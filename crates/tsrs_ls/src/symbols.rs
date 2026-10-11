@@ -636,7 +636,7 @@ fn clean_callback_text(text: &str) -> String {
     if truncated.len() < text.len() {
         text = format!("{truncated}...");
     }
-    text.chars().filter(|&r| !stringutil::is_line_break(r)).collect()
+    text.chars().filter(|&r| !stringutil::is_line_break(r as u32)).collect()
 }
 
 // symbols.go:524

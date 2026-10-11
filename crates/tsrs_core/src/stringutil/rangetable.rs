@@ -1,50 +1,6 @@
 // Equivalent of Go's unicode.RangeTable / unicode.Is, used by the generated tables.
 
-pub type Rune = i32;
-
-/// Anything usable where Go takes a `rune`: `char`, `i32` or `u32`.
-pub trait AsRune: Copy {
-    fn as_rune(self) -> Rune;
-
-    /// Preserve a decoded character, or validate an integer rune before converting it.
-    #[inline]
-    fn as_char(self) -> Option<char> {
-        char::from_u32(self.as_rune() as u32)
-    }
-}
-
-impl AsRune for char {
-    #[inline]
-    fn as_rune(self) -> Rune {
-        self as Rune
-    }
-
-    #[inline]
-    fn as_char(self) -> Option<char> {
-        Some(self)
-    }
-}
-
-impl AsRune for i32 {
-    #[inline]
-    fn as_rune(self) -> Rune {
-        self
-    }
-}
-
-impl AsRune for u32 {
-    #[inline]
-    fn as_rune(self) -> Rune {
-        self as Rune
-    }
-}
-
-impl AsRune for u8 {
-    #[inline]
-    fn as_rune(self) -> Rune {
-        self as Rune
-    }
-}
+pub type Rune = u32;
 
 pub struct Range16 {
     pub lo: u16,
@@ -124,16 +80,13 @@ fn is32(ranges: &[Range32], r: u32) -> bool {
 
 /// Go `unicode.Is`.
 pub fn unicode_is(table: &RangeTable, r: Rune) -> bool {
-    if r < 0 {
-        return false;
-    }
     let r16 = table.r16;
-    if !r16.is_empty() && r as u32 <= r16[r16.len() - 1].hi as u32 {
+    if !r16.is_empty() && r <= u32::from(r16[r16.len() - 1].hi) {
         return is16(r16, r as u16);
     }
     let r32 = table.r32;
-    if !r32.is_empty() && r as u32 >= r32[0].lo {
-        return is32(r32, r as u32);
+    if !r32.is_empty() && r >= r32[0].lo {
+        return is32(r32, r);
     }
     false
 }
@@ -147,7 +100,7 @@ pub fn unicode_to_lower(r: Rune) -> Rune {
         }
         return r;
     }
-    let Some(c) = char::from_u32(r as u32) else {
+    let Some(c) = char::from_u32(r) else {
         return r;
     };
     if c == '\u{130}' {
@@ -172,7 +125,7 @@ pub fn unicode_to_upper(r: Rune) -> Rune {
         }
         return r;
     }
-    let Some(c) = char::from_u32(r as u32) else {
+    let Some(c) = char::from_u32(r) else {
         return r;
     };
     match r {
@@ -191,7 +144,7 @@ pub fn unicode_to_upper(r: Rune) -> Rune {
 /// wrapping around to the smallest. Go first consults its `asciiFold` table for ASCII; that table agrees with
 /// `CASE_ORBIT` (K, S, k, s) and the ToLower/ToUpper fallback, so it is not copied.
 pub fn unicode_simple_fold(r: Rune) -> Rune {
-    if !(0..=0x10FFFF).contains(&r) {
+    if r > 0x10FFFF {
         return r;
     }
     if let Ok(i) = CASE_ORBIT.binary_search_by_key(&r, |&(from, _)| from as Rune) {
@@ -249,7 +202,7 @@ pub fn decode_rune(s: &[u8]) -> (Rune, usize) {
     };
     if (0xC2..=0xDF).contains(&b0) {
         if let Some(c1) = cont(1, 0x80, 0xBF) {
-            return ((((b0 & 0x1F) as u32) << 6 | c1) as Rune, 2);
+            return (((b0 & 0x1F) as u32) << 6 | c1, 2);
         }
         return (RUNE_ERROR, 1);
     }
@@ -260,7 +213,7 @@ pub fn decode_rune(s: &[u8]) -> (Rune, usize) {
             _ => (0x80, 0xBF),
         };
         if let (Some(c1), Some(c2)) = (cont(1, lo, hi), cont(2, 0x80, 0xBF)) {
-            return ((((b0 & 0x0F) as u32) << 12 | c1 << 6 | c2) as Rune, 3);
+            return (((b0 & 0x0F) as u32) << 12 | c1 << 6 | c2, 3);
         }
         return (RUNE_ERROR, 1);
     }
@@ -271,7 +224,7 @@ pub fn decode_rune(s: &[u8]) -> (Rune, usize) {
             _ => (0x80, 0xBF),
         };
         if let (Some(c1), Some(c2), Some(c3)) = (cont(1, lo, hi), cont(2, 0x80, 0xBF), cont(3, 0x80, 0xBF)) {
-            return ((((b0 & 0x07) as u32) << 18 | c1 << 12 | c2 << 6 | c3) as Rune, 4);
+            return (((b0 & 0x07) as u32) << 18 | c1 << 12 | c2 << 6 | c3, 4);
         }
         return (RUNE_ERROR, 1);
     }
@@ -301,7 +254,7 @@ pub fn decode_last_rune(s: &[u8]) -> (Rune, usize) {
 
 /// Appends the UTF-8 encoding of `r` (Go `strings.Builder.WriteRune`; invalid runes become U+FFFD).
 pub fn push_rune(b: &mut String, r: Rune) {
-    b.push(char::from_u32(r as u32).unwrap_or('\u{FFFD}'));
+    b.push(char::from_u32(r).unwrap_or('\u{FFFD}'));
 }
 
 #[cfg(test)]
@@ -327,7 +280,6 @@ mod tests {
         assert_eq!(unicode_to_upper(0x1C5), 0x1C4);
         assert_eq!(unicode_to_upper('a' as Rune), 'A' as Rune);
         assert_eq!(unicode_to_upper(0xFF), 0x178);
-        assert_eq!(unicode_to_upper(-1), -1);
         assert_eq!(unicode_to_upper(0xD800), 0xD800);
     }
 
@@ -362,7 +314,6 @@ mod tests {
         assert_eq!(unicode_simple_fold(0x1F80), 0x1F88);
         assert_eq!(unicode_simple_fold(0x1F88), 0x1F80);
         assert_eq!(unicode_simple_fold('1' as Rune), '1' as Rune);
-        assert_eq!(unicode_simple_fold(-2), -2);
     }
 
     #[test]

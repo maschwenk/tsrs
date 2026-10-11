@@ -14,6 +14,12 @@ use crate::{Entries, FileInfo, FileMode, FsError};
 pub trait IoFS: Send + Sync {
     fn stat(&self, name: &str) -> Result<FileInfo, FsError>;
 
+    // file_type is the subset of Stat needed by FileExists and DirectoryExists. Implementations may avoid
+    // collecting the name, size and modification time; the default preserves the behavior of custom file systems.
+    fn file_type(&self, name: &str) -> Result<FileMode, FsError> {
+        self.stat(name).map(|info| info.mode.type_())
+    }
+
     // ReadDir returns the entries sorted by filename, like fs.ReadDir.
     fn read_dir(&self, name: &str) -> Result<Vec<IoDirEntry>, FsError>;
 
@@ -31,6 +37,10 @@ pub trait IoFS: Send + Sync {
 impl<T: IoFS + ?Sized> IoFS for Arc<T> {
     fn stat(&self, name: &str) -> Result<FileInfo, FsError> {
         (**self).stat(name)
+    }
+
+    fn file_type(&self, name: &str) -> Result<FileMode, FsError> {
+        (**self).file_type(name)
     }
 
     fn read_dir(&self, name: &str) -> Result<Vec<IoDirEntry>, FsError> {
@@ -108,13 +118,19 @@ impl Common {
     }
 
     pub fn file_exists(&self, path: &str) -> bool {
-        let stat = self.stat(path);
-        matches!(stat, Some(stat) if !stat.is_dir())
+        let (fsys, _, rest) = self.root_and_path(path);
+        let Some(fsys) = fsys else {
+            return false;
+        };
+        matches!(fsys.file_type(&rest), Ok(mode) if !mode.is_dir())
     }
 
     pub fn directory_exists(&self, path: &str) -> bool {
-        let stat = self.stat(path);
-        matches!(stat, Some(stat) if stat.is_dir())
+        let (fsys, _, rest) = self.root_and_path(path);
+        let Some(fsys) = fsys else {
+            return false;
+        };
+        matches!(fsys.file_type(&rest), Ok(mode) if mode.is_dir())
     }
 
     pub fn get_accessible_entries(&self, path: &str) -> Entries {

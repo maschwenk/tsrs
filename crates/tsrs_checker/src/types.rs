@@ -185,7 +185,7 @@ bitflags! {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum SignatureKind {
     #[default]
@@ -193,7 +193,7 @@ pub enum SignatureKind {
     Construct,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum IndexKind {
     #[default]
@@ -201,7 +201,7 @@ pub enum IndexKind {
     Number,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MemberOverrideStatus {
     #[default]
@@ -647,7 +647,7 @@ pub struct ArrayLiteralLinks {
 
 // Links for late-binding containers
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MembersOrExportsResolutionKind {
     #[default]
@@ -3257,7 +3257,7 @@ pub struct CompositeSignature {
     pub signatures: Cell<&'static [P<Signature>]>, // Individual signatures
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum TypePredicateKind {
     #[default]

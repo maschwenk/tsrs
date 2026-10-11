@@ -635,11 +635,11 @@ impl View {
         let add_as_type_only = get_add_as_type_only(is_valid_type_only_use_site, export, &self.program.options());
 
         let mut name = export.name().to_string();
-        let starts_with_upper = tsrs_core::stringutil::unicode_is_upper(name.as_bytes()[0] as i32);
+        let starts_with_upper = tsrs_core::stringutil::unicode_is_upper(u32::from(name.as_bytes()[0]));
         if for_jsx && !starts_with_upper {
             if export.is_renameable() {
-                let first = name.as_bytes()[0] as i32;
-                let upper = char::from_u32(tsrs_core::stringutil::unicode_to_upper(first) as u32).unwrap();
+                let first = u32::from(name.as_bytes()[0]);
+                let upper = char::from_u32(tsrs_core::stringutil::unicode_to_upper(first)).unwrap();
                 name = format!("{}{}", upper, &name[1..]);
             } else {
                 return Vec::new();

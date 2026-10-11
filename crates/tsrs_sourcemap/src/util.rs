@@ -10,7 +10,7 @@ pub fn try_get_source_mapping_url(line_info: Option<&ECMALineInfo>) -> String {
             let line = line_info.line_text(index);
             // Go unicode.IsSpace = the Unicode White_Space property = char::is_whitespace.
             let line = line.trim_start_matches(char::is_whitespace);
-            let line = line.trim_end_matches(|c: char| stringutil::is_line_break(c));
+            let line = line.trim_end_matches(|c: char| stringutil::is_line_break(c as u32));
             if line.is_empty() {
                 continue;
             }

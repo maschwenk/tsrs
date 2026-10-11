@@ -152,3 +152,36 @@ repeatability of the counter. The mixed-sign differences are measurement-neutral
 At the default 16 checkers, the median project RSS delta is -0.009% and the median wall delta is +0.464%.
 Single-threaded RSS changes range from -0.415% to +0.510%. These three-repetition wall/RSS measurements and the
 unchanged layouts do not establish a repeatable performance regression; no performance improvement is claimed.
+
+## Follow-up: unsigned Rune and internal enum representations
+
+At the owner's request, the next internal-domain audit makes `stringutil::Rune` a `u32`. Although Go defines `rune`
+as `int32`, every producer in this port returns a decoded Unicode value, `RuneError`, a UTF-16 surrogate preserved
+for JavaScript/WTF-8 handling, or another non-negative invalid code point. End-of-input is represented separately by
+the decoded byte count or `Option`, never by a negative rune. The old generic `AsRune` conversion layer and its four
+implementations are removed; Rune APIs take `u32` directly. The scanner decodes straight to `u32` instead of
+decoding to `char` and converting back, and the regexp flag lookup no longer narrows through `u8::try_from`.
+Positive invalid code points, surrogates and `RuneError` retain their previous behavior.
+
+Purely internal, non-negative state enums now use `repr(u32)` while retaining their four-byte layouts. Signed
+compiler/watch configuration and script kinds, diagnostics, process exit status, indentation and source-map deltas,
+JavaScript `ToInt32`, protocol/FFI integers and the relation budget remain signed. The LSP protocol crates, schemas,
+generated types and generator are unchanged; language-service edits are mechanical Rune call-site adaptations only.
+
+### Local measurement
+
+A local macOS arm64 screen compares `f970b59a` with the working tree. Both release binaries use fat LTO, one codegen
+unit and the same profiling-enabled release settings. Six interleaved single-threaded vscode runs use the configured
+benchmark checkout and `/usr/bin/time -l`; diagnostics without extended statistics are byte-identical.
+
+The macOS retired-instruction counter was bimodal for both binaries, so the unstratified medians are not a valid
+comparison. The baseline's low mode was 87,422,909,472 instructions (one sample) and its high mode ranged from
+88,363,987,372 to 88,376,261,308 (five); the new binary's low mode ranged from 87,415,582,512 to 87,468,533,701
+(four) and its high mode from 88,349,344,491 to 88,398,502,270 (two). The high-mode means differ by +0.0034%, which
+is measurement-neutral. Peak RSS has the same 1,677,115,392 to 1,677,148,160-byte range before and after. This does
+not establish a speedup or a regression; a Linux `bench/count.py` run is still the deterministic acceptance measure.
+
+Local validation: workspace and WebAssembly checks pass; 297 affected-crate tests pass (one ignored negative Miri
+control); all 29 regression fixtures pass; conformance retains 13,458 diagnostic, 12,779 types and 12,779 symbols
+passes with no crashes or timeouts; fourslash retains 4,066 passes, 63 existing failures and 417 skips. All generators
+reproduce the working diff, and the lint ratchet and source checks pass without a baseline increase.

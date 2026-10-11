@@ -1,17 +1,16 @@
 // Package stringutil Exports common rune utilities for parsing and emitting javascript
 
-use super::rangetable::{decode_last_rune, decode_rune, push_rune, unicode_to_lower, AsRune, Rune};
+use super::rangetable::{decode_last_rune, decode_rune, push_rune, unicode_to_lower, Rune};
 
-pub fn is_white_space_like(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_white_space_like(ch: Rune) -> bool {
     is_white_space_single_line(ch) || is_line_break(ch)
 }
 
-pub fn is_white_space_single_line(ch: impl AsRune) -> bool {
+pub fn is_white_space_single_line(ch: Rune) -> bool {
     // Note: nextLine is in the Zs space, and should be considered to be a whitespace.
     // It is explicitly not a line-break as it isn't in the exact set specified by EcmaScript.
     matches!(
-        ch.as_rune(),
+        ch,
         0x20 // space
         | 0x09 // tab
         | 0x0B // verticalTab
@@ -38,7 +37,7 @@ pub fn is_white_space_single_line(ch: impl AsRune) -> bool {
     )
 }
 
-pub fn is_line_break(ch: impl AsRune) -> bool {
+pub fn is_line_break(ch: Rune) -> bool {
     // ES5 7.3:
     // The ECMAScript line terminator characters are listed in Table 3.
     //     Table 3: Line Terminator Characters
@@ -50,7 +49,7 @@ pub fn is_line_break(ch: impl AsRune) -> bool {
     // Only the characters in Table 3 are treated as line terminators. Other new line or line
     // breaking characters are treated as white space but not as line terminators.
     matches!(
-        ch.as_rune(),
+        ch,
         0x0A // lineFeed
         | 0x0D // carriageReturn
         | 0x2028 // lineSeparator
@@ -58,23 +57,19 @@ pub fn is_line_break(ch: impl AsRune) -> bool {
     )
 }
 
-pub fn is_digit(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_digit(ch: Rune) -> bool {
     ch >= '0' as Rune && ch <= '9' as Rune
 }
 
-pub fn is_octal_digit(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_octal_digit(ch: Rune) -> bool {
     ch >= '0' as Rune && ch <= '7' as Rune
 }
 
-pub fn is_hex_digit(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_hex_digit(ch: Rune) -> bool {
     ch >= '0' as Rune && ch <= '9' as Rune || ch >= 'A' as Rune && ch <= 'F' as Rune || ch >= 'a' as Rune && ch <= 'f' as Rune
 }
 
-pub fn is_ascii_letter(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_ascii_letter(ch: Rune) -> bool {
     ch >= 'A' as Rune && ch <= 'Z' as Rune || ch >= 'a' as Rune && ch <= 'z' as Rune
 }
 
@@ -279,31 +274,26 @@ pub fn truncate_by_runes(str: &str, max_length: usize) -> &str {
 // whole range, so this split point is defined here to distinguish the two.
 pub const SURROGATE_LOW_START: Rune = 0xDC00;
 
-pub fn is_high_surrogate(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_high_surrogate(ch: Rune) -> bool {
     is_surrogate(ch) && ch < SURROGATE_LOW_START
 }
 
-pub fn is_low_surrogate(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_low_surrogate(ch: Rune) -> bool {
     is_surrogate(ch) && ch >= SURROGATE_LOW_START
 }
 
-pub fn is_surrogate(ch: impl AsRune) -> bool {
-    let ch = ch.as_rune();
+pub fn is_surrogate(ch: Rune) -> bool {
     (0xD800..0xE000).contains(&ch)
 }
 
-pub fn surrogate_pair_to_code_point(high: impl AsRune, low: impl AsRune) -> Rune {
-    let (r1, r2) = (high.as_rune(), low.as_rune());
+pub fn surrogate_pair_to_code_point(r1: Rune, r2: Rune) -> Rune {
     if (0xD800..0xDC00).contains(&r1) && (0xDC00..0xE000).contains(&r2) {
         return ((r1 - 0xD800) << 10 | (r2 - 0xDC00)) + 0x10000;
     }
     0xFFFD
 }
 
-pub fn code_point_to_surrogate_pair(ch: impl AsRune) -> (Rune, Rune) {
-    let r = ch.as_rune();
+pub fn code_point_to_surrogate_pair(r: Rune) -> (Rune, Rune) {
     if r < 0x10000 || r > 0x10FFFF {
         return (0xFFFD, 0xFFFD);
     }
@@ -334,8 +324,7 @@ const SURROGATE_UTF8_BYTE1_MAX: u8 = 0xBF;
 /// sentinel bytes. Such a `String` is not valid UTF-8 (Go strings are byte strings): only
 /// compare, hash, concatenate, slice at ASCII boundaries, or decode it with
 /// `decode_js_string_rune`; never call `chars()` on it.
-pub fn encode_js_string_rune(ch: impl AsRune) -> String {
-    let ch = ch.as_rune();
+pub fn encode_js_string_rune(ch: Rune) -> String {
     if is_surrogate(ch) {
         let bytes = vec![
             SURROGATE_UTF8_LEAD,
@@ -418,14 +407,14 @@ mod tests {
         assert_eq!(split_lines("a\r\nb\rc\nd"), vec!["a", "b", "c", "d"]);
         assert_eq!(unquote_string("\"a\\\"b\""), "a\"b");
         assert_eq!(strip_quotes("'x'"), "x");
-        assert!(is_unicode_identifier_start('é'));
-        assert!(!is_unicode_identifier_start('1'));
-        assert!(is_unicode_identifier_part('1'));
+        assert!(is_unicode_identifier_start('é' as Rune));
+        assert!(!is_unicode_identifier_start('1' as Rune));
+        assert!(is_unicode_identifier_part('1' as Rune));
         assert!(is_unicode_identifier_start(0x2F800u32));
         let s = encode_js_string_rune(0xD83D) + &encode_js_string_rune(0xDE00);
         assert_eq!(combine_surrogate_pairs(&s), "😀");
         assert_eq!(decode_js_string_rune(&encode_js_string_rune(0xDC01)), (0xDC01, 3));
-        assert_eq!(code_point_to_surrogate_pair('😀'), (0xD83D, 0xDE00));
+        assert_eq!(code_point_to_surrogate_pair('😀' as Rune), (0xD83D, 0xDE00));
         assert_eq!(truncate_by_runes("héllo", 2), "hé");
     }
 }

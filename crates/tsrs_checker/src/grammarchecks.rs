@@ -890,7 +890,7 @@ impl Checker {
             ..equals_greater_than_token
                 .end()
                 .expect_source("parsed tokens have source positions") as usize];
-        arrow_full_text.chars().any(stringutil::is_line_break)
+        arrow_full_text.chars().any(|ch| stringutil::is_line_break(ch as u32))
             && self.grammar_error_on_node(
                 equals_greater_than_token,
                 &diagnostics::Line_terminator_not_permitted_before_arrow,

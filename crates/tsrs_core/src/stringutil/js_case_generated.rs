@@ -17,7 +17,7 @@ pub(crate) struct SpecialCasingMapping {
 }
 
 // Sorted by code point; looked up with binary search (Go uses a map).
-pub(crate) static SPECIAL_CASING_MAPPINGS: &[(i32, SpecialCasingMapping)] = &[
+pub(crate) static SPECIAL_CASING_MAPPINGS: &[(u32, SpecialCasingMapping)] = &[
     (0x41, SpecialCasingMapping { lower: "\u{61}", upper: "\u{41}", conditional_lower: "", condition: SpecialCasingCondition::None }),
     (0x42, SpecialCasingMapping { lower: "\u{62}", upper: "\u{42}", conditional_lower: "", condition: SpecialCasingCondition::None }),
     (0x43, SpecialCasingMapping { lower: "\u{63}", upper: "\u{43}", conditional_lower: "", condition: SpecialCasingCondition::None }),

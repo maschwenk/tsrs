@@ -238,13 +238,13 @@ impl Parser {
                     let mut result = String::new();
                     for (i, ch) in name.as_identifier().text().char_indices() {
                         if i == 0 {
-                            if !scanner::is_identifier_start(ch as i32) {
+                            if !scanner::is_identifier_start(ch as u32) {
                                 result.push('_');
                             } else {
                                 result.push(ch);
                             }
                             continue;
-                        } else if !scanner::is_identifier_part(ch as i32) {
+                        } else if !scanner::is_identifier_part(ch as u32) {
                             result.push('_');
                         } else {
                             result.push(ch);

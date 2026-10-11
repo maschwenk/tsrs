@@ -3321,7 +3321,7 @@ impl FourslashTest {
 
                 // Find leading and trailing width of non-whitespace characters
                 let masked_runes: Vec<char> = masked_str.chars().collect();
-                let is_real_character = |ch: char| ch != '•' && ch != '↲' && !stringutil::is_white_space_like(ch);
+                let is_real_character = |ch: char| ch != '•' && ch != '↲' && !stringutil::is_white_space_like(ch as u32);
 
                 let leading_width = masked_runes.iter().position(|&ch| is_real_character(ch));
                 let trailing_width = masked_runes.iter().rposition(|&ch| is_real_character(ch));
@@ -6374,7 +6374,7 @@ fn position_after_edit(position: u32, edit_start: u32, edit_end: u32, new_text_l
 fn remove_whitespace(text: &str) -> String {
     let mut builder = String::new();
     for ch in text.chars() {
-        if tsrs_core::stringutil::is_white_space_like(ch as i32) {
+        if tsrs_core::stringutil::is_white_space_like(ch as u32) {
             continue;
         }
         builder.push(ch);

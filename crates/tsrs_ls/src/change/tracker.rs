@@ -686,7 +686,7 @@ impl Tracker {
                 Some(&scanner::SkipTriviaOptions { stop_after_line_break: true, stop_at_comments: false, ..Default::default() }),
             );
             // find position before "\n" or "\r\n"
-            while insert_pos != end && stringutil::is_line_break(source_file.text().as_bytes()[insert_pos as usize - 1] as i32) {
+            while insert_pos != end && stringutil::is_line_break(u32::from(source_file.text().as_bytes()[insert_pos as usize - 1])) {
                 insert_pos -= 1;
             }
             let insert_ls_pos = insert_pos;
@@ -757,7 +757,7 @@ impl Tracker {
             options.prefix.clone_from(&self.new_line);
         }
         let text = source_file.text();
-        if text.is_empty() || !stringutil::is_line_break(text.as_bytes()[pos as usize] as i32) {
+        if text.is_empty() || !stringutil::is_line_break(u32::from(text.as_bytes()[pos as usize])) {
             options.suffix.clone_from(&self.new_line);
         }
         if blank_line_between {
@@ -1038,7 +1038,7 @@ fn find_indentation_column(
     let bytes = text.as_bytes();
     let mut i = line_start;
     while i < member_start && (i as usize) < bytes.len() {
-        let ch = bytes[i as usize] as i32;
+        let ch = u32::from(bytes[i as usize]);
 
         if stringutil::is_line_break(ch) {
             return None;
@@ -1055,8 +1055,8 @@ fn find_indentation_column(
 }
 
 // tracker.go:822
-fn advance_indentation_column(column: i32, ch: i32, tab_size: i32) -> i32 {
-    if ch == '\t' as i32 {
+fn advance_indentation_column(column: i32, ch: stringutil::Rune, tab_size: i32) -> i32 {
+    if ch == '\t' as stringutil::Rune {
         return column + tab_size - (column % tab_size);
     }
     column + 1

@@ -16,12 +16,12 @@ bitflags::bitflags! {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum QuoteChar {
-    SingleQuote = '\'' as i32,
-    DoubleQuote = '"' as i32,
-    Backtick = '`' as i32,
+    SingleQuote = '\'' as u32,
+    DoubleQuote = '"' as u32,
+    Backtick = '`' as u32,
 }
 
 fn jsx_escaped_chars_map(ch: stringutil::Rune) -> Option<&'static str> {
@@ -53,14 +53,14 @@ fn escaped_chars_map(ch: stringutil::Rune) -> Option<&'static str> {
 }
 
 fn encode_jsx_character_entity(b: &mut String, char_code: stringutil::Rune) {
-    let hex_char_code = format!("{:X}", char_code as u32);
+    let hex_char_code = format!("{:X}", char_code);
     b.push_str("&#x");
     b.push_str(&hex_char_code);
     b.push(';');
 }
 
 fn encode_utf16_escape_sequence(b: &mut String, char_code: stringutil::Rune) {
-    let hex_char_code = format!("{:X}", char_code as u32);
+    let hex_char_code = format!("{:X}", char_code);
     b.push_str("\\u");
     for _ in hex_char_code.len()..4 {
         b.push('0');
@@ -102,17 +102,17 @@ pub(crate) fn escape_string_worker(s: &str, quote_char: QuoteChar, flags: getLit
         // the language service. These characters should be escaped when printing, and if any characters are added,
         // `escapedCharsMap` and/or `jsxEscapedCharsMap` must be updated. Note that this *does not* include the 'delete'
         // character. There is no reason for this other than that JSON.stringify does not handle it either.
-        if ch == '\\' as i32 {
+        if ch == '\\' as stringutil::Rune {
             if !flags.intersects(getLiteralTextFlags::JsxAttributeEscape) {
                 escape = true;
             }
-        } else if ch == '$' as i32 {
+        } else if ch == '$' as stringutil::Rune {
             if quote_char == QuoteChar::Backtick && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
                 escape = true;
             }
-        } else if ch == quote_char as i32 || ch == 0x2028 || ch == 0x2029 || ch == 0x0085 || ch == '\r' as i32 {
+        } else if ch == quote_char as stringutil::Rune || ch == 0x2028 || ch == 0x2029 || ch == 0x0085 || ch == '\r' as stringutil::Rune {
             escape = true;
-        } else if ch == '\n' as i32 {
+        } else if ch == '\n' as stringutil::Rune {
             if quote_char != QuoteChar::Backtick {
                 // Template strings preserve simple LF newlines, still encode CRLF (or CR).
                 escape = true;
@@ -135,7 +135,7 @@ pub(crate) fn escape_string_worker(s: &str, quote_char: QuoteChar, flags: getLit
                 } else {
                     encode_jsx_character_entity(b, ch);
                 }
-            } else if ch == '\r' as i32 && quote_char == QuoteChar::Backtick && i + 1 < bytes.len() && bytes[i + 1] == b'\n' {
+            } else if ch == '\r' as stringutil::Rune && quote_char == QuoteChar::Backtick && i + 1 < bytes.len() && bytes[i + 1] == b'\n' {
                 // Template strings preserve simple LF newlines, but still must escape CRLF. Left alone, the
                 // above cases for `\r` and `\n` would inadvertently escape CRLF as two independent characters.
                 size += 1;
@@ -148,7 +148,7 @@ pub(crate) fn escape_string_worker(s: &str, quote_char: QuoteChar, flags: getLit
             } else if ch >= 0xD800 && ch <= 0xDFFF {
                 encode_utf16_escape_sequence(b, ch);
             } else if ch == 0 {
-                if i + 1 < bytes.len() && stringutil::is_digit(bytes[i + 1] as i32) {
+                if i + 1 < bytes.len() && stringutil::is_digit(u32::from(bytes[i + 1])) {
                     // If the null character is followed by digits, print as a hex escape to prevent the result from
                     // parsing as an octal (which is forbidden in strict mode)
                     b.push_str("\\x00");
@@ -485,7 +485,7 @@ pub(crate) fn get_previous_non_whitespace_position(
 ) -> Option<u32> {
     let mut pos = pos;
     while pos >= stop_pos {
-        if !stringutil::is_white_space_like(source_file.text().as_bytes()[pos as usize] as i32) {
+        if !stringutil::is_white_space_like(u32::from(source_file.text().as_bytes()[pos as usize])) {
             return Some(pos);
         }
         if pos == 0 {
@@ -762,7 +762,7 @@ pub fn format_generated_name(private_name: bool, prefix: &str, base: &str, suffi
 }
 
 pub(crate) fn is_ascii_word_character(ch: stringutil::Rune) -> bool {
-    stringutil::is_ascii_letter(ch) || stringutil::is_digit(ch) || ch == '_' as i32
+    stringutil::is_ascii_letter(ch) || stringutil::is_digit(ch) || ch == '_' as stringutil::Rune
 }
 
 pub(crate) fn make_identifier_from_module_name(module_name: &str) -> String {
@@ -772,7 +772,7 @@ pub(crate) fn make_identifier_from_module_name(module_name: &str) -> String {
     let mut start = 0;
     let mut pos = 0;
     while pos < bytes.len() {
-        let ch = bytes[pos] as i32;
+        let ch = u32::from(bytes[pos]);
         if pos == 0 && stringutil::is_digit(ch) {
             builder.push('_');
         } else if !is_ascii_word_character(ch) {
@@ -856,10 +856,10 @@ fn match_string(text: &str, pos: &mut usize, expected: &str) -> bool {
 fn match_quoted_string(text: &str, pos: &mut usize) -> bool {
     let mut text_pos = *pos;
     let quote_char;
-    if match_rune(text, &mut text_pos, '\'' as i32) {
-        quote_char = '\'' as i32;
-    } else if match_rune(text, &mut text_pos, '"' as i32) {
-        quote_char = '"' as i32;
+    if match_rune(text, &mut text_pos, '\'' as stringutil::Rune) {
+        quote_char = '\'' as stringutil::Rune;
+    } else if match_rune(text, &mut text_pos, '"' as stringutil::Rune) {
+        quote_char = '"' as stringutil::Rune;
     } else {
         return false;
     }
@@ -890,7 +890,7 @@ pub fn is_recognized_triple_slash_comment(text: &str, comment_range: CommentRang
         let text = &text[comment_range.pos() as usize + 3..comment_range.end() as usize];
         let mut pos = 0;
         skip_white_space_single_line(text, &mut pos);
-        if !match_rune(text, &mut pos, '<' as i32) {
+        if !match_rune(text, &mut pos, '<' as stringutil::Rune) {
             return false;
         }
         if match_string(text, &mut pos, "reference") {
@@ -901,7 +901,7 @@ pub fn is_recognized_triple_slash_comment(text: &str, comment_range: CommentRang
                 return false;
             }
             skip_white_space_single_line(text, &mut pos);
-            if !match_rune(text, &mut pos, '=' as i32) {
+            if !match_rune(text, &mut pos, '=' as stringutil::Rune) {
                 return false;
             }
             skip_white_space_single_line(text, &mut pos);
@@ -916,7 +916,7 @@ pub fn is_recognized_triple_slash_comment(text: &str, comment_range: CommentRang
                 return false;
             }
             skip_white_space_single_line(text, &mut pos);
-            if !match_rune(text, &mut pos, '=' as i32) {
+            if !match_rune(text, &mut pos, '=' as stringutil::Rune) {
                 return false;
             }
             skip_white_space_single_line(text, &mut pos);
@@ -958,7 +958,7 @@ pub(crate) fn calculate_indent(text: &str, pos: u32, end: u32) -> i32 {
         if !stringutil::is_white_space_single_line(ch) {
             break;
         }
-        if ch == '\t' as i32 {
+        if ch == '\t' as stringutil::Rune {
             // Tabs = TabSize = indent size and go to next tabStop
             current_line_indent += indent_size - (current_line_indent % indent_size);
         } else {

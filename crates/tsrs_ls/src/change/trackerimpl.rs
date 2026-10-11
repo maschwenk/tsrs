@@ -462,7 +462,7 @@ impl Tracker {
 
         if new_end != node_end
             && (trailing_trivia_option == TrailingTriviaOption::Include
-                || stringutil::is_line_break(text.as_bytes()[new_end as usize - 1] as i32))
+                || stringutil::is_line_break(u32::from(text.as_bytes()[new_end as usize - 1])))
         {
             return new_end;
         }
@@ -491,7 +491,7 @@ impl Tracker {
                 return;
             }
             let ch = bytes[*position as usize];
-            if stringutil::is_line_break(ch as i32) {
+            if stringutil::is_line_break(u32::from(ch)) {
                 *position += 1;
                 if (*position as usize) < bytes.len() && ch == b'\r' && bytes[*position as usize] == b'\n' {
                     *position += 1;
@@ -636,7 +636,7 @@ pub fn get_format_code_settings_for_writing(options: FormatCodeSettings, source_
 // trackerimpl.go:452
 pub(crate) fn has_comments_before_line_break(text: &str, start: u32) -> bool {
     for ch in text[start as usize..].chars() {
-        if !stringutil::is_white_space_single_line(ch as i32) {
+        if !stringutil::is_white_space_single_line(ch as u32) {
             return ch == '/';
         }
     }

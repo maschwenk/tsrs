@@ -707,7 +707,7 @@ pub(crate) fn find_first_non_whitespace_character_and_column(
             break;
         }
 
-        if ch == '\t' as i32 {
+        if ch == '\t' as u32 {
             if options.tab_size > 0 {
                 column += options.tab_size + (column % options.tab_size);
             }

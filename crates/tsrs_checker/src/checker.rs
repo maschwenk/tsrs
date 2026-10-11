@@ -58,7 +58,7 @@ impl From<P<Signature>> for TypeSystemEntity {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum TypeSystemPropertyName {
     #[default]
@@ -102,7 +102,7 @@ pub struct InferenceContextInfo {
 
 // WideningKind
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum WideningKind {
     #[default]
@@ -130,7 +130,7 @@ pub struct EnumRelationKey {
 
 // TypeCacheKind
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum CachedTypeKind {
     #[default]
@@ -739,7 +739,7 @@ bitflags! {
 
 // IntrinsicTypeKind
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum IntrinsicTypeKind {
     #[default]
@@ -771,7 +771,7 @@ bitflags! {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MappedTypeNameTypeKind {
     #[default]
@@ -780,7 +780,7 @@ pub enum MappedTypeNameTypeKind {
     Remapping,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ReferenceHint {
     #[default]
@@ -912,7 +912,7 @@ pub struct IterationTypes {
     pub next_type: Option<P<Type>>,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum IterationTypeKind {
     #[default]
@@ -2926,7 +2926,7 @@ pub struct InheritanceInfo {
     pub containing_type: P<Type>,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum UnusedKind {
     #[default]
@@ -3010,7 +3010,7 @@ impl Default for keyBuilder {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum thisAssignmentDeclarationKind {
     #[default]
@@ -3030,7 +3030,7 @@ pub struct TupleNormalizer {
     pub last_optional_or_rest_index: Option<usize>,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum UnionReduction {
     #[default]

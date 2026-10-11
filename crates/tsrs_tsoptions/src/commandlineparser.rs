@@ -392,7 +392,7 @@ impl CommandLineParser {
                     }
                     _ => {
                         let (val, err) =
-                            convert_json_option_of_enum_type(opt, args[i].trim_matches(|c: char| stringutil::is_white_space_like(c)), None, None);
+                            convert_json_option_of_enum_type(opt, args[i].trim_matches(|c: char| stringutil::is_white_space_like(c as u32)), None, None);
                         self.options.set(opt.name.to_string(), val);
                         self.errors.extend(err);
                         i += 1;
@@ -457,7 +457,7 @@ pub fn parse_list_type_option(opt: &'static CommandLineOption, value: &str) -> (
             let mut result = Vec::new();
             for v in values {
                 let (val, err) =
-                    convert_json_option_of_enum_type(elements, v.trim_matches(|c: char| stringutil::is_white_space_like(c)), None, None);
+                    convert_json_option_of_enum_type(elements, v.trim_matches(|c: char| stringutil::is_white_space_like(c as u32)), None, None);
                 if let CompilerOptionsValue::String(s) = &val {
                     if err.is_empty() && !s.is_empty() {
                         result.push(CompilerOptionsValue::String(s.clone()));

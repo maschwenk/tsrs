@@ -456,8 +456,8 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                     // Reset the state
                     open_marker = None;
                     state = ParserState::None;
-                } else if !(stringutil::is_digit(current_character)
-                    || stringutil::is_ascii_letter(current_character)
+                } else if !(stringutil::is_digit(current_character as u32)
+                    || stringutil::is_ascii_letter(current_character as u32)
                     || current_character == '$'
                     || current_character == '_')
                 {

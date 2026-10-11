@@ -715,7 +715,7 @@ fn trim_rune_count(s: &str, rune_count: usize) -> &str {
 // Rest special characters are either already in lower case format or
 // they have corresponding upper case character so they dont need special handling
 pub fn to_file_name_lower_case(file_name: &str) -> String {
-    const I_WITH_DOT: i32 = 0x130;
+    const I_WITH_DOT: stringutil::Rune = 0x130;
 
     if file_name.is_ascii() {
         return file_name.to_ascii_lowercase();

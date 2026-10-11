@@ -11,7 +11,7 @@ pub fn dedent(text: &str) -> String {
         let mut line = lines[i].clone();
         let first_non_white = line
             .char_indices()
-            .find(|&(_, r)| !stringutil::is_white_space_like(r))
+            .find(|&(_, r)| !stringutil::is_white_space_like(r as u32))
             .map(|(i, _)| i);
         if let Some(fnw) = first_non_white.filter(|&index| index > 0) {
             line = line[0..fnw].replace('\t', "    ") + &line[fnw..];

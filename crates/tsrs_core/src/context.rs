@@ -345,7 +345,7 @@ pub fn get_request_id(ctx: &Context) -> &str {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum CheckerLifetime {
     #[default]

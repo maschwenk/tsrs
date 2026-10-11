@@ -1636,7 +1636,7 @@ fn remove_leading_newlines(comments: &mut Vec<&'static str>) {
 }
 
 fn trim_end(s: &str) -> &str {
-    s.trim_end_matches(|c: char| stringutil::is_white_space_like(c))
+    s.trim_end_matches(|c: char| stringutil::is_white_space_like(c as u32))
 }
 
 fn remove_trailing_whitespace(comments: &mut Vec<&'static str>) {

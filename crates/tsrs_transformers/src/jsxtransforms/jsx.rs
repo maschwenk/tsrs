@@ -1027,15 +1027,15 @@ fn decode_entity(entity: &str) -> Option<stringutil::Rune> {
         }
 
         for c in entity.chars() {
-            if base == 16 && !stringutil::is_hex_digit(c) {
+            if base == 16 && !stringutil::is_hex_digit(c as u32) {
                 return None;
             }
-            if base == 10 && !stringutil::is_digit(c) {
+            if base == 10 && !stringutil::is_digit(c as u32) {
                 return None;
             }
         }
 
-        return i32::from_str_radix(entity, base).ok();
+        return u32::from_str_radix(entity, base).ok();
     }
 
     entities(entity)

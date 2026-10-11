@@ -140,7 +140,7 @@ mod tests {
 
     #[test]
     fn test_js_casing() {
-        let e = |r: i32| encode_js_string_rune(r);
+        let e = |r: Rune| encode_js_string_rune(r);
         let tests: Vec<(&str, String, String)> = vec![
             ("ascii lowercase", to_lower_js("HELLO"), "hello".into()),
             ("ascii uppercase", to_upper_js("hello"), "HELLO".into()),
