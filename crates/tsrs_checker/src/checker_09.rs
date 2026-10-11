@@ -2904,9 +2904,11 @@ impl Checker {
     }
 
     pub(crate) fn get_ready_lazy_member_table_worker(&mut self, t: P<Type>) -> Option<P<LazyMemberTable>> {
-        let source = t.target();
-        if !t.flags().intersects(TypeFlags::Object)
-            || source.is_none()
+        if !t.flags().intersects(TypeFlags::Object) {
+            return None;
+        }
+        let source = t.object_target();
+        if source.is_none()
             || source == Some(t)
             || !source.unwrap().object_flags().intersects(ObjectFlags::ClassOrInterface)
                 && !(self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple))
@@ -2960,7 +2962,7 @@ impl Checker {
         });
         self.lazy_member_tables.insert(t, lm);
         self.lazy_member_stats.member_tables_created += 1;
-        if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
+        if t.object_target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_created += 1;
         }
         self.prepare_lazy_members(t, lm, type_arguments.last().copied());
@@ -3052,7 +3054,7 @@ impl Checker {
 
     // Mirrors resolveObjectTypeMembers without creating member symbols.
     pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>, this_argument: Option<P<Type>>) {
-        let source = t.target().unwrap();
+        let source = t.object_target().unwrap();
         let resolved = self.resolve_declared_members(source).unwrap();
         let unaffected = match resolved.declared_members.get() {
             Some(declared_members) => self.lazy_unaffected_members(source, declared_members, lm.mapper),
@@ -3179,7 +3181,7 @@ impl Checker {
         self.lazy_member_stats.member_lookups += 1;
         // The declared member, else the first base type's property (see addInheritedMembers).
         let mut result: Option<P<Symbol>> = None;
-        let declared_members = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get();
+        let declared_members = self.resolve_declared_members(t.object_target().unwrap()).unwrap().declared_members.get();
         if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
             if self.is_named_member(decl, name) {
                 if instantiate {

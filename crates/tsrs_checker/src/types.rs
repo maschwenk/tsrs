@@ -1754,6 +1754,12 @@ impl Type {
         panic!("Unhandled case in Type.Target")
     }
 
+    /// `target()` of an object type, without the flag dispatch (`target()` is out of line at most call sites).
+    #[inline]
+    pub fn object_target(&self) -> Option<P<Type>> {
+        self.as_object_type().target.get()
+    }
+
     #[inline]
     pub fn mapper(&self) -> Option<P<TypeMapper>> {
         let flags = self.flags.get();
