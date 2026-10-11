@@ -621,7 +621,8 @@ fn hash_name(name: &str) -> u32 {
     } else {
         (0, 0)
     };
-    let m = ((x ^ 0x243f_6a88_85a3_08d3) as u128).wrapping_mul((y ^ 0x1319_8a2e_0370_7344 ^ len as u64) as u128);
+    // The two constants are AArch64 logical immediates (one `eor` each, no four-instruction load).
+    let m = ((x ^ 0x5555_5555_5555_5555) as u128).wrapping_mul((y ^ 0x3333_3333_3333_3333 ^ len as u64) as u128);
     let h = (m as u64) ^ ((m >> 64) as u64);
     (h ^ (h >> 32)) as u32
 }
@@ -658,10 +659,13 @@ fn key_at(entries: &[SymbolMapEntry], odd_keys: &[(u32, &'static str)], i: usize
     odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
 }
 
-/// The index's hash of an entry: its 32-bit hash spread over 64 bits (hashbrown takes its tag from the top bits).
+/// The index's hash of an entry: hashbrown takes the bucket from the low bits (the name hash's low bits) and its
+/// 7-bit tag from the top bits, here name hash bits 13-19, which neither the bucket of a table below 8192 buckets
+/// nor the entry fingerprint (bits 20-31) uses. One shifted `orr`, no constant to load.
 #[inline]
 fn index_hash(hash: u32) -> u64 {
-    (hash as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15)
+    let h = hash as u64;
+    h | h << 44
 }
 
 
