@@ -255,13 +255,13 @@ Bug reports with a small reproduction are the most useful contribution, and fixe
 counts as a bug. See [`CONTRIBUTING.md`](CONTRIBUTING.md), [`SECURITY.md`](SECURITY.md) for reporting vulnerabilities,
 and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Acknowledgments
+
+Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for generously transferring the `tsrs` npm package name to this project.
+
 ## License
 
 A derivative of microsoft/TypeScript (Copyright Microsoft Corporation), licensed Apache-2.0 like the original
 ([`LICENSE`](LICENSE), [`NOTICE`](NOTICE)). The bundled `lib.*.d.ts` files are TypeScript's. Not affiliated with or
 endorsed by Microsoft. The port was written largely by AI coding agents, directed and reviewed by Max Schwenk; its
 correctness rests on the test results above rather than on review alone.
-
-## Acknowledgments
-
-Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for generously transferring the `tsrs` npm package name to this project.
