@@ -2372,9 +2372,12 @@ impl Checker {
         self.compare_types_assignable_worker(source, target, report_errors)
     }
 
-    /// `c.compareTypesAssignable` used as a value (`TypeComparer`).
+    /// `c.compareTypesAssignable` used as a value (`TypeComparer`): a function item, so no arena allocation per call.
     pub(crate) fn compare_types_assignable_comparer(&self) -> TypeComparer {
-        type_comparer(|c, s, t, report_errors| c.compare_types_assignable(s, t, report_errors))
+        fn compare_types_assignable(c: &mut Checker, s: P<Type>, t: P<Type>, report_errors: bool) -> Ternary {
+            c.compare_types_assignable(s, t, report_errors)
+        }
+        &compare_types_assignable
     }
 
     /// The closure built by Go `getGlobalTypesResolver(names, arity, reportErrors)`.
