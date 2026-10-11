@@ -2258,6 +2258,12 @@ pub(crate) fn move_to_next_directory_separator_if_available(path: &str, prev_sep
 pub struct ParsedPatterns {
     matchable_string_set: Set<String>,
     patterns: Vec<Pattern>,
+    // tsrs-only: the positions in `patterns` by the text before the star, and the lengths of those prefixes, longest
+    // first. The best match (`find_best_pattern_match`: the longest prefix, then the first pattern) is the first
+    // pattern that matches among those whose prefix starts the candidate, tried from the longest prefix: a few
+    // lookups instead of testing every pattern (hundreds in a monorepo's `paths`).
+    by_prefix: std::collections::HashMap<Box<[u8]>, Vec<u32>, rustc_hash::FxBuildHasher>,
+    prefix_lengths: Vec<usize>,
 }
 
 impl DefaultResolver {
@@ -2304,7 +2310,15 @@ pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>
             }
         }
     }
-    ParsedPatterns { matchable_string_set, patterns }
+    let mut by_prefix: std::collections::HashMap<Box<[u8]>, Vec<u32>, rustc_hash::FxBuildHasher> = Default::default();
+    for (i, pattern) in patterns.iter().enumerate() {
+        let prefix: Box<[u8]> = pattern.text.as_bytes()[..pattern.star_index as usize].into();
+        by_prefix.entry(prefix).or_default().push(i as u32);
+    }
+    let mut prefix_lengths: Vec<usize> = by_prefix.keys().map(|k| k.len()).collect();
+    prefix_lengths.sort_unstable_by(|a, b| b.cmp(a));
+    prefix_lengths.dedup();
+    ParsedPatterns { matchable_string_set, patterns, by_prefix, prefix_lengths }
 }
 
 pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pattern {
@@ -2314,7 +2328,16 @@ pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pat
     if patterns.patterns.is_empty() {
         return Pattern::default();
     }
-    tsrs_core::find_best_pattern_match(&patterns.patterns, |p| p, candidate).unwrap_or_default()
+    let bytes = candidate.as_bytes();
+    for &len in &patterns.prefix_lengths {
+        let Some(positions) = bytes.get(..len).and_then(|prefix| patterns.by_prefix.get(prefix)) else {
+            continue;
+        };
+        if let Some(&i) = positions.iter().find(|&&i| patterns.patterns[i as usize].matches(candidate)) {
+            return patterns.patterns[i as usize].clone();
+        }
+    }
+    Pattern::default()
 }
 
 // If you import from "." inside a containing directory "/foo", the result of `tspath.NormalizePath`
@@ -2745,6 +2768,28 @@ mod last_path_component_test {
         ] {
             let parts = tspath::get_path_components(path, "");
             assert_eq!(last_path_component(path), parts[parts.len() - 1], "{path:?}");
+        }
+    }
+}
+
+#[cfg(test)]
+mod match_pattern_or_exact_test {
+    use super::*;
+
+    #[test]
+    fn matches_like_find_best_pattern_match() {
+        let mut paths: OrderedMap<String, Vec<String>> = OrderedMap::default();
+        for key in ["@a/*", "@a/b/*", "@a/b/*.js", "*", "@a/b/c", "@a/*/d", "x*", "@a/b/*", "@a/bc*"] {
+            paths.insert(key.to_string(), vec![]);
+        }
+        let parsed = try_parse_patterns(Some(&paths));
+        for candidate in ["@a/b/c", "@a/b/x", "@a/b/x.js", "@a/q/d", "@a/bcd", "xyz", "zzz", "@a/", "@a", "", "@a/b/"] {
+            let expected = if parsed.matchable_string_set.m.contains(candidate) {
+                Pattern { text: candidate.to_string(), star_index: -1 }
+            } else {
+                tsrs_core::find_best_pattern_match(&parsed.patterns, |p| p, candidate).unwrap_or_default()
+            };
+            assert_eq!(match_pattern_or_exact(&parsed, candidate), expected, "{candidate}");
         }
     }
 }
