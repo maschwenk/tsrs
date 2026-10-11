@@ -341,6 +341,12 @@ with the switch off, which is why it is not in the default build.
 - Longest-processing-time-first queues and thieves taking from the front (notes/perf-checker-64.md): LPT +3.6% CPU at
   16 checkers and 5-8% more CPU per checker with the static assignment (program order keeps caches warm), README bench
   -2%; front-stealing +4-6% CPU at every count.
+- Assignment and stealing knobs on the 38k-file codebase at 8 checkers (notes/perf-icount-assign.md): the module
+  affinity's mu, gamma and passes away from 1 / 0.5 / 3 (+0.3% to +2.2% exact, static assignment); stealing runs of
+  files instead of single files, picking the victim by module overlap with the thief (+0.6% to +1.0%), and a gate on
+  starting a new victim late (only trims the extra stealing a loaded machine causes): within the noise. One thief per
+  queue at a time cost vscode 2% of check time at 9-12 checkers (1-7% at 4-16 when a thief never gave up its place);
+  the landed limit is checkers/4 at a time from 8 to 15.
 - Memory-traffic work at 32 checkers (notes/perf-memory-traffic-32.md): IPC is equal or higher at 32 checkers than at
   1 (vscode 1.92 -> 1.96) and miss rates are low, so padding, pinning, prefetching and hot/cold splits have nothing to
   win; `ReferenceInstantiations` slot hashes (A2) were within noise (+11 MiB peak).
