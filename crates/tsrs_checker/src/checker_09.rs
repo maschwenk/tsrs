@@ -3292,6 +3292,10 @@ impl Checker {
     pub(crate) fn every_property_of_structured_type(&mut self, t: P<Type>, f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool) -> bool {
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_every_property_queries += 1;
+            if lm.ready.get().unwrap().base_types.get().is_empty() {
+                // No inherited member to hide, and the names of one table are unique: no set of names.
+                return self.every_declared_lazy_property(t, f);
+            }
             let mut seen = self.free_name_sets.pop().unwrap_or_default();
             let result = self.every_lazy_property(t, lm, &mut seen, f);
             if seen.capacity() <= 1024 {
@@ -3306,6 +3310,19 @@ impl Checker {
 
     pub(crate) fn has_properties_of_structured_type(&mut self, t: P<Type>) -> bool {
         !self.every_property_of_structured_type(t, &mut |_, _| false)
+    }
+
+    /// `every_lazy_property` with an empty `seen` for a table without base types.
+    fn every_declared_lazy_property(&mut self, t: P<Type>, f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool) -> bool {
+        if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get() {
+            for i in 0..declared_members.len() {
+                let (id, symbol) = declared_members.entry(i);
+                if self.is_named_member(symbol, id) && !f(self, symbol) {
+                    return false;
+                }
+            }
+        }
+        true
     }
 
     // seen has the names of properties that hide inherited ones, as in addInheritedMembers.

@@ -1500,15 +1500,19 @@ impl Checker {
         }
         let mut members: Vec<P<Symbol>> = Vec::new();
         let mut seen: FxHashSet<&'static str> = FxHashSet::default();
+        let base_types = lm.ready.get().unwrap().base_types.get();
         if let Some(declared_members) = self.resolve_declared_members(reduced.target().unwrap()).unwrap().declared_members.get() {
             for (id, symbol) in declared_members.entries() {
                 if self.is_named_member(symbol, id) {
-                    seen.insert(id);
+                    // The names only hide inherited members (the names of one table are unique).
+                    if !base_types.is_empty() {
+                        seen.insert(id);
+                    }
                     members.push(lm.declared.lookup(id).unwrap_or(symbol));
                 }
             }
         }
-        for &base_type in lm.ready.get().unwrap().base_types.get() {
+        for &base_type in base_types {
             let base_properties: std::borrow::Cow<'static, [P<Symbol>]> = match self.get_lazy_properties_in_order(base_type) {
                 Some(properties) => properties.into(),
                 None => self.get_properties_of_type(base_type).into(),
