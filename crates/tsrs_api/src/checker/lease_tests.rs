@@ -335,10 +335,10 @@ fn async_two_waits_in_one_request_each_get_the_full_grace_period() {
         thread::sleep(g * 6 / 10);
         a.answer(&cb_q, "\"q\"");
         let mut got = Vec::new();
-        for _ in 0..2 {
+        got.extend((0..2).map(|_| {
             let v = a.read();
-            got.push((get(&v, "id"), result(&v)));
-        }
+            (get(&v, "id"), result(&v))
+        }));
         let (_, waits) = got.iter().find(|(id, _)| *id == Value::Number(3.0)).expect("twoWaits response").clone();
         let Value::Array(w) = waits else { panic!("{waits:?}") };
         assert!(ms(&w[1]) >= (g * 11 / 10).as_millis(), "the two waits together exceed the grace period: {w:?}");

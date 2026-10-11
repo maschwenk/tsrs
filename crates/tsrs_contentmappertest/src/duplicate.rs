@@ -18,13 +18,13 @@ impl ipc::Handler for duplicateHandler {
             METHOD_TRANSFORM => {
                 let p: TransformParams = unmarshal_params(params)?;
                 let content = p.content.as_str();
-                let length = content.len() as isize;
+                let length = content.len();
                 // A verbatim segment of the whole original content at virtual position `virtual_start`.
-                let segment = |virtual_start: isize, features: Feature| Segment {
-                    virtual_start: virtual_start as i32,
-                    virtual_end: (virtual_start + length) as i32,
+                let segment = |virtual_start: usize, features: Feature| Segment {
+                    virtual_start: virtual_start as u32,
+                    virtual_end: (virtual_start + length) as u32,
                     original_start: 0,
-                    original_end: length as i32,
+                    original_end: length as u32,
                     kind: Kind::Verbatim,
                     features,
                 };
@@ -37,9 +37,12 @@ impl ipc::Handler for duplicateHandler {
                 };
                 if p.file_name.contains("hover-fallback") {
                     let virtual_ = format!("// {content}\nconst {content} = 1;\n");
-                    let first = "// ".len() as isize;
-                    let second = first + length + "\nconst ".len() as isize;
-                    let mappings = marshal_span_map(&[segment(first, Feature::Hover), segment(second, Feature::Hover)])?;
+                    let first = "// ".len();
+                    let second = first + length + "\nconst ".len();
+                    let mappings = marshal_span_map(&[
+                        segment(first, Feature::Hover),
+                        segment(second, Feature::Hover),
+                    ])?;
                     return Ok(result(virtual_, mappings));
                 }
                 if p.file_name.contains("hover-concat") {
@@ -50,8 +53,10 @@ impl ipc::Handler for duplicateHandler {
                     return Ok(result(virtual_, mappings));
                 }
                 if p.file_name.contains("signature-fallback") {
-                    let virtual_ = format!("// {content}\nfunction use(value: number): void {{}}\n{content};\n");
-                    let first = "// ".len() as isize;
+                    let virtual_ = format!(
+                        "// {content}\nfunction use(value: number): void {{}}\n{content};\n"
+                    );
+                    let first = "// ".len();
                     let second = last_index(&virtual_, content);
                     let mappings =
                         marshal_span_map(&[segment(first, Feature::SignatureHelp), segment(second, Feature::SignatureHelp)])?;
@@ -70,8 +75,8 @@ impl ipc::Handler for duplicateHandler {
                     return Ok(result(virtual_, mappings));
                 }
                 let virtual_ = format!("export const {content} = 1;\n{content};\n");
-                let first = "export const ".len() as isize;
-                let second = first + length + " = 1;\n".len() as isize;
+                let first = "export const ".len();
+                let second = first + length + " = 1;\n".len();
                 let disabled = p.file_name.contains("disabled");
                 let mut semantic_features = Feature::Hover | Feature::Definition | Feature::References | Feature::Rename;
                 let mut navigation_features = Feature::Definition | Feature::References | Feature::Rename;
@@ -91,12 +96,12 @@ impl ipc::Handler for duplicateHandler {
     }
 }
 
-// Go `strings.Index`: -1 when absent.
-fn index(s: &str, substr: &str) -> isize {
-    s.find(substr).map_or(-1, |i| i as isize)
+fn index(s: &str, substr: &str) -> usize {
+    s.find(substr)
+        .expect("constructed virtual text contains the requested substring")
 }
 
-// Go `strings.LastIndex`: -1 when absent.
-fn last_index(s: &str, substr: &str) -> isize {
-    s.rfind(substr).map_or(-1, |i| i as isize)
+fn last_index(s: &str, substr: &str) -> usize {
+    s.rfind(substr)
+        .expect("constructed virtual text contains the requested substring")
 }

@@ -195,9 +195,7 @@ impl Session {
             req.close_files.get_or_insert_with(Set::new).add(self.to_path(&d.to_uri(&cwd).file_name()));
         }
         let create = p.array("createPrograms")?;
-        for (i, item) in create.iter().enumerate() {
-            req.create_programs.push(self.create_programs_request(item, "createPrograms", i)?);
-        }
+        req.create_programs = create.iter().enumerate().map(|(i, item)| self.create_programs_request(item, "createPrograms", i)).collect::<Result<_, _>>()?;
         let mut reconfigured: Set<SyntheticProjectID> = Set::new();
         for (i, item) in p.array("reconfigurePrograms")?.iter().enumerate() {
             if matches!(item, Value::Null) {
@@ -300,15 +298,9 @@ impl Session {
             return Ok(summary);
         }
         let cwd = self.current_directory();
-        for d in DocumentIdentifier::parse_list(p.array("changed")?, "changed")? {
-            summary.changed.add(d.to_uri(cwd));
-        }
-        for d in DocumentIdentifier::parse_list(p.array("created")?, "created")? {
-            summary.created.add(d.to_uri(cwd));
-        }
-        for d in DocumentIdentifier::parse_list(p.array("deleted")?, "deleted")? {
-            summary.deleted.add(d.to_uri(cwd));
-        }
+        summary.changed.m.extend((DocumentIdentifier::parse_list(p.array("changed")?, "changed")?).into_iter().map(|d| d.to_uri(cwd)));
+        summary.created.m.extend((DocumentIdentifier::parse_list(p.array("created")?, "created")?).into_iter().map(|d| d.to_uri(cwd)));
+        summary.deleted.m.extend((DocumentIdentifier::parse_list(p.array("deleted")?, "deleted")?).into_iter().map(|d| d.to_uri(cwd)));
         if summary.changed.len() + summary.created.len() + summary.deleted.len() > 0 {
             summary.includes_watch_change_outside_node_modules = true;
         }
@@ -321,46 +313,48 @@ impl Session {
         let mut operation = Obj::new();
         if echo.has_create_programs {
             let mut ids = Vec::new();
-            for created in snapshot.created_programs() {
+            ids = snapshot.created_programs().iter().try_fold(ids, |mut ids, created| {
                 let created = created.as_ref().ok_or_else(|| ApiError::internal("created program result missing"))?;
                 let id = created.id();
                 let synthetic = id.synthetic().ok_or_else(|| ApiError::internal("created program has non-synthetic project ID"))?;
                 ids.push(s(synthetic.0));
-            }
+                Ok::<_, ApiError>(ids)
+            })?;
             operation = operation.set("createdPrograms", Value::Array(ids));
         }
         if let Some(open_files) = &echo.open_files {
             let mut results = Vec::new();
-            for f in open_files {
+            results = open_files.iter().try_fold(results, |mut results, f| {
                 let project = snapshot
                     .get_default_project(&f.to_uri(cwd))
                     .ok_or_else(|| ApiError::internal(format!("no project found for opened file {}", f.to_absolute_file_name(cwd))))?;
                 results.push(Obj::new().set("project", s(project.id().0)).build());
-            }
+                Ok::<_, ApiError>(results)
+            })?;
             operation = operation.set("openedFiles", Value::Array(results));
         }
         let mut projects = Vec::new();
         let mut out = Obj::new().set("snapshot", Value::Number(snapshot.id() as f64));
         match base {
             None => {
-                for proj in snapshot.project_collection.projects() {
-                    if proj.command_line.is_some() {
-                        projects.push(project_response(&proj));
-                    }
-                }
+                projects.extend(
+                    snapshot
+                        .project_collection
+                        .projects()
+                        .into_iter()
+                        .filter_map(|proj| if proj.command_line.is_some() { Some(project_response(&proj)) } else { None }),
+                );
                 out = out.set("projects", Value::Array(projects));
             }
             Some(base) => {
                 let old = base.project_collection.projects_by_id();
-                for (id, new) in snapshot.project_collection.projects_by_id().iter() {
+                projects.extend(snapshot.project_collection.projects_by_id().iter().filter_map(|(id, new)| {
                     let include = match old.get(id) {
                         None => true,
                         Some(old) => !same_project(old, new),
                     };
-                    if include && new.command_line.is_some() {
-                        projects.push(project_response(new));
-                    }
-                }
+                    if include && new.command_line.is_some() { Some(project_response(new)) } else { None }
+                }));
                 out = out.set("projects", Value::Array(projects));
                 // `json:"changes,omitempty"` (json/v2): a SnapshotChanges that encodes as `{}` is omitted.
                 let changes = compute_snapshot_changes(base, snapshot);
@@ -373,12 +367,16 @@ impl Session {
     }
 
     fn module_resolution_error(snapshot: &Snapshot) -> ApiResult<()> {
-        for project in snapshot.project_collection.projects() {
+        if let Some(result) = snapshot.project_collection.projects().into_iter().find_map(|project| {
             if let Some(program) = project.get_program() {
                 if let Some(err) = program.module_resolution_error() {
-                    return Err(ApiError::internal(err.to_string()));
+                    return Some(Err(ApiError::internal(err.to_string())));
                 }
             }
+
+            None
+        }) {
+            return result;
         }
         Ok(())
     }

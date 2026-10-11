@@ -1,6 +1,6 @@
 use std::any::Any;
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, SyncSender};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::thread;
@@ -31,7 +31,7 @@ pub struct AsyncConn {
     handler: Arc<dyn Handler>,
 
     // For server→client requests
-    seq: AtomicI64,
+    seq: AtomicU64,
     pending_mu: Mutex<pendingCalls>,
     write_mu: Mutex<()>,
     // Go's `handlers sync.WaitGroup`: Run starts the handler threads in a std::thread::scope, which waits for them.
@@ -65,8 +65,12 @@ pub fn new_async_conn_with_protocol(
         rwc,
         protocol,
         handler,
-        seq: AtomicI64::new(0),
-        pending_mu: Mutex::new(pendingCalls { pending: FxHashMap::default(), terminal: None, has_cause: false }),
+        seq: AtomicU64::new(0),
+        pending_mu: Mutex::new(pendingCalls {
+            pending: FxHashMap::default(),
+            terminal: None,
+            has_cause: false,
+        }),
         write_mu: Mutex::new(()),
     })
 }

@@ -15,11 +15,15 @@ pub(crate) fn should_allow_importing_ts_extension(compiler_options: &CompilerOpt
 
 // preferences.go:18
 pub(crate) fn uses_extensions_on_imports(file: P<SourceFile>) -> bool {
-    for ref_ in file.imports() {
+    if let Some(result) = file.imports().iter().find_map(|ref_| {
         let text = ref_.text();
         if tspath::path_is_relative(text) && !tspath::file_extension_is_one_of(text, tspath::EXTENSIONS_NOT_SUPPORTING_EXTENSIONLESS_RESOLUTION) {
-            return tspath::has_ts_file_extension(text) || tspath::has_js_file_extension(text);
+            return Some(tspath::has_ts_file_extension(text) || tspath::has_js_file_extension(text));
         }
+
+        None
+    }) {
+        return result;
     }
     false
 }

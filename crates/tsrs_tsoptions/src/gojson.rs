@@ -157,9 +157,7 @@ impl GoJson for Option<OrderedMap<String, Vec<String>>> {
     fn to_go_json(&self) -> Option<Value> {
         self.as_ref().map(|m| {
             let mut o = OrderedMap::default();
-            for (k, v) in m.iter() {
-                o.insert(k.clone(), strings_to(v));
-            }
+            o.extend(m.iter().map(|(k, v)| (k.clone(), strings_to(v))));
             Value::Object(o)
         })
     }
@@ -168,9 +166,10 @@ impl GoJson for Option<OrderedMap<String, Vec<String>>> {
             Value::Null => Ok(None),
             Value::Object(entries) => {
                 let mut m = OrderedMap::default();
-                for (k, v) in entries.iter() {
+                m = entries.iter().try_fold(m, |mut m, (k, v)| {
                     m.insert(k.clone(), strings_from(v, field)?);
-                }
+                    Ok::<_, String>(m)
+                })?;
                 Ok(Some(m))
             }
             v => Err(type_error(field, "map[string][]string", v)),

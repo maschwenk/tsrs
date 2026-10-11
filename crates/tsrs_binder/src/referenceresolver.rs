@@ -248,29 +248,27 @@ impl<H: 'static> ReferenceResolver<H> {
         let mut declarations = Vec::new();
         if let Some(symbol) = self.get_referenced_value_symbol(h, node, false /*startInDeclarationContainer*/) {
             let symbol = self.get_export_symbol_of_value_symbol_if_exported(h, Some(symbol)).unwrap();
-            for &declaration in symbol.declarations() {
-                match declaration.kind() {
-                    Kind::VariableDeclaration
-                    | Kind::Parameter
-                    | Kind::BindingElement
-                    | Kind::PropertyDeclaration
-                    | Kind::PropertyAssignment
-                    | Kind::ShorthandPropertyAssignment
-                    | Kind::EnumMember
-                    | Kind::ObjectLiteralExpression
-                    | Kind::FunctionDeclaration
-                    | Kind::FunctionExpression
-                    | Kind::ArrowFunction
-                    | Kind::ClassDeclaration
-                    | Kind::ClassExpression
-                    | Kind::EnumDeclaration
-                    | Kind::MethodDeclaration
-                    | Kind::GetAccessor
-                    | Kind::SetAccessor
-                    | Kind::ModuleDeclaration => declarations.push(declaration),
-                    _ => {}
-                }
-            }
+            declarations.extend(symbol.declarations().iter().filter_map(|&declaration| match declaration.kind() {
+                Kind::VariableDeclaration
+                | Kind::Parameter
+                | Kind::BindingElement
+                | Kind::PropertyDeclaration
+                | Kind::PropertyAssignment
+                | Kind::ShorthandPropertyAssignment
+                | Kind::EnumMember
+                | Kind::ObjectLiteralExpression
+                | Kind::FunctionDeclaration
+                | Kind::FunctionExpression
+                | Kind::ArrowFunction
+                | Kind::ClassDeclaration
+                | Kind::ClassExpression
+                | Kind::EnumDeclaration
+                | Kind::MethodDeclaration
+                | Kind::GetAccessor
+                | Kind::SetAccessor
+                | Kind::ModuleDeclaration => Some(declaration),
+                _ => None,
+            }));
         }
         declarations
     }

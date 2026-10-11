@@ -596,6 +596,13 @@ func (g *gen) index(e ast.Expr) string {
 	if tv := g.info.Types[e]; tv.Value != nil {
 		return tv.Value.ExactString()
 	}
+	if call, ok := e.(*ast.CallExpr); ok {
+		if sel, ok := call.Fun.(*ast.SelectorExpr); ok {
+			if f, ok := g.info.Uses[sel.Sel].(*types.Func); ok && f.Pkg() != nil && f.Pkg().Path() == "strings" && f.Name() == "Index" {
+				return parenIfNeeded(g.expr(e, types.Typ[types.Int], mOwned)) + ".expect(\"slice bound substring must be present\")"
+			}
+		}
+	}
 	return parenIfNeeded(g.expr(e, types.Typ[types.Int], mOwned)) + " as usize"
 }
 

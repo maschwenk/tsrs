@@ -15,7 +15,7 @@ use crate::logging::new_test_logger;
 use crate::session::{new_session, Session, SessionInit, SessionOptions};
 
 fn ptr(c: &CheckerHandle) -> *const Checker {
-    &**c as *const Checker
+    &raw const **c
 }
 
 fn ctx_with(request_id: &str, lifetime: CheckerLifetime) -> Context {

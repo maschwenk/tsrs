@@ -239,30 +239,30 @@ impl Watcher {
             return;
         }
         let pending = st.pending.get_or_insert_with(|| IndexMap::with_capacity(events.len()));
-        for event in events {
+        pending.extend(events.iter().filter_map(|event| {
             let change_type = match event.kind {
                 fswatch::EventKind::Update => {
                     // fswatch intentionally doesn't distinguish create vs update.
                     // For LSP consumers this is fine: callers infer create/update
                     // from their own cache and both should invalidate stale state.
                     if kind.0 & (lsproto::WatchKind::Create.0 | lsproto::WatchKind::Change.0) == 0 {
-                        continue;
+                        return None;
                     }
                     lsproto::FileChangeType::Changed
                 }
                 fswatch::EventKind::Delete => {
                     if kind.0 & lsproto::WatchKind::Delete.0 == 0 {
-                        continue;
+                        return None;
                     }
                     lsproto::FileChangeType::Deleted
                 }
-                _ => continue,
+                _ => return None,
             };
 
             let path = tspath::normalize_slashes(&event.path);
             let uri = lsconv::file_name_to_document_uri(&path);
-            pending.insert(uri.0.clone(), lsproto::FileEvent { uri, type_: change_type });
-        }
+            Some((uri.0.clone(), lsproto::FileEvent { uri, type_: change_type }))
+        }));
         self.schedule_flush_locked(&mut st);
     }
 
@@ -287,12 +287,8 @@ impl Watcher {
             });
         } else {
             let entries = self.fs.get_accessible_entries(directory);
-            for name in &entries.files {
-                paths.push(tspath::combine_paths(directory, &[name]));
-            }
-            for name in &entries.directories {
-                paths.push(tspath::combine_paths(directory, &[name]));
-            }
+            paths.extend(entries.files.iter().map(|name| tspath::combine_paths(directory, &[name])));
+            paths.extend(entries.directories.iter().map(|name| tspath::combine_paths(directory, &[name])));
         }
         self.enqueue_synthetic_creates(&paths);
     }

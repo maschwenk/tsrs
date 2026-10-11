@@ -46,7 +46,7 @@ function convertExpr(expr: string, prefix: string): string {
 function genFlags(file: string, typeName: string) {
     const src = fs.readFileSync(path.join(goDir, file + ".go"), "utf8");
     const typeM = new RegExp(`type ${typeName} (\\w+)`).exec(src)!;
-    const rustInt = ({ uint32: "u32", int32: "i32", uint64: "u64", int64: "i64" } as Record<string, string>)[typeM[1]];
+    const rustInt = ({ uint32: "u32", int32: "u32", uint64: "u64", int64: "u64" } as Record<string, string>)[typeM[1]];
     const start = src.indexOf("const (");
     const block = src.slice(start + 7, src.indexOf("\n)\n", start));
     let out = header + "use bitflags::bitflags;\n\nbitflags! {\n";

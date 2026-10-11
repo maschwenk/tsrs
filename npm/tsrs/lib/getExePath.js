@@ -2,10 +2,9 @@ import fs from "node:fs";
 import module from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { getPlatformPackageName } from "./platform.js";
 
-// Same scheme as TypeScript 7's `typescript` package: the native binary ships in a per-platform package
-// `@ts-rs/<process.platform>-<process.arch>`, listed in `optionalDependencies` so the package
-// manager installs only the one whose `os`/`cpu` match.
+// The native binary ships in a per-platform optional dependency, with GNU/musl suffixes on Linux as in Oxc.
 export default function getExePath() {
     const override = process.env.TSRS_BINARY;
     if (override) {
@@ -18,7 +17,7 @@ export default function getExePath() {
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
     const platformPackagePrefix = "@ts-rs/";
-    const platformPackageName = `${platformPackagePrefix}${process.platform}-${process.arch}`;
+    const platformPackageName = getPlatformPackageName();
     const exeName = process.platform === "win32" ? "tsrs.exe" : "tsrs";
 
     let packageDir;
@@ -31,7 +30,7 @@ export default function getExePath() {
         const isSupported = supported.includes(platformPackageName);
         throw new Error(
             [
-                `Cannot find the optional dependency ${platformPackageName}, which contains the tsrs binary for ${process.platform}-${process.arch}.`,
+                `Cannot find the optional dependency ${platformPackageName}, which contains the tsrs binary for ${platformPackageName.slice(platformPackagePrefix.length)}.`,
                 isSupported
                     ? `It is listed in ${pkg.name}'s optionalDependencies but was not installed. Common causes: installing with --no-optional / --omit=optional, ` +
                         `a lockfile or node_modules created on another platform, or pnpm \`supportedArchitectures\` excluding this platform. Reinstall to fix.`

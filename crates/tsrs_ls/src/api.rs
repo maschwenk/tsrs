@@ -13,7 +13,12 @@ pub const ERR_NO_TOKEN_AT_POSITION: &str = "no token found at position";
 
 impl LanguageService {
     // api.go:18
-    pub fn get_symbol_at_position(&self, ctx: &Context, file_name: &str, position: i32) -> Result<Option<P<Symbol>>, lsproto::Error> {
+    pub fn get_symbol_at_position(
+        &self,
+        ctx: &Context,
+        file_name: &str,
+        position: u32,
+    ) -> Result<Option<P<Symbol>>, lsproto::Error> {
         let (program, file) = self.try_get_program_and_file(file_name);
         let Some(file) = file else {
             return Err(lsproto::Error::new(format!("{}: {}", ERR_NO_SOURCE_FILE, file_name)));

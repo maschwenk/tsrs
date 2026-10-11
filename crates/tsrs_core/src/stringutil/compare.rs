@@ -93,11 +93,11 @@ pub fn get_string_equality_comparer(ignore_case: bool) -> fn(&str, &str) -> bool
     equate_string_case_sensitive
 }
 
-pub type Comparison = i32;
+pub type Comparison = Ordering;
 
-pub const COMPARISON_LESS_THAN: Comparison = -1;
-pub const COMPARISON_EQUAL: Comparison = 0;
-pub const COMPARISON_GREATER_THAN: Comparison = 1;
+pub const COMPARISON_LESS_THAN: Comparison = Ordering::Less;
+pub const COMPARISON_EQUAL: Comparison = Ordering::Equal;
+pub const COMPARISON_GREATER_THAN: Comparison = Ordering::Greater;
 
 pub fn compare_strings_case_insensitive(a: &str, b: &str) -> Comparison {
     if a == b {
@@ -141,11 +141,7 @@ pub fn compare_strings_case_insensitive(a: &str, b: &str) -> Comparison {
 }
 
 pub fn compare_strings_case_sensitive(a: &str, b: &str) -> Comparison {
-    match a.as_bytes().cmp(b.as_bytes()) {
-        Ordering::Less => -1,
-        Ordering::Equal => 0,
-        Ordering::Greater => 1,
-    }
+    a.as_bytes().cmp(b.as_bytes())
 }
 
 pub fn get_string_comparer(ignore_case: bool) -> fn(&str, &str) -> Comparison {

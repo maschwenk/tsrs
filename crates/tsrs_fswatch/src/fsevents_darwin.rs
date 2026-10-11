@@ -121,13 +121,13 @@ impl fsEventsState {
     // fsevents_darwin.go:215
     fn active_watches_locked(&self) -> Vec<fseventsWatchSnapshot> {
         let mut watches = Vec::with_capacity(self.watches.len());
-        #[expect(clippy::iter_over_hash_type, reason = "stream paths are sorted after; each watch's dispatch only touches that watch's own state; Go ranges the map too")]
-        for (w, state) in &self.watches {
+        // stream paths are sorted after; each watch's dispatch only touches that watch's own state; Go ranges the map too
+        watches.extend(self.watches.iter().filter_map(|(w, state)| {
             if state.terminated.load(Ordering::SeqCst) {
-                continue;
+                return None;
             }
-            watches.push(fseventsWatchSnapshot { w: Arc::clone(&w.0), state: Arc::clone(state) });
-        }
+            Some(fseventsWatchSnapshot { w: Arc::clone(&w.0), state: Arc::clone(state) })
+        }));
         watches
     }
 }
@@ -162,13 +162,13 @@ fn start_fs_events_streams(
     }
     let mut seen = FxHashSet::with_capacity_and_hasher(watches.len(), Default::default());
     let mut paths = Vec::with_capacity(watches.len());
-    for watch in watches {
+    paths.extend(watches.iter().filter_map(|watch| {
         let path = watch.w.physical_dir.clone();
         if !seen.insert(path.clone()) {
-            continue;
+            return None;
         }
-        paths.push(path);
-    }
+        Some(path)
+    }));
     paths.sort();
 
     if let Ok(stream) = start_stream(&paths, watches) {
@@ -241,12 +241,14 @@ impl watcherImpl for fsEventsBackend {
             return Some(Ok(()));
         }
         let mut states: Vec<(Arc<dirWatch>, Arc<fseventsState>)> = Vec::with_capacity(watches_to_add.len());
-        for w in watches_to_add {
-            if let Err(err) = check_watcher(w) {
-                return Some(Err(err));
-            }
+        states = match watches_to_add.iter().try_fold(states, |mut states, w| {
+            check_watcher(w)?;
             states.push((Arc::clone(w), Arc::new(fseventsState::default())));
-        }
+            Ok(states)
+        }) {
+            Ok(states) => states,
+            Err(err) => return Some(Err(err)),
+        };
 
         let mut st = self.mu.lock().unwrap();
         for (w, state) in &states {

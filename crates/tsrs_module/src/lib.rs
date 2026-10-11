@@ -3,6 +3,7 @@ pub mod symlinks;
 
 mod cache;
 mod resolver;
+mod scratch;
 mod types;
 mod util;
 

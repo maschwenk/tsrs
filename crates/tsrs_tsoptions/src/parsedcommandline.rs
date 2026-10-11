@@ -30,9 +30,7 @@ impl ParsedCommandLine {
         }
         let mut extensions: Vec<&str> = Vec::with_capacity(9 + mapper_extensions.len());
         extensions.extend(["js", "jsx", "mjs", "cjs", "ts", "tsx", "mts", "cts", "json"]);
-        for extension in &mapper_extensions {
-            extensions.push(extension.strip_prefix('.').unwrap_or(extension));
-        }
+        extensions.extend(mapper_extensions.iter().map(|extension| extension.strip_prefix('.').unwrap_or(extension)));
         let file_glob = format!("*.{{{}}}", extensions.join(","));
         let recursive = format!("**/{file_glob}");
         (file_glob, recursive)
@@ -228,22 +226,22 @@ impl ParsedCommandLine {
     pub(crate) fn get_output_declaration_and_source_file_names(&self) -> Vec<(String, String)> {
         let options = self.compiler_options().unwrap();
         let mut result = Vec::with_capacity(self.parsed_config.file_names.len());
-        for file_name in &self.parsed_config.file_names {
+        result.extend(self.parsed_config.file_names.iter().map(|file_name| {
             let mut output_dts = String::new();
             if !tspath::is_declaration_file_name(file_name) && !tspath::file_extension_is(file_name, tspath::EXTENSION_JSON) {
                 output_dts = outputpaths::get_output_declaration_file_name_worker(file_name, &options, self);
             }
-            result.push((output_dts, file_name.clone()));
-        }
+            (output_dts, file_name.clone())
+        }));
         result
     }
 
     pub fn get_output_file_names(&self) -> Vec<String> {
         let options = self.compiler_options().unwrap();
         let mut result = Vec::new();
-        for file_name in &self.parsed_config.file_names {
+        result = self.parsed_config.file_names.iter().fold(result, |mut result, file_name| {
             if tspath::is_declaration_file_name(file_name) {
-                continue;
+                return result;
             }
             let js_file_name = outputpaths::get_output_js_file_name(file_name, &options, self);
             let is_json = tspath::file_extension_is(file_name, tspath::EXTENSION_JSON);
@@ -259,7 +257,7 @@ impl ParsedCommandLine {
                 }
             }
             if is_json {
-                continue;
+                return result;
             }
             if options.get_emit_declarations() {
                 let dts_file_name = outputpaths::get_output_declaration_file_name_worker(file_name, &options, self);
@@ -271,7 +269,9 @@ impl ParsedCommandLine {
                     }
                 }
             }
-        }
+
+            result
+        });
         result
     }
 
@@ -299,16 +299,10 @@ impl ParsedCommandLine {
         self.include_globs.get_or_init(|| {
             let (file_glob, recursive_file_glob) = self.file_glob_patterns();
             let mut globs: Vec<Glob> = Vec::with_capacity(wildcard_directories.len());
-            for (dir, recursive) in wildcard_directories.iter() {
-                let pattern = format!(
-                    "{}/{}",
-                    tspath::normalize_path(dir),
-                    if *recursive { &recursive_file_glob } else { &file_glob }
-                );
-                if let Ok(parsed) = glob::parse(&pattern) {
-                    globs.push(parsed);
-                }
-            }
+            globs.extend(wildcard_directories.iter().filter_map(|(dir, recursive)| {
+                let pattern = format!("{}/{}", tspath::normalize_path(dir), if *recursive { &recursive_file_glob } else { &file_glob });
+                if let Ok(parsed) = glob::parse(&pattern) { Some(parsed) } else { None }
+            }));
             globs
         })
     }
@@ -349,10 +343,10 @@ impl ParsedCommandLine {
     pub fn file_names_by_path(&self) -> &FxHashMap<Path, String> {
         self.file_names_by_path.get_or_init(|| {
             let mut file_names_by_path = FxHashMap::with_capacity_and_hasher(self.parsed_config.file_names.len(), Default::default());
-            for file_name in &self.parsed_config.file_names {
+            file_names_by_path.extend(self.parsed_config.file_names.iter().map(|file_name| {
                 let path = tspath::to_path(file_name, self.get_current_directory(), self.use_case_sensitive_file_names());
-                file_names_by_path.insert(path, file_name.clone());
-            }
+                (path, file_name.clone())
+            }));
             file_names_by_path
         })
     }
@@ -426,13 +420,17 @@ impl ParsedCommandLine {
         {
             let config_file = self.config_file.unwrap();
             let specs = config_file.config_file_specs.borrow();
-            for include in &specs.as_ref().unwrap().validated_include_specs {
+            if specs.as_ref().unwrap().validated_include_specs.iter().any(|include| {
                 if !include.contains(['*', '?']) && !vfsmatch::is_implicit_glob(include) {
                     let include_path = tspath::to_path(include, self.get_current_directory(), self.use_case_sensitive_file_names());
                     if include_path == path {
                         return true;
                     }
                 }
+
+                false
+            }) {
+                return true;
             }
         }
         if self.get_content_mapper_for_file_name(file_name).is_some() {
@@ -443,10 +441,8 @@ impl ParsedCommandLine {
         }
         let wildcard_directory_globs = self.wildcard_directory_globs();
         if !wildcard_directory_globs.is_empty() {
-            for glob in wildcard_directory_globs {
-                if glob.match_(file_name) {
-                    return true;
-                }
+            if wildcard_directory_globs.iter().any(|glob| glob.match_(file_name)) {
+                return true;
             }
         }
         false
@@ -456,7 +452,7 @@ impl ParsedCommandLine {
         let Some(wildcard_directories) = self.wildcard_directories() else {
             return false;
         };
-        for (wildcard_dir, recursive) in wildcard_directories.iter() {
+        if wildcard_directories.iter().any(|(wildcard_dir, recursive)| {
             let wildcard_dir_path = tspath::to_path(wildcard_dir, self.get_current_directory(), self.use_case_sensitive_file_names());
             if *recursive {
                 if wildcard_dir_path.contains_path(directory_path) {
@@ -465,6 +461,10 @@ impl ParsedCommandLine {
             } else if wildcard_dir_path == *directory_path {
                 return true;
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }

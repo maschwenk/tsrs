@@ -1,5 +1,5 @@
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
@@ -41,7 +41,7 @@ pub struct Snapshot {
     pub(crate) host: Arc<SnapshotHost>,
     pub(crate) id: u64,
     pub(crate) parent_id: u64,
-    ref_count: AtomicI32,
+    ref_count: AtomicU32,
 
     converters: Arc<Converters>,
 
@@ -81,10 +81,8 @@ impl Snapshot {
                 let mut content_mapper_watched_files = Set::default();
                 for project in self.project_collection.projects() {
                     if let Some(watched) = &project.content_mapper_watched_files {
-                        #[expect(clippy::iter_over_hash_type, reason = "pure set union; Go ranges the set too")]
-                        for path in watched.keys() {
-                            content_mapper_watched_files.add(path.clone());
-                        }
+                        // pure set union; Go ranges the set too
+                        content_mapper_watched_files.m.extend(watched.keys().iter().map(std::clone::Clone::clone));
                     }
                 }
                 (content_mapper_extensions, Arc::new(content_mapper_watched_files))
@@ -111,7 +109,7 @@ impl SnapshotHost {
             host: Arc::clone(self),
             id,
             parent_id: 0,
-            ref_count: AtomicI32::new(1),
+            ref_count: AtomicU32::new(1),
             // Go passes the method value `s.LSPLineMap`; the closure holds the snapshot's file system rather than the
             // snapshot itself (which would form a reference cycle).
             converters: lsconv::new_converters(self.options.position_encoding, move |file_name: &str| {
@@ -303,11 +301,13 @@ impl Snapshot {
     pub(crate) fn resource_request_for_document(&self, uri: &lsproto::DocumentUri) -> ResourceRequest {
         let path = uri.path(self.use_case_sensitive_file_names());
         let mut request = ResourceRequest { documents: vec![uri.clone()], ..Default::default() };
-        for project in self.project_collection.synthetic_projects() {
+        request.projects.extend(self.project_collection.synthetic_projects().into_iter().filter_map(|project| {
             if project.contains_file(&path) || project.host.as_ref().is_some_and(|host| host.source_fs.seen_file_or_missing_parent_directory(&path)) {
-                request.projects.push(project.id());
+                Some(project.id())
+            } else {
+                None
             }
-        }
+        }));
         request
     }
 
@@ -651,11 +651,13 @@ impl Snapshot {
         };
 
         let mut projects_with_new_program_structure: FxHashMap<ProjectID, bool> = FxHashMap::default();
-        for project in project_collection.projects() {
+        projects_with_new_program_structure.extend(project_collection.projects().into_iter().filter_map(|project| {
             if project.program_last_update == new_snapshot_id && project.program_update_kind != ProgramUpdateKind::Cloned {
-                projects_with_new_program_structure.insert(ProjectID(project.id().0), project.program_update_kind == ProgramUpdateKind::NewFiles);
+                Some((ProjectID(project.id().0), project.program_update_kind == ProgramUpdateKind::NewFiles))
+            } else {
+                None
             }
-        }
+        }));
 
         // Clean cached files not touched by any open project on file open, close, delete,
         // or when explicitly requested (e.g. by an idle timer).
@@ -672,10 +674,8 @@ impl Snapshot {
                 let mut removed_files = 0;
                 let projects = project_collection.projects();
                 fs.cache_files.range(|entry| {
-                    for project in &projects {
-                        if project.host.as_ref().is_some_and(|host| host.source_fs.seen_file(&entry.key())) {
-                            return true;
-                        }
+                    if projects.iter().any(|project| project.host.as_ref().is_some_and(|host| host.source_fs.seen_file(&entry.key()))) {
+                        return true;
                     }
                     entry.delete();
                     removed_files += 1;
@@ -694,10 +694,8 @@ impl Snapshot {
         let auto_import_host =
             new_auto_import_registry_clone_host(Arc::clone(&project_collection), Arc::clone(&store.parse_cache), Arc::clone(&fs), &store.options.current_directory, Arc::clone(&store.to_path));
         let mut open_files: FxHashMap<Path, String> = FxHashMap::default();
-        #[expect(clippy::iter_over_hash_type, reason = "pure map inserts; Go ranges the map too")]
-        for (path, overlay) in overlays.iter() {
-            open_files.insert(path.clone(), overlay.base.file_name.clone());
-        }
+        // pure map inserts; Go ranges the map too
+        open_files.extend(overlays.iter().map(|(path, overlay)| (path.clone(), overlay.base.file_name.clone())));
         let mut prepare_auto_imports = Path::default();
         if !change.resource_request.auto_imports.0.is_empty() {
             prepare_auto_imports = change.resource_request.auto_imports.path(self.use_case_sensitive_file_names());
@@ -788,8 +786,17 @@ impl Snapshot {
     // disposed until a corresponding Deref is called. The snapshot must still
     // be alive (refCount > 0) when ref is called.
     pub(crate) fn ref_(&self) {
-        if self.ref_count.fetch_add(1, Ordering::SeqCst) + 1 <= 1 {
-            panic!("snapshot {}: ref on disposed snapshot, parentId={}", self.id, self.parent_id);
+        if self
+            .ref_count
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                (count > 0).then(|| count.checked_add(1)).flatten()
+            })
+            .is_err()
+        {
+            panic!(
+                "snapshot {}: ref on disposed snapshot, parentId={}",
+                self.id, self.parent_id
+            );
         }
     }
 
@@ -798,26 +805,29 @@ impl Snapshot {
     // snapshot is already disposed (refCount == 0), it returns false without
     // modifying the count. On success the caller must eventually call Deref.
     pub(crate) fn try_ref(&self) -> bool {
-        loop {
-            let rc = self.ref_count.load(Ordering::SeqCst);
-            if rc <= 0 {
-                return false;
-            }
-            if self.ref_count.compare_exchange(rc, rc + 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-                return true;
-            }
-        }
+        self.ref_count
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                (count > 0).then(|| count.checked_add(1)).flatten()
+            })
+            .is_ok()
     }
 
     // snapshot.go:755
     // Deref decrements the snapshot's reference count. When the count reaches
     // zero, the snapshot is disposed and its store-owned resources are released.
     pub fn deref(&self) {
-        let rc = self.ref_count.fetch_sub(1, Ordering::SeqCst) - 1;
-        if rc < 0 {
-            panic!("snapshot {}: ref count below zero, parentId={}", self.id, self.parent_id);
-        }
-        if rc == 0 {
+        let previous = self
+            .ref_count
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                count.checked_sub(1)
+            })
+            .unwrap_or_else(|_| {
+                panic!(
+                    "snapshot {}: ref count below zero, parentId={}",
+                    self.id, self.parent_id
+                )
+            });
+        if previous == 1 {
             self.dispose();
         }
     }
@@ -857,7 +867,7 @@ impl Snapshot {
     }
 
     #[cfg(test)]
-    pub(crate) fn ref_count(&self) -> i32 {
+    pub(crate) fn ref_count(&self) -> u32 {
         self.ref_count.load(Ordering::SeqCst)
     }
 }
@@ -865,10 +875,8 @@ impl Snapshot {
 // snapshot.go:193
 fn overlay_file_handles(overlays: &OverlayMap) -> FxHashMap<Path, Arc<dyn FileHandle>> {
     let mut files: FxHashMap<Path, Arc<dyn FileHandle>> = FxHashMap::with_capacity_and_hasher(overlays.len(), Default::default());
-    #[expect(clippy::iter_over_hash_type, reason = "pure map inserts; Go ranges the map too")]
-    for (path, overlay) in overlays.iter() {
-        files.insert(path.clone(), Arc::<crate::overlayfs::Overlay>::clone(overlay));
-    }
+    // pure map inserts; Go ranges the map too
+    files.extend(overlays.iter().map(|(path, overlay)| (path.clone(), Arc::<crate::overlayfs::Overlay>::clone(overlay) as Arc<dyn FileHandle>)));
     files
 }
 

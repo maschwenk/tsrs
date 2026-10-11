@@ -8,49 +8,10 @@ use tsrs_core::P;
 use crate::program::{sort_and_deduplicate_diagnostics, Program};
 use crate::splitcheck;
 
-#[cfg(feature = "checker")]
 pub use tsrs_checker::{Checker, Context};
 
-#[cfg(feature = "checker")]
 fn new_checker(program: &'static Program) -> Box<Checker> {
     tsrs_checker::new_checker(program)
-}
-
-// Built without the checker crate: programs can be created, parsed and bound, but nothing can
-// be type checked.
-#[cfg(not(feature = "checker"))]
-pub struct Checker {
-    pub type_count: u32,
-    pub symbol_count: u32,
-    pub total_instantiation_count: u32,
-    pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
-}
-
-#[cfg(not(feature = "checker"))]
-pub use tsrs_core::context::Context;
-
-#[cfg(not(feature = "checker"))]
-impl Checker {
-    pub fn get_diagnostics_exported(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
-        unimplemented!("tsrs_compiler was built without the `checker` feature")
-    }
-
-    pub fn get_suggestion_diagnostics(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
-        unimplemented!("tsrs_compiler was built without the `checker` feature")
-    }
-
-    pub fn get_global_diagnostics(&mut self) -> Vec<P<Diagnostic>> {
-        unimplemented!("tsrs_compiler was built without the `checker` feature")
-    }
-
-    pub fn was_canceled(&mut self) -> bool {
-        false
-    }
-}
-
-#[cfg(not(feature = "checker"))]
-fn new_checker(_program: &'static Program) -> Box<Checker> {
-    Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
 }
 
 // checkerpool.go:24
@@ -244,10 +205,7 @@ impl SlotChecker {
         let region = tsrs_core::arena::Region::new_scratch(1 << 20);
         let checker = {
             let _scope = region.enter_scratch();
-            #[cfg(feature = "checker")]
             let fork = crate::sharedgraph::fresh_fork();
-            #[cfg(not(feature = "checker"))]
-            let fork = None;
             fork.unwrap_or_else(|| new_checker(program))
         };
         SlotChecker { checker, region: Some(region) }
@@ -544,7 +502,7 @@ fn get_checker_associations_in_order(
         edge_count += adjacent_files[i].len() as i64;
     }
 
-    let mut associations: Vec<i64> = vec![-1; file_weights.len()];
+    let mut associations: Vec<Option<usize>> = vec![None; file_weights.len()];
     let mut checker_weights: Vec<i64> = vec![0; checker_count];
     let checker_count_i = checker_count as i64;
     let average_checker_weight = (total_weight + checker_count_i - 1) / checker_count_i;
@@ -562,15 +520,14 @@ fn get_checker_associations_in_order(
 
         neighbor_counts.iter_mut().for_each(|c| *c = 0);
         for &adjacent_file in &adjacent_files[file_index] {
-            let checker_index = associations[adjacent_file];
-            if checker_index >= 0 {
-                neighbor_counts[checker_index as usize] += 1;
+            if let Some(checker_index) = associations[adjacent_file] {
+                neighbor_counts[checker_index] += 1;
             }
         }
 
         // tsrs-only: the locality assignment also counts the modules a group shares with each checker (affinity.rs).
         let module_affinities = affinity.as_deref_mut().map(|a| a.affinities(file_index));
-        let mut best_checker: i64 = -1;
+        let mut best_checker = None;
         let mut best_score = f64::NEG_INFINITY;
         for (checker_index, &checker_weight) in checker_weights.iter().enumerate() {
             if checker_weight + file_weights[file_index] > max_checker_weight {
@@ -583,27 +540,31 @@ fn get_checker_associations_in_order(
             let penalty = alpha * (new_penalty - old_penalty);
             let score = neighbor_counts[checker_index] as f64 - penalty + module_affinities.map_or(0.0, |a| a[checker_index]);
             if score > best_score
-                || score == best_score && (best_checker < 0 || checker_weight < checker_weights[best_checker as usize])
+                || score == best_score
+                    && best_checker.is_none_or(|best| checker_weight < checker_weights[best])
             {
-                best_checker = checker_index as i64;
+                best_checker = Some(checker_index);
                 best_score = score;
             }
         }
-        if best_checker < 0 {
-            best_checker = 0;
-            for (checker_index, &checker_weight) in checker_weights[1..].iter().enumerate() {
-                if checker_weight < checker_weights[best_checker as usize] {
-                    best_checker = checker_index as i64 + 1;
+        if best_checker .is_none() {
+            best_checker = Some( 0) ;
+            best_checker = checker_weights[1..].iter().enumerate().fold(best_checker, |mut best_checker, (checker_index, &checker_weight)| {
+                if checker_weight < checker_weights[best_checker .unwrap()] {
+                    best_checker = Some( checker_index  + 1) ;
                 }
-            }
+
+                best_checker
+            });
         }
-        associations[file_index] = best_checker;
-        checker_weights[best_checker as usize] += file_weights[file_index];
+        let best_checker = best_checker.unwrap();
+        associations[file_index] = Some(best_checker);
+        checker_weights[best_checker] += file_weights[file_index];
         if let Some(affinity) = affinity.as_deref_mut() {
-            affinity.place(file_index, best_checker as usize);
+            affinity.place(file_index, best_checker);
         }
     }
-    associations.into_iter().map(|a| a as usize).collect()
+    associations.into_iter().map(Option::unwrap).collect()
 }
 
 // getCheckerAssociationOrder places source files before declarations and orders each group by
@@ -724,14 +685,12 @@ impl checkerPool {
             let shared = crate::sharedgraph::enabled() && !program.single_threaded();
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
-                #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
                 // With the shared graph (sharedgraph.rs) the pool's checkers are plain until the type-check pass makes
                 // them forks of the seed.
                 run_work_group(self.single_threaded, self.checker_count, |i| {
                     let c = SlotChecker::new(program, recycle);
-                    #[cfg(feature = "checker")]
                     if shared && i == 0 {
                         crate::sharedgraph::note_fresh_checker(&c.checker);
                     }
@@ -902,7 +861,6 @@ impl checkerPool {
         // (`fileregions::classify`): as for every checker, the leaf guard (`Checker::is_unreadable_check_leaf`) then
         // keeps it from reading a leaf file, which may be freed while the seed runs or while a frozen object points into
         // it.
-        #[cfg(feature = "checker")]
         if allow_steal && state.shared_graph {
             static SEED_STARTED: std::sync::Once = std::sync::Once::new();
             SEED_STARTED.call_once(|| crate::sharedgraph::start_seed(self.program, state.weights.clone(), state.recycle));
@@ -920,7 +878,6 @@ impl checkerPool {
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             // Without `--maxMemory` the checker becomes a fork of the seed now, waiting for it; with it, at its first
             // file boundary after the freeze (`switch_to_fork` below), so that the pool does not wait for the seed.
-            #[cfg(feature = "checker")]
             if allow_steal && state.shared_graph && !state.recycle {
                 let _region = guard.enter();
                 crate::sharedgraph::fork_into(&mut guard.checker);
@@ -977,10 +934,7 @@ impl checkerPool {
                     // Read by the other checker threads only to pick the largest; a stale value picks another one.
                     region_sizes[checker_idx].store(guard.region_bytes(), std::sync::atomic::Ordering::Relaxed);
                 }
-                #[cfg(feature = "checker")]
                 let switch_to_fork = recycle && state.shared_graph && !guard.checker.is_fork && crate::sharedgraph::try_base().is_some();
-                #[cfg(not(feature = "checker"))]
-                let switch_to_fork = false;
                 if switch_to_fork
                     || recycle
                     && guard.region_bytes() >= retire_min()
@@ -1188,15 +1142,18 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
             }
             let lengths: Vec<u64> = pieces
                 .iter()
-                .map(|r| file.statements.nodes()[r.clone()].iter().map(|s| (s.end() - s.pos()).max(1) as u64).sum())
+                .map(|r| {
+                    file.statements.nodes()[r.clone()]
+                        .iter()
+                        .map(|s| u64::from(s.loc().len().unwrap_or(0).max(1)))
+                        .sum()
+                })
                 .collect();
             let length: u64 = lengths.iter().sum();
             let piece_weights: Vec<u64> = lengths.iter().map(|&l| (w * l / length.max(1)).max(1)).collect();
             let s = plan.files.len();
             let split_file = splitcheck::SplitFile::new(file, pieces, config.shadow);
-            for k in split_file.queued_pieces() {
-                plan.piece_items.push((s, k, piece_weights[k]));
-            }
+            plan.piece_items.extend(split_file.queued_pieces().into_iter().map(|k| (s, k, piece_weights[k])));
             plan.owner_weights.push(piece_weights[0]);
             plan.split_of.insert(i, s);
             plan.files.push(split_file);
@@ -1238,10 +1195,10 @@ impl FileQueue {
         let mut prefix = Vec::with_capacity(positions.len() + 1);
         let mut sum = 0;
         prefix.push(0);
-        for &i in &positions {
+        prefix.extend(positions.iter().map(|&i| {
             sum += weight(i);
-            prefix.push(sum);
-        }
+            sum
+        }));
         let len = positions.len() as u64;
         FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32), thieves: std::sync::atomic::AtomicU64::new(0) }
     }
@@ -1300,18 +1257,17 @@ impl FileQueue {
 
     fn take(&self, front: bool) -> Option<usize> {
         // The compare-exchange on `range` alone decides who gets a position; nothing else is published through it.
-        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
-        loop {
-            if (r & QUEUE_LOW) >= (r >> 32) {
-                return None;
-            }
-            let new = if front { r + 1 } else { r - (1 << 32) };
-            // As above: the exchange only claims the position.
-            match self.range.compare_exchange_weak(r, new, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
-                Ok(_) => break,
-                Err(current) => r = current,
-            }
-        }
+        // As above: the exchange only claims the position.
+        let r = self
+            .range
+            .try_update(
+                std::sync::atomic::Ordering::Relaxed, // Only claims the position; publishes no data.
+                std::sync::atomic::Ordering::Relaxed, // A failed claim only retries the range value.
+                |r| {
+                    ((r & QUEUE_LOW) < (r >> 32)).then(|| if front { r + 1 } else { r - (1 << 32) })
+                },
+            )
+            .ok()?;
         let pos = if front { r & QUEUE_LOW } else { (r >> 32) - 1 };
         Some(self.positions[pos as usize] as usize)
     }
@@ -1547,18 +1503,16 @@ fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
     else {
         return (entries, 0);
     };
-    for line in lines {
+    entries.extend(lines.filter_map(|line| {
         let mut fields = line.splitn(3, '\t');
         let (Some(seconds), Some(checker), Some(file)) = (fields.next(), fields.next(), fields.next()) else {
-            continue;
+            return None;
         };
         let (Ok(seconds), Ok(checker)) = (seconds.parse::<f64>(), checker.parse::<usize>()) else {
-            continue;
+            return None;
         };
-        if seconds.is_finite() && seconds >= 0.0 && checker < checker_count {
-            entries.insert(file.to_string(), CostEntry { seconds, checker });
-        }
-    }
+        if seconds.is_finite() && seconds >= 0.0 && checker < checker_count { Some((file.to_string(), CostEntry { seconds, checker })) } else { None }
+    }));
     (entries, checker_count)
 }
 
@@ -1581,12 +1535,10 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
         }
     }
     let mut entries: Vec<(&str, f64, usize)> = Vec::new();
-    for (i, file) in program.files.iter().enumerate() {
+    entries.extend(program.files.iter().enumerate().filter_map(|(i, file)| {
         let skipped = (file.is_declaration_file.get() || ast::is_json_source_file(*file)) && program.skip_type_checking(*file, false);
-        if measured[i] >= 0.0 && !skipped {
-            entries.push((file.path(), measured[i], state.owner_at(i)));
-        }
-    }
+        if measured[i] >= 0.0 && !skipped { Some((file.path().as_str(), measured[i], state.owner_at(i))) } else { None }
+    }));
     entries.sort_by(|a, b| a.0.cmp(b.0));
     let mut out = String::with_capacity(entries.len() * 100);
     let _ = writeln!(out, "{COST_CACHE_MAGIC} checkers={}", state.checkers.len());
@@ -1853,12 +1805,12 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
             }
             let mut result = if previous.iter().all(|p| p.0 == usize::MAX) { fennel(&group_weights) } else { vec![usize::MAX; group_weights.len()] };
             let mut loads = vec![0i64; checker_count];
-            for g in 0..result.len() {
+            for (g, element) in result.iter_mut().enumerate() {
                 if previous[g].0 != usize::MAX {
-                    result[g] = previous[g].0;
+                    (*element) = previous[g].0;
                 }
-                if result[g] != usize::MAX {
-                    loads[result[g]] += group_weights[g];
+                if (*element) != usize::MAX {
+                    loads[*element] += group_weights[g];
                 }
             }
             // Groups without a previous checker (new files) go to the least loaded checker, largest first.
@@ -1949,7 +1901,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             break;
         }
         let mut best: Option<(f64, i64, usize, usize)> = None; // (new max, -affinity gain, group, destination)
-        for g in 0..costs.len() {
+        for (g, element) in costs.iter().enumerate() {
             if associations[g] != heavy {
                 continue;
             }
@@ -1957,15 +1909,15 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             for &n in &adjacency[g] {
                 affinity[associations[n]] += 1;
             }
-            let cost = costs[g] as f64;
+            let cost = (*element) as f64;
             for dest in 0..checker_count {
                 if dest == heavy {
                     continue;
                 }
                 let mut new_max = (loads[heavy] - cost).max(loads[dest] + cost * MOVE_COST_PREMIUM);
-                for c in 0..checker_count {
+                for (c, element) in loads[..checker_count].iter().enumerate() {
                     if c != heavy && c != dest {
-                        new_max = new_max.max(loads[c]);
+                        new_max = new_max.max(*element);
                     }
                 }
                 let key = (new_max, affinity[heavy] - affinity[dest], g, dest);
@@ -2064,9 +2016,7 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
 fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
-    for (i, &file) in files.iter().enumerate() {
-        file_indices.insert(file, i);
-    }
+    file_indices.extend(files.iter().enumerate().map(|(i, &file)| (file, i)));
     // The in-program import targets of each file, in resolution-map order (looking a resolved file name up
     // normalizes it, so this part runs on the worker pool); the adjacency lists are then built in file order.
     let targets_of = |file_index: usize| -> Vec<usize> {

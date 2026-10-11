@@ -139,16 +139,17 @@ impl Mapper {
         if self.manifest.compiler_options.is_empty() {
             return Ok(out);
         }
-        for name in &self.manifest.compiler_options {
+        out = self.manifest.compiler_options.iter().try_fold(out, |mut out, name| {
             let Some(field) = gojson::compiler_option_to_go_json(options, name) else {
-                continue;
+                return Ok(out);
             };
             let Some(value) = field else {
-                continue;
+                return Ok(out);
             };
             let raw = json::marshal(&value)?;
             out.insert(name.clone(), raw);
-        }
+            Ok::<_, String>(out)
+        })?;
         Ok(out)
     }
 }

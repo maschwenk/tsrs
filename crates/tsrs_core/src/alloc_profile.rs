@@ -18,7 +18,9 @@ use std::sync::{Arc, Mutex};
 pub mod census;
 mod os;
 
-struct Counting;
+/// Counting mimalloc allocator for profiling executables. The executable installs it with
+/// `#[global_allocator]`; enabling library instrumentation does not choose a process-wide allocator.
+pub struct CountingAllocator;
 
 static HEAP_CURRENT: AtomicUsize = AtomicUsize::new(0);
 static HEAP_PEAK: AtomicUsize = AtomicUsize::new(0);
@@ -30,7 +32,7 @@ fn grow(n: usize) {
     HEAP_PEAK.fetch_max(now, Ordering::Relaxed);
 }
 
-unsafe impl GlobalAlloc for Counting {
+unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // SAFETY: the `GlobalAlloc` caller guarantees that `layout` is valid; it is passed through unchanged.
         unsafe {
@@ -335,17 +337,10 @@ mod heap_sample {
         if let Some(path) = want_tsv {
             use std::io::Write;
             let mut out = String::from("group\tlive_bytes\tpeak_bytes\ttotal_bytes\tframes\n");
-            for (i, site) in state.stacks.iter().enumerate() {
+            out.extend(state.stacks.iter().enumerate().map(|(i, site)| {
                 let frames = if site.stack[0] == 1 { vec!["<arena chunks>".to_string()] } else { frames_of(&site.stack, &names, 12) };
-                out.push_str(&format!(
-                    "{}\t{}\t{}\t{}\t{}\n",
-                    group_name(site.group),
-                    site.live,
-                    state.peak.get(i).copied().unwrap_or(0),
-                    site.total,
-                    frames.join(" <- ")
-                ));
-            }
+                format!("{}\t{}\t{}\t{}\t{}\n", group_name(site.group), site.live, state.peak.get(i).copied().unwrap_or(0), site.total, frames.join(" <- "))
+            }));
             if let Ok(mut f) = std::fs::File::create(&path) {
                 let _ = f.write_all(out.as_bytes());
             }
@@ -426,9 +421,6 @@ mod heap_sample {
         print("allocated (cumulative)", &order, &|i| sites[i].2 as i64, &mut names);
     }
 }
-
-#[global_allocator]
-static GLOBAL: Counting = Counting;
 
 #[derive(Default, Clone, Copy)]
 struct Entry {
@@ -579,9 +571,7 @@ pub(crate) fn census_would_free_since(since: usize) {
         let data = &mut *data;
         census::with_guard(|| {
             let seq = census::next_seq();
-            for &(addr, size, _, _) in data.blocks.get(since..).unwrap_or(&[]) {
-                data.would_free.push((addr, size, seq));
-            }
+            data.would_free.extend(data.blocks.get(since..).unwrap_or(&[]).iter().map(|&(addr, size, _, _)| (addr, size, seq)));
         });
     });
 }

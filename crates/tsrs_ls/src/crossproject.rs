@@ -233,11 +233,11 @@ impl LanguageService {
             let mut has_more_work = false;
             if let Some(default_definition) = &default_definition {
                 let mut requested_project_trees: Set<Path> = Set::new();
-                for (key, response) in results.iter() {
-                    if response.complete {
-                        requested_project_trees.add(Path::new(key.clone()));
-                    }
-                }
+                requested_project_trees.m.extend(results.iter().filter_map(
+                    |(key, response)| {
+                        if response.complete { Some(Path::new(key.clone())) } else { None }
+                    },
+                ));
 
                 // Load more projects based on default definition found
                 for loaded_project in orchestrator.get_projects_loading_project_tree(ctx, &requested_project_trees) {
@@ -283,28 +283,30 @@ impl LanguageService {
             ordered.push(std::mem::take(&mut results.get_mut(&default_id).unwrap().result));
         }
         seen_projects.add(default_id);
-        for project in &all_projects {
+        ordered.extend(all_projects.iter().filter_map(|project| {
             let id = project.id();
             if seen_projects.add_if_absent(id.clone()) {
-                if let Some(response) = results.get_mut(&id) {
-                    if response.complete {
-                        ordered.push(std::mem::take(&mut response.result));
-                    }
-                }
+                if let Some(response) = results.get_mut(&id) { if response.complete { Some(std::mem::take(&mut response.result)) } else { None } } else { None }
+            } else {
+                None
             }
-        }
+        }));
         // Prefer the searches from locations for default definition
-        for (key, response) in results.iter_mut() {
+        ordered.extend(results.iter_mut().filter_map(|(key, response)| {
             if !response.for_original_location && seen_projects.add_if_absent(key.clone()) && response.complete {
-                ordered.push(std::mem::take(&mut response.result));
+                Some(std::mem::take(&mut response.result))
+            } else {
+                None
             }
-        }
+        }));
         // Then the searches from original locations
-        for (key, response) in results.iter_mut() {
+        ordered.extend(results.iter_mut().filter_map(|(key, response)| {
             if response.for_original_location && seen_projects.add_if_absent(key.clone()) && response.complete {
-                ordered.push(std::mem::take(&mut response.result));
+                Some(std::mem::take(&mut response.result))
+            } else {
+                None
             }
-        }
+        }));
 
         let resp = if size > 1 {
             combine_results(ordered)
@@ -318,11 +320,7 @@ impl LanguageService {
 
 // crossproject.go:298
 pub(crate) fn combine_location_array<T: HasLocation + Clone>(mut combined: Vec<T>, locations: &[T], seen: &mut Set<lsproto::Location>) -> Vec<T> {
-    for loc in locations {
-        if seen.add_if_absent(loc.get_location()) {
-            combined.push(loc.clone());
-        }
-    }
+    combined.extend(locations.iter().filter_map(|loc| if seen.add_if_absent(loc.get_location()) { Some(loc.clone()) } else { None }));
     combined
 }
 
@@ -330,11 +328,13 @@ pub(crate) fn combine_location_array<T: HasLocation + Clone>(mut combined: Vec<T
 pub(crate) fn combine_response_locations<T: HasLocations>(results: &[T]) -> Vec<lsproto::Location> {
     let mut combined: Vec<lsproto::Location> = Vec::new();
     let mut seen_locations: Set<lsproto::Location> = Set::new();
-    for resp in results {
+    combined = results.iter().fold(combined, |mut combined, resp| {
         if let Some(locations) = resp.get_locations() {
             combined = combine_location_array(combined, locations, &mut seen_locations);
         }
-    }
+
+        combined
+    });
     combined
 }
 
@@ -347,27 +347,28 @@ pub(crate) fn combine_references(results: &[lsproto::ReferencesResponse]) -> lsp
 pub(crate) fn combine_vs_references(results: Vec<lsproto::VSReferencesResponse>) -> lsproto::VSReferencesResponse {
     let mut combined: Vec<lsproto::VSReferenceItem> = Vec::new();
     // Re-number IDs across projects to maintain unique IDs and correct definition references
-    let mut next_id: i32 = 0;
+    let mut next_id: usize = 0;
     for resp in results {
         let Some(items) = resp.vs_reference_items else {
             continue;
         };
         // Map old IDs to new IDs for this batch
-        let mut id_map: FxHashMap<i32, i32> = FxHashMap::default();
-        for item in items {
+        let mut id_map: FxHashMap<i32, usize> = FxHashMap::default();
+        combined.extend(items.into_iter().map(|item| {
             let old_id = item.vs_id;
-            let new_id = next_id;
-            id_map.insert(old_id, new_id);
+            let new_id = i32::try_from(next_id).expect("reference ID exceeds protocol i32");
+            id_map.insert(old_id, next_id);
             next_id += 1;
 
             let mut new_item = item.clone();
             new_item.vs_id = new_id;
             if let Some(definition_id) = item.vs_definition_id {
-                let new_def_id = id_map.get(&definition_id).copied().unwrap_or(0);
+                let new_def_id = i32::try_from(id_map.get(&definition_id).copied().unwrap_or(0))
+                    .expect("reference ID exceeds protocol i32");
                 new_item.vs_definition_id = Some(new_def_id);
             }
-            combined.push(new_item);
-        }
+            new_item
+        }));
     }
     lsproto::VSReferenceItemsOrNull { vs_reference_items: Some(combined) }
 }
@@ -400,28 +401,26 @@ pub(crate) fn combine_rename_response(results: Vec<lsproto::RenameResponse>) -> 
             continue;
         };
         if let Some(changes) = workspace_edit.document_changes {
-            for change in changes {
-                match &change.rename_file {
-                    Some(rename_file) => {
-                        let key = [rename_file.old_uri.clone(), rename_file.new_uri.clone()];
-                        if seen_renames.add_if_absent(key) {
-                            document_changes.push(change);
-                        }
-                    }
-                    None => document_changes.push(change),
+            document_changes.extend(changes.into_iter().filter_map(|change| match &change.rename_file {
+                Some(rename_file) => {
+                    let key = [rename_file.old_uri.clone(), rename_file.new_uri.clone()];
+                    if seen_renames.add_if_absent(key) { Some(change) } else { None }
                 }
-            }
+                None => Some(change),
+            }));
         }
         if let Some(changes) = workspace_edit.changes {
             for (doc, changes) in changes {
                 let seen_set = seen_changes.entry(doc.clone()).or_default();
                 let changes_for_doc = combined.entry(doc).or_default();
-                for change in changes {
+                changes_for_doc.extend(changes.into_iter().filter_map(|change| {
                     if !seen_set.has(&change.range) {
                         seen_set.add(change.range);
-                        changes_for_doc.push(change);
+                        Some(change)
+                    } else {
+                        None
                     }
-                }
+                }));
             }
         }
     }
@@ -442,14 +441,8 @@ pub(crate) fn combine_rename_response(results: Vec<lsproto::RenameResponse>) -> 
 pub(crate) fn combine_incoming_calls(results: Vec<lsproto::CallHierarchyIncomingCallsResponse>) -> lsproto::CallHierarchyIncomingCallsResponse {
     let mut combined: Vec<lsproto::CallHierarchyIncomingCall> = Vec::new();
     let mut seen_calls: Set<lsproto::Location> = Set::new();
-    for resp in results {
-        if let Some(calls) = resp.call_hierarchy_incoming_calls {
-            for call in calls {
-                if seen_calls.add_if_absent(call.from.get_location()) {
-                    combined.push(call);
-                }
-            }
-        }
-    }
+    combined.extend(
+        results.into_iter().filter_map(|resp| resp.call_hierarchy_incoming_calls).flatten().filter(|call| seen_calls.add_if_absent(call.from.get_location())),
+    );
     lsproto::CallHierarchyIncomingCallsOrNull { call_hierarchy_incoming_calls: Some(combined) }
 }

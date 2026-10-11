@@ -45,9 +45,7 @@ fn generate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker,
     // !!! Perf baseline (not written by Go either)
     let perf_lines: Vec<String> = Vec::new();
     let baselines = iterate_baseline(all_files, full_walker, is_symbol_baseline);
-    for value in &baselines {
-        result.push_str(value);
-    }
+    result.extend(baselines.iter().map(String::as_str));
     if !result.is_empty() {
         return format!("//// [{header}] ////\r\n\r\n{}{result}", perf_lines.join("\n"));
     }
@@ -57,13 +55,10 @@ fn generate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker,
 fn iterate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker, is_symbol_baseline: bool) -> Vec<String> {
     let mut baselines = Vec::new();
 
-    for file in all_files {
+    baselines.extend(all_files.iter().map_while(|file| {
         let results = if is_symbol_baseline { full_walker.get_symbols(&file.unit_name) } else { full_walker.get_types(&file.unit_name) };
-        match file_baseline(&file.unit_name, &file.content, &results, is_symbol_baseline) {
-            Some(text) => baselines.push(text),
-            None => return baselines,
-        }
-    }
+        file_baseline(&file.unit_name, &file.content, &results, is_symbol_baseline)
+    }));
 
     baselines
 }
@@ -76,44 +71,51 @@ fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], i
     type_lines.push_str(unit_name);
     type_lines.push_str(" ===\r\n");
     let code_lines: Vec<&str> = CODE_LINES_REGEXP.split(content).collect();
-    let mut last_index_written: i64 = -1;
-    let is_blank_or_bracket = |i: usize| i < code_lines.len() && (BRACKET_LINE_REGEX.is_match(code_lines[i]) || code_lines[i].trim().is_empty());
+    let mut last_index_written: Option<usize> = None;
+    let is_blank_or_bracket = |i: usize| {
+        i < code_lines.len()
+            && (BRACKET_LINE_REGEX.is_match(code_lines[i]) || code_lines[i].trim().is_empty())
+    };
     for result in results {
         if is_symbol_baseline && result.symbol.is_empty() {
             return None;
         }
-        if last_index_written == -1 {
+        if last_index_written.is_none() {
             type_lines.push_str(&code_lines[..result.line + 1].join("\r\n"));
             type_lines.push_str("\r\n");
-        } else if last_index_written != result.line as i64 {
-            if !is_blank_or_bracket((last_index_written + 1) as usize) {
+        } else if last_index_written != Some(result.line) {
+            let next_index = last_index_written.unwrap() + 1;
+            if !is_blank_or_bracket(next_index) {
                 type_lines.push_str("\r\n");
             }
-            type_lines.push_str(&code_lines[(last_index_written + 1) as usize..result.line + 1].join("\r\n"));
+            type_lines.push_str(&code_lines[next_index..result.line + 1].join("\r\n"));
             type_lines.push_str("\r\n");
         }
-        last_index_written = result.line as i64;
-        let type_or_symbol_string = if is_symbol_baseline { &result.symbol } else { &result.typ };
+        last_index_written = Some(result.line);
+        let type_or_symbol_string = if is_symbol_baseline {
+            &result.symbol
+        } else {
+            &result.typ
+        };
         let line_text = LINE_DELIMITER.replace_all(&result.source_text, "");
         type_lines.push('>');
         let _ = write!(type_lines, "{line_text} : {type_or_symbol_string}");
         type_lines.push_str("\r\n");
         if !result.underline.is_empty() {
             type_lines.push('>');
-            for _ in 0..line_text.len() {
-                type_lines.push(' ');
-            }
+            type_lines.extend((0..line_text.len()).map(|_| ' '));
             type_lines.push_str(" : ");
             type_lines.push_str(&result.underline);
             type_lines.push_str("\r\n");
         }
     }
 
-    if ((last_index_written + 1) as usize) < code_lines.len() {
-        if !is_blank_or_bracket((last_index_written + 1) as usize) {
+    let next_index = last_index_written.map_or(0, |index| index + 1);
+    if next_index < code_lines.len() {
+        if !is_blank_or_bracket(next_index) {
             type_lines.push_str("\r\n");
         }
-        type_lines.push_str(&code_lines[(last_index_written + 1) as usize..].join("\r\n"));
+        type_lines.push_str(&code_lines[next_index..].join("\r\n"));
     }
     type_lines.push_str("\r\n");
 
@@ -164,23 +166,27 @@ impl TypeWriterWalker {
     fn visit_node(&mut self, node: P<Node>, is_symbol_walk: bool) -> Vec<TypeWriterResult> {
         let nodes = for_each_ast_node(node);
         let mut results = Vec::new();
-        for n in nodes {
+        results.extend(nodes.into_iter().filter_map(|n| {
             if ast::is_expression_node(n)
                 || n.kind() == Kind::Identifier
                 || ast::is_declaration_name(n)
                 || ast::is_qualified_name(n) && ast::is_name_of_heritage_clause_type_reference(n) && (is_symbol_walk || ast::is_qualified_name(n.parent().unwrap()))
             {
-                if let Some(result) = self.write_type_or_symbol(n, is_symbol_walk) {
-                    results.push(result);
-                }
+                if let Some(result) = self.write_type_or_symbol(n, is_symbol_walk) { Some(result) } else { None }
+            } else {
+                None
             }
-        }
+        }));
         results
     }
 
     fn write_type_or_symbol(&mut self, node: P<Node>, is_symbol_walk: bool) -> Option<TypeWriterResult> {
         let sf = self.current_source_file.unwrap();
-        let actual_pos = scanner::skip_trivia(sf.text(), node.pos());
+        let actual_pos = scanner::skip_trivia(
+            sf.text(),
+            node.pos()
+                .expect_source("baseline nodes have source positions"),
+        );
         let line = scanner::get_ecma_line_of_position(&*sf, actual_pos) as usize;
         let source_text = scanner::get_source_text_of_node_from_source_file(sf, node, false /*includeTrivia*/);
         // If we don't use the right checker for the file, its contents won't be up to date
@@ -293,7 +299,12 @@ impl TypeWriterWalker {
             symbol_string.push_str(", ");
             // (Go's declarationTextCache is never written.)
             let decl_source_file = ast::get_source_file_of_node(declaration).unwrap();
-            let (decl_line, decl_char) = scanner::get_ecma_line_and_utf16_character_of_position(&*decl_source_file, declaration.pos());
+            let (decl_line, decl_char) = scanner::get_ecma_line_and_utf16_character_of_position(
+                &*decl_source_file,
+                declaration
+                    .pos()
+                    .expect_source("baseline declarations have source positions"),
+            );
             let file_name = tspath::get_base_file_name(decl_source_file.file_name());
             symbol_string.push_str("Decl(");
             symbol_string.push_str(&file_name);

@@ -85,16 +85,7 @@ impl ConstEnumInliningTransformer {
 fn safe_multi_line_comment(text: &str) -> String {
     let mut b = String::with_capacity(text.len() + 2);
     b.push(' ');
-    let mut text = text;
-    loop {
-        let Some(i) = text.find("*/") else {
-            break;
-        };
-        b.push_str(&text[..i]);
-        b.push_str("*_/");
-        text = &text[i + 2..];
-    }
-    b.push_str(text);
+    b.extend(text.split("*/").enumerate().flat_map(|(i, part)| [if i == 0 { "" } else { "*_/" }, part]));
     b.push(' ');
     b
 }

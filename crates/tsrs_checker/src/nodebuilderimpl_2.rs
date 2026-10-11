@@ -11,7 +11,7 @@ use tsrs_ast as ast;
 //     propertyNameNodeKindStringLiteral
 
 // Go `b.ctx.approximateLength += n`.
-fn add_approximate_length(b: &NodeBuilderImpl, n: i32) {
+fn add_approximate_length(b: &NodeBuilderImpl, n: usize) {
     let ctx = b.ctx();
     ctx.approximate_length.set(ctx.approximate_length.get() + n);
 }
@@ -34,18 +34,18 @@ impl NodeBuilderImpl {
         add_approximate_length(self, 3);
         // Usually a signature contributes a few more characters than this, but 3 is the minimum
 
-        if self.ctx().flags.get().intersects(Flags::WriteTypeArgumentsOfSignature) && signature.target().is_some() && signature.mapper.get().is_some() && !signature.target().unwrap().type_parameters().is_empty() {
-            for &parameter in signature.target().unwrap().type_parameters() {
+        if self.ctx().flags.get().intersects(Flags::WriteTypeArgumentsOfSignature)
+            && signature.target().is_some()
+            && signature.mapper.get().is_some()
+            && !signature.target().unwrap().type_parameters().is_empty()
+        {
+            type_parameters.extend(signature.target().unwrap().type_parameters().iter().filter_map(|&parameter| {
                 let t = c.instantiate_type(parameter, signature.mapper.get());
                 // Go appends a possibly-nil node; a nil element cannot be represented in a Rust node list.
-                if let Some(n) = self.type_to_type_node(c, Some(t)) {
-                    type_parameters.push(n);
-                }
-            }
+                if let Some(n) = self.type_to_type_node(c, Some(t)) { Some(n) } else { None }
+            }));
         } else {
-            for &parameter in signature.type_parameters() {
-                type_parameters.push(self.type_parameter_to_declaration(c, parameter));
-            }
+            type_parameters.extend(signature.type_parameters().iter().map(|&parameter| self.type_parameter_to_declaration(c, parameter)));
         }
 
         let mut restore_flags = self.save_restore_flags(c);
@@ -151,18 +151,24 @@ impl NodeBuilderImpl {
 // Go's `getUniqAssociatedNamesFromTupleType` closure in getExpandedParameters.
 fn get_uniq_associated_names_from_tuple_type(c: &mut Checker, t: P<Type>, rest_symbol: P<Symbol>) -> Vec<String> {
     let element_infos = t.target().unwrap().as_tuple_type().element_infos.get();
-    let mut names: Vec<String> = element_infos.iter().enumerate().map(|(i, &info)| c.get_tuple_element_label(info, Some(rest_symbol), i as i32)).collect();
+    let mut names: Vec<String> = element_infos
+        .iter()
+        .enumerate()
+        .map(|(i, &info)| c.get_tuple_element_label(info, Some(rest_symbol), i))
+        .collect();
     if !names.is_empty() {
         let mut duplicates: Vec<usize> = vec![];
         let mut unique_names: FxHashSet<String> = FxHashSet::default();
-        for (i, name) in names.iter().enumerate() {
+        duplicates.extend(names.iter().enumerate().filter_map(|(i, name)| {
             if unique_names.contains(name) {
-                duplicates.push(i);
+                Some(i)
             } else {
                 unique_names.insert(name.clone());
+
+                None
             }
-        }
-        let mut counters: FxHashMap<String, i32> = FxHashMap::default();
+        }));
+        let mut counters: FxHashMap<String, usize> = FxHashMap::default();
         for &i in &duplicates {
             let mut counter = match counters.get(&names[i]) {
                 Some(&counter) => counter,
@@ -417,7 +423,7 @@ impl NodeBuilderImpl {
         if index_info.value_type.get().is_none() && !self.ctx().flags.get().intersects(Flags::AllowEmptyIndexInfoType) {
             self.ctx().encountered_error.set(true);
         }
-        add_approximate_length(self, name.len() as i32 + 4);
+        add_approximate_length(self, name.len() + 4);
         let mut modifiers: Option<P<ModifierList>> = None;
         if index_info.is_readonly.get() {
             add_approximate_length(self, 9);
@@ -625,7 +631,7 @@ impl NodeBuilderImpl {
         // (3) - we only inspect the last MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH elements of the
         // stack for approximate matches to catch tight infinite loops
         // TODO: Why? Reasoning lost to time. this could probably stand to be improved?
-        if (reverse_mapped_stack.len() as i32) < MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH {
+        if reverse_mapped_stack.len() < MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH {
             return false;
         }
         if !c.reverse_mapped_symbol_links.has(property_symbol) {
@@ -637,18 +643,16 @@ impl NodeBuilderImpl {
             return false;
         }
         let prop_mapped_type = prop_mapped_type.unwrap();
-        for i in 0..reverse_mapped_stack.len() {
-            if i as i32 > MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH {
-                break;
-            }
-            let prop = reverse_mapped_stack[reverse_mapped_stack.len() - 1 - i];
+        if reverse_mapped_stack.iter().rev().take(MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH + 1).any(|&prop| {
             if c.reverse_mapped_symbol_links.has(prop) {
                 let links = c.reverse_mapped_symbol_links.try_get(prop).unwrap();
                 let mapped_type = links.mapped_type.get();
-                if mapped_type.is_some() && mapped_type.unwrap().symbol() == prop_mapped_type.symbol() {
-                    return true;
-                }
+                mapped_type.is_some() && mapped_type.unwrap().symbol() == prop_mapped_type.symbol()
+            } else {
+                false
             }
+        }) {
+            return true;
         }
         false
     }
@@ -835,11 +839,16 @@ impl NodeBuilderImpl {
         } else if let Some(first_declaration) = property_symbol.declarations().first().copied() {
             self.ctx().enclosing_declaration.set(Some(first_declaration));
         } else {
-            self.ctx().enclosing_declaration.set(save_enclosing_declaration);
+            self.ctx()
+                .enclosing_declaration
+                .set(save_enclosing_declaration);
         }
-        let property_name = self.get_property_name_node_for_symbol(c, property_symbol, save_enclosing_declaration);
-        self.ctx().enclosing_declaration.set(save_enclosing_declaration);
-        add_approximate_length(self, ast::symbol_name(property_symbol).len() as i32 + 1);
+        let property_name =
+            self.get_property_name_node_for_symbol(c, property_symbol, save_enclosing_declaration);
+        self.ctx()
+            .enclosing_declaration
+            .set(save_enclosing_declaration);
+        add_approximate_length(self, ast::symbol_name(property_symbol).len() + 1);
 
         if property_symbol.flags().intersects(SymbolFlags::Accessor) {
             let write_type = c.get_write_type_of_symbol(property_symbol).unwrap();
@@ -889,11 +898,16 @@ impl NodeBuilderImpl {
         if property_symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) && c.get_properties_of_object_type(property_type).is_empty() && !c.is_readonly_symbol(property_symbol) {
             let filtered_type = c.filter_type(property_type, |_c, t| !t.flags().intersects(TypeFlags::Undefined));
             let signatures = c.get_signatures_of_type(filtered_type, SignatureKind::Call);
-            for &signature in signatures {
-                let method_declaration = self.signature_to_signature_declaration_helper(c, signature, Kind::MethodSignature, Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, question_token: optional_token, ..Default::default() })));
+            type_elements.extend(signatures.iter().map(|&signature| {
+                let method_declaration = self.signature_to_signature_declaration_helper(
+                    c,
+                    signature,
+                    Kind::MethodSignature,
+                    Some(P::new_scratch(SignatureToSignatureDeclarationOptions { name: property_name, question_token: optional_token, ..Default::default() })),
+                );
                 self.set_comment_range(c, method_declaration, signature.declaration().or(property_symbol.value_declaration()));
-                type_elements.push(method_declaration);
-            }
+                method_declaration
+            }));
             if !signatures.is_empty() || optional_token.is_none() {
                 return type_elements;
             }
@@ -937,28 +951,28 @@ impl NodeBuilderImpl {
         }
         let structured_type = resolved_type.as_structured_type();
         let mut type_elements: Vec<P<Node>> = vec![];
-        for &signature in structured_type.call_signatures() {
-            type_elements.push(self.signature_to_signature_declaration_helper(c, signature, Kind::CallSignature, None));
-        }
-        for &signature in structured_type.construct_signatures() {
+        type_elements.extend(
+            structured_type.call_signatures().iter().map(|&signature| self.signature_to_signature_declaration_helper(c, signature, Kind::CallSignature, None)),
+        );
+        type_elements.extend(structured_type.construct_signatures().iter().filter_map(|&signature| {
             if signature.flags().intersects(SignatureFlags::Abstract) {
-                continue;
+                return None;
             }
-            type_elements.push(self.signature_to_signature_declaration_helper(c, signature, Kind::ConstructSignature, None));
-        }
-        for &info in structured_type.index_infos() {
+            Some(self.signature_to_signature_declaration_helper(c, signature, Kind::ConstructSignature, None))
+        }));
+        type_elements.extend(structured_type.index_infos().iter().flat_map(|&info| {
             // Go's core.IfElse evaluates both arms, so the placeholder (and its length accounting) is always created.
             let placeholder = self.create_elided_information_placeholder(c);
             let type_node = if resolved_type.object_flags().intersects(ObjectFlags::ReverseMapped) { Some(placeholder) } else { None };
-            type_elements.extend(self.index_info_to_object_computed_names_or_signature_declaration(c, info, type_node));
-        }
+            self.index_info_to_object_computed_names_or_signature_declaration(c, info, type_node)
+        }));
 
         let properties = structured_type.properties();
         if properties.is_empty() {
             return Some(self.f.new_node_list(type_elements));
         }
 
-        let mut i: i32 = 0;
+        let mut i: usize = 0;
         for &property_symbol in properties {
             if is_expanding(self.ctx()) && property_symbol.flags().intersects(SymbolFlags::Prototype) {
                 continue;
@@ -975,13 +989,24 @@ impl NodeBuilderImpl {
                     self.tracker().report_private_in_base_of_class_expression(ast::symbol_name(property_symbol));
                 }
             }
-            if self.check_truncation_length(c) && (i + 2 < properties.len() as i32 - 1) {
+            if self.check_truncation_length(c) && (i + 2 < properties.len() - 1) {
                 if self.ctx().flags.get().intersects(Flags::NoTruncation) {
                     let last = type_elements.len() - 1;
-                    type_elements[last] = self.e.add_synthetic_trailing_comment(type_elements[last], Kind::MultiLineCommentTrivia, &format!("... {} more elided ...", properties.len() as i32 - i), false /*hasTrailingNewLine*/);
+                    type_elements[last] = self.e.add_synthetic_trailing_comment(
+                        type_elements[last],
+                        Kind::MultiLineCommentTrivia,
+                        &format!("... {} more elided ...", properties.len() - i),
+                        false, /*hasTrailingNewLine*/
+                    );
                 } else {
-                    let text = format!("... {} more ...", properties.len() as i32 - i);
-                    type_elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(self.f.alloc_text(&text)), None, None, None));
+                    let text = format!("... {} more ...", properties.len() - i);
+                    type_elements.push(self.f.new_property_signature_declaration(
+                        None,
+                        self.f.new_identifier(self.f.alloc_text(&text)),
+                        None,
+                        None,
+                        None,
+                    ));
                 }
                 type_elements = self.add_property_to_element_list(c, properties[properties.len() - 1], &type_elements);
                 break;
@@ -1357,24 +1382,30 @@ impl NodeBuilderImpl {
                 .collect();
             if !type_arguments.is_empty() {
                 let arity = c.get_type_reference_arity(t);
-                let tuple_constituent_nodes = self.map_to_type_nodes(c, &type_arguments[0..arity as usize], false /*isBareList*/);
+                let tuple_constituent_nodes =
+                    self.map_to_type_nodes(c, &type_arguments[0..arity], false /*isBareList*/);
                 if let Some(tuple_constituent_nodes) = tuple_constituent_nodes {
                     let mut nodes: Vec<P<Node>> = tuple_constituent_nodes.nodes().to_vec();
-                    for i in 0..nodes.len() {
+                    for (i, element) in nodes.iter_mut().enumerate() {
                         let flags = element_infos[i].flags;
                         let labeled_element_declaration = element_infos[i].labeled_declaration;
 
                         if labeled_element_declaration.is_some() {
-                            let dot_dot_dot_token = if flags.intersects(ElementFlags::Variable) { Some(self.f.new_token(Kind::DotDotDotToken)) } else { None };
-                            let label = c.get_tuple_element_label(element_infos[i], None, i as i32);
+                            let dot_dot_dot_token = if flags.intersects(ElementFlags::Variable) {
+                                Some(self.f.new_token(Kind::DotDotDotToken))
+                            } else {
+                                None
+                            };
+                            let label = c.get_tuple_element_label(element_infos[i], None, i);
                             let name = self.new_identifier(c, &label, None /*symbol*/);
                             let question_token = if flags.intersects(ElementFlags::Optional) { Some(self.f.new_token(Kind::QuestionToken)) } else { None };
-                            let type_node = if flags.intersects(ElementFlags::Rest) { self.f.new_array_type_node(nodes[i]) } else { nodes[i] };
-                            nodes[i] = self.f.new_named_tuple_member(dot_dot_dot_token, name, question_token, type_node);
+                            let type_node = if flags.intersects(ElementFlags::Rest) { self.f.new_array_type_node(*element) } else { *element };
+                            (*element) = self.f.new_named_tuple_member(dot_dot_dot_token, name, question_token, type_node);
                         } else if flags.intersects(ElementFlags::Variable) {
-                            nodes[i] = self.f.new_rest_type_node(if flags.intersects(ElementFlags::Rest) { self.f.new_array_type_node(nodes[i]) } else { nodes[i] });
+                            (*element) =
+                                self.f.new_rest_type_node(if flags.intersects(ElementFlags::Rest) { self.f.new_array_type_node(*element) } else { *element });
                         } else if flags.intersects(ElementFlags::Optional) {
-                            nodes[i] = self.f.new_optional_type_node(nodes[i]);
+                            (*element) = self.f.new_optional_type_node(*element);
                         }
                     }
                     // Go assigns into `tupleConstituentNodes.Nodes` in place; Rust node lists are immutable.
@@ -1519,9 +1550,16 @@ impl NodeBuilderImpl {
 
         let key = CompositeTypeCacheIdentity { type_id, flags: self.ctx().flags.get(), internal_flags: self.ctx().internal_flags.get() };
         // Don't rely on type cache if we're expanding a type, because we need to compute `canIncreaseExpansionDepth`.
-        let can_use_cache = self.ctx().max_expansion_depth.get() < 0;
-        if can_use_cache && self.ctx().enclosing_declaration.get().is_some() && self.links.has(self.ctx().enclosing_declaration.get().unwrap()) {
-            let links = self.links.get(self.ctx().enclosing_declaration.get().unwrap());
+        let can_use_cache = self.ctx().max_expansion_depth.get().is_none();
+        if can_use_cache
+            && self.ctx().enclosing_declaration.get().is_some()
+            && self
+                .links
+                .has(self.ctx().enclosing_declaration.get().unwrap())
+        {
+            let links = self
+                .links
+                .get(self.ctx().enclosing_declaration.get().unwrap());
             let cached_result = links.serialized_types.get(&key);
             if let Some(cached_result) = cached_result {
                 // TODO:: check if we instead store late painted statements associated with this?
@@ -1536,7 +1574,7 @@ impl NodeBuilderImpl {
             }
         }
 
-        let mut depth: i32 = 0;
+        let mut depth: usize = 0;
         if let Some(id) = id {
             depth = self.ctx().symbol_depth.borrow().get(&id).copied().unwrap_or(0);
             if depth > 10 {
@@ -1602,7 +1640,7 @@ impl NodeBuilderImpl {
 
         // Push type onto typeStack for expansion depth tracking
         let mut _pop_type_stack: Option<Defer> = None;
-        if self.ctx().max_expansion_depth.get() >= 0 {
+        if self.ctx().max_expansion_depth.get().is_some() {
             self.ctx().type_stack.borrow_mut().push(Some(t));
             let b = self.as_p();
             _pop_type_stack = Some(Defer(Box::new(move || {
@@ -1679,7 +1717,7 @@ impl NodeBuilderImpl {
                 Some(LiteralValue::String(s)) => s,
                 _ => panic!("string literal type without a string value"),
             };
-            add_approximate_length(self, value.len() as i32 + 2);
+            add_approximate_length(self, value.len() + 2);
             let lit = self.new_string_literal(c, value);
             self.e.add_emit_flags(lit, EmitFlags::NoAsciiEscaping);
             return Some(self.f.new_literal_type_node(lit));
@@ -1690,7 +1728,7 @@ impl NodeBuilderImpl {
                 _ => panic!("number literal type without a number value"),
             };
             let value_text = value.string();
-            add_approximate_length(self, value_text.len() as i32);
+            add_approximate_length(self, value_text.len());
             if value.0 < 0.0 {
                 return Some(self.f.new_literal_type_node(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(self.f.alloc_text(&value_text[1..]), TokenFlags::None))));
             } else {
@@ -1698,8 +1736,18 @@ impl NodeBuilderImpl {
             }
         }
         if t.flags().intersects(TypeFlags::BigIntLiteral) {
-            add_approximate_length(self, pseudo_big_int_to_string(get_big_int_literal_value(t)).len() as i32 + 1);
-            return Some(self.f.new_literal_type_node(self.f.new_big_int_literal(self.f.alloc_text(&(pseudo_big_int_to_string(get_big_int_literal_value(t)) + "n")), TokenFlags::None)));
+            add_approximate_length(
+                self,
+                pseudo_big_int_to_string(get_big_int_literal_value(t)).len() + 1,
+            );
+            return Some(self.f.new_literal_type_node(
+                self.f.new_big_int_literal(
+                    self.f.alloc_text(
+                        &(pseudo_big_int_to_string(get_big_int_literal_value(t)) + "n"),
+                    ),
+                    TokenFlags::None,
+                ),
+            ));
         }
         if t.flags().intersects(TypeFlags::BooleanLiteral) {
             let value = matches!(t.as_literal_type().value.get(), Some(LiteralValue::Boolean(true)));
@@ -1804,8 +1852,10 @@ impl NodeBuilderImpl {
                 self.ctx().depth.set(self.ctx().depth.get() - 1);
                 return result;
             }
-            if t.flags().intersects(TypeFlags::TypeParameter) && self.ctx().infer_type_parameters.get().contains(&t) {
-                add_approximate_length(self, ast::symbol_name(t.symbol().unwrap()).len() as i32 + 6);
+            if t.flags().intersects(TypeFlags::TypeParameter)
+                && self.ctx().infer_type_parameters.get().contains(&t)
+            {
+                add_approximate_length(self, ast::symbol_name(t.symbol().unwrap()).len() + 6);
                 let mut constraint_node: Option<P<Node>> = None;
                 let constraint = c.get_constraint_of_type_parameter(t);
                 if let Some(constraint) = constraint {
@@ -1823,8 +1873,11 @@ impl NodeBuilderImpl {
             }
             if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) && t.flags().intersects(TypeFlags::TypeParameter) {
                 let name = self.type_parameter_to_name(c, t);
-                add_approximate_length(self, name.text().len() as i32);
-                return Some(self.f.new_type_reference_node(self.new_identifier(c, name.text(), t.symbol()), None /*typeArguments*/));
+                add_approximate_length(self, name.text().len());
+                return Some(self.f.new_type_reference_node(
+                    self.new_identifier(c, name.text(), t.symbol()),
+                    None, /*typeArguments*/
+                ));
             }
             // Ignore constraint/default when creating a usage (as opposed to declaration) of a type parameter.
             if let Some(symbol) = t.symbol() {
@@ -1984,11 +2037,20 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3669
-    pub(crate) fn lookup_instantiated_type_argument_nodes(&self, c: &mut Checker, chain: &[P<Symbol>], index: i32) -> Option<P<NodeList>> {
+    pub(crate) fn lookup_instantiated_type_argument_nodes(
+        &self,
+        c: &mut Checker,
+        chain: &[P<Symbol>],
+        index: usize,
+    ) -> Option<P<NodeList>> {
         if self.should_write_type_parameters_in_qualified_name(c, chain, index) {
-            let symbol = chain[index as usize];
-            let next_symbol = chain[index as usize + 1];
-            if !next_symbol.check_flags.get().intersects(CheckFlags::Instantiated) {
+            let symbol = chain[index];
+            let next_symbol = chain[index + 1];
+            if !next_symbol
+                .check_flags
+                .get()
+                .intersects(CheckFlags::Instantiated)
+            {
                 return None;
             }
 
@@ -2012,9 +2074,14 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3696
-    pub(crate) fn lookup_expression_chain_type_argument_nodes(&self, c: &mut Checker, chain: &[P<Symbol>], index: i32) -> Option<P<NodeList>> {
+    pub(crate) fn lookup_expression_chain_type_argument_nodes(
+        &self,
+        c: &mut Checker,
+        chain: &[P<Symbol>],
+        index: usize,
+    ) -> Option<P<NodeList>> {
         if self.should_write_type_parameters_in_qualified_name(c, chain, index) {
-            let symbol = chain[index as usize];
+            let symbol = chain[index];
             let symbol_id = ast::get_symbol_id(symbol);
             if self.ctx().type_parameter_symbol_list.borrow().has(&symbol_id) {
                 return None;
@@ -2033,7 +2100,16 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3716
-    pub(crate) fn should_write_type_parameters_in_qualified_name(&self, _c: &mut Checker, chain: &[P<Symbol>], index: i32) -> bool {
-        self.ctx().flags.get().intersects(Flags::WriteTypeParametersInQualifiedName) && index < chain.len() as i32 - 1
+    pub(crate) fn should_write_type_parameters_in_qualified_name(
+        &self,
+        _c: &mut Checker,
+        chain: &[P<Symbol>],
+        index: usize,
+    ) -> bool {
+        self.ctx()
+            .flags
+            .get()
+            .intersects(Flags::WriteTypeParametersInQualifiedName)
+            && index < chain.len() - 1
     }
 }

@@ -279,18 +279,16 @@ impl configFileRegistryBuilder {
         if include_tsconfig_dir {
             globs.push(get_recursive_glob_pattern(&tsconfig_dir));
         }
-        for file_name in command_line.as_ref().map(|c| c.extended_source_files()).unwrap_or_default() {
+        globs.extend(command_line.as_ref().map(|c| c.extended_source_files()).unwrap_or_default().into_iter().filter_map(|file_name| {
             if include_workspace && tspath::contains_path(&self.session_options.current_directory, &file_name, &compare_paths_options) {
-                continue;
+                return None;
             }
-            globs.push(file_name);
-        }
+            Some(file_name)
+        }));
         if !external_directories.is_empty() {
             let (common_parents, ignored_external_dirs) =
                 tspath::get_common_parents(&external_directories, minWatchLocationDepth, get_path_components_for_watching, &compare_paths_options);
-            for parent in &common_parents {
-                globs.push(get_recursive_glob_pattern(parent));
-            }
+            globs.extend(common_parents.iter().map(|parent| get_recursive_glob_pattern(parent)));
             ignored = ignored_external_dirs;
         }
 
@@ -526,12 +524,15 @@ impl configFileRegistryBuilder {
                     }
 
                     affected_projects = copy_set_into(affected_projects, self.handle_config_change(&entry, logger).as_ref());
-                    let retaining_configs: Vec<Path> = entry.value().and_then(|v| v.retaining_configs.clone()).map(|r| r.into_iter().collect()).unwrap_or_default();
-                    for extending_config_path in retaining_configs {
+                    let retaining_configs: Vec<Path> =
+                        entry.value().and_then(|v| v.retaining_configs.clone()).map(|r| r.into_iter().collect()).unwrap_or_default();
+                    affected_projects = retaining_configs.into_iter().fold(affected_projects, |mut affected_projects, extending_config_path| {
                         if let Some(extending_config_entry) = self.configs.load(&extending_config_path) {
                             affected_projects = copy_set_into(affected_projects, self.handle_config_change(&extending_config_entry, logger).as_ref());
                         }
-                    }
+
+                        affected_projects
+                    });
                     // This was a config file, so assume it's not also a root file
                     created_files.remove(path);
                 }
@@ -618,8 +619,8 @@ impl configFileRegistryBuilder {
                             return false;
                         }
                         logger.logf(format_args!("Checking if any of {} created files match root files for config {}", created_files.len(), key.0));
-                        #[expect(clippy::iter_over_hash_type, reason = "any-match predicate; the result does not depend on order; Go ranges the map too")]
-                        for (path, file_name) in &created_files {
+                        // any-match predicate; the result does not depend on order; Go ranges the map too
+                        if created_files.iter().any(|(path, file_name)| {
                             if command_line.possibly_matches_file_name(file_name) {
                                 return true;
                             }
@@ -628,6 +629,10 @@ impl configFileRegistryBuilder {
                                 // test realpath here; this is enough confidence to trigger a filename reload.
                                 return true;
                             }
+
+                            false
+                        }) {
+                            return true;
                         }
                         false
                     },
@@ -803,16 +808,12 @@ fn content_mapper_manifest_path(command_line: Option<P<ParsedCommandLine>>, to_p
     let Some(command_line) = command_line else {
         return false;
     };
-    for mapper in command_line.content_mappers() {
-        if !mapper.definition.package.is_empty()
+    command_line.content_mappers().iter().any(|mapper| {
+        !mapper.definition.package.is_empty()
             && mapper.contribution_id.is_empty()
             && !mapper.package_directory.is_empty()
             && to_path(&tspath::combine_paths(&mapper.package_directory, &["package.json"])) == *path
-        {
-            return true;
-        }
-    }
-    false
+    })
 }
 
 impl ParseConfigHost for configFileRegistryBuilder {

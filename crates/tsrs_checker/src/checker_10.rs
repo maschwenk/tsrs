@@ -34,15 +34,24 @@ impl Checker {
     }
 
     // checker.go:19627
-    pub(crate) fn get_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], _location: P<Node>) -> Vec<P<Signature>> {
-        let type_arg_count = type_argument_nodes.len() as i32;
+    pub(crate) fn get_constructors_for_type_arguments(
+        &mut self,
+        t: P<Type>,
+        type_argument_nodes: &[P<Node>],
+        _location: P<Node>,
+    ) -> Vec<P<Signature>> {
+        let type_arg_count = type_argument_nodes.len();
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         let mut result = Vec::new();
-        for &sig in signatures {
-            if type_arg_count >= self.get_min_type_argument_count(sig.type_parameters.get()) && type_arg_count <= sig.type_parameters.get().len() as i32 {
-                result.push(sig);
+        result.extend(signatures.iter().filter_map(|&sig| {
+            if type_arg_count >= self.get_min_type_argument_count(sig.type_parameters.get())
+                && type_arg_count <= sig.type_parameters.get().len()
+            {
+                Some(sig)
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
@@ -218,15 +227,14 @@ impl Checker {
         // identities, and potentially a lot of work comparing those identities, so here we create an instantiation
         // that uses the original type identities for all unconstrained type parameters.
         let mut type_arguments = Vec::with_capacity(signature.type_parameters.get().len());
-        for &tp in signature.type_parameters.get() {
+        type_arguments.extend(signature.type_parameters.get().iter().filter_map(|&tp| {
             if let Some(target) = tp.target() {
                 if self.get_constraint_of_type_parameter(target).is_none() {
-                    type_arguments.push(target);
-                    continue;
+                    return Some(target);
                 }
             }
-            type_arguments.push(tp);
-        }
+            Some(tp)
+        }));
         self.get_signature_instantiation(signature, &type_arguments, ast::is_in_js_file(signature.declaration.get()), &[] /*inferredTypeParameters*/)
     }
 
@@ -241,16 +249,16 @@ impl Checker {
             return cached;
         }
         let mut constraints = Vec::with_capacity(type_parameters.len());
-        for &tp in type_parameters {
-            constraints.push(self.get_constraint_of_type_parameter(tp).unwrap_or(self.unknown_type));
-        }
+        constraints.extend(type_parameters.iter().map(|&tp| self.get_constraint_of_type_parameter(tp).unwrap_or(self.unknown_type)));
         let base_constraint_mapper = new_type_mapper(type_parameters, alloc_vec(constraints));
         let mut base_constraints: Vec<P<Type>> = type_parameters.iter().map(|tp| self.instantiate_type(*tp, Some(base_constraint_mapper))).collect();
         // Run the immediate constraint mapper N-1 times so non-circular interdependent type parameters
         // resolve to their external dependencies without adding an extra expansion step for self-recursive constraints.
-        for _ in 0..type_parameters.len() - 1 {
+        base_constraints = (0..type_parameters.len() - 1).fold(base_constraints, |mut base_constraints, _| {
             base_constraints = self.instantiate_types(&base_constraints, Some(base_constraint_mapper));
-        }
+
+            base_constraints
+        });
         // and then apply a type eraser to remove any remaining circularly dependent type parameters
         base_constraints = self.instantiate_types(&base_constraints, Some(new_array_to_single_type_mapper(type_parameters, self.any_type)));
         let result = self.instantiate_signature_ex(signature, new_type_mapper(type_parameters, alloc_vec(base_constraints)), true /*eraseTypeParameters*/);
@@ -527,11 +535,7 @@ impl Checker {
             }
         }
         if has_computed_string_property || has_computed_number_property || has_computed_symbol_property {
-            for &sym in sibling_symbols {
-                if sym != index_symbol {
-                    property_symbols.push(sym);
-                }
-            }
+            property_symbols.extend(sibling_symbols.iter().filter_map(|&sym| if sym != index_symbol { Some(sym) } else { None }));
             // aggregate similar index infos implied to be the same key to the same combined index info
             if has_computed_string_property && find_index_info(&index_infos, self.string_type).is_none() {
                 let info = self.get_object_literal_index_info(readonly_computed_string_property, &property_symbols, self.string_type);
@@ -725,7 +729,7 @@ impl Checker {
                 || is_rest_parameter(param)
                 || iife.is_some() && parameters.len() > iife.unwrap().arguments().len() && type_node.is_none();
             if !is_optional_parameter {
-                min_argument_count = parameters.len() as i32;
+                min_argument_count = parameters.len();
             }
         }
         // If only one accessor includes a this-type annotation, the other behaves as if it had the same type annotation
@@ -885,9 +889,7 @@ impl Checker {
             t = self.instantiate_type(target_return_type, sig.mapper.get());
         } else if let Some(composite) = sig.composite() {
             let mut return_types = Vec::with_capacity(composite.signatures.get().len());
-            for &s in composite.signatures.get() {
-                return_types.push(self.get_return_type_of_signature(s));
-            }
+            return_types.extend(composite.signatures.get().iter().map(|&s| self.get_return_type_of_signature(s)));
             let combined = self.get_union_or_intersection_type(&return_types, composite.is_union.get(), UnionReduction::Subtype);
             t = self.instantiate_type(combined, sig.mapper.get());
         } else {
@@ -972,8 +974,16 @@ impl Checker {
     // checker.go:20420
     pub(crate) fn get_parameter_type_of_full_signature(&mut self, node: P<Node>, parameter: P<Node>) -> Option<P<Type>> {
         if let Some(signature) = self.get_signature_of_full_signature_type(node) {
-            let pos = node.parameters().iter().position(|p| *p == parameter).map_or(-1, |i| i as i32);
-            if parameter.as_parameter_declaration().dot_dot_dot_token().is_some() {
+            let pos = node
+                .parameters()
+                .iter()
+                .position(|p| *p == parameter)
+                .expect("parameter belongs to its signature");
+            if parameter
+                .as_parameter_declaration()
+                .dot_dot_dot_token()
+                .is_some()
+            {
                 return Some(self.get_rest_type_at_position(signature, pos, false /*readonly*/));
             } else {
                 return Some(self.get_type_at_position(signature, pos));
@@ -1450,14 +1460,12 @@ impl Checker {
                 if t.types().iter().any(|s| self.is_empty_object_type(*s)) {
                     error_reported = true;
                 } else {
-                    for &s in t.types() {
-                        error_reported = error_reported || self.report_widening_errors_in_type(s);
-                    }
+                    let types = t.types();
+                    error_reported = error_reported || types.iter().any(|&s| self.report_widening_errors_in_type(s));
                 }
             } else if self.is_array_or_tuple_type(t) {
-                for &s in self.get_type_arguments(t) {
-                    error_reported = error_reported || self.report_widening_errors_in_type(s);
-                }
+                let type_arguments = self.get_type_arguments(t);
+                error_reported = error_reported || type_arguments.iter().any(|&s| self.report_widening_errors_in_type(s));
             } else if is_object_literal_type(t) {
                 for p in self.get_properties_of_object_type(t).iter().copied() {
                     let s = self.get_type_of_symbol(p);
@@ -1522,7 +1530,7 @@ impl Checker {
         if !return_type.flags().intersects(TypeFlags::Boolean) {
             return None;
         }
-        for (i, &param) in fn_.parameters().iter().enumerate() {
+        if let Some(result) = fn_.parameters().iter().enumerate().find_map(|(i, &param)| {
             let init_type = self.get_type_of_symbol(param.symbol().unwrap());
             if init_type.flags().intersects(TypeFlags::Boolean)
                 || !ast::is_identifier(param.name().unwrap())
@@ -1530,12 +1538,21 @@ impl Checker {
                 || is_rest_parameter(param)
             {
                 // Refining "x: boolean" to "x is true" or "x is false" isn't useful.
-                continue;
+                return None;
             }
             let true_type = self.check_if_expression_refines_parameter(fn_, expr, param, init_type);
             if let Some(true_type) = true_type {
-                return Some(self.new_type_predicate(TypePredicateKind::Identifier, param.name().unwrap().text(), i as i32, Some(true_type)));
+                return Some(Some(self.new_type_predicate(
+                    TypePredicateKind::Identifier,
+                    param.name().unwrap().text(),
+                    Some(i),
+                    Some(true_type),
+                )));
             }
+
+            None
+        }) {
+            return result;
         }
         None
     }
@@ -1707,7 +1724,7 @@ impl Checker {
         if symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) {
             let signatures = self.get_signatures_of_symbol(Some(symbol));
             d.set_signatures(alloc_vec(signatures));
-            d.set_call_signature_count(d.signatures().len() as i32);
+            d.set_call_signature_count(d.signatures().len());
         }
         // And likewise for construct signatures for classes
         if symbol.flags().intersects(SymbolFlags::Class) {
@@ -1912,12 +1929,15 @@ impl Checker {
         let base_type_node = get_base_type_node_of_class(class_type);
         let is_java_script = declaration.is_some_and(|d| ast::is_in_js_file(d));
         let type_arguments = self.get_type_arguments_from_node(base_type_node.unwrap());
-        let type_arg_count = type_arguments.len() as i32;
+        let type_arg_count = type_arguments.len();
         let mut result = Vec::new();
-        for &base_sig in base_signatures {
-            let min_type_argument_count = self.get_min_type_argument_count(base_sig.type_parameters.get());
-            let type_param_count = base_sig.type_parameters.get().len() as i32;
-            if is_java_script || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count {
+        result.extend(base_signatures.iter().filter_map(|&base_sig| {
+            let min_type_argument_count =
+                self.get_min_type_argument_count(base_sig.type_parameters.get());
+            let type_param_count = base_sig.type_parameters.get().len();
+            if is_java_script
+                || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count
+            {
                 let sig = if type_param_count != 0 {
                     let filled = self.fill_missing_type_arguments(&type_arguments, base_sig.type_parameters.get(), min_type_argument_count, is_java_script);
                     self.create_signature_instantiation(base_sig, &filled)
@@ -1931,9 +1951,11 @@ impl Checker {
                 } else {
                     sig.flags.set(sig.flags.get() & !SignatureFlags::Abstract);
                 }
-                result.push(sig);
+                Some(sig)
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
@@ -2214,7 +2236,7 @@ impl Checker {
             }
             lazy.resolving.set(true);
             let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
-            for info in self.get_index_infos_of_type(lazy.modifiers_type) {
+            index_infos = self.get_index_infos_of_type(lazy.modifiers_type).iter().fold(index_infos, |mut index_infos, info| {
                 index_infos = self.append_mapped_type_index_info(
                     index_infos,
                     t,
@@ -2225,7 +2247,9 @@ impl Checker {
                     info.key_type(),
                     info.key_type(),
                 );
-            }
+
+                index_infos
+            });
             lazy.resolving.set(false);
             if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
                 return t.as_structured_type().index_infos();
@@ -2404,21 +2428,15 @@ impl Checker {
         // The members and properties collections are empty for union types. To get all properties of a union
         // type use getPropertiesOfType (only the language service uses this).
         let mut call_signature_lists = Vec::with_capacity(t.types().len());
-        for &t in t.types() {
-            if t == self.global_function_type {
-                call_signature_lists.push(vec![self.unknown_signature]);
-            } else {
-                call_signature_lists.push(self.get_signatures_of_type(t, SignatureKind::Call).to_vec());
-            }
-        }
+        call_signature_lists.extend(t.types().iter().map(|&t| {
+            if t == self.global_function_type { vec![self.unknown_signature] } else { self.get_signatures_of_type(t, SignatureKind::Call).to_vec() }
+        }));
         let mut call_signatures = self.get_union_signatures(&call_signature_lists);
         if call_signatures.is_empty() {
             call_signatures = self.get_array_member_call_signatures(t);
         }
         let mut construct_signature_lists = Vec::with_capacity(t.types().len());
-        for &t in t.types() {
-            construct_signature_lists.push(self.get_signatures_of_type(t, SignatureKind::Construct).to_vec());
-        }
+        construct_signature_lists.extend(t.types().iter().map(|&t| self.get_signatures_of_type(t, SignatureKind::Construct).to_vec()));
         let construct_signatures = self.get_union_signatures(&construct_signature_lists);
         let index_infos = self.get_union_index_infos(t.types());
         self.set_structured_type_members(t, None, &call_signatures, &construct_signatures, &index_infos);
@@ -2488,20 +2506,21 @@ impl Checker {
         let mut result: Vec<P<Signature>> = Vec::new();
         let mut index_with_length_over_one = 0usize;
         let mut count_length_over_one = 0;
-        for i in 0..signature_lists.len() {
-            if signature_lists[i].is_empty() {
+        for (i, signatures) in signature_lists.iter().enumerate() {
+            if signatures.is_empty() {
                 return Vec::new();
             }
-            if signature_lists[i].len() > 1 {
+            if signatures.len() > 1 {
                 index_with_length_over_one = i;
                 count_length_over_one += 1;
             }
-            for &signature in &signature_lists[i] {
+            for &signature in signatures {
                 // Only process signatures with parameter lists that aren't already in the result list
                 if result.is_empty()
                     || self.find_matching_signature(&result, signature, false /*partialMatch*/, false /*ignoreThisTypes*/, true /*ignoreReturnTypes*/).is_none()
                 {
-                    let union_signatures = self.find_matching_signatures(signature_lists, signature, i as i32);
+                    let union_signatures =
+                        self.find_matching_signatures(signature_lists, signature, i);
                     if !union_signatures.is_empty() {
                         let mut s = signature;
                         // Union the result types when more than one signature matches
@@ -2510,11 +2529,11 @@ impl Checker {
                             let first_this_parameter_of_union_signatures = first_non_nil(&union_signatures, |sig| sig.this_parameter());
                             if let Some(first_this) = first_this_parameter_of_union_signatures {
                                 let mut this_types = Vec::new();
-                                for &sig in &union_signatures {
-                                    if let Some(tp) = sig.this_parameter() {
-                                        this_types.push(self.get_type_of_symbol(tp));
-                                    }
-                                }
+                                this_types.extend(
+                                    union_signatures
+                                        .iter()
+                                        .filter_map(|&sig| if let Some(tp) = sig.this_parameter() { Some(self.get_type_of_symbol(tp)) } else { None }),
+                                );
                                 let this_type = self.get_intersection_type(&this_types);
                                 this_parameter = Some(self.create_symbol_with_type(first_this, Some(this_type)));
                             }
@@ -2709,7 +2728,12 @@ impl Checker {
                         .map(|&s| {
                             let clone = self.clone_signature(s);
                             let return_type = self.get_return_type_of_signature(s);
-                            clone.resolved_return_type.set(Some(self.include_mixin_type(return_type, types, &mixin_flags, i as i32)));
+                            clone.resolved_return_type.set(Some(self.include_mixin_type(
+                                return_type,
+                                types,
+                                &mixin_flags,
+                                i,
+                            )));
                             clone
                         })
                         .collect();
@@ -2718,9 +2742,11 @@ impl Checker {
             }
             let call = self.get_signatures_of_type(t, SignatureKind::Call);
             call_signatures = self.append_signatures(&call_signatures, &call);
-            for info in self.get_index_infos_of_type(t).iter().copied() {
+            index_infos = self.get_index_infos_of_type(t).iter().copied().fold(index_infos, |mut index_infos, info| {
                 index_infos = self.append_index_info(&mut index_infos, info, false /*union*/);
-            }
+
+                index_infos
+            });
         }
         self.set_structured_type_members(t, None, &call_signatures, &construct_signatures, &index_infos);
     }
@@ -2731,9 +2757,17 @@ impl Checker {
         for &sig in new_signatures {
             let mut all_different = true;
             if !signatures.is_empty() {
-                for i in 0..signatures.len() {
-                    let s = signatures[i];
-                    if self.compare_signatures_identical(s, sig, false /*partialMatch*/, false /*ignoreThisTypes*/, false /*ignoreReturnTypes*/, |c, s, t| c.compare_types_identical(s, t)) != Ternary::False {
+                for element in signatures.iter() {
+                    let s = *element;
+                    if self.compare_signatures_identical(
+                        s,
+                        sig,
+                        false, /*partialMatch*/
+                        false, /*ignoreThisTypes*/
+                        false, /*ignoreReturnTypes*/
+                        super::checker::Checker::compare_types_identical,
+                    ) != Ternary::False
+                    {
                         all_different = false;
                         break;
                     }
@@ -2748,8 +2782,8 @@ impl Checker {
 
     // checker.go:21687
     pub(crate) fn append_index_info(&mut self, index_infos: &mut [P<IndexInfo>], new_info: P<IndexInfo>, union: bool) -> Vec<P<IndexInfo>> {
-        for i in 0..index_infos.len() {
-            let info = index_infos[i];
+        for info_slot in index_infos.iter_mut() {
+            let info = *info_slot;
             if info.key_type.get() == new_info.key_type.get() {
                 let value_type;
                 let is_readonly;
@@ -2760,7 +2794,7 @@ impl Checker {
                     value_type = self.get_intersection_type(&[info.value_type(), new_info.value_type()]);
                     is_readonly = info.is_readonly.get() && new_info.is_readonly.get();
                 }
-                index_infos[i] = self.new_index_info(info.key_type(), value_type, is_readonly, None, &[]);
+                *info_slot = self.new_index_info(info.key_type(), value_type, is_readonly, None, &[]);
                 return index_infos.to_vec();
             }
         }
@@ -2770,40 +2804,53 @@ impl Checker {
     }
 
     // checker.go:21706
-    pub(crate) fn find_mixins(&mut self, types: &[P<Type>]) -> (Vec<bool>, i32) {
-        let mut mixin_flags: Vec<bool> = types.iter().map(|t| self.is_mixin_constructor_type(*t)).collect();
+    pub(crate) fn find_mixins(&mut self, types: &[P<Type>]) -> (Vec<bool>, usize) {
+        let mut mixin_flags: Vec<bool> = types
+            .iter()
+            .map(|t| self.is_mixin_constructor_type(*t))
+            .collect();
         let mut constructor_type_count = 0;
         let mut mixin_count = 0;
-        let mut first_mixin_index: i32 = -1;
+        let mut first_mixin_index = None;
         for (i, &t) in types.iter().enumerate() {
             if !self.get_signatures_of_type(t, SignatureKind::Construct).is_empty() {
                 constructor_type_count += 1;
             }
             if mixin_flags[i] {
-                if first_mixin_index < 0 {
-                    first_mixin_index = i as i32;
+                if first_mixin_index.is_none() {
+                    first_mixin_index = Some(i);
                 }
                 mixin_count += 1;
             }
         }
         if constructor_type_count > 0 && constructor_type_count == mixin_count {
-            mixin_flags[first_mixin_index as usize] = false;
+            mixin_flags[first_mixin_index.expect("constructor mixins are non-empty")] = false;
             mixin_count -= 1;
         }
         (mixin_flags, mixin_count)
     }
 
     // checker.go:21728
-    pub(crate) fn include_mixin_type(&mut self, t: P<Type>, types: &[P<Type>], mixin_flags: &[bool], index: i32) -> P<Type> {
+    pub(crate) fn include_mixin_type(
+        &mut self,
+        t: P<Type>,
+        types: &[P<Type>],
+        mixin_flags: &[bool],
+        index: usize,
+    ) -> P<Type> {
         let mut mixed_types: Vec<P<Type>> = Vec::new();
-        for i in 0..types.len() {
-            if i as i32 == index {
-                mixed_types.push(t);
-            } else if mixin_flags[i] {
-                let sig = self.get_signatures_of_type(types[i], SignatureKind::Construct)[0];
-                mixed_types.push(self.get_return_type_of_signature(sig));
+        mixed_types.extend((0..types.len()).filter_map(|i| {
+            if i == index {
+                Some(t)
+            } else {
+                if mixin_flags[i] {
+                    let sig = self.get_signatures_of_type(types[i], SignatureKind::Construct)[0];
+                    Some(self.get_return_type_of_signature(sig))
+                } else {
+                    None
+                }
             }
-        }
+        }));
         self.get_intersection_type(&mixed_types)
     }
 

@@ -3,7 +3,7 @@ use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, ContextFlags, Type, TypeExt as _};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
-use tsrs_core::{TextPos, TextRange, P};
+use tsrs_core::{P, TextRange};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -36,11 +36,13 @@ impl LanguageService {
         let (program, file) = self.get_program_and_file(document_uri);
         let positions = self.converters.from_lsp_position_for_source_file(file, position, Feature::Definition);
         let mut results: Vec<lsproto::DefinitionResponse> = Vec::with_capacity(positions.len());
-        for mapped in positions {
+        results.extend(positions.into_iter().filter_map(|mapped| {
             if mapped.fidelity.is_single_segment() {
-                results.push(self.provide_definition_at_position(ctx, program, mapped.script, mapped.position, client_supports_link));
+                Some(self.provide_definition_at_position(ctx, program, mapped.script, mapped.position, client_supports_link))
+            } else {
+                None
             }
-        }
+        }));
         Ok(combine_definition_responses(results, client_supports_link))
     }
 
@@ -50,7 +52,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         file: P<SourceFile>,
-        text_pos: TextPos,
+        text_pos: u32,
         client_supports_link: bool,
     ) -> lsproto::DefinitionResponse {
         let pos = text_pos;
@@ -86,7 +88,15 @@ impl LanguageService {
         if node.kind() == Kind::CaseKeyword || node.kind() == Kind::DefaultKeyword && ast::is_default_clause(node.parent().unwrap()) {
             if let Some(stmt) = ast::find_ancestor(node.parent(), ast::is_switch_statement) {
                 let file = ast::get_source_file_of_node(stmt).unwrap();
-                return self.create_location_from_file_and_range(file, scanner::get_range_of_token_at_position(file, stmt.pos()), Feature::Definition);
+                return self.create_location_from_file_and_range(
+                    file,
+                    scanner::get_range_of_token_at_position(
+                        file,
+                        stmt.pos()
+                            .expect_source("parsed switch statements have source positions"),
+                    ),
+                    Feature::Definition,
+                );
             }
         }
 
@@ -128,11 +138,13 @@ impl LanguageService {
         let (program, file) = self.get_program_and_file(document_uri);
         let positions = self.converters.from_lsp_position_for_source_file(file, position, Feature::TypeDefinition);
         let mut results: Vec<lsproto::TypeDefinitionResponse> = Vec::with_capacity(positions.len());
-        for mapped in positions {
+        results.extend(positions.into_iter().filter_map(|mapped| {
             if mapped.fidelity.is_single_segment() {
-                results.push(self.provide_type_definition_at_position(ctx, program, mapped.script, mapped.position, client_supports_link));
+                Some(self.provide_type_definition_at_position(ctx, program, mapped.script, mapped.position, client_supports_link))
+            } else {
+                None
             }
-        }
+        }));
         Ok(combine_definition_responses(results, client_supports_link))
     }
 
@@ -142,7 +154,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         file: P<SourceFile>,
-        text_pos: TextPos,
+        text_pos: u32,
         client_supports_link: bool,
     ) -> lsproto::TypeDefinitionResponse {
         let pos = text_pos;
@@ -184,13 +196,15 @@ pub(crate) fn combine_definition_responses(results: Vec<lsproto::DefinitionRespo
     let mut seen: FxHashSet<lsproto::Location> = FxHashSet::default();
     for result in results {
         if let Some(result_links) = result.definition_links {
-            for link in result_links {
+            (definition_links, locations) = result_links.into_iter().fold((definition_links, locations), |(mut definition_links, mut locations), link| {
                 let location = lsproto::Location { uri: link.target_uri.clone(), range: link.target_selection_range };
                 if seen.insert(location.clone()) {
                     definition_links.push(link);
                     locations.push(location);
                 }
-            }
+
+                (definition_links, locations)
+            });
         }
         if let Some(location) = result.location {
             if seen.insert(location.clone()) {
@@ -204,17 +218,20 @@ pub(crate) fn combine_definition_responses(results: Vec<lsproto::DefinitionRespo
             }
         }
         if let Some(result_locations) = result.locations {
-            for location in result_locations {
-                if seen.insert(location.clone()) {
-                    definition_links.push(lsproto::LocationLink {
-                        target_uri: location.uri.clone(),
-                        target_range: location.range,
-                        target_selection_range: location.range,
-                        ..Default::default()
-                    });
-                    locations.push(location);
-                }
-            }
+            (definition_links, locations) =
+                result_locations.into_iter().fold((definition_links, locations), |(mut definition_links, mut locations), location| {
+                    if seen.insert(location.clone()) {
+                        definition_links.push(lsproto::LocationLink {
+                            target_uri: location.uri.clone(),
+                            target_range: location.range,
+                            target_selection_range: location.range,
+                            ..Default::default()
+                        });
+                        locations.push(location);
+                    }
+
+                    (definition_links, locations)
+                });
         }
     }
     if links {
@@ -275,32 +292,47 @@ impl LanguageService {
             });
         }
 
-        for &decl in declarations {
+        locations.extend(declarations.iter().filter_map(|&decl| {
             let file = ast::get_source_file_of_node(decl).unwrap();
             let name = ast::get_name_of_declaration(decl).unwrap_or(decl);
-            let name_range = if name.kind() == Kind::EmptyStatement { TextRange::new(name.pos(), name.pos()) } else { create_range_from_node(name, file) };
-            if location_ranges.insert(FileRange { file, file_range: name_range }) {
+            let name_range = if name.kind() == Kind::EmptyStatement {
+                let pos = name
+                    .pos()
+                    .expect_source("parsed empty statements have source positions");
+                TextRange::new(pos, pos)
+            } else {
+                create_range_from_node(name, file)
+            };
+            if location_ranges.insert(FileRange {
+                file,
+                file_range: name_range,
+            }) {
                 let context_node = get_context_node(Some(decl)).unwrap_or(decl);
                 let mut context_range = to_context_range(Some(name_range), file, Some(context_node)).unwrap_or(name_range);
                 if !name_range.contained_by(context_range) {
-                    context_range = TextRange::new(name_range.pos().min(context_range.pos()), name_range.end().max(context_range.end()));
+                    context_range = TextRange::from_text_pos(
+                        name_range.pos().min(context_range.pos()),
+                        name_range.end().max(context_range.end()),
+                    );
                 }
                 let (target_selection_loc, selection_fidelity) = self.source_file_range_to_lsp_location_for_feature(file, name_range, feature);
                 if !selection_fidelity.is_single_segment() {
-                    continue;
+                    return None;
                 }
                 let (mut target_loc, context_fidelity) = self.source_file_range_to_lsp_location(file, context_range);
                 if context_fidelity.is_none() || target_loc.uri != target_selection_loc.uri || !lsp_range_contains(target_loc.range, target_selection_loc.range) {
                     target_loc = target_selection_loc.clone();
                 }
-                locations.push(lsproto::LocationLink {
+                Some(lsproto::LocationLink {
                     origin_selection_range: Some(origin_selection_range),
                     target_selection_range: target_selection_loc.range,
                     target_uri: target_loc.uri,
                     target_range: target_loc.range,
-                });
+                })
+            } else {
+                None
             }
-        }
+        }));
 
         if client_supports_link {
             return lsproto::LocationOrLocationsOrDefinitionLinksOrNull { definition_links: Some(locations), ..Default::default() };
@@ -311,7 +343,8 @@ impl LanguageService {
 
 // definition.go:281
 pub(crate) fn lsp_range_contains(outer: lsproto::Range, inner: lsproto::Range) -> bool {
-    lsproto::compare_positions(outer.start, inner.start) <= 0 && lsproto::compare_positions(inner.end, outer.end) <= 0
+    lsproto::compare_positions(outer.start, inner.start).is_le()
+        && lsproto::compare_positions(inner.end, outer.end).is_le()
 }
 
 // definition.go:286
@@ -364,11 +397,14 @@ pub(crate) fn get_declarations_from_location(c: &mut Checker, node: P<Node>) -> 
                 let t = c.get_type_at_location(parent.parent().unwrap());
                 let types: Vec<P<Type>> = if t.is_union() { t.types().to_vec() } else { vec![t] };
                 let mut result: Vec<P<Node>> = Vec::new();
-                for union_type in types {
-                    if let Some(prop) = c.get_property_of_type_exported(union_type, &name) {
-                        result.extend_from_slice(prop.declarations());
-                    }
-                }
+                result.extend(
+                    types
+                        .into_iter()
+                        .filter_map(|union_type| {
+                            if let Some(prop) = c.get_property_of_type_exported(union_type, &name) { Some(prop.declarations().iter().copied()) } else { None }
+                        })
+                        .flatten(),
+                );
                 return result;
             }
         }
@@ -427,9 +463,7 @@ fn get_declarations_from_object_literal_element(c: &mut Checker, node: P<Node>) 
     }
 
     let mut result: Vec<P<Node>> = Vec::new();
-    for prop in properties {
-        result.extend_from_slice(prop.declarations());
-    }
+    result.extend(properties.into_iter().flat_map(|prop| prop.declarations().iter().copied()));
     result
 }
 

@@ -33,10 +33,8 @@ pub(crate) fn is_class_named_evaluation_helper_block(emit_context: P<EmitContext
  */
 pub(crate) fn class_has_explicitly_assigned_name(emit_context: P<EmitContext>, node: P<Node>) -> bool {
     if emit_context.assigned_name(node).is_some() {
-        for &member in node.members() {
-            if is_class_named_evaluation_helper_block(emit_context, member) {
-                return true;
-            }
+        if node.members().iter().any(|&member| is_class_named_evaluation_helper_block(emit_context, member)) {
+            return true;
         }
     }
     false
@@ -204,7 +202,11 @@ pub(crate) fn inject_class_named_evaluation_helper_block_if_missing(
         emit_context.set_source_map_range(named_evaluation_block.body().unwrap().statements()[0], name.loc());
     }
 
-    let insertion_index = (node.members().iter().position(|&n| is_class_this_assignment_block(emit_context, n)).map_or(-1, |i| i as isize) + 1) as usize;
+    let insertion_index = node
+        .members()
+        .iter()
+        .position(|&n| is_class_this_assignment_block(emit_context, n))
+        .map_or(0, |index| index + 1);
     let leading = &node.members()[..insertion_index];
     let trailing = &node.members()[insertion_index..];
 

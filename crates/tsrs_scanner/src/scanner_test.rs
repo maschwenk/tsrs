@@ -117,6 +117,12 @@ fn test_get_text_of_node_from_jsdoc_type_preserves_asterisk_type() {
     let f = NodeFactory::default();
     let node = f.new_jsdoc_all_type();
     node.set_flags(NodeFlags::JSDoc);
-    node.set_loc(tsrs_core::TextRange::new(0, source_text.len() as i32));
-    assert_eq!(crate::get_text_of_node_from_source_text(&source_text, node, false /*includeTrivia*/), "*");
+    node.set_loc(tsrs_core::TextRange::new(
+        0,
+        u32::try_from(source_text.len()).unwrap(),
+    ));
+    assert_eq!(
+        crate::get_text_of_node_from_source_text(&source_text, node, false /*includeTrivia*/),
+        "*"
+    );
 }

@@ -30,16 +30,17 @@ pub(crate) fn walk_dir(dir: &str, recursive: bool, f: &mut dyn FnMut(&str, bool)
 fn iterate_dir(rd: fs::ReadDir, dirname: &str, recursive: bool, f: &mut dyn FnMut(&str, bool) -> Result<(), Error>) -> Result<(), Error> {
     f(dirname, true)?;
     let mut entries = Vec::new();
-    for ent in rd {
+    entries = rd.into_iter().try_fold(entries, |mut entries, ent| {
         let ent = ent.map_err(Error::from_io)?;
         let name = ent.file_name().to_string_lossy().into_owned();
         let is_dir = match ent.file_type() {
             Ok(t) => t.is_dir(),
             // Go: lstat failed for a DT_UNKNOWN entry -> skip it.
-            Err(_) => continue,
+            Err(_) => return Ok(entries),
         };
         entries.push((name, is_dir));
-    }
+        Ok::<_, Error>(entries)
+    })?;
 
     for (name, is_dir) in entries {
         let full_path = format!("{}/{}", dirname, name);

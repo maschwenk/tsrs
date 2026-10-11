@@ -58,17 +58,29 @@ impl Checker {
                                             //   type Foo<T extends string, U extends T> = [T, U];
                                             //   type Bar<T> = T extends Foo<infer X, infer X> ? Foo<X, X> : T;
                                             // the instantiated constraint for U is X, so we discard that inference.
-                                            let type_parameters: &'static [P<Type>] = alloc_vec(type_parameters);
-                                            let targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> = (0..type_parameters.len())
-                                                .map(|index| {
-                                                    let f: Box<dyn Fn(&mut Checker) -> P<Type>> = Box::new(move |c: &mut Checker| {
-                                                        c.get_effective_type_argument_at_index(parent, type_parameters, index as i32)
-                                                    });
-                                                    f
-                                                })
-                                                .collect();
-                                            let mapper = new_deferred_type_mapper(type_parameters, targets);
-                                            let constraint = self.instantiate_type(declared_constraint, Some(mapper));
+                                            let type_parameters: &'static [P<Type>] =
+                                                alloc_vec(type_parameters);
+                                            let targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> =
+                                                (0..type_parameters.len())
+                                                    .map(|index| {
+                                                        let f: Box<
+                                                            dyn Fn(&mut Checker) -> P<Type>,
+                                                        > = Box::new(move |c: &mut Checker| {
+                                                            c.get_effective_type_argument_at_index(
+                                                                parent,
+                                                                type_parameters,
+                                                                index,
+                                                            )
+                                                        });
+                                                        f
+                                                    })
+                                                    .collect();
+                                            let mapper =
+                                                new_deferred_type_mapper(type_parameters, targets);
+                                            let constraint = self.instantiate_type(
+                                                declared_constraint,
+                                                Some(mapper),
+                                            );
                                             if constraint != t {
                                                 inferences.push(constraint);
                                             }
@@ -146,12 +158,17 @@ impl Checker {
     }
 
     // checker.go:17536
-    pub(crate) fn get_effective_type_argument_at_index(&mut self, node: P<Node>, type_parameters: &[P<Type>], index: i32) -> P<Type> {
+    pub(crate) fn get_effective_type_argument_at_index(
+        &mut self,
+        node: P<Node>,
+        type_parameters: &[P<Type>],
+        index: usize,
+    ) -> P<Type> {
         let type_arguments = node.type_arguments();
-        if (index as usize) < type_arguments.len() {
-            return self.get_type_from_type_node(type_arguments[index as usize]);
+        if index < type_arguments.len() {
+            return self.get_type_from_type_node(type_arguments[index]);
         }
-        self.get_effective_type_arguments(node, type_parameters)[index as usize]
+        self.get_effective_type_arguments(node, type_parameters)[index]
     }
 
     // checker.go:17544
@@ -299,7 +316,7 @@ impl Checker {
                 this_type.as_type_parameter().constraint.set(Some(t));
                 type_parameters.push(this_type);
                 d.all_type_parameters.set(alloc_vec(type_parameters));
-                d.outer_type_parameter_count.set(outer_type_parameter_count as i32);
+                d.outer_type_parameter_count.set(outer_type_parameter_count);
                 d.resolved_type_arguments.set(Some(d.type_parameters()));
                 d.instantiations.make();
                 d.instantiations.add(t);
@@ -323,21 +340,25 @@ impl Checker {
                     return false;
                 }
                 let base_type_nodes = get_extends_heritage_clause_elements(declaration);
-                for &node in base_type_nodes {
+                if base_type_nodes.iter().any(|&node| {
                     let name = get_heritage_clause_element_name(node);
                     if is_entity_name(name) || is_entity_name_expression(name) {
                         let base_symbol = self.resolve_entity_name(name, SymbolFlags::Type, true /*ignoreErrors*/, false, None);
                         match base_symbol {
-                            None => return false,
+                            None => return true,
                             Some(base_symbol) => {
                                 if !base_symbol.flags().intersects(SymbolFlags::Interface)
                                     || self.get_declared_type_of_class_or_interface(base_symbol).as_interface_type().this_type.get().is_some()
                                 {
-                                    return false;
+                                    return true;
                                 }
                             }
                         }
                     }
+
+                    false
+                }) {
+                    return false;
                 }
             }
         }
@@ -357,7 +378,7 @@ impl keyBuilder {
     #[inline]
     pub(crate) fn hash(&self) -> CacheHashKey {
         match &self.overflow_buffer {
-            None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length as usize]),
+            None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length]),
             Some(overflow) => self.hash_spilled(overflow),
         }
     }
@@ -367,7 +388,7 @@ impl keyBuilder {
     #[inline(never)]
     fn hash_spilled(&self, overflow: &[u8]) -> CacheHashKey {
         let mut buf = overflow.to_vec();
-        buf.extend_from_slice(&self.inline_buffer[..self.inline_length as usize]);
+        buf.extend_from_slice(&self.inline_buffer[..self.inline_length]);
         CacheHashKey::hash_128(&buf)
     }
 
@@ -377,7 +398,7 @@ impl keyBuilder {
     #[cold]
     #[inline(never)]
     pub(crate) fn spill(&mut self) {
-        let n = self.inline_length as usize;
+        let n = self.inline_length;
         let inline = self.inline_buffer;
         self.overflow_buffer.get_or_insert_with(Vec::new).extend_from_slice(&inline[..n]);
         self.inline_length = 0;
@@ -386,35 +407,35 @@ impl keyBuilder {
     // checker.go:17727
     #[inline]
     pub(crate) fn write_byte(&mut self, c: u8) {
-        if self.inline_length as usize == self.inline_buffer.len() {
+        if self.inline_length == self.inline_buffer.len() {
             self.spill();
         }
-        self.inline_buffer[self.inline_length as usize] = c;
+        self.inline_buffer[self.inline_length] = c;
         self.inline_length += 1;
     }
 
     // checker.go:17735
     #[inline]
     pub(crate) fn write_string(&mut self, s: &str) {
-        if self.inline_length as usize + s.len() > self.inline_buffer.len() {
+        if self.inline_length + s.len() > self.inline_buffer.len() {
             self.spill();
             if s.len() > self.inline_buffer.len() {
                 self.overflow_buffer.get_or_insert_with(Vec::new).extend_from_slice(s.as_bytes());
                 return;
             }
         }
-        let start = self.inline_length as usize;
+        let start = self.inline_length;
         self.inline_buffer[start..start + s.len()].copy_from_slice(s.as_bytes());
-        self.inline_length += s.len() as i32;
+        self.inline_length += s.len();
     }
 
     // checker.go:17746
     #[inline]
     pub(crate) fn write_uint32(&mut self, v: u32) {
-        if self.inline_length as usize + 4 > self.inline_buffer.len() {
+        if self.inline_length + 4 > self.inline_buffer.len() {
             self.spill();
         }
-        let start = self.inline_length as usize;
+        let start = self.inline_length;
         self.inline_buffer[start..start + 4].copy_from_slice(&v.to_le_bytes());
         self.inline_length += 4;
     }
@@ -422,19 +443,18 @@ impl keyBuilder {
     // checker.go:17754
     #[inline]
     pub(crate) fn write_uint64(&mut self, v: u64) {
-        if self.inline_length as usize + 8 > self.inline_buffer.len() {
+        if self.inline_length + 8 > self.inline_buffer.len() {
             self.spill();
         }
-        let start = self.inline_length as usize;
+        let start = self.inline_length;
         self.inline_buffer[start..start + 8].copy_from_slice(&v.to_le_bytes());
         self.inline_length += 8;
     }
 
     // checker.go:17762
     #[inline]
-    pub(crate) fn write_int(&mut self, value: i32) {
-        // Go `uint64(value)` of a (64-bit) int: sign-extend
-        self.write_uint64(value as i64 as u64);
+    pub(crate) fn write_usize(&mut self, value: usize) {
+        self.write_uint64(value as u64);
     }
 
     // checker.go:17766
@@ -452,7 +472,7 @@ impl keyBuilder {
     // checker.go:17774
     #[inline]
     pub(crate) fn write_types(&mut self, types: &[P<Type>]) {
-        self.write_int(types.len() as i32);
+        self.write_usize(types.len());
         for &t in types {
             self.write_type(t);
         }
@@ -494,7 +514,7 @@ impl keyBuilder {
             b: &mut keyBuilder,
             c: &mut Checker,
             ref_: P<Type>,
-            depth: i32,
+            depth: u32,
             ignore_constraints: bool,
             type_parameters: &mut Vec<P<Type>>,
             constrained: &mut bool,
@@ -512,7 +532,7 @@ impl keyBuilder {
                             }
                         };
                         b.write_byte(b'=');
-                        b.write_int(index as i32);
+                        b.write_usize(index);
                         continue;
                     }
                     *constrained = true;
@@ -688,7 +708,7 @@ pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheH
     b.write_types(types);
     b.write_byte(b'|');
     for s in texts {
-        b.write_int(s.len() as i32);
+        b.write_usize(s.len());
     }
     b.write_byte(b'|');
     for s in texts {
@@ -844,12 +864,14 @@ impl Checker {
                     }
                     let elements = pattern.elements();
                     let mut literal_members: Vec<P<Node>> = Vec::with_capacity(elements.len());
-                    for &element in elements {
+                    literal_members.extend(elements.iter().filter_map(|&element| {
                         if !has_dot_dot_dot_token(element) {
                             let name = element.property_name_or_name().unwrap();
-                            literal_members.push(name);
+                            Some(name)
+                        } else {
+                            None
                         }
-                    }
+                    }));
                     t = self.get_rest_type(parent_type, &literal_members, declaration.symbol());
                 } else {
                     // Use explicitly specified property name ({ p: xxx } form), or otherwise the implied name ({ p } form)
@@ -869,7 +891,11 @@ impl Checker {
                     self.undefined_type,
                     Some(pattern),
                 );
-                let index = pattern.elements().iter().position(|&e| e == declaration).map_or(-1, |i| i as i32);
+                let index = pattern
+                    .elements()
+                    .iter()
+                    .position(|&e| e == declaration)
+                    .expect("binding element belongs to its pattern");
                 if has_dot_dot_dot_token(declaration) {
                     // If the parent is a tuple type, the rest element has a tuple type of the
                     // remaining tuple element types. Otherwise, the rest element has an array type with same
@@ -1114,8 +1140,8 @@ impl Checker {
             return self.any_array_type;
         }
         let mut min_length: usize = 0;
-        for i in (0..elements.len()).rev() {
-            let e = elements[i];
+        for (i, element) in elements.iter().enumerate().rev() {
+            let e = *element;
             if !(Some(e) == rest_element || e.name().is_none() || self.has_default_value(e)) {
                 min_length = i + 1;
                 break;
@@ -1123,7 +1149,7 @@ impl Checker {
         }
         let mut element_types: Vec<P<Type>> = Vec::with_capacity(elements.len());
         let mut element_infos: Vec<TupleElementInfo> = Vec::with_capacity(elements.len());
-        for (i, &e) in elements.iter().enumerate() {
+        (element_infos, element_types) = elements.iter().enumerate().fold((element_infos, element_types), |(mut element_infos, mut element_types), (i, &e)| {
             let t = if e.name().is_none() { self.any_type } else { self.get_type_from_binding_element(e, include_pattern_in_type, report_errors) };
             let flags = if Some(e) == rest_element {
                 ElementFlags::Rest
@@ -1134,7 +1160,9 @@ impl Checker {
             };
             element_types.push(t);
             element_infos.push(TupleElementInfo { flags, labeled_declaration: None });
-        }
+
+            (element_infos, element_types)
+        });
         let mut result = self.create_tuple_type_ex(&element_types, &element_infos, false);
         if include_pattern_in_type {
             result = self.clone_type_reference(result);
@@ -1479,7 +1507,11 @@ impl Checker {
                                 .resolve_name(Some(declaration), name.text(), SymbolFlags::Type, None /*nameNotFoundMessage*/, true /*isUse*/, false /*excludeGlobals*/)
                                 .is_some())
                     {
-                        let index = parent.parameters().iter().position(|&p| p == declaration).map_or(-1, |i| i as i32);
+                        let index = parent
+                            .parameters()
+                            .iter()
+                            .position(|&p| p == declaration)
+                            .expect("parameter belongs to its declaration");
                         let new_name = format!("arg{}", index);
                         let type_name = tsrs_scanner::declaration_name_to_string(Some(param.name()))
                             + if param.dot_dot_dot_token().is_some() { "[]" } else { "" };
@@ -1723,9 +1755,7 @@ impl Checker {
             let mut names: OrderedMap<&'static str, P<Symbol>> = OrderedMap::default();
             for t in self.get_siblings_of_context(context) {
                 if is_object_literal_type(t) && !t.object_flags().intersects(ObjectFlags::ContainsSpread) {
-                    for prop in self.get_properties_of_type(t).iter().copied() {
-                        names.insert(prop.name(), prop);
-                    }
+                    names.extend(self.get_properties_of_type(t).iter().copied().map(|prop| (prop.name(), prop)));
                 }
             }
             let values: Vec<P<Symbol>> = names.values().copied().collect();
@@ -1738,15 +1768,24 @@ impl Checker {
     pub(crate) fn get_siblings_of_context(&mut self, context: P<WideningContext>) -> Vec<P<Type>> {
         if context.siblings.get().is_none() {
             let mut siblings: Vec<P<Type>> = Vec::new();
-            for t in self.get_siblings_of_context(context.parent.get().unwrap()) {
-                if is_object_literal_type(t) {
-                    let prop = self.get_property_of_object_type(t, context.property_name.get());
-                    if let Some(prop) = prop {
-                        let prop_type = self.get_type_of_symbol(prop);
-                        siblings.extend(prop_type.distributed_iter());
-                    }
-                }
-            }
+            siblings.extend(
+                self.get_siblings_of_context(context.parent.get().unwrap())
+                    .into_iter()
+                    .filter_map(|t| {
+                        if is_object_literal_type(t) {
+                            let prop = self.get_property_of_object_type(t, context.property_name.get());
+                            if let Some(prop) = prop {
+                                let prop_type = self.get_type_of_symbol(prop);
+                                Some(prop_type.distributed_iter())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten(),
+            );
             context.siblings.set(Some(alloc_vec(siblings)));
         }
         context.siblings.get().unwrap().to_vec()
@@ -2077,12 +2116,21 @@ impl Checker {
     // @param target The symbol, type, or signature whose type is being queried
     // @param propertyName The property name that should be used to query the target for its type
     // checker.go:19102
-    pub(crate) fn push_type_resolution(&mut self, target: TypeSystemEntity, property_name: TypeSystemPropertyName) -> bool {
-        let resolution_cycle_start_index = self.find_resolution_cycle_start_index(target, property_name);
-        if resolution_cycle_start_index >= 0 {
+    pub(crate) fn push_type_resolution(
+        &mut self,
+        target: TypeSystemEntity,
+        property_name: TypeSystemPropertyName,
+    ) -> bool {
+        if let Some(resolution_cycle_start_index) =
+            self.find_resolution_cycle_start_index(target, property_name)
+        {
             // A cycle was found
-            for i in resolution_cycle_start_index as usize..self.type_resolutions.len() {
-                self.type_resolutions[i].result = false;
+            for element in self
+                .type_resolutions
+                .iter_mut()
+                .skip(resolution_cycle_start_index)
+            {
+                (*element).result = false;
             }
             return false;
         }
@@ -2099,22 +2147,24 @@ impl Checker {
     }
 
     // checker.go:19127
-    pub(crate) fn find_resolution_cycle_start_index(&mut self, target: TypeSystemEntity, property_name: TypeSystemPropertyName) -> i32 {
-        let mut i = self.type_resolutions.len() as i32 - 1;
-        while i >= self.resolution_start {
-            let resolution = self.type_resolutions[i as usize];
+    pub(crate) fn find_resolution_cycle_start_index(
+        &mut self,
+        target: TypeSystemEntity,
+        property_name: TypeSystemPropertyName,
+    ) -> Option<usize> {
+        for i in (self.resolution_start..self.type_resolutions.len()).rev() {
+            let resolution = self.type_resolutions[i];
             if self.type_resolution_has_property(&resolution) {
-                return -1;
+                return None;
             }
             if resolution.target == target && resolution.property_name == property_name {
                 // A circular or in-progress resolution: what the caller does next is not final until this
                 // resolution is done (flow memo).
                 self.flow_memo.taint(resolution.serial);
-                return i;
+                return Some(i);
             }
-            i -= 1;
         }
-        -1
+        None
     }
 
     // `r: P<TypeResolution>` -> `r: &TypeResolution` (TypeResolution is a plain value struct stored in
@@ -2203,18 +2253,18 @@ impl Checker {
             let mut checked: FxHashSet<&'static str> = FxHashSet::default();
             let mut props: Vec<P<Symbol>> = Vec::new();
             for &current in d.types.get() {
-                for &prop in self.get_properties_of_type(current) {
+                props.extend(self.get_properties_of_type(current).iter().filter_map(|&prop| {
                     if checked.insert(prop.name()) {
                         let combined_prop = self.get_property_of_union_or_intersection_type(
                             t,
                             prop.name(),
                             t.flags().intersects(TypeFlags::Intersection), /*skipObjectFunctionPropertyAugment*/
                         );
-                        if let Some(combined_prop) = combined_prop {
-                            props.push(combined_prop);
-                        }
+                        if let Some(combined_prop) = combined_prop { Some(combined_prop) } else { None }
+                    } else {
+                        None
                     }
-                }
+                }));
                 // The properties of a union type are those that are present in all constituent types, so
                 // we only need to check the properties of the first type without index signature
                 if t.flags().intersects(TypeFlags::Union) && self.get_index_infos_of_type(current).is_empty() {
@@ -2587,12 +2637,11 @@ impl Checker {
             _ => {
                 let mut is_readonly = true;
                 let mut types: Vec<P<Type>> = Vec::with_capacity(applicable_infos.len());
-                for info in &applicable_infos {
-                    types.push(info.value_type());
-                    if !info.is_readonly() {
-                        is_readonly = false;
-                    }
-                }
+                types.extend(applicable_infos.iter().map(|info| {
+                    let value_type = info.value_type();
+                    is_readonly &= info.is_readonly();
+                    value_type
+                }));
                 let value_type = self.get_intersection_type(&types);
                 Some(self.new_index_info(self.unknown_type, value_type, is_readonly, None, &[]))
             }
@@ -2763,10 +2812,8 @@ impl Checker {
 
 // checker.go:19499
 pub(crate) fn find_index_info(index_infos: &[P<IndexInfo>], key_type: P<Type>) -> Option<P<IndexInfo>> {
-    for &info in index_infos {
-        if info.key_type.get() == Some(key_type) {
-            return Some(info);
-        }
+    if let Some(result) = index_infos.iter().find_map(|&info| if info.key_type.get() == Some(key_type) { Some(Some(info)) } else { None }) {
+        return result;
     }
     None
 }
@@ -3258,11 +3305,11 @@ impl Checker {
         f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
     ) -> bool {
         if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get() {
-            for i in 0..declared_members.len() {
+            if (0..declared_members.len()).any(|i| {
                 let (id, symbol) = declared_members.entry(i);
-                if self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol) {
-                    return false;
-                }
+                self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol)
+            }) {
+                return false;
             }
         }
         for &base_type in lm.ready.get().unwrap().base_types.get() {
@@ -3273,10 +3320,14 @@ impl Checker {
                 }
                 continue;
             }
-            for prop in self.get_properties_of_type(base_type).iter().copied() {
-                if !is_static_private_identifier_property(prop) && seen.insert(prop.name()) && !f(self, prop) {
-                    return false;
-                }
+            if self
+                .get_properties_of_type(base_type)
+                .iter()
+                .copied()
+                .into_iter()
+                .any(|prop| !is_static_private_identifier_property(prop) && seen.insert(prop.name()) && !f(self, prop))
+            {
+                return false;
             }
         }
         true
@@ -3371,7 +3422,7 @@ impl Checker {
         let mut first_declaration = self.earliest_declaration(entry);
         for &c in &circular {
             let declaration = self.earliest_declaration(c);
-            if self.compare_nodes(declaration, first_declaration) < 0 {
+            if self.compare_nodes(declaration, first_declaration).is_lt() {
                 first = c;
                 first_declaration = declaration;
             }
@@ -3396,11 +3447,13 @@ impl Checker {
     // declaration is not always that one: global augmentations are merged after the files' globals.
     fn earliest_declaration(&mut self, t: P<Type>) -> Option<P<Node>> {
         let mut earliest = None;
-        for &d in t.symbol().unwrap().declarations() {
-            if earliest.is_none() || self.compare_nodes(Some(d), earliest) < 0 {
+        earliest = t.symbol().unwrap().declarations().iter().fold(earliest, |mut earliest, &d| {
+            if earliest.is_none() || self.compare_nodes(Some(d), earliest) .is_lt() {
                 earliest = Some(d);
             }
-        }
+
+            earliest
+        });
         earliest
     }
 
@@ -3409,13 +3462,11 @@ impl Checker {
         let type_parameters = t.as_tuple_type().type_parameters();
         let element_infos = t.as_tuple_type().element_infos.get();
         let mut element_types: Vec<P<Type>> = Vec::with_capacity(type_parameters.len());
-        for (i, &tp) in type_parameters.iter().enumerate() {
-            if element_infos[i].flags.intersects(ElementFlags::Variadic) {
-                element_types.push(self.get_indexed_access_type(tp, self.number_type));
-            } else {
-                element_types.push(tp);
-            }
-        }
+        element_types.extend(
+            type_parameters.iter().enumerate().map(|(i, &tp)| {
+                if element_infos[i].flags.intersects(ElementFlags::Variadic) { self.get_indexed_access_type(tp, self.number_type) } else { tp }
+            }),
+        );
         let u = self.get_union_type(&element_types);
         self.create_array_type_ex(u, t.as_tuple_type().readonly.get())
     }

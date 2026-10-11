@@ -334,7 +334,11 @@ impl Checker {
     }
 
     // exports.go:268
-    pub fn get_contextual_type_for_argument_at_index_exported(&mut self, node: P<Node>, arg_index: i32) -> Option<P<Type>> {
+    pub fn get_contextual_type_for_argument_at_index_exported(
+        &mut self,
+        node: P<Node>,
+        arg_index: usize,
+    ) -> Option<P<Type>> {
         self.get_contextual_type_for_argument_at_index(node, arg_index)
     }
 
@@ -441,12 +445,23 @@ impl Checker {
     }
 
     // exports.go:354
-    pub fn fill_missing_type_arguments_exported(&mut self, type_arguments: &[P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> Vec<P<Type>> {
-        self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, is_java_script_implicit_any)
+    pub fn fill_missing_type_arguments_exported(
+        &mut self,
+        type_arguments: &[P<Type>],
+        type_parameters: &[P<Type>],
+        min_type_argument_count: usize,
+        is_java_script_implicit_any: bool,
+    ) -> Vec<P<Type>> {
+        self.fill_missing_type_arguments(
+            type_arguments,
+            type_parameters,
+            min_type_argument_count,
+            is_java_script_implicit_any,
+        )
     }
 
     // exports.go:358
-    pub fn get_min_type_argument_count_exported(&mut self, type_parameters: &[P<Type>]) -> i32 {
+    pub fn get_min_type_argument_count_exported(&mut self, type_parameters: &[P<Type>]) -> usize {
         self.get_min_type_argument_count(type_parameters)
     }
 
@@ -490,7 +505,11 @@ impl Checker {
     }
 
     // exports.go:394
-    pub fn compare_symbols_exported(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 {
+    pub fn compare_symbols_exported(
+        &mut self,
+        s1: Option<P<Symbol>>,
+        s2: Option<P<Symbol>>,
+    ) -> std::cmp::Ordering {
         self.compare_symbols(s1, s2)
     }
 

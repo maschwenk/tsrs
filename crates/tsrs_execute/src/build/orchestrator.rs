@@ -139,9 +139,11 @@ impl Orchestrator {
         for config in &order {
             let task = self.get_task(&self.to_path(config));
             let mut depth = 0;
-            for upstream in task.up_stream.lock().unwrap().iter() {
+            depth = task.up_stream.lock().unwrap().iter().fold(depth, |mut depth, upstream| {
                 depth = depth.max(depths.get(&upstream.task).copied().unwrap_or(0) + 1);
-            }
+
+                depth
+            });
             depths.insert(task, depth);
             entries.push((config.clone(), depth));
         }
@@ -375,12 +377,10 @@ impl Orchestrator {
                 continue;
             };
             let inputs: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
-            let mut outputs: Vec<String> = resolved.get_output_file_names().into_iter().collect();
-            outputs.push(resolved.get_build_info_file_name());
-            let mut deleted = false;
-            for output_file in outputs {
-                deleted = self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic) || deleted;
-            }
+            let outputs = resolved.get_output_file_names().into_iter().chain([resolved.get_build_info_file_name()]);
+            let deleted = outputs.fold(false, |deleted, output_file| {
+                self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic) || deleted
+            });
             if deleted {
                 task.reset_status();
                 task.set_build_info_entry(None);

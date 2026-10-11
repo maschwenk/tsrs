@@ -103,16 +103,12 @@ impl Checker {
                 // named unions' constituents answers every constituent's question; the binary searches, one per
                 // named union per constituent, were most of the `compare_types` calls on the 38k-file codebase.
                 let mut named: FxHashSet<P<Type>> = FxHashSet::default();
-                for u in &named_unions {
-                    named.extend(u.types().iter().copied());
-                }
+                // Extend each known-length constituent slice so the set reserves before inserting.
+                named_unions.iter().for_each(|u| named.extend(u.types().iter().copied()));
                 reduced_types.extend(type_set.iter().copied().filter(|t| !named.contains(t)));
             } else {
-                for &t in &type_set {
-                    if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) {
-                        reduced_types.push(t);
-                    }
-                }
+                reduced_types
+                    .extend(type_set.iter().filter_map(|&t| if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) { Some(t) } else { None }));
             }
             if alias.is_none() && named_unions.len() == 1 && reduced_types.is_empty() {
                 return named_unions[0];
@@ -120,13 +116,17 @@ impl Checker {
             // We create a denormalized origin type only when the union was created from one or more named unions
             // (unions with alias symbols or origins) and when there is no overlap between those named unions.
             let mut named_types_count = 0;
-            for u in &named_unions {
+            named_types_count = named_unions.iter().fold(named_types_count, |mut named_types_count, u| {
                 named_types_count += u.types().len();
-            }
+
+                named_types_count
+            });
             if named_types_count + reduced_types.len() == type_set.len() {
-                for &t in &named_unions {
+                reduced_types = named_unions.iter().fold(reduced_types, |mut reduced_types, &t| {
                     reduced_types = insert_type(self, &reduced_types, t).0;
-                }
+
+                    reduced_types
+                });
                 origin = Some(self.new_union_type(ObjectFlags::None, &reduced_types));
             }
         }
@@ -176,11 +176,13 @@ impl Checker {
         let total_order = self.program.source_files_complete();
         let mut capacity = source_types.len();
         if source_types.len() == 2 {
-            for &t in source_types {
+            capacity = source_types.iter().fold(capacity, |mut capacity, &t| {
                 if t.flags().intersects(TypeFlags::Union) {
                     capacity += t.types().len() - 1;
                 }
-            }
+
+                capacity
+            });
             if source_types[0] == source_types[1] {
                 capacity /= 2;
             }
@@ -215,11 +217,13 @@ impl Checker {
             types.push(t);
         }
         if total_order && source_types.len() == 2 && (source_types[0].flags() & source_types[1].flags()).intersects(TypeFlags::Union) {
-            for &t in source_types {
+            includes = source_types.iter().fold(includes, |mut includes, &t| {
                 if t.alias().is_some() || t.as_union_type().origin().is_some() {
                     includes |= TypeFlags::Union;
                 }
-            }
+
+                includes
+            });
             // Two sorted, unique runs: merge them (a constituent of both is added once).
             merge_sorted_types(self, source_types[0].types(), source_types[1].types(), true /*dedup*/, &mut |c, t| add_type(c, &mut types, &mut includes, t));
             return (types, includes);
@@ -242,7 +246,11 @@ impl Checker {
                 } else {
                     add_type(self, &mut types, &mut includes, t);
                 }
-                if total_order && start > 0 && types.len() > start && compare_types(self, Some(types[start - 1]), Some(types[start])) > 0 {
+                if total_order
+                    && start > 0
+                    && types.len() > start
+                    && compare_types(self, Some(types[start - 1]), Some(types[start])).is_gt()
+                {
                     run_starts.push(start);
                 }
                 last_type = Some(t);
@@ -310,6 +318,7 @@ impl Checker {
     pub(crate) fn remove_string_literals_matched_by_template_literals(&mut self, types: &[P<Type>]) -> Vec<P<Type>> {
         let mut types = types.to_vec();
         let mut templates: Vec<P<Type>> = Vec::new();
+        // Keep this measured hot collector as a loop; see notes/perf-iterator-regressions.md.
         for &t in &types {
             if self.is_pattern_literal_type(t) {
                 templates.push(t);
@@ -1018,8 +1027,8 @@ impl Checker {
             for j in (0..types.len()).rev() {
                 if types[j].flags().intersects(TypeFlags::Union) {
                     let source_types = types[j].types();
-                    let length = source_types.len() as i32;
-                    constituents[j] = source_types[(n % length) as usize];
+                    let length = source_types.len();
+                    constituents[j] = source_types[n % length];
                     n /= length;
                 }
             }
@@ -1033,7 +1042,7 @@ impl Checker {
 }
 
 // checker.go:26922
-pub(crate) fn get_constituent_count(t: P<Type>) -> i32 {
+pub(crate) fn get_constituent_count(t: P<Type>) -> usize {
     if !t.flags().intersects(TypeFlags::UnionOrIntersection) || t.alias().is_some() {
         return 1;
     }
@@ -1046,7 +1055,7 @@ pub(crate) fn get_constituent_count(t: P<Type>) -> i32 {
 }
 
 // checker.go:26932
-pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> i32 {
+pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> usize {
     let mut n = 0;
     for &t in types {
         n += get_constituent_count(t);
@@ -1300,11 +1309,12 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
 /// a small union added to a large one.
 fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type>], dedup: bool, out: &mut impl FnMut(&mut Checker, P<Type>)) {
     let (short, long) = (left.len().min(right.len()), left.len().max(right.len()));
-    if short > 0 && short * (usize::BITS - long.leading_zeros()) as usize * 2 < long {
+    if short > 0 && short * long.bit_width() as usize * 2 < long {
         let left_is_long = left.len() >= right.len();
         let (mut long_run, short_run) = if left_is_long { (left, right) } else { (right, left) };
         for &t in short_run {
-            let i = long_run.partition_point(|&x| x != t && compare_types(c, Some(x), Some(t)) < 0);
+            let i =
+                long_run.partition_point(|&x| x != t && compare_types(c, Some(x), Some(t)).is_lt());
             for &x in &long_run[..i] {
                 out(c, x);
             }
@@ -1330,7 +1340,7 @@ fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type
             }
             left = &left[1..];
             right = &right[1..];
-        } else if compare_types(c, Some(l), Some(r)) < 0 {
+        } else if compare_types(c, Some(l), Some(r)).is_lt() {
             out(c, l);
             left = &left[1..];
         } else {
@@ -1347,6 +1357,7 @@ fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type
 // so they take `c` like `compare_types`.
 /// `maybe_type_of_kind` of any of `types`.
 /// A loop rather than `any` with a closure: the recursive closure was not inlined, a call per constituent.
+/// Rechecked in notes/perf-iterator-regressions.md; keep this loop when refactoring iterator use.
 fn maybe_constituent_of_kind(types: &[P<Type>], kind: TypeFlags) -> bool {
     for &t in types {
         let flags = t.flags();
@@ -1386,13 +1397,14 @@ fn contains_regular_literal_type(c: &mut Checker, types: &[P<Type>], i: usize, r
 /// forward scan by identity answers the same with no comparisons. Used when the scan is the cheaper of the two.
 pub(crate) fn is_sorted_subset(source: &[P<Type>], target: &[P<Type>]) -> bool {
     let mut rest = target;
-    for &t in source {
+    !(source.iter().any(|&t| {
         match rest.iter().position(|&u| u == t) {
             Some(k) => rest = &rest[k + 1..],
-            None => return false,
+            None => return true,
         }
-    }
-    true
+
+        false
+    }))
 }
 
 // checker.go:27091
@@ -1406,9 +1418,9 @@ pub(crate) fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Ve
 }
 
 // checker.go:27098
-pub(crate) fn count_types(t: P<Type>) -> i32 {
+pub(crate) fn count_types(t: P<Type>) -> usize {
     if t.flags().intersects(TypeFlags::Union) {
-        return t.types().len() as i32;
+        return t.types().len();
     } else if t.flags().intersects(TypeFlags::Never) {
         return 0;
     }
@@ -1500,18 +1512,15 @@ impl Checker {
     }
 
     // checker.go:27130
-    pub(crate) fn get_cross_product_union_size(&mut self, types: &[P<Type>]) -> i32 {
-        let mut size: i32 = 1;
+    pub(crate) fn get_cross_product_union_size(&mut self, types: &[P<Type>]) -> usize {
+        let mut size = 1usize;
         for &t in types {
             if t.flags().intersects(TypeFlags::Union) {
-                let n = t.types().len() as i32;
+                let n = t.types().len();
                 // Cap the result to avoid integer overflow when computing the cross product of many large unions.
                 // In TypeScript, number overflow produces Infinity which naturally exceeds the limit check;
                 // in Go, we must guard against int wrapping to zero or negative.
-                if n > 0 && size > i32::MAX / n {
-                    return i32::MAX;
-                }
-                size *= n;
+                size = size.saturating_mul(n);
             } else if t.flags().intersects(TypeFlags::Never) {
                 return 0;
             }
@@ -1589,18 +1598,18 @@ impl Checker {
         let props = self.get_properties_of_type(t);
         let index_infos = self.get_index_infos_of_type(t);
         let mut types: Vec<P<Type>> = Vec::with_capacity(props.len() + index_infos.len());
-        for &prop in props {
-            types.push(self.get_literal_type_from_property(prop, include, false));
-        }
-        for &info in index_infos {
+        types.extend(props.iter().map(|&prop| self.get_literal_type_from_property(prop, include, false)));
+        types.extend(index_infos.iter().filter_map(|&info| {
             if info != self.enum_number_index_info && self.is_key_type_included(info.key_type(), include) {
                 if info.key_type() == self.string_type && include.intersects(TypeFlags::Number) {
-                    types.push(self.string_or_number_type);
+                    Some(self.string_or_number_type)
                 } else {
-                    types.push(info.key_type());
+                    Some(info.key_type())
                 }
+            } else {
+                None
             }
-        }
+        }));
         let result = self.get_union_type_ex(&types, UnionReduction::Literal, AliasArg::None, origin);
         self.properties_types.insert(key, result);
         result
@@ -2411,7 +2420,7 @@ impl Checker {
 }
 
 // checker.go:27851
-pub(crate) fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: i32) -> bool {
+pub(crate) fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: usize) -> bool {
     every_type(c, index_type, |_, t| {
         if t.flags().intersects(TypeFlags::StringOrNumberLiteral) {
             let prop_name = get_property_name_from_type(t);

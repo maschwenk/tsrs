@@ -39,9 +39,13 @@ impl Parser {
         let name = name?;
         if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text()) {
             let mut err_loc = name.loc();
-            if err_loc.len() == 0 {
+            if err_loc.len() == Some(0) {
                 // missing name, emit error on the character before the missing name node
-                err_loc = TextRange::new(name.loc().pos() - 1, name.loc().pos());
+                let pos = name
+                    .loc()
+                    .pos()
+                    .expect_source("parsed nodes have source positions");
+                err_loc = TextRange::new(pos - 1, pos);
             }
             self.parse_error_at_range(err_loc, &diagnostics::Identifier_expected, &[]);
         }
@@ -139,8 +143,11 @@ impl Parser {
             }
             Kind::JSDocOverloadTag => {
                 // Create overload signatures only for function, method, and constructor declarations outside object literals
-                if (ast::is_function_declaration(parent) || ast::is_method_declaration(parent) || ast::is_constructor_declaration(parent))
-                    && self.parsing_contexts & (1 << ParsingContext::ObjectLiteralMembers as i32) == 0
+                if (ast::is_function_declaration(parent)
+                    || ast::is_method_declaration(parent)
+                    || ast::is_constructor_declaration(parent))
+                    && self.parsing_contexts & (1 << ParsingContext::ObjectLiteralMembers as u32)
+                        == 0
                 {
                     let signature = self.reparse_jsdoc_signature(
                         tag.as_jsdoc_overload_tag().type_expression,
@@ -229,20 +236,9 @@ impl Parser {
                 if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text()) {
                     // drop invalid chars for _, if empty, write _0, etc., so we have a valid param name to emit later
                     let mut result = String::new();
-                    for (i, ch) in name.as_identifier().text().char_indices() {
-                        if i == 0 {
-                            if !scanner::is_identifier_start(ch as i32) {
-                                result.push('_');
-                            } else {
-                                result.push(ch);
-                            }
-                            continue;
-                        } else if !scanner::is_identifier_part(ch as i32) {
-                            result.push('_');
-                        } else {
-                            result.push(ch);
-                        }
-                    }
+                    result.extend(name.as_identifier().text().char_indices().map(|(i, ch)| {
+                        if if i == 0 { scanner::is_identifier_start(ch as u32) } else { scanner::is_identifier_part(ch as u32) } { ch } else { '_' }
+                    }));
                     if result.is_empty() {
                         result.push('_');
                         result.push_str(&pi.to_string());
@@ -337,9 +333,8 @@ impl Parser {
 
     pub(crate) fn gather_type_parameters(&mut self, j: P<Node>, typedef_or_callback: bool) -> Option<P<NodeList>> {
         let mut type_parameters: Vec<P<Node>> = Vec::new();
-        let mut pos = -1;
-        let mut end_pos = -1;
-        let mut first_template = true;
+        let mut pos = None;
+        let mut end_pos = None;
         for &tag in j.as_jsdoc().tags.unwrap().nodes() {
             // When a JSDoc comment contains an `@typedef` or `@callback` tag, `@template` type parameter
             // declarations apply to the type being defined.
@@ -349,11 +344,16 @@ impl Parser {
             if !ast::is_jsdoc_template_tag(tag) {
                 continue;
             }
-            if first_template {
-                pos = tag.pos();
-                first_template = false;
+            if pos.is_none() {
+                pos = Some(
+                    tag.pos()
+                        .expect_source("parsed nodes have source positions"),
+                );
             }
-            end_pos = tag.end();
+            end_pos = Some(
+                tag.end()
+                    .expect_source("parsed nodes have source positions"),
+            );
             let constraint = tag.as_jsdoc_template_tag().constraint;
             let mut first_type_parameter = true;
             for &tp in tag.type_parameters() {
@@ -382,7 +382,10 @@ impl Parser {
         if type_parameters.is_empty() {
             None
         } else {
-            Some(self.new_node_list(TextRange::new(pos, end_pos), &type_parameters))
+            Some(self.new_node_list(
+                TextRange::new(pos.unwrap(), end_pos.unwrap()),
+                &type_parameters,
+            ))
         }
     }
 
@@ -393,13 +396,17 @@ impl Parser {
                 match parent.kind() {
                     Kind::VariableStatement => {
                         if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
-                            for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
-                                if declaration.type_node().is_none() && tag.type_expression().is_some() {
-                                    let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node());
-                                    declaration.as_mutable().set_type(t);
-                                    self.finish_mutated_node(declaration);
-                                    return;
-                                }
+                            if let Some(&declaration) = declaration_list
+                                .as_variable_declaration_list()
+                                .declarations
+                                .nodes()
+                                .iter()
+                                .find(|declaration| declaration.type_node().is_none() && tag.type_expression().is_some())
+                            {
+                                let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node());
+                                declaration.as_mutable().set_type(t);
+                                self.finish_mutated_node(declaration);
+                                return;
                             }
                         }
                     }
@@ -460,14 +467,13 @@ impl Parser {
             Kind::JSDocSatisfiesTag => match parent.kind() {
                 Kind::VariableStatement => {
                     if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
-                        for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
-                            if declaration.initializer().is_some() && tag.type_expression().is_some() {
-                                let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
-                                let cast = self.make_new_cast(t, declaration.initializer().unwrap(), false /*isAssertion*/);
-                                declaration.as_mutable().set_initializer(cast);
-                                self.finish_mutated_node(declaration);
-                                break;
-                            }
+                        if let Some(declaration) = declaration_list.as_variable_declaration_list().declarations.nodes().iter().find_map(|&declaration| {
+                            if declaration.initializer().is_some() && tag.type_expression().is_some() { Some(declaration) } else { None }
+                        }) {
+                            let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
+                            let cast = self.make_new_cast(t, declaration.initializer().unwrap(), false /*isAssertion*/);
+                            declaration.as_mutable().set_initializer(cast);
+                            self.finish_mutated_node(declaration);
                         }
                     }
                 }
@@ -598,7 +604,10 @@ impl Parser {
                     // In object literals these aren't class-like members, so JSDoc modifiers like @override
                     // or @readonly aren't real modifiers there; reparsing them produces spurious grammar errors (#4437).
                     Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => {
-                        if self.parsing_contexts & (1 << ParsingContext::ObjectLiteralMembers as i32) != 0 {
+                        if self.parsing_contexts
+                            & (1 << ParsingContext::ObjectLiteralMembers as u32)
+                            != 0
+                        {
                             return;
                         }
                         true
@@ -696,9 +705,7 @@ impl Parser {
                                 if ast::has_same_property_access_name(target.expression, source.expression) {
                                     if let (None, Some(source_type_arguments)) = (target.type_arguments.get(), source.type_arguments.get()) {
                                         let mut new_arguments: Vec<P<Node>> = Vec::with_capacity(source_type_arguments.nodes().len());
-                                        for &arg in source_type_arguments.nodes() {
-                                            new_arguments.push(self.add_deep_clone_reparse(Some(arg)).unwrap());
-                                        }
+                                        new_arguments.extend(source_type_arguments.nodes().iter().map(|&arg| self.add_deep_clone_reparse(Some(arg)).unwrap()));
                                         let list = self.new_node_list(source_type_arguments.loc.get(), &new_arguments);
                                         target.type_arguments.set(Some(list));
                                         self.finish_mutated_node(target_node);
@@ -733,7 +740,11 @@ impl Parser {
         } else {
             self.factory.new_satisfies_expression(e, t)
         };
-        self.finish_node_with_end(assert, e.pos(), e.end());
+        self.finish_node_with_end(
+            assert,
+            e.pos().expect_source("parsed nodes have source positions"),
+            e.end().expect_source("parsed nodes have source positions"),
+        );
         assert
     }
 
@@ -790,30 +801,43 @@ impl Parser {
     }
 }
 
-fn find_matching_parameter(fun: P<Node>, parameter_tag: P<Node>, js_doc: P<Node>) -> Option<P<Node>> {
-    let mut tag_index: i32 = -1;
-    let mut param_count: i32 = -1;
+fn find_matching_parameter(
+    fun: P<Node>,
+    parameter_tag: P<Node>,
+    js_doc: P<Node>,
+) -> Option<P<Node>> {
+    let mut tag_index = None;
+    let mut param_count = 0;
     for &tag in js_doc.as_jsdoc().tags.unwrap().nodes() {
         if tag.kind() == Kind::JSDocParameterTag {
-            param_count += 1;
             if tag == parameter_tag {
-                tag_index = param_count;
+                tag_index = Some(param_count);
                 break;
             }
+            param_count += 1;
         }
     }
-    for (parameter_index, &parameter) in fun.parameters().iter().enumerate() {
-        let parameter_index = parameter_index as i32;
-        if parameter.name().unwrap().kind() == Kind::Identifier {
-            let tag_name = parameter_tag.name().unwrap();
-            if tag_name.kind() == Kind::Identifier
-                && ((parameter.name().unwrap().text() == tag_name.text()) || (parameter_index == tag_index && tag_name.text().is_empty()))
-            {
-                return Some(parameter);
-            }
-        } else if parameter_index == tag_index {
-            return Some(parameter);
-        }
+    if let Some(result) =
+        fun.parameters()
+            .iter()
+            .enumerate()
+            .find_map(|(parameter_index, &parameter)| {
+                if parameter.name().unwrap().kind() == Kind::Identifier {
+                    let tag_name = parameter_tag.name().unwrap();
+                    if tag_name.kind() == Kind::Identifier
+                        && ((parameter.name().unwrap().text() == tag_name.text())
+                            || (Some(parameter_index) == tag_index && tag_name.text().is_empty()))
+                    {
+                        return Some(Some(parameter));
+                    }
+                } else if Some(parameter_index) == tag_index {
+                    return Some(Some(parameter));
+                }
+
+                None
+            })
+    {
+        return result;
     }
     None
 }

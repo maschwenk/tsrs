@@ -43,9 +43,7 @@ pub(crate) fn build_info_to_snapshot(build_info: &BuildInfo, config: &ParsedComm
         .iter()
         .map(|file_id_list| {
             let mut file_set = new_set_with_size_hint(file_id_list.len());
-            for &file_id in file_id_list {
-                file_set.add(to.to_file_path(file_id));
-            }
+            file_set.m.extend(file_id_list.iter().map(|&file_id| to.to_file_path(file_id)));
             std::sync::Arc::new(RefSet::flat(file_set))
         })
         .collect();

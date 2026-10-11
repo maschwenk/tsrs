@@ -31,6 +31,13 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   indexed-access chain (see "Measured and rejected"). Not tried: redesigning `getResolvedBaseConstraint` to resolve
   each type from the top (the note's option 3).
 
+## Pending review
+
+- **Resolver path scratch buffers** (`notes/perf-resolver-allocations.md`): reuse thread-local strings for
+  extension and module-suffix probes. Allocation calls fall 3.7% / 12.7% in the corresponding probes;
+  historical whole-project instructions fall 0.09% on xstate / 0.04% on VS Code. Retained for owner review;
+  below the usual landing thresholds, with deterministic Linux verification outstanding.
+
 ## Not verified yet
 
 - **The 32 GiB reservation outside macOS and GitHub runners: verified.** main ran in a Linux x86-64 dev sandbox
@@ -138,6 +145,23 @@ with the switch off, which is why it is not in the default build.
   chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);
   root names instead of reference paths (a quarter of the skips).
 
+- Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
+  0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic
+  search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone
+  does not establish equivalent cost. The final direct comparison is below the pre-refactor baseline on all 17
+  projects; retain the template iterators whose isolated reversion regressed counts. The note records the causes,
+  rejected candidates, allocation checks and instruction/RSS measurements.
+
+- Derived equality and ordering on the niche-encoded `TextPos` enum (PR #306;
+  notes/perf-unsigned-positions.md): extra discriminant handling despite a four-byte encoding that already supplies
+  equality and order. The first correctness-clean refactor added 0.086% to 1.002% instructions on all seventeen
+  projects. Direct encoded-key comparisons and cold failure paths remove that work without enlarging the positions.
+  Keep the relation budget signed as in Go: its negative exhausted states otherwise require saturation on every
+  recorded relation. The owner explicitly requested eliminating even instruction increases below the usual gate.
+  The subsequent internal-integer audit is also owner-requested domain cleanup, not a speedup claim: unsigned
+  masks and bounded IDs retain their width, emitter indexes avoid narrowing, and genuine signed domains remain
+  signed. Before/after validation and measurements are recorded in the same note.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
@@ -154,6 +178,21 @@ with the switch off, which is why it is not in the default build.
   gate). Initially rejected on performance, then both changes were applied at the owner's explicit request on
   2026-10-11 to align with Oxc. These measurements do not establish a speedup; further performance work needs a
   numeric-conversion profile or new evidence of a qualifying whole-project improvement.
+- Oxc-style lightweight VFS metadata (`notes/perf-vfs-lightweight-metadata.md`): existence probes avoid constructing
+  full `FileInfo`, and Linux requests only `STATX_TYPE`. Public macOS screening was -0.27% single-threaded
+  instructions and -0.49% default peak RSS, below the landing bars; the Linux-only path still needs a pinned
+  `bench/count.py` run before this can be reconsidered.
+- Scanner arena string construction (notes/perf-scanner-arena-builder.md, branch
+  `codex/scanner-arena-builder`): exact over 14,013 public VS Code files; parse-only heap allocations -16.8% and
+  instructions about -0.10%. Abandoned growth buffers add about 0.7 MB of arena requests without changing chunk
+  capacity or peak RSS. Retained as an independent implementation at the owner's request on 2026-10-11. Repeat
+  only with an exact-sizing or composed design that can move whole-project instructions or peak memory across a
+  landing threshold.
+- Scanner numeric-cache identity avoidance (notes/perf-scanner-numeric-identity.md, branch
+  `codex/scanner-numeric-identity`): exact over 14,013 public VS Code files; parse-only heap allocations -13.5%
+  and instructions about -0.24%, with full-front-end peak RSS unchanged within 0.10%. Retained as an independent
+  implementation at the owner's request on 2026-10-11. Repeat only with a workload or composition that can move
+  whole-project instructions or peak memory across a landing threshold.
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables

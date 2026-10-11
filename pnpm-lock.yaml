@@ -164,7 +164,9 @@ settings:
 
 importers:
 
-  .:
+  .: {}
+
+  npm:
     devDependencies:
       '@types/node':
         specifier: 22.20.1

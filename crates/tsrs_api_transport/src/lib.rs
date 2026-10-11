@@ -16,8 +16,6 @@ pub mod msgpack;
 pub mod protocol;
 pub mod reentrancy;
 pub mod strictjson;
-#[cfg(feature = "requestfs")]
-pub mod requestfs;
 pub mod timing;
 pub mod transport;
 

@@ -47,13 +47,11 @@ pub fn emit_and_report_statistics(input: &EmitInput) -> (CompileAndEmitResult, O
         if tsrs_compiler::assignment_stats_enabled() {
             input.write(&input.program.checker_assignment_report());
         }
-        #[cfg(feature = "checker")]
         if tsrs_compiler::Checker::census_enabled() {
             input.program.for_each_checker_parallel(|_, c| c.census_collect());
             tsrs_compiler::Checker::census_write_report();
         }
         // TSRS_HEAP_CENSUS (docs/DEBUGGING.md): the containers each checker owns, on stderr.
-        #[cfg(feature = "checker")]
         if tsrs_compiler::Checker::heap_census_enabled() {
             let reports = std::sync::Mutex::new(Vec::new());
             input.program.for_each_checker_parallel(|i, c| {
@@ -68,7 +66,6 @@ pub fn emit_and_report_statistics(input: &EmitInput) -> (CompileAndEmitResult, O
             }
         }
         // TSRS_FLOW_MEMO_STATS (docs/DEBUGGING.md): one line per checker, on stderr.
-        #[cfg(feature = "checker")]
         input.program.for_each_checker_parallel(|i, c| {
             if let Some(report) = c.flow_memo.report() {
                 eprintln!("checker {i}: {report}");
@@ -174,10 +171,7 @@ fn list_files_worker(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult)
         input.write(&tsrs_core::utf8::from_utf8_lossy(&out));
     } else if options.list_files.is_true() || options.list_files_only.is_true() {
         let mut out = String::new();
-        for file in input.program.get_source_files() {
-            out.push_str(file.file_name());
-            out.push('\n');
-        }
+        out.extend(input.program.get_source_files().iter().flat_map(|file| [file.file_name(), "\n"]));
         input.write(&out);
     }
 }

@@ -87,18 +87,18 @@ impl EmitTextWriter for DisplayPartsWriter {
     }
 
     // displaypartswriter.go:78
-    fn get_indent(&self) -> i32 {
+    fn get_indent(&self) -> u32 {
         0
     }
 
     // displaypartswriter.go:80
-    fn get_line(&self) -> i32 {
+    fn get_line(&self) -> u32 {
         0
     }
 
     // displaypartswriter.go:82
-    fn get_text_pos(&self) -> i32 {
-        self.builder.len() as i32
+    fn get_text_pos(&self) -> u32 {
+        self.builder.len() as u32
     }
 
     // displaypartswriter.go:86

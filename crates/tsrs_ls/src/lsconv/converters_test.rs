@@ -6,7 +6,6 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 use tsrs_core::json::Value;
-use tsrs_core::TextPos;
 use tsrs_lsproto as lsproto;
 
 use super::*;
@@ -184,10 +183,12 @@ function utf8SeqLen(b) {
 fn run_js_reference(texts: &[&str]) -> Option<Vec<Vec<(i64, u32, u32)>>> {
     let mut input: Vec<u8> = Vec::new();
     input.extend_from_slice(&(texts.len() as u32).to_le_bytes());
-    for s in texts {
+    input = texts.iter().fold(input, |mut input, s| {
         input.extend_from_slice(&(s.len() as u32).to_le_bytes());
         input.extend_from_slice(s.as_bytes());
-    }
+
+        input
+    });
 
     let mut child = match Command::new("node").arg("-e").arg(JS_REFERENCE_SCRIPT).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(child) => child,
@@ -252,11 +253,18 @@ fn test_converters_against_js_reference() {
     for (i, &(name, text)) in cases.iter().enumerate() {
         let (conv, script) = new_test_converters(text);
         for &(byte_pos, line, char) in &refs[i] {
-            let byte_pos = byte_pos as TextPos;
-            let expected_lc = lsproto::Position { line, character: char };
+            let byte_pos =
+                u32::try_from(byte_pos).expect("reference position fits in a source position");
+            let expected_lc = lsproto::Position {
+                line,
+                character: char,
+            };
 
-            let (got_lc, _) = conv.to_lsp_position(&script, byte_pos);
-            assert_eq!(got_lc, expected_lc, "{name}: PositionToLineAndCharacter({byte_pos}) mismatch in {text:?}");
+            let (got_lc, _) = conv.to_lsp_position(&script, byte_pos.into());
+            assert_eq!(
+                got_lc, expected_lc,
+                "{name}: PositionToLineAndCharacter({byte_pos}) mismatch in {text:?}"
+            );
 
             let positions = conv.from_lsp_position(script.clone(), expected_lc, Feature::All);
             assert_eq!(positions.len(), 1);

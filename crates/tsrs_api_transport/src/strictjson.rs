@@ -132,9 +132,7 @@ impl Scanner<'_> {
     }
 
     fn skip_ws(&mut self) {
-        while self.i < self.b.len() && matches!(self.b[self.i], b' ' | b'\t' | b'\n' | b'\r') {
-            self.i += 1;
-        }
+        self.i += (self.i..self.b.len()).take_while(|&index| matches!(self.b[index], b' ' | b'\t' | b'\n' | b'\r')).count();
     }
 
     fn hex4(&self, at: usize) -> Option<u32> {
@@ -236,14 +234,18 @@ impl Scanner<'_> {
 
     fn literal(&mut self, lit: &'static [u8], name: &str) -> Result<(), String> {
         let ptr = self.value_ptr();
-        for (k, &want) in lit.iter().enumerate() {
+        if let Some(result) = lit.iter().enumerate().find_map(|(k, &want)| {
             match self.b.get(self.i + k) {
-                None => return Err(self.eof(&ptr, self.b.len())),
+                None => return Some(Err(self.eof(&ptr, self.b.len()))),
                 Some(&got) if got != want => {
-                    return Err(self.invalid_char(self.i + k, &format!("in literal {name} (expecting {})", quote_char(want as char)), &ptr));
+                    return Some(Err(self.invalid_char(self.i + k, &format!("in literal {name} (expecting {})", quote_char(want as char)), &ptr)));
                 }
                 _ => {}
             }
+
+            None
+        }) {
+            return result;
         }
         self.i += lit.len();
         Ok(())
@@ -267,9 +269,7 @@ impl Scanner<'_> {
         match b.get(j) {
             Some(b'0') => j += 1,
             Some(b'1'..=b'9') => {
-                while b.get(j).is_some_and(u8::is_ascii_digit) {
-                    j += 1;
-                }
+                j += b.iter().skip(j).take_while(|b| b.is_ascii_digit()).count();
             }
             _ => return Err(digit_expected(self, j)),
         }
@@ -278,9 +278,7 @@ impl Scanner<'_> {
             if !b.get(j).is_some_and(u8::is_ascii_digit) {
                 return Err(digit_expected(self, j));
             }
-            while b.get(j).is_some_and(u8::is_ascii_digit) {
-                j += 1;
-            }
+            j += b.iter().skip(j).take_while(|b| b.is_ascii_digit()).count();
         }
         if matches!(b.get(j), Some(b'e' | b'E')) {
             j += 1;
@@ -290,9 +288,7 @@ impl Scanner<'_> {
             if !b.get(j).is_some_and(u8::is_ascii_digit) {
                 return Err(digit_expected(self, j));
             }
-            while b.get(j).is_some_and(u8::is_ascii_digit) {
-                j += 1;
-            }
+            j += b.iter().skip(j).take_while(|b| b.is_ascii_digit()).count();
         }
         self.i = j;
         Ok(())

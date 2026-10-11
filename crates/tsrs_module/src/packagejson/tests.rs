@@ -1,6 +1,39 @@
 use super::json::{self, Json};
 use super::*;
 
+#[test]
+fn range_dependencies_stops_across_groups() {
+    let fields = parse(
+        r#"{
+            "dependencies": {"b": "2", "a": "1"},
+            "devDependencies": {"c": "3"},
+            "peerDependencies": {"d": "4"},
+            "optionalDependencies": {"e": "5"}
+        }"#,
+    )
+    .unwrap();
+    let expected = [
+        ("a", "1", "dependencies"),
+        ("b", "2", "dependencies"),
+        ("c", "3", "devDependencies"),
+        ("d", "4", "peerDependencies"),
+        ("e", "5", "optionalDependencies"),
+    ];
+    for stop_after in 1..=expected.len() + 1 {
+        let mut visited = Vec::new();
+        fields.range_dependencies(|name, version, group| {
+            visited.push((name.to_string(), version.to_string(), group.to_string()));
+            visited.len() < stop_after
+        });
+        let expected: Vec<_> = expected
+            .iter()
+            .take(stop_after)
+            .map(|&(name, version, group)| (name.to_string(), version.to_string(), group.to_string()))
+            .collect();
+        assert_eq!(visited, expected);
+    }
+}
+
 fn member<'a>(value: &'a Json, name: &str) -> &'a Json {
     let Json::Object(members) = value else { panic!("not an object") };
     &members.iter().rev().find(|(n, _)| n == name).expect("member").1

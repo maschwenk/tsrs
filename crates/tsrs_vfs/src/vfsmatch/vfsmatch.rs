@@ -62,21 +62,18 @@ fn get_base_paths(path: &str, includes: &[impl AsRef<str>], use_case_sensitive_f
 
         // Storage for literal base paths amongst the include patterns.
         let mut include_base_paths: Vec<String> = Vec::new();
-        for include in includes {
+        include_base_paths.extend(includes.iter().map(|include| {
             let include = include.as_ref();
             // We also need to check the relative paths by converting them to absolute and normalizing
             // in case they escape the base path (e.g "..\somedirectory")
-            let absolute = if tspath::is_rooted_disk_path(include) {
-                include.to_string()
-            } else {
-                tspath::normalize_path(&tspath::combine_paths(path, &[include]))
-            };
+            let absolute =
+                if tspath::is_rooted_disk_path(include) { include.to_string() } else { tspath::normalize_path(&tspath::combine_paths(path, &[include])) };
             // Append the literal and canonical candidate base paths.
-            include_base_paths.push(get_include_base_path(&absolute));
-        }
+            get_include_base_path(&absolute)
+        }));
 
         // Sort the offsets array using either the literal or canonical path representations.
-        include_base_paths.sort_by(|a, b| string_comparer(a, b).cmp(&0));
+        include_base_paths.sort_by(|a, b| string_comparer(a, b));
 
         // Iterate over each include base path and include unique base paths that are not a
         // subpath of an existing base path
@@ -159,9 +156,7 @@ fn compile_glob_pattern(spec: &str, base_path: &str, usage: Usage, case_sensitiv
         components: Vec::with_capacity(parts.len()),
     };
 
-    for part in &parts {
-        p.components.push(parse_component(part, usage != Usage::Exclude));
-    }
+    p.components.extend(parts.iter().map(|part| parse_component(part, usage != Usage::Exclude)));
     Some(p)
 }
 
@@ -199,14 +194,11 @@ fn parse_segments(s: &str) -> Vec<Segment> {
     let wildcards = b.iter().filter(|&&c| c == b'*' || c == b'?').count();
     let mut result = Vec::with_capacity(2 * wildcards + 1);
     let mut start = 0;
-    for i in 0..b.len() {
+    result = (0..b.len()).fold(result, |mut result, i| {
         match b[i] {
             b'*' | b'?' => {
                 if i > start {
-                    result.push(Segment {
-                        kind: SegmentKind::Literal,
-                        literal: s[start..i].to_string(),
-                    });
+                    result.push(Segment { kind: SegmentKind::Literal, literal: s[start..i].to_string() });
                 }
                 if b[i] == b'*' {
                     result.push(Segment { kind: SegmentKind::Star, literal: String::new() });
@@ -217,7 +209,9 @@ fn parse_segments(s: &str) -> Vec<Segment> {
             }
             _ => {}
         }
-    }
+
+        result
+    });
     if start < b.len() {
         result.push(Segment {
             kind: SegmentKind::Literal,
@@ -327,12 +321,7 @@ impl GlobPattern {
     fn pattern_satisfied(&self, comp_idx: usize) -> bool {
         // A pattern is satisfied when remaining components can match empty input.
         // For both include and exclude patterns, only trailing "**" components may match nothing.
-        for c in &self.components[comp_idx..] {
-            if c.kind != ComponentKind::DoubleAsterisk {
-                return false;
-            }
-        }
-        true
+        !(self.components[comp_idx..].iter().any(|c| c.kind != ComponentKind::DoubleAsterisk))
     }
 
     // matchWildcard matches a path component against wildcard segments.
@@ -361,7 +350,7 @@ impl GlobPattern {
     fn match_segments(&self, segs: &[Segment], s: &str) -> bool {
         let s = s.as_bytes();
         let (mut seg_idx, mut s_idx) = (0usize, 0usize);
-        let (mut star_seg_idx, mut star_s_idx) = (-1isize, 0usize);
+        let (mut star_seg_idx, mut star_s_idx) = (None, 0usize);
 
         while s_idx < s.len() {
             if seg_idx < segs.len() {
@@ -385,7 +374,7 @@ impl GlobPattern {
                     }
                     SegmentKind::Star => {
                         // Record star position for backtracking, then try matching zero chars.
-                        star_seg_idx = seg_idx as isize;
+                        star_seg_idx = Some(seg_idx);
                         star_s_idx = s_idx;
                         seg_idx += 1;
                         continue;
@@ -394,12 +383,14 @@ impl GlobPattern {
             }
 
             // Current segment didn't match. Backtrack to last star if possible.
-            if star_seg_idx >= 0 && star_s_idx < s.len() && s[star_s_idx] != b'/' {
+            if let Some(star_seg_idx) =
+                star_seg_idx.filter(|_| star_s_idx < s.len() && s[star_s_idx] != b'/')
+            {
                 // Star consumes one more character (rune), retry from segment after star.
                 let (_, size) = decode_rune(&s[star_s_idx..]);
                 star_s_idx += size;
                 s_idx = star_s_idx;
-                seg_idx = star_seg_idx as usize + 1;
+                seg_idx = star_seg_idx + 1;
                 continue;
             }
 
@@ -407,9 +398,7 @@ impl GlobPattern {
         }
 
         // Consume any trailing stars.
-        while seg_idx < segs.len() && segs[seg_idx].kind == SegmentKind::Star {
-            seg_idx += 1;
-        }
+        seg_idx += (seg_idx..segs.len()).take_while(|&index| segs[index].kind == SegmentKind::Star).count();
         seg_idx >= segs.len()
     }
 
@@ -445,14 +434,14 @@ impl GlobPattern {
     }
 
     fn pattern_mentions_min_suffix(&self, segs: &[Segment]) -> bool {
-        for seg in segs {
+        if segs.iter().any(|seg| {
             if seg.kind != SegmentKind::Literal {
-                continue;
+                return false;
             }
             let lit = if !self.case_sensitive { stringutil::go_strings_to_lower(&seg.literal) } else { seg.literal.clone() };
-            if lit.contains(".min.js") || lit.contains(".min.") {
-                return true;
-            }
+            lit.contains(".min.js") || lit.contains(".min.")
+        }) {
+            return true;
         }
         false
     }
@@ -476,9 +465,7 @@ fn next_path_part_single(s: &str, mut offset: usize) -> Option<(usize, usize, us
     if offset == 0 && !b.is_empty() && b[0] == b'/' {
         return Some((0, 0, 1));
     }
-    while offset < b.len() && b[offset] == b'/' {
-        offset += 1;
-    }
+    offset += (offset..b.len()).take_while(|&index| b[index] == b'/').count();
     if offset >= b.len() {
         return None;
     }
@@ -517,9 +504,7 @@ fn next_path_part_parts(prefix: &str, suffix: &str, mut offset: usize) -> Option
 
     // Scan within prefix.
     if offset < pb.len() {
-        while offset < pb.len() && pb[offset] == b'/' {
-            offset += 1;
-        }
+        offset += (offset..pb.len()).take_while(|&index| pb[index] == b'/').count();
         if offset < pb.len() {
             let rest = &pb[offset..];
             // idx is guaranteed >= 0 for the call sites we care about because prefix ends in '/'.
@@ -595,16 +580,16 @@ fn new_glob_matcher(include_specs: &[impl AsRef<str>], exclude_specs: &[impl AsR
         excludes: Vec::with_capacity(exclude_specs.len()),
     };
 
-    for spec in include_specs {
-        if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, usage, case_sensitive) {
-            m.includes.push(p);
-        }
-    }
-    for spec in exclude_specs {
-        if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, Usage::Exclude, case_sensitive) {
-            m.excludes.push(p);
-        }
-    }
+    m.includes.extend(
+        include_specs
+            .iter()
+            .filter_map(|spec| if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, usage, case_sensitive) { Some(p) } else { None }),
+    );
+    m.excludes.extend(
+        exclude_specs
+            .iter()
+            .filter_map(|spec| if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, Usage::Exclude, case_sensitive) { Some(p) } else { None }),
+    );
     m
 }
 
@@ -612,10 +597,8 @@ impl GlobMatcher {
     // matchesFileParts checks if prefix+suffix matches against the glob patterns.
     // Returns the index of the matching include pattern, or None if not matched.
     fn matches_file_parts(&self, prefix: &str, suffix: &str) -> Option<usize> {
-        for e in &self.excludes {
-            if e.matches_parts(prefix, suffix) {
-                return None;
-            }
+        if let Some(result) = self.excludes.iter().find_map(|e| if e.matches_parts(prefix, suffix) { Some(None) } else { None }) {
+            return result;
         }
         self.matches_includes(prefix, suffix)
     }
@@ -627,10 +610,8 @@ impl GlobMatcher {
             }
             return Some(0);
         }
-        for (i, inc) in self.includes.iter().enumerate() {
-            if inc.matches_parts(prefix, suffix) {
-                return Some(i);
-            }
+        if let Some(i) = self.includes.iter().position(|inc| inc.matches_parts(prefix, suffix)) {
+            return Some(i);
         }
         None
     }
@@ -647,30 +628,24 @@ impl GlobMatcher {
 
     /// `matches_file_parts` for an entry of a directory whose live excludes are `live`.
     fn matches_file_parts_in(&self, live: &[u32], prefix: &str, suffix: &str) -> Option<usize> {
-        for &e in live {
-            if self.excludes[e as usize].matches_parts(prefix, suffix) {
-                return None;
-            }
+        if let Some(result) = live.iter().find_map(|&e| if self.excludes[e as usize].matches_parts(prefix, suffix) { Some(None) } else { None }) {
+            return result;
         }
         self.matches_includes(prefix, suffix)
     }
 
     /// `matches_directory_parts` for an entry of a directory whose live excludes are `live`.
     fn matches_directory_parts_in(&self, live: &[u32], prefix: &str, suffix: &str) -> bool {
-        for &e in live {
-            if self.excludes[e as usize].matches_parts(prefix, suffix) {
-                return false;
-            }
+        if live.iter().any(|&e| self.excludes[e as usize].matches_parts(prefix, suffix)) {
+            return false;
         }
         self.matches_directory_includes(prefix, suffix)
     }
 
     // matchesDirectoryParts checks if files under the directory prefix+suffix could match any pattern.
     fn matches_directory_parts(&self, prefix: &str, suffix: &str) -> bool {
-        for e in &self.excludes {
-            if e.matches_parts(prefix, suffix) {
-                return false;
-            }
+        if self.excludes.iter().any(|e| e.matches_parts(prefix, suffix)) {
+            return false;
         }
         self.matches_directory_includes(prefix, suffix)
     }
@@ -679,12 +654,7 @@ impl GlobMatcher {
         if self.includes.is_empty() {
             return !self.had_includes;
         }
-        for inc in &self.includes {
-            if inc.matches_prefix_parts(prefix, suffix) {
-                return true;
-            }
-        }
-        false
+        self.includes.iter().any(|inc| inc.matches_prefix_parts(prefix, suffix))
     }
 }
 
@@ -893,22 +863,14 @@ pub struct SpecMatcher {
 impl SpecMatcher {
     // MatchString returns true if any pattern matches the path.
     pub fn match_string(&self, path: &str) -> bool {
-        for p in &self.patterns {
-            if p.matches(path) {
-                return true;
-            }
-        }
-        false
+        self.patterns.iter().any(|p| p.matches(path))
     }
 
-    // MatchIndex returns the index of the first matching pattern, or -1.
-    pub fn match_index(&self, path: &str) -> i32 {
-        for (i, p) in self.patterns.iter().enumerate() {
-            if p.matches(path) {
-                return i as i32;
-            }
-        }
-        -1
+    // MatchIndex returns the index of the first matching pattern.
+    pub fn match_index(&self, path: &str) -> Option<usize> {
+        self.patterns
+            .iter()
+            .position(|pattern| pattern.matches(path))
     }
 }
 
@@ -919,11 +881,11 @@ pub fn new_spec_matcher(specs: &[impl AsRef<str>], base_path: &str, usage: Usage
         return None;
     }
     let mut patterns = Vec::with_capacity(specs.len());
-    for spec in specs {
-        if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, usage, use_case_sensitive_file_names) {
-            patterns.push(p);
-        }
-    }
+    patterns.extend(
+        specs
+            .iter()
+            .filter_map(|spec| if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, usage, use_case_sensitive_file_names) { Some(p) } else { None }),
+    );
     if patterns.is_empty() {
         return None;
     }

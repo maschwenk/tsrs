@@ -60,13 +60,11 @@ impl<T: Named + Clone> Index<T> {
         };
 
         let mut results = Vec::new();
-        for &entry_index in candidates {
+        results.extend(candidates.iter().filter_map(|&entry_index| {
             let entry = &self.entries[entry_index];
             let entry_name = entry.name();
-            if (case_sensitive && entry_name == name) || (!case_sensitive && stringutil::equal_fold(entry_name, name)) {
-                results.push(entry.clone());
-            }
-        }
+            if (case_sensitive && entry_name == name) || (!case_sensitive && stringutil::equal_fold(entry_name, name)) { Some(entry.clone()) } else { None }
+        }));
 
         results
     }
@@ -108,14 +106,10 @@ impl<T: Named + Clone> Index<T> {
 
         // Filter entries by checking if they contain all characters in order
         let mut results = Vec::with_capacity(count);
-        for starts in [name_starts, word_starts] {
-            for &i in starts {
-                let entry = &self.entries[i];
-                if contains_chars_in_order(entry.name(), &prefix) {
-                    results.push(entry.clone());
-                }
-            }
-        }
+        results.extend([name_starts, word_starts].into_iter().flatten().filter_map(|&i| {
+            let entry = &self.entries[i];
+            contains_chars_in_order(entry.name(), &prefix).then(|| entry.clone())
+        }));
         results
     }
 
@@ -175,18 +169,13 @@ impl<T: Named + Clone> Index<T> {
         }
 
         // Rebuild the index with remapped indices
-        #[expect(clippy::iter_over_hash_type, reason = "each key is re-inserted into a new map with its Vec order kept; Go ranges the map too")]
-        for (&r, old_indices) in &self.index {
+        // each key is re-inserted into a new map with its Vec order kept; Go ranges the map too
+        new_idx.index.extend(self.index.iter().filter_map(|(&r, old_indices)| {
             let mut new_indices = Vec::with_capacity(old_indices.len());
-            for old_index in old_indices {
-                if let Some(&new_index) = old_to_new.get(old_index) {
-                    new_indices.push(new_index);
-                }
-            }
-            if !new_indices.is_empty() {
-                new_idx.index.insert(r, new_indices);
-            }
-        }
+            new_indices
+                .extend(old_indices.iter().filter_map(|old_index| if let Some(&new_index) = old_to_new.get(old_index) { Some(new_index) } else { None }));
+            if !new_indices.is_empty() { Some((r, new_indices)) } else { None }
+        }));
 
         new_idx
     }

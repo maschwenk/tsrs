@@ -188,9 +188,11 @@ impl<'h> Setup<'h> {
 
     pub(crate) fn types_response(&mut self, types: &[P<Type>]) -> CheckerResult<Value> {
         let mut out = Vec::with_capacity(types.len());
-        for t in types {
+        out = types.iter().try_fold(out, |mut out, t| {
             out.push(self.type_response(*t)?);
-        }
+
+            Ok::<_, CheckerError>(out)
+        })?;
         Ok(Value::Array(out))
     }
 
@@ -241,8 +243,10 @@ impl<'h> Setup<'h> {
 }
 
 /// `astnav.GetTouchingPropertyName(file, positionMap.UTF16ToUTF8(position))`.
-pub(crate) fn touching_property_name_at_utf16(source_file: P<SourceFile>, position: u32) -> P<Node> {
-    let position = i32::try_from(position).unwrap_or(i32::MAX);
+pub(crate) fn touching_property_name_at_utf16(
+    source_file: P<SourceFile>,
+    position: u32,
+) -> P<Node> {
     let utf8 = source_file.get_position_map().utf16_to_utf8(position);
     tsrs_astnav::get_touching_property_name(source_file, utf8)
 }

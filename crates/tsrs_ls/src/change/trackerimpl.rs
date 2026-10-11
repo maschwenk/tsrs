@@ -20,8 +20,9 @@ impl Tracker {
         // all sharing one original file. Their edits are collected together before being ordered and checked,
         // so duplicate edits are emitted once and conflicting edits are rejected regardless of map iteration
         // order.
-        let mut projections: OrderedMap<String, i32> = OrderedMap::default();
-        let all: Vec<(P<SourceFile>, Vec<trackerEdit>)> = self.changes.iter().map(|(k, v)| (*k, v.clone())).collect();
+        let mut projections: OrderedMap<String, usize> = OrderedMap::default();
+        let all: Vec<(P<SourceFile>, Vec<trackerEdit>)> =
+            self.changes.iter().map(|(k, v)| (*k, v.clone())).collect();
         for (source_file, changes_in_file) in all {
             let file_name = source_file.original_file_name().to_string();
             if self.unmappable_files.contains(&file_name) {
@@ -30,7 +31,7 @@ impl Tracker {
             // For a content-mapped file, a mapper may reorder source text relative to the original document.
             // Convert first, then sort and check for overlap in the space where edits are actually applied.
             let mut text_changes = Vec::with_capacity(changes_in_file.len());
-            for change in &changes_in_file {
+            text_changes.extend(changes_in_file.iter().map(|change| {
                 // !!! targetSourceFile
 
                 let new_text = self.compute_new_text(change, source_file, source_file);
@@ -40,8 +41,8 @@ impl Tracker {
                 // if (span.length == newText.length && stringContainsAt(targetSourceFile.text, newText, span.start)) { return nil }
 
                 let range = self.to_lsp_edit_range(source_file, change.text_range);
-                text_changes.push(lsproto::TextEdit { new_text, range });
-            }
+                lsproto::TextEdit { new_text, range }
+            }));
 
             if !text_changes.is_empty() {
                 changes.entry(file_name.clone()).or_default().extend(text_changes);
@@ -61,23 +62,18 @@ impl Tracker {
             let text_changes = changes.get_mut(&file_name).unwrap();
             // order changes by start position
             // If the start position is the same, put the shorter range first, since an empty range (x, x) may precede (x, y) but not vice-versa.
-            text_changes.sort_by(|a, b| lsproto::compare_ranges(a.range, b.range).cmp(&0));
+            text_changes.sort_by(|a, b| lsproto::compare_ranges(a.range, b.range));
             if projection_count > 1 {
                 let deduped = dedupe_identical_edits(std::mem::take(text_changes));
                 *text_changes = deduped;
             }
             // verify that change intervals do not overlap, except possibly at end points.
-            let n = text_changes.len();
-            for i in 0..n.saturating_sub(1) {
-                if text_edits_conflict(&text_changes[i], &text_changes[i + 1], projection_count > 1) {
-                    if projection_count > 1 {
-                        // Projections of one original range disagree about how to edit it. That is a property of
-                        // the mapper's output rather than a bug here, so drop the file instead of failing.
-                        self.unmappable_files.insert(file_name.clone());
-                        break;
-                    }
-                    // assert change[i].End <= change[i + 1].Start
-                    panic!("changes overlap: {:?} and {:?}", text_changes[i].range, text_changes[i + 1].range);
+            if let Some(pair) = text_changes.windows(2).find(|pair| text_edits_conflict(&pair[0], &pair[1], projection_count > 1)) {
+                if projection_count > 1 {
+                    // Conflicting projections cannot be applied to the original file.
+                    self.unmappable_files.insert(file_name.clone());
+                } else {
+                    panic!("changes overlap: {:?} and {:?}", pair[0].range, pair[1].range);
                 }
             }
         }
@@ -171,7 +167,9 @@ impl Tracker {
             return text;
         }
         let original = crate::lsconv::Script::original_text(&source_file);
-        let mut pos = change.text_range.pos();
+        let Some(mut pos) = change.text_range.source_pos() else {
+            return text;
+        };
         if let Some(spans) = crate::lsconv::Script::span_map(&source_file) {
             let (mapped, fidelity) = spans.virtual_to_original_position(pos);
             if !fidelity.is_exact() {
@@ -179,7 +177,7 @@ impl Tracker {
             }
             pos = mapped;
         }
-        if pos < 0 || pos as usize > original.len() {
+        if pos as usize > original.len() {
             return text;
         }
         let pos = pos as usize;
@@ -207,7 +205,7 @@ impl Tracker {
         node_in: P<Node>,
         target_source_file: P<SourceFile>,
         source_file: P<SourceFile>,
-        pos: i32,
+        pos: u32,
         options: &NodeOptions,
     ) -> String {
         let (text, source_file_like) = self.get_nonformatted_text(node_in, target_source_file);
@@ -249,7 +247,7 @@ impl Tracker {
             node,
             Some(source_file),
             &self.new_line,
-            self.format_settings.indent_size,
+            usize::try_from(self.format_settings.indent_size).unwrap_or(0),
             Some(self.emit_context),
         );
         let source_file_like = printer::create_synthetic_source_file(
@@ -290,7 +288,7 @@ impl Tracker {
         node: P<Node>,
         leading_option: LeadingTriviaOption,
         has_trailing_comment: bool,
-    ) -> i32 {
+    ) -> u32 {
         let text = source_file.text();
         if leading_option == LeadingTriviaOption::JSDoc {
             let mut f = self.node_factory.clone();
@@ -306,7 +304,7 @@ impl Tracker {
         match leading_option {
             LeadingTriviaOption::Exclude => return start,
             LeadingTriviaOption::StartLine => {
-                if node.loc().contains_inclusive(start_of_line_pos) {
+                if node.loc().contains_inclusive(start_of_line_pos.into()) {
                     return start_of_line_pos;
                 }
                 return start;
@@ -314,13 +312,15 @@ impl Tracker {
             _ => {}
         }
 
-        let full_start = node.pos();
+        let full_start = node
+            .pos()
+            .expect_source("parsed nodes have source positions");
         if full_start == start {
             return start;
         }
         let line_starts = source_file.ecma_line_map();
         let full_start_line_index = scanner::compute_line_of_position(line_starts, full_start);
-        let full_start_line_pos = line_starts[full_start_line_index as usize];
+        let full_start_line_pos = line_starts[full_start_line_index];
         if start_of_line_pos == full_start_line_pos {
             // full start and start of the node are on the same line
             //   a,     b;
@@ -354,90 +354,114 @@ impl Tracker {
 
         // get start position of the line following the line that contains fullstart position
         // (but only if the fullstart isn't the very beginning of the file)
-        let next_line_start = if full_start > 0 { 1 } else { 0 };
-        let mut adjusted_start_position = line_starts[(full_start_line_index + next_line_start) as usize];
+        let next_line_start = usize::from(full_start > 0);
+        let mut adjusted_start_position = line_starts[full_start_line_index + next_line_start];
         // skip whitespaces/newlines
         adjusted_start_position = scanner::skip_trivia_ex(
             text,
             adjusted_start_position,
             Some(&scanner::SkipTriviaOptions { stop_at_comments: true, ..Default::default() }),
         );
-        line_starts[scanner::compute_line_of_position(line_starts, adjusted_start_position) as usize]
+        line_starts[scanner::compute_line_of_position(line_starts, adjusted_start_position)]
     }
 
     // trackerimpl.go:394
     // method on the changeTracker because of converters
-    // Return the end position of a multiline comment of it is on another line; otherwise returns `undefined`;
-    fn get_end_position_of_multiline_trailing_comment(&self, source_file: P<SourceFile>, node: P<Node>, trailing_opt: TrailingTriviaOption) -> i32 {
+    // Return the end position of a multiline comment if it is on another line.
+    fn get_end_position_of_multiline_trailing_comment(
+        &self,
+        source_file: P<SourceFile>,
+        node: P<Node>,
+        trailing_opt: TrailingTriviaOption,
+    ) -> Option<u32> {
         if trailing_opt == TrailingTriviaOption::Include {
             // If the trailing comment is a multiline comment that extends to the next lines,
             // return the end of the comment and track it for the next nodes to adjust.
             let line_starts = source_file.ecma_line_map();
-            let node_end_line = scanner::compute_line_of_position(line_starts, node.end());
-            for comment in scanner::get_trailing_comment_ranges(source_file.text(), node.end()) {
-                // Single line can break the loop as trivia will only be this line.
-                // Comments on subsequent lines are also ignored.
-                if comment.kind == Kind::SingleLineCommentTrivia || scanner::compute_line_of_position(line_starts, comment.pos()) > node_end_line {
-                    break;
-                }
-
-                // Get the end line of the comment and compare against the end line of the node.
-                // If the comment end line position and the multiline comment extends to multiple lines,
-                // then is safe to return the end position.
-                let comment_end_line = scanner::compute_line_of_position(line_starts, comment.end());
-                if comment_end_line > node_end_line {
-                    return scanner::skip_trivia_ex(
-                        source_file.text(),
-                        comment.end(),
-                        Some(&scanner::SkipTriviaOptions { stop_after_line_break: true, stop_at_comments: true, ..Default::default() }),
-                    );
-                }
+            let node_end = node
+                .end()
+                .expect_source("parsed nodes have source positions"); let node_end_line = scanner::compute_line_of_position(line_starts, node_end);
+            if let Some(comment) = scanner::get_trailing_comment_ranges(source_file.text(), node_end)
+                // Ignore single-line comments and comments starting on subsequent lines.
+                .take_while(|comment| {
+                    comment.kind != Kind::SingleLineCommentTrivia && scanner::compute_line_of_position(line_starts, comment.pos()) <= node_end_line
+                })
+                .find(|comment| scanner::compute_line_of_position(line_starts, comment.end()) > node_end_line)
+            {
+                return Some(scanner::skip_trivia_ex(
+                    source_file.text(),
+                    comment.end(),
+                    Some(&scanner::SkipTriviaOptions {
+                        stop_after_line_break: true,
+                        stop_at_comments: true,
+                        ..Default::default()
+                    }),
+                ));
             }
         }
 
-        0
+        None
     }
 
     // trackerimpl.go:422
     // method on the changeTracker because of converters
-    pub(crate) fn get_adjusted_end_position(&self, source_file: P<SourceFile>, node: P<Node>, trailing_trivia_option: TrailingTriviaOption) -> i32 {
+    pub(crate) fn get_adjusted_end_position(
+        &self,
+        source_file: P<SourceFile>,
+        node: P<Node>,
+        trailing_trivia_option: TrailingTriviaOption,
+    ) -> u32 {
+        let node_end = node
+            .end()
+            .expect_source("parsed nodes have source positions");
         if trailing_trivia_option == TrailingTriviaOption::Exclude {
-            return node.end();
+            return node_end;
         }
         let text = source_file.text();
         if trailing_trivia_option == TrailingTriviaOption::ExcludeWhitespace {
-            let mut comments: Vec<ast::CommentRange> = scanner::get_trailing_comment_ranges(text, node.end()).collect();
-            comments.extend(scanner::get_leading_comment_ranges(text, node.end()));
+            let mut comments: Vec<ast::CommentRange> =
+                scanner::get_trailing_comment_ranges(text, node_end).collect();
+            comments.extend(scanner::get_leading_comment_ranges(text, node_end));
             if let Some(last) = comments.last() {
                 let real_end = last.end();
                 if real_end != 0 {
                     return real_end;
                 }
             }
-            return node.end();
+            return node_end;
         }
 
-        let multiline_end_position = self.get_end_position_of_multiline_trailing_comment(source_file, node, trailing_trivia_option);
-        if multiline_end_position != 0 {
+        if let Some(multiline_end_position) = self.get_end_position_of_multiline_trailing_comment(
+            source_file,
+            node,
+            trailing_trivia_option,
+        ) {
             return multiline_end_position;
         }
 
         let new_end = scanner::skip_trivia_ex(
             text,
-            node.end(),
-            Some(&scanner::SkipTriviaOptions { stop_after_line_break: true, ..Default::default() }),
+            node_end,
+            Some(&scanner::SkipTriviaOptions {
+                stop_after_line_break: true,
+                ..Default::default()
+            }),
         );
 
-        if new_end != node.end()
-            && (trailing_trivia_option == TrailingTriviaOption::Include || stringutil::is_line_break(text.as_bytes()[new_end as usize - 1] as i32))
+        if new_end != node_end
+            && (trailing_trivia_option == TrailingTriviaOption::Include
+                || stringutil::is_line_break(u32::from(text.as_bytes()[new_end as usize - 1])))
         {
             return new_end;
         }
-        node.end()
+        node_end
     }
 
     // trackerimpl.go:475
-    pub(crate) fn get_insertion_position_at_source_file_top(&self, source_file: P<SourceFile>) -> i32 {
+    pub(crate) fn get_insertion_position_at_source_file_top(
+        &self,
+        source_file: P<SourceFile>,
+    ) -> u32 {
         let mut last_prologue: Option<P<Node>> = None;
         for &node in source_file.statements.nodes() {
             if ast::is_prologue_directive(node) {
@@ -447,15 +471,15 @@ impl Tracker {
             }
         }
 
-        let mut position: i32 = 0;
+        let mut position = 0_u32;
         let text = source_file.text();
         let bytes = text.as_bytes();
-        let advance_past_line_break = |position: &mut i32| {
+        let advance_past_line_break = |position: &mut u32| {
             if *position as usize >= bytes.len() {
                 return;
             }
             let ch = bytes[*position as usize];
-            if stringutil::is_line_break(ch as i32) {
+            if stringutil::is_line_break(u32::from(ch)) {
                 *position += 1;
                 if (*position as usize) < bytes.len() && ch == b'\r' && bytes[*position as usize] == b'\n' {
                     *position += 1;
@@ -463,14 +487,16 @@ impl Tracker {
             }
         };
         if let Some(last_prologue) = last_prologue {
-            position = last_prologue.end();
+            position = last_prologue
+                .end()
+                .expect_source("parsed prologues have source positions");
             advance_past_line_break(&mut position);
             return position;
         }
 
         let shebang = scanner::get_shebang(text);
         if !shebang.is_empty() {
-            position = shebang.len() as i32;
+            position = u32::try_from(shebang.len()).expect("shebang length exceeds u32");
             advance_past_line_break(&mut position);
         }
 
@@ -481,7 +507,7 @@ impl Tracker {
         // Find the first attached comment to the first node and add before it
         let mut last_comment: Option<ast::CommentRange> = None;
         let mut pinned_or_triple_slash = false;
-        let mut first_node_line = -1;
+        let mut first_node_line = None;
 
         let len_statements = source_file.statements.nodes().len();
         let line_map = source_file.ecma_line_map();
@@ -514,14 +540,19 @@ impl Tracker {
             }
 
             if len_statements > 0 {
-                if first_node_line == -1 {
-                    first_node_line = scanner::compute_line_of_position(
+                if first_node_line.is_none() {
+                    first_node_line = Some(scanner::compute_line_of_position(
                         line_map,
-                        astnav::get_start_of_node(source_file.statements.nodes()[0], source_file, false),
-                    );
+                        astnav::get_start_of_node(
+                            source_file.statements.nodes()[0],
+                            source_file,
+                            false,
+                        ),
+                    ));
                 }
                 let comment_end_line = scanner::compute_line_of_position(line_map, r.end());
-                if first_node_line < comment_end_line + 2 {
+                if first_node_line.expect("a statement established its line") < comment_end_line + 2
+                {
                     break;
                 }
             }
@@ -541,22 +572,18 @@ impl Tracker {
 // dedupeIdenticalEdits drops exact duplicates from a sorted slice of edits. When a mapper copies one span
 // of the original into more than one projection, an edit computed against each projection describes the
 // same change to the same original range; emitting it once per projection would apply it repeatedly.
-fn dedupe_identical_edits(edits: Vec<lsproto::TextEdit>) -> Vec<lsproto::TextEdit> {
-    let mut deduped: Vec<lsproto::TextEdit> = Vec::with_capacity(edits.len());
-    for edit in edits {
-        if let Some(last) = deduped.last() {
-            if last.range == edit.range && last.new_text == edit.new_text {
-                continue;
-            }
-        }
-        deduped.push(edit);
-    }
-    deduped
+fn dedupe_identical_edits(mut edits: Vec<lsproto::TextEdit>) -> Vec<lsproto::TextEdit> {
+    edits.dedup_by(|a, b| a.range == b.range && a.new_text == b.new_text);
+    edits
 }
 
 // trackerimpl.go:96
-pub(crate) fn text_edits_conflict(a: &lsproto::TextEdit, b: &lsproto::TextEdit, multiple_projections: bool) -> bool {
-    if lsproto::compare_positions(a.range.end, b.range.start) > 0 {
+pub(crate) fn text_edits_conflict(
+    a: &lsproto::TextEdit,
+    b: &lsproto::TextEdit,
+    multiple_projections: bool,
+) -> bool {
+    if lsproto::compare_positions(a.range.end, b.range.start).is_gt() {
         return true;
     }
     // Different insertions at the same position are ambiguous when they may come from different projections.
@@ -567,9 +594,7 @@ pub(crate) fn text_edits_conflict(a: &lsproto::TextEdit, b: &lsproto::TextEdit, 
 fn leading_indentation(text: &str) -> &str {
     let bytes = text.as_bytes();
     let mut end = 0;
-    while end < bytes.len() && (bytes[end] == b' ' || bytes[end] == b'\t') {
-        end += 1;
-    }
+    end += (end..bytes.len()).take_while(|&index| bytes[index] == b' ' || bytes[index] == b'\t').count();
     &text[..end]
 }
 
@@ -587,11 +612,11 @@ pub fn get_format_code_settings_for_writing(options: FormatCodeSettings, source_
 }
 
 // trackerimpl.go:452
-pub(crate) fn has_comments_before_line_break(text: &str, start: i32) -> bool {
-    for ch in text[start as usize..].chars() {
-        if !stringutil::is_white_space_single_line(ch as i32) {
-            return ch == '/';
-        }
+pub(crate) fn has_comments_before_line_break(text: &str, start: u32) -> bool {
+    if let Some(result) =
+        text[start as usize..].chars().into_iter().find_map(|ch| if !stringutil::is_white_space_single_line(ch as u32) { Some(ch == '/') } else { None })
+    {
+        return result;
     }
     false
 }

@@ -55,13 +55,13 @@ pub fn diagnostic_keys(text: &str) -> Vec<String> {
     if text == NO_CONTENT {
         return keys;
     }
-    for line in text.split("\r\n") {
+    keys.extend(text.split("\r\n").take_while(|line| !line.starts_with("==== ")).filter_map(|line| {
         if line.starts_with("==== ") {
-            break;
+            return None;
         }
         let (re, line) = if line.contains('\u{1b}') { (&*PRETTY_HEADER_LINE, ANSI.replace_all(line, "")) } else { (&*HEADER_LINE, line.into()) };
         if let Some(c) = re.captures(&line) {
-            keys.push(format!(
+            return Some(format!(
                 "{}({},{}) {} TS{}",
                 c.get(1).map_or("", |m| m.as_str()),
                 c.get(2).map_or("", |m| m.as_str()),
@@ -70,7 +70,9 @@ pub fn diagnostic_keys(text: &str) -> Vec<String> {
                 &c[5]
             ));
         }
-    }
+
+        None
+    }));
     keys.sort();
     keys
 }
@@ -99,17 +101,21 @@ pub fn first_difference(expected: Option<&str>, actual: &str) -> String {
     let expected = expected.unwrap_or(NO_CONTENT);
     let e: Vec<&str> = expected.split('\n').collect();
     let a: Vec<&str> = actual.split('\n').collect();
-    for i in 0..e.len().max(a.len()) {
+    if let Some(result) = (0..e.len().max(a.len())).find_map(|i| {
         let el = e.get(i).map(|l| l.trim_end_matches('\r'));
         let al = a.get(i).map(|l| l.trim_end_matches('\r'));
         if el != al {
-            return format!(
+            return Some(format!(
                 "L{}: -{} +{}",
                 i + 1,
                 el.map_or("<eof>".to_string(), |l| truncate(l, 120)),
                 al.map_or("<eof>".to_string(), |l| truncate(l, 120))
-            );
+            ));
         }
+
+        None
+    }) {
+        return result;
     }
     "line endings differ".to_string()
 }

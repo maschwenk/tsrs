@@ -156,9 +156,7 @@ impl Glob {
 
     pub fn string(&self) -> String {
         let mut b = String::new();
-        for e in &self.elems {
-            b.push_str(&e.string());
-        }
+        b.extend(self.elems.iter().map(Element::string));
         b
     }
 }
@@ -277,11 +275,8 @@ pub(crate) fn match_(mut elems: &[&Element], mut input: &[u8]) -> bool {
                 (seg_input, input) = split(input);
 
                 let mut elem_end = elems.len();
-                for (i, e) in elems.iter().enumerate() {
-                    if **e == Element::Slash {
-                        elem_end = i;
-                        break;
-                    }
+                if let Some((i, _e)) = elems.iter().enumerate().find_map(|(i, e)| if **e == Element::Slash { Some((i, e)) } else { None }) {
+                    elem_end = i;
                 }
                 let seg_elems = &elems[..elem_end];
                 elems = &elems[elem_end..];
@@ -293,13 +288,7 @@ pub(crate) fn match_(mut elems: &[&Element], mut input: &[u8]) -> bool {
 
                 // Backtracking: advance characters until remaining subpattern elements
                 // match.
-                let mut matched = false;
-                for i in 0..seg_input.len() {
-                    if match_(seg_elems, &seg_input[i..]) {
-                        matched = true;
-                        break;
-                    }
-                }
+                let matched = (0..seg_input.len()).any(|i| match_(seg_elems, &seg_input[i..]));
                 if !matched {
                     return false;
                 }
@@ -351,10 +340,8 @@ pub(crate) fn split(input: &[u8]) -> (&[u8], &[u8]) {
         return (input, b"");
     };
     let first = &input[..i];
-    for j in i..input.len() {
-        if input[j] != b'/' {
-            return (first, &input[j..]);
-        }
+    if let Some((j, _)) = input.iter().enumerate().skip(i).find(|&(_, &byte)| byte != b'/') {
+        return (first, &input[j..]);
     }
     (first, b"")
 }

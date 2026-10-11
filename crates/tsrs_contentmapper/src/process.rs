@@ -178,16 +178,20 @@ fn look_path(file: &str) -> Result<String, String> {
     let path = std::env::var_os("PATH").unwrap_or_default();
     // filepath.SplitList returns no elements for an empty list.
     if !path.is_empty() {
-        for dir in std::env::split_paths(&path) {
+        if let Some(result) = std::env::split_paths(&path).into_iter().find_map(|dir| {
             // Unix shell semantics: path element "" means "."
             let dir = if dir.as_os_str().is_empty() { PathBuf::from(".") } else { dir };
             let path = dir.join(file);
             if is_executable(&path) {
                 if !path.is_absolute() {
-                    return Err(format!("exec: {}: cannot run executable found relative to current directory", quote(file)));
+                    return Some(Err(format!("exec: {}: cannot run executable found relative to current directory", quote(file))));
                 }
-                return Ok(path.to_string_lossy().into_owned());
+                return Some(Ok(path.to_string_lossy().into_owned()));
             }
+
+            None
+        }) {
+            return result;
         }
     }
     Err(format!("exec: {}: executable file not found in $PATH", quote(file)))

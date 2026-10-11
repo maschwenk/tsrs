@@ -9,7 +9,7 @@ use crate::*;
 bitflags::bitflags! {
     // Flags enum to track count of temp variables and a few dedicated names
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub(crate) struct tempFlags: i32 {
+    pub(crate) struct tempFlags: u32 {
         const Auto = 0x00000000; // No preferred name
         const CountMask = 0x0FFFFFFF; // Temp variable counter
         const _i = 0x10000000; // Use/preference flag for '_i'
@@ -382,14 +382,8 @@ impl NameGenerator {
         ////	}
         ////}
 
-        let mut scope = self.get_scope(private_name).as_deref();
-        while let Some(s) = scope {
-            if s.reserved_names.contains(name) {
-                return true;
-            }
-            scope = s.next.as_deref();
-        }
-        false
+        let scope = self.get_scope(private_name).as_deref();
+        std::iter::successors(scope, |s| s.next.as_deref()).any(|s| s.reserved_names.contains(name))
     }
 }
 

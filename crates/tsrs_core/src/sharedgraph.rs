@@ -3,7 +3,7 @@
 //!
 //! One seed checker runs in a region of its own; when it is done the region's chunks are *frozen*: marked in a page
 //! bitmap (`is_frozen_addr`) and `mprotect`ed read-only (`TSRS_SHARED_GRAPH_PROTECT=0` turns that off), so a missed
-//! write is a fault with a backtrace instead of a silent race. Every pool checker
+//! write is a fault with a backtrace (except on musl) instead of a silent race. Every pool checker
 //! is a fork that reads the frozen objects and keeps what it would have written into them in its own `Overlay`, keyed
 //! by the address of the cell. `OvCell` is a `Cell` whose writes to a frozen address go to the overlay of the
 //! checker the current thread runs (`enter_overlay`).
@@ -193,6 +193,8 @@ fn install_fault_handler() {
 
 #[cfg(unix)]
 extern "C" fn fault_handler(sig: i32, info: *mut libc::siginfo_t, _ctx: *mut libc::c_void) {
+    // musl has no execinfo backtrace functions; it still gets the fault message and the same signal handling.
+    #[cfg(not(target_env = "musl"))]
     unsafe extern "C" {
         fn backtrace(buf: *mut *mut libc::c_void, size: i32) -> i32;
         fn backtrace_symbols_fd(buf: *const *mut libc::c_void, size: i32, fd: i32);
@@ -201,13 +203,16 @@ extern "C" fn fault_handler(sig: i32, info: *mut libc::siginfo_t, _ctx: *mut lib
     let addr = unsafe { (*info).si_addr() }.addr();
     let ours = is_frozen_addr_slow(addr);
     let msg: &[u8] = if ours { b"tsrs shared graph: write to frozen address\n" } else { b"tsrs shared graph: fault outside the frozen seed\n" };
-    let mut frames = [std::ptr::null_mut::<libc::c_void>(); 64];
     // SAFETY: writes a static buffer to stderr; fills and prints a local frame buffer (the raw frames, symbolized by
     // the system without allocating).
     unsafe {
         libc::write(2, msg.as_ptr().cast(), msg.len());
-        let n = backtrace(frames.as_mut_ptr(), 64);
-        backtrace_symbols_fd(frames.as_ptr(), n, 2);
+        #[cfg(not(target_env = "musl"))]
+        {
+            let mut frames = [std::ptr::null_mut::<libc::c_void>(); 64];
+            let n = backtrace(frames.as_mut_ptr(), 64);
+            backtrace_symbols_fd(frames.as_ptr(), n, 2);
+        }
     }
     if ours {
         std::process::abort();

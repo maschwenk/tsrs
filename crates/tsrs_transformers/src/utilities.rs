@@ -174,9 +174,7 @@ fn convert_binding_element_to_object_assignment_pattern(emit_context: P<EmitCont
     let f = &emit_context.get().factory;
     let mut properties: Vec<P<Node>> = Vec::new();
     let elements = element.as_binding_pattern().elements;
-    for &e in elements.nodes() {
-        properties.push(convert_binding_element_to_object_assignment_element(emit_context, e));
-    }
+    properties.extend(elements.nodes().iter().map(|&e| convert_binding_element_to_object_assignment_element(emit_context, e)));
     let property_list = f.new_node_list(properties);
     property_list.loc.set(elements.loc.get());
     let object = f.new_object_literal_expression(property_list, false /*multiLine*/);
@@ -190,9 +188,7 @@ fn convert_binding_element_to_array_assignment_pattern(emit_context: P<EmitConte
     let f = &emit_context.get().factory;
     let mut out: Vec<P<Node>> = Vec::new();
     let elements = element.as_binding_pattern().elements;
-    for &e in elements.nodes() {
-        out.push(convert_binding_element_to_array_assignment_element(emit_context, e));
-    }
+    out.extend(elements.nodes().iter().map(|&e| convert_binding_element_to_array_assignment_element(emit_context, e)));
     let element_list = f.new_node_list(out);
     element_list.loc.set(elements.loc.get());
     let object = f.new_array_literal_expression(element_list, false /*multiLine*/);
@@ -244,8 +240,18 @@ pub fn is_original_node_single_line(emit_context: P<EmitContext>, node: Option<P
     let Some(source) = ast::get_source_file_of_node(Some(original)) else {
         return false;
     };
-    let start_line = scanner::get_ecma_line_of_position(&*source, original.pos());
-    let end_line = scanner::get_ecma_line_of_position(&*source, original.end());
+    let start_line = scanner::get_ecma_line_of_position(
+        &*source,
+        original
+            .pos()
+            .expect_source("parsed nodes have source positions"),
+    );
+    let end_line = scanner::get_ecma_line_of_position(
+        &*source,
+        original
+            .end()
+            .expect_source("parsed nodes have source positions"),
+    );
     start_line == end_line
 }
 
@@ -263,8 +269,8 @@ pub fn find_super_statement_index_path(statements: &[P<Node>], start: usize) -> 
 
 // utilities.go:281
 fn find_super_statement_index_path_worker(statements: &[P<Node>], start: usize, indices: Vec<usize>) -> Option<Vec<usize>> {
-    for i in start..statements.len() {
-        let statement = statements[i];
+    for (i, element) in statements.iter().enumerate().skip(start) {
+        let statement = *element;
         if get_super_call_from_statement(statement).is_some() {
             let mut indices = indices;
             indices.push(i);
@@ -295,7 +301,7 @@ pub fn get_super_call_from_statement(statement: P<Node>) -> Option<P<Node>> {
 // utilities.go:308
 pub fn move_range_past_modifiers(node: P<Node>) -> tsrs_core::TextRange {
     if ast::is_property_declaration(node) || ast::is_method_declaration(node) {
-        return tsrs_core::TextRange::new(node.name().unwrap().pos(), node.end());
+        return tsrs_core::TextRange::from_text_pos(node.name().unwrap().pos(), node.end());
     }
 
     let mut last_modifier = None;
@@ -305,7 +311,7 @@ pub fn move_range_past_modifiers(node: P<Node>) -> tsrs_core::TextRange {
 
     if let Some(last_modifier) = last_modifier {
         if !ast::position_is_synthesized(last_modifier.end()) {
-            return tsrs_core::TextRange::new(last_modifier.end(), node.end());
+            return tsrs_core::TextRange::from_text_pos(last_modifier.end(), node.end());
         }
     }
     move_range_past_decorators(node)
@@ -324,7 +330,7 @@ pub fn move_range_past_decorators(node: P<Node>) -> tsrs_core::TextRange {
 
     if let Some(last_decorator) = last_decorator {
         if !ast::position_is_synthesized(last_decorator.end()) {
-            return tsrs_core::TextRange::new(last_decorator.end(), node.end());
+            return tsrs_core::TextRange::from_text_pos(last_decorator.end(), node.end());
         }
     }
     node.loc()

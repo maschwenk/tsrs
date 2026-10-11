@@ -1461,9 +1461,7 @@ mod retired {
         use std::collections::BTreeMap;
 
         fn batch(s: &mut State, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
-            for &(start, end) in ranges {
-                s.pending.push((start, end));
-            }
+            s.pending.extend(ranges.into_iter().map(|&(start, end)| (start, end)));
             take_pages(s)
         }
 

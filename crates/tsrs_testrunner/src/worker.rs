@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::baseline::{self, Class};
 use crate::compiler_runner::{self, Outcome, TestItem};
-use crate::Backend;
+use crate::harnessutil::OptionTable;
 
 pub const WORKER_STACK_SIZE: usize = 256 << 20;
 
@@ -106,16 +106,15 @@ pub const EXTRA_KINDS: [(&str, u8); 5] = [
 pub fn results_dir() -> PathBuf {
     match std::env::var_os("TSRS_TEST_RESULTS") {
         Some(p) => PathBuf::from(p),
-        None if crate::syntax_only() => compiler_runner::repo_root().join("target/test-results-syntax"),
         None => compiler_runner::repo_root().join("target/test-results"),
     }
 }
 
-pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
+pub fn run_item(table: &OptionTable, item: &TestItem) -> ItemResult {
     let start = Instant::now();
     LAST_PANIC.with(|p| *p.borrow_mut() = None);
     *ANY_THREAD_PANIC.lock().unwrap() = None;
-    let outcome = panic::catch_unwind(AssertUnwindSafe(|| backend.run(item)));
+    let outcome = panic::catch_unwind(AssertUnwindSafe(|| crate::compile::run(item, table)));
     let ms = start.elapsed().as_millis();
     let mut r = ItemResult {
         class: Class::Fail,
@@ -137,23 +136,17 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
         Err(_) => {
             r.class = Class::Crash;
             r.panic = Some(take_panic_info().unwrap_or(PanicInfo { message: "<unknown panic>".into(), location: String::new() }));
-            for (ext, _) in EXTRA_KINDS {
-                extras.push((ext, ExtraResult::plain(Class::Crash, "errors phase panicked".to_string())));
-            }
+            extras.extend(EXTRA_KINDS.into_iter().map(|(ext, _)| (ext, ExtraResult::plain(Class::Crash, "errors phase panicked".to_string()))));
         }
         Ok(Outcome::Skip(reason)) => {
             r.class = Class::Skip;
-            for (ext, _) in EXTRA_KINDS {
-                extras.push((ext, ExtraResult::plain(Class::Skip, reason.clone())));
-            }
+            extras.extend(EXTRA_KINDS.into_iter().map(|(ext, _)| (ext, ExtraResult::plain(Class::Skip, reason.clone()))));
             r.skip = reason;
         }
         Ok(Outcome::Error(e)) => {
             r.class = Class::Fail;
             r.diff = format!("harness error: {e}");
-            for (ext, _) in EXTRA_KINDS {
-                extras.push((ext, ExtraResult::plain(Class::Fail, r.diff.clone())));
-            }
+            extras.extend(EXTRA_KINDS.into_iter().map(|(ext, _)| (ext, ExtraResult::plain(Class::Fail, r.diff.clone()))));
         }
         Ok(Outcome::Baseline(actual, types_and_symbols, js, maps)) => {
             match &js {
@@ -162,20 +155,22 @@ pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
             }
             // `.js.map` / `.sourcemap.txt`: a test whose generated baseline is `NoContent` and that has no reference
             // passes trivially in Go; it is reported as a skip so the pass counts mean something.
-            for (ext, generated) in [("js.map", maps.as_ref().and_then(|m| m.js_map.as_ref())), ("sourcemap.txt", maps.as_ref().and_then(|m| m.sourcemap.as_ref()))] {
-                match generated {
-                    None => extras.push((ext, ExtraResult::plain(Class::Skip, "no source map baseline".to_string()))),
-                    Some(Ok(actual)) if actual == baseline::NO_CONTENT && compiler_runner::read_reference_extra_baseline(&item.suite, &item.name, ext).is_none() => {
-                        extras.push((ext, ExtraResult::plain(Class::Skip, "no source maps".to_string())))
-                    }
-                    Some(generated) => extras.push((ext, ExtraResult::classify(item, ext, generated))),
-                }
-            }
+            extras.extend(
+                ([("js.map", maps.as_ref().and_then(|m| m.js_map.as_ref())), ("sourcemap.txt", maps.as_ref().and_then(|m| m.sourcemap.as_ref()))])
+                    .into_iter()
+                    .map(|(ext, generated)| match generated {
+                        None => (ext, ExtraResult::plain(Class::Skip, "no source map baseline".to_string())),
+                        Some(Ok(actual))
+                            if actual == baseline::NO_CONTENT && compiler_runner::read_reference_extra_baseline(&item.suite, &item.name, ext).is_none() =>
+                        {
+                            (ext, ExtraResult::plain(Class::Skip, "no source maps".to_string()))
+                        }
+                        Some(generated) => (ext, ExtraResult::classify(item, ext, generated)),
+                    }),
+            );
             match &types_and_symbols {
                 None => {
-                    for ext in ["types", "symbols"] {
-                        extras.push((ext, ExtraResult::plain(Class::Skip, "noTypesAndSymbols".to_string())));
-                    }
+                    extras.extend((["types", "symbols"]).into_iter().map(|ext| (ext, ExtraResult::plain(Class::Skip, "noTypesAndSymbols".to_string()))));
                 }
                 Some(t) => {
                     extras.push(("types", ExtraResult::classify(item, "types", &t.types)));
@@ -271,13 +266,13 @@ pub fn format_item_line(item: &TestItem) -> String {
 }
 
 // `tsrs-test __worker`: items arrive on stdin, one per line; results leave on stdout in the same order.
-pub fn worker_main(backend_spec: crate::BackendSpec) {
+pub fn worker_main() {
     install_panic_hook(true);
     let handle = std::thread::Builder::new()
         .name("tsrs-test-worker".into())
         .stack_size(WORKER_STACK_SIZE)
         .spawn(move || {
-            let backend = Backend::new(&backend_spec);
+            let table = crate::options::tsoptions_option_table();
             let stdin = std::io::stdin();
             let mut stdout = std::io::stdout().lock();
             for (i, line) in stdin.lock().lines().enumerate() {
@@ -288,7 +283,7 @@ pub fn worker_main(backend_spec: crate::BackendSpec) {
                 let item = parse_item_line(&line);
                 let _ = writeln!(stdout, "{}", json!({"start": i}));
                 let _ = stdout.flush();
-                let r = run_item(&backend, &item);
+                let r = run_item(&table, &item);
                 write_artifacts(&item, &r);
                 write_extra_artifacts(&item, &r);
                 let mut v = json!({"i": i, "class": r.class.as_str(), "ms": r.ms as u64});

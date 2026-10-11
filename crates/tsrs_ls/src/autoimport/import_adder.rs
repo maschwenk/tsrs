@@ -276,7 +276,7 @@ impl ImportAdder for importAdder {
         }
 
         let mut new_declarations: Vec<P<Node>> = Vec::new();
-        for (key, new_import) in &self.new_imports {
+        new_declarations.extend(self.new_imports.iter().flat_map(|(key, new_import)| {
             let module_specifier = &key[2..]; // From `${0 | 1}|${moduleSpecifier}` format
             let declarations = if new_import.use_require {
                 get_new_requires(
@@ -300,8 +300,8 @@ impl ImportAdder for importAdder {
                     &self.preferences,
                 )
             };
-            new_declarations.extend(declarations);
-        }
+            declarations
+        }));
 
         if !new_declarations.is_empty() {
             insert_imports(&mut tracker, self.view.importing_file, &new_declarations, true /*blankLineBetween*/, &self.preferences);

@@ -606,9 +606,7 @@ pub fn run(phase: &str, files: &[P<SourceFile>], skip_freed_leaves: bool) {
         for (host, d) in docs {
             c.jsdoc_cache_entries += 1;
             c.jsdoc_cache_slice_bytes += 4 * d.len() as u64;
-            for &j in d {
-                stack.push(Frame { node: j, parent: Some(host), top: Kind::JSDoc, jsdoc: true });
-            }
+            stack.extend(d.iter().map(|&j| Frame { node: j, parent: Some(host), top: Kind::JSDoc, jsdoc: true }));
             walk(c, &mut stack, &mut seen, text, &mut texts);
         }
     }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use tsrs_core::{ECMALineStarts, TextPos};
+use tsrs_core::ECMALineStarts;
 
 // lineinfo.go:5
 #[derive(Clone, Debug, Default)]
@@ -23,10 +23,10 @@ impl ECMALineInfo {
     // lineinfo.go:21
     pub fn line_text(&self, line: usize) -> &str {
         let pos = self.line_starts[line];
-        let end: TextPos = if line + 1 < self.line_starts.len() {
+        let end = if line + 1 < self.line_starts.len() {
             self.line_starts[line + 1]
         } else {
-            self.text.len() as TextPos
+            self.text.len() as u32
         };
         &self.text[pos as usize..end as usize]
     }

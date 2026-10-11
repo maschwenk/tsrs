@@ -148,7 +148,7 @@ pub fn get_output_paths_for(source_file: P<SourceFile>, options: &CompilerOption
                 current_directory: host.get_current_directory().to_string(),
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
             },
-        ) == 0;
+        ) == std::cmp::Ordering::Equal;
     let mut paths = OutputPaths::default();
     if source_file.content_mapper().is_empty()
         && (force.js || options.emit_declaration_only != tsrs_core::Tristate::True)
@@ -175,12 +175,9 @@ pub fn for_each_emitted_file(
     source_files: &[P<SourceFile>],
     force_dts_emit: bool,
 ) -> bool {
-    for &source_file in source_files {
-        if action(&get_output_paths_for(source_file, options, host, ForceEmitPaths { dts: force_dts_emit, ..Default::default() }), source_file) {
-            return true;
-        }
-    }
-    false
+    source_files.iter().any(|&source_file| {
+        action(&get_output_paths_for(source_file, options, host, ForceEmitPaths { dts: force_dts_emit, ..Default::default() }), source_file)
+    })
 }
 
 fn extension_refs(extensions: &[String]) -> Vec<&str> {
@@ -200,7 +197,7 @@ pub fn get_output_js_file_name(input_file_name: &str, options: &CompilerOptions,
                 current_directory: host.get_current_directory().to_string(),
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
             },
-        ) != 0
+        ) != std::cmp::Ordering::Equal
     {
         return output_file_name;
     }

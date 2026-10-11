@@ -31,11 +31,7 @@ pub fn parse_tristate(value: &CompilerOptionsValue) -> Tristate {
 pub fn parse_string_array(value: &CompilerOptionsValue) -> Option<Vec<String>> {
     if let CompilerOptionsValue::Array(arr) = value {
         let mut result = Vec::with_capacity(arr.len());
-        for v in arr {
-            if let CompilerOptionsValue::String(str) = v {
-                result.push(str.clone());
-            }
-        }
+        result.extend(arr.iter().filter_map(|v| if let CompilerOptionsValue::String(str) = v { Some(str.clone()) } else { None }));
         return Some(result);
     }
     None
@@ -44,9 +40,7 @@ pub fn parse_string_array(value: &CompilerOptionsValue) -> Option<Vec<String>> {
 pub(crate) fn parse_string_map(value: &CompilerOptionsValue) -> Option<OrderedMap<String, Vec<String>>> {
     if let CompilerOptionsValue::Object(m) = value {
         let mut result = OrderedMap::with_capacity_and_hasher(m.len(), Default::default());
-        for (k, v) in m.iter() {
-            result.set(k.clone(), parse_string_array(v).unwrap_or_default());
-        }
+        result.extend(m.iter().map(|(k, v)| (k.clone(), parse_string_array(v).unwrap_or_default())));
         return Some(result);
     }
     None
@@ -170,12 +164,14 @@ pub(crate) fn parse_string_array_strict(value: &CompilerOptionsValue) -> Option<
         return None;
     };
     let mut result = Vec::with_capacity(arr.len());
-    for v in arr {
+    result = arr.iter().try_fold(result, |mut result, v| {
         let CompilerOptionsValue::String(str) = v else {
             return None;
         };
         result.push(str.clone());
-    }
+
+        Some(result)
+    })?;
     Some(result)
 }
 
@@ -481,12 +477,15 @@ macro_rules! float_or_int32_to_flag {
                 CompilerOptionsValue::$ty(v) => *v,
                 CompilerOptionsValue::Float(f) => {
                     let n = *f as i32;
-                    for v in $map.values() {
+                    if let Some(value) = $map.values().find_map(|v| {
                         if let CompilerOptionsValue::$ty(v) = v {
                             if v.value() == n {
-                                return *v;
+                                return Some(*v);
                             }
                         }
+                        None
+                    }) {
+                        return value;
                     }
                     $ty::default()
                 }
@@ -891,11 +890,7 @@ pub(crate) fn merge_compiler_options(
     if let Some(CompilerOptionsValue::Object(raw_map)) = raw_source {
         // Options are nested under "compilerOptions" in both tsconfig.json and wrapped command line options
         if let Some(CompilerOptionsValue::Object(compiler_options_map)) = raw_map.get("compilerOptions") {
-            for (key, value) in compiler_options_map.iter() {
-                if value.is_null() {
-                    explicit_null_fields.insert(key.as_str());
-                }
-            }
+            explicit_null_fields.extend(compiler_options_map.iter().filter_map(|(key, value)| if value.is_null() { Some(key.as_str()) } else { None }));
         }
     }
 

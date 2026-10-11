@@ -614,10 +614,14 @@ pub fn get_local_symbol_for_export_default(symbol: P<Symbol>) -> Option<P<Symbol
         return None;
     }
     let declarations = symbol.declarations();
-    for decl in declarations {
+    if let Some(result) = declarations.iter().find_map(|decl| {
         if let Some(local_symbol) = decl.local_symbol() {
-            return Some(local_symbol);
+            return Some(Some(local_symbol));
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -649,13 +653,17 @@ pub(crate) fn get_is_deferred_context(location: P<Node>, last_location: Option<P
 }
 
 pub(crate) fn is_type_parameter_symbol_declared_in_container(symbol: P<Symbol>, container: P<Node>) -> bool {
-    for &decl in symbol.declarations().iter() {
+    if symbol.declarations().iter().any(|&decl| {
         if decl.kind() == Kind::TypeParameter {
             let parent = decl.parent();
             if parent == Some(container) {
                 return true;
             }
         }
+
+        false
+    }) {
+        return true;
     }
     false
 }

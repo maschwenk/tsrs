@@ -197,10 +197,14 @@ impl Session {
         // Field types are part of decoding the request (Go json): mismatches are invalid requests, not client
         // errors about the descriptor's contents.
         if let Value::Object(o) = descriptor {
-            for key in ["fileName", "path", "contentHash", "parseOptionsKey", "nodeId"] {
+            if let Some(result) = (["fileName", "path", "contentHash", "parseOptionsKey", "nodeId"]).into_iter().find_map(|key| {
                 if !matches!(o.get(key), None | Some(Value::Null) | Some(Value::String(_))) {
-                    return Err(ApiError::invalid_request(format!("cannot unmarshal into Go string within \"/file/{key}\"")));
+                    Some(Err(ApiError::invalid_request(format!("cannot unmarshal into Go string within \"/file/{key}\""))))
+                } else {
+                    None
                 }
+            }) {
+                return result;
             }
             if !matches!(o.get("scriptKind"), None | Some(Value::Null) | Some(Value::Number(_))) {
                 return Err(ApiError::invalid_request("cannot unmarshal into Go core.ScriptKind within \"/file/scriptKind\""));
@@ -306,10 +310,7 @@ impl Session {
         if *config.source_file.path() == requested {
             return self.encode_source_file_response(Some(config.source_file));
         }
-        for name in command_line.extended_source_files() {
-            if tspath::to_path(&name, cwd, cs) != requested {
-                continue;
-            }
+        if let Some(name) = command_line.extended_source_files().into_iter().find(|name| tspath::to_path(name, cwd, cs) == requested) {
             let Some(text) = sd.snapshot.read_file(&name) else { return self.encode_source_file_response(None) };
             // Go parses a fresh tsconfig source file per call; here it lives in a scratch region freed after
             // encoding (its cached node index table is evicted with the region).

@@ -5,7 +5,7 @@ use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use rustc_hash::FxHashMap;
-use tsrs_core::collections::{OrderedSet, OrderedSetExt};
+use tsrs_core::collections::OrderedSet;
 
 // Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
 // gosig into this directory: it rewrites every file listed in checker.json.
@@ -389,9 +389,7 @@ impl Checker {
                 return false;
             }
             if common_declarations.is_empty() {
-                for &d in symbol_declarations.iter() {
-                    common_declarations.add(d);
-                }
+                common_declarations.extend(symbol_declarations.iter().map(|&d| d));
                 continue;
             }
             common_declarations.retain(|d| symbol_declarations.contains(d));
@@ -599,10 +597,8 @@ impl Checker {
         if !types.is_empty() && types[0].object_flags().intersects(ObjectFlags::Mapped) {
             let first_type = self.get_modifiers_type_from_mapped_type(types[0]);
             if first_type.flags().intersects(TypeFlags::Object) {
-                for &t in &types[1..] {
-                    if !t.object_flags().intersects(ObjectFlags::Mapped) || self.get_modifiers_type_from_mapped_type(t) != first_type {
-                        return false;
-                    }
+                if types[1..].iter().any(|&t| !t.object_flags().intersects(ObjectFlags::Mapped) || self.get_modifiers_type_from_mapped_type(t) != first_type) {
+                    return false;
                 }
                 return true;
             }
@@ -721,11 +717,14 @@ impl Checker {
     pub(crate) fn elaborate_never_intersection(&mut self, chain: Option<P<Diagnostic>>, node: P<Node>, t: P<Type>) -> Option<P<Diagnostic>> {
         if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsNeverIntersection) {
             let mut never_prop: Option<P<Symbol>> = None;
-            for prop in self.get_properties_of_union_or_intersection_type(t).iter().copied() {
-                if self.is_discriminant_with_never_type(prop) {
-                    never_prop = Some(prop);
-                    break;
-                }
+            if let Some(prop) = self
+                .get_properties_of_union_or_intersection_type(t)
+                .iter()
+                .copied()
+                .into_iter()
+                .find_map(|prop| if self.is_discriminant_with_never_type(prop) { Some(prop) } else { None })
+            {
+                never_prop = Some(prop);
             }
             if let Some(never_prop) = never_prop {
                 let type_string = self.type_to_string_ex(t, None, TypeFormatFlags::NoTypeReduction, None);
@@ -815,13 +814,15 @@ impl Checker {
 
     // Gets the minimum number of type arguments needed to satisfy all non-optional type parameters.
     // checker.go:22334
-    pub fn get_min_type_argument_count(&mut self, type_parameters: &[P<Type>]) -> i32 {
+    pub fn get_min_type_argument_count(&mut self, type_parameters: &[P<Type>]) -> usize {
         let mut min_type_argument_count = 0;
-        for (i, &type_parameter) in type_parameters.iter().enumerate() {
+        min_type_argument_count = type_parameters.iter().enumerate().fold(min_type_argument_count, |mut min_type_argument_count, (i, &type_parameter)| {
             if !self.has_type_parameter_default(type_parameter) {
-                min_type_argument_count = i as i32 + 1;
+                min_type_argument_count = i + 1;
             }
-        }
+
+            min_type_argument_count
+        });
         min_type_argument_count
     }
 
@@ -834,7 +835,13 @@ impl Checker {
     }
 
     // checker.go:22350
-    pub fn fill_missing_type_arguments(&mut self, type_arguments: &[P<Type>], type_parameters: &[P<Type>], min_type_argument_count: i32, is_java_script_implicit_any: bool) -> Vec<P<Type>> {
+    pub fn fill_missing_type_arguments(
+        &mut self,
+        type_arguments: &[P<Type>],
+        type_parameters: &[P<Type>],
+        min_type_argument_count: usize,
+        is_java_script_implicit_any: bool,
+    ) -> Vec<P<Type>> {
         let _ = min_type_argument_count;
         let num_type_parameters = type_parameters.len();
         if num_type_parameters == 0 {
@@ -847,9 +854,7 @@ impl Checker {
             let n = num_type_arguments.min(num_type_parameters);
             result[..n].copy_from_slice(&type_arguments[..n]);
             // Map invalid forward references in default types to the error type
-            for i in num_type_arguments..num_type_parameters {
-                result[i] = self.error_type;
-            }
+
             let base_default_type = self.get_default_type_argument_type(is_java_script_implicit_any);
             for i in num_type_arguments..num_type_parameters {
                 let mut default_type = self.get_default_from_type_parameter(type_parameters[i]);
@@ -954,20 +959,20 @@ impl Checker {
         let is_class_or_interface_container = container.is_some_and(|c| c.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface));
         if is_class_or_interface_container {
             let container = container.unwrap();
-            for i in 0..n {
+            result.extend((0..n).filter_map(|i| {
                 let (id, symbol) = members.entry(i);
-                if self.is_named_member(symbol, id) && self.is_declaration_contained_by(symbol, container) {
-                    result.push(symbol);
-                }
-            }
+                if self.is_named_member(symbol, id) && self.is_declaration_contained_by(symbol, container) { Some(symbol) } else { None }
+            }));
             contained_count = result.len();
         }
-        for i in 0..n {
+        result.extend((0..n).filter_map(|i| {
             let (id, symbol) = members.entry(i);
             if self.is_named_member(symbol, id) && (!is_class_or_interface_container || !self.is_declaration_contained_by(symbol, container.unwrap())) {
-                result.push(symbol);
+                Some(symbol)
+            } else {
+                None
             }
-        }
+        }));
         let (contained, rest) = result.split_at_mut(contained_count);
         self.sort_symbols(contained);
         self.sort_symbols(rest);
@@ -977,10 +982,8 @@ impl Checker {
     // checker.go:22472
     pub(crate) fn is_declaration_contained_by(&mut self, symbol: P<Symbol>, container: P<Symbol>) -> bool {
         if let Some(declaration) = symbol.value_declaration() {
-            for d in container.declarations().iter() {
-                if declaration.loc().contained_by(d.loc()) {
-                    return true;
-                }
+            if container.declarations().iter().any(|d| declaration.loc().contained_by(d.loc())) {
+                return true;
             }
         }
         false
@@ -1065,19 +1068,26 @@ impl Checker {
         let index = self.find_active_mapper(m);
         // A mapper that was not active gets a cleared cache, and nothing is stored in it for this call (the result is
         // stored only when the mapper was already active), so its lookup can only miss: no key is built for it.
-        let key = if index == -1 {
+        let key = if index.is_none() {
             self.push_active_mapper(m);
             debug_assert!(self.active_type_mappers_caches.last().is_some_and(|cache| cache.is_empty()));
             None
         } else {
             let key = active_mapper_cache_key(t, alias);
-            if let Some(cached_type) = self.active_type_mappers_caches[index as usize].get(&key) {
+            if let Some(cached_type) = self.active_type_mappers_caches[index.unwrap()].get(&key) {
                 tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
                 return cached_type;
             }
             Some(key)
         };
-        tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", if index == -1 { "miss (new mapper)" } else { "miss (active mapper)" });
+        tsrs_core::sitecount::hit(
+            "active mapper cache (instantiateTypeWithAlias)",
+            if index.is_none() {
+                "miss (new mapper)"
+            } else {
+                "miss (active mapper)"
+            },
+        );
         self.total_instantiation_count += 1;
         self.instantiation_count += 1;
         tsrs_core::sitecount::hit("instantiation", type_kind_label(t.flags(), t.object_flags()));
@@ -1086,7 +1096,7 @@ impl Checker {
         match key {
             None => self.pop_active_mapper(),
             Some(key) => {
-                self.active_type_mappers_caches[index as usize].insert(key, result);
+                self.active_type_mappers_caches[index.unwrap()].insert(key, result);
             }
         }
         self.instantiation_stack.pop();
@@ -1119,7 +1129,7 @@ fn active_mapper_cache_key(t: P<Type>, alias: Option<P<TypeAlias>>) -> CacheHash
 impl Checker {
     // checker.go:22551
     pub(crate) fn get_circular_type_names(&mut self) -> Vec<String> {
-        let mut type_counts: FxHashMap<P<Type>, i32> = FxHashMap::default();
+        let mut type_counts: FxHashMap<P<Type>, usize> = FxHashMap::default();
         let mut circular_type_names: Vec<String> = Vec::new();
         let stack = self.instantiation_stack.clone();
         for t in stack {
@@ -1167,7 +1177,7 @@ impl Checker {
     }
 
     // checker.go:22596
-    pub(crate) fn find_active_mapper(&mut self, mapper: P<TypeMapper>) -> i32 {
+    pub(crate) fn find_active_mapper(&mut self, mapper: P<TypeMapper>) -> Option<usize> {
         find_last_index(&self.active_mappers, |&m| m == mapper)
     }
 
@@ -1362,39 +1372,38 @@ impl Checker {
         } else {
             t
         };
-        let type_parameters: &'static [P<Type>] = match links.outer_type_parameters.get() {
-            Some(type_parameters) => type_parameters,
-            None => {
-                // The first time an anonymous type is instantiated we compute and store a list of the type
-                // parameters that are in scope (and therefore potentially referenced). For type literals that
-                // aren't the right hand side of a generic type alias declaration we optimize by reducing the
-                // set of type parameters to those that are possibly referenced in the literal.
-                let mut type_parameters = self.get_outer_type_parameters(declaration, true /*includeThisTypes*/);
-                if target.alias().type_arguments().is_empty() {
-                    if t.object_flags().intersects(ObjectFlags::Reference | ObjectFlags::InstantiationExpressionType) {
-                        let mut filtered = Vec::new();
-                        for tp in type_parameters {
-                            if self.is_type_parameter_possibly_referenced(tp, declaration) {
-                                filtered.push(tp);
-                            }
+        let type_parameters: &'static [P<Type>] =
+            match links.outer_type_parameters.get() {
+                Some(type_parameters) => type_parameters,
+                None => {
+                    // The first time an anonymous type is instantiated we compute and store a list of the type
+                    // parameters that are in scope (and therefore potentially referenced). For type literals that
+                    // aren't the right hand side of a generic type alias declaration we optimize by reducing the
+                    // set of type parameters to those that are possibly referenced in the literal.
+                    let mut type_parameters = self.get_outer_type_parameters(declaration, true /*includeThisTypes*/);
+                    if target.alias().type_arguments().is_empty() {
+                        if t.object_flags().intersects(ObjectFlags::Reference | ObjectFlags::InstantiationExpressionType) {
+                            let mut filtered = Vec::new();
+                            filtered.extend(
+                                type_parameters
+                                    .into_iter()
+                                    .filter_map(|tp| if self.is_type_parameter_possibly_referenced(tp, declaration) { Some(tp) } else { None }),
+                            );
+                            type_parameters = filtered;
+                        } else if target.symbol().unwrap().flags().intersects(SymbolFlags::Method | SymbolFlags::TypeLiteral) {
+                            let mut filtered = Vec::new();
+                            let declarations = t.symbol().unwrap().declarations();
+                            filtered.extend(type_parameters.into_iter().filter_map(|tp| {
+                                if declarations.iter().any(|&d| self.is_type_parameter_possibly_referenced(tp, d)) { Some(tp) } else { None }
+                            }));
+                            type_parameters = filtered;
                         }
-                        type_parameters = filtered;
-                    } else if target.symbol().unwrap().flags().intersects(SymbolFlags::Method | SymbolFlags::TypeLiteral) {
-                        let mut filtered = Vec::new();
-                        let declarations = t.symbol().unwrap().declarations();
-                        for tp in type_parameters {
-                            if declarations.iter().any(|&d| self.is_type_parameter_possibly_referenced(tp, d)) {
-                                filtered.push(tp);
-                            }
-                        }
-                        type_parameters = filtered;
                     }
+                    let type_parameters = alloc_vec(type_parameters);
+                    links.outer_type_parameters.set(Some(type_parameters));
+                    type_parameters
                 }
-                let type_parameters = alloc_vec(type_parameters);
-                links.outer_type_parameters.set(Some(type_parameters));
-                type_parameters
-            }
-        };
+            };
         if type_parameters.is_empty() {
             return t;
         }
@@ -1402,10 +1411,10 @@ impl Checker {
         // mapper to the type parameters to produce the effective list of type arguments, and compute the
         // instantiation cache key from the type IDs of the type arguments.
         let mut type_arguments = self.free_type_lists.pop().unwrap_or_default();
-        for &tp in type_parameters {
+        type_arguments.extend(type_parameters.iter().map(|&tp| {
             let mapped = self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap());
-            type_arguments.push(mapped);
-        }
+            mapped
+        }));
         let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), m) } else { None };
         let new_alias = AliasArg::given_or_pending(alias, &pending);
         // Go `data := target.AsObjectType()`; `data.instantiations` is `self.object_type_instantiations[target]`
@@ -1731,7 +1740,12 @@ impl Checker {
         if d.declaration.get().unwrap().as_mapped_type_node().name_type.is_none() {
             if self.is_array_type(s)
                 || s.flags().intersects(TypeFlags::Any)
-                    && self.find_resolution_cycle_start_index(type_variable.into(), TypeSystemPropertyName::ResolvedBaseConstraint) < 0
+                    && self
+                        .find_resolution_cycle_start_index(
+                            type_variable.into(),
+                            TypeSystemPropertyName::ResolvedBaseConstraint,
+                        )
+                        .is_none()
                     && self.has_array_or_type_type_constraint(type_variable)
             {
                 return self.instantiate_mapped_array_type(s, t, prepend_type_mapping(type_variable, s, Some(m)));
@@ -1789,7 +1803,7 @@ impl Checker {
         let mut new_element_infos: Vec<TupleElementInfo> = element_infos.to_vec();
         for (i, &e) in element_types.iter().enumerate() {
             let flags = element_infos[i].flags;
-            let mapped = if (i as i32) < fixed_length {
+            let mapped = if i < fixed_length {
                 let key = self.get_string_literal_type(&i.to_string());
                 self.instantiate_mapped_type_template(mapped_type, key, flags.intersects(ElementFlags::Optional), fixed_mapper)
             } else if flags.intersects(ElementFlags::Variadic) {
@@ -1989,10 +2003,10 @@ impl Checker {
                 result.reserve(types.len());
                 result.extend_from_slice(&types[..i]);
                 result.push(mapped);
-                for &t in &types[i + 1..] {
+                result.extend(types[i + 1..].iter().map(|&t| {
                     let mapped = self.instantiate_type(t, Some(m));
-                    result.push(mapped);
-                }
+                    mapped
+                }));
                 return Some(result);
             }
         }
@@ -2034,9 +2048,7 @@ impl Checker {
                 let mut result: Vec<T> = Vec::with_capacity(values.len());
                 result.extend_from_slice(&values[..i]);
                 result.push(mapped);
-                for &v in &values[i + 1..] {
-                    result.push(instantiator(self, v, m));
-                }
+                result.extend(values[i + 1..].iter().map(|&v| instantiator(self, v, m)));
                 return result;
             }
         }
@@ -2496,22 +2508,25 @@ impl Checker {
         let d = t.as_interface_type();
         let type_parameters = d.local_type_parameters();
         if !type_parameters.is_empty() {
-            let num_type_arguments = node.type_arguments().len() as i32;
+            let num_type_arguments = node.type_arguments().len();
             let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
             let is_js = ast::is_in_js_file(node);
             let is_js_implicit_any = !self.no_implicit_any && is_js;
-            if !is_js_implicit_any && (num_type_arguments < min_type_argument_count || num_type_arguments > type_parameters.len() as i32) {
+            if !is_js_implicit_any
+                && (num_type_arguments < min_type_argument_count
+                    || num_type_arguments > type_parameters.len())
+            {
                 let message: &'static Message;
 
                 let missing_augments_tag = is_js && is_expression_with_type_arguments(node) && !is_jsdoc_augments_tag(node.parent().unwrap());
                 if missing_augments_tag {
-                    message = if min_type_argument_count < type_parameters.len() as i32 {
+                    message = if min_type_argument_count < type_parameters.len() {
                         &diagnostics::Expected_0_1_type_arguments_provide_these_with_an_extends_tag
                     } else {
                         &diagnostics::Expected_0_type_arguments_provide_these_with_an_extends_tag
                     };
                 } else {
-                    message = if min_type_argument_count < type_parameters.len() as i32 {
+                    message = if min_type_argument_count < type_parameters.len() {
                         &diagnostics::Generic_type_0_requires_between_1_and_2_type_arguments
                     } else {
                         &diagnostics::Generic_type_0_requires_1_type_argument_s
@@ -2525,8 +2540,16 @@ impl Checker {
                     return self.error_type;
                 }
             }
-            if node.kind() == Kind::TypeReference && self.is_deferred_type_reference_node(node, num_type_arguments != type_parameters.len() as i32) {
-                return self.create_deferred_type_reference(t, node, None /*mapper*/, None /*alias*/);
+            if node.kind() == Kind::TypeReference
+                && self.is_deferred_type_reference_node(
+                    node,
+                    num_type_arguments != type_parameters.len(),
+                )
+            {
+                return self.create_deferred_type_reference(
+                    t, node, None, /*mapper*/
+                    None, /*alias*/
+                );
             }
             // In a type reference, the outer type parameters of the referenced class or interface are automatically
             // supplied as type arguments and the type reference only specifies arguments for the local type parameters
@@ -2643,8 +2666,11 @@ impl Checker {
         }
         let element_infos = d.element_infos();
         if d.combined_flags.get().intersects(ElementFlags::Variadic) {
-            for (i, &e) in element_types.iter().enumerate() {
-                if i < element_infos.len() && element_infos[i].flags.intersects(ElementFlags::Variadic) && e.flags().intersects(TypeFlags::Never | TypeFlags::Union) {
+            if let Some(result) = element_types.iter().enumerate().find_map(|(i, &e)| {
+                if i < element_infos.len()
+                    && element_infos[i].flags.intersects(ElementFlags::Variadic)
+                    && e.flags().intersects(TypeFlags::Never | TypeFlags::Union)
+                {
                     // Transform [A, ...(X | Y | Z)] into [A, ...X] | [A, ...Y] | [A, ...Z]
                     let check_types: Vec<P<Type>> = element_types
                         .iter()
@@ -2652,11 +2678,16 @@ impl Checker {
                         .map(|(i, &t)| if i < element_infos.len() && element_infos[i].flags.intersects(ElementFlags::Variadic) { t } else { self.unknown_type })
                         .collect();
                     if self.check_cross_product_union(&check_types, Self::too_complex_key(&check_types)) {
-                        return self
-                            .map_type(e, |c, t| Some(c.create_normalized_tuple_type_ex(target, &replace_element(element_types, i, t), object_flags)))
-                            .unwrap();
+                        return Some(
+                            self.map_type(e, |c, t| Some(c.create_normalized_tuple_type_ex(target, &replace_element(element_types, i, t), object_flags)))
+                                .unwrap(),
+                        );
                     }
                 }
+
+                None
+            }) {
+                return result;
             }
         }
         // We have optional, rest, or variadic elements that may need normalizing. Normalization ensures that all variadic
@@ -2690,10 +2721,15 @@ impl Checker {
 
 impl TupleNormalizer {
     // checker.go:23825
-    pub(crate) fn normalize(&mut self, c: &mut Checker, element_types: &[P<Type>], element_infos: &[TupleElementInfo]) -> bool {
-        self.last_required_index = -1;
-        self.first_rest_index = -1;
-        self.last_optional_or_rest_index = -1;
+    pub(crate) fn normalize(
+        &mut self,
+        c: &mut Checker,
+        element_types: &[P<Type>],
+        element_infos: &[TupleElementInfo],
+    ) -> bool {
+        self.last_required_index = None;
+        self.first_rest_index = None;
+        self.last_optional_or_rest_index = None;
         for (i, &t) in element_types.iter().enumerate() {
             let info = element_infos[i];
             if info.flags.intersects(ElementFlags::Variadic) {
@@ -2733,23 +2769,29 @@ impl TupleNormalizer {
             }
         }
         // Turn optional elements preceding the last required element into required elements
-        for i in 0..self.last_required_index.max(0) as usize {
+        for i in 0..self.last_required_index.unwrap_or(0) {
             if self.infos[i].flags.intersects(ElementFlags::Optional) {
                 self.infos[i].flags = ElementFlags::Required;
             }
         }
-        if self.first_rest_index >= 0 && self.first_rest_index < self.last_optional_or_rest_index {
+        if self
+            .first_rest_index
+            .zip(self.last_optional_or_rest_index)
+            .is_some_and(|(first, last)| first < last)
+        {
+            let first = self.first_rest_index.unwrap();
+            let last = self.last_optional_or_rest_index.unwrap();
             // Turn elements between first rest and last optional/rest into a single rest element
             let mut types: Vec<P<Type>> = Vec::new();
-            for i in self.first_rest_index as usize..=self.last_optional_or_rest_index as usize {
+            types = (first..=last).fold(types, |mut types, i| {
                 let mut t = self.types[i];
                 if self.infos[i].flags.intersects(ElementFlags::Variadic) {
                     t = c.get_indexed_access_type(t, c.number_type);
                 }
                 types.push(t);
-            }
-            let first = self.first_rest_index as usize;
-            let last = self.last_optional_or_rest_index as usize;
+
+                types
+            });
             self.types[first] = c.get_union_type(&types);
             self.types.drain(first + 1..last + 1);
             self.infos.drain(first + 1..last + 1);
@@ -2760,13 +2802,16 @@ impl TupleNormalizer {
     // checker.go:23891
     pub(crate) fn add(&mut self, c: &mut Checker, t: P<Type>, info: TupleElementInfo) {
         if info.flags.intersects(ElementFlags::Required) {
-            self.last_required_index = self.types.len() as i32;
+            self.last_required_index = Some(self.types.len());
         }
-        if info.flags.intersects(ElementFlags::Rest) && self.first_rest_index < 0 {
-            self.first_rest_index = self.types.len() as i32;
+        if info.flags.intersects(ElementFlags::Rest) && self.first_rest_index.is_none() {
+            self.first_rest_index = Some(self.types.len());
         }
-        if info.flags.intersects(ElementFlags::Optional | ElementFlags::Rest) {
-            self.last_optional_or_rest_index = self.types.len() as i32;
+        if info
+            .flags
+            .intersects(ElementFlags::Optional | ElementFlags::Rest)
+        {
+            self.last_optional_or_rest_index = Some(self.types.len());
         }
         let t = c.add_optionality_ex(t, true /*isProperty*/, info.flags.intersects(ElementFlags::Optional));
         self.types.push(t);
@@ -2776,31 +2821,33 @@ impl TupleNormalizer {
 
 // Return count of starting consecutive tuple elements of the given kind(s)
 // checker.go:23906
-pub(crate) fn get_start_element_count(t: &'static TupleType, flags: ElementFlags) -> i32 {
-    for (i, info) in t.element_infos().iter().enumerate() {
+pub(crate) fn get_start_element_count(t: &'static TupleType, flags: ElementFlags) -> usize {
+    if let Some(result) = t.element_infos().iter().enumerate().find_map(|(i, info)| {
         if !info.flags.intersects(flags) {
-            return i as i32;
+            Some(i)
+        } else {
+            None
         }
+    }) {
+        return result;
     }
-    t.element_infos().len() as i32
+    t.element_infos().len()
 }
 
 // Return count of ending consecutive tuple elements of the given kind(s)
 // checker.go:23916
-pub(crate) fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) -> i32 {
+pub(crate) fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) -> usize {
     let element_infos = t.element_infos();
-    let mut i = element_infos.len();
-    while i > 0 {
-        if !element_infos[i - 1].flags.intersects(flags) {
-            return (element_infos.len() - i) as i32;
-        }
-        i -= 1;
-    }
-    element_infos.len() as i32
+    let count = element_infos
+        .iter()
+        .rev()
+        .take_while(|info| info.flags.intersects(flags))
+        .count();
+    count
 }
 
 // checker.go:23925
-pub(crate) fn get_total_fixed_element_count(t: &'static TupleType) -> i32 {
+pub(crate) fn get_total_fixed_element_count(t: &'static TupleType) -> usize {
     t.fixed_length() + get_end_element_count(t, ElementFlags::Fixed)
 }
 
@@ -2809,15 +2856,15 @@ impl Checker {
     pub(crate) fn get_element_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
         let type_arguments = self.get_type_arguments(t);
         let arity = self.get_type_reference_arity(t);
-        if type_arguments.len() as i32 == arity {
+        if type_arguments.len() == arity {
             return type_arguments;
         }
-        &type_arguments[..(arity as usize).min(type_arguments.len())]
+        &type_arguments[..arity.min(type_arguments.len())]
     }
 
     // checker.go:23938
-    pub(crate) fn get_type_reference_arity(&mut self, t: P<Type>) -> i32 {
-        t.target_interface_type().type_parameters().len() as i32
+    pub(crate) fn get_type_reference_arity(&mut self, t: P<Type>) -> usize {
+        t.target_interface_type().type_parameters().len()
     }
 
     // checker.go:23942

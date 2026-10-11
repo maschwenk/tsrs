@@ -109,7 +109,7 @@ fn field(message: &str, key: &str) -> Option<String> {
 
 fn json_string(s: &str) -> String {
     let mut out = String::from("\"");
-    for c in s.chars() {
+    out = s.chars().fold(out, |mut out, c| {
         match c {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
@@ -117,7 +117,9 @@ fn json_string(s: &str) -> String {
             '\t' => out.push_str("\\t"),
             c => out.push(c),
         }
-    }
+
+        out
+    });
     out.push('"');
     out
 }

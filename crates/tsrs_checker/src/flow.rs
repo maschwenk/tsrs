@@ -2,6 +2,7 @@ use crate::flowmemo::{FlowMemoMode, FrameTaint, MemoHit, ShadowHit, FLAG_EFFECTS
 use crate::*;
 use tsrs_ast::*;
 use tsrs_ast as ast;
+use tsrs_core::TextPos;
 use tsrs_diagnostics as diagnostics;
 
 // Non-function declarations of flow.go (FlowType, SharedFlow, FlowState, typeofNEFacts,
@@ -122,7 +123,7 @@ impl Checker {
         f.declared_type.set(Some(declared_type));
         f.initial_type.set(Some(initial_type));
         f.flow_container.set(flow_container);
-        f.shared_flow_start.set(self.shared_flows.len() as i32);
+        f.shared_flow_start.set(self.shared_flows.len());
         f.walk_floor.set(self.flow_memo.next_serial());
         self.flow_invocation_count += 1;
         let mut census_container = None;
@@ -131,7 +132,13 @@ impl Checker {
             census_container = ast::get_containing_function(reference);
             let sampled = (census_container.map_or(0, |n| n.to_bits()) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60 == 0;
             let key = sampled.then(|| {
-                let text = if reference.pos() >= 0 && ast::get_source_file_of_node(reference).is_some() { tsrs_scanner::get_text_of_node(reference) } else { format!("#{}", reference.to_bits()) };
+                let text = if !reference.pos().is_synthetic()
+                    && ast::get_source_file_of_node(reference).is_some()
+                {
+                    tsrs_scanner::get_text_of_node(reference)
+                } else {
+                    format!("#{}", reference.to_bits())
+                };
                 let mut bytes = text.into_bytes();
                 bytes.extend_from_slice(&declared_type.id.0.to_le_bytes());
                 bytes.extend_from_slice(&initial_type.id.0.to_le_bytes());
@@ -158,7 +165,7 @@ impl Checker {
             // The walk used memo results and then reached the depth limit. Go's walk computes those sub-walks and
             // keeps their shared nodes in sharedFlows, so it may not be this deep here: walk again without the memo.
             self.flow_memo.stats.aborts += 1;
-            self.shared_flows.truncate(f.shared_flow_start.get() as usize);
+            self.shared_flows.truncate(f.shared_flow_start.get());
             f.memo_aborted.set(false);
             f.memo_used.set(false);
             f.memo_faithful.set(true);
@@ -187,7 +194,7 @@ impl Checker {
             let s = census.stats.get_mut(&(crate::workcensus::Cat::Flow, crate::workcensus::CKey::OptNode(census_container))).unwrap();
             s.b = s.b.max(own);
         }
-        self.shared_flows.truncate(f.shared_flow_start.get() as usize);
+        self.shared_flows.truncate(f.shared_flow_start.get());
         self.put_flow_state(f);
         // When the reference is 'x' in an 'x.length', 'x.push(value)', 'x.unshift(value)' or x[n] = value' operation,
         // we give type 'any[]' to 'x' instead of using the type determined by control flow analysis such that operations
@@ -260,7 +267,7 @@ impl Checker {
                 // We cache results of flow type resolution for shared nodes that were previously visited in
                 // the same getFlowTypeOfReference invocation. A node is considered shared when it is the
                 // antecedent of more than one node.
-                for i in f.shared_flow_start.get() as usize..self.shared_flows.len() {
+                for i in f.shared_flow_start.get()..self.shared_flows.len() {
                     if self.shared_flows[i].flow == flow {
                         let shared = self.shared_flows[i];
                         f.depth.set(entry_depth);
@@ -407,7 +414,15 @@ impl Checker {
     /// a label with more than one antecedent), and at checkpoints: about one in four of the nodes it iterates past,
     /// chosen by the node itself so that walks starting at different places agree on them. The answer at any of them
     /// is the frame's answer (the nodes iterated past pass the type on).
-    fn flow_memo_at_node(&mut self, f: P<FlowState>, entry_flow: P<FlowNode>, flow: P<FlowNode>, flags: FlowFlags, key: u128, entry_depth: i32) -> Option<(MemoHit, bool)> {
+    fn flow_memo_at_node(
+        &mut self,
+        f: P<FlowState>,
+        entry_flow: P<FlowNode>,
+        flow: P<FlowNode>,
+        flags: FlowFlags,
+        key: u128,
+        entry_depth: u32,
+    ) -> Option<(MemoHit, bool)> {
         let ends_iteration = flags.intersects(FlowFlags::Condition | FlowFlags::SwitchClause)
             || flags.intersects(FlowFlags::BranchLabel | FlowFlags::LoopLabel) && flow.antecedents().is_some_and(|a| a.next.get().is_some());
         if !ends_iteration && flow != entry_flow {
@@ -425,7 +440,13 @@ impl Checker {
         Some((hit, ends_iteration))
     }
 
-    fn flow_memo_lookup(&mut self, f: P<FlowState>, flow: P<FlowNode>, key: u128, entry_depth: i32) -> Option<MemoHit> {
+    fn flow_memo_lookup(
+        &mut self,
+        f: P<FlowState>,
+        flow: P<FlowNode>,
+        key: u128,
+        entry_depth: u32,
+    ) -> Option<MemoHit> {
         self.flow_memo.stats.consults += 1;
         let hit = self.flow_memo.lookup(flow, key)?;
         if !self.flow_memo_consult_ok(f, hit) {
@@ -434,7 +455,7 @@ impl Checker {
         }
         // Go's walk of this sub-graph reaches at most `height` levels below here: it must not reach the limit, or Go
         // would report TS2563 inside it.
-        if entry_depth + hit.height as i32 >= FLOW_DEPTH_LIMIT {
+        if entry_depth + u32::from(hit.height) >= FLOW_DEPTH_LIMIT {
             self.flow_memo.stats.height_misses += 1;
             return None;
         }
@@ -444,8 +465,23 @@ impl Checker {
 
     /// Stores the frame's answer under its first node, the node that ended its iteration and the checkpoints it
     /// iterated past (the type is the same at all of them; so is the height, iteration adds no depth).
-    #[expect(clippy::too_many_arguments, reason = "the frame's facts, passed once at its end")]
-    fn flow_memo_fill(&mut self, f: P<FlowState>, memo: FrameMemo, entry_flow: P<FlowNode>, final_flow: P<FlowNode>, entry_depth: i32, t: FlowType, taint: FrameTaint, height: u16, steps: u32, hit: Option<MemoHit>) {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "the frame's facts, passed once at its end"
+    )]
+    fn flow_memo_fill(
+        &mut self,
+        f: P<FlowState>,
+        memo: FrameMemo,
+        entry_flow: P<FlowNode>,
+        final_flow: P<FlowNode>,
+        entry_depth: u32,
+        t: FlowType,
+        taint: FrameTaint,
+        height: u16,
+        steps: u32,
+        hit: Option<MemoHit>,
+    ) {
         self.flow_memo_shadow_settle(f, memo, entry_depth, t, taint);
         let key = memo.key;
         if !taint.is_pure() {
@@ -487,7 +523,14 @@ impl Checker {
 
     /// Shadow mode: checks the answers the memo had for this frame's nodes against what the frame computed.
     #[inline]
-    fn flow_memo_shadow_settle(&mut self, f: P<FlowState>, memo: FrameMemo, entry_depth: i32, t: FlowType, taint: FrameTaint) {
+    fn flow_memo_shadow_settle(
+        &mut self,
+        f: P<FlowState>,
+        memo: FrameMemo,
+        entry_depth: u32,
+        t: FlowType,
+        taint: FrameTaint,
+    ) {
         if self.flow_memo.shadow_hits.len() > memo.shadow as usize {
             for shadow_hit in self.flow_memo.shadow_hits.split_off(memo.shadow as usize) {
                 self.flow_memo_shadow_check(f, entry_depth, t, taint, shadow_hit);
@@ -497,7 +540,14 @@ impl Checker {
 
     /// Shadow mode: the frame was walked although the memo had an answer; they must agree.
     #[cold]
-    fn flow_memo_shadow_check(&mut self, f: P<FlowState>, entry_depth: i32, t: FlowType, taint: FrameTaint, shadow_hit: ShadowHit) {
+    fn flow_memo_shadow_check(
+        &mut self,
+        f: P<FlowState>,
+        entry_depth: u32,
+        t: FlowType,
+        taint: FrameTaint,
+        shadow_hit: ShadowHit,
+    ) {
         self.flow_memo.stats.shadow_checks += 1;
         self.flow_memo_shadow_key_bytes(f);
         let ShadowHit { flow, hit, full_key, origin: (origin, origin_depth) } = shadow_hit;
@@ -510,7 +560,7 @@ impl Checker {
         let walked = t.t.map_or(String::new(), |t| self.type_to_string(t, None));
         let memo = self.type_to_string(hit.t, None);
         panic!(
-            "TSRS_FLOW_MEMO=shadow: memo and walk disagree for reference at {file}:{} (flow node {:?} of node at {:?} in a frame at depth {entry_depth}; memo from reference at {:?} depth {origin_depth}): walked {walked} (type {:?}, incomplete {}, taint {}/{}), memo {memo} (type {:?}, height {}), same key {same_key}",
+            "TSRS_FLOW_MEMO=shadow: memo and walk disagree for reference at {file}:{:?} (flow node {:?} of node at {:?} in a frame at depth {entry_depth}; memo from reference at {:?} depth {origin_depth}): walked {walked} (type {:?}, incomplete {}, taint {}/{}), memo {memo} (type {:?}, height {}), same key {same_key}",
             reference.pos(),
             flow.flags(),
             flow.node().map(|n| (n.pos(), n.end(), n.kind())),
@@ -535,13 +585,8 @@ impl Checker {
 
 // flow.go:208
 pub(crate) fn get_branch_label_antecedents(flow: P<FlowNode>, reduce_labels: &[P<ast::FlowReduceLabelData>]) -> Option<P<FlowList>> {
-    let mut i = reduce_labels.len();
-    while i != 0 {
-        i -= 1;
-        let data = reduce_labels[i];
-        if data.target == flow {
-            return data.antecedents;
-        }
+    if let Some(data) = reduce_labels.iter().rev().find(|data| data.target == flow) {
+        return data.antecedents;
     }
     flow.antecedents()
 }
@@ -665,9 +710,18 @@ impl Checker {
                     let t = self.finalize_evolving_array_type(flow_type.t.unwrap());
                     let parameter_index = predicate.parameter_index.get();
                     let narrowed_type = if predicate.t.get().is_some() {
-                        self.narrow_type_by_type_predicate(f, t, predicate, node, true /*assumeTrue*/)
-                    } else if predicate.kind.get() == TypePredicateKind::AssertsIdentifier && parameter_index >= 0 && (parameter_index as usize) < node.arguments().len() {
-                        self.narrow_type_by_assertion(f, t, node.arguments()[parameter_index as usize])
+                        self.narrow_type_by_type_predicate(
+                            f, t, predicate, node, true, /*assumeTrue*/
+                        )
+                    } else if predicate.kind.get() == TypePredicateKind::AssertsIdentifier
+                        && parameter_index
+                            .is_some_and(|parameter_index| parameter_index < node.arguments().len())
+                    {
+                        self.narrow_type_by_assertion(
+                            f,
+                            t,
+                            node.arguments()[parameter_index.unwrap()],
+                        )
                     } else {
                         t
                     };
@@ -1267,8 +1321,15 @@ impl Checker {
             predicate = self.get_type_predicate_of_signature(signature);
         }
         if let Some(predicate) = predicate {
-            if predicate.kind.get() == TypePredicateKind::Identifier && predicate.parameter_index.get() == 0 {
-                return self.get_narrowed_type(t, predicate.t.get().unwrap(), assume_true, true /*checkDerived*/);
+            if predicate.kind.get() == TypePredicateKind::Identifier
+                && predicate.parameter_index.get() == Some(0)
+            {
+                return self.get_narrowed_type(
+                    t,
+                    predicate.t.get().unwrap(),
+                    assume_true,
+                    true, /*checkDerived*/
+                );
             }
         }
         if !self.is_type_derived_from(right_type, self.global_function_type) {
@@ -1416,10 +1477,10 @@ impl Checker {
         let construct_signatures = self.get_signatures_of_type(constructor_type, SignatureKind::Construct);
         if !construct_signatures.is_empty() {
             let mut types = Vec::with_capacity(construct_signatures.len());
-            for &signature in construct_signatures {
+            types.extend(construct_signatures.iter().map(|&signature| {
                 let erased = self.get_erased_signature(signature);
-                types.push(self.get_return_type_of_signature(erased));
-            }
+                self.get_return_type_of_signature(erased)
+            }));
             return self.get_union_type(&types);
         }
         // We use the empty object type to indicate we don't know the type of objects created by
@@ -1550,8 +1611,9 @@ impl Checker {
         if switch_types.is_empty() {
             return t;
         }
-        let clause_types = &switch_types[data.clause_start as usize..data.clause_end as usize];
-        let has_default_clause = data.clause_start == data.clause_end || clause_types.contains(&self.never_type);
+        let clause_types = &switch_types[data.clause_start..data.clause_end];
+        let has_default_clause =
+            data.clause_start == data.clause_end || clause_types.contains(&self.never_type);
         if t.flags().intersects(TypeFlags::Unknown) && !has_default_clause {
             let mut ground_clause_types: Option<Vec<P<Type>>> = None;
             for (i, &s) in clause_types.iter().enumerate() {
@@ -1620,25 +1682,22 @@ impl Checker {
         };
         let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes();
         // Equal start and end denotes implicit fallthrough; undefined marks explicit default clause.
-        let default_index = clauses.iter().position(|clause| clause.kind() == Kind::DefaultClause).map_or(-1, |i| i as i32);
+        let default_index = clauses
+            .iter()
+            .position(|clause| clause.kind() == Kind::DefaultClause);
         let clause_start = data.clause_start;
         let clause_end = data.clause_end;
-        let has_default_clause = clause_start == clause_end || (default_index >= clause_start && default_index < clause_end);
+        let has_default_clause = clause_start == clause_end
+            || default_index.is_some_and(|index| index >= clause_start && index < clause_end);
         if has_default_clause {
             // In the default clause we filter constituents down to those that are not-equal to all handled cases.
             let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(clause_start, clause_end, witnesses);
             return self.filter_type(t, move |c, t| c.get_type_facts(t, not_equal_facts) == not_equal_facts);
         }
         // In the non-default cause we create a union of the type narrowed by each of the listed cases.
-        let clause_witnesses = &witnesses[clause_start as usize..clause_end as usize];
+        let clause_witnesses = &witnesses[clause_start..clause_end];
         let mut types = Vec::with_capacity(clause_witnesses.len());
-        for &text in clause_witnesses {
-            if !text.is_empty() {
-                types.push(self.narrow_type_by_type_name(t, text));
-            } else {
-                types.push(self.never_type);
-            }
-        }
+        types.extend(clause_witnesses.iter().map(|&text| if !text.is_empty() { self.narrow_type_by_type_name(t, text) } else { self.never_type }));
         self.get_union_type(&types)
     }
 
@@ -1646,14 +1705,23 @@ impl Checker {
     pub(crate) fn narrow_type_by_switch_on_true(&mut self, f: P<FlowState>, t: P<Type>, data: P<Node>) -> P<Type> {
         let mut t = t;
         let data = data.as_flow_switch_clause_data();
-        let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes();
-        let default_index = clauses.iter().position(|clause| clause.kind() == Kind::DefaultClause).map_or(-1, |i| i as i32);
+        let clauses = data
+            .switch_statement
+            .as_switch_statement()
+            .case_block
+            .as_case_block()
+            .clauses
+            .nodes();
+        let default_index = clauses
+            .iter()
+            .position(|clause| clause.kind() == Kind::DefaultClause);
         let clause_start = data.clause_start;
         let clause_end = data.clause_end;
-        let has_default_clause = clause_start == clause_end || (default_index >= clause_start && default_index < clause_end);
+        let has_default_clause = clause_start == clause_end
+            || default_index.is_some_and(|index| index >= clause_start && index < clause_end);
         // First, narrow away all of the cases that preceded this set of cases.
-        for i in 0..clause_start as usize {
-            let clause = clauses[i];
+        for element in clauses[..clause_start].iter() {
+            let clause = *element;
             if clause.kind() == Kind::CaseClause {
                 t = self.narrow_type(f, t, clause.expression().unwrap(), false /*assumeTrue*/);
             }
@@ -1662,8 +1730,8 @@ impl Checker {
         // There's no point in narrowing by the other cases in the set, since we can
         // get here through other paths.
         if has_default_clause {
-            for i in clause_end as usize..clauses.len() {
-                let clause = clauses[i];
+            for element in clauses.iter().skip(clause_end) {
+                let clause = *element;
                 if clause.kind() == Kind::CaseClause {
                     t = self.narrow_type(f, t, clause.expression().unwrap(), false /*assumeTrue*/);
                 }
@@ -1671,14 +1739,14 @@ impl Checker {
             return t;
         }
         // Now, narrow based on the cases in this set.
-        let mut types = Vec::with_capacity((clause_end - clause_start) as usize);
-        for &clause in &clauses[clause_start as usize..clause_end as usize] {
+        let mut types = Vec::with_capacity(clause_end - clause_start);
+        types.extend(clauses[clause_start..clause_end].iter().map(|&clause| {
             if clause.kind() == Kind::CaseClause {
-                types.push(self.narrow_type(f, t, clause.expression().unwrap(), true /*assumeTrue*/));
+                self.narrow_type(f, t, clause.expression().unwrap(), true /*assumeTrue*/)
             } else {
-                types.push(self.never_type);
+                self.never_type
             }
-        }
+        }));
         self.get_union_type(&types)
     }
 
@@ -1688,13 +1756,9 @@ impl Checker {
         let data = data.as_flow_switch_clause_data();
         let every_clause_checks = data.clause_start != data.clause_end && {
             let switch_types = self.get_switch_clause_types(data.switch_statement);
-            let mut every = true;
-            for &s in &switch_types[data.clause_start as usize..data.clause_end as usize] {
-                if !clause_check(self, s) {
-                    every = false;
-                    break;
-                }
-            }
+            let every = !(switch_types[data.clause_start..data.clause_end]
+                .iter()
+                .any(|&s| !clause_check(self, s)));
             every
         };
         if every_clause_checks {
@@ -1709,15 +1773,17 @@ impl Checker {
         if clause_data.clause_start < clause_data.clause_end && t.flags().intersects(TypeFlags::Union) {
             let (accessed_name, _) = self.get_accessed_property_name(access);
             if !accessed_name.is_empty() && self.get_key_property_name(t) == accessed_name {
-                let clause_types = self.get_switch_clause_types(clause_data.switch_statement)[clause_data.clause_start as usize..clause_data.clause_end as usize].to_vec();
+                let clause_types = self.get_switch_clause_types(clause_data.switch_statement)
+                    [clause_data.clause_start..clause_data.clause_end]
+                    .to_vec();
                 let mut types = Vec::with_capacity(clause_types.len());
-                for s in clause_types {
+                types.extend(clause_types.into_iter().map(|s| {
                     let result = self.get_constituent_type_for_key_type(t, s);
                     match result {
-                        Some(result) => types.push(result),
-                        None => types.push(self.unknown_type),
+                        Some(result) => result,
+                        None => self.unknown_type,
                     }
-                }
+                }));
                 let candidate = self.get_union_type(&types);
                 if candidate != self.unknown_type {
                     return candidate;
@@ -1810,16 +1876,12 @@ impl Checker {
     pub(crate) fn get_union_or_evolving_array_type(&mut self, f: P<FlowState>, types: &[P<Type>], subtype_reduction: UnionReduction) -> P<Type> {
         if is_evolving_array_type_list(types) {
             let mut element_types = Vec::with_capacity(types.len());
-            for &t in types {
-                element_types.push(self.get_element_type_of_evolving_array_type(t));
-            }
+            element_types.extend(types.iter().map(|&t| self.get_element_type_of_evolving_array_type(t)));
             let union_type = self.get_union_type(&element_types);
             return self.get_evolving_array_type(union_type);
         }
         let mut finalized_types = Vec::with_capacity(types.len());
-        for &t in types {
-            finalized_types.push(self.finalize_evolving_array_type(t));
-        }
+        finalized_types.extend(types.iter().map(|&t| self.finalize_evolving_array_type(t)));
         let union_type = self.get_union_type_ex(&finalized_types, subtype_reduction, AliasArg::None, None);
         let result = self.recombine_unknown_type(union_type);
         let declared_type = f.declared();
@@ -1942,9 +2004,11 @@ impl Checker {
                 if flow_type_t.object_flags().intersects(ObjectFlags::EvolvingArray) {
                     let mut evolved_type = flow_type_t;
                     if ast::is_call_expression(node) {
-                        for &arg in node.arguments() {
+                        evolved_type = node.arguments().iter().fold(evolved_type, |mut evolved_type, &arg| {
                             evolved_type = self.add_evolving_array_element_type(evolved_type, arg);
-                        }
+
+                            evolved_type
+                        });
                     } else {
                         // We must get the context free expression type so as to not recur in an uncached fashion on the LHS (which causes exponential blowup in compile time)
                         let index_type = self.get_context_free_type_of_expression(node.as_binary_expression().left.as_element_access_expression().argument_expression);
@@ -2159,7 +2223,14 @@ impl Checker {
     pub(crate) fn report_flow_control_error(&mut self, node: P<Node>) {
         let block = ast::find_ancestor(node, ast::is_function_or_module_block).unwrap();
         let source_file = ast::get_source_file_of_node(node).unwrap();
-        let span = tsrs_scanner::get_range_of_token_at_position(source_file, block.statement_list().unwrap().pos());
+        let span = tsrs_scanner::get_range_of_token_at_position(
+            source_file,
+            block
+                .statement_list()
+                .unwrap()
+                .pos()
+                .expect_source("parsed node lists have source positions"),
+        );
         self.add_diagnostic(ast::new_diagnostic(Some(source_file), span, &diagnostics::The_containing_function_or_module_body_is_too_large_for_control_flow_analysis, &[]));
     }
 
@@ -2337,7 +2408,13 @@ impl Checker {
         } else if ast::is_binding_element(access) {
             self.get_destructuring_property_name(access)
         } else if ast::is_parameter_declaration(access) {
-            let index = access.parent().unwrap().parameters().iter().position(|&p| p == access).map_or(-1, |i| i as i32);
+            let index = access
+                .parent()
+                .unwrap()
+                .parameters()
+                .iter()
+                .position(|&p| p == access)
+                .expect("parameter belongs to its declaration");
             (index.to_string(), true)
         } else {
             (String::new(), false)
@@ -2412,7 +2489,11 @@ impl Checker {
             return self.get_literal_property_name_text(node.name().unwrap());
         }
         if ast::is_array_literal_expression(parent) || ast::is_array_binding_pattern(parent) {
-            let index = parent.elements().iter().position(|&e| e == node).map_or(-1, |i| i as i32);
+            let index = parent
+                .elements()
+                .iter()
+                .position(|&e| e == node)
+                .expect("element belongs to its parent");
             return (index.to_string(), true);
         }
         (String::new(), false)
@@ -2520,10 +2601,12 @@ impl Checker {
 
     // flow.go:1886
     pub(crate) fn has_matching_argument(&mut self, expression: P<Node>, reference: P<Node>) -> bool {
-        for &argument in expression.arguments() {
-            if self.is_or_contains_matching_reference(reference, argument) || self.optional_chain_contains_reference(argument, reference) {
-                return true;
-            }
+        if expression
+            .arguments()
+            .iter()
+            .any(|&argument| self.is_or_contains_matching_reference(reference, argument) || self.optional_chain_contains_reference(argument, reference))
+        {
+            return true;
         }
         let callee = expression.expression().unwrap();
         if ast::is_property_access_expression(callee) && self.is_or_contains_matching_reference(reference, callee.expression().unwrap()) {
@@ -2661,10 +2744,14 @@ impl Checker {
 
     // Return the combined not-equal type facts for all cases except those between the start and end indices.
     // flow.go:2012
-    pub(crate) fn get_not_equal_facts_from_typeof_switch(&mut self, start: i32, end: i32, witnesses: &[&str]) -> TypeFacts {
+    pub(crate) fn get_not_equal_facts_from_typeof_switch(
+        &mut self,
+        start: usize,
+        end: usize,
+        witnesses: &[&str],
+    ) -> TypeFacts {
         let mut facts = TypeFacts::None;
         for (i, &witness) in witnesses.iter().enumerate() {
-            let i = i as i32;
             if (i < start || i >= end) && !witness.is_empty() {
                 let f = match typeofNEFacts.get(witness) {
                     Some(&f) => f,
@@ -2682,9 +2769,7 @@ impl Checker {
         if !links.switch_types_computed.get() {
             let clauses = node.as_switch_statement().case_block.as_case_block().clauses.nodes();
             let mut types = Vec::with_capacity(clauses.len());
-            for &clause in clauses {
-                types.push(self.get_type_of_switch_clause(clause));
-            }
+            types.extend(clauses.iter().map(|&clause| self.get_type_of_switch_clause(clause)));
             links.switch_types.set(alloc_vec(types));
             links.switch_types_computed.set(true);
         }
@@ -2972,7 +3057,11 @@ impl Checker {
         let t = if ast::is_object_binding_pattern(pattern) {
             self.get_type_of_destructured_property(parent_type, get_binding_element_property_name(node).unwrap())
         } else if !has_dot_dot_dot_token(node) {
-            let index = pattern.elements().iter().position(|&e| e == node).map_or(-1, |i| i as i32);
+            let index = pattern
+                .elements()
+                .iter()
+                .position(|&e| e == node)
+                .expect("binding element belongs to its pattern");
             self.get_type_of_destructured_array_element(parent_type, index)
         } else {
             self.get_type_of_destructured_spread_expression(parent_type)
@@ -3014,12 +3103,20 @@ impl Checker {
     // flow.go:2323
     pub(crate) fn get_assigned_type_of_array_literal_element(&mut self, node: P<Node>, element: P<Node>) -> P<Type> {
         let assigned_type = self.get_assigned_type(node);
-        let index = node.elements().iter().position(|&e| e == element).map_or(-1, |i| i as i32);
+        let index = node
+            .elements()
+            .iter()
+            .position(|&e| e == element)
+            .expect("element belongs to its array literal");
         self.get_type_of_destructured_array_element(assigned_type, index)
     }
 
     // flow.go:2327
-    pub(crate) fn get_type_of_destructured_array_element(&mut self, t: P<Type>, index: i32) -> P<Type> {
+    pub(crate) fn get_type_of_destructured_array_element(
+        &mut self,
+        t: P<Type>,
+        index: usize,
+    ) -> P<Type> {
         if every_type(self, t, |c, t| c.is_tuple_like_type(t)) {
             if let Some(element_type) = self.get_tuple_element_type(t, index) {
                 return element_type;
@@ -3144,12 +3241,7 @@ impl Checker {
             return true;
         }
         // Otherwise, check if any constituent type of the source union is assignable to the target type
-        for &t in source.types() {
-            if self.is_type_assignable_to(t, target) {
-                return true;
-            }
-        }
-        false
+        source.types().iter().any(|&t| self.is_type_assignable_to(t, target))
     }
 
     // flow.go:2451
@@ -3157,8 +3249,10 @@ impl Checker {
         if predicate.kind.get() == TypePredicateKind::Identifier || predicate.kind.get() == TypePredicateKind::AssertsIdentifier {
             let arguments = call_expression.arguments();
             let parameter_index = predicate.parameter_index.get();
-            if parameter_index >= 0 && (parameter_index as usize) < arguments.len() {
-                return Some(arguments[parameter_index as usize]);
+            if let Some(parameter_index) =
+                parameter_index.filter(|&parameter_index| parameter_index < arguments.len())
+            {
+                return Some(arguments[parameter_index]);
             }
         } else {
             let invoked_expression = ast::skip_parentheses(call_expression.expression().unwrap());
@@ -3205,7 +3299,7 @@ impl Checker {
         } else {
             self.factory.new_identifier(symbol_name)
         };
-        for &static_block in static_blocks {
+        if let Some(result) = static_blocks.iter().find_map(|&static_block| {
             let this_keyword = self.factory.new_keyword_expression(Kind::ThisKeyword);
             let reference = self.factory.new_property_access_expression(this_keyword, None, access_name, NodeFlags::None);
             reference.expression().unwrap().set_parent(Some(reference));
@@ -3219,9 +3313,11 @@ impl Checker {
             }
             // We don't infer a type if assignments are only null or undefined.
             if every_type(self, flow_type, |c, t| c.is_nullable_type(t)) {
-                continue;
+                return None;
             }
-            return Some(self.convert_auto_to_any(flow_type));
+            Some(Some(self.convert_auto_to_any(flow_type)))
+        }) {
+            return result;
         }
         None
     }
@@ -3265,7 +3361,10 @@ impl Checker {
                         if predicate.kind.get() == TypePredicateKind::AssertsIdentifier && predicate.t.get().is_none() {
                             let arguments = node.arguments();
                             let parameter_index = predicate.parameter_index.get();
-                            if parameter_index >= 0 && (parameter_index as usize) < arguments.len() && self.is_false_expression(arguments[parameter_index as usize]) {
+                            if let Some(parameter_index) = parameter_index
+                                .filter(|&parameter_index| parameter_index < arguments.len())
+                                && self.is_false_expression(arguments[parameter_index])
+                            {
                                 return false;
                             }
                         }
@@ -3395,7 +3494,11 @@ impl Checker {
     // flow.go:2661
     pub(crate) fn is_symbol_assigned(&mut self, symbol: P<Symbol>) -> bool {
         self.ensure_assignments_marked(symbol);
-        self.marked_assignment_symbol_links.get(symbol).last_assignment_pos.get() != 0
+        self.marked_assignment_symbol_links
+            .get(symbol)
+            .last_assignment_pos
+            .get()
+            != LastAssignmentPosition::None
     }
 
     // Return true if there are no assignments to the given symbol or if the given location
@@ -3403,8 +3506,18 @@ impl Checker {
     // flow.go:2668
     pub(crate) fn is_past_last_assignment(&mut self, symbol: P<Symbol>, location: Option<P<Node>>) -> bool {
         self.ensure_assignments_marked(symbol);
-        let last_assignment_pos = self.marked_assignment_symbol_links.get(symbol).last_assignment_pos.get();
-        last_assignment_pos == 0 || location.is_some() && last_assignment_pos < location.unwrap().pos()
+        let last_assignment_pos = self
+            .marked_assignment_symbol_links
+            .get(symbol)
+            .last_assignment_pos
+            .get();
+        match last_assignment_pos {
+            LastAssignmentPosition::None => true,
+            LastAssignmentPosition::Position(pos) => {
+                location.is_some_and(|location| pos < location.pos())
+            }
+            LastAssignmentPosition::BeyondAll => false,
+        }
     }
 
     // flow.go:2674
@@ -3444,13 +3557,26 @@ impl Checker {
                     if self.is_parameter_or_mutable_local_variable(symbol) {
                         let links = self.marked_assignment_symbol_links.get(symbol);
                         let pos = links.last_assignment_pos.get();
-                        if pos == 0 || pos != i32::MAX {
-                            let referencing_function = ast::find_ancestor(node, ast::is_function_or_source_file);
-                            let declaring_function = ast::find_ancestor(symbol.value_declaration(), ast::is_function_or_source_file);
+                        if pos != LastAssignmentPosition::BeyondAll {
+                            let referencing_function =
+                                ast::find_ancestor(node, ast::is_function_or_source_file);
+                            let declaring_function = ast::find_ancestor(
+                                symbol.value_declaration(),
+                                ast::is_function_or_source_file,
+                            );
                             if referencing_function == declaring_function {
-                                links.last_assignment_pos.set(self.extend_assignment_position(Some(node), symbol.value_declaration().unwrap()));
+                                links
+                                    .last_assignment_pos
+                                    .set(LastAssignmentPosition::Position(
+                                        self.extend_assignment_position(
+                                            Some(node),
+                                            symbol.value_declaration().unwrap(),
+                                        ),
+                                    ));
                             } else {
-                                links.last_assignment_pos.set(i32::MAX);
+                                links
+                                    .last_assignment_pos
+                                    .set(LastAssignmentPosition::BeyondAll);
                             }
                         }
                         if assignment_kind == AssignmentKind::Definite {
@@ -3469,7 +3595,9 @@ impl Checker {
                     if let Some(symbol) = symbol {
                         if self.is_parameter_or_mutable_local_variable(symbol) {
                             let links = self.marked_assignment_symbol_links.get(symbol);
-                            links.last_assignment_pos.set(i32::MAX);
+                            links
+                                .last_assignment_pos
+                                .set(LastAssignmentPosition::BeyondAll);
                         }
                     }
                 }
@@ -3490,7 +3618,11 @@ impl Checker {
     // expression statement, compound statement, or class declaration occurring between the node and the given
     // declaration node.
     // flow.go:2749
-    pub(crate) fn extend_assignment_position(&mut self, node: Option<P<Node>>, declaration: P<Node>) -> i32 {
+    pub(crate) fn extend_assignment_position(
+        &mut self,
+        node: Option<P<Node>>,
+        declaration: P<Node>,
+    ) -> TextPos {
         let mut node = node;
         let mut pos = node.unwrap().pos();
         while let Some(n) = node {

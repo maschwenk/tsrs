@@ -11,11 +11,15 @@
 const GENERIC_SECRET_KEYWORDS: [&str; 5] = ["key", "token", "signature", "sig", "pwd"];
 
 fn match_generic_secret_keyword_at(s: &[u8], i: usize) -> Option<usize> {
-    for keyword in GENERIC_SECRET_KEYWORDS {
+    if let Some(result) = GENERIC_SECRET_KEYWORDS.into_iter().find_map(|keyword| {
         let end = i + keyword.len();
         if end < s.len() && s[i..end].eq_ignore_ascii_case(keyword.as_bytes()) && matches!(s[end], b'(' | b'[' | b'.' | b'|') {
-            return Some(keyword.len());
+            return Some(Some(keyword.len()));
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }

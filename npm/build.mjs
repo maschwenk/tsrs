@@ -10,9 +10,9 @@
 //
 // The main package also carries TypeScript 7's unstable JS API (`tsrs/unstable/sync`, `/async`, `/ast`, ...),
 // copied from microsoft/TypeScript packages/typescript by npm/sdk/sync-upstream.mjs. It is compiled here with the
-// build-only compiler in npm/package.json (`pnpm --dir npm install --frozen-lockfile` first; `--tsc <path>` to use another TypeScript 7 tsc).
+// build-only compiler in npm/package.json (`pnpm install --frozen-lockfile` first; `--tsc <path>` to use another TypeScript 7 tsc).
 //
-// The package name comes from npm/tsrs/package.json; platform packages are `@ts-rs/<os>-<cpu>`. The version is
+// The package name comes from npm/tsrs/package.json; Linux platform packages have a `-gnu` or `-musl` suffix. The version is
 // `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml, for every package
 // including `@ts-rs/wasm` (npm/tsrs-wasm). The main package lists exactly the platforms given here, so a
 // release never points at a platform package that was not published.
@@ -31,6 +31,8 @@ const TARGETS = {
     "x86_64-apple-darwin": { os: "darwin", cpu: "x64" },
     "x86_64-unknown-linux-gnu": { os: "linux", cpu: "x64", libc: "glibc" },
     "aarch64-unknown-linux-gnu": { os: "linux", cpu: "arm64", libc: "glibc" },
+    "x86_64-unknown-linux-musl": { os: "linux", cpu: "x64", libc: "musl" },
+    "aarch64-unknown-linux-musl": { os: "linux", cpu: "arm64", libc: "musl" },
     "x86_64-pc-windows-msvc": { os: "win32", cpu: "x64" },
 };
 
@@ -146,7 +148,7 @@ function buildSdk(tscPath) {
     const pkgDir = path.join(npmDir, "tsrs");
     const tsc = tscPath ?? path.join(npmDir, "node_modules", "typescript", "bin", "tsc");
     if (!fs.existsSync(tsc)) {
-        throw new Error(`the JS API build compiler is not installed (${path.relative(process.cwd(), tsc)}); run \`pnpm --dir npm install --frozen-lockfile\` or pass --tsc`);
+        throw new Error(`the JS API build compiler is not installed (${path.relative(process.cwd(), tsc)}); run \`pnpm install --frozen-lockfile\` or pass --tsc`);
     }
     fs.rmSync(path.join(pkgDir, "dist"), { recursive: true, force: true });
     fs.rmSync(path.join(pkgDir, "tsconfig.tsbuildinfo"), { force: true });
@@ -270,8 +272,9 @@ function main() {
     for (const [triple, binary] of [...opts.binaries].sort()) {
         if (!fs.existsSync(binary)) throw new Error(`binary for ${triple} not found: ${binary}`);
         const { os, cpu, libc } = TARGETS[triple];
-        const platformName = `@ts-rs/${os}-${cpu}`;
-        const dir = path.join(opts.out, `${baseName}-${os}-${cpu}`);
+        const platform = `${os}-${cpu}${libc ? `-${libc === "glibc" ? "gnu" : libc}` : ""}`;
+        const platformName = `@ts-rs/${platform}`;
+        const dir = path.join(opts.out, `${baseName}-${platform}`);
         fs.mkdirSync(dir, { recursive: true });
 
         const exeName = os === "win32" ? "tsrs.exe" : "tsrs";
@@ -282,15 +285,14 @@ function main() {
         const readme = fs.readFileSync(path.join(npmDir, "platform", "README.md"), "utf8")
             .replaceAll("{{name}}", platformName)
             .replaceAll("{{mainName}}", name)
-            .replaceAll("{{os}}", os)
-            .replaceAll("{{cpu}}", cpu)
+            .replaceAll("{{platform}}", platform)
             .replaceAll("{{version}}", version)
             .replaceAll("{{commit}}", versions.typescriptCommit.slice(0, 12));
         fs.writeFileSync(path.join(dir, "README.md"), readme);
         writeJson(path.join(dir, "package.json"), {
             name: platformName,
             ...common,
-            description: `The ${os}-${cpu} binary for ${name}`,
+            description: `The ${platform} binary for ${name}`,
             preferUnplugged: true,
             files: [exeName, "NOTICE.txt"],
             exports: { "./package.json": "./package.json" },

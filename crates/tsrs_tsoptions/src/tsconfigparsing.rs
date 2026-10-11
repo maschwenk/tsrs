@@ -133,7 +133,7 @@ impl ConfigFileSpecs {
         if self.validated_include_specs.is_empty() {
             return String::new();
         }
-        for (index, spec) in self.validated_include_specs.iter().enumerate() {
+        if let Some(result) = self.validated_include_specs.iter().enumerate().find_map(|(index, spec)| {
             let include_matcher = vfsmatch::new_spec_matcher(
                 std::slice::from_ref(spec),
                 &compare_paths_options.current_directory,
@@ -142,9 +142,13 @@ impl ConfigFileSpecs {
             );
             if let Some(include_matcher) = include_matcher {
                 if include_matcher.match_string(file_name) {
-                    return self.validated_include_specs_before_substitution[index].clone();
+                    return Some(self.validated_include_specs_before_substitution[index].clone());
                 }
             }
+
+            None
+        }) {
+            return result;
         }
         String::new()
     }
@@ -153,17 +157,15 @@ impl ConfigFileSpecs {
         if self.validated_files_spec.is_empty() {
             return String::new();
         }
-        let file_path = tspath::to_path(
-            file_name,
-            &compare_paths_options.current_directory,
-            compare_paths_options.use_case_sensitive_file_names,
-        );
-        for (index, spec) in self.validated_files_spec.iter().enumerate() {
-            if tspath::to_path(spec, &compare_paths_options.current_directory, compare_paths_options.use_case_sensitive_file_names)
-                == file_path
-            {
-                return self.validated_files_spec_before_substitution[index].clone();
+        let file_path = tspath::to_path(file_name, &compare_paths_options.current_directory, compare_paths_options.use_case_sensitive_file_names);
+        if let Some(result) = self.validated_files_spec.iter().enumerate().find_map(|(index, spec)| {
+            if tspath::to_path(spec, &compare_paths_options.current_directory, compare_paths_options.use_case_sensitive_file_names) == file_path {
+                Some(self.validated_files_spec_before_substitution[index].clone())
+            } else {
+                None
             }
+        }) {
+            return result;
         }
         String::new()
     }
@@ -739,17 +741,21 @@ impl CommandLineOptionNameMap {
     }
 
     pub fn get_spelling_suggestion(&self, name: &str) -> Option<&'static CommandLineOption> {
-        tsrs_core::get_spelling_suggestion(name, self.0.values().copied(), |option| option.name, |a, b| a.name.cmp(b.name) as i32)
+        tsrs_core::get_spelling_suggestion(
+            name,
+            self.0.values().copied(),
+            |option| option.name,
+            |a, b| a.name.cmp(b.name),
+        )
     }
 }
 
 pub(crate) fn command_line_options_to_map(compiler_options: &[&'static CommandLineOption]) -> CommandLineOptionNameMap {
     let mut result = FxHashMap::with_capacity_and_hasher(compiler_options.len() * 2, Default::default());
-    for option in compiler_options {
-        result.insert(option.name, *option);
+    result.extend(compiler_options.iter().flat_map(|option| {
         let lower: &'static str = tsrs_core::alloc_str(&tsrs_core::stringutil::go_strings_to_lower(option.name));
-        result.insert(lower, *option);
-    }
+        [(option.name, *option), (lower, *option)]
+    }));
     CommandLineOptionNameMap(result)
 }
 
@@ -1284,9 +1290,7 @@ fn get_extended_config(
     if let Some(extended_result) = cache_entry.extended_result {
         if source_file.is_some() {
             result.extended_source_files.insert(extended_result.source_file.file_name().to_string());
-            for extended_source_file in extended_result.extended_source_files.borrow().iter() {
-                result.extended_source_files.insert(extended_source_file.clone());
-            }
+            result.extended_source_files.extend(extended_result.extended_source_files.borrow().iter().map(std::clone::Clone::clone));
         }
     }
     (cache_entry.get().extended_config.as_ref(), errors)
@@ -1688,15 +1692,14 @@ fn parse_json_config_file_content_worker(
         }
     }
     if let Some(file_specs) = &file_specs.slice_value {
-        for spec in file_specs.iter().filter(|v| is_string_value(v)) {
-            if let CompilerOptionsValue::String(spec) = spec {
-                validated_files_spec_before_substitution.push(spec.clone());
-            }
-        }
-        validated_files_spec = match get_substituted_string_array_with_config_dir_template(
-            &validated_files_spec_before_substitution,
-            &base_path_for_file_names,
-        ) {
+        validated_files_spec_before_substitution.extend(
+            file_specs
+                .iter()
+                .filter(|v| is_string_value(v))
+                .filter_map(|spec| if let CompilerOptionsValue::String(spec) = spec { Some(spec.clone()) } else { None }),
+        );
+        validated_files_spec = match get_substituted_string_array_with_config_dir_template(&validated_files_spec_before_substitution, &base_path_for_file_names)
+        {
             Some(v) => v,
             None => validated_files_spec_before_substitution.clone(),
         };
@@ -1718,20 +1721,26 @@ fn parse_json_config_file_content_worker(
 
     let content_mapper_source_file = source_file.map(|f| f.source_file);
     let mut content_mappers: Vec<Mapper> = Vec::new();
-    let mut content_mapper_indices: Vec<i32> = Vec::new();
-    let content_mappers_of_raw = get_prop_from_raw("contentMappers", &is_object, "object", &mut errors);
-    for (i, element) in content_mappers_of_raw.slice_value.iter().flatten().enumerate() {
+    let mut content_mapper_indices: Vec<usize> = Vec::new();
+    let content_mappers_of_raw =
+        get_prop_from_raw("contentMappers", &is_object, "object", &mut errors);
+    for (i, element) in content_mappers_of_raw
+        .slice_value
+        .iter()
+        .flatten()
+        .enumerate()
+    {
         let (mapper, mapper_errors) = parse_content_mapper(element);
-        for mapper_error in mapper_errors {
-            errors.push(set_content_mapper_diagnostic_location(
+        errors.extend(mapper_errors.into_iter().map(|mapper_error| {
+            set_content_mapper_diagnostic_location(
                 mapper_error,
                 content_mapper_source_file,
-                get_content_mapper_syntax(content_mapper_source_file, i as i32, ""),
-            ));
-        }
+                get_content_mapper_syntax(content_mapper_source_file, Some(i), ""),
+            )
+        }));
         if let Some(mapper) = mapper {
             content_mappers.push(mapper);
-            content_mapper_indices.push(i as i32);
+            content_mapper_indices.push(i);
         }
     }
     let total_content_mapper_extensions: usize = content_mappers.iter().map(|m| m.definition.extensions.len()).sum();
@@ -1803,7 +1812,11 @@ fn parse_json_config_file_content_worker(
                 errors.push(set_content_mapper_diagnostic_location(
                     diagnostic,
                     content_mapper_source_file,
-                    get_content_mapper_syntax(content_mapper_source_file, content_mapper_indices[j], "package"),
+                    get_content_mapper_syntax(
+                        content_mapper_source_file,
+                        Some(content_mapper_indices[j]),
+                        "package",
+                    ),
                 ));
                 continue;
             }
@@ -1970,16 +1983,20 @@ fn invalid_dot_dot_after_recursive_wildcard(s: &str) -> bool {
     // can be matched in many arbitrary positions when multiple are present, resulting
     // in bad backtracking (and we don't care which is matched - just that some /.. segment
     // comes after some **/ segment).
-    let wildcard_index: i64 = if s.starts_with("**/") {
-        0
+    let wildcard_index = if s.starts_with("**/") {
+        Some(0)
     } else {
-        s.find("/**/").map_or(-1, |i| i as i64)
+        s.find("/**/")
     };
-    if wildcard_index == -1 {
+    let Some(wildcard_index) = wildcard_index else {
         return false;
-    }
-    let last_dot_index: i64 = if s.ends_with("/..") { s.len() as i64 } else { s.rfind("/../").map_or(-1, |i| i as i64) };
-    last_dot_index > wildcard_index
+    };
+    let last_dot_index = if s.ends_with("/..") {
+        Some(s.len())
+    } else {
+        s.rfind("/../")
+    };
+    last_dot_index.is_some_and(|last_dot_index| last_dot_index > wildcard_index)
 }
 
 pub fn get_ts_config_prop_array_element_value(
@@ -2068,8 +2085,12 @@ pub fn get_options_syntax_by_array_element_value(object_literal: Option<P<Node>>
 // getContentMapperSyntax returns the tsconfig JSON node to attribute a diagnostic about the content
 // mapper at index to: the value of subKey within that mapper's object (when subKey is non-empty),
 // falling back to the mapper element, then to the "contentMappers" array. An index outside the array
-// (e.g. -1) yields the array itself. Returns nil when there is no source file (JSON API).
-fn get_content_mapper_syntax(source_file: Option<P<SourceFile>>, index: i32, sub_key: &str) -> Option<P<Node>> {
+// yields the array itself. Returns nil when there is no source file (JSON API).
+fn get_content_mapper_syntax(
+    source_file: Option<P<SourceFile>>,
+    index: Option<usize>,
+    sub_key: &str,
+) -> Option<P<Node>> {
     source_file?;
     for_each_ts_config_prop_array(source_file, "contentMappers", |property| {
         let initializer = property.initializer().unwrap();
@@ -2077,10 +2098,10 @@ fn get_content_mapper_syntax(source_file: Option<P<SourceFile>>, index: i32, sub
             return Some(initializer);
         }
         let elements = initializer.elements();
-        if index < 0 || index as usize >= elements.len() {
+        let Some(index) = index.filter(|&index| index < elements.len()) else {
             return Some(initializer);
-        }
-        let element = elements[index as usize];
+        };
+        let element = elements[index];
         if !sub_key.is_empty() && tsrs_ast::is_object_literal_expression(element) {
             if let Some(node) = for_each_property_assignment(Some(element), sub_key, |property| property.initializer(), None) {
                 return Some(node);
@@ -2103,7 +2124,10 @@ pub fn get_content_mapper_option_diagnostic_location(
         return (None, tsrs_core::undefined_text_range());
     };
     // Go `slices.Index(config.ContentMappers(), mapper)` compares the *Mapper pointers.
-    let index = config.content_mappers().iter().position(|m| std::ptr::eq(m, mapper)).map_or(-1, |i| i as i32);
+    let index = config
+        .content_mappers()
+        .iter()
+        .position(|m| std::ptr::eq(m, mapper));
     let mapper_node = get_content_mapper_syntax(Some(config_file.source_file), index, "");
     let mut node = get_content_mapper_syntax(Some(config_file.source_file), index, "options");
     if node.is_none() {
@@ -2130,7 +2154,18 @@ pub fn get_content_mapper_option_diagnostic_location(
         return (None, tsrs_core::undefined_text_range());
     };
     let file = config_file.source_file;
-    (Some(file), TextRange::new(tsrs_scanner::skip_trivia(file.text(), node.pos()), node.end()))
+    (
+        Some(file),
+        TextRange::new(
+            tsrs_scanner::skip_trivia(
+                file.text(),
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            node.end()
+                .expect_source("parsed nodes have source positions"),
+        ),
+    )
 }
 
 // getContentMappersKeySyntax returns the "contentMappers" property key node, used to attribute a
@@ -2142,8 +2177,12 @@ fn get_content_mappers_key_syntax(source_file: Option<P<SourceFile>>) -> Option<
 
 // getContentMapperExtensionSyntax returns the node for a specific extension string within the content
 // mapper at index, falling back to the "extensions" array or the mapper element.
-fn get_content_mapper_extension_syntax(source_file: Option<P<SourceFile>>, index: i32, ext: &str) -> Option<P<Node>> {
-    let node = get_content_mapper_syntax(source_file, index, "extensions");
+fn get_content_mapper_extension_syntax(
+    source_file: Option<P<SourceFile>>,
+    index: usize,
+    ext: &str,
+) -> Option<P<Node>> {
+    let node = get_content_mapper_syntax(source_file, Some(index), "extensions");
     if let Some(node) = node {
         if tsrs_ast::is_array_literal_expression(node) {
             if let Some(element) =
@@ -2166,7 +2205,15 @@ fn set_content_mapper_diagnostic_location(
 ) -> P<Diagnostic> {
     if let (Some(source_file), Some(node)) = (source_file, node) {
         diagnostic.set_file(Some(source_file));
-        diagnostic.set_location(TextRange::new(tsrs_scanner::skip_trivia(source_file.text(), node.pos()), node.end()));
+        diagnostic.set_location(TextRange::new(
+            tsrs_scanner::skip_trivia(
+                source_file.text(),
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            node.end()
+                .expect_source("parsed nodes have source positions"),
+        ));
     }
     diagnostic
 }
@@ -2178,15 +2225,19 @@ pub fn for_each_property_assignment<T>(
     key2: Option<&str>,
 ) -> Option<T> {
     if let Some(object_literal) = object_literal {
-        for property in object_literal.as_object_literal_expression().properties.nodes().iter().copied() {
+        if let Some(result) = object_literal.as_object_literal_expression().properties.nodes().iter().copied().into_iter().find_map(|property| {
             if !tsrs_ast::is_property_assignment(property) {
-                continue;
+                return None;
             }
             if let Some(prop_name) = tsrs_ast::try_get_text_of_property_name(property.name().unwrap()) {
                 if prop_name == key || key2.is_some_and(|key2| key2 == prop_name) {
-                    return callback(property);
+                    return Some(callback(property));
                 }
             }
+
+            None
+        }) {
+            return result;
         }
     }
     None
@@ -2273,32 +2324,31 @@ fn handle_option_config_dir_template_substitution(compiler_options: Option<&mut 
 // (`extensions` is getSupportedExtensions' result as string slices, built once per call of the caller.)
 fn has_file_with_higher_priority_extension(file: &str, extensions: &[Vec<&str>], has_file: impl Fn(&str) -> bool) -> bool {
     let mut extension_group: Vec<&str> = Vec::new();
-    for group in extensions {
-        if tspath::file_extension_is_one_of(file, group) {
-            extension_group.extend(group);
-        }
-    }
+    extension_group.extend(extensions.iter().filter_map(|group| if tspath::file_extension_is_one_of(file, group) { Some(group) } else { None }).flatten());
     if extension_group.is_empty() {
         return false;
     }
-    for ext in extension_group {
+    if let Some(result) = extension_group.into_iter().find_map(|ext| {
         // d.ts files match with .ts extension and with case sensitive sorting the file order for same files with ts tsx and dts extension is
         // d.ts, .ts, .tsx in that order so we need to handle tsx and dts of same same name case here and in remove files with same extensions
         // So dont match .d.ts files with .ts extension
         if tspath::file_extension_is(file, ext) && (ext != tspath::EXTENSION_TS || !tspath::file_extension_is(file, tspath::EXTENSION_DTS)) {
-            return false;
+            return Some(false);
         }
         if has_file(&tspath::change_extension(file, ext)) {
-            if ext == tspath::EXTENSION_DTS
-                && (tspath::file_extension_is(file, tspath::EXTENSION_JS) || tspath::file_extension_is(file, tspath::EXTENSION_JSX))
+            if ext == tspath::EXTENSION_DTS && (tspath::file_extension_is(file, tspath::EXTENSION_JS) || tspath::file_extension_is(file, tspath::EXTENSION_JSX))
             {
                 // LEGACY BEHAVIOR: An off-by-one bug somewhere in the extension priority system for wildcard module loading allowed declaration
                 // files to be loaded alongside their js(x) counterparts. We regard this as generally undesirable, but retain the behavior to
                 // prevent breakage.
-                continue;
+                return None;
             }
-            return true;
+            return Some(true);
         }
+
+        None
+    }) {
+        return result;
     }
     false
 }
@@ -2367,10 +2417,10 @@ pub(crate) fn get_file_names_from_config_specs(
         get_supported_extensions_with_json_if_resolve_json_module(options, &supported_extensions);
     // Literal files are always included verbatim. An "include" or "exclude" specification cannot
     // remove a literal file.
-    for file_name in validated_files_spec {
+    literal_file_map.extend(validated_files_spec.iter().map(|file_name| {
         let file = tspath::get_normalized_absolute_path(file_name, &base_path);
-        literal_file_map.set(key_mappper(file_name), file);
-    }
+        (key_mappper(file_name), file)
+    }));
 
     let mut json_only_include_matchers: Option<Option<vfsmatch::SpecMatcher>> = None;
     if !validated_include_specs.is_empty() {
@@ -2395,11 +2445,10 @@ pub(crate) fn get_file_names_from_config_specs(
                         validated_include_specs.iter().filter(|include| include.ends_with(tspath::EXTENSION_JSON)).cloned().collect();
                     vfsmatch::new_spec_matcher(&includes, &base_path, vfsmatch::Usage::Files, host.use_case_sensitive_file_names())
                 });
-                let mut include_index: i32 = -1;
-                if let Some(matchers) = matchers {
-                    include_index = matchers.match_index(&file);
-                }
-                if include_index != -1 {
+                if matchers
+                    .as_ref()
+                    .is_some_and(|matchers| matchers.match_index(&file).is_some())
+                {
                     let key = key_mappper(&file);
                     if !literal_file_map.contains_key(&key) && !wild_card_json_file_map.contains_key(&key) {
                         wild_card_json_file_map.set(key, file.clone());
@@ -2431,15 +2480,9 @@ pub(crate) fn get_file_names_from_config_specs(
         }
     }
     let mut files: Vec<String> = Vec::with_capacity(literal_file_map.len() + wildcard_file_map.len() + wild_card_json_file_map.len());
-    for file in literal_file_map.values() {
-        files.push(file.clone());
-    }
-    for file in wildcard_file_map.values() {
-        files.push(file.clone());
-    }
-    for file in wild_card_json_file_map.values() {
-        files.push(file.clone());
-    }
+    files.extend(literal_file_map.values().map(std::clone::Clone::clone));
+    files.extend(wildcard_file_map.values().map(std::clone::Clone::clone));
+    files.extend(wild_card_json_file_map.values().map(std::clone::Clone::clone));
     (files, literal_file_map.len())
 }
 
@@ -2459,11 +2502,7 @@ pub fn get_supported_extensions(compiler_options: Option<&CompilerOptions>, extr
     }
     let flat_builtins: Vec<&String> = builtins.iter().flatten().collect();
     let mut result: Vec<Vec<String>> = Vec::new();
-    for ext in extra_extensions {
-        if !flat_builtins.contains(&ext) {
-            result.push(vec![ext.clone()]);
-        }
-    }
+    result.extend(extra_extensions.iter().filter_map(|ext| if !flat_builtins.contains(&ext) { Some(vec![ext.clone()]) } else { None }));
     if result.is_empty() {
         return builtins;
     }
@@ -2547,7 +2586,7 @@ pub fn stringify_json(value: &CompilerOptionsValue) -> String {
 
 fn write_json_string(out: &mut String, s: &str) {
     out.push('"');
-    for c in s.chars() {
+    let out = s.chars().fold(out, |out, c| {
         match c {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
@@ -2556,10 +2595,14 @@ fn write_json_string(out: &mut String, s: &str) {
             '\t' => out.push_str("\\t"),
             '\u{8}' => out.push_str("\\b"),
             '\u{c}' => out.push_str("\\f"),
-            c if (c as u32) < 0x20 => { let _ = write!(out, "\\u{:04x}", c as u32); },
+            c if (c as u32) < 0x20 => {
+                let _ = write!(out, "\\u{:04x}", c as u32);
+            }
             c => out.push(c),
         }
-    }
+
+        out
+    });
     out.push('"');
 }
 
@@ -2651,12 +2694,12 @@ pub(crate) fn locale_parse(locale_str: &str) -> bool {
         i += 1;
     }
     // variants
-    while i < subtags.len()
-        && is_alnum(subtags[i])
-        && ((5..=8).contains(&subtags[i].len()) || (subtags[i].len() == 4 && subtags[i].as_bytes()[0].is_ascii_digit()))
-    {
-        i += 1;
-    }
+    i += (i..subtags.len())
+        .take_while(|&index| {
+            is_alnum(subtags[index])
+                && ((5..=8).contains(&subtags[index].len()) || (subtags[index].len() == 4 && subtags[index].as_bytes()[0].is_ascii_digit()))
+        })
+        .count();
     // extensions and private use
     while i < subtags.len() {
         let singleton = subtags[i];
@@ -2666,9 +2709,8 @@ pub(crate) fn locale_parse(locale_str: &str) -> bool {
         let private_use = singleton.eq_ignore_ascii_case("x");
         i += 1;
         let start = i;
-        while i < subtags.len() && is_alnum(subtags[i]) && subtags[i].len() <= 8 && (private_use || subtags[i].len() >= 2) {
-            i += 1;
-        }
+        i +=
+            (i..subtags.len()).take_while(|&index| is_alnum(subtags[index]) && subtags[index].len() <= 8 && (private_use || subtags[index].len() >= 2)).count();
         if i == start {
             return false;
         }

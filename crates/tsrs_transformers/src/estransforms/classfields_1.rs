@@ -3,12 +3,13 @@
 
 use super::*;
 use printer::{EmitFlags, PrivateIdentifierKind};
+use tsrs_core::TextPos;
 
 bitflags::bitflags! {
     // classfields.go:18
     // classFacts tracks various facts about a class being transformed.
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub(crate) struct classFacts: i32 {
+    pub(crate) struct classFacts: u32 {
         const None = 0;
         const ClassWasDecorated = 1 << 0;
         const NeedsClassConstructorReference = 1 << 1;
@@ -293,12 +294,9 @@ impl classFieldsTransformer {
         if !self.requires_block_scoped_var() {
             return false;
         }
-        for member in self.current_class_container.get().unwrap().members() {
-            if ast::is_property_declaration(*member) && !ast::has_static_modifier(*member) && member.name().is_some_and(|n| ast::is_computed_property_name(n)) {
-                return true;
-            }
-        }
-        false
+        self.current_class_container.get().unwrap().members().iter().any(|member| {
+            ast::is_property_declaration(*member) && !ast::has_static_modifier(*member) && member.name().is_some_and(ast::is_computed_property_name)
+        })
     }
 
     // classfields.go:220
@@ -837,7 +835,7 @@ impl classFieldsTransformer {
         if self.current_class_element.get().is_some() {
             let original = self.emit_context().most_original(Some(node));
             if original != Some(node) && self.current_class_container.get().is_some() {
-                for member in self.current_class_container.get().unwrap().members() {
+                if let Some(result) = self.current_class_container.get().unwrap().members().iter().find_map(|member| {
                     if self.emit_context().most_original(Some(*member)) == original && ast::is_static(*member) {
                         // The function expression originates from a static class member (e.g., a
                         // descriptor method synthesized by the ES decorator transformer for a
@@ -845,8 +843,12 @@ impl classFieldsTransformer {
                         // that visitThisExpression can substitute `this` with `_classThis`.
                         // Non-static members must NOT preserve the class element because `this`
                         // inside their descriptor functions should remain dynamic.
-                        return self.visit_each_child_of_node(node);
+                        return Some(self.visit_each_child_of_node(node));
                     }
+
+                    None
+                }) {
+                    return result;
                 }
             }
         }
@@ -1108,8 +1110,15 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:1027
-    pub(crate) fn create_private_identifier_access_helper(&self, info: P<privateIdentifierInfo>, receiver: P<Node>) -> P<Node> {
-        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+    pub(crate) fn create_private_identifier_access_helper(
+        &self,
+        info: P<privateIdentifierInfo>,
+        receiver: P<Node>,
+    ) -> P<Node> {
+        self.emit_context().set_comment_range(
+            receiver,
+            tsrs_core::TextRange::from_text_pos(TextPos::Synthetic, receiver.end()),
+        );
 
         match info.kind {
             PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_get_helper(receiver, info.brand_check_identifier.unwrap(), info.kind, info.getter_name.get()),
@@ -1717,7 +1726,10 @@ impl classFieldsTransformer {
             );
         }
 
-        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+        self.emit_context().set_comment_range(
+            receiver,
+            tsrs_core::TextRange::from_text_pos(TextPos::Synthetic, receiver.end()),
+        );
 
         match info.kind {
             PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_set_helper(receiver, info.brand_check_identifier.unwrap(), right, info.kind, info.setter_name.get()),
@@ -1792,12 +1804,7 @@ impl classFieldsTransformer {
     // references to the class's own constructor. Replaces Strada's
     // resolver.hasNodeCheckFlag(node, NodeCheckFlags.ContainsConstructorReference).
     pub(crate) fn class_contains_constructor_reference(&self, node: P<Node>) -> bool {
-        for member in node.members() {
-            if self.member_contains_constructor_reference(*member, node) {
-                return true;
-            }
-        }
-        false
+        node.members().iter().any(|member| self.member_contains_constructor_reference(*member, node))
     }
 
     // classfields.go:1747

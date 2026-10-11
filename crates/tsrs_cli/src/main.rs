@@ -2,6 +2,9 @@
 #[cfg(not(feature = "alloc-profile"))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+#[cfg(feature = "alloc-profile")]
+#[global_allocator]
+static GLOBAL: tsrs_core::alloc_profile::CountingAllocator = tsrs_core::alloc_profile::CountingAllocator;
 
 /// mimalloc as the global allocator, like `mimalloc_safe::MiMalloc` except that an allocation whose alignment
 /// mimalloc gives every block of its size (at most 16 bytes, and at most the size) takes the plain entry points
@@ -165,10 +168,8 @@ fn main() {
         .join()
         .unwrap_or(tsc::ExitStatus::NotImplemented);
     // TSRS_UNION_CACHE_STATS / TSRS_UNION_CACHE=shadow: the union front cache's totals.
-    #[cfg(feature = "checker")]
     tsrs_compiler::Checker::union_cache_finish();
     // TSRS_INFER_MEMO_STATS / TSRS_INFER_MEMO=shadow: the inference memo's totals.
-    #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
     tsrs_core::memsplit::report("exit");
     let _ = std::io::Write::flush(&mut std::io::stdout());

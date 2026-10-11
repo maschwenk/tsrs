@@ -140,9 +140,11 @@ pub(crate) fn force_shared_lists(program: &crate::program::Program) {
     }
     let mut lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>> = Vec::new();
     if !std::env::var_os("TSRS_LAZY_DTS_SHARED").is_some_and(|v| v == "0") {
-        for file in global_library_files(program) {
-            lists.extend(file.lazy_lists.get().iter().copied().filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED));
-        }
+        lists.extend(
+            global_library_files(program)
+                .into_iter()
+                .flat_map(|file| file.lazy_lists.get().iter().copied().filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED)),
+        );
     }
     let mut by_name: FxHashMap<&'static str, Vec<P<tsrs_ast::Symbol>>> = FxHashMap::default();
     let mut add = |table: Option<P<tsrs_ast::SymbolTable>>| {
@@ -161,12 +163,15 @@ pub(crate) fn force_shared_lists(program: &crate::program::Program) {
             }
         }
     }
-    #[expect(clippy::iter_over_hash_type, reason = "collects lists to force; forcing order cannot be seen")]
-    for symbols in by_name.values() {
-        if symbols.len() > 1 {
-            lists.extend(symbols.iter().filter_map(|s| s.lazy_list()).filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED));
-        }
-    }
+    // collects lists to force; forcing order cannot be seen
+    lists.extend(
+        by_name
+            .values()
+            .filter_map(|symbols| {
+                if symbols.len() > 1 { Some(symbols.iter().filter_map(|s| s.lazy_list()).filter(|l| l.state() == tsrs_ast::lazylist::DEFERRED)) } else { None }
+            })
+            .flatten(),
+    );
     use rayon::prelude::*;
     tsrs_core::phases::time("Lazy lists: shared", || crate::program::worker_pool().install(|| lists.par_iter().for_each(|l| l.ensure())));
 }
@@ -213,10 +218,7 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
 /// whatever the value.
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
-    #[cfg(feature = "checker")]
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
-    #[cfg(not(feature = "checker"))]
-    let checker_census = false;
     if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
         return LeafSettings::default();
     }
@@ -457,16 +459,14 @@ fn leaf_referred(program: &Program, has_region: impl Fn(P<SourceFile>) -> bool +
 /// 24 ms on one thread, and collecting every importer's names before that another 3-5 ms on one thread.
 fn referred_files(program: &Program, wanted: impl Fn(P<SourceFile>) -> bool + Sync) -> FxHashSet<P<SourceFile>> {
     let mut referred = FxHashSet::default();
-    #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order of insertion cannot be seen")]
-    for (path, reasons) in &program.file_include_data.file_include_reasons {
+    // builds a set; the order of insertion cannot be seen
+    referred.extend(program.file_include_data.file_include_reasons.iter().filter_map(|(path, reasons)| {
         if reasons.iter().any(|r| !r.is_root_file()) {
-            if let Some(&file) = program.files_by_path.get(path) {
-                if wanted(file) {
-                    referred.insert(file);
-                }
-            }
+            if let Some(&file) = program.files_by_path.get(path) { if wanted(file) { Some(file) } else { None } } else { None }
+        } else {
+            None
         }
-    }
+    }));
     let by_name = files_by_name(program);
     let target = |from: Option<P<SourceFile>>, name: &str| -> Option<P<SourceFile>> {
         let file = by_name.get(name).copied().or_else(|| program.get_source_file_for_resolved_module(name))?;

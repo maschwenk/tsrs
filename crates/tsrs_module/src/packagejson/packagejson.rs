@@ -73,30 +73,22 @@ impl Fields {
             if let Some(deps) = deps.get_value() {
                 let mut sorted: Vec<(&String, &String)> = deps.iter().collect();
                 sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
-                for (name, version) in sorted {
-                    if !f(name, version, field) {
-                        return;
-                    }
+                if !sorted.into_iter().all(|(name, version)| f(name, version, field)) {
+                    return;
                 }
             }
         }
     }
 
-    #[expect(clippy::iter_over_hash_type, reason = "collects the names into a set")]
+    // collects the names into a set
     pub fn get_runtime_dependency_names(&self) -> Set<String> {
         let deps = &self.dependencies.value;
         let peer_deps = &self.peer_dependencies.value;
         let opt_deps = &self.optional_dependencies.value;
         let mut names = new_set_with_size_hint(deps.len() + peer_deps.len() + opt_deps.len());
-        for name in deps.keys() {
-            names.add(name.clone());
-        }
-        for name in peer_deps.keys() {
-            names.add(name.clone());
-        }
-        for name in opt_deps.keys() {
-            names.add(name.clone());
-        }
+        names.m.extend(deps.keys().map(std::clone::Clone::clone));
+        names.m.extend(peer_deps.keys().map(std::clone::Clone::clone));
+        names.m.extend(opt_deps.keys().map(std::clone::Clone::clone));
         names
     }
 }

@@ -78,12 +78,7 @@ pub fn to_upper_js(str: &str) -> String {
 
 fn to_lower_ascii(str: &str) -> Option<String> {
     let mut needs_mapping = false;
-    for &ch in str.as_bytes() {
-        if ch >= 0x80 {
-            return None;
-        }
-        needs_mapping = needs_mapping || ch.is_ascii_uppercase();
-    }
+    needs_mapping = str.bytes().try_fold(needs_mapping, |needs_mapping, ch| if ch >= 0x80 { None } else { Some(needs_mapping || ch.is_ascii_uppercase()) })?;
     if !needs_mapping {
         return Some(str.to_string());
     }
@@ -92,12 +87,7 @@ fn to_lower_ascii(str: &str) -> Option<String> {
 
 fn to_upper_ascii(str: &str) -> Option<String> {
     let mut needs_mapping = false;
-    for &ch in str.as_bytes() {
-        if ch >= 0x80 {
-            return None;
-        }
-        needs_mapping = needs_mapping || ch.is_ascii_lowercase();
-    }
+    needs_mapping = str.bytes().try_fold(needs_mapping, |needs_mapping, ch| if ch >= 0x80 { None } else { Some(needs_mapping || ch.is_ascii_lowercase()) })?;
     if !needs_mapping {
         return Some(str.to_string());
     }
@@ -140,7 +130,7 @@ mod tests {
 
     #[test]
     fn test_js_casing() {
-        let e = |r: i32| encode_js_string_rune(r);
+        let e = |r: Rune| encode_js_string_rune(r);
         let tests: Vec<(&str, String, String)> = vec![
             ("ascii lowercase", to_lower_js("HELLO"), "hello".into()),
             ("ascii uppercase", to_upper_js("hello"), "HELLO".into()),

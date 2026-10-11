@@ -39,7 +39,7 @@ pub(crate) fn get_error_baseline(
     t: &T,
     input_files: &[TestFile],
     diagnostics: &[FourslashDiagnostic],
-    compare_diagnostics: impl Fn(&FourslashDiagnostic, &FourslashDiagnostic) -> i32,
+    compare_diagnostics: impl Fn(&FourslashDiagnostic, &FourslashDiagnostic) -> std::cmp::Ordering,
 ) -> String {
     let output_lines = iterate_error_baseline(t, input_files, diagnostics, compare_diagnostics);
     output_lines.concat()
@@ -50,10 +50,10 @@ fn iterate_error_baseline(
     t: &T,
     input_files: &[TestFile],
     input_diagnostics: &[FourslashDiagnostic],
-    compare_diagnostics: impl Fn(&FourslashDiagnostic, &FourslashDiagnostic) -> i32,
+    compare_diagnostics: impl Fn(&FourslashDiagnostic, &FourslashDiagnostic) -> std::cmp::Ordering,
 ) -> Vec<String> {
     let mut diagnostics: Vec<&FourslashDiagnostic> = input_diagnostics.iter().collect();
-    diagnostics.sort_by(|a, b| compare_diagnostics(a, b).cmp(&0));
+    diagnostics.sort_by(|a, b| compare_diagnostics(a, b));
 
     let mut output_lines = String::new();
     let mut first_line = true;
@@ -71,22 +71,22 @@ fn iterate_error_baseline(
         let message = flatten_diagnostic_message(diag);
 
         let mut err_lines = Vec::new();
-        for line in remove_test_path_prefixes(&message).split('\n') {
+        err_lines.extend(remove_test_path_prefixes(&message).split('\n').filter_map(|line| {
             let line = line.strip_suffix('\r').unwrap_or(line);
             if line.is_empty() {
-                continue;
+                return None;
             }
-            err_lines.push(format!("!!! {} TS{}: {}", diag.category.name(), diag.code, line));
-        }
+            Some(format!("!!! {} TS{}: {}", diag.category.name(), diag.code, line))
+        }));
 
-        for info in &diag.related_diagnostics {
+        err_lines.extend(diag.related_diagnostics.iter().map(|info| {
             let mut location = format!(" {}", format_location(info));
             location = remove_test_path_prefixes(&location);
             if !location.is_empty() && is_default_library_file(&info.file.file_name) {
                 location = DIAGNOSTICS_LOCATION_PATTERN.replace_all(&location, "$1:--:--").into_owned();
             }
-            err_lines.push(format!("!!! related TS{}{}: {}", info.code, location, flatten_diagnostic_message(info)));
-        }
+            format!("!!! related TS{}{}: {}", info.code, location, flatten_diagnostic_message(info))
+        }));
 
         for e in err_lines {
             output_lines.push_str(new_line());
@@ -110,7 +110,14 @@ fn iterate_error_baseline(
         let file_errors: Vec<&FourslashDiagnostic> = diagnostics
             .iter()
             .copied()
-            .filter(|e| tspath::compare_paths(&remove_test_path_prefixes(&e.file.file_name), &unit, &ComparePathsOptions::default()) == 0)
+            .filter(|e| {
+                tspath::compare_paths(
+                    &remove_test_path_prefixes(&e.file.file_name),
+                    &unit,
+                    &ComparePathsOptions::default(),
+                )
+                .is_eq()
+            })
             .collect();
 
         // Header
@@ -131,22 +138,35 @@ fn iterate_error_baseline(
 
             let this_line_start = line_starts[line_index];
             // On the last line of the file, fake the next line start number so that we handle errors on the last character of the file correctly
-            let next_line_start = if line_index == lines.len() - 1 { content.len() as i32 } else { line_starts[line_index + 1] };
+            let next_line_start = if line_index == lines.len() - 1 {
+                u32::try_from(content.len()).expect("source length exceeds u32")
+            } else {
+                line_starts[line_index + 1]
+            };
             // Emit this line from the original file
             output_lines.push_str(new_line());
             output_lines.push_str("    ");
             output_lines.push_str(&tsrs_core::utf8::from_utf8_lossy(line));
             for err_diagnostic in &file_errors {
                 // Does any error start or continue on to this line? Emit squiggles
-                let err_start = err_diagnostic.loc.pos();
-                let end = err_start + err_diagnostic.loc.len();
-                if end >= this_line_start && (err_start < next_line_start || line_index == lines.len() - 1) {
+                let err_start = err_diagnostic
+                    .loc
+                    .pos()
+                    .expect_source("fourslash diagnostics have source positions");
+                let end = err_diagnostic
+                    .loc
+                    .end()
+                    .expect_source("fourslash diagnostics have source positions");
+                if end >= this_line_start
+                    && (err_start < next_line_start || line_index == lines.len() - 1)
+                {
                     // How many characters from the start of this line the error starts at (could be positive or negative)
-                    let relative_offset = err_start - this_line_start;
+                    let relative_offset = i64::from(err_start) - i64::from(this_line_start);
                     // How many characters of the error are on this line (might be longer than this line in reality)
-                    let length = (end - err_start) - 0.max(this_line_start - err_start);
+                    let length = end.saturating_sub(err_start.max(this_line_start));
                     // Calculate the start of the squiggle
-                    let squiggle_start = 0.max(relative_offset) as usize;
+                    let squiggle_start = usize::try_from(relative_offset.max(0))
+                        .expect("squiggle offset exceeds usize");
                     output_lines.push_str(new_line());
                     output_lines.push_str("    ");
                     output_lines.push_str(&replace_non_whitespace(&line[..squiggle_start.min(line.len())]));
@@ -179,32 +199,47 @@ fn rune_count(bytes: &[u8]) -> usize {
 // nonWhitespace.ReplaceAllString(s, " "), with Go's ASCII-only `\S`.
 fn replace_non_whitespace(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
-    for chunk in bytes.utf8_chunks() {
-        for c in chunk.valid().chars() {
-            out.push(if matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' ') { c } else { ' ' });
-        }
-        for _ in chunk.invalid() {
-            out.push(' ');
-        }
-    }
+    out.extend(bytes.utf8_chunks().flat_map(|chunk| {
+        chunk
+            .valid()
+            .chars()
+            .map(|c| if matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' ') { c } else { ' ' })
+            .chain(std::iter::repeat_n(' ', chunk.invalid().len()))
+    }));
     out
 }
 
 // error_baseline.go:272 (with a writer that drops the styles: diagnosticwriter.WriteLocation)
 fn format_location(diag: &FourslashDiagnostic) -> String {
-    let (first_line, first_char) = get_ecma_line_and_utf16_character_of_position(diag, diag.loc.pos());
-    let relative_file_name = tspath::convert_to_relative_path(&diag.file.file_name, &ComparePathsOptions::default());
-    format!("{}:{}:{}", relative_file_name, first_line + 1, first_char + 1)
+    let (first_line, first_char) = get_ecma_line_and_utf16_character_of_position(
+        diag,
+        diag.loc
+            .pos()
+            .expect_source("fourslash diagnostics have source positions"),
+    );
+    let relative_file_name =
+        tspath::convert_to_relative_path(&diag.file.file_name, &ComparePathsOptions::default());
+    format!(
+        "{}:{}:{}",
+        relative_file_name,
+        first_line + 1,
+        first_char + 1
+    )
 }
 
 // diagnosticwriter.GetECMALineAndUTF16CharacterOfPosition
-fn get_ecma_line_and_utf16_character_of_position(diag: &FourslashDiagnostic, pos: i32) -> (usize, i32) {
+fn get_ecma_line_and_utf16_character_of_position(
+    diag: &FourslashDiagnostic,
+    pos: u32,
+) -> (usize, u32) {
     let line_map = &diag.file.ecma_line_map;
-    let line = tsrs_scanner::compute_line_of_position(line_map, pos).max(0) as usize;
-    let start = line_map[line].max(0) as usize;
+    let line = tsrs_scanner::compute_line_of_position(line_map, pos);
+    let start = line_map[line] as usize;
     let text = &diag.file.content;
-    let end = (pos.max(0) as usize).min(text.len()).max(start);
-    let character = text.get(start..end).map_or(0, |s| s.chars().map(|c| c.len_utf16() as i32).sum());
+    let end = (pos as usize).min(text.len()).max(start);
+    let character = text
+        .get(start..end)
+        .map_or(0, |s| s.chars().map(|c| c.len_utf16() as u32).sum());
     (line, character)
 }
 
@@ -215,11 +250,29 @@ fn flatten_diagnostic_message(diag: &FourslashDiagnostic) -> String {
 
 // diagnosticwriter.WriteFormatDiagnostic
 fn write_format_diagnostic(output: &mut String, diagnostic: &FourslashDiagnostic) {
-    let (line, character) = get_ecma_line_and_utf16_character_of_position(diagnostic, diagnostic.loc.pos());
-    let relative_file_name = tspath::convert_to_relative_path(&diagnostic.file.file_name, &ComparePathsOptions::default());
-    output.push_str(&format!("{}({},{}): ", relative_file_name, line + 1, character + 1));
+    let (line, character) = get_ecma_line_and_utf16_character_of_position(
+        diagnostic,
+        diagnostic
+            .loc
+            .pos()
+            .expect_source("fourslash diagnostics have source positions"),
+    );
+    let relative_file_name = tspath::convert_to_relative_path(
+        &diagnostic.file.file_name,
+        &ComparePathsOptions::default(),
+    );
+    output.push_str(&format!(
+        "{}({},{}): ",
+        relative_file_name,
+        line + 1,
+        character + 1
+    ));
 
-    output.push_str(&format!("{} TS{}: ", diagnostic.category.name(), diagnostic.code));
+    output.push_str(&format!(
+        "{} TS{}: ",
+        diagnostic.category.name(),
+        diagnostic.code
+    ));
     output.push_str(&flatten_diagnostic_message(diagnostic));
     output.push_str(HARNESS_NEW_LINE);
 }

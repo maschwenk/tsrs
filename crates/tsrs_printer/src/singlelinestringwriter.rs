@@ -43,11 +43,11 @@ impl EmitTextWriter for singleLineStringWriter {
         0
     }
 
-    fn get_indent(&self) -> i32 {
+    fn get_indent(&self) -> u32 {
         0
     }
 
-    fn get_line(&self) -> i32 {
+    fn get_line(&self) -> u32 {
         0
     }
 
@@ -55,8 +55,8 @@ impl EmitTextWriter for singleLineStringWriter {
         self.builder.clone()
     }
 
-    fn get_text_pos(&self) -> i32 {
-        self.builder.len() as i32
+    fn get_text_pos(&self) -> u32 {
+        self.builder.len() as u32
     }
 
     fn has_trailing_comment(&self) -> bool {

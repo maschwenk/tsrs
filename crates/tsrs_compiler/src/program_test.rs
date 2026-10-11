@@ -167,7 +167,12 @@ fn external_checker_pool_diagnostics() {
             .get_semantic_diagnostics(&ctx, None)
             .iter()
             .chain(program.get_suggestion_diagnostics(&ctx, None).iter())
-            .map(|d| format!("{}:{}:{}", d.file().unwrap().file_name(), d.pos(), d.code()))
+            .map(|d| {
+                let pos = d
+                    .pos()
+                    .map_or_else(|| "-".to_string(), |pos| pos.to_string());
+                format!("{}:{pos}:{}", d.file().unwrap().file_name(), d.code())
+            })
             .collect()
     };
     let expected = messages(builtin);

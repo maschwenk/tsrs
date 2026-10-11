@@ -63,9 +63,7 @@ pub fn get_symbol_jsdoc_tags(symbol: Option<P<Symbol>>) -> Vec<JSDocTagInfo> {
         if has_typedef && !has_param_or_return {
             continue;
         }
-        for &tag in tags {
-            infos.push(JSDocTagInfo { name: tag.tag_name().text().to_string(), text: get_jsdoc_tag_text(tag) });
-        }
+        infos.extend(tags.iter().map(|&tag| JSDocTagInfo { name: tag.tag_name().text().to_string(), text: get_jsdoc_tag_text(tag) }));
     }
     infos
 }
@@ -116,7 +114,7 @@ fn get_jsdoc_tag_text(tag: P<Node>) -> String {
             if let Some(constraint) = template_tag.constraint {
                 b.push_str(&scanner::get_text_of_node(constraint));
             }
-            for (i, &tp) in template_tag.type_parameters.nodes().iter().enumerate() {
+            b = template_tag.type_parameters.nodes().iter().enumerate().fold(b, |mut b, (i, &tp)| {
                 if i == 0 && !b.is_empty() {
                     b.push(' ');
                 }
@@ -124,7 +122,9 @@ fn get_jsdoc_tag_text(tag: P<Node>) -> String {
                     b.push_str(", ");
                 }
                 b.push_str(&scanner::get_text_of_node(tp));
-            }
+
+                b
+            });
             if !comment.is_empty() {
                 if !b.is_empty() {
                     b.push(' ');
@@ -186,10 +186,14 @@ pub(crate) fn get_jsdoc_or_tag(c: &mut Checker, node: Option<P<Node>>, seen_symb
         if ast::is_identifier(name) {
             let object_type = c.get_type_at_location(node.parent().unwrap());
             if let Some(prop) = c.get_property_of_type_exported(object_type, name.text()) {
-                for &d in prop.declarations() {
+                if let Some(result) = prop.declarations().iter().find_map(|&d| {
                     if let Some(jsdoc) = get_jsdoc(d) {
-                        return Some(jsdoc);
+                        return Some(Some(jsdoc));
                     }
+
+                    None
+                }) {
+                    return result;
                 }
             }
         }
@@ -230,16 +234,20 @@ pub(crate) fn get_jsdoc_or_tag(c: &mut Checker, node: Option<P<Node>>, seen_symb
                         }
                     }
                 } else {
-                    for &base_type in c.get_base_types_exported(class_type) {
+                    if let Some(result) = c.get_base_types_exported(class_type).iter().find_map(|&base_type| {
                         if let Some(prop) = c.get_property_of_type_exported(base_type, symbol.name()) {
                             if let Some(value_declaration) = prop.value_declaration() {
                                 if seen_symbols.insert(prop) {
                                     if let Some(js_doc) = get_jsdoc_or_tag(c, Some(value_declaration), seen_symbols) {
-                                        return Some(js_doc);
+                                        return Some(Some(js_doc));
                                     }
                                 }
                             }
                         }
+
+                        None
+                    }) {
+                        return result;
                     }
                 }
             }
@@ -259,10 +267,8 @@ fn get_matching_jsdoc_tag(
     if let Some(jsdoc) = get_jsdoc_or_tag(c, Some(node), seen_symbols) {
         if jsdoc.kind() == Kind::JSDoc {
             if let Some(tags) = jsdoc.as_jsdoc().tags {
-                for &tag in tags.nodes() {
-                    if match_(tag, name) {
-                        return Some(tag);
-                    }
+                if let Some(result) = tags.nodes().iter().find_map(|&tag| if match_(tag, name) { Some(Some(tag)) } else { None }) {
+                    return result;
                 }
             }
         }
@@ -289,14 +295,8 @@ fn get_jsdoc_parameter_tag_by_position(c: &mut Checker, param: P<Node>) -> Optio
     // Collect all @param tags in order
     let tags = jsdoc.as_jsdoc().tags?;
 
-    let mut param_tag_index = 0;
-    for &tag in tags.nodes() {
-        if tag.kind() == Kind::JSDocParameterTag {
-            if param_tag_index == param_index {
-                return Some(tag);
-            }
-            param_tag_index += 1;
-        }
+    if let Some(&tag) = tags.nodes().iter().filter(|tag| tag.kind() == Kind::JSDocParameterTag).nth(param_index as usize) {
+        return Some(tag);
     }
     None
 }

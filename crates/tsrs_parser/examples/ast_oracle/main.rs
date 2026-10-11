@@ -179,11 +179,25 @@ impl Dumper {
 
     fn diagnostics(&mut self, tag: &str, diags: &[P<Diagnostic>]) {
         for diag in diags {
-            let _ = write!(self.sb, "{} {} {} {} {} ", tag, diag.code(), diag.category() as i32, diag.pos(), diag.len());
+            let _ = write!(
+                self.sb,
+                "{} {} {} {} {} ",
+                tag,
+                diag.code(),
+                diag.category() as i32,
+                diag.pos().map_or(-1_i64, i64::from),
+                diag.len().map_or(-1_i64, i64::from)
+            );
             escape(&mut self.sb, diag.message_text());
             let _ = write!(self.sb, " C{} R", diag.message_chain().len());
             for r in diag.related_information() {
-                let _ = write!(self.sb, " {}:{}:{}", r.code(), r.pos(), r.len());
+                let _ = write!(
+                    self.sb,
+                    " {}:{}:{}",
+                    r.code(),
+                    r.pos().map_or(-1_i64, i64::from),
+                    r.len().map_or(-1_i64, i64::from)
+                );
             }
             self.sb.push('\n');
         }

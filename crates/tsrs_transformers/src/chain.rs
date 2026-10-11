@@ -15,9 +15,11 @@ impl chainedTransformer {
             panic!("Chained transform passed non-sourcefile initial node");
         }
         let mut result = node.as_source_file_p();
-        for t in &self.components {
+        result = self.components.iter().fold(result, |mut result, t| {
             result = t.transform_source_file(result);
-        }
+
+            result
+        });
         result.as_node()
     }
 }
@@ -48,12 +50,10 @@ pub fn chain(transforms: &[TransformerFactory]) -> Box<dyn Fn(&TransformOptions)
     let transforms = transforms.to_vec();
     Box::new(move |opt: &TransformOptions| {
         let mut constructed: Vec<P<Transformer>> = Vec::with_capacity(transforms.len());
-        for t in &transforms {
+        constructed.extend(transforms.iter().filter_map(|t| {
             // TODO: flatten nested chains?
-            if let Some(result) = t(opt) {
-                constructed.push(result);
-            }
-        }
+            if let Some(result) = t(opt) { Some(result) } else { None }
+        }));
         match constructed.len() {
             0 => return None,
             1 => return Some(constructed[0]),

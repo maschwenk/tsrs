@@ -13,7 +13,7 @@ use std::sync::OnceLock;
 use rustc_hash::FxHashMap;
 use tsrs_ast::*;
 use tsrs_core::goslices::sort_func;
-use tsrs_core::{binary_search_unique_func, P};
+use tsrs_core::{P, TextPos, binary_search_unique_func};
 
 use crate::format::*;
 use crate::generated::{children_property_mask, node_common_data, node_data_type, record_extended_data, record_node_strings};
@@ -62,18 +62,19 @@ impl NodeIndexTable {
             let mut idx: Vec<u32> = (0..self.nodes.len() as u32).filter(|&i| self.nodes[i as usize].is_some()).collect();
             let nodes = &self.nodes;
             sort_func(&mut idx, |&a, &b| {
-                let (ia, ib) = (get_node_id(nodes[a as usize].unwrap()), get_node_id(nodes[b as usize].unwrap()));
-                ia.cmp(&ib) as i32
+                let (ia, ib) = (
+                    get_node_id(nodes[a as usize].unwrap()),
+                    get_node_id(nodes[b as usize].unwrap()),
+                );
+                ia.cmp(&ib)
             });
             idx
         });
         let target = get_node_id(node);
-        let (i, found) = binary_search_unique_func(sorted, |_, &el| get_node_id(self.nodes[el as usize].unwrap()).cmp(&target) as i32);
-        if found {
-            sorted[i]
-        } else {
-            0
-        }
+        let (i, found) = binary_search_unique_func(sorted, |_, &el| {
+            get_node_id(self.nodes[el as usize].unwrap()).cmp(&target)
+        });
+        if found { sorted[i] } else { 0 }
     }
 
     /// The node at encoder index `index` (`None` for 0, NodeList records and out-of-range indices).
@@ -99,15 +100,16 @@ pub struct EncodeContext {
 }
 
 impl EncodeContext {
-    fn utf16(&self, pos: i32) -> u32 {
-        self.position_map.utf8_to_utf16(pos as i64) as u32
+    fn utf16(&self, pos: TextPos) -> u32 {
+        match pos {
+            TextPos::Synthetic => u32::MAX,
+            TextPos::Source(pos) => self.position_map.utf8_to_utf16(i64::from(pos.get())) as u32,
+        }
     }
 }
 
 pub(crate) fn append_u32s(buf: &mut Vec<u8>, values: &[u32]) {
-    for v in values {
-        buf.extend_from_slice(&v.to_le_bytes());
-    }
+    buf.extend(values.iter().flat_map(|v| v.to_le_bytes()));
 }
 
 /// Go `hasModifiers`.
@@ -269,8 +271,25 @@ impl Walker for EncodeState {
         self.node_count += 1;
         self.table.push(None);
         self.link_prev();
-        let (pos, end) = (self.cx.utf16(list.pos()), self.cx.utf16(list.end()));
-        let values = [SYNTAX_KIND_NODE_LIST, pos, end, 0, self.parent_index, list.nodes().len() as u32, list.has_trailing_comma() as u32];
+        let pos = self.cx.utf16(list.pos());
+        let end = if list
+            .nodes()
+            .last()
+            .is_some_and(|node| node.has_trailing_comma_marker())
+        {
+            u32::MAX - 1
+        } else {
+            self.cx.utf16(list.end())
+        };
+        let values = [
+            SYNTAX_KIND_NODE_LIST,
+            pos,
+            end,
+            0,
+            self.parent_index,
+            list.nodes().len() as u32,
+            list.has_trailing_comma() as u32,
+        ];
         append_u32s(&mut self.nodes, &values);
         self.descend()
     }
@@ -338,9 +357,7 @@ fn encode_tree(root: P<Node>, source_file: Option<&'static SourceFile>) -> Resul
         }
         if total > 0 {
             let mut map = FxHashMap::with_capacity_and_hasher(total, Default::default());
-            for &n in sf.imports.get().iter().chain(sf.module_augmentations.get()) {
-                map.insert(n, 0);
-            }
+            map.extend(sf.imports.get().iter().chain(sf.module_augmentations.get()).map(|&n| (n, 0)));
             if let Some(e) = emi.filter(|&e| e != root) {
                 map.insert(e, 0);
             }
@@ -477,8 +494,8 @@ pub(crate) fn record_extended_data_source_file(node: P<Node>, cx: &mut EncodeCon
     // file name and no diagnostic directives. These are exactly the values the pinned encoder writes for a file
     // without content-mapper info; encoding content-mapper info is not implemented.
     let original_text_index = text_index;
-    let file_name_index = cx.strs.add(sf.file_name(), Kind::Unknown, 0, 0);
-    let path_index = cx.strs.add(&sf.path().0, Kind::Unknown, 0, 0);
+    let file_name_index = cx.strs.add(sf.file_name(), Kind::Unknown, 0u32, 0u32);
+    let path_index = cx.strs.add(&sf.path().0, Kind::Unknown, 0u32, 0u32);
     let pm = &cx.position_map;
     let referenced = encode_file_references(sf.referenced_files.get(), pm, &mut cx.structured_data);
     let type_refs = encode_file_references(sf.type_reference_directives.get(), pm, &mut cx.structured_data);
@@ -587,8 +604,22 @@ fn encode_file_references(refs: &[P<FileReference>], pm: &PositionMap, buf: &mut
     msgpack::write_array_header(buf, refs.len());
     for r in refs {
         msgpack::write_array_header(buf, 5);
-        msgpack::write_uint(buf, pm.utf8_to_utf16(r.text_range.pos() as i64) as u32);
-        msgpack::write_uint(buf, pm.utf8_to_utf16(r.text_range.end() as i64) as u32);
+        msgpack::write_uint(
+            buf,
+            pm.utf8_to_utf16(i64::from(
+                r.text_range
+                    .pos()
+                    .expect_source("file references have source positions"),
+            )) as u32,
+        );
+        msgpack::write_uint(
+            buf,
+            pm.utf8_to_utf16(i64::from(
+                r.text_range
+                    .end()
+                    .expect_source("file references have source positions"),
+            )) as u32,
+        );
         msgpack::write_string(buf, &r.file_name);
         msgpack::write_uint(buf, r.resolution_mode.value() as u32);
         msgpack::write_bool(buf, r.preserve);

@@ -83,9 +83,7 @@ impl FSDiffer {
         }
         let default_libs = self.default_libs().unwrap_or_default();
         self.serialized_diff = Some(Snapshot { snap, default_libs });
-        for (path, diff) in &diffs {
-            baseline.push_str(&format!("//// [{}] {}\n", path, diff));
-        }
+        baseline.extend(diffs.iter().map(|(path, diff)| format!("//// [{}] {}\n", path, diff)));
         baseline.push('\n');
         self.written_files.lock().unwrap().clear(); // Reset written files after baseline
     }

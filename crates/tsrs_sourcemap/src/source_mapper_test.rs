@@ -48,7 +48,32 @@ fn decoder_reads_what_the_generator_writes() {
     };
     assert_eq!(
         mappings,
-        vec![m(0, 4, 0, 1, 2, MISSING_NAME), m(0, 40, 0, 0, 0, 0), m(2, 1, MISSING_SOURCE, MISSING_LINE_OR_COLUMN, MISSING_UTF16_COLUMN, MISSING_NAME)]
+        vec![
+            m(
+                SourceIndex::Index(0).get().unwrap(),
+                4,
+                SourceIndex::Index(0),
+                Some(1),
+                Some(2),
+                MISSING_NAME
+            ),
+            m(
+                0,
+                40,
+                SourceIndex::Index(0),
+                Some(0),
+                Some(0),
+                NameIndex::Index(0)
+            ),
+            m(
+                2,
+                1,
+                MISSING_SOURCE,
+                MISSING_LINE_OR_COLUMN,
+                MISSING_UTF16_COLUMN,
+                MISSING_NAME
+            ),
+        ]
     );
     assert!(mappings[0].is_source_mapping());
     assert!(!mappings[2].is_source_mapping());
@@ -143,7 +168,9 @@ fn document_position_mapper_from_data_url() {
 #[test]
 fn document_position_mapper_rejects_inlined_sources() {
     let mut r#gen = generate_map();
-    r#gen.set_source_content(0, "let x: number = 1;\n").unwrap();
+    r#gen
+        .set_source_content(SourceIndex::Index(0), "let x: number = 1;\n")
+        .unwrap();
     let host = test_host("", Some(&r#gen.string()));
     assert!(get_document_position_mapper(&host, "/out/main.js").is_none());
 }

@@ -3,7 +3,10 @@
 // in the slice could match the target. Also, unlike [slices.BinarySearchFunc],
 // the comparison function is passed the current index of the element being
 // compared, instead of the target element.
-pub fn binary_search_unique_func<E>(x: &[E], mut cmp: impl FnMut(usize, &E) -> i32) -> (usize, bool) {
+pub fn binary_search_unique_func<E>(
+    x: &[E],
+    mut cmp: impl FnMut(usize, &E) -> Ordering,
+) -> (usize, bool) {
     let n = x.len();
     if n == 0 {
         return (0, false);
@@ -12,9 +15,9 @@ pub fn binary_search_unique_func<E>(x: &[E], mut cmp: impl FnMut(usize, &E) -> i
     while low <= high {
         let middle = low + ((high - low) >> 1);
         let value = cmp(middle as usize, &x[middle as usize]);
-        if value < 0 {
+        if value == Ordering::Less {
             low = middle + 1;
-        } else if value > 0 {
+        } else if value == Ordering::Greater {
             high = middle - 1;
         } else {
             return (middle as usize, true);
@@ -22,3 +25,4 @@ pub fn binary_search_unique_func<E>(x: &[E], mut cmp: impl FnMut(usize, &E) -> i
     }
     (low as usize, false)
 }
+use std::cmp::Ordering;

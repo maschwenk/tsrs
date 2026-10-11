@@ -196,7 +196,7 @@ programs over 4 GiB of linear memory.
   only 4-aligned. Use `u64` words, as `TypeMapper` and `P::pack` do.
 - A new thread spawn needs a `tsrs_core::NO_THREADS` (or `single_threaded`) path: on `wasm32-wasip1`
   `std::thread::spawn` returns `Unsupported`, and a panic cannot be caught.
-- `cargo check -p tsrs_wasm --target wasm32-wasip1 --locked` (with `-D warnings`) is in CI.
+- `cargo check -p tsrs_wasm --target wasm32-wasip1 --locked` (with `build.warnings=deny`) is in CI.
 
 ## Reproduce
 

@@ -35,7 +35,7 @@ const HANGUL_S_COUNT: u32 = 19 * HANGUL_N_COUNT;
 /// Stream-Safe Text Format); that is not reproduced.
 pub fn norm_nfd_string(s: &str) -> String {
     let mut out: Vec<char> = Vec::with_capacity(s.len());
-    for c in s.chars() {
+    out = s.chars().fold(out, |mut out, c| {
         let cp = c as u32;
         if (HANGUL_S_BASE..HANGUL_S_BASE + HANGUL_S_COUNT).contains(&cp) {
             let s_index = cp - HANGUL_S_BASE;
@@ -45,13 +45,15 @@ pub fn norm_nfd_string(s: &str) -> String {
             if t != 0 {
                 out.push(char::from_u32(HANGUL_T_BASE + t).unwrap());
             }
-            continue;
+            return out;
         }
         match NFD_DECOMPOSITIONS.binary_search_by_key(&cp, |&(r, _)| r) {
             Ok(i) => out.extend(NFD_DECOMPOSITIONS[i].1.chars()),
             Err(_) => out.push(c),
         }
-    }
+
+        out
+    });
     // Canonical ordering: stable sort of every maximal run of non-starters by combining class.
     let mut i = 0;
     while i < out.len() {
@@ -60,9 +62,7 @@ pub fn norm_nfd_string(s: &str) -> String {
             continue;
         }
         let start = i;
-        while i < out.len() && canonical_combining_class(out[i]) != 0 {
-            i += 1;
-        }
+        i += (i..out.len()).take_while(|&index| canonical_combining_class(out[index]) != 0).count();
         out[start..i].sort_by_key(|&c| canonical_combining_class(c));
     }
     out.into_iter().collect()

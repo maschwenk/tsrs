@@ -794,12 +794,14 @@ impl DeclarationTransformer {
         let members = class_node.class_like_data().unwrap().members();
         let mut seen = Set::new();
         // Pre-populate seen with existing direct member nodes to avoid duplicates
-        for &member in members.nodes() {
+        seen.m.extend(members.nodes().iter().filter_map(|&member| {
             if member.name().is_some() {
                 let is_static = ast::is_static(member);
-                seen.add(get_this_property_assignment_key(member.name(), member, is_static));
+                Some(get_this_property_assignment_key(member.name(), member, is_static))
+            } else {
+                None
             }
-        }
+        }));
         *self.seen_properties.borrow_mut() = seen;
         *self.this_property_assignments_collected.borrow_mut() = Vec::new();
 
@@ -815,13 +817,13 @@ impl DeclarationTransformer {
     // transform.go:2201
     pub(crate) fn walk_binding_pattern(&self, pattern: P<Node>, param: P<Node>) -> Vec<P<Node>> {
         let mut elems = Vec::new();
-        for &elem in pattern.as_binding_pattern().elements.nodes() {
+        elems = pattern.as_binding_pattern().elements.nodes().iter().fold(elems, |mut elems, &elem| {
             if ast::is_omitted_expression(elem) {
-                continue;
+                return elems;
             }
             if ast::is_binding_pattern(elem.name().unwrap()) {
                 elems.extend(self.walk_binding_pattern(elem.name().unwrap(), param));
-                continue;
+                return elems;
             }
             elems.push(self.factory().new_property_declaration(
                 self.ensure_modifiers(param),
@@ -830,7 +832,9 @@ impl DeclarationTransformer {
                 self.ensure_type(elem, false),
                 None, /*initializer*/
             ));
-        }
+
+            elems
+        });
         elems
     }
 
@@ -854,13 +858,15 @@ impl DeclarationTransformer {
         if self.state.current_source_file.get().unwrap().common_js_module_indicator().is_some() {
             let mut normal_declarations = Vec::new();
             let mut imports = Vec::new();
-            for &n in &input_nodes {
+            (imports, normal_declarations) = input_nodes.iter().fold((imports, normal_declarations), |(mut imports, mut normal_declarations), &n| {
                 if ast::is_variable_declaration_initialized_to_require(n) {
                     imports.push(n);
                 } else {
                     normal_declarations.push(n);
                 }
-            }
+
+                (imports, normal_declarations)
+            });
             input_nodes = normal_declarations;
             (extra_imports, _) = self.visitor().visit_slice(alloc_vec(imports));
         }

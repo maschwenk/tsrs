@@ -82,12 +82,18 @@ impl LegacyDecoratorsTransformer {
     fn visit_identifier(&self, node: P<Node>) -> P<Node> {
         // takes the place of `substituteIdentifier` in the strada transform
         let enclosing: Vec<P<Node>> = self.enclosing_classes.borrow().clone();
-        for d in enclosing {
+        if let Some(result) = enclosing.into_iter().find_map(|d| {
             if let Some(alias) = self.class_alias_of(d) {
-                if self.reference_resolver.get_referenced_value_declaration(self.emit_context().most_original(Some(node)).unwrap()) == self.emit_context().most_original(Some(d)) {
-                    return alias;
+                if self.reference_resolver.get_referenced_value_declaration(self.emit_context().most_original(Some(node)).unwrap())
+                    == self.emit_context().most_original(Some(d))
+                {
+                    return Some(alias);
                 }
             }
+
+            None
+        }) {
+            return result;
         }
         node
     }
@@ -529,12 +535,7 @@ impl LegacyDecoratorsTransformer {
             }
             n.for_each_child(&mut |c| is_or_contains_static_self_reference(tx, class_node, c))
         }
-        for member in node.members() {
-            if member.for_each_child(&mut |c| is_or_contains_static_self_reference(self, class_node, c)) {
-                return true;
-            }
-        }
-        false
+        node.members().iter().any(|member| member.for_each_child(&mut |c| is_or_contains_static_self_reference(self, class_node, c)))
     }
 
     // legacydecorators.go:539
@@ -644,20 +645,20 @@ fn has_class_element_with_decorator_containing_private_identifier_in_expression(
     if members.is_empty() {
         return false;
     }
-    for member in members {
+    if members.iter().any(|member| {
         let member = *member;
         if !ast::can_have_decorators(member) {
-            continue;
+            return false;
         }
         let Some(all_decorators) = get_all_decorators_of_class_element(member, node, true) else {
-            continue;
+            return false;
         };
         if all_decorators.decorators.iter().any(|d| decorator_contains_private_identifier_in_expression(*d)) {
             return true;
         }
-        if all_decorators.parameters.iter().any(|p| parameter_decorators_contain_private_identifier_in_expression(p)) {
-            return true;
-        }
+        all_decorators.parameters.iter().any(|p| parameter_decorators_contain_private_identifier_in_expression(p))
+    }) {
+        return true;
     }
     false
 }
@@ -840,9 +841,7 @@ impl LegacyDecoratorsTransformer {
     fn get_class_element_decoration_statements(&self, node: P<Node>, is_static: bool) -> Vec<P<Node>> {
         let exprs = self.generate_class_element_decoration_expressions(node, is_static);
         let mut statements: Vec<P<Node>> = Vec::new();
-        for e in exprs {
-            statements.push(self.factory().new_expression_statement(e));
-        }
+        statements.extend(exprs.into_iter().map(|e| self.factory().new_expression_statement(e)));
         statements
     }
 }
@@ -869,11 +868,7 @@ fn is_decorated_class_element(member: P<Node>, is_static_element: bool, parent: 
  */
 fn get_decorated_class_elements(node: P<Node>, is_static: bool) -> Vec<P<Node>> {
     let mut members: Vec<P<Node>> = Vec::new();
-    for member in node.members() {
-        if is_decorated_class_element(*member, is_static, node) {
-            members.push(*member);
-        }
-    }
+    members.extend(node.members().iter().filter_map(|member| if is_decorated_class_element(*member, is_static, node) { Some(*member) } else { None }));
     members
 }
 
@@ -890,11 +885,13 @@ impl LegacyDecoratorsTransformer {
     fn generate_class_element_decoration_expressions(&self, node: P<Node>, is_static: bool) -> Vec<P<Node>> {
         let members = get_decorated_class_elements(node, is_static);
         let mut expressions: Vec<P<Node>> = Vec::new();
-        for member in members {
-            if let Some(expr) = self.generate_class_element_decoration_expression(node, member) {
-                expressions.push(expr);
-            }
-        }
+        expressions.extend(
+            members.into_iter().filter_map(
+                |member| {
+                    if let Some(expr) = self.generate_class_element_decoration_expression(node, member) { Some(expr) } else { None }
+                },
+            ),
+        );
         expressions
     }
 
@@ -994,11 +991,15 @@ impl LegacyDecoratorsTransformer {
         let mut results: Vec<P<Node>> = Vec::new();
         for (i, decorators) in parameters.iter().enumerate() {
             if !decorators.is_empty() {
-                for decorator in decorators {
-                    let helper = self.factory().new_param_helper(self.visitor().visit_node(decorator.expression()).unwrap(), i as i32, decorator.expression().unwrap().loc());
+                results.extend(decorators.iter().map(|decorator| {
+                    let helper = self.factory().new_param_helper(
+                        self.visitor().visit_node(decorator.expression()).unwrap(),
+                        i,
+                        decorator.expression().unwrap().loc(),
+                    );
                     self.emit_context().set_emit_flags(helper, EmitFlags::NoComments);
-                    results.push(helper);
-                }
+                    helper
+                }));
             }
         }
         results
@@ -1012,10 +1013,10 @@ impl LegacyDecoratorsTransformer {
      */
     fn transform_decorators(&self, decorators: &[P<Node>]) -> Vec<P<Node>> {
         let mut results: Vec<P<Node>> = Vec::new();
-        for d in decorators {
+        results.extend(decorators.iter().flat_map(|d| {
             // Go appends the visited expression even when it is nil.
-            results.extend(self.visitor().visit_node(d.expression()));
-        }
+            self.visitor().visit_node(d.expression())
+        }));
         results
     }
 

@@ -1,7 +1,7 @@
 use std::sync::LazyLock;
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_core::collections::{OrderedMap, OrderedMapExt};
+use tsrs_core::collections::OrderedMap;
 use tsrs_core::tspath;
 use tsrs_core::{
     CompilerOptions, JsxEmit, ModuleDetectionKind, ModuleKind, ModuleResolutionKind, NewLineKind, PollingKind, ScriptTarget,
@@ -12,9 +12,7 @@ use crate::commandlineoption::CompilerOptionsValue;
 
 fn new_map(entries: &[(&'static str, CompilerOptionsValue)]) -> OrderedMap<&'static str, CompilerOptionsValue> {
     let mut m = OrderedMap::default();
-    for (k, v) in entries {
-        m.set(*k, v.clone());
-    }
+    m.extend(entries.iter().map(|(k, v)| (*k, v.clone())));
     m
 }
 

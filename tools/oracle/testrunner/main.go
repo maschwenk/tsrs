@@ -430,17 +430,13 @@ func runVariant(t *testing.T, content string, filename string, namedConfiguratio
 
 func main() {
 	_ = repo.TestDataPath()
-	if len(os.Args) < 2 {
+	if len(os.Args) < 2 || (os.Args[1] != "names" && os.Args[1] != "diags") {
 		fmt.Fprintln(os.Stderr, "usage: tsrs-oracle-testrunner names|diags [filter]")
 		os.Exit(2)
 	}
 	var filter *regexp.Regexp
 	if len(os.Args) > 2 {
 		filter = regexp.MustCompile(os.Args[2])
-	}
-	if os.Args[1] == "options" {
-		dumpOptions()
-		return
 	}
 	tests := enumerate()
 	if filter != nil {
@@ -464,7 +460,6 @@ func main() {
 				switch os.Args[1] {
 				case "names":
 					write(namesOf(tf))
-				case "options":
 				case "diags":
 					diagsOf(tf, func(r diagResult) { write(r) })
 				}
@@ -476,37 +471,4 @@ func main() {
 	}
 	close(work)
 	wg.Wait()
-}
-
-func dumpOptions() {
-	type opt struct {
-		Name    string      `json:"name"`
-		Kind    string      `json:"kind"`
-		Enum    [][2]string `json:"enum,omitempty"`
-		Vary    bool        `json:"vary,omitempty"`
-		File    bool        `json:"file,omitempty"`
-		ElemFile bool       `json:"elemFile,omitempty"`
-	}
-	var out []opt
-	all := core.Concatenate(tsoptions.OptionsDeclarations, []*tsoptions.CommandLineOption{
-		{Name: "allowNonTsExtensions", Kind: tsoptions.CommandLineOptionTypeBoolean},
-		{Name: "noErrorTruncation", Kind: tsoptions.CommandLineOptionTypeBoolean},
-		{Name: "suppressOutputPathCheck", Kind: tsoptions.CommandLineOptionTypeBoolean},
-		{Name: "noCheck", Kind: tsoptions.CommandLineOptionTypeBoolean},
-	})
-	for _, o := range all {
-		j := opt{Name: o.Name, Kind: string(o.Kind), File: o.IsFilePath}
-		_, j.Vary = compilerVaryBy[strings.ToLower(o.Name)]
-		if o.Kind == tsoptions.CommandLineOptionTypeEnum {
-			for k, v := range o.EnumMap().Entries() {
-				j.Enum = append(j.Enum, [2]string{k, fmt.Sprintf("%T:%v", v, v)})
-			}
-		}
-		if o.Kind == tsoptions.CommandLineOptionTypeList || o.Kind == tsoptions.CommandLineOptionTypeListOrElement {
-			j.ElemFile = o.Elements().IsFilePath
-		}
-		out = append(out, j)
-	}
-	enc := json.NewEncoder(os.Stdout)
-	_ = enc.Encode(out)
 }

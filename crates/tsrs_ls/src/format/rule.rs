@@ -128,7 +128,7 @@ pub(crate) fn any_context() -> Vec<ContextPredicate> {
 
 // rule.go:87
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub(crate) struct RuleAction(pub(crate) i32);
+pub(crate) struct RuleAction(pub(crate) u32);
 
 impl RuleAction {
     pub(crate) const None: RuleAction = RuleAction(0);

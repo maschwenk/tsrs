@@ -108,14 +108,16 @@ fn list_files_worker(spec: &Regex, recursive: bool, folder: &Path, paths: &mut V
 
 fn get_file_based_test_configuration_description(config: &TestConfiguration) -> String {
     let mut output = String::new();
-    for (i, (key, value)) in config.iter().enumerate() {
+    output = config.iter().enumerate().fold(output, |mut output, (i, (key, value))| {
         if i > 0 {
             output.push(',');
         }
         output.push_str(key);
         output.push('=');
         output.push_str(&value.to_lowercase());
-    }
+
+        output
+    });
     output
 }
 
@@ -151,13 +153,11 @@ pub fn get_file_based_test_configurations(
     if !option_entries.is_empty() {
         // Merge varying and non-varying options
         let varying_configurations = compute_file_based_test_configuration_variations(variation_count, &option_entries);
-        for mut varying_config in varying_configurations {
+        configurations.extend(varying_configurations.into_iter().map(|mut varying_config| {
             let description = get_file_based_test_configuration_description(&varying_config);
-            for (k, v) in &non_varying_options {
-                varying_config.insert(k.clone(), v.clone());
-            }
-            configurations.push(NamedTestConfiguration { name: description, config: varying_config });
-        }
+            varying_config.extend(non_varying_options.iter().map(|(k, v)| (k.clone(), v.clone())));
+            NamedTestConfiguration { name: description, config: varying_config }
+        }));
     } else if !non_varying_options.is_empty() {
         // Only non-varying options
         configurations.push(NamedTestConfiguration { name: String::new(), config: non_varying_options });

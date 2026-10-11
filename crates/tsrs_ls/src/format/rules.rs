@@ -12,21 +12,19 @@ macro_rules! preds {
 // rules.go:10
 pub(crate) fn get_all_rules() -> Vec<RuleSpec> {
     let mut all_tokens: Vec<Kind> = Vec::with_capacity((Kind::LastToken as usize) - (Kind::FirstToken as usize) + 1);
-    for token in (Kind::FirstToken as i16)..=(Kind::LastToken as i16) {
+    all_tokens.extend(((Kind::FirstToken as i16)..=(Kind::LastToken as i16)).filter_map(|token| {
         let token = Kind::from_i16(token);
-        if token != Kind::EndOfFile {
-            all_tokens.push(token);
-        }
-    }
+        if token != Kind::EndOfFile { Some(token) } else { None }
+    }));
 
     let any_token_except = |tokens: &[Kind]| -> TokenRange {
         let mut new_tokens: Vec<Kind> = Vec::with_capacity(all_tokens.len());
-        for &token in &all_tokens {
+        new_tokens.extend(all_tokens.iter().filter_map(|&token| {
             if tokens.contains(&token) {
-                continue;
+                return None;
             }
-            new_tokens.push(token);
-        }
+            Some(token)
+        }));
         TokenRange { is_specific: false, tokens: new_tokens }
     };
 
@@ -451,9 +449,7 @@ fn token_range_from_ex(prefix: &[Kind], tokens: &[Kind]) -> TokenRange {
 // rules.go:443
 fn token_range_from_range(start: Kind, end: Kind) -> TokenRange {
     let mut tokens: Vec<Kind> = Vec::with_capacity((end as usize) - (start as usize) + 1);
-    for token in (start as i16)..=(end as i16) {
-        tokens.push(Kind::from_i16(token));
-    }
+    tokens.extend(((start as i16)..=(end as i16)).map(Kind::from_i16));
 
     token_range_from(&tokens)
 }

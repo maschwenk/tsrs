@@ -225,7 +225,7 @@ fn test_get_node_module_path_parts() {
     let parts = get_node_module_path_parts("/base/path/node_modules/@scope/pkg/sub/file.js").unwrap();
     assert_eq!(parts.top_level_node_modules_index, 10);
     assert_eq!(parts.top_level_package_name_index, 23);
-    assert_eq!(parts.package_root_index, 34);
+    assert_eq!(parts.package_root_index, Some(34));
     assert_eq!(parts.file_name_index, 38);
     assert!(get_node_module_path_parts("/base/path/src/file.js").is_none());
     // A bare scope directory still parses (state Scope > NodeModules), as in Go.

@@ -65,12 +65,12 @@ pub fn run(args: &DumpArgs) {
 
     let config_dir = tspath::get_directory_path(&config_path);
     let mut files = Vec::new();
-    for &f in program.source_files() {
+    files.extend(program.source_files().iter().filter_map(|&f| {
         if f.file_name().contains("/node_modules/") || program.is_source_file_default_library(&f.path()) {
-            continue;
+            return None;
         }
-        files.push((f, rel_name(&config_dir, f.file_name())));
-    }
+        Some((f, rel_name(&config_dir, f.file_name())))
+    }));
 
     let mut wanted: Option<FxHashSet<String>> = match args.text.as_str() {
         "all" | "none" => None,

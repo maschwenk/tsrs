@@ -19,9 +19,9 @@ impl ipc::Handler for supplementalDiagnosticsHandler {
                 let p: TransformParams = unmarshal_params(params)?;
                 const PREFIX: &str = "missingSupplementalGlobal;\n";
                 let mappings = marshal_span_map(&[Segment {
-                    virtual_start: PREFIX.len() as i32,
-                    virtual_end: (PREFIX.len() + p.content.len()) as i32,
-                    original_end: p.content.len() as i32,
+                    virtual_start: PREFIX.len() as u32,
+                    virtual_end: (PREFIX.len() + p.content.len()) as u32,
+                    original_end: p.content.len() as u32,
                     kind: Kind::Verbatim,
                     features: Feature::All,
                     ..Default::default()

@@ -410,13 +410,16 @@ fn concurrent_calls_each_get_their_own_response() {
         let conn = Arc::clone(&host.conn);
         let done = done.clone();
         thread::spawn(move || {
-            for i in 0..100 {
+            if (0..100).any(|i| {
                 let params = value(&format!(r#"{{"fileName":"/f{t}_{i}.vue","n":{i}}}"#));
                 let result = conn.call("echo", Some(&params));
                 if result != Ok(Some(params.clone())) {
                     let _ = done.send(Err(format!("{params:?} got {result:?}")));
-                    return;
+                    return true;
                 }
+                false
+            }) {
+                return;
             }
             let _ = done.send(Ok(()));
         });

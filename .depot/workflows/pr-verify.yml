@@ -58,7 +58,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
   # `depot ci run` and pull request runs have no inputs; these fallbacks are the defaults above.
   RUNNER_CPUS: ${{ inputs.cpus || '32' }}
   BASE: ${{ inputs.base || 'main' }}
@@ -131,7 +130,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Set up pnpm
         run: bash .github/scripts/setup-pnpm.sh

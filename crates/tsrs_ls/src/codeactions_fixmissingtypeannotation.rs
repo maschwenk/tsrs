@@ -159,8 +159,9 @@ fn get_all_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeF
 
     for diag in all_diags {
         if is_fixable_diagnostic(diag, isolated_declarations_fix_error_codes()) {
-            let span = TextRange::new(diag.loc().pos(), diag.loc().end());
-            fixer.add_type_annotation(span);
+            if let Some(span) = diag.loc() {
+                fixer.add_type_annotation(span);
+            }
         }
     }
 
@@ -247,7 +248,11 @@ impl isolatedDeclarationsFixer<'_> {
 
     // codeactions_fixmissingtypeannotation.go:233
     fn add_type_annotation(&mut self, span: TextRange) -> String {
-        let node_with_diag = astnav::get_token_at_position(self.source_file, span.pos());
+        let node_with_diag = astnav::get_token_at_position(
+            self.source_file,
+            span.pos()
+                .expect_source("code-fix spans have source positions"),
+        );
 
         if let Some(expando_function) = find_expando_function(self.checker, node_with_diag) {
             if ast::is_function_declaration(expando_function) {
@@ -277,26 +282,26 @@ impl isolatedDeclarationsFixer<'_> {
         let factory = self.factory();
 
         let mut new_properties: Vec<P<Node>> = Vec::new();
-        for &symbol in elements {
+        new_properties.extend(elements.iter().filter_map(|&symbol| {
             if !scanner::is_identifier_text(symbol.name(), LanguageVariant::Standard) {
-                continue;
+                return None;
             }
             // skip symbols that already have a variable declaration
             if symbol.value_declaration().is_some_and(|d| ast::is_variable_declaration(d)) {
-                continue;
+                return None;
             }
 
             let sym_type = self.checker.get_type_of_symbol_exported(symbol);
             let Some(type_node) = self.type_to_minimized_reference_type(sym_type, expando_func, declaration_emit_node_builder_flags()) else {
-                continue;
+                return None;
             };
 
             let var_decl = factory.new_variable_declaration(factory.new_identifier(symbol.name()), None, Some(type_node), None);
             let export_token = factory.new_token(Kind::ExportKeyword);
             let var_decl_list = factory.new_variable_declaration_list(factory.new_node_list(vec![var_decl]), NodeFlags::None);
             let var_stmt = factory.new_variable_statement(Some(factory.new_modifier_list(vec![export_token])), var_decl_list);
-            new_properties.push(var_stmt);
-        }
+            Some(var_stmt)
+        }));
 
         if new_properties.is_empty() {
             return String::new();
@@ -324,7 +329,11 @@ impl isolatedDeclarationsFixer<'_> {
 
     // codeactions_fixmissingtypeannotation.go:321
     fn add_inline_assertion(&mut self, span: TextRange) -> String {
-        let node_with_diag = astnav::get_token_at_position(self.source_file, span.pos());
+        let node_with_diag = astnav::get_token_at_position(
+            self.source_file,
+            span.pos()
+                .expect_source("code-fix spans have source positions"),
+        );
 
         // No inline assertions for expando members
         if find_expando_function(self.checker, node_with_diag).is_some() {
@@ -386,7 +395,17 @@ impl isolatedDeclarationsFixer<'_> {
             // Insert `: expr as Type` after the shorthand property name
             let cloned_name = factory.deep_clone_node(target_node.name()).unwrap();
             let as_expr = create_as_expression(&factory, cloned_name, type_node);
-            self.change_tracker.insert_node_at(self.source_file, target_node.end(), as_expr, NodeOptions { prefix: ": ".to_string(), ..Default::default() });
+            self.change_tracker.insert_node_at(
+                self.source_file,
+                target_node
+                    .end()
+                    .expect_source("parsed target nodes have source positions"),
+                as_expr,
+                NodeOptions {
+                    prefix: ": ".to_string(),
+                    ..Default::default()
+                },
+            );
         } else if is_expression_target {
             // Replace expression with `(expression) satisfies Type as Type` or `expression satisfies Type as Type`
             let mut cloned_target = factory.deep_clone_node(Some(target_node)).unwrap();
@@ -405,7 +424,11 @@ impl isolatedDeclarationsFixer<'_> {
 
     // codeactions_fixmissingtypeannotation.go:404
     fn extract_as_variable(&mut self, span: TextRange) -> String {
-        let node_with_diag = astnav::get_token_at_position(self.source_file, span.pos());
+        let node_with_diag = astnav::get_token_at_position(
+            self.source_file,
+            span.pos()
+                .expect_source("code-fix spans have source positions"),
+        );
         let Some(target_node) = find_best_fitting_node(Some(node_with_diag), span) else {
             return String::new();
         };
@@ -544,11 +567,14 @@ impl isolatedDeclarationsFixer<'_> {
     // codeactions_fixmissingtypeannotation.go:633
     fn transform_extends_clause_with_expression(&mut self, class_decl: P<Node>) -> String {
         let mut extends_clause: Option<P<Node>> = None;
-        for &clause in class_decl.as_class_declaration().heritage_clauses().map_or(&[][..], |h| h.nodes()) {
-            if clause.as_heritage_clause().token == Kind::ExtendsKeyword {
-                extends_clause = Some(clause);
-                break;
-            }
+        if let Some(clause) = class_decl
+            .as_class_declaration()
+            .heritage_clauses()
+            .map_or(&[][..], |h| h.nodes())
+            .iter()
+            .find_map(|&clause| if clause.as_heritage_clause().token == Kind::ExtendsKeyword { Some(clause) } else { None })
+        {
+            extends_clause = Some(clause);
         }
         let Some(extends_clause) = extends_clause else {
             return String::new();
@@ -1238,13 +1264,7 @@ fn find_expando_function(ch: &mut Checker, node: P<Node>) -> Option<P<Node>> {
     let target_type = ch.get_type_at_location(expression);
 
     let properties = ch.get_properties_of_type(target_type);
-    let mut found = false;
-    for &p in properties {
-        if p.value_declaration() == Some(expando_declaration) || p.value_declaration() == expando_declaration.parent() {
-            found = true;
-            break;
-        }
-    }
+    let found = properties.iter().any(|&p| p.value_declaration() == Some(expando_declaration) || p.value_declaration() == expando_declaration.parent());
     if !found {
         return None;
     }
@@ -1289,24 +1309,31 @@ fn end_of_required_type_parameters(ch: &mut Checker, t: P<Type>) -> usize {
     };
     let type_params = interface_type.type_parameters();
     let local_type_params = interface_type.local_type_parameters();
-    let outer_count = type_params.len() as i64 - local_type_params.len() as i64;
+    let outer_count = type_params.len().saturating_sub(local_type_params.len());
     for cutoff in 0..type_args.len() {
         // Skip cutoff positions where the local type parameter has no default.
         // This matches TS's check for constraint === undefined on localTypeParameters,
         // which in practice skips type parameters without defaults (e.g. Set<T>
         // where T has no default should not have <unknown> elided).
-        let local_idx = cutoff as i64 - outer_count;
-        if local_idx < 0 || local_idx as usize >= local_type_params.len() || !type_param_has_default(local_type_params[local_idx as usize]) {
+        let Some(local_idx) = cutoff
+            .checked_sub(outer_count)
+            .filter(|&index| index < local_type_params.len())
+        else {
+            continue;
+        };
+        if !type_param_has_default(local_type_params[local_idx]) {
             continue;
         }
-        let filled_in = ch.fill_missing_type_arguments_exported(&type_args[..cutoff], type_params, cutoff as i32, false);
-        let mut all_match = true;
-        for (i, &fill) in filled_in.iter().enumerate() {
-            if fill != type_args[i] {
-                all_match = false;
-                break;
-            }
-        }
+        let filled_in = ch.fill_missing_type_arguments_exported(
+            &type_args[..cutoff],
+            type_params,
+            cutoff,
+            false,
+        );
+        let all_match = !(filled_in
+            .iter()
+            .enumerate()
+            .any(|(i, &fill)| fill != type_args[i]));
         if all_match {
             return cutoff;
         }
@@ -1320,12 +1347,7 @@ fn type_param_has_default(tp: P<Type>) -> bool {
     let Some(sym) = tp.symbol() else {
         return false;
     };
-    for &decl in sym.declarations() {
-        if ast::is_type_parameter_declaration(decl) && decl.as_type_parameter_declaration().default_type.is_some() {
-            return true;
-        }
-    }
-    false
+    sym.declarations().iter().any(|&decl| ast::is_type_parameter_declaration(decl) && decl.as_type_parameter_declaration().default_type.is_some())
 }
 
 // codeactions_fixmissingtypeannotation.go:1283
@@ -1353,23 +1375,7 @@ fn type_to_string_for_diag(type_node: P<Node>, source_file: P<SourceFile>, ct: &
 
 fn go_lossy_utf8(bytes: &[u8]) -> String {
     let mut out = String::new();
-    let mut i = 0;
-    while i < bytes.len() {
-        match tsrs_core::utf8::compat::from_utf8(&bytes[i..]) {
-            Ok(s) => {
-                out.push_str(s);
-                break;
-            }
-            Err(e) => {
-                let valid = e.valid_up_to();
-                out.push_str(tsrs_core::utf8::compat::from_utf8(&bytes[i..i + valid]).unwrap());
-                i += valid;
-                // json/v2 replaces each invalid byte with U+FFFD
-                out.push('\u{FFFD}');
-                i += 1;
-            }
-        }
-    }
+    out.extend(bytes.utf8_chunks().flat_map(|chunk| chunk.valid().chars().chain(std::iter::repeat_n('\u{FFFD}', chunk.invalid().len()))));
     out
 }
 
@@ -1392,7 +1398,7 @@ fn find_ancestor_with_missing_type(node: P<Node>) -> Option<P<Node>> {
 // findBestFittingNode walks up from the token to find the node that best fits the diagnostic span.
 fn find_best_fitting_node(node: Option<P<Node>>, span: TextRange) -> Option<P<Node>> {
     let mut node = node?;
-    while node.end() < span.pos() + span.len() {
+    while node.end() < span.end() {
         // Go walks to a nil parent and then dereferences it in the next loop.
         node = node.parent().expect("nil node");
     }

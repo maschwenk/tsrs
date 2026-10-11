@@ -84,8 +84,14 @@ fn get_all_code_actions_to_fix_class_incorrectly_implements_interface(
     let mut seen_class_declarations: Set<P<Node>> = Set::new();
 
     for diag in all_diags {
-        if is_fixable_diagnostic(diag, fix_class_incorrectly_implements_interface_error_codes()) {
-            let Some(class_declaration) = get_class(fix_context.source_file, TextRange::new(diag.pos(), diag.end())) else {
+        if is_fixable_diagnostic(
+            diag,
+            fix_class_incorrectly_implements_interface_error_codes(),
+        ) {
+            let Some(diag_loc) = diag.loc() else {
+                continue;
+            };
+            let Some(class_declaration) = get_class(fix_context.source_file, diag_loc) else {
                 continue;
             };
             if seen_class_declarations.add_if_absent(class_declaration) {
@@ -211,7 +217,11 @@ fn insert_interface_member_node(change_tracker: &mut change::Tracker, source_fil
 
 // codeactions_fixclassincorrectlyimplementsinterface.go:165
 fn get_class(source_file: P<SourceFile>, span: TextRange) -> Option<P<Node>> {
-    let token = astnav::get_token_at_position(source_file, span.pos());
+    let token = astnav::get_token_at_position(
+        source_file,
+        span.pos()
+            .expect_source("diagnostics in source files have source positions"),
+    );
     ast::get_containing_class(token)
 }
 
@@ -230,19 +240,21 @@ fn get_missing_members(type_checker: &mut Checker, class_declaration: P<Node>, i
 
     let mut missing_members = Vec::new();
     for &implemented_type in implemented_types {
-        for &symbol in type_checker.get_properties_of_type(implemented_type) {
+        missing_members.extend(type_checker.get_properties_of_type(implemented_type).iter().filter_map(|&symbol| {
             if class_members.is_some_and(|m| m.lookup(symbol.name()).is_some()) {
-                continue;
+                return None;
             }
             if inherited_members.contains_key(symbol.name()) || seen_members.contains_key(symbol.name()) {
-                continue;
+                return None;
             }
             let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
             if !flags.intersects(ModifierFlags::Private) {
                 seen_members.insert(symbol.name(), symbol);
-                missing_members.push(symbol);
+                Some(symbol)
+            } else {
+                None
             }
-        }
+        }));
     }
     missing_members
 }
@@ -256,12 +268,10 @@ fn get_inherited_members(type_checker: &mut Checker, class_declaration: P<Node>)
     let base_type = type_checker.get_type_at_location(type_node);
 
     let mut inherited_members = FxHashMap::default();
-    for &symbol in type_checker.get_properties_of_type(base_type) {
+    inherited_members.extend(type_checker.get_properties_of_type(base_type).iter().filter_map(|&symbol| {
         let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
-        if !flags.intersects(ModifierFlags::Private) {
-            inherited_members.insert(symbol.name(), symbol);
-        }
-    }
+        if !flags.intersects(ModifierFlags::Private) { Some((symbol.name(), symbol)) } else { None }
+    }));
     inherited_members
 }
 

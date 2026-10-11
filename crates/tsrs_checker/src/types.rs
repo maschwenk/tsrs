@@ -1,11 +1,57 @@
 use std::fmt;
 use std::hash::Hash;
+use std::num::NonZeroU32;
 
 use bitflags::bitflags;
-use tsrs_core::ThinSliceCell;
 use tsrs_core::sharedgraph::{OvCell, OvExact, OvOptionThinSliceCell, RawWord};
+use tsrs_core::{TextPos, ThinSliceCell};
 
 use crate::*;
+
+#[derive(Default)]
+pub struct CountCell(Cell<u32>);
+
+impl CountCell {
+    #[inline]
+    pub fn get(&self) -> usize {
+        self.0.get() as usize
+    }
+
+    #[inline]
+    pub fn set(&self, value: usize) {
+        self.0
+            .set(u32::try_from(value).expect("count exceeds u32 storage"));
+    }
+}
+
+pub struct OptionalCountCell(OvExact<Option<NonZeroU32>>);
+
+impl Default for OptionalCountCell {
+    fn default() -> Self {
+        Self(OvExact::new(None))
+    }
+}
+
+impl OptionalCountCell {
+    #[inline]
+    pub fn get(&self) -> Option<usize> {
+        self.0.get().map(|value| value.get() as usize - 1)
+    }
+
+    #[inline]
+    pub fn set(&self, value: Option<usize>) {
+        let value = value.map(|value| {
+            let value = u32::try_from(value).expect("count exceeds u32 storage");
+            NonZeroU32::new(
+                value
+                    .checked_add(1)
+                    .expect("count exceeds optional u32 storage"),
+            )
+            .unwrap()
+        });
+        self.0.set(value);
+    }
+}
 
 // GoMap: a Go `map[K]V` field (a nil-able reference to a shared hash table), pointer-sized.
 
@@ -139,7 +185,7 @@ bitflags! {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum SignatureKind {
     #[default]
@@ -147,7 +193,7 @@ pub enum SignatureKind {
     Construct,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum IndexKind {
     #[default]
@@ -155,7 +201,7 @@ pub enum IndexKind {
     Number,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MemberOverrideStatus {
     #[default]
@@ -595,13 +641,13 @@ pub struct SwitchStatementLinks {
 #[derive(Default)]
 pub struct ArrayLiteralLinks {
     pub indices_computed: Cell<bool>,
-    pub first_spread_index: Cell<i32>, // Index of first spread expression (or -1 if none)
-    pub last_spread_index: Cell<i32>, // Index of last spread expression (or -1 if none)
+    pub first_spread_index: OptionalCountCell,
+    pub last_spread_index: OptionalCountCell,
 }
 
 // Links for late-binding containers
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MembersOrExportsResolutionKind {
     #[default]
@@ -651,9 +697,17 @@ bitflags! {
     }
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+pub enum LastAssignmentPosition {
+    #[default]
+    None,
+    Position(TextPos),
+    BeyondAll,
+}
+
 #[derive(Default)]
 pub struct MarkedAssignmentSymbolLinks {
-    pub last_assignment_pos: Cell<i32>,
+    pub last_assignment_pos: Cell<LastAssignmentPosition>,
     pub has_definite_assignment: Cell<bool>, // Symbol is definitely assigned somewhere
 }
 
@@ -923,11 +977,7 @@ static typeFlagNames: [(TypeFlags, &str); 29] = [
 /// FormatTypeFlags returns the individual flag names as a slice of strings.
 pub fn format_type_flags(flags: TypeFlags) -> Vec<&'static str> {
     let mut result = Vec::with_capacity(flags.bits().count_ones() as usize);
-    for (flag, name) in typeFlagNames.iter() {
-        if flags.intersects(*flag) {
-            result.push(*name);
-        }
-    }
+    result.extend(typeFlagNames.iter().filter_map(|(flag, name)| if flags.intersects(*flag) { Some(*name) } else { None }));
     if result.is_empty() {
         result.push("None");
     }
@@ -2175,7 +2225,7 @@ struct CountOrIndexInfos(Cell<RawWord>);
 
 struct IndexInfosTail {
     index_infos: ThinSliceCell<P<IndexInfo>>,
-    call_signature_count: Cell<i32>,
+    call_signature_count: CountCell,
 }
 
 impl Default for CountOrIndexInfos {
@@ -2193,17 +2243,17 @@ impl CountOrIndexInfos {
         (p.addr() & 1 == 0).then(|| unsafe { &*p })
     }
     #[inline]
-    fn call_signature_count(&self) -> i32 {
+    fn call_signature_count(&self) -> usize {
         match self.tail() {
             Some(t) => t.call_signature_count.get(),
-            None => (self.0.get().0 >> 1) as u32 as i32,
+            None => self.0.get().0 >> 1,
         }
     }
     #[inline]
-    fn set_call_signature_count(&self, count: i32) {
+    fn set_call_signature_count(&self, count: usize) {
         match self.tail() {
             Some(t) => t.call_signature_count.set(count),
-            None => self.0.set(RawWord(((count as u32 as usize) << 1) | 1)),
+            None => self.0.set(RawWord((count << 1) | 1)),
         }
     }
     #[inline]
@@ -2216,8 +2266,14 @@ impl CountOrIndexInfos {
             t.index_infos.set(index_infos);
         } else if !index_infos.is_empty() {
             let count = self.call_signature_count();
-            let t = P::new(IndexInfosTail { index_infos: ThinSliceCell::new(index_infos), call_signature_count: Cell::new(count) });
-            self.0.set(RawWord::from_ptr(std::ptr::from_ref::<IndexInfosTail>(t.get())));
+            let t = P::new(IndexInfosTail {
+                index_infos: ThinSliceCell::new(index_infos),
+                call_signature_count: CountCell(Cell::new(count as u32)),
+            });
+            self.0
+                .set(RawWord::from_ptr(std::ptr::from_ref::<IndexInfosTail>(
+                    t.get(),
+                )));
         }
     }
 }
@@ -2261,12 +2317,16 @@ impl StructuredType {
         self.resolved_for_write().signatures.set(signatures);
     }
     #[inline]
-    pub fn call_signature_count(&self) -> i32 {
-        self.resolved.get().map_or(0, |r| r.count_or_index_infos.call_signature_count())
+    pub fn call_signature_count(&self) -> usize {
+        self.resolved
+            .get()
+            .map_or(0, |r| r.count_or_index_infos.call_signature_count())
     }
     #[inline]
-    pub fn set_call_signature_count(&self, count: i32) {
-        self.resolved_for_write().count_or_index_infos.set_call_signature_count(count);
+    pub fn set_call_signature_count(&self, count: usize) {
+        self.resolved_for_write()
+            .count_or_index_infos
+            .set_call_signature_count(count);
     }
     #[inline]
     pub fn index_infos(&self) -> &'static [P<IndexInfo>] {
@@ -2278,11 +2338,11 @@ impl StructuredType {
     }
     #[inline]
     pub fn call_signatures(&self) -> &'static [P<Signature>] {
-        &self.signatures()[..self.call_signature_count() as usize]
+        &self.signatures()[..self.call_signature_count()]
     }
     #[inline]
     pub fn construct_signatures(&self) -> &'static [P<Signature>] {
-        &self.signatures()[self.call_signature_count() as usize..]
+        &self.signatures()[self.call_signature_count()..]
     }
 }
 
@@ -2423,7 +2483,7 @@ pub struct InterfaceType {
     pub declared_call_signatures: OvCell<&'static [P<Signature>]>, // Declared call signatures
     pub declared_construct_signatures: OvCell<&'static [P<Signature>]>, // Declared construct signatures
     pub declared_index_infos: OvCell<&'static [P<IndexInfo>]>, // Declared index signatures
-    pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
+    pub outer_type_parameter_count: CountCell, // Count of outer type parameters
     pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)
     pub resolved_base_constructor_type: OvCell<Option<P<Type>>>,
     pub declared_members: OvCell<Option<P<SymbolTable>>>, // Declared members
@@ -2440,7 +2500,7 @@ impl InterfaceType {
         if all.is_empty() {
             return &[];
         }
-        &all[..self.outer_type_parameter_count.get() as usize]
+        &all[..self.outer_type_parameter_count.get()]
     }
 
     #[inline]
@@ -2449,7 +2509,7 @@ impl InterfaceType {
         if all.is_empty() {
             return &[];
         }
-        &all[self.outer_type_parameter_count.get() as usize..all.len() - 1]
+        &all[self.outer_type_parameter_count.get()..all.len() - 1]
     }
 
     #[inline]
@@ -2506,8 +2566,8 @@ impl TupleElementInfo {
 pub struct TupleType {
     pub interface_type: InterfaceType,
     pub element_infos: Cell<&'static [TupleElementInfo]>,
-    pub min_length: Cell<i32>, // Number of required or variadic elements
-    pub fixed_length: Cell<i32>, // Number of initial required or optional elements
+    pub min_length: CountCell,   // Number of required or variadic elements
+    pub fixed_length: CountCell, // Number of initial required or optional elements
     pub combined_flags: Cell<ElementFlags>,
     pub readonly: Cell<bool>,
 }
@@ -2515,7 +2575,7 @@ embeds!(TupleType, interface_type, InterfaceType);
 
 impl TupleType {
     #[inline]
-    pub fn fixed_length(&self) -> i32 {
+    pub fn fixed_length(&self) -> usize {
         self.fixed_length.get()
     }
     #[inline]
@@ -3051,8 +3111,8 @@ bitflags! {
 pub struct Signature {
     pub id: Cell<SignatureId>,
     pub flags: Cell<SignatureFlags>,
-    pub min_argument_count: Cell<i32>,
-    pub resolved_min_argument_count: OvExact<i32>,
+    pub min_argument_count: CountCell,
+    pub resolved_min_argument_count: OptionalCountCell,
     pub declaration: Cell<Option<P<Node>>>,
     pub type_parameters: ThinSliceCell<P<Type>>, // one word each (`tsrs_core::ThinSlice`)
     pub parameters: ThinSliceCell<P<Symbol>>,
@@ -3203,7 +3263,7 @@ impl Signature {
         self.flags.get().intersects(SignatureFlags::HasRestParameter)
     }
     #[inline]
-    pub fn min_argument_count(&self) -> i32 {
+    pub fn min_argument_count(&self) -> usize {
         self.min_argument_count.get()
     }
 }
@@ -3214,7 +3274,7 @@ pub struct CompositeSignature {
     pub signatures: Cell<&'static [P<Signature>]>, // Individual signatures
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum TypePredicateKind {
     #[default]
@@ -3227,7 +3287,7 @@ pub enum TypePredicateKind {
 #[derive(Default)]
 pub struct TypePredicate {
     pub kind: Cell<TypePredicateKind>,
-    pub parameter_index: Cell<i32>,
+    pub parameter_index: Cell<Option<usize>>,
     pub parameter_name: Cell<&'static str>,
     pub t: Cell<Option<P<Type>>>,
 }
@@ -3242,7 +3302,7 @@ impl TypePredicate {
         self.kind.get()
     }
     #[inline]
-    pub fn parameter_index(&self) -> i32 {
+    pub fn parameter_index(&self) -> Option<usize> {
         self.parameter_index.get()
     }
     #[inline]

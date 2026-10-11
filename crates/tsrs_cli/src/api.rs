@@ -489,11 +489,11 @@ mod memory_tests {
         };
         assert!(b.contains(&format!("\"status\":{}", status.code().unwrap())), "cli exit {:?} vs api {b}", status.code());
         let mut files = Vec::new();
-        for proj in ["core/out", "app/out"] {
-            for e in std::fs::read_dir(cli.join(proj)).unwrap() {
-                files.push(format!("{proj}/{}", e.unwrap().file_name().to_string_lossy()));
-            }
-        }
+        files.extend(
+            ["core/out", "app/out"]
+                .into_iter()
+                .flat_map(|proj| std::fs::read_dir(cli.join(proj)).unwrap().map(move |e| format!("{proj}/{}", e.unwrap().file_name().to_string_lossy()))),
+        );
         files.sort();
         assert!(files.len() >= 8, "{files:?}");
         for f in &files {

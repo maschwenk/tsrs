@@ -116,12 +116,12 @@ impl diffTable {
             diff_keys.sort();
         }
 
-        for key in diff_keys {
+        w.extend(diff_keys.into_iter().map(|key| {
             let value = self.diff.get(key).cloned().unwrap_or_default();
             // Go `%-*s`: pads to the width in runes.
             let pad = (key_width + 1).saturating_sub(key.chars().count());
-            w.push_str(&format!("{}{}{} {}\n", indent, key, " ".repeat(pad), value));
-        }
+            format!("{}{}{} {}\n", indent, key, " ".repeat(pad), value)
+        }));
     }
 }
 
@@ -152,9 +152,7 @@ impl diffTableWriter {
     fn print(&self, w: &mut String) {
         if self.has_change {
             w.push_str(&format!("{}::\n", self.header));
-            for rendered in self.diffs.values() {
-                w.push_str(rendered);
-            }
+            w.extend(self.diffs.values().map(String::as_str));
         }
     }
 }
@@ -404,13 +402,13 @@ impl FourslashTest {
             if let Some(default_project) = &default_project {
                 new_file_info.default_project_name = default_project.id().0;
             }
-            for project in snapshot.project_collection.projects() {
+            new_file_info.all_projects.extend(snapshot.project_collection.projects().into_iter().filter_map(|project| {
                 if let Some(program) = project.get_program() {
-                    if program.get_source_file_by_path(&path).is_some() {
-                        new_file_info.all_projects.push(project.id().0);
-                    }
+                    if program.get_source_file_by_path(&path).is_some() { Some(project.id().0) } else { None }
+                } else {
+                    None
                 }
-            }
+            }));
             new_file_info.all_projects.sort();
             current_open_files.insert(file_name.clone(), new_file_info.clone());
             let open_file_change;

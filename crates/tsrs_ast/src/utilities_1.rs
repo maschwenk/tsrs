@@ -141,7 +141,9 @@ pub fn get_locals(container: P<Node>) -> P<SymbolTable> {
 pub fn node_is_missing(node: impl Into<Option<P<Node>>>) -> bool {
     match node.into() {
         None => true,
-        Some(node) => node.pos() == node.end() && node.pos() >= 0 && node.kind() != Kind::EndOfFile,
+        Some(node) => {
+            node.pos() == node.end() && !node.pos().is_synthetic() && node.kind() != Kind::EndOfFile
+        }
     }
 }
 
@@ -156,8 +158,8 @@ pub fn node_is_synthesized(node: P<Node>) -> bool {
 }
 
 // Determines whether a position is synthetic
-pub fn position_is_synthesized(pos: i32) -> bool {
-    pos < 0
+pub fn position_is_synthesized(pos: tsrs_core::TextPos) -> bool {
+    pos.is_synthetic()
 }
 
 pub fn node_kind_is(node: P<Node>, kinds: &[Kind]) -> bool {
@@ -920,6 +922,7 @@ pub fn walk_up_parenthesized_types(node: impl Into<Option<P<Node>>>) -> Option<P
 }
 
 // Walks up the parents of a node to find the containing SourceFile
+// Keep early-returning parent walks as loops; see notes/perf-iterator-regressions.md.
 pub fn get_source_file_of_node(node: impl Into<Option<P<Node>>>) -> Option<P<SourceFile>> {
     let mut node = node.into();
     while let Some(n) = node {
@@ -987,7 +990,7 @@ pub fn find_ancestor_kind(node: impl Into<Option<P<Node>>>, kind: Kind) -> Optio
     None
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum FindAncestorResult {
     False,
@@ -1052,9 +1055,11 @@ pub fn modifier_to_flag(token: Kind) -> ModifierFlags {
 
 pub fn modifiers_to_flags(modifiers: &[P<Node>]) -> ModifierFlags {
     let mut flags = ModifierFlags::None;
-    for modifier in modifiers {
+    flags = modifiers.iter().fold(flags, |mut flags, modifier| {
         flags |= modifier_to_flag(modifier.kind());
-    }
+
+        flags
+    });
     flags
 }
 
@@ -1309,10 +1314,8 @@ pub fn get_combined_node_flags(node: P<Node>) -> NodeFlags {
 pub fn get_jsdoc_deprecated_tag(node: P<Node>) -> Option<P<Node>> {
     for &jsdoc in node.jsdoc(None) {
         if let Some(tags) = jsdoc.as_jsdoc().tags {
-            for &tag in tags.nodes() {
-                if is_jsdoc_deprecated_tag(tag) {
-                    return Some(tag);
-                }
+            if let Some(result) = tags.nodes().iter().find_map(|&tag| if is_jsdoc_deprecated_tag(tag) { Some(Some(tag)) } else { None }) {
+                return result;
             }
         }
     }

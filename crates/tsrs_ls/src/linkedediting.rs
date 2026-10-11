@@ -1,6 +1,6 @@
 use tsrs_ast::{self as ast, Kind, NodeFlags};
+use tsrs_core::TextRange;
 use tsrs_core::context::Context;
-use tsrs_core::{TextPos, TextRange};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -22,7 +22,7 @@ impl LanguageService {
         }
         source_file = positions[0].script;
         let position = positions[0].position;
-        let token = astnav::find_preceding_token(source_file, position as i32);
+        let token = astnav::find_preceding_token(source_file, position);
 
         let Some(token) = token.filter(|t| t.parent().unwrap().kind() != Kind::SourceFile) else {
             return Ok(lsproto::LinkedEditingRangeResponse::default());
@@ -36,16 +36,26 @@ impl LanguageService {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
 
-            let open_pos = (astnav::get_start_of_node(open_fragment, source_file, false) + "<".len() as i32) as TextPos;
-            let close_pos = (astnav::get_start_of_node(close_fragment, source_file, false) + "</".len() as i32) as TextPos;
+            let open_pos = astnav::get_start_of_node(open_fragment, source_file, false)
+                + u32::try_from("<".len()).expect("fragment delimiter length exceeds u32");
+            let close_pos = astnav::get_start_of_node(close_fragment, source_file, false)
+                + u32::try_from("</".len()).expect("fragment delimiter length exceeds u32");
 
             // only allows linked editing right after opening bracket: <| ></| >
             if position != open_pos && position != close_pos {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
 
-            let (open_line_char, open_fidelity) = self.converters.to_lsp_position_for_feature(&source_file, open_pos, Feature::LinkedEditing);
-            let (close_line_char, close_fidelity) = self.converters.to_lsp_position_for_feature(&source_file, close_pos, Feature::LinkedEditing);
+            let (open_line_char, open_fidelity) = self.converters.to_lsp_position_for_feature(
+                &source_file,
+                open_pos.into(),
+                Feature::LinkedEditing,
+            );
+            let (close_line_char, close_fidelity) = self.converters.to_lsp_position_for_feature(
+                &source_file,
+                close_pos.into(),
+                Feature::LinkedEditing,
+            );
             if !open_fidelity.is_exact() || !close_fidelity.is_exact() {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
@@ -70,21 +80,36 @@ impl LanguageService {
             let open_tag = jsx_element.opening_element;
             let close_tag = jsx_element.closing_element;
 
-            let open_tag_name_start = astnav::get_start_of_node(open_tag.tag_name(), source_file, false);
-            let open_tag_name_end = open_tag.tag_name().end();
-            let close_tag_name_start = astnav::get_start_of_node(close_tag.tag_name(), source_file, false);
-            let close_tag_name_end = close_tag.tag_name().end();
+            let open_tag_name_start =
+                astnav::get_start_of_node(open_tag.tag_name(), source_file, false);
+            let open_tag_name_end = open_tag
+                .tag_name()
+                .end()
+                .expect_source("parsed JSX tag names have source positions");
+            let close_tag_name_start =
+                astnav::get_start_of_node(close_tag.tag_name(), source_file, false);
+            let close_tag_name_end = close_tag
+                .tag_name()
+                .end()
+                .expect_source("parsed JSX tag names have source positions");
             // do not return linked cursors if tags are not well-formed
             if open_tag_name_start == astnav::get_start_of_node(open_tag, source_file, false)
                 || close_tag_name_start == astnav::get_start_of_node(close_tag, source_file, false)
-                || open_tag_name_end == open_tag.end()
-                || close_tag_name_end == close_tag.end()
+                || open_tag_name_end
+                    == open_tag
+                        .end()
+                        .expect_source("parsed JSX tags have source positions")
+                || close_tag_name_end
+                    == close_tag
+                        .end()
+                        .expect_source("parsed JSX tags have source positions")
             {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
             // only return linked cursors if the cursor is within a tag name
-            let position_int = position as i32;
-            if !(open_tag_name_start <= position_int && position_int <= open_tag_name_end || close_tag_name_start <= position_int && position_int <= close_tag_name_end) {
+            if !(open_tag_name_start <= position && position <= open_tag_name_end
+                || close_tag_name_start <= position && position <= close_tag_name_end)
+            {
                 return Ok(lsproto::LinkedEditingRangeResponse::default());
             }
 

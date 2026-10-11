@@ -5,14 +5,15 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 | package | contents |
 | --- | --- |
 | `tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `dist/` + `vendor/` (the `unstable/*` JS API, see below), `optionalDependencies` on every platform package |
-| `@ts-rs/<os>-<arch>` | the `tsrs` binary for one platform, with `os`/`cpu` (and `libc: glibc` on Linux) so package managers install only the matching one |
+| `@ts-rs/<os>-<arch>[-<libc>]` | the `tsrs` binary for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
 | `@ts-rs/wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
 
-Platforms: `darwin-arm64`, `linux-x64` and `linux-arm64` (glibc; `darwin-x64` was published up to 0.2.1). `npm/build.mjs` and the launcher
+Next-release platforms: `darwin-arm64`, `linux-x64-gnu`, `linux-arm64-gnu`, `linux-x64-musl` and `linux-arm64-musl`
+(earlier releases use unsuffixed GNU names; `darwin-x64` was published up to 0.2.1). `npm/build.mjs` and the launcher
 also know `win32-x64` (see TODO).
 
-The main package name is set in `npm/tsrs/package.json`; platform packages are always `@ts-rs/<os>-<cpu>`, and
-the launcher derives that name from the current platform and architecture at runtime.
+The main package name is set in `npm/tsrs/package.json`; platform packages are `@ts-rs/<os>-<cpu>` with `-gnu` or
+`-musl` on Linux. The launcher derives that name from the current platform, architecture and libc at runtime.
 
 ## How the launcher finds the binary
 
@@ -23,8 +24,9 @@ extensionless ES module in a `"type": "module"` package. `npm/sdk/smoke-consumer
 launcher and the JS API on each given Node; 16.20.0, 18, 20, 22 and 24 pass.)
 
 1. `TSRS_BINARY` set: run that file (for local builds: `TSRS_BINARY=$PWD/target/release/tsrs pnpm exec tsrs ...`).
-2. Otherwise resolve `@ts-rs/<process.platform>-<process.arch>/package.json` from the launcher's own location (with
+2. Otherwise resolve `@ts-rs/<process.platform>-<process.arch>[-<libc>]/package.json` from the launcher's own location (with
    pnpm that is the sibling link in `node_modules/.pnpm/<main>/node_modules/`), and run `tsrs`/`tsrs.exe` next to it.
+   Linux libc detection follows Oxc's ldd/report probes to choose `-gnu` or `-musl`.
    If that fails, exit 1 with a message naming the missing optional dependency (or listing the supported platforms).
 3. Like TypeScript's `tsc`, on Node >= 22.15 the launcher `execve`s the binary (no Node process left, signals and the
    exit code are the binary's own). On older Node and on Windows it spawns the binary, forwards SIGINT/SIGTERM/SIGHUP/
@@ -59,11 +61,11 @@ commit, update `[workspace.metadata.typescript]`.
 
 ## Building packages locally
 
-Use pnpm 12.10.1, pinned in `npm/package.json`, for the build tooling, packing and publishing.
+Use pnpm 12.10.1, pinned in the root `package.json`, for the build tooling, packing and publishing.
 
 ```sh
 cargo build --release -p tsrs_cli
-pnpm --dir npm install --frozen-lockfile     # build-only compiler for the JS API
+pnpm install --frozen-lockfile     # build-only compiler for the JS API
 node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 # -> npm/dist/ts-rs-darwin-arm64-<version>.tgz, npm/dist/tsrs-<version>.tgz, npm/dist/packages.json
 ```
@@ -92,7 +94,7 @@ After bumping `[workspace.metadata.typescript]`, check out that commit as `ts-re
 `node npm/sdk/sync-upstream.mjs --check` fails if the copy drifted.
 
 ```sh
-pnpm --dir npm install --frozen-lockfile                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
+pnpm install --frozen-lockfile                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
 node npm/build.mjs --sdk-only              # npm/tsrs/src -> npm/tsrs/dist (also part of every package build)
 cd npm/tsrs && TSRS_BINARY=/path/to/server node --conditions @typescript/source --test 'test/**/*.test.ts'
 node npm/sdk/smoke-consumer.mjs            # after build.mjs --pack: offline install into a temp consumer, typecheck, sync+async compile
@@ -138,9 +140,10 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
 
 1. checks the tag against `Cargo.toml`, and runs `cargo check --workspace`;
 2. builds PGO release binaries (`dist` profile, trained by `.github/scripts/pgo-train.sh`) for macOS arm64 and Linux
-   x64 and arm64 (`ubuntu-22.04`); on Linux, BOLT-optimizes them and runs the conformance and fourslash gates on the
+   x64 and arm64 GNU (`ubuntu-22.04`); on GNU, BOLT-optimizes them and runs the conformance and fourslash gates on the
    BOLT-optimized binaries (`.github/scripts/bolt.sh`); smoke-runs the native ones (`--version`, exit code 2 on a type
    error) and the installed package (`npm/sdk/smoke-consumer.mjs`);
+   musl x64/arm64 uses static `dist` builds with Zig 0.13.0 and cargo-zigbuild 0.23.4;
 3. builds the WebAssembly module (`tools/wasm/build.sh`, binaryen 133), runs `pnpm test` in `npm/tsrs-wasm`, packs
    `@ts-rs/wasm` with `npm/build.mjs --wasm`, installs that tarball and runs it (`--version` must name the
    release version, exit code 2 on a type error), and uploads it as the `npm-wasm` artifact;
@@ -149,7 +152,7 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
    `--access public --tag latest` using npm trusted publishing (skipping any already on the registry, so a failed
    run can be re-run). Releases publish directly, without a staged approval step.
 
-The conformance and fourslash gates run on the Linux release binaries (`bolt.sh`). The macOS binary gets only the
+The conformance and fourslash gates run on the GNU Linux release binaries (`bolt.sh`). The macOS binary gets only the
 smoke tests; `ci.yml` (Linux) gates the source, and the WebAssembly differential gate (`tools/wasm/gate.sh`) runs only
 there.
 
@@ -158,15 +161,15 @@ there.
 What maintainers must configure before the first release:
 
 - The `@ts-rs` npm org and each package must exist. Configure a GitHub Actions trusted publisher for `tsrs`,
-  `@ts-rs/wasm` and each `@ts-rs/<os>-<arch>` platform package: owner `maschwenk`, repository `tsrs`, workflow
+  `@ts-rs/wasm` and each platform package, including the four new GNU/musl names: owner `maschwenk`, repository `tsrs`, workflow
   filename `release.yml`, no environment name, with direct publishing allowed.
 - The publish job uses pnpm 12.10.1 and `id-token: write` to authenticate through GitHub Actions OIDC. No registry publish
   token or repository secret is required. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)
   for configuration and first-publish validation requirements.
 - Provenance: npm only accepts `--provenance` from public repositories. The workflow adds `--provenance` automatically
   when the repository is public and omits it while it is private.
-- Linux binaries are built on Ubuntu 22.04, so they need glibc >= 2.35 at most (a build on Debian 12 needed 2.34);
-  Alpine/musl is not supported.
+- GNU binaries are built on Ubuntu 22.04, so they need glibc >= 2.35 at most (a build on Debian 12 needed 2.34).
+  Musl binaries are statically linked for Alpine/musl.
 
 `.depot/workflows/ci.yml` (Depot CI; pushes to main, pull requests into main, manual dispatch): `cargo check
 --workspace` with warnings denied, `cargo test` for the fast crates, a release build, the conformance and fourslash

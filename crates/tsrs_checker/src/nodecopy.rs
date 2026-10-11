@@ -56,7 +56,7 @@ impl NodeBuilderImpl {
             // type references so canIncreaseExpansionDepth is set even though
             // typeToTypeNode (and shouldExpandType) were never called.
             let ctx = self.ctx();
-            if ctx.max_expansion_depth.get() >= 0 && !ctx.can_increase_expansion_depth.get() {
+            if ctx.max_expansion_depth.get().is_some() && !ctx.can_increase_expansion_depth.get() {
                 self.walk_node_for_expandability(c, Some(node));
             }
             return r;
@@ -105,9 +105,13 @@ impl recoveryBoundary {
 
     // nodecopy.go:122
     pub(crate) fn start_recovery_scope(&self) -> originalRecoveryScopeState {
-        let tracked_symbols_top = self.ctx.tracked_symbols.borrow().len() as i32;
-        let unreported_errors_top = self.deferred_reports.borrow().len() as i32;
-        originalRecoveryScopeState { tracked_symbols_top, unreported_errors_top, had_error: self.had_error.get() }
+        let tracked_symbols_top = self.ctx.tracked_symbols.borrow().len();
+        let unreported_errors_top = self.deferred_reports.borrow().len();
+        originalRecoveryScopeState {
+            tracked_symbols_top,
+            unreported_errors_top,
+            had_error: self.had_error.get(),
+        }
     }
 
     // nodecopy.go:128
@@ -249,7 +253,10 @@ impl NodeBuilderImpl {
             return None;
         }
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + (existing.end() - existing.pos()));
+        // Synthetic nodes have both positions set to -1 in Go, so their length is zero.
+        let existing_length = existing.loc().len().unwrap_or(0) as usize;
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + existing_length);
         transformed
     }
 
@@ -335,8 +342,12 @@ pub(crate) fn get_existing_node_tree_visitor(c: &mut Checker, b: P<NodeBuilderIm
             if non_local_node.get() {
                 if let Some(r) = res {
                     // Remove position data from node lists originating in other files
-                    let r = if Some(r) == nodes { nodes.unwrap().clone_list(&b.f) } else { r };
-                    r.loc.set(new_text_range(-1, -1));
+                    let r = if Some(r) == nodes {
+                        nodes.unwrap().clone_list(&b.f)
+                    } else {
+                        r
+                    };
+                    r.loc.set(TextRange::synthetic());
                     res = Some(r);
                 }
             }
@@ -645,9 +656,9 @@ impl ExistingNodeTree {
         }
         if node.kind() == Kind::JSDocTypeLiteral {
             let mut members: Vec<P<Node>> = Vec::new();
-            for &t in node.as_jsdoc_type_literal().jsdoc_property_tags {
+            members.extend(node.as_jsdoc_type_literal().jsdoc_property_tags.iter().filter_map(|&t| {
                 if t.kind() != Kind::JSDocPropertyTag && t.kind() != Kind::JSDocParameterTag {
-                    continue;
+                    return None;
                 }
                 let n = t.name().unwrap();
                 let target_name = if ast::is_identifier(n) {
@@ -656,13 +667,13 @@ impl ExistingNodeTree {
                     n.as_qualified_name().right // !!! TODO: without typesystem backup, doing this cast unguarded seems really suspect, even though it is what strada does
                 };
                 let name = self.visit_node(c, v, Some(target_name));
-                let should_be_optional = t.as_jsdoc_parameter_or_property_tag().is_bracketed
-                    || t.type_expression().is_some_and(|te| te.kind() == Kind::JSDocOptionalType);
+                let should_be_optional =
+                    t.as_jsdoc_parameter_or_property_tag().is_bracketed || t.type_expression().is_some_and(|te| te.kind() == Kind::JSDocOptionalType);
                 let question = if should_be_optional { Some(factory.new_token(Kind::QuestionToken)) } else { None };
                 let ty = self.visit_node(c, v, t.type_expression()); // !!! TODO: alternate lookup locations for the type? serialize on demand if it doesn't serialze? strada does something funky here.
 
-                members.push(factory.new_property_signature_declaration(None, name.unwrap(), question, ty, None));
-            }
+                Some(factory.new_property_signature_declaration(None, name.unwrap(), question, ty, None))
+            }));
             return Some(factory.new_type_literal_node(factory.new_node_list(members)));
         }
         // if (ast.IsExpressionWithTypeArguments(node) || ast.IsTypeReferenceNode(node)) && ast.IsJSDocIndexSignature(node) { /// !!! TODO: JSDocIndexSignature handling hasn't been ported - readd if it's readded

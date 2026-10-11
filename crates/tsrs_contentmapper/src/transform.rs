@@ -139,10 +139,10 @@ pub(crate) fn is_module_virtual_extension(extension: &str) -> bool {
 // CheckSupplementalFileNameCollisions rejects compiler-assigned virtual filenames that name physical files.
 // transform.go:128
 pub fn check_supplemental_file_name_collisions(files: &SourceFiles, mut file_exists: impl FnMut(&str) -> bool) -> Result<(), Error> {
-    for file in &files.supplemental {
-        if file_exists(file.file_name()) {
-            return Err(SupplementalFileCollisionError { file_name: file.file_name().to_string() }.into());
-        }
+    if let Some(result) = files.supplemental.iter().find_map(|file| {
+        if file_exists(file.file_name()) { Some(Err(SupplementalFileCollisionError { file_name: file.file_name().to_string() }.into())) } else { None }
+    }) {
+        return result;
     }
     Ok(())
 }

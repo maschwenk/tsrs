@@ -87,9 +87,11 @@ impl CommonJSModuleTransformer {
             if !exported_names.is_empty() {
                 // For each additional export of the declaration, apply an export assignment.
                 let mut expression = self.visitor().visit_each_child(Some(node)).unwrap();
-                for export_name in exported_names {
+                expression = exported_names.into_iter().fold(expression, |mut expression, export_name| {
                     expression = self.create_export_expression(export_name, expression, Some(node.loc()) /*location*/, false /*liveBinding*/);
-                }
+
+                    expression
+                });
                 return expression;
             }
         }
@@ -112,29 +114,33 @@ impl CommonJSModuleTransformer {
     // commonjsmodule.go:1440
     fn destructuring_needs_flattening(&self, node: P<Node>) -> bool {
         if ast::is_object_literal_expression(node) {
-            for &elem in node.properties() {
+            if let Some(result) = node.properties().iter().find_map(|&elem| {
                 match elem.kind() {
                     Kind::PropertyAssignment => {
                         if self.destructuring_needs_flattening(elem.initializer().unwrap()) {
-                            return true;
+                            return Some(true);
                         }
                     }
                     Kind::ShorthandPropertyAssignment => {
                         if self.destructuring_needs_flattening(elem.name().unwrap()) {
-                            return true;
+                            return Some(true);
                         }
                     }
                     Kind::SpreadAssignment => {
                         if self.destructuring_needs_flattening(elem.expression().unwrap()) {
-                            return true;
+                            return Some(true);
                         }
                     }
-                    Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => return false,
+                    Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => return Some(false),
                     _ => {}
                 }
+
+                None
+            }) {
+                return result;
             }
         } else if ast::is_array_literal_expression(node) {
-            for &elem in node.as_array_literal_expression().elements.nodes() {
+            if node.as_array_literal_expression().elements.nodes().iter().any(|&elem| {
                 if ast::is_spread_element(elem) {
                     if self.destructuring_needs_flattening(elem.expression().unwrap()) {
                         return true;
@@ -142,6 +148,10 @@ impl CommonJSModuleTransformer {
                 } else if self.destructuring_needs_flattening(elem) {
                     return true;
                 }
+
+                false
+            }) {
+                return true;
             }
         } else if ast::is_identifier(node) {
             let exported_names = self.get_exports(node);
@@ -188,9 +198,11 @@ impl CommonJSModuleTransformer {
             } else {
                 expression = f.new_assignment_expression(name, value);
             }
-            for export_name in exported_names {
+            expression = exported_names.into_iter().fold(expression, |mut expression, export_name| {
                 expression = self.create_export_expression(export_name, expression, location.copied(), false /*liveBinding*/);
-            }
+
+                expression
+            });
             return expression;
         }
         // If the identifier is directly exported but has no additional export aliases,
@@ -301,9 +313,11 @@ impl CommonJSModuleTransformer {
                 let value = f.new_unique_name_ex("value", AutoGenerateOptions { flags: GeneratedIdentifierFlags::Optimistic, ..Default::default() });
                 expression = f.new_assignment_expression(expression, value);
 
-                for export_name in exported_names {
+                expression = exported_names.into_iter().fold(expression, |mut expression, export_name| {
                     expression = self.create_export_expression(export_name, expression, None /*location*/, false /*liveBinding*/);
-                }
+
+                    expression
+                });
 
                 let statement = f.new_expression_statement(expression);
                 let statement_list = f.new_node_list(vec![statement]);
@@ -738,11 +752,11 @@ impl CommonJSModuleTransformer {
             let mut bindings: Vec<P<Node>> = Vec::new();
             let declarations = self.resolver.get_referenced_value_declarations(original);
             for declaration in declarations {
-                for &binding in info.exported_bindings.get(&declaration) {
-                    if bindings_set.insert(binding) {
-                        bindings.push(binding);
-                    }
-                }
+                bindings.extend(info.exported_bindings.get(&declaration).iter().filter_map(
+                    |&binding| {
+                        if bindings_set.insert(binding) { Some(binding) } else { None }
+                    },
+                ));
             }
             return bindings;
         } else if is_file_level_reserved_generated_identifier(emit_context, name) {

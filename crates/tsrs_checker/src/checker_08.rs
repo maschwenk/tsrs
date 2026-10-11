@@ -283,11 +283,11 @@ impl Checker {
                             // Fallback: do a best-effort extraction using strings.Contains.
                             // This handles cases where a wildcard pattern matches a TS extension that's
                             // not at the end of the module specifier, e.g., "#/foo.ts.omg" through "#/*.omg": "./src/*"
-                            for ext in tspath::SUPPORTED_TS_EXTENSIONS_FLAT.iter() {
-                                if module_reference.contains(ext) {
-                                    ts_extension = ext;
-                                    break;
-                                }
+                            if let Some(ext) = tspath::SUPPORTED_TS_EXTENSIONS_FLAT
+                                .iter()
+                                .find_map(|ext| if module_reference.contains(ext) { Some(ext) } else { None })
+                            {
+                                ts_extension = ext;
                             }
                         }
                         if ts_extension.is_empty() {
@@ -469,12 +469,10 @@ impl Checker {
         if !self.pattern_ambient_modules.is_empty() {
             let pattern_ambient_modules = self.pattern_ambient_modules.clone();
             let mut candidates: Vec<P<ast::PatternAmbientModule>> = Vec::new();
-            for v in pattern_ambient_modules {
+            candidates.extend(pattern_ambient_modules.into_iter().filter_map(|v| {
                 let module_attributes_type = self.get_type_of_module_import_attributes(v.symbol);
-                if v.pattern.matches(module_reference) && self.is_type_assignable_to(import_attributes_type, module_attributes_type) {
-                    candidates.push(v);
-                }
-            }
+                if v.pattern.matches(module_reference) && self.is_type_assignable_to(import_attributes_type, module_attributes_type) { Some(v) } else { None }
+            }));
 
             if !candidates.is_empty() {
                 let augmentation = self.pattern_ambient_module_augmentations.and_then(|t| t.lookup(module_reference));
@@ -489,16 +487,14 @@ impl Checker {
                 }
 
                 let mut best_type_candidates: Vec<P<ast::PatternAmbientModule>> = Vec::new();
-                'outer: for (i, candidate) in candidates.iter().enumerate() {
+                best_type_candidates.extend(candidates.iter().enumerate().filter_map(|(i, candidate)| {
                     let candidate_type = self.get_type_of_module_import_attributes(candidate.symbol);
-                    for (j, other) in candidates.iter().enumerate() {
+                    let has_better_candidate = candidates.iter().enumerate().any(|(j, other)| {
                         let other_type = self.get_type_of_module_import_attributes(other.symbol);
-                        if i != j && self.is_type_strict_subtype_of(other_type, candidate_type) && !self.is_type_identical_to(other_type, candidate_type) {
-                            continue 'outer;
-                        }
-                    }
-                    best_type_candidates.push(*candidate);
-                }
+                        i != j && self.is_type_strict_subtype_of(other_type, candidate_type) && !self.is_type_identical_to(other_type, candidate_type)
+                    });
+                    (!has_better_candidate).then_some(*candidate)
+                }));
                 if best_type_candidates.len() == 1 {
                     let merged_candidate = self.get_merged_symbol(best_type_candidates[0].symbol);
                     if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
@@ -1321,9 +1317,7 @@ impl Checker {
                     // because we might have visited it via an 'export type *', and visiting
                     // again with 'export *' will override the type-onlyness of its exports.
                     if let Some(exports) = symbol.exports() {
-                        for name in exports.keys() {
-                            st.non_type_only_names.add(name.to_string());
-                        }
+                        st.non_type_only_names.m.extend(exports.keys().into_iter().map(std::string::ToString::to_string));
                     }
                 }
             }
@@ -1364,9 +1358,7 @@ impl Checker {
             if let Some(export_star) = export_star {
                 if export_star.is_type_only() {
                     let m = st.type_only_export_star_map.get_or_insert_with(FxHashMap::default);
-                    for name in symbols.keys() {
-                        m.insert(name.to_string(), export_star);
-                    }
+                    m.extend(symbols.keys().into_iter().map(|name| (name.to_string(), export_star)));
                 }
             }
             Some(symbols)
@@ -1508,7 +1500,14 @@ impl Checker {
     // checker.go:16626
     pub(crate) fn try_resolve_alias(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
         let links = self.alias_symbol_links.get(symbol);
-        if links.alias_target.get().is_some() || self.find_resolution_cycle_start_index(symbol.into(), TypeSystemPropertyName::AliasTarget) < 0 {
+        if links.alias_target.get().is_some()
+            || self
+                .find_resolution_cycle_start_index(
+                    symbol.into(),
+                    TypeSystemPropertyName::AliasTarget,
+                )
+                .is_none()
+        {
             return Some(self.resolve_alias(symbol));
         }
         None
@@ -2119,15 +2118,13 @@ impl Checker {
     // checker.go:17146
     pub(crate) fn pad_object_literal_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> {
         let mut missing_elements: Vec<P<Node>> = Vec::new();
-        for &e in pattern.elements() {
+        missing_elements.extend(pattern.elements().iter().filter_map(|&e| {
             if has_dot_dot_dot_token(e) {
-                continue;
+                return None;
             }
             let name = self.get_property_name_from_binding_element(e);
-            if name != InternalSymbolNameMissing && self.get_property_of_type(t, &name).is_none() {
-                missing_elements.push(e);
-            }
-        }
+            if name != InternalSymbolNameMissing && self.get_property_of_type(t, &name).is_none() { Some(e) } else { None }
+        }));
         if missing_elements.is_empty() {
             return t;
         }

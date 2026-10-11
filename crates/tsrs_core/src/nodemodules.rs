@@ -64,13 +64,8 @@ pub static EXCLUSIVELY_PREFIXED_NODE_CORE_MODULES: &[&str] = &["node:quic", "nod
 
 static NODE_CORE_MODULES: LazyLock<FxHashSet<String>> = LazyLock::new(|| {
     let mut node_core_modules = FxHashSet::default();
-    for unprefixed in UNPREFIXED_NODE_CORE_MODULES {
-        node_core_modules.insert(unprefixed.to_string());
-        node_core_modules.insert(format!("node:{unprefixed}"));
-    }
-    for m in EXCLUSIVELY_PREFIXED_NODE_CORE_MODULES {
-        node_core_modules.insert(m.to_string());
-    }
+    node_core_modules.extend(UNPREFIXED_NODE_CORE_MODULES.iter().flat_map(|unprefixed| [unprefixed.to_string(), format!("node:{unprefixed}")]));
+    node_core_modules.extend(EXCLUSIVELY_PREFIXED_NODE_CORE_MODULES.iter().map(std::string::ToString::to_string));
     node_core_modules
 });
 

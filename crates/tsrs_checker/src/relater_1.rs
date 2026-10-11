@@ -75,8 +75,8 @@ impl Relation {
     }
 
     // relater.go:113
-    pub(crate) fn size(&self) -> i32 {
-        (self.pairs.borrow().len() + self.hashed.borrow().len()) as i32
+    pub(crate) fn size(&self) -> usize {
+        self.pairs.borrow().len() + self.hashed.borrow().len()
     }
 }
 
@@ -485,7 +485,8 @@ impl Checker {
         let r = self.get_relater();
         r.relation.set(Some(relation));
         r.error_node.set(error_node);
-        r.relation_count.set((16_000_000 - relation.size()) / 8);
+        r.relation_count
+            .set((16_000_000 - isize::try_from(relation.size()).expect("relation size exceeds signed budget range")) / 8);
         let result = r.is_related_to_ex(
             self,
             source,
@@ -1102,8 +1103,13 @@ impl Checker {
     // It is possible, though highly unlikely, for the deeply nested check to be true in a situation where a chain of
     // instantiations is not infinitely expanding. Effectively, we will generate a false positive when two types are
     // structurally equal to at least maxDepth levels, but unequal at some level beyond that.
-    pub(crate) fn is_deeply_nested_type(&mut self, t: P<Type>, stack: &[P<Type>], max_depth: i32) -> bool {
-        if stack.len() as i32 >= max_depth {
+    pub(crate) fn is_deeply_nested_type(
+        &mut self,
+        t: P<Type>,
+        stack: &[P<Type>],
+        max_depth: usize,
+    ) -> bool {
+        if stack.len() >= max_depth {
             let target = get_recursion_identity_target(self, t);
             if target.flags().intersects(TypeFlags::Intersection) {
                 for &t in target.types() {
@@ -1141,11 +1147,11 @@ impl Checker {
     /// The first walk to reach an entry computes it exactly as `has_matching_recursion_identity` would, so anything
     /// that computation resolves is resolved at the same point.
     #[inline]
-    pub(crate) fn is_deeply_nested_on_stack(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
-        stack.len() as i32 >= max_depth && self.is_deeply_nested_on_stack_walk(t, stack, max_depth)
+    pub(crate) fn is_deeply_nested_on_stack(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: usize) -> bool {
+        stack.len() >= max_depth && self.is_deeply_nested_on_stack_walk(t, stack, max_depth)
     }
 
-    fn is_deeply_nested_on_stack_walk(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+    fn is_deeply_nested_on_stack_walk(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: usize) -> bool {
         let result = self.is_deeply_nested_on_stack_walk_kept(t, stack, max_depth);
         if self.deep_nested_shadow {
             let types: Vec<P<Type>> = stack.iter().map(|e| e.t).collect();
@@ -1163,7 +1169,7 @@ impl Checker {
         result
     }
 
-    fn is_deeply_nested_on_stack_walk_kept(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+    fn is_deeply_nested_on_stack_walk_kept(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: usize) -> bool {
         let target = get_recursion_identity_target(self, t);
         let top = stack.last().filter(|e| e.t == t && e.identity_key.get() == 0);
         if target.flags().intersects(TypeFlags::Intersection) {
@@ -1662,20 +1668,20 @@ pub(crate) fn exclude_properties<'a>(properties: &'a [P<Symbol>], excluded_prope
 
 impl<'a> TypeDiscriminator<'a> {
     // relater.go:1036
-    pub(crate) fn len(&mut self, c: &mut Checker) -> i32 {
+    pub(crate) fn len(&mut self, c: &mut Checker) -> usize {
         let _ = c;
-        self.props.len() as i32
+        self.props.len()
     }
 
     // relater.go:1040
-    pub(crate) fn name(&mut self, c: &mut Checker, index: i32) -> &'static str {
+    pub(crate) fn name(&mut self, c: &mut Checker, index: usize) -> &'static str {
         let _ = c;
-        self.props[index as usize].name()
+        self.props[index].name()
     }
 
     // relater.go:1044
-    pub(crate) fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
-        let prop_type = c.get_type_of_symbol(self.props[index as usize]);
+    pub(crate) fn matches(&mut self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
+        let prop_type = c.get_type_of_symbol(self.props[index]);
         for s in prop_type.distributed_iter() {
             if (self.is_related_to)(c, s, t) != Ternary::False {
                 return true;
@@ -2077,10 +2083,10 @@ impl Checker {
         let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, |v| v.len());
         if links.variances.get().is_none() {
             let stack_index = self.get_variance_stack_index(symbol);
-            if stack_index < 0 {
+            if stack_index.is_none() {
                 let save_resolution_start = self.resolution_start;
                 if self.variance_stack.is_empty() {
-                    self.resolution_start = self.type_resolutions.len() as i32;
+                    self.resolution_start = self.type_resolutions.len();
                 }
                 self.variance_stack.push(VarianceStackEntry { symbol, type_parameters });
                 let mut variances = vec![VarianceFlags::Invariant; type_parameters.len()];
@@ -2154,12 +2160,12 @@ impl Checker {
                 // we enter a circularity, we find the generic type with the "smallest" symbol in the circular
                 // region of the variance stack and restart the computation from there if necessary. This
                 // ensures stable results for circular generic types.
-                let stack_index = stack_index as usize;
+                let stack_index = stack_index.unwrap();
                 let mut min_index = stack_index;
                 for i in stack_index + 1..self.variance_stack.len() {
                     let a = self.variance_stack[i].symbol;
                     let b = self.variance_stack[min_index].symbol;
-                    if self.compare_symbols(Some(a), Some(b)) < 0 {
+                    if self.compare_symbols(Some(a), Some(b)).is_lt() {
                         min_index = i;
                     }
                 }
@@ -2180,13 +2186,13 @@ impl Checker {
     }
 
     // relater.go:1437
-    pub(crate) fn get_variance_stack_index(&mut self, symbol: P<Symbol>) -> i32 {
+    pub(crate) fn get_variance_stack_index(&mut self, symbol: P<Symbol>) -> Option<usize> {
         for (i, entry) in self.variance_stack.iter().enumerate() {
             if entry.symbol == symbol {
-                return i as i32;
+                return Some(i);
             }
         }
-        -1
+        None
     }
 
     // relater.go:1446
@@ -2324,14 +2330,18 @@ impl Checker {
         } else {
             source_count.max(target_count)
         };
-        let rest_index = if source_rest_type.is_some() || target_rest_type.is_some() { param_count - 1 } else { -1 };
+        let rest_index = if source_rest_type.is_some() || target_rest_type.is_some() {
+            param_count.checked_sub(1)
+        } else {
+            None
+        };
         for i in 0..param_count {
-            let source_type = if i == rest_index {
+            let source_type = if Some(i) == rest_index {
                 Some(self.get_rest_or_any_type_at_position(source, i))
             } else {
                 self.try_get_type_at_position(source, i)
             };
-            let target_type = if i == rest_index {
+            let target_type = if Some(i) == rest_index {
                 Some(self.get_rest_or_any_type_at_position(target, i))
             } else {
                 self.try_get_type_at_position(target, i)
@@ -2531,65 +2541,84 @@ impl Checker {
     // parameter. For example, the parameter count of (x: number, y: number, ...z: string[]) is 3 and
     // the parameter count of (x: number, ...args: [number, ...string[], boolean])) is also 3. In the
     // latter example, the effective rest type is [...string[], boolean].
-    pub(crate) fn get_parameter_count(&mut self, signature: P<Signature>) -> i32 {
-        let length = signature.parameters().len() as i32;
+    pub(crate) fn get_parameter_count(&mut self, signature: P<Signature>) -> usize {
+        let length = signature.parameters().len();
         if signature_has_rest_parameter(signature) {
-            let rest_type = self.get_type_of_symbol(signature.parameters()[length as usize - 1]);
+            let rest_type = self.get_type_of_symbol(signature.parameters()[length - 1]);
             if is_tuple_type(rest_type) {
                 let target = rest_type.target_tuple_type();
                 return length + target.fixed_length.get()
-                    - if target.combined_flags.get().intersects(ElementFlags::Variable) { 0 } else { 1 };
+                    - usize::from(
+                        !target
+                            .combined_flags
+                            .get()
+                            .intersects(ElementFlags::Variable),
+                    );
             }
         }
         length
     }
 
     // relater.go:1737
-    pub(crate) fn get_min_argument_count(&mut self, signature: P<Signature>) -> i32 {
+    pub(crate) fn get_min_argument_count(&mut self, signature: P<Signature>) -> usize {
         self.get_min_argument_count_ex(signature, MinArgumentCountFlags::None)
     }
 
     // relater.go:1741
-    pub(crate) fn get_min_argument_count_ex(&mut self, signature: P<Signature>, flags: MinArgumentCountFlags) -> i32 {
+    pub(crate) fn get_min_argument_count_ex(
+        &mut self,
+        signature: P<Signature>,
+        flags: MinArgumentCountFlags,
+    ) -> usize {
         let strong_arity_for_untyped_js = flags & MinArgumentCountFlags::StrongArityForUntypedJS;
         let void_is_non_optional = flags & MinArgumentCountFlags::VoidIsNonOptional;
-        if !void_is_non_optional.is_empty() || signature.resolved_min_argument_count.get() == -1 {
-            let mut min_argument_count: i32 = -1;
+        if !void_is_non_optional.is_empty() || signature.resolved_min_argument_count.get().is_none()
+        {
+            let mut min_argument_count = None;
             if signature_has_rest_parameter(signature) {
                 let rest_type = self.get_type_of_symbol(signature.parameters()[signature.parameters().len() - 1]);
                 if is_tuple_type(rest_type) {
                     let first_optional_index =
-                        find_index(rest_type.target_tuple_type().element_infos(), |info| !info.flags.intersects(ElementFlags::Required));
-                    let mut required_count = first_optional_index;
-                    if first_optional_index < 0 {
-                        required_count = rest_type.target_tuple_type().fixed_length();
-                    }
+                        find_index(rest_type.target_tuple_type().element_infos(), |info| {
+                            !info.flags.intersects(ElementFlags::Required)
+                        });
+                    let required_count = first_optional_index
+                        .unwrap_or_else(|| rest_type.target_tuple_type().fixed_length());
                     if required_count > 0 {
-                        min_argument_count = signature.parameters().len() as i32 - 1 + required_count;
+                        min_argument_count =
+                            Some(signature.parameters().len() - 1 + required_count);
                     }
                 }
             }
-            if min_argument_count == -1 {
-                if strong_arity_for_untyped_js.is_empty() && signature.flags().intersects(SignatureFlags::IsUntypedSignatureInJSFile) {
-                    return 0;
+            let mut min_argument_count = match min_argument_count {
+                Some(min_argument_count) => min_argument_count,
+                None => {
+                    if strong_arity_for_untyped_js.is_empty()
+                        && signature
+                            .flags()
+                            .intersects(SignatureFlags::IsUntypedSignatureInJSFile)
+                    {
+                        return 0;
+                    }
+                    signature.min_argument_count()
                 }
-                min_argument_count = signature.min_argument_count();
-            }
+            };
             if !void_is_non_optional.is_empty() {
                 return min_argument_count;
             }
-            let mut i = min_argument_count - 1;
-            while i >= 0 {
+            while min_argument_count > 0 {
+                let i = min_argument_count - 1;
                 let t = self.get_type_at_position(signature, i);
                 if !some_type(self, t, |_, t| t.flags().intersects(TypeFlags::Void)) {
                     break;
                 }
                 min_argument_count = i;
-                i -= 1;
             }
-            signature.resolved_min_argument_count.set(min_argument_count);
+            signature
+                .resolved_min_argument_count
+                .set(Some(min_argument_count));
         }
-        signature.resolved_min_argument_count.get()
+        signature.resolved_min_argument_count.get().unwrap()
     }
 
     // relater.go:1782
@@ -2602,7 +2631,7 @@ impl Checker {
     }
 
     // relater.go:1790
-    pub(crate) fn get_type_at_position(&mut self, signature: P<Signature>, pos: i32) -> P<Type> {
+    pub(crate) fn get_type_at_position(&mut self, signature: P<Signature>, pos: usize) -> P<Type> {
         let t = self.try_get_type_at_position(signature, pos);
         if let Some(t) = t {
             return t;
@@ -2611,16 +2640,21 @@ impl Checker {
     }
 
     // relater.go:1798
-    pub(crate) fn try_get_type_at_position(&mut self, signature: P<Signature>, pos: i32) -> Option<P<Type>> {
-        let param_count = signature.parameters().len() as i32 - if signature_has_rest_parameter(signature) { 1 } else { 0 };
+    pub(crate) fn try_get_type_at_position(
+        &mut self,
+        signature: P<Signature>,
+        pos: usize,
+    ) -> Option<P<Type>> {
+        let param_count =
+            signature.parameters().len() - usize::from(signature_has_rest_parameter(signature));
         if pos < param_count {
-            return Some(self.get_type_of_parameter(signature.parameters()[pos as usize]));
+            return Some(self.get_type_of_parameter(signature.parameters()[pos]));
         }
         if signature_has_rest_parameter(signature) {
             // We want to return the value undefined for an out of bounds parameter position,
             // so we need to check bounds here before calling getIndexedAccessType (which
             // otherwise would return the type 'undefined').
-            let rest_type = self.get_type_of_symbol(signature.parameters()[param_count as usize]);
+            let rest_type = self.get_type_of_symbol(signature.parameters()[param_count]);
             let index = pos - param_count;
             if !is_tuple_type(rest_type)
                 || rest_type.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)
@@ -2637,7 +2671,11 @@ impl Checker {
     // Return the rest type at the given position, transforming `any[]` into just `any`. We do this because
     // in signatures we want `any[]` in a rest position to be compatible with anything, but `any[]` isn't
     // assignable to tuple types with required elements.
-    pub(crate) fn get_rest_or_any_type_at_position(&mut self, source: P<Signature>, pos: i32) -> P<Type> {
+    pub(crate) fn get_rest_or_any_type_at_position(
+        &mut self,
+        source: P<Signature>,
+        pos: usize,
+    ) -> P<Type> {
         let rest_type = self.get_rest_type_at_position(source, pos, false);
         if let Some(element_type) = self.get_element_type_of_array_type(rest_type) {
             if is_type_any(Some(element_type)) {
@@ -2648,7 +2686,12 @@ impl Checker {
     }
 
     // relater.go:1829
-    pub(crate) fn get_rest_type_at_position(&mut self, source: P<Signature>, pos: i32, readonly: bool) -> P<Type> {
+    pub(crate) fn get_rest_type_at_position(
+        &mut self,
+        source: P<Signature>,
+        pos: usize,
+        readonly: bool,
+    ) -> P<Type> {
         let parameter_count = self.get_parameter_count(source);
         let min_argument_count = self.get_min_argument_count(source);
         let rest_type = self.get_effective_rest_type(source);
@@ -2663,33 +2706,44 @@ impl Checker {
                 }
             }
         }
-        let length = parameter_count - pos;
-        if length <= 0 {
+        if pos >= parameter_count {
             return self.create_tuple_type_ex(&[], &[], readonly);
         }
-        let length = length as usize;
+        let length = parameter_count - pos;
         let mut types: Vec<P<Type>> = Vec::with_capacity(length);
         let mut infos: Vec<TupleElementInfo> = Vec::with_capacity(length);
         for i in 0..length {
             let flags;
             if rest_type.is_none() || i < length - 1 {
-                types.push(self.get_type_at_position(source, i as i32 + pos));
-                flags = if (i as i32 + pos) < min_argument_count { ElementFlags::Required } else { ElementFlags::Optional };
+                types.push(self.get_type_at_position(source, i + pos));
+                flags = if i + pos < min_argument_count {
+                    ElementFlags::Required
+                } else {
+                    ElementFlags::Optional
+                };
             } else {
                 types.push(rest_type.unwrap());
                 flags = ElementFlags::Variadic;
             }
-            let labeled_declaration = self.get_nameable_declaration_at_position(source, i as i32 + pos);
-            infos.push(TupleElementInfo { flags, labeled_declaration });
+            let labeled_declaration = self.get_nameable_declaration_at_position(source, i + pos);
+            infos.push(TupleElementInfo {
+                flags,
+                labeled_declaration,
+            });
         }
         self.create_tuple_type_ex(&types, &infos, readonly)
     }
 
     // relater.go:1860
-    pub(crate) fn get_nameable_declaration_at_position(&mut self, signature: P<Signature>, pos: i32) -> Option<P<Node>> {
-        let param_count = signature.parameters().len() as i32 - if signature_has_rest_parameter(signature) { 1 } else { 0 };
+    pub(crate) fn get_nameable_declaration_at_position(
+        &mut self,
+        signature: P<Signature>,
+        pos: usize,
+    ) -> Option<P<Node>> {
+        let param_count =
+            signature.parameters().len() - usize::from(signature_has_rest_parameter(signature));
         if pos < param_count {
-            let decl = signature.parameters()[pos as usize].value_declaration();
+            let decl = signature.parameters()[pos].value_declaration();
             if let Some(decl) = decl {
                 if self.is_valid_declaration_for_tuple_label(decl) {
                     return Some(decl);
@@ -2698,11 +2752,11 @@ impl Checker {
             return None;
         }
         if signature_has_rest_parameter(signature) {
-            let rest_parameter = signature.parameters()[param_count as usize];
+            let rest_parameter = signature.parameters()[param_count];
             let rest_type = self.get_type_of_symbol(rest_parameter);
             if is_tuple_type(rest_type) {
                 let element_infos = rest_type.target_tuple_type().element_infos();
-                let index = (pos - param_count) as usize;
+                let index = pos - param_count;
                 if index < element_infos.len() {
                     return element_infos[index].labeled_declaration;
                 }
@@ -2752,9 +2806,14 @@ impl Checker {
     }
 
     // relater.go:1915
-    pub(crate) fn slice_tuple_type(&mut self, t: P<Type>, index: i32, end_skip_count: i32) -> P<Type> {
+    pub(crate) fn slice_tuple_type(
+        &mut self,
+        t: P<Type>,
+        index: usize,
+        end_skip_count: usize,
+    ) -> P<Type> {
         let target = t.target_tuple_type();
-        let end_index = self.get_type_reference_arity(t) - end_skip_count.max(0);
+        let end_index = self.get_type_reference_arity(t).saturating_sub(end_skip_count);
         if index > target.fixed_length() {
             if let Some(rest_array_type) = self.get_rest_array_type_of_tuple_type(t) {
                 return rest_array_type;
@@ -2766,8 +2825,8 @@ impl Checker {
         }
         let type_arguments = self.get_type_arguments(t);
         self.create_tuple_type_ex(
-            &type_arguments[index as usize..end_index as usize],
-            &target.element_infos()[index as usize..end_index as usize],
+            &type_arguments[index..end_index],
+            &target.element_infos()[index..end_index],
             false, /*readonly*/
         )
     }
@@ -2775,7 +2834,7 @@ impl Checker {
     // relater.go:1930
     pub(crate) fn get_known_keys_of_tuple_type(&mut self, t: P<Type>) -> P<Type> {
         let fixed_length = t.target_tuple_type().fixed_length();
-        let mut keys: Vec<P<Type>> = Vec::with_capacity(fixed_length as usize + 1);
+        let mut keys: Vec<P<Type>> = Vec::with_capacity(fixed_length + 1);
         for i in 0..fixed_length {
             keys.push(self.get_string_literal_type(&i.to_string()));
         }
@@ -2801,7 +2860,11 @@ impl Checker {
     }
 
     // relater.go:1954
-    pub(crate) fn is_instantiated_generic_parameter(&mut self, signature: P<Signature>, pos: i32) -> bool {
+    pub(crate) fn is_instantiated_generic_parameter(
+        &mut self,
+        signature: P<Signature>,
+        pos: usize,
+    ) -> bool {
         let Some(target) = signature.target() else {
             return false;
         };
@@ -2810,23 +2873,33 @@ impl Checker {
     }
 
     // relater.go:1962
-    pub(crate) fn get_parameter_name_at_position(&mut self, signature: P<Signature>, pos: i32) -> String {
-        let param_count = signature.parameters().len() as i32 - if signature_has_rest_parameter(signature) { 1 } else { 0 };
+    pub(crate) fn get_parameter_name_at_position(
+        &mut self,
+        signature: P<Signature>,
+        pos: usize,
+    ) -> String {
+        let param_count =
+            signature.parameters().len() - usize::from(signature_has_rest_parameter(signature));
         if pos < param_count {
-            return signature.parameters()[pos as usize].name().to_string();
+            return signature.parameters()[pos].name().to_string();
         }
-        let rest_parameter = signature.parameters()[param_count as usize];
+        let rest_parameter = signature.parameters()[param_count];
         let rest_type = self.get_type_of_symbol(rest_parameter);
         if is_tuple_type(rest_type) {
             let index = pos - param_count;
-            let element_info = rest_type.target_tuple_type().element_infos()[index as usize];
+            let element_info = rest_type.target_tuple_type().element_infos()[index];
             return self.get_tuple_element_label(element_info, Some(rest_parameter), index);
         }
         rest_parameter.name().to_string()
     }
 
     // relater.go:1976
-    pub(crate) fn get_tuple_element_label(&mut self, element_info: TupleElementInfo, rest_symbol: Option<P<Symbol>>, index: i32) -> String {
+    pub(crate) fn get_tuple_element_label(
+        &mut self,
+        element_info: TupleElementInfo,
+        rest_symbol: Option<P<Symbol>>,
+        index: usize,
+    ) -> String {
         if let Some(labeled_declaration) = element_info.labeled_declaration {
             return labeled_declaration.name().unwrap().text().to_string();
         }
@@ -2842,7 +2915,12 @@ impl Checker {
     }
 
     // relater.go:1992
-    pub(crate) fn get_tuple_element_label_from_binding_element(&mut self, node: P<Node>, index: i32, element_flags: ElementFlags) -> String {
+    pub(crate) fn get_tuple_element_label_from_binding_element(
+        &mut self,
+        node: P<Node>,
+        index: usize,
+        element_flags: ElementFlags,
+    ) -> String {
         if let Some(name_node) = node.name() {
             match name_node.kind() {
                 Kind::Identifier => {
@@ -2884,11 +2962,12 @@ impl Checker {
                     if has_dot_dot_dot_token(node) {
                         let elements = name_node.elements();
                         let last_element = last_or_nil(elements);
-                        let last_element_is_binding_element_rest =
-                            last_element.is_some_and(|e| is_binding_element(e) && has_dot_dot_dot_token(e));
-                        let element_count = elements.len() as i32 - if last_element_is_binding_element_rest { 1 } else { 0 };
+                        let last_element_is_binding_element_rest = last_element
+                            .is_some_and(|e| is_binding_element(e) && has_dot_dot_dot_token(e));
+                        let element_count =
+                            elements.len() - usize::from(last_element_is_binding_element_rest);
                         if index < element_count {
-                            let element = elements[index as usize];
+                            let element = elements[index];
                             if is_binding_element(element) {
                                 return self.get_tuple_element_label_from_binding_element(element, index, element_flags);
                             }
@@ -2989,8 +3068,17 @@ impl Checker {
             t = Some(self.get_type_from_type_node(type_node));
         }
         if is_this_type_node(predicate_node.parameter_name) {
-            let kind = if predicate_node.asserts_modifier.is_some() { TypePredicateKind::AssertsThis } else { TypePredicateKind::This };
-            return self.new_type_predicate(kind, "" /*parameterName*/, 0 /*parameterIndex*/, t);
+            let kind = if predicate_node.asserts_modifier.is_some() {
+                TypePredicateKind::AssertsThis
+            } else {
+                TypePredicateKind::This
+            };
+            return self.new_type_predicate(
+                kind,
+                "",      /*parameterName*/
+                Some(0), /*parameterIndex*/
+                t,
+            );
         }
         let kind = if predicate_node.asserts_modifier.is_some() {
             TypePredicateKind::AssertsIdentifier
@@ -3013,7 +3101,13 @@ impl Checker {
     }
 
     // relater.go:2141
-    pub(crate) fn new_type_predicate(&mut self, kind: TypePredicateKind, parameter_name: &str, parameter_index: i32, t: Option<P<Type>>) -> P<TypePredicate> {
+    pub(crate) fn new_type_predicate(
+        &mut self,
+        kind: TypePredicateKind,
+        parameter_name: &str,
+        parameter_index: Option<usize>,
+        t: Option<P<Type>>,
+    ) -> P<TypePredicate> {
         P::new(TypePredicate {
             kind: Cell::new(kind),
             parameter_index: Cell::new(parameter_index),
@@ -3030,15 +3124,25 @@ impl Checker {
             }
         }
         signature.resolved_return_type.get().is_none()
-            && self.find_resolution_cycle_start_index(TypeSystemEntity::Signature(signature), TypeSystemPropertyName::ResolvedReturnType) >= 0
+            && self
+                .find_resolution_cycle_start_index(
+                    TypeSystemEntity::Signature(signature),
+                    TypeSystemPropertyName::ResolvedReturnType,
+                )
+                .is_some()
     }
 
     // relater.go:2152
-    pub(crate) fn find_matching_signatures(&mut self, signature_lists: &[Vec<P<Signature>>], signature: P<Signature>, list_index: i32) -> Vec<P<Signature>> {
+    pub(crate) fn find_matching_signatures(
+        &mut self,
+        signature_lists: &[Vec<P<Signature>>],
+        signature: P<Signature>,
+        list_index: usize,
+    ) -> Vec<P<Signature>> {
         if !signature.type_parameters().is_empty() {
             // We require an exact match for generic signatures, so we only return signatures from the first
             // signature list and only if they have exact matches in the other signature lists.
-            if list_index > 0 {
+            if list_index != 0 {
                 return Vec::new();
             }
             for i in 1..signature_lists.len() {
@@ -3055,7 +3159,7 @@ impl Checker {
         for i in 0..signature_lists.len() {
             // Allow matching non-generic signatures to have excess parameters (as a fallback if exact parameter match is not found) and different return types.
             // Prefer matching this types if possible.
-            let m = if i as i32 == list_index {
+            let m = if i == list_index {
                 Some(signature)
             } else {
                 let m = self.find_matching_signature(&signature_lists[i], signature, false /*partialMatch*/, false /*ignoreThisTypes*/, true /*ignoreReturnTypes*/);
@@ -3295,10 +3399,12 @@ impl Checker {
         let inferences = self.infer_types_from_template_literal_type(source, target, compare_types);
         // An empty result stands for Go's nil (a successful inference is never empty).
         if !inferences.is_empty() {
-            for (i, &inference) in inferences.iter().enumerate() {
-                if !self.is_valid_type_for_template_literal_placeholder(inference, target.types()[i], compare_types) {
-                    return false;
-                }
+            if inferences
+                .iter()
+                .enumerate()
+                .any(|(i, &inference)| !self.is_valid_type_for_template_literal_placeholder(inference, target.types()[i], compare_types))
+            {
+                return false;
             }
             return true;
         }
@@ -3316,15 +3422,11 @@ impl Checker {
             let source_template = source.as_template_literal_type();
             if source_template.texts() == target.texts() {
                 let mut result: Vec<P<Type>> = Vec::with_capacity(source_template.types().len());
-                for (i, &s) in source_template.types().iter().enumerate() {
+                result.extend(source_template.types().iter().enumerate().map(|(i, &s)| {
                     let a = self.get_base_constraint_or_type(s);
                     let b = self.get_base_constraint_or_type(target.types()[i]);
-                    if compare_types(self, a, b, false /*partialMatch*/) != Ternary::False {
-                        result.push(s);
-                    } else {
-                        result.push(self.get_string_like_type_for_type(s));
-                    }
-                }
+                    if compare_types(self, a, b, false /*partialMatch*/) != Ternary::False { s } else { self.get_string_like_type_for_type(s) }
+                }));
                 return result;
             }
             return self.infer_from_literal_parts_to_template_literal(source_template.texts(), source_template.types(), target);
@@ -3395,8 +3497,7 @@ impl Checker {
             *seg = s;
             *pos = p;
         };
-        for i in 1..last_target_index {
-            let delim = target_texts[i];
+        for &delim in target_texts.iter().take(last_target_index).skip(1) {
             if !delim.is_empty() {
                 let mut s = seg;
                 let mut p = pos;

@@ -46,8 +46,8 @@ fn check_baseline(name: &str, actual: &str) {
 #[derive(Clone, PartialEq, Eq, Debug)]
 struct TokenInfo {
     kind: String,
-    pos: i32,
-    end: i32,
+    pos: u32,
+    end: u32,
 }
 
 // tokens_test.go:257
@@ -57,19 +57,30 @@ fn to_token_info(node: Option<P<Node>>) -> Option<TokenInfo> {
     if kind == "EndOfFile" {
         kind = "EndOfFileToken".to_string();
     }
-    Some(TokenInfo { kind, pos: node.pos(), end: node.end() })
+    Some(TokenInfo {
+        kind,
+        pos: node
+            .pos()
+            .expect_source("parsed tokens have source positions"),
+        end: node
+            .end()
+            .expect_source("parsed tokens have source positions"),
+    })
 }
 
 struct TokenRun {
     start_pos: usize,
     end_pos: usize,
     kind: String,
-    node_pos: i32,
-    node_end: i32,
+    node_pos: u32,
+    node_end: u32,
 }
 
 // tokens_test.go:196
-fn baseline_go_tokens_json(test_name: &str, get_go_token: impl Fn(P<SourceFile>, i32) -> Option<TokenInfo>) {
+fn baseline_go_tokens_json(
+    test_name: &str,
+    get_go_token: impl Fn(P<SourceFile>, u32) -> Option<TokenInfo>,
+) {
     for file_name in test_files() {
         let file_text = std::fs::read_to_string(&file_name).unwrap();
         let file = parse_for_test("/file.ts", &file_text, ScriptKind::TS);
@@ -79,7 +90,7 @@ fn baseline_go_tokens_json(test_name: &str, get_go_token: impl Fn(P<SourceFile>,
         let mut current: Option<TokenRun> = None;
 
         for pos in 0..max_pos {
-            let token = get_go_token(file, pos as i32);
+            let token = get_go_token(file, u32::try_from(pos).expect("test position fits in u32"));
             match (&mut current, &token) {
                 (Some(c), Some(t)) if c.kind == t.kind && c.node_pos == t.pos && c.node_end == t.end => {
                     c.end_pos = pos;
@@ -165,11 +176,11 @@ fs.writeFileSync("result.json", JSON.stringify(result));
                         _ => panic!(),
                     },
                     pos: match m["pos"] {
-                        Value::Number(n) => n as i32,
+                        Value::Number(n) => n as u32,
                         _ => panic!(),
                     },
                     end: match m["end"] {
-                        Value::Number(n) => n as i32,
+                        Value::Number(n) => n as u32,
                         _ => panic!(),
                     },
                 }),
@@ -186,7 +197,11 @@ struct TokenDiff {
 }
 
 // tokens_test.go:140
-fn baseline_tokens(test_name: &str, include_eof: bool, get_go_token: impl Fn(P<SourceFile>, i32) -> Option<TokenInfo>) {
+fn baseline_tokens(
+    test_name: &str,
+    include_eof: bool,
+    get_go_token: impl Fn(P<SourceFile>, u32) -> Option<TokenInfo>,
+) {
     for file_name in test_files() {
         let file_text = std::fs::read_to_string(&file_name).unwrap();
         let positions: Vec<usize> = (0..file_text.len() + if include_eof { 1 } else { 0 }).collect();
@@ -201,21 +216,34 @@ fn baseline_tokens(test_name: &str, include_eof: bool, get_go_token: impl Fn(P<S
         let mut current_diff = TokenDiff::default();
 
         for (pos, ts_token) in ts_tokens.iter().enumerate() {
-            let go_token = get_go_token(file, pos as i32);
-            let diff = TokenDiff { go_token, ts_token: ts_token.clone() };
+            let pos = u32::try_from(pos).expect("test position fits in u32");
+            let go_token = get_go_token(file, pos);
+            let diff = TokenDiff {
+                go_token,
+                ts_token: ts_token.clone(),
+            };
 
             if !(current_diff.go_token == diff.go_token && current_diff.ts_token == diff.ts_token) {
                 if current_diff.go_token != current_diff.ts_token {
-                    write_range_diff(&mut output, file, &current_diff, current_range, pos as i32);
+                    write_range_diff(&mut output, file, &current_diff, current_range, pos);
                 }
                 current_diff = diff;
-                current_range = TextRange::new(pos as i32, pos as i32);
+                current_range = TextRange::new(pos, pos);
             }
-            current_range = current_range.with_end(pos as i32);
+            current_range = current_range.with_end(pos.into());
         }
 
         if current_diff.go_token != current_diff.ts_token {
-            write_range_diff(&mut output, file, &current_diff, current_range, ts_tokens.len() as i32 - 1);
+            let last_position = u32::try_from(ts_tokens.len())
+                .expect("test position fits in u32")
+                .saturating_sub(1);
+            write_range_diff(
+                &mut output,
+                file,
+                &current_diff,
+                current_range,
+                last_position,
+            );
         }
 
         let base = file_name.file_name().unwrap().to_string_lossy().to_string();
@@ -224,7 +252,13 @@ fn baseline_tokens(test_name: &str, include_eof: bool, get_go_token: impl Fn(P<S
 }
 
 // tokens_test.go:381
-fn write_range_diff(output: &mut String, file: P<SourceFile>, diff: &TokenDiff, rng: TextRange, position: i32) {
+fn write_range_diff(
+    output: &mut String,
+    file: P<SourceFile>,
+    diff: &TokenDiff,
+    rng: TextRange,
+    position: u32,
+) {
     let lines = file.ecma_line_map();
 
     let mut ts_token_pos = position;
@@ -293,10 +327,14 @@ fn write_range_diff(output: &mut String, file: P<SourceFile>, diff: &TokenDiff, 
             line = skip_to;
         }
         out_bytes.extend_from_slice(format!("{:>digits$} │", line + 1).as_bytes());
-        let end = if line < lines.len() - 1 { lines[line + 1] as i32 } else { text.len() as i32 + 1 };
-        let mut pos = lines[line] as i32;
+        let end = if line < lines.len() - 1 {
+            lines[line + 1]
+        } else {
+            u32::try_from(text.len()).expect("test source fits in u32") + 1
+        };
+        let mut pos = lines[line];
         while pos < end {
-            if pos == rng.end() + 1 {
+            if pos == rng.end().expect_source("diff ranges have source positions") + 1 {
                 out_bytes.extend_from_slice("〛".as_bytes());
             }
             if diff.ts_token.is_some() && pos == ts_token_end {
@@ -311,7 +349,7 @@ fn write_range_diff(output: &mut String, file: P<SourceFile>, diff: &TokenDiff, 
             if diff.ts_token.is_some() && pos == ts_token_pos {
                 out_bytes.extend_from_slice("【".as_bytes());
             }
-            if pos == rng.pos() {
+            if pos == rng.pos().expect_source("diff ranges have source positions") {
                 out_bytes.extend_from_slice("〚".as_bytes());
             }
             if (pos as usize) < text.len() {
@@ -420,7 +458,7 @@ fn test_unit_find_preceding_token() {
     struct TestCase {
         name: &'static str,
         file_content: &'static str,
-        position: i32,
+        position: u32,
         expected_kind: Kind,
     }
     let test_cases = [

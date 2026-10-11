@@ -1,5 +1,9 @@
 # Status
 
+## Unreleased
+
+Linux x64/arm64 packages gain explicit `-gnu` and `-musl` suffixes, static musl builds and libc-aware binary selection.
+
 ## 2026-10-10: 0.13.0 release
 
 Walker Boyle's checker optimizations (#299): faster union construction and membership, caching of long union

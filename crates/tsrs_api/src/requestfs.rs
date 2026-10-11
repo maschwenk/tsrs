@@ -321,14 +321,16 @@ impl RequestParams {
         match p.get("files") {
             Value::Null => {}
             Value::Object(m) => {
-                for (k, v) in m.iter() {
+                files = m.iter().try_fold(files, |mut files, (k, v)| {
                     match v {
                         Value::String(c) => files.push((k.clone(), c.clone())),
                         // Go map[string]string: a null value is "".
                         Value::Null => files.push((k.clone(), String::new())),
                         _ => return Err("fileSystem.files values must be strings".to_string()),
                     }
-                }
+
+                    Ok::<_, String>(files)
+                })?;
             }
             _ => return Err("fileSystem.files must be an object".to_string()),
         }
@@ -336,13 +338,19 @@ impl RequestParams {
         match p.get("directories") {
             Value::Null => {}
             Value::Object(m) => {
-                for (k, v) in m.iter() {
+                directories = m.iter().try_fold(directories, |mut directories, (k, v)| {
                     let d = Params(v);
                     directories.push((
                         k.clone(),
-                        Entries { files: str_list(d.get("files"), "directory files")?, directories: str_list(d.get("directories"), "directory directories")?, symlinks: None },
+                        Entries {
+                            files: str_list(d.get("files"), "directory files")?,
+                            directories: str_list(d.get("directories"), "directory directories")?,
+                            symlinks: None,
+                        },
                     ));
-                }
+
+                    Ok::<_, String>(directories)
+                })?;
             }
             _ => return Err("fileSystem.directories must be an object".to_string()),
         }
@@ -350,7 +358,7 @@ impl RequestParams {
         match p.get("symlinks") {
             Value::Null => {}
             Value::Object(m) => {
-                for (k, v) in m.iter() {
+                symlinks = m.iter().try_fold(symlinks, |mut symlinks, (k, v)| {
                     let s = Params(v);
                     let target = match s.get("target") {
                         Value::String(t) => t.clone(),
@@ -358,7 +366,9 @@ impl RequestParams {
                         _ => return Err("symlink target must be a string".to_string()),
                     };
                     symlinks.push((k.clone(), target, matches!(s.get("host"), Value::Bool(true))));
-                }
+
+                    Ok::<_, String>(symlinks)
+                })?;
             }
             _ => return Err("fileSystem.symlinks must be an object".to_string()),
         }
@@ -463,9 +473,7 @@ impl RequestFileSystem {
                 }));
             }
             r.register_directory(&mut root, &tspath::get_directory_path(&abs));
-            for child in &entries.directories {
-                listed.push(tspath::combine_paths(&abs, &[child]));
-            }
+            listed.extend(entries.directories.iter().map(|child| tspath::combine_paths(&abs, &[child])));
         }
         for (link, _, _) in &params.symlinks {
             let abs = r.to_absolute_path(link);
@@ -675,12 +683,8 @@ impl RequestFileSystem {
         let mut symlinks = r.symlinks.take().unwrap_or_default();
         let mut links = Vec::new();
         if let (Some(node), _) = self.paths.lookup(&self.to_path(dir)) {
-            #[expect(clippy::iter_over_hash_type, reason = "order-independent: one link per name, files and directories are sorted below and symlinks is a set; Go ranges the map too")]
-            for child in node.children.values() {
-                if let Some(Entry::Symlink(s)) = child.entry.as_deref() {
-                    links.push(s.clone());
-                }
-            }
+            // order-independent: one link per name, files and directories are sorted below and symlinks is a set; Go ranges the map too
+            links.extend(node.children.values().filter_map(|child| if let Some(Entry::Symlink(s)) = child.entry.as_deref() { Some(s.clone()) } else { None }));
         }
         if links.is_empty() {
             r.symlinks = Some(symlinks);
@@ -851,9 +855,7 @@ fn add_file_changes(summary: &mut FileChangeSummary, request: &RequestParams, ba
         add_with_aliases(summary, &abs, true);
         summary.created.add(uri(&abs));
         if let Some(b) = base_request {
-            for alias in b.aliases_for_path(&abs) {
-                summary.created.add(uri(&alias));
-            }
+            summary.created.m.extend(b.aliases_for_path(&abs).into_iter().map(|alias| uri(&alias)));
         }
     };
     for (d, _) in &request.directories {
@@ -896,14 +898,14 @@ impl LayeredFileSystem for RequestFileSystem {
     fn overlays(&self) -> OverlayMap {
         let FsRef::Layered(base) = &self.base_ref else { return OverlayMap::default() };
         let mut result = rustc_hash::FxHashMap::default();
-        #[expect(clippy::iter_over_hash_type, reason = "builds a map keyed by path; Go ranges the overlay map too")]
-        for (path, overlay) in base.overlays().iter() {
-            let Some(l) = self.lookup_path(overlay.file_name()) else { continue };
+        // builds a map keyed by path; Go ranges the overlay map too
+        result.extend(base.overlays().iter().filter_map(|(path, overlay)| {
+            let Some(l) = self.lookup_path(overlay.file_name()) else { return None };
             if !l.use_base || self.to_path(&l.path) != *path {
-                continue;
+                return None;
             }
-            result.insert(path.clone(), Arc::clone(overlay));
-        }
+            Some((path.clone(), Arc::clone(overlay)))
+        }));
         Arc::new(result)
     }
 
@@ -937,15 +939,10 @@ impl FileChangeExpander for RequestFileSystem {
     fn expand_file_changes(&self, mut summary: FileChangeSummary) -> FileChangeSummary {
         let expand = |uris: &mut tsrs_core::collections::Set<tsrs_lsproto::DocumentUri>| {
             let mut additional = Vec::new();
-            #[expect(clippy::iter_over_hash_type, reason = "the aliases are added to the same set; Go ranges the set too")]
-            for uri in uris.keys().iter() {
-                for alias in self.aliases_for_path(&uri.file_name()) {
-                    additional.push(tsrs_ls::lsconv::file_name_to_document_uri(&alias));
-                }
-            }
-            for uri in additional {
-                uris.add(uri);
-            }
+            // the aliases are added to the same set; Go ranges the set too
+            additional
+                .extend(uris.keys().iter().flat_map(|uri| self.aliases_for_path(&uri.file_name())).map(|alias| tsrs_ls::lsconv::file_name_to_document_uri(&alias)));
+            uris.m.extend(additional);
         };
         expand(&mut summary.changed);
         expand(&mut summary.created);

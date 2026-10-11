@@ -74,11 +74,14 @@ fn test_server_outgoing_queue_does_not_block_without_writer() {
     let (tx, rx) = std::sync::mpsc::channel();
     let s = server.clone();
     std::thread::spawn(move || {
-        for _ in 0..1000 {
+        if (0..1000).any(|_| {
             if let Err(err) = s.send(msg.clone()) {
                 let _ = tx.send(Err(err));
-                return;
+                return true;
             }
+            false
+        }) {
+            return;
         }
         let _ = tx.send(Ok(()));
     });
@@ -109,9 +112,11 @@ fn write_loop_recovers_from_unserializable_response() {
 
     // A selection range whose parent chain is far deeper than the JSON encoder's nesting limit.
     let mut deep: Option<Box<lsproto::SelectionRange>> = None;
-    for _ in 0..20000 {
+    deep = (0..20000).fold(deep, |mut deep, _| {
         deep = Some(Box::new(lsproto::SelectionRange { parent: deep, ..Default::default() }));
-    }
+
+        deep
+    });
     let bad_result = vec![*deep.unwrap()];
     let bad_id = jsonrpc::new_id_string("bad");
     server

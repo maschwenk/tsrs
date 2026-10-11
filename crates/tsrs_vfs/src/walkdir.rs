@@ -81,7 +81,7 @@ impl WalkState {
                     use_case_sensitive_file_names: self.use_case_sensitive_file_names,
                     ..Default::default()
                 },
-            ) == 0
+            ) == std::cmp::Ordering::Equal
     }
 
     fn equivalent(&self, left: &str, right: &str) -> bool {
@@ -92,7 +92,7 @@ impl WalkState {
                 use_case_sensitive_file_names: self.use_case_sensitive_file_names,
                 ..Default::default()
             },
-        ) == 0
+        ) == std::cmp::Ordering::Equal
     }
 
     fn canonicalize(&self, path: &str) -> String {
@@ -127,9 +127,7 @@ impl WalkState {
 
         let entries = file_system.get_accessible_entries(path);
         let mut directories: FxHashSet<&str> = FxHashSet::default();
-        for name in &entries.directories {
-            directories.insert(name.as_str());
-        }
+        directories.extend(entries.directories.iter().map(std::string::String::as_str));
         let mut names: Vec<&str> = entries.directories.iter().map(|s| s.as_str()).collect();
         names.extend(entries.files.iter().map(|s| s.as_str()));
         names.sort_unstable();

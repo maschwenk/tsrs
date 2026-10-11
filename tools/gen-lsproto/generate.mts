@@ -2717,7 +2717,7 @@ function generateCode() {
 
     function generateCompareMethod(structure: Structure, fields: RField[]) {
         writeLine(`impl ${structure.name} {`);
-        writeLine(`    pub fn compare(&self, other: &${structure.name}) -> i32 {`);
+        writeLine(`    pub fn compare(&self, other: &${structure.name}) -> std::cmp::Ordering {`);
         for (let i = 0; i < fields.length; i++) {
             const f = fields[i];
             const isLast = i === fields.length - 1;
@@ -2727,7 +2727,7 @@ function generateCode() {
             }
             else {
                 writeLine(`        let c = ${expr};`);
-                writeLine(`        if c != 0 {`);
+                writeLine(`        if c != std::cmp::Ordering::Equal {`);
                 writeLine(`            return c;`);
                 writeLine(`        }`);
             }
@@ -3252,7 +3252,7 @@ function generateCode() {
             writeLine(`${indent}match json_object_has_key(v, &[${args}]) {`);
             for (let i = 0; i < allChecks.length; i++) {
                 writeLine(`${indent}    // ${allChecks[i].jsonFieldName}`);
-                writeLine(`${indent}    ${i} => {`);
+                writeLine(`${indent}    Some(${i}) => {`);
                 armAssign(allChecks[i].entry, indent + "        ", "arm_buffered(v)?");
                 writeLine(`${indent}    }`);
             }

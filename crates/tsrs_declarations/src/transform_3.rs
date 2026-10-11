@@ -89,9 +89,7 @@ impl DeclarationTransformer {
             return self.factory().new_node_list(Vec::new());
         }
         let mut results = Vec::with_capacity(params.nodes().len());
-        for &p in params.nodes() {
-            results.push(self.ensure_parameter(p));
-        }
+        results.extend(params.nodes().iter().map(|&p| self.ensure_parameter(p)));
         self.factory().new_node_list(results)
     }
 
@@ -291,10 +289,15 @@ impl DeclarationTransformer {
 
     // transform.go:2620
     pub(crate) fn transform_jsdoc_nullable_type(&self, input: P<Node>) -> P<Node> {
-        let replacement = self.factory().new_union_type_node(self.factory().new_node_list(vec![
-            self.visit_fn(Some(input.as_jsdoc_nullable_type().type_)).unwrap(),
-            self.factory().new_literal_type_node(self.factory().new_keyword_expression(Kind::NullKeyword)),
-        ]));
+        let replacement = self
+            .factory()
+            .new_union_type_node(self.factory().new_node_list(vec![
+                self.visit_fn(Some(input.as_jsdoc_nullable_type().type_))
+                    .unwrap(),
+                self.factory().new_literal_type_node(
+                    self.factory().new_keyword_expression(Kind::NullKeyword),
+                ),
+            ]));
         self.emit_context().set_original(replacement, input);
         replacement
     }
@@ -313,9 +316,13 @@ impl DeclarationTransformer {
 
     // transform.go:2639
     pub(crate) fn transform_jsdoc_optional_type(&self, input: P<Node>) -> P<Node> {
-        let replacement = self.factory().new_union_type_node(
-            self.factory().new_node_list(vec![self.visit_fn(Some(input.as_jsdoc_optional_type().type_)).unwrap(), self.factory().new_keyword_type_node(Kind::UndefinedKeyword)]),
-        );
+        let replacement = self
+            .factory()
+            .new_union_type_node(self.factory().new_node_list(vec![
+                self.visit_fn(Some(input.as_jsdoc_optional_type().type_))
+                    .unwrap(),
+                self.factory().new_keyword_type_node(Kind::UndefinedKeyword),
+            ]));
         self.emit_context().set_original(replacement, input);
         replacement
     }
@@ -648,13 +655,10 @@ impl DeclarationTransformer {
             let mut host: Vec<P<Node>> = Vec::new();
             if let Some(n) = n.filter(|n| n.kind() == Kind::SyntaxList) {
                 // find the first named syntax list element and use its' name & modifiers
-                for c in n.iter_children() {
-                    if let Some(c_name) = c.name() {
-                        name = Some(c_name.clone_node(self.factory()));
-                        if let Some(c_modifiers) = c.modifiers() {
-                            modifiers = Some(c_modifiers.clone_list(self.factory().as_node_factory()));
-                        }
-                        break;
+                if let Some((c, c_name)) = n.iter_children().into_iter().find_map(|c| c.name().map(|c_name| (c, c_name))) {
+                    name = Some(c_name.clone_node(self.factory()));
+                    if let Some(c_modifiers) = c.modifiers() {
+                        modifiers = Some(c_modifiers.clone_list(self.factory().as_node_factory()));
                     }
                 }
                 host = n.as_syntax_list().children.to_vec();

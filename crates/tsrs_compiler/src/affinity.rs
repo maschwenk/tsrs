@@ -131,12 +131,14 @@ impl ModuleAffinity {
         for g in 0..group_count {
             let start = modules.len();
             for &i in &members[starts[g]..starts[g + 1]] {
-                for m in std::iter::once(i as usize).chain(targets[i as usize].iter().copied()) {
+                modules.extend(std::iter::once(i as usize).chain(targets[i as usize].iter().copied()).filter_map(|m| {
                     if stamp[m] != g {
                         stamp[m] = g;
-                        modules.push(m as u32);
+                        Some(m as u32)
+                    } else {
+                        None
                     }
-                }
+                }));
             }
             // In file order, so that the sums below do not depend on the order of the import lists.
             modules[start..].sort_unstable();

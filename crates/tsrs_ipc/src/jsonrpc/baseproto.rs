@@ -160,7 +160,7 @@ pub(crate) fn go_quote(b: &[u8]) -> String {
     let mut out = String::with_capacity(b.len() + 2);
     out.push('"');
     for chunk in b.utf8_chunks() {
-        for c in chunk.valid().chars() {
+        out = chunk.valid().chars().fold(out, |mut out, c| {
             match c {
                 '\x07' => out.push_str("\\a"),
                 '\x08' => out.push_str("\\b"),
@@ -182,7 +182,9 @@ pub(crate) fn go_quote(b: &[u8]) -> String {
                     let _ = write!(out, "\\U{:08x}", c as u32);
                 }
             }
-        }
+
+            out
+        });
         for byte in chunk.invalid() {
             let _ = write!(out, "\\x{byte:02x}");
         }

@@ -128,13 +128,13 @@ impl View {
         if let Some(bucket) = registry.projects.get(&self.project_id) {
             let exports = search_fn(bucket);
             results.reserve(exports.len());
-            for e in exports {
+            results.extend(exports.into_iter().filter_map(|e| {
                 if e.module_id.0 == self.importing_file.path().as_str() {
                     // Don't auto-import from the importing file itself
-                    continue;
+                    return None;
                 }
-                results.push(e);
-            }
+                Some(e)
+            }));
         }
 
         // Compute the set of packages accessible to the importing file.
@@ -167,27 +167,25 @@ impl View {
             if let Some(node_modules_bucket) = registry.node_modules.get(dir_path) {
                 let exports = search_fn(node_modules_bucket);
                 results.reserve(exports.len());
-                for e in exports {
+                results.extend(exports.into_iter().filter_map(|e| {
                     // Exclude packages found in lower node_modules (shadowing)
                     if exclude_packages.has(&e.package_name) {
-                        continue;
+                        return None;
                     }
                     // If allowedPackages is nil, no package.json was found, so include all packages.
                     // Otherwise, only include packages that are dependencies or directly imported.
                     if let Some(allowed) = &allowed_packages {
                         if !allowed.has(&e.package_name) {
-                            continue;
+                            return None;
                         }
                     }
-                    results.push(e);
-                }
+                    Some(e)
+                }));
 
                 // As we go up the directory tree, exclude packages found in lower node_modules
                 if let Some(package_files) = &node_modules_bucket.package_files {
-                    #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the map too")]
-                    for pkg_name in package_files.keys() {
-                        exclude_packages.add(pkg_name.clone());
-                    }
+                    // pure set inserts; Go ranges the map too
+                    exclude_packages.m.extend(package_files.keys().map(std::clone::Clone::clone));
                 }
             }
             None
@@ -212,7 +210,7 @@ impl View {
             if !scanner::is_identifier_text(&name, LanguageVariant::Standard) {
                 continue;
             }
-            if for_jsx && !(tsrs_core::stringutil::unicode_is_upper(name.as_bytes()[0] as i32) || e.is_renameable()) {
+            if for_jsx && !(tsrs_core::stringutil::unicode_is_upper(u32::from(name.as_bytes()[0])) || e.is_renameable()) {
                 continue;
             }
             let mut target = e.export_id.clone();
@@ -233,10 +231,10 @@ impl View {
                 }
             }
             if let Some(existing) = grouped.get_mut(&key) {
-                for i in 0..existing.len() {
-                    let ex = Arc::clone(&existing[i]);
+                for element in existing.iter_mut() {
+                    let ex = Arc::clone(&(*element));
                     if e.export_id == ex.export_id {
-                        existing[i] = Arc::new(Export {
+                        (*element) = Arc::new(Export {
                             export_id: e.export_id.clone(),
                             module_file_name: e.module_file_name.clone(),
                             package_name: e.package_name.clone(),
@@ -258,15 +256,14 @@ impl View {
         }
 
         let mut fixes: Vec<FixAndExport> = Vec::new();
-        let compare_fixes = |a: &FixAndExport, b: &FixAndExport| -> i32 { self.compare_fixes_for_ranking(&a.fix, &b.fix) };
+        let compare_fixes =
+            |a: &FixAndExport, b: &FixAndExport| self.compare_fixes_for_ranking(&a.fix, &b.fix);
 
         for exps in grouped.values() {
             let mut fixes_for_group: Vec<FixAndExport> = Vec::with_capacity(exps.len());
-            for e in exps {
-                for fix in self.get_fixes(e, for_jsx, is_type_only_location, Some(position)) {
-                    fixes_for_group.push(FixAndExport { fix, export: Arc::clone(e) });
-                }
-            }
+            fixes_for_group.extend(exps.iter().flat_map(|e| {
+                self.get_fixes(e, for_jsx, is_type_only_location, Some(position)).into_iter().map(move |fix| FixAndExport { fix, export: Arc::clone(e) })
+            }));
             fixes.extend(tsrs_core::min_all_func(&fixes_for_group, compare_fixes));
         }
 
