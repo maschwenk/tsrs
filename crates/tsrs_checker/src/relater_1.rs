@@ -1148,12 +1148,27 @@ pub(crate) fn has_matching_recursion_identity(c: &mut Checker, t: P<Type>, ident
 /// `has_matching_recursion_identity` of an intersection recursion identity target.
 #[inline(never)]
 fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool {
+    // tsrs: the identities of the constituents (nested intersections' included) are kept per intersection: the
+    // deeply-nested test asks this of every intersection on the relater's stack each time, and they never change.
+    if let Some(ids) = c.intersection_recursion_ids.get(&target) {
+        return ids.contains(&identity);
+    }
+    let mut ids = Vec::new();
+    collect_intersection_recursion_ids(c, target, &mut ids);
+    let found = ids.contains(&identity);
+    c.intersection_recursion_ids.insert(target, ids.into_boxed_slice());
+    found
+}
+
+fn collect_intersection_recursion_ids(c: &mut Checker, target: P<Type>, ids: &mut Vec<RecursionId>) {
     for &t in target.types() {
-        if has_matching_recursion_identity(c, t, identity) {
-            return true;
+        let t = get_recursion_identity_target(c, t);
+        if t.flags().intersects(TypeFlags::Intersection) {
+            collect_intersection_recursion_ids(c, t, ids);
+        } else {
+            ids.push(get_recursion_identity_from_target(t));
         }
     }
-    false
 }
 
 // relater.go:810

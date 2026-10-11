@@ -1135,6 +1135,8 @@ pub struct Checker {
     /// `constituent_flags` (checker_13.rs): the flags of the constituents of a large union or intersection, nested
     /// ones included.
     pub(crate) constituent_flags: FxHashMap<P<Type>, TypeFlags>,
+    /// `intersection_recursion_ids` (relater_1.rs): the recursion identities of an intersection's constituents.
+    pub(crate) intersection_recursion_ids: FxHashMap<P<Type>, Box<[RecursionId]>>,
     /// Bumped whenever a type's resolved members are reset (`get_base_types`, `canonicalize_base_type_cycles`).
     pub(crate) members_reset_epoch: u32,
     /// Structured type member resolutions in progress: while any is, a member table may be incomplete.
@@ -1546,6 +1548,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         contextual_relevant: FxHashMap::default(),
         discriminant_property_types: FxHashMap::default(),
         constituent_flags: FxHashMap::default(),
+        intersection_recursion_ids: FxHashMap::default(),
         members_reset_epoch: 0,
         members_resolving: 0,
         last_emit_module_format: None,
@@ -2038,6 +2041,7 @@ impl Checker {
             contextual_relevant: FxHashMap::default(),
             discriminant_property_types: FxHashMap::default(),
             constituent_flags: FxHashMap::default(),
+            intersection_recursion_ids: FxHashMap::default(),
             members_reset_epoch: 0,
             members_resolving: 0,
             #[cfg(feature = "assignment-stats")]
