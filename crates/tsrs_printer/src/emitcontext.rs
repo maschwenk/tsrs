@@ -384,11 +384,8 @@ impl EmitContext {
                 changed = true;
             } else {
                 let mut left_prologues: FxHashSet<&'static str> = FxHashSet::default();
-                for &left_prologue in &statements[..left_standard_prologue_end] {
-                    left_prologues.insert(left_prologue.expression().unwrap().text());
-                }
-                for i in (0..right_standard_prologue_end).rev() {
-                    let right_prologue = declarations[i];
+                left_prologues.extend(statements[..left_standard_prologue_end].iter().map(|&left_prologue| left_prologue.expression().unwrap().text()));
+                for &right_prologue in declarations[..right_standard_prologue_end].iter().rev() {
                     if !left_prologues.contains(right_prologue.expression().unwrap().text()) {
                         left = concatenate(&[right_prologue], &left).into_owned();
                         changed = true;

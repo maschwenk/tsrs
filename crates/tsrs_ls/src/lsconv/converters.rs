@@ -281,9 +281,9 @@ impl Converters {
                 self.line_and_character_to_position(&original, text_range.start),
                 self.line_and_character_to_position(&original, text_range.end),
             );
-            for mapped in spans.original_to_virtual_intersecting_spans(original_range, feature) {
-                result.push(MappedSpan { script, mapped_span: mapped });
-            }
+            result.extend(
+                spans.original_to_virtual_intersecting_spans(original_range, feature).into_iter().map(|mapped| MappedSpan { script, mapped_span: mapped }),
+            );
         }
         result
     }
@@ -291,11 +291,9 @@ impl Converters {
     // converters.go:177
     fn lsp_range_to_virtual_for_scripts<T: Script + Clone>(&self, scripts: &[T], text_range: lsproto::Range, feature: Feature) -> Vec<MappedSpan<T>> {
         let mut result = Vec::with_capacity(scripts.len());
-        for script in scripts {
-            for mapped in self.lsp_range_to_virtual(script, text_range, feature) {
-                result.push(MappedSpan { script: script.clone(), mapped_span: mapped });
-            }
-        }
+        result.extend(scripts.iter().flat_map(|script| {
+            self.lsp_range_to_virtual(script, text_range, feature).into_iter().map(|mapped| MappedSpan { script: script.clone(), mapped_span: mapped })
+        }));
         result
     }
 
@@ -371,11 +369,9 @@ impl Converters {
         feature: Feature,
     ) -> Vec<MappedPosition<T>> {
         let mut result = Vec::with_capacity(scripts.len());
-        for script in scripts {
-            for mapped in self.lsp_position_to_virtual(script, position, feature) {
-                result.push(MappedPosition { script: script.clone(), mapped_position: mapped });
-            }
-        }
+        result.extend(scripts.iter().flat_map(|script| {
+            self.lsp_position_to_virtual(script, position, feature).into_iter().map(|mapped| MappedPosition { script: script.clone(), mapped_position: mapped })
+        }));
         result
     }
 
@@ -433,7 +429,7 @@ pub fn language_kind_to_script_kind(language_id: lsproto::LanguageKind) -> Scrip
 // converters.go:308 (Go strings.NewReplacer with single-byte keys: one pass, byte by byte)
 fn extra_escape_replace(s: &str) -> String {
     let mut out: Vec<u8> = Vec::with_capacity(s.len());
-    for &b in s.as_bytes() {
+    out = s.as_bytes().iter().fold(out, |mut out, &b| {
         let replacement = match b {
             b':' => "%3A",
             b'/' => "%2F",
@@ -458,11 +454,13 @@ fn extra_escape_replace(s: &str) -> String {
             b' ' => "%20",
             _ => {
                 out.push(b);
-                continue;
+                return out;
             }
         };
         out.extend_from_slice(replacement.as_bytes());
-    }
+
+        out
+    });
     // Only ASCII bytes are replaced (by ASCII), so the result is valid UTF-8 when the input is.
     tsrs_core::utf8::into_string(out).unwrap()
 }
@@ -522,15 +520,11 @@ fn url_path_escape(s: &str) -> String {
         return s.to_string();
     }
     let mut t: Vec<u8> = Vec::with_capacity(bytes.len() * 3);
-    for &c in bytes {
-        if should_escape(c) {
-            t.push(b'%');
-            t.push(UPPERHEX[(c >> 4) as usize]);
-            t.push(UPPERHEX[(c & 15) as usize]);
-        } else {
-            t.push(c);
-        }
-    }
+    t.extend(bytes.iter().flat_map(|&c| {
+        { if should_escape(c) { [Some(b'%'), Some(UPPERHEX[(c >> 4) as usize]), Some(UPPERHEX[(c & 15) as usize])] } else { [Some(c), None, None] } }
+            .into_iter()
+            .flatten()
+    }));
     tsrs_core::utf8::into_string(t).unwrap()
 }
 
@@ -703,7 +697,7 @@ fn diagnostic_to_lsp(_ctx: &Context, converters: &Converters, diagnostic: P<Diag
     let mut related_information: Vec<lsproto::DiagnosticRelatedInformation> = Vec::new();
     if opts.related_information {
         related_information.reserve(diagnostic.related_information().len());
-        for &related in diagnostic.related_information() {
+        related_information.extend(diagnostic.related_information().iter().map(|&related| {
             let related_file = related.file().expect("related information without a file");
             let (script, loc) = diagnostic_script_and_range(related_file, related.loc(), related.source());
             let (mut related_range, fidelity) = converters.to_lsp_range(&script, loc);
@@ -712,11 +706,11 @@ fn diagnostic_to_lsp(_ctx: &Context, converters: &Converters, diagnostic: P<Diag
                 // location instead of presenting the synthesized span's insertion point as related source.
                 related_range = lsproto::Range::default();
             }
-            related_information.push(lsproto::DiagnosticRelatedInformation {
+            lsproto::DiagnosticRelatedInformation {
                 location: lsproto::Location { uri: file_name_to_document_uri(related_file.original_file_name()), range: related_range },
                 message: related.localize(),
-            });
-        }
+            }
+        }));
     }
 
     let mut tags: Vec<lsproto::DiagnosticTag> = Vec::new();

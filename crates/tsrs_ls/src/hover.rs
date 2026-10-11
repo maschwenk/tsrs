@@ -308,16 +308,21 @@ fn documentation_from_alias(
         candidates.push(export_symbol);
     }
 
-    for candidate in candidates {
+    if let Some(result) = candidates.into_iter().find_map(|candidate| {
         let aliased_declaration = candidate.value_declaration().or_else(|| candidate.declarations().first().copied());
         if aliased_declaration.is_none() {
-            continue;
+            return None;
         }
 
-        let documentation = get_documentation_from_declaration(get_mapped_location, c, Some(candidate), aliased_declaration, Some(node), content_format, comment_only);
+        let documentation =
+            get_documentation_from_declaration(get_mapped_location, c, Some(candidate), aliased_declaration, Some(node), content_format, comment_only);
         if !documentation.is_empty() {
-            return documentation;
+            return Some(documentation);
         }
+
+        None
+    }) {
+        return result;
     }
 
     String::new()
@@ -1148,10 +1153,8 @@ fn get_call_or_new_expression(mut node: P<Node>) -> Option<P<Node>> {
 fn contains_typedef_tag(jsdoc: P<Node>) -> bool {
     if jsdoc.kind() == Kind::JSDoc {
         if let Some(tags) = jsdoc.as_jsdoc().tags {
-            for &tag in tags.nodes() {
-                if tag.kind() == Kind::JSDocTypedefTag || tag.kind() == Kind::JSDocCallbackTag {
-                    return true;
-                }
+            if tags.nodes().iter().any(|&tag| tag.kind() == Kind::JSDocTypedefTag || tag.kind() == Kind::JSDocCallbackTag) {
+                return true;
             }
         }
     }
@@ -1167,16 +1170,12 @@ fn write_code(b: &mut String, lang: &str, code: &str) {
     while code.contains(&"`".repeat(ticks)) {
         ticks += 1;
     }
-    for _ in 0..ticks {
-        b.push('`');
-    }
+    b.extend((0..ticks).map(|_| '`'));
     b.push_str(lang);
     b.push('\n');
     b.push_str(code);
     b.push('\n');
-    for _ in 0..ticks {
-        b.push('`');
-    }
+    b.extend((0..ticks).map(|_| '`'));
     b.push('\n');
 }
 

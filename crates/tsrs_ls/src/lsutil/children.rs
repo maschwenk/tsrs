@@ -71,11 +71,8 @@ pub fn get_last_visited_child(node: P<Node>, source_file: P<SourceFile>) -> Opti
         let last_child = Rc::clone(&last_child);
         Rc::new(move |node_list: Option<P<NodeList>>, _: &mut NodeVisitor| {
             if let Some(list) = node_list {
-                for &v in list.nodes().iter().rev() {
-                    if !v.flags().intersects(NodeFlags::Reparsed) {
-                        last_child.set(Some(v));
-                        break;
-                    }
+                if let Some(v) = list.nodes().iter().rev().into_iter().find_map(|&v| if !v.flags().intersects(NodeFlags::Reparsed) { Some(v) } else { None }) {
+                    last_child.set(Some(v));
                 }
             }
             node_list

@@ -429,28 +429,30 @@ impl<'a> speculation<'a> {
         let compiler_options = ctx.opts.config.compiler_options().unwrap();
         let mut out = Vec::new();
         if !compiler_options.no_resolve.is_true() && !ctx.opts.skip_module_resolution {
-            for (name, diagnostic) in &resolutions.referenced_files {
+            out.extend(resolutions.referenced_files.iter().filter_map(|(name, diagnostic)| {
                 if diagnostic.is_none() {
                     let name = tspath::normalize_path(name);
                     let path = to_path(&name);
-                    out.push((name, path));
+                    Some((name, path))
+                } else {
+                    None
                 }
-            }
-            for (resolved, _) in &resolutions.type_references {
+            }));
+            out.extend(resolutions.type_references.iter().filter_map(|(resolved, _)| {
                 if resolved.is_resolved() {
                     let name = tspath::normalize_path(resolved.resolved_file_name);
                     let path = to_path(&name);
-                    out.push((name, path));
+                    Some((name, path))
+                } else {
+                    None
                 }
-            }
+            }));
         }
         let imports = file.imports();
-        for entry in resolutions.imports.iter().take(imports.len()) {
-            let Some(prepared) = entry.as_ref().and_then(|entry| entry.prepared.as_ref()) else { continue };
-            if !prepared.elide_on_depth {
-                out.push((prepared.normalized_file_path.to_string(), prepared.path.clone()));
-            }
-        }
+        out.extend(resolutions.imports.iter().take(imports.len()).filter_map(|entry| {
+            let Some(prepared) = entry.as_ref().and_then(|entry| entry.prepared.as_ref()) else { return None };
+            if !prepared.elide_on_depth { Some((prepared.normalized_file_path.to_string(), prepared.path.clone())) } else { None }
+        }));
         out
     }
 
@@ -665,11 +667,13 @@ impl filesParser {
             let unlisted = (!data.tasks.contains_key(&task.normalized_file_path)).then_some(item.task);
             // `task_needs_parse` before the key: it is false for a loaded task, and most of a later round's queued
             // sub tasks name files that an earlier round loaded (vscode's round 2: ~110k of them for 16 files).
-            for candidate in data.tasks.values().copied().chain(unlisted) {
+            to_parse.extend(data.tasks.values().copied().chain(unlisted).filter_map(|candidate| {
                 if task_needs_parse(loader, candidate) && planned.insert((item.data, Arc::clone(&loader.tasks[candidate].normalized_file_path))) {
-                    to_parse.push(candidate);
+                    Some(candidate)
+                } else {
+                    None
                 }
-            }
+            }));
         }
         // The sub tasks the round's loads will append to `loader.tasks` (at most), reserved at once: on vscode the first
         // sequential load appends ~110k tasks, and growing the vector by doubling copied and faulted it repeatedly.
@@ -1092,9 +1096,9 @@ impl filesParser {
 
         let loader = c.loader;
         let reason_keys: Vec<Path> = reasons_order.iter().map(|&(_, task)| loader.tasks[task].path.clone()).collect();
-        for ((data, _), path) in reasons_order.into_iter().zip(reason_keys) {
-            include_data.file_include_reasons.insert(path, std::mem::take(&mut reasons_by_data[data]));
-        }
+        include_data
+            .file_include_reasons
+            .extend(reasons_order.into_iter().zip(reason_keys).map(|((data, _), path)| (path, std::mem::take(&mut reasons_by_data[data]))));
         loader.sort_libs(&mut lib_files);
 
         let lib_len = lib_files.len();

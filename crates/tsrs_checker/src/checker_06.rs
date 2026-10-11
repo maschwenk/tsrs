@@ -1072,14 +1072,23 @@ impl Checker {
             return;
         }
         let mut diagnostic: Option<P<Diagnostic>> = None;
-        if !ast::is_private_identifier(prop_node) && containing_type.flags().intersects(TypeFlags::Union) && !containing_type.flags().intersects(TypeFlags::Primitive) {
-            for &subtype in containing_type.types() {
-                if self.get_property_of_type(subtype, prop_node.text()).is_none() && self.get_applicable_index_info_for_name(subtype, prop_node.text()).is_none() {
-                    let name = tsrs_scanner::declaration_name_to_string(Some(prop_node));
-                    let type_string = self.type_to_string_exported(subtype);
-                    diagnostic = Some(new_diagnostic_chain_for_node(diagnostic, prop_node, Some(&diagnostics::Property_0_does_not_exist_on_type_1), &[&name, &type_string]));
-                    break;
+        if !ast::is_private_identifier(prop_node)
+            && containing_type.flags().intersects(TypeFlags::Union)
+            && !containing_type.flags().intersects(TypeFlags::Primitive)
+        {
+            if let Some(subtype) = containing_type.types().iter().find_map(|&subtype| {
+                if self.get_property_of_type(subtype, prop_node.text()).is_none()
+                    && self.get_applicable_index_info_for_name(subtype, prop_node.text()).is_none()
+                {
+                    Some(subtype)
+                } else {
+                    None
                 }
+            }) {
+                let name = tsrs_scanner::declaration_name_to_string(Some(prop_node));
+                let type_string = self.type_to_string_exported(subtype);
+                diagnostic =
+                    Some(new_diagnostic_chain_for_node(diagnostic, prop_node, Some(&diagnostics::Property_0_does_not_exist_on_type_1), &[&name, &type_string]));
             }
         }
         if self.type_has_static_property(prop_node.text(), containing_type) {
@@ -1147,10 +1156,10 @@ impl Checker {
         if let Some(container) = container {
             let feature_map = get_feature_map();
             if let Some(type_features) = feature_map.get(container.name()) {
-                for entry in type_features {
-                    if entry.props.contains(&missing_property) {
-                        return entry.lib.to_string();
-                    }
+                if let Some(result) =
+                    type_features.iter().find_map(|entry| if entry.props.contains(&missing_property) { Some(entry.lib.to_string()) } else { None })
+                {
+                    return result;
                 }
             }
         }
@@ -1526,13 +1535,17 @@ impl Checker {
             return callback(self, prop);
         }
         let types = self.value_symbol_links.get(prop).containing_type().unwrap().types();
-        for &t in types {
+        if types.iter().any(|&t| {
             let p = self.get_property_of_type(t, prop.name());
             if let Some(p) = p {
                 if self.for_each_property_worker(p, callback) {
                     return true;
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }
@@ -2398,11 +2411,12 @@ impl Checker {
             }
             let mut non_rest_names: Vec<P<Node>> = Vec::new();
             if let Some(all_properties) = all_properties {
-                for &other_property in all_properties.nodes() {
-                    if !ast::is_spread_assignment(other_property) {
-                        non_rest_names.push(other_property.name().unwrap());
-                    }
-                }
+                non_rest_names.extend(
+                    all_properties
+                        .nodes()
+                        .iter()
+                        .filter_map(|&other_property| if !ast::is_spread_assignment(other_property) { Some(other_property.name().unwrap()) } else { None }),
+                );
             }
             let t = self.get_rest_type(object_literal_type, &non_rest_names, object_literal_type.symbol());
             self.check_grammar_for_disallowed_trailing_comma(all_properties, &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
@@ -2421,9 +2435,9 @@ impl Checker {
         let undefined_type = self.undefined_type;
         let possibly_out_of_bounds_type = self.check_iterated_type_or_element_type(IterationUse::Destructuring | IterationUse::PossiblyOutOfBounds, source_type, undefined_type, Some(node));
         let mut in_bounds_type = if self.compiler_options.no_unchecked_indexed_access == Tristate::True { None } else { Some(possibly_out_of_bounds_type) };
-        for i in 0..elements.len() {
+        for (i, element) in elements.iter().enumerate() {
             let mut t = possibly_out_of_bounds_type;
-            if elements[i].kind() == Kind::SpreadElement {
+            if (*element).kind() == Kind::SpreadElement {
                 if in_bounds_type.is_none() {
                     in_bounds_type = Some(self.check_iterated_type_or_element_type(IterationUse::Destructuring, source_type, undefined_type, Some(node)));
                 }

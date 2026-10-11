@@ -66,9 +66,7 @@ impl<'a> StringTable<'a> {
     /// Appends the string offsets section followed by the string data section.
     pub fn encode_into(&self, out: &mut Vec<u8>) {
         out.reserve(self.encoded_length());
-        for &o in &self.offsets {
-            out.extend_from_slice(&o.to_le_bytes());
-        }
+        out.extend(self.offsets.iter().flat_map(|&o| o.to_le_bytes()));
         out.extend_from_slice(self.file_text);
         out.extend_from_slice(&self.other_strings);
     }

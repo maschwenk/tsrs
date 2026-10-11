@@ -40,12 +40,7 @@ pub(crate) fn visit<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, node: Option<
 
 #[inline]
 pub(crate) fn visit_nodes<V: FnMut(P<Node>) -> bool + ?Sized>(v: &mut V, nodes: &[P<Node>]) -> bool {
-    for &node in nodes {
-        if v(node) {
-            return true;
-        }
-    }
-    false
+    nodes.iter().any(|&node| v(node))
 }
 
 #[inline]

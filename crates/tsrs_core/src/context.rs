@@ -108,12 +108,11 @@ impl cancelState {
 
 // The cancellation state a new child must be registered with (Go `parentCancelCtx`).
 fn nearest_cancel(ctx: &Context) -> Option<&Arc<cancelState>> {
-    let mut cur = ctx.node.as_ref();
-    while let Some(node) = cur {
-        if let ctxKind::Cancel(state) = &node.kind {
-            return Some(state);
-        }
-        cur = node.parent.node.as_ref();
+    let cur = ctx.node.as_ref();
+    if let Some(state) =
+        std::iter::successors(cur, |node| node.parent.node.as_ref()).find_map(|node| if let ctxKind::Cancel(state) = &node.kind { Some(state) } else { None })
+    {
+        return Some(state);
     }
     None
 }
@@ -175,14 +174,16 @@ impl Context {
 
     // Go `ctx.Value(key).(T)`.
     pub fn value<T: Any + Send + Sync>(&self) -> Option<&T> {
-        let mut cur = self.node.as_ref();
-        while let Some(node) = cur {
+        let cur = self.node.as_ref();
+        if let Some(value) = std::iter::successors(cur, |node| node.parent.node.as_ref()).find_map(|node| {
             if let ctxKind::Value(id, value) = &node.kind {
                 if *id == TypeId::of::<T>() {
-                    return value.downcast_ref::<T>();
+                    return Some(value.downcast_ref::<T>());
                 }
             }
-            cur = node.parent.node.as_ref();
+            None
+        }) {
+            return value;
         }
         None
     }

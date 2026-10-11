@@ -201,23 +201,33 @@ impl affectedFilesHandler<'_> {
         let mut frontier = sorted(self.program.snapshot.referenced_map.get_referenced_by(file.path()));
         while !frontier.is_empty() {
             let mut level: Vec<Option<P<SourceFile>>> = Vec::new();
-            for current_path in frontier {
+            level.extend(frontier.into_iter().filter_map(|current_path| {
                 if let std::collections::hash_map::Entry::Vacant(entry) = seen_file_names_map.entry(current_path) {
                     let current_file = self.program.p().get_source_file_by_path(entry.key());
                     entry.insert(current_file);
-                    level.push(current_file);
+                    Some(current_file)
+                } else {
+                    None
                 }
-            }
+            }));
             let to_compute: Vec<P<SourceFile>> = level.iter().flatten().copied().filter(|&f| self.needs_dts_signature(f)).collect();
             let mut computed = if to_compute.len() > 1 { self.compute_dts_signatures(to_compute) } else { FxHashMap::default() };
             let mut next: Vec<Path> = Vec::new();
             // If the current file is not nil and has a shape change, we need to queue it for processing
-            for current_file in level.into_iter().flatten() {
-                let signature = if computed.is_empty() { None } else { Some(computed.remove(&current_file).unwrap_or_default()) };
-                if self.update_shape_signature_with(current_file, false, signature) {
-                    next.extend(sorted(self.program.snapshot.referenced_map.get_referenced_by(current_file.path())));
-                }
-            }
+            next.extend(
+                level
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|current_file| {
+                        let signature = if computed.is_empty() { None } else { Some(computed.remove(&current_file).unwrap_or_default()) };
+                        if self.update_shape_signature_with(current_file, false, signature) {
+                            Some(sorted(self.program.snapshot.referenced_map.get_referenced_by(current_file.path())))
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten(),
+            );
             frontier = next;
         }
         // Return array of values that needs emit
@@ -333,10 +343,12 @@ impl affectedFilesHandler<'_> {
             }
             // Since references of changed file = affected files - we would have already handled d.ts emit and semantic diagnostics
             // for those files. Now we need to handle files referencing those affected files to ensure correctness.
-            for file_referencing_affected_file in sorted(self.program.snapshot.referenced_map.get_referenced_by(&file_referencing_changed_file)) {
-                if self.handle_dts_may_change_of_file_and_references(dts_may_change, &file_referencing_affected_file, invalidate_js_files) {
-                    return;
-                }
+            if sorted(self.program.snapshot.referenced_map.get_referenced_by(&file_referencing_changed_file)).into_iter().any(
+                |file_referencing_affected_file| {
+                    self.handle_dts_may_change_of_file_and_references(dts_may_change, &file_referencing_affected_file, invalidate_js_files)
+                },
+            ) {
+                return;
             }
         }
     }
@@ -361,12 +373,9 @@ impl affectedFilesHandler<'_> {
 
         // Remove the diagnostics of files that import this file and
         // any files that are referenced by it (directly or indirectly)
-        for referencing_file_path in sorted(self.program.snapshot.referenced_map.get_referenced_by(file_path)) {
-            if self.handle_dts_may_change_of_file_and_references(dts_may_change, &referencing_file_path, invalidate_js_files) {
-                return true;
-            }
-        }
-        false
+        sorted(self.program.snapshot.referenced_map.get_referenced_by(file_path))
+            .into_iter()
+            .any(|referencing_file_path| self.handle_dts_may_change_of_file_and_references(dts_may_change, &referencing_file_path, invalidate_js_files))
     }
 
     // affectedfileshandler.go:299
@@ -471,13 +480,12 @@ pub(crate) fn collect_all_affected_files(ctx: &Context, program: &Program) {
     };
     let mut result: Vec<P<SourceFile>> = Vec::new();
     let mut seen: FxHashSet<P<SourceFile>> = FxHashSet::default();
-    for file in sorted(program.snapshot.changed_files_set.keys()) {
-        for affected_file in handler.get_files_affected_by(&file) {
-            if seen.insert(affected_file) {
-                result.push(affected_file);
-            }
-        }
-    }
+    result.extend(
+        sorted(program.snapshot.changed_files_set.keys())
+            .into_iter()
+            .flat_map(|file| handler.get_files_affected_by(&file))
+            .filter(|&affected_file| seen.insert(affected_file)),
+    );
 
     if ctx.err().is_some() {
         return;
@@ -495,9 +503,7 @@ pub(crate) fn collect_all_affected_files(ctx: &Context, program: &Program) {
         if to_compute.len() > 1 {
             let mut computed = handler.compute_dts_signatures(to_compute.clone());
             let mut precomputed = handler.precomputed.borrow_mut();
-            for file in to_compute {
-                precomputed.insert(file.path().clone(), computed.remove(&file).unwrap_or_default());
-            }
+            precomputed.extend(to_compute.into_iter().map(|file| (file.path().clone(), computed.remove(&file).unwrap_or_default())));
         }
     }
     for file in result {

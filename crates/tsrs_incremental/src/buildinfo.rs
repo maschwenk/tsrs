@@ -790,13 +790,11 @@ impl BuildInfo {
         let to_path = |file_name: &str| tspath::to_path(file_name, build_info_directory, compare_path_options.use_case_sensitive_file_names);
 
         // Create map from resolvedRoot to Root
-        for resolved in &self.resolved_root {
+        resolved_to_root.extend(self.resolved_root.iter().filter_map(|resolved| {
             let resolved_root = self.file_name(resolved.resolved);
             let root = self.file_name(resolved.root);
-            if !resolved_root.is_empty() && !root.is_empty() {
-                resolved_to_root.insert(to_path(resolved_root), to_path(root));
-            }
-        }
+            if !resolved_root.is_empty() && !root.is_empty() { Some((to_path(resolved_root), to_path(root))) } else { None }
+        }));
 
         let mut add_root = |resolved_root: &str, file_info: Option<&BuildInfoFileInfo>| {
             if resolved_root.is_empty() {

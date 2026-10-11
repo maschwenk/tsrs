@@ -125,12 +125,10 @@ pub fn parse_test_files_and_symlinks_with_options<T>(
             }
             if meta_data_name != "filename" {
                 if meta_data_name == "symlink" && !current_file_name.is_empty() {
-                    for link in meta_data_value.split(',') {
+                    symlinks.extend(meta_data_value.split(',').filter_map(|link| {
                         let link = link.trim();
-                        if !link.is_empty() {
-                            symlinks.insert(link.to_string(), current_file_name.clone());
-                        }
-                    }
+                        if !link.is_empty() { Some((link.to_string(), current_file_name.clone())) } else { None }
+                    }));
                 } else if FOURSLASH_DIRECTIVES.contains(&meta_data_name.as_str()) {
                     // File-specific option
                     current_file_options.insert(meta_data_name, meta_data_value);
@@ -207,10 +205,10 @@ pub fn parse_test_files_and_symlinks_with_options<T>(
 
 pub fn extract_compiler_settings(content: &str) -> RawCompilerSettings {
     let mut opts = RawCompilerSettings::new();
-    for m in OPTION_REGEX.captures_iter(content) {
+    opts.extend(OPTION_REGEX.captures_iter(content).map(|m| {
         let value = m[2].trim();
-        opts.insert(m[1].to_lowercase(), value.strip_suffix(';').unwrap_or(value).to_string());
-    }
+        (m[1].to_lowercase(), value.strip_suffix(';').unwrap_or(value).to_string())
+    }));
     opts
 }
 
@@ -227,9 +225,7 @@ fn parse_symlink_from_test(line: &str, symlinks: &mut BTreeMap<String, String>) 
 fn skip_trivia(text: &str, mut pos: usize) -> usize {
     let bytes = text.as_bytes();
     if pos == 0 && bytes.starts_with(b"#!") {
-        while pos < bytes.len() && bytes[pos] != b'\n' && bytes[pos] != b'\r' {
-            pos += 1;
-        }
+        pos += (pos..bytes.len()).take_while(|&index| bytes[index] != b'\n' && bytes[index] != b'\r').count();
     }
     loop {
         if pos >= bytes.len() {

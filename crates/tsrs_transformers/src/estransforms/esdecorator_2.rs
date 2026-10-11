@@ -296,11 +296,11 @@ impl esDecoratorTransformer {
                     // static block that contains the pending initializers that precedes this block.
                     let pending = std::mem::take(&mut *ci.pending_static_initializers.borrow_mut());
                     let mut stmts: Vec<P<Node>> = Vec::new();
-                    for init in pending {
+                    stmts.extend(pending.into_iter().map(|init| {
                         let init_stmt = f.new_expression_statement(init);
                         ec.set_source_map_range(init_stmt, ec.source_map_range(init));
-                        stmts.push(init_stmt);
-                    }
+                        init_stmt
+                    }));
                     let body = f.new_block(f.new_node_list(stmts), true);
                     let static_block = f.new_class_static_block_declaration(None, body);
                     // Return both the new static block and the original
@@ -960,9 +960,7 @@ impl esDecoratorTransformer {
     // Transforms all of the decorators for a declaration into an array of expressions.
     pub(crate) fn transform_all_decorators_of_declaration(&self, decorators: &[P<Node>]) -> Vec<P<Node>> {
         let mut result: Vec<P<Node>> = Vec::with_capacity(decorators.len());
-        for d in decorators {
-            result.push(self.transform_decorator(*d));
-        }
+        result.extend(decorators.iter().map(|d| self.transform_decorator(*d)));
         result
     }
 

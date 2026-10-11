@@ -68,13 +68,16 @@ const LINEAR_MAX: usize = 18;
 
 fn is16(ranges: &[Range16], r: u16) -> bool {
     if ranges.len() <= LINEAR_MAX || r <= 0xFF {
-        for range in ranges {
+        if let Some(result) = ranges.iter().find_map(|range| {
             if r < range.lo {
-                return false;
+                Some(false)
+            } else if r <= range.hi {
+                Some(range.stride == 1 || (r - range.lo) % range.stride == 0)
+            } else {
+                None
             }
-            if r <= range.hi {
-                return range.stride == 1 || (r - range.lo) % range.stride == 0;
-            }
+        }) {
+            return result;
         }
         return false;
     }
@@ -96,13 +99,16 @@ fn is16(ranges: &[Range16], r: u16) -> bool {
 
 fn is32(ranges: &[Range32], r: u32) -> bool {
     if ranges.len() <= LINEAR_MAX {
-        for range in ranges {
+        if let Some(result) = ranges.iter().find_map(|range| {
             if r < range.lo {
-                return false;
+                Some(false)
+            } else if r <= range.hi {
+                Some(range.stride == 1 || (r - range.lo) % range.stride == 0)
+            } else {
+                None
             }
-            if r <= range.hi {
-                return range.stride == 1 || (r - range.lo) % range.stride == 0;
-            }
+        }) {
+            return result;
         }
         return false;
     }
@@ -289,9 +295,7 @@ pub fn decode_last_rune(s: &[u8]) -> (Rune, usize) {
     if s[start] < 0x80 {
         return (s[start] as Rune, 1);
     }
-    while start > lim && (s[start] & 0xC0) == 0x80 {
-        start -= 1;
-    }
+    start -= (lim + 1..=start).rev().take_while(|&i| (s[i] & 0xC0) == 0x80).count();
     let (r, size) = decode_rune(&s[start..end]);
     if start + size != end {
         return (0xFFFD, 1);

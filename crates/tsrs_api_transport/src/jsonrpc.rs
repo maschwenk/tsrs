@@ -100,7 +100,7 @@ fn parse_go_int64(s: &str) -> Result<i64, String> {
 fn go_quote(bytes: &[u8]) -> String {
     let mut out = String::from("\"");
     for chunk in bytes.utf8_chunks() {
-        for c in chunk.valid().chars() {
+        out = chunk.valid().chars().fold(out, |mut out, c| {
             match c {
                 '"' => out.push_str("\\\""),
                 '\\' => out.push_str("\\\\"),
@@ -112,7 +112,9 @@ fn go_quote(bytes: &[u8]) -> String {
                 }
                 c => out.push(c),
             }
-        }
+
+            out
+        });
         for b in chunk.invalid() {
             let _ = write!(out, "\\x{b:02x}");
         }

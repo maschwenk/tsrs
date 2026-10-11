@@ -221,9 +221,9 @@ fn push_fake_scope(b: &NodeBuilderImpl, c: &mut Checker, kind: &'static str, add
 }
 
 // Go's `bindPatternWorker` closure in enterNewScope.
-#[expect(clippy::never_loop, reason = "Go's bindPatternWorker returns after the first element too")]
+// Go's bindPatternWorker returns after the first element too
 fn bind_pattern(b: &NodeBuilderImpl, c: &mut Checker, p: P<Node>, add: AddSymbol) {
-    for &e in p.elements() {
+    if let Some(&e) = p.elements().first() {
         match e.kind() {
             Kind::OmittedExpression => return,
             Kind::BindingElement => {

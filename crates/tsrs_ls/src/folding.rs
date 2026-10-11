@@ -30,14 +30,14 @@ impl LanguageService {
         let mut projections = vec![source_file];
         projections.extend_from_slice(source_file.supplemental_source_files());
         let mut res: Vec<lsproto::FoldingRange> = Vec::new();
-        for projection in projections {
+        res.extend(projections.into_iter().flat_map(|projection| {
             let mut ranges = self.add_node_outlining_spans(ctx, projection);
             ranges.extend(self.add_region_outlining_spans(ctx, projection));
             if lsproto::get_client_capabilities(ctx).text_document.folding_range.line_folding_only {
                 ranges = self.adjust_folding_end(ranges, projection);
             }
-            res.extend(ranges);
-        }
+            ranges
+        }));
         goslices::sort_stable_func(&mut res, |a, b| {
             let c = go_cmp_compare(a.start_line, b.start_line);
             if c != 0 {
@@ -105,7 +105,7 @@ impl LanguageService {
     fn adjust_folding_end(&self, ranges: Vec<lsproto::FoldingRange>, source_file: P<SourceFile>) -> Vec<lsproto::FoldingRange> {
         let source_text = source_file.text().as_bytes();
         let mut result = Vec::with_capacity(ranges.len());
-        for mut r in ranges {
+        result.extend(ranges.into_iter().map(|mut r| {
             if let Some(end_character) = r.end_character.filter(|&c| c > 0) {
                 let positions = self.converters.from_lsp_position_for_source_file(
                     source_file,
@@ -123,8 +123,8 @@ impl LanguageService {
                     }
                 }
             }
-            result.push(r);
-        }
+            r
+        }));
         result
     }
 
@@ -278,12 +278,8 @@ fn visit_node(ctx: &Context, n: P<Node>, depth_remaining: i32, source_file: P<So
         let expression_nodes = visit_node(ctx, n.expression().unwrap(), depth_remaining, source_file, l);
         folding_range.extend(expression_nodes);
         depth_remaining -= 1;
-        for &arg in n.arguments() {
-            folding_range.extend(visit_node(ctx, arg, depth_remaining, source_file, l));
-        }
-        for &type_arg in n.type_arguments() {
-            folding_range.extend(visit_node(ctx, type_arg, depth_remaining, source_file, l));
-        }
+        folding_range.extend(n.arguments().iter().flat_map(|&arg| visit_node(ctx, arg, depth_remaining, source_file, l)));
+        folding_range.extend(n.type_arguments().iter().flat_map(|&type_arg| visit_node(ctx, type_arg, depth_remaining, source_file, l)));
     } else if ast::is_if_statement(n) && n.as_if_statement().else_statement.is_some_and(ast::is_if_statement) {
         // Consider an 'else if' to be on the same depth as the 'if'.
         let if_statement = n.as_if_statement();

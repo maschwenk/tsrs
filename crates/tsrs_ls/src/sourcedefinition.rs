@@ -222,9 +222,7 @@ impl SourceDefResolver<'_> {
         }
 
         let mut declarations: Vec<P<Node>> = Vec::new();
-        for &declaration in checker_declarations {
-            declarations.extend(self.map_declaration_to_source(node, declaration, &resolved_impl_file));
-        }
+        declarations.extend(checker_declarations.iter().flat_map(|&declaration| self.map_declaration_to_source(node, declaration, &resolved_impl_file)));
         let declarations = unique_declaration_nodes(&declarations);
         if has_concrete_source_declarations(&declarations) {
             return declarations;
@@ -470,12 +468,16 @@ impl SourceDefResolver<'_> {
             modes.push(ModuleKind::CommonJS);
         }
 
-        for mode in modes {
+        if let Some(result) = modes.into_iter().find_map(|mode| {
             if let Ok((resolved, _)) = self.resolver.resolve_module_name(module_name, resolve_from_file, mode, None) {
                 if resolved.is_resolved() && !tspath::is_declaration_file_name(resolved.resolved_file_name) {
-                    return resolved.resolved_file_name.to_string();
+                    return Some(resolved.resolved_file_name.to_string());
                 }
             }
+
+            None
+        }) {
+            return result;
         }
         String::new()
     }
@@ -521,16 +523,19 @@ impl SourceDefResolver<'_> {
 
 // sourcedefinition.go:475
 fn find_containing_module_specifier(node: P<Node>) -> Option<P<Node>> {
-    let mut current = Some(node);
-    while let Some(cur) = current {
+    let current = Some(node);
+    if let Some(result) = std::iter::successors(current, |cur| cur.parent()).find_map(|cur| {
         if ast::is_any_import_or_re_export(cur) || ast::is_require_call(cur, true /*requireStringLiteralLikeArgument*/) || ast::is_import_call(cur) {
             if let Some(module_specifier) = ast::get_external_module_name(cur) {
                 if ast::is_string_literal_like(module_specifier) {
-                    return Some(module_specifier);
+                    return Some(Some(module_specifier));
                 }
             }
         }
-        current = cur.parent();
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -555,9 +560,11 @@ impl SourceDefResolver<'_> {
         }
 
         let mut forwarded: Vec<P<Node>> = Vec::new();
-        for forwarded_file in self.get_forwarded_implementation_files(source_file) {
-            forwarded.extend(self.find_declarations_in_file(&forwarded_file, names, seen));
-        }
+        forwarded.extend(
+            self.get_forwarded_implementation_files(source_file)
+                .into_iter()
+                .flat_map(|forwarded_file| self.find_declarations_in_file(&forwarded_file, names, seen)),
+        );
         if !forwarded.is_empty() {
             if has_concrete_source_declarations(&forwarded) {
                 return unique_declaration_nodes(&forwarded);
@@ -574,13 +581,11 @@ impl SourceDefResolver<'_> {
         let preferred_mode = self.infer_implied_node_format(source_file.file_name());
 
         let mut files: Vec<String> = Vec::new();
-        for &imp in source_file.imports() {
+        files.extend(source_file.imports().iter().filter_map(|&imp| {
             let module_name = imp.text();
             let implementation_file = self.resolve_implementation_from(module_name, source_file.file_name(), preferred_mode);
-            if !implementation_file.is_empty() {
-                files.push(implementation_file);
-            }
-        }
+            if !implementation_file.is_empty() { Some(implementation_file) } else { None }
+        }));
         deduplicate(files)
     }
 }
@@ -780,26 +785,25 @@ fn is_concrete_source_declaration(node: P<Node>) -> bool {
 fn unique_declaration_nodes(nodes: &[P<Node>]) -> Vec<P<Node>> {
     let mut seen: FxHashSet<(String, TextRange)> = FxHashSet::default();
     let mut result: Vec<P<Node>> = Vec::with_capacity(nodes.len());
-    for &node in nodes {
+    result.extend(nodes.iter().filter_map(|&node| {
         let file_name = ast::get_source_file_of_node(node).unwrap().file_name().to_string();
         let key = (file_name, node.loc());
         if !seen.insert(key) {
-            continue;
+            return None;
         }
-        result.push(node);
-    }
+        Some(node)
+    }));
     result
 }
 
 // sourcedefinition.go:727
 fn find_closest_declaration_node(source_file: P<SourceFile>, pos: i32) -> P<Node> {
     let node = astnav::get_touching_property_name(source_file, pos);
-    let mut current = Some(node);
-    while let Some(cur) = current {
-        if ast::is_declaration(cur) || cur.kind() == Kind::ExportAssignment {
-            return cur;
-        }
-        current = cur.parent();
+    let current = Some(node);
+    if let Some(result) = std::iter::successors(current, |cur| cur.parent())
+        .find_map(|cur| if ast::is_declaration(cur) || cur.kind() == Kind::ExportAssignment { Some(cur) } else { None })
+    {
+        return result;
     }
     get_source_definition_entry_node(source_file)
 }

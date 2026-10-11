@@ -195,9 +195,7 @@ impl NodeBuilderImpl {
                 let mut type_params: Option<P<NodeList>> = None;
                 if !d.type_parameters.is_empty() {
                     let mut res: Vec<P<Node>> = Vec::with_capacity(d.type_parameters.len());
-                    for &tp in d.type_parameters {
-                        res.push(self.reuse_node(c, tp).unwrap());
-                    }
+                    res.extend(d.type_parameters.iter().map(|&tp| self.reuse_node(c, tp).unwrap()));
                     type_params = Some(self.f.new_node_list(res));
                 }
                 let params = self.pseudo_parameters_to_node_list(c, d.parameters);
@@ -209,9 +207,7 @@ impl NodeBuilderImpl {
             PseudoTypeKind::Tuple => {
                 let mut res: Vec<P<Node>> = Vec::new();
                 let elements = t.as_pseudo_type_tuple().elements;
-                for &e in elements {
-                    res.push(self.pseudo_type_to_node(c, Some(e)).unwrap());
-                }
+                res.extend(elements.iter().map(|&e| self.pseudo_type_to_node(c, Some(e)).unwrap()));
                 // pseudo-tuples are implicitly `readonly` since they originate from `as const` contexts
                 // but strada *sometimes* fails to add the `readonly` modifier to the generated node.
                 let result = self.f.new_tuple_type_node(self.f.new_node_list(res));
@@ -264,9 +260,7 @@ impl NodeBuilderImpl {
                             let mut type_params: Option<P<NodeList>> = None;
                             if !d.type_parameters.is_empty() {
                                 let mut res: Vec<P<Node>> = Vec::with_capacity(d.type_parameters.len());
-                                for &tp in d.type_parameters {
-                                    res.push(self.reuse_node(c, tp).unwrap());
-                                }
+                                res.extend(d.type_parameters.iter().map(|&tp| self.reuse_node(c, tp).unwrap()));
                                 type_params = Some(self.f.new_node_list(res));
                             }
                             if is_const {
@@ -331,9 +325,7 @@ impl NodeBuilderImpl {
     // pseudotypenodebuilder.go:327
     pub(crate) fn pseudo_parameters_to_node_list(&self, c: &mut Checker, params: &[P<PseudoParameter>]) -> P<NodeList> {
         let mut res: Vec<P<Node>> = Vec::with_capacity(params.len());
-        for &p in params {
-            res.push(self.pseudo_parameter_to_node(c, p));
-        }
+        res.extend(params.iter().map(|&p| self.pseudo_parameter_to_node(c, p)));
         self.f.new_node_list(res)
     }
 
@@ -435,9 +427,11 @@ impl NodeBuilderImpl {
                 // Count total declarations across all target prop symbols to handle getter/setter pairs,
                 // which are two elements in pt.Elements but only one symbol in targetProps.
                 let mut target_decl_count = 0;
-                for prop in target_props {
+                target_decl_count = target_props.iter().fold(target_decl_count, |mut target_decl_count, prop| {
                     target_decl_count += prop.declarations().len();
-                }
+
+                    target_decl_count
+                });
                 if pt.elements.len() != target_decl_count {
                     return false;
                 }
@@ -562,12 +556,11 @@ impl NodeBuilderImpl {
                 if pt.elements.len() != element_types.len() {
                     return false;
                 }
-                for (i, &elem) in pt.elements.iter().enumerate() {
-                    if !self.pseudo_type_equivalent_to_type(c, Some(elem), Some(element_types[i]), false, report_errors) {
-                        return false;
-                    }
-                }
-                true
+                !(pt
+                    .elements
+                    .iter()
+                    .enumerate()
+                    .any(|(i, &elem)| !self.pseudo_type_equivalent_to_type(c, Some(elem), Some(element_types[i]), false, report_errors)))
             }
             PseudoTypeKind::SingleCallSignature => {
                 let target_sig = c.get_single_call_signature(undefined_stripped.unwrap());
@@ -752,17 +745,19 @@ impl NodeBuilderImpl {
                 let mut res: Vec<P<Type>> = Vec::new();
                 let mut has_elided_type = false;
                 let members = t.as_pseudo_type_union().types;
-                for &m in members {
+                res = members.iter().try_fold(res, |mut res, &m| {
                     if !c.strict_null_checks && (m.kind == PseudoTypeKind::Undefined || m.kind == PseudoTypeKind::Null) {
                         has_elided_type = true;
-                        continue;
+                        return Some(res);
                     }
                     let t = self.pseudo_type_to_type(c, Some(m));
                     let Some(t) = t else {
                         return None; // propagate failure
                     };
                     res.push(t);
-                }
+
+                    Some(res)
+                })?;
                 if res.len() == 1 {
                     return Some(res[0]);
                 }

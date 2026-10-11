@@ -260,7 +260,7 @@ impl JSXTransformer {
             if ast::is_external_module(file) {
                 statements_updated = true;
                 let mut new_statements: Vec<P<Node>> = Vec::with_capacity(imports.len());
-                for (import_source, import_specifiers_map) in &imports {
+                new_statements.extend(imports.iter().map(|(import_source, import_specifiers_map)| {
                     let s = f.new_import_declaration(
                         None,
                         Some(f.new_import_clause(Kind::Unknown, None, Some(f.new_named_imports(f.new_node_list(get_sorted_specifiers(import_specifiers_map)))))),
@@ -268,8 +268,8 @@ impl JSXTransformer {
                         None,
                     );
                     ast::set_parent_in_children(s);
-                    new_statements.push(s);
-                }
+                    s
+                }));
                 for e in new_statements {
                     self.insert_statement_after_custom_prologue(&mut statements, Some(e));
                 }
@@ -279,9 +279,9 @@ impl JSXTransformer {
                 for (import_source, import_specifiers_map) in &imports {
                     let sorted = get_sorted_specifiers(import_specifiers_map);
                     let mut as_binding_elems: Vec<P<Node>> = Vec::with_capacity(sorted.len());
-                    for elem in sorted {
-                        as_binding_elems.push(f.new_binding_element(None, elem.property_name(), Some(elem.as_import_specifier().name()), None));
-                    }
+                    as_binding_elems.extend(
+                        sorted.into_iter().map(|elem| f.new_binding_element(None, elem.property_name(), Some(elem.as_import_specifier().name()), None)),
+                    );
                     let s = f.new_variable_statement(
                         None,
                         f.new_variable_declaration_list(
@@ -373,13 +373,13 @@ impl JSXTransformer {
         // For multiple children in the children property array, don't set StartOnNewLine
         // on child elements — the array literal is single-line.
         let mut results: Vec<P<Node>> = Vec::with_capacity(non_whitespce_children.len());
-        for child in non_whitespce_children {
+        results.extend(non_whitespce_children.into_iter().filter_map(|child| {
             let Some(res) = self.transform_jsx_child_to_expression(child) else {
-                continue;
+                return None;
             };
             self.emit_context().set_emit_flags(res, self.emit_context().emit_flags(res) & !EmitFlags::StartOnNewLine);
-            results.push(res);
-        }
+            Some(res)
+        }));
         if results.is_empty() {
             return None;
         }
@@ -510,7 +510,7 @@ impl JSXTransformer {
     // jsx.go:465
     fn transform_jsx_attributes_to_props(&self, attrs: &[P<Node>], children_prop: Option<P<Node>>) -> Vec<P<Node>> {
         let mut props: Vec<P<Node>> = Vec::with_capacity(attrs.len());
-        for attr in attrs {
+        props = attrs.iter().fold(props, |mut props, attr| {
             let attr = *attr;
             if attr.kind() == Kind::JsxSpreadAttribute {
                 let res = self.transform_jsx_spread_attributes_to_props(attr);
@@ -518,7 +518,9 @@ impl JSXTransformer {
             } else {
                 props.push(self.transform_jsx_attribute_to_object_literal_element(attr));
             }
-        }
+
+            props
+        });
         if let Some(children_prop) = children_prop {
             props.push(children_prop);
         }
@@ -528,11 +530,13 @@ impl JSXTransformer {
 
 // jsx.go:481
 fn has_proto(obj: P<Node>) -> bool {
-    for p in obj.properties() {
+    if obj.properties().iter().any(|p| {
         let p = *p;
-        if ast::is_property_assignment(p) && (ast::is_string_literal(p.name().unwrap()) || ast::is_identifier(p.name().unwrap())) && p.name().unwrap().text() == "__proto__" {
-            return true;
-        }
+        ast::is_property_assignment(p)
+            && (ast::is_string_literal(p.name().unwrap()) || ast::is_identifier(p.name().unwrap()))
+            && p.name().unwrap().text() == "__proto__"
+    }) {
+        return true;
     }
     false
 }
@@ -754,11 +758,7 @@ impl JSXTransformer {
 
         let mut new_children: Vec<P<Node>> = Vec::new();
         if let Some(children) = children {
-            for c in children.nodes() {
-                if let Some(res) = self.transform_jsx_child_to_expression(*c) {
-                    new_children.push(res);
-                }
-            }
+            new_children.extend(children.nodes().iter().filter_map(|&c| self.transform_jsx_child_to_expression(c)));
         }
 
         // Add StartOnNewLine flag only if there are multiple actual children (after filtering)
@@ -790,11 +790,7 @@ impl JSXTransformer {
 
         let mut new_children: Vec<P<Node>> = Vec::new();
         if let Some(children) = children {
-            for c in children.nodes() {
-                if let Some(res) = self.transform_jsx_child_to_expression(*c) {
-                    new_children.push(res);
-                }
-            }
+            new_children.extend(children.nodes().iter().filter_map(|&c| self.transform_jsx_child_to_expression(c)));
         }
 
         // Add StartOnNewLine flag only if there are multiple actual children (after filtering)
@@ -984,13 +980,17 @@ fn decode_entity(entity: &str) -> Option<stringutil::Rune> {
             return None;
         }
 
-        for c in entity.chars() {
+        if let Some(result) = entity.chars().into_iter().find_map(|c| {
             if base == 16 && !stringutil::is_hex_digit(c) {
-                return None;
+                return Some(None);
             }
             if base == 10 && !stringutil::is_digit(c) {
-                return None;
+                return Some(None);
             }
+
+            None
+        }) {
+            return result;
         }
 
         return i32::from_str_radix(entity, base).ok();

@@ -105,9 +105,7 @@ impl EncodeContext {
 }
 
 pub(crate) fn append_u32s(buf: &mut Vec<u8>, values: &[u32]) {
-    for v in values {
-        buf.extend_from_slice(&v.to_le_bytes());
-    }
+    buf.extend(values.iter().flat_map(|v| v.to_le_bytes()));
 }
 
 /// Go `hasModifiers`.
@@ -338,9 +336,7 @@ fn encode_tree(root: P<Node>, source_file: Option<&'static SourceFile>) -> Resul
         }
         if total > 0 {
             let mut map = FxHashMap::with_capacity_and_hasher(total, Default::default());
-            for &n in sf.imports.get().iter().chain(sf.module_augmentations.get()) {
-                map.insert(n, 0);
-            }
+            map.extend(sf.imports.get().iter().chain(sf.module_augmentations.get()).map(|&n| (n, 0)));
             if let Some(e) = emi.filter(|&e| e != root) {
                 map.insert(e, 0);
             }

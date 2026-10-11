@@ -644,12 +644,7 @@ impl RegExpParser {
     }
 
     fn named_capturing_groups_contains(&self, name: &str) -> bool {
-        for group in &self.named_capturing_groups {
-            if group.contains(&name) {
-                return true;
-            }
-        }
-        false
+        self.named_capturing_groups.iter().any(|group| group.contains(&name))
     }
 
     fn is_class_content_exit(&self, ch: i32) -> bool {

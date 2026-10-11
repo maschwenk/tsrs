@@ -62,9 +62,7 @@ fn encode_jsx_character_entity(b: &mut String, char_code: stringutil::Rune) {
 fn encode_utf16_escape_sequence(b: &mut String, char_code: stringutil::Rune) {
     let hex_char_code = format!("{:X}", char_code as u32);
     b.push_str("\\u");
-    for _ in hex_char_code.len()..4 {
-        b.push('0');
-    }
+    b.extend((hex_char_code.len()..4).map(|_| '0'));
     b.push_str(&hex_char_code);
 }
 
@@ -701,18 +699,14 @@ pub(crate) fn make_identifier_from_module_name(module_name: &str) -> String {
 // utilities.go:706
 pub(crate) fn find_span_end_with_emit_context<T: Copy>(c: &EmitContext, array: &[T], test: impl Fn(&EmitContext, T) -> bool, start: usize) -> usize {
     let mut i = start;
-    while i < array.len() && test(c, array[i]) {
-        i += 1;
-    }
+    i += (i..array.len()).take_while(|&index| test(c, array[index])).count();
     i
 }
 
 // utilities.go:714
 pub(crate) fn find_span_end<T: Copy>(array: &[T], test: impl Fn(T) -> bool, start: usize) -> usize {
     let mut i = start;
-    while i < array.len() && test(array[i]) {
-        i += 1;
-    }
+    i += (i..array.len()).take_while(|&index| test(array[index])).count();
     i
 }
 

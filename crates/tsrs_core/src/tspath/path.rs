@@ -293,12 +293,14 @@ pub fn get_path_from_path_components<S: AsRef<str>>(path_components: &[S]) -> St
 
     let root = path_components[0].as_ref();
     let mut result = if !root.is_empty() { ensure_trailing_directory_separator(root) } else { String::new() };
-    for (i, c) in path_components[1..].iter().enumerate() {
+    result = path_components[1..].iter().enumerate().fold(result, |mut result, (i, c)| {
         if i > 0 {
             result.push('/');
         }
         result.push_str(c.as_ref());
-    }
+
+        result
+    });
     result
 }
 
@@ -370,17 +372,13 @@ fn get_normalized_path_components_from_combined(path: &str) -> Vec<String> {
     let mut i = root_length;
     while i < bytes.len() {
         // Skip directory separators (handles consecutive separators and trailing '/').
-        while i < bytes.len() && bytes[i] == b'/' {
-            i += 1;
-        }
+        i += (i..bytes.len()).take_while(|&index| bytes[index] == b'/').count();
         if i >= bytes.len() {
             break;
         }
 
         let start = i;
-        while i < bytes.len() && bytes[i] != b'/' {
-            i += 1;
-        }
+        i += (i..bytes.len()).take_while(|&index| bytes[index] != b'/').count();
         let component = &path[start..i];
 
         if component.is_empty() || component == "." {
@@ -580,13 +578,7 @@ pub fn has_relative_path_segment(p: &str) -> bool {
         }
         i += 7;
     }
-    while i + 1 < n {
-        if relative_segment_after(p, i) {
-            return true;
-        }
-        i += 1;
-    }
-    false
+    (i..n.saturating_sub(1)).any(|i| relative_segment_after(p, i))
 }
 
 // Whether p[slash] is a slash that ends an empty segment or starts a "." or ".." segment (`has_relative_path_segment`).
@@ -802,9 +794,7 @@ pub fn get_path_components_relative_to(from: &str, to: &str, options: &ComparePa
 
     result.push(String::new());
     // Add all the relative components until we hit a common directory.
-    for _ in 0..num_dot_dot_slashes {
-        result.push("..".to_string());
-    }
+    result.extend((0..num_dot_dot_slashes).map(|_| "..".to_string()));
     // Now add all the remaining components of the "to" path.
     result.extend(to_components[start..].iter().cloned());
 
@@ -925,11 +915,15 @@ pub fn get_longest_extension_from_path(path: &str, extensions: &[&str], ignore_c
 }
 
 fn get_any_extension_from_path_worker(path: &str, extensions: &[&str], string_equality_comparer: fn(&str, &str) -> bool) -> String {
-    for extension in extensions {
+    if let Some(result) = extensions.iter().find_map(|extension| {
         let result = try_get_extension_from_path_with(path, extension, string_equality_comparer);
         if !result.is_empty() {
-            return result;
+            return Some(result);
         }
+
+        None
+    }) {
+        return result;
     }
     String::new()
 }
@@ -1045,11 +1039,8 @@ pub fn compare_paths(a: &str, b: &str, options: &ComparePathsOptions) -> i32 {
     let a_components = reduce_path_components(&get_path_components(&a, ""));
     let b_components = reduce_path_components(&get_path_components(&b, ""));
     let shared_length = a_components.len().min(b_components.len());
-    for i in 1..shared_length {
-        let result = options.get_comparer()(&a_components[i], &b_components[i]);
-        if result != 0 {
-            return result;
-        }
+    if let Some(result) = (1..shared_length).map(|i| options.get_comparer()(&a_components[i], &b_components[i])).find(|&result| result != 0) {
+        return result;
     }
     cmp_to_i32(a_components.len().cmp(&b_components.len()))
 }
@@ -1078,11 +1069,11 @@ pub fn contains_path(parent: &str, child: &str, options: &ComparePathsOptions) -
     }
 
     let component_comparer = options.get_equality_comparer();
-    for (i, parent_component) in parent_components.iter().enumerate() {
+    if parent_components.iter().enumerate().any(|(i, parent_component)| {
         let comparer: fn(&str, &str) -> bool = if i == 0 { stringutil::equate_string_case_insensitive } else { component_comparer };
-        if !comparer(parent_component, &child_components[i]) {
-            return false;
-        }
+        !comparer(parent_component, &child_components[i])
+    }) {
+        return false;
     }
 
     true
@@ -1214,11 +1205,13 @@ fn get_common_parents_worker(component_groups: &[Vec<String>], min_components: u
     }
     // Determine the maximum depth we can consider
     let mut max_depth = component_groups[0].len();
-    for comps in &component_groups[1..] {
+    max_depth = component_groups[1..].iter().fold(max_depth, |mut max_depth, comps| {
         if comps.len() < max_depth {
             max_depth = comps.len();
         }
-    }
+
+        max_depth
+    });
 
     let equality = options.get_equality_comparer();
     for last_common_index in 0..max_depth {
@@ -1241,19 +1234,14 @@ fn get_common_parents_worker(component_groups: &[Vec<String>], min_components: u
                     }
                     ordered_groups.sort();
                     let mut result = Vec::with_capacity(new_groups.len());
-                    for key in &ordered_groups {
+                    result.extend(ordered_groups.iter().flat_map(|key| {
                         let group = &new_groups[key];
-                        let sub_results = get_common_parents_worker(&group.1, min_components - (last_common_index + 1), options);
-                        for sr in sub_results {
-                            if sr.is_empty() {
-                                result.push(group.0.clone());
-                            } else {
-                                let mut v = group.0.clone();
-                                v.extend(sr);
-                                result.push(v);
-                            }
-                        }
-                    }
+                        get_common_parents_worker(&group.1, min_components - (last_common_index + 1), options).into_iter().map(move |sr| {
+                            let mut v = group.0.clone();
+                            v.extend(sr);
+                            v
+                        })
+                    }));
                     return result;
                 }
                 return vec![component_groups[0][..last_common_index].to_vec()];

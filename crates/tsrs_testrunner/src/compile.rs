@@ -175,12 +175,14 @@ fn compile_files_ex(
     tsconfig: Option<P<ParsedCommandLine>>,
 ) -> Result<CompilationResult, String> {
     let mut program_file_names = Vec::new();
-    for file in input_files {
+    program_file_names.extend(input_files.iter().filter_map(|file| {
         let file_name = tspath::get_normalized_absolute_path(&file.unit_name, current_directory);
         if !tspath::file_extension_is(&file_name, tspath::EXTENSION_JSON) && !tspath::file_extension_is(&file_name, tspath::EXTENSION_TS_BUILD_INFO) {
-            program_file_names.push(file_name);
+            Some(file_name)
+        } else {
+            None
         }
-    }
+    }));
 
     // Performance optimization; avoid copying in the /.lib folder if the test doesn't need it.
     let mut include_lib_dir = input_files.iter().any(|file| file.content.contains(&format!("{TEST_LIB_FOLDER}/")));
@@ -219,19 +221,17 @@ fn compile_files_ex(
 
     // Create fake FS for testing
     let mut testfs: BTreeMap<String, vfstest::MapFile> = BTreeMap::new();
-    for file in input_files.iter().chain(other_files) {
-        testfs.insert(tspath::get_normalized_absolute_path(&file.unit_name, current_directory), vfstest::MapFile::from(file.content.as_str()));
-    }
-    for (src, target) in symlinks {
-        testfs.insert(
-            tspath::get_normalized_absolute_path(src, current_directory),
-            vfstest::symlink(&tspath::get_normalized_absolute_path(target, current_directory)),
-        );
-    }
+    testfs.extend(
+        input_files
+            .iter()
+            .chain(other_files)
+            .map(|file| (tspath::get_normalized_absolute_path(&file.unit_name, current_directory), vfstest::MapFile::from(file.content.as_str()))),
+    );
+    testfs.extend(symlinks.iter().map(|(src, target)| {
+        (tspath::get_normalized_absolute_path(src, current_directory), vfstest::symlink(&tspath::get_normalized_absolute_path(target, current_directory)))
+    }));
     if include_lib_dir {
-        for (k, v) in test_lib_folder_map() {
-            testfs.insert(k, vfstest::MapFile::from(v));
-        }
+        testfs.extend(test_lib_folder_map().into_iter().map(|(k, v)| (k, vfstest::MapFile::from(v))));
     }
 
     let fs = vfstest::from_map(testfs, harness_options.use_case_sensitive_file_names);
@@ -401,9 +401,7 @@ fn verify_javascript_output(
         }
         let outputs = result.emit.as_ref().unwrap();
         let mut text = String::new();
-        for file in outputs.dts.values() {
-            text.push_str(&crate::emit_harness::file_output(file, &result.harness_options));
-        }
+        text.extend(outputs.dts.values().map(|file| crate::emit_harness::file_output(file, &result.harness_options)));
         return Some(Ok(if text.is_empty() { crate::baseline::NO_CONTENT.to_string() } else { text }));
     }
     let header_components =

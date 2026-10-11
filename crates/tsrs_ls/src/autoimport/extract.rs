@@ -129,11 +129,13 @@ impl exportExtractor<'_> {
         }
         if !file.ambient_module_names().is_empty() {
             let mut export_count = 0;
-            for &statement in file.statements.nodes() {
+            export_count = file.statements.nodes().iter().fold(export_count, |mut export_count, &statement| {
                 if ast::is_module_with_string_literal_name(statement) && is_non_pattern_ambient_module_declaration(file, statement) {
                     export_count += statement.symbol().unwrap().exports().map_or(0, |e| e.len());
                 }
-            }
+
+                export_count
+            });
             let mut exports = Vec::with_capacity(export_count);
             for &statement in file.statements.nodes() {
                 if ast::is_module_with_string_literal_name(statement) && is_non_pattern_ambient_module_declaration(file, statement) {
@@ -159,9 +161,11 @@ impl exportExtractor<'_> {
             })
             .collect();
         let mut augmentation_export_count = 0;
-        for decl in &module_augmentations {
+        augmentation_export_count = module_augmentations.iter().fold(augmentation_export_count, |mut augmentation_export_count, decl| {
             augmentation_export_count += decl.symbol().unwrap().exports().map_or(0, |e| e.len());
-        }
+
+            augmentation_export_count
+        });
         let module_id = self.symbol_extractor.get_module_id(file);
         let file_exports = file.symbol().unwrap().exports();
         let mut exports = Vec::with_capacity(file_exports.map_or(0, |e| e.len()) + augmentation_export_count);
@@ -202,12 +206,7 @@ impl exportExtractor<'_> {
 
 // extract.go:136
 fn is_non_pattern_ambient_module_declaration(file: P<SourceFile>, decl: P<Node>) -> bool {
-    for module in file.pattern_ambient_modules() {
-        if Some(module.symbol) == decl.symbol() {
-            return false;
-        }
-    }
-    true
+    !(file.pattern_ambient_modules().iter().any(|module| Some(module.symbol) == decl.symbol()))
 }
 
 impl symbolExtractor<'_> {
@@ -245,7 +244,7 @@ impl symbolExtractor<'_> {
             }
 
             exports.reserve(all_exports.len());
-            for reexported_symbol in all_exports {
+            exports.extend(all_exports.into_iter().filter_map(|reexported_symbol| {
                 let (export, _) = self.create_export(reexported_symbol, module_id, module_file_name, ExportSyntax::Star, file, &mut checker_lease);
                 if let Some(mut export) = export {
                     let reexported_parent = reexported_symbol.parent();
@@ -262,9 +261,11 @@ impl symbolExtractor<'_> {
                         }
                     }
                     export.through = ast::InternalSymbolNameExportStar.to_string();
-                    exports.push(Arc::new(export));
+                    Some(Arc::new(export))
+                } else {
+                    None
                 }
-            }
+            }));
             return;
         }
 
@@ -281,15 +282,19 @@ impl symbolExtractor<'_> {
             if syntax == ExportSyntax::Equals && target.flags().intersects(SymbolFlags::Namespace) {
                 if let Some(target_exports) = target.exports() {
                     exports.reserve(target_exports.len());
-                    for (inner_name, named_export) in target_exports.entries() {
+                    exports.extend(target_exports.entries().into_iter().filter_map(|(inner_name, named_export)| {
                         if inner_name != ast::InternalSymbolNameExportStar {
                             let (export, _) = self.create_export(named_export, module_id, module_file_name, syntax, file, &mut checker_lease);
                             if let Some(mut export) = export {
                                 export.through = name.to_string();
-                                exports.push(Arc::new(export));
+                                Some(Arc::new(export))
+                            } else {
+                                None
                             }
+                        } else {
+                            None
                         }
-                    }
+                    }));
                 }
             }
         } else if syntax == ExportSyntax::CommonJSModuleExports {
@@ -300,7 +305,7 @@ impl symbolExtractor<'_> {
                 // At least, it would be sketchy if there were any methods, computed properties...
                 let properties = expression.as_object_literal_expression().properties.nodes();
                 exports.reserve(properties.len());
-                for &prop in properties {
+                exports.extend(properties.iter().filter_map(|&prop| {
                     if ast::is_shorthand_property_assignment(prop) || ast::is_property_assignment(prop) && prop.name().unwrap().kind() == Kind::Identifier {
                         // Go indexes the members map, which yields nil for a missing member; createExport then
                         // dereferences it.
@@ -308,10 +313,14 @@ impl symbolExtractor<'_> {
                         let (export, _) = self.create_export(member, module_id, module_file_name, syntax, file, &mut checker_lease);
                         if let Some(mut export) = export {
                             export.through = name.to_string();
-                            exports.push(Arc::new(export));
+                            Some(Arc::new(export))
+                        } else {
+                            None
                         }
+                    } else {
+                        None
                     }
-                }
+                }));
             }
         }
     }
@@ -499,26 +508,30 @@ fn should_ignore_symbol(symbol: P<Symbol>) -> bool {
 
 // extract.go:417
 fn get_syntax(symbol: P<Symbol>) -> ExportSyntax {
-    for &decl in symbol.declarations() {
+    if let Some(result) = symbol.declarations().iter().find_map(|&decl| {
         match decl.kind() {
-            Kind::ExportSpecifier => return ExportSyntax::Named,
+            Kind::ExportSpecifier => return Some(ExportSyntax::Named),
             Kind::ExportAssignment => {
-                return if decl.as_export_assignment().is_export_equals { ExportSyntax::Equals } else { ExportSyntax::DefaultDeclaration };
+                return Some(if decl.as_export_assignment().is_export_equals { ExportSyntax::Equals } else { ExportSyntax::DefaultDeclaration });
             }
-            Kind::NamespaceExportDeclaration => return ExportSyntax::UMD,
+            Kind::NamespaceExportDeclaration => return Some(ExportSyntax::UMD),
             Kind::BinaryExpression => match ast::get_assignment_declaration_kind(decl) {
-                JSDeclarationKind::ModuleExports => return ExportSyntax::CommonJSModuleExports,
-                JSDeclarationKind::ExportsProperty => return ExportSyntax::CommonJSExportsProperty,
+                JSDeclarationKind::ModuleExports => return Some(ExportSyntax::CommonJSModuleExports),
+                JSDeclarationKind::ExportsProperty => return Some(ExportSyntax::CommonJSExportsProperty),
                 _ => {}
             },
             _ => {
                 if ast::get_combined_modifier_flags(decl).intersects(ModifierFlags::Default) {
-                    return ExportSyntax::DefaultModifier;
+                    return Some(ExportSyntax::DefaultModifier);
                 } else {
-                    return ExportSyntax::Modifier;
+                    return Some(ExportSyntax::Modifier);
                 }
             }
         }
+
+        None
+    }) {
+        return result;
     }
     ExportSyntax::None
 }

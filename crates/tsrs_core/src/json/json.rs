@@ -111,9 +111,7 @@ fn es6_number_string(f: f64) -> String {
 fn newline(out: &mut String, prefix: &str, indent: &str, depth: usize) {
     out.push('\n');
     out.push_str(prefix);
-    for _ in 0..depth {
-        out.push_str(indent);
-    }
+    out.extend((0..depth).map(|_| indent));
 }
 
 fn write_value(out: &mut String, v: &Value, prefix: &str, indent: &str, depth: usize) -> Result<(), String> {
@@ -243,9 +241,7 @@ struct JsonParser<'a> {
 
 impl JsonParser<'_> {
     fn skip_ws(&mut self) {
-        while self.pos < self.s.len() && matches!(self.s[self.pos], b' ' | b'\t' | b'\n' | b'\r') {
-            self.pos += 1;
-        }
+        self.pos += (self.pos..self.s.len()).take_while(|&index| matches!(self.s[index], b' ' | b'\t' | b'\n' | b'\r')).count();
     }
 
     fn err<T>(&self, msg: &str) -> Result<T, String> {
@@ -337,9 +333,7 @@ impl JsonParser<'_> {
         }
         let digits = |p: &mut Self| {
             let s = p.pos;
-            while p.pos < p.s.len() && p.s[p.pos].is_ascii_digit() {
-                p.pos += 1;
-            }
+            p.pos += (p.pos..p.s.len()).take_while(|&index| p.s[index].is_ascii_digit()).count();
             p.pos - s
         };
         match self.s.get(self.pos) {

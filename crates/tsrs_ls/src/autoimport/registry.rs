@@ -472,12 +472,14 @@ impl Registry {
     // registry.go:397
     pub fn node_modules_directories(&self) -> FxHashMap<Path, String> {
         let mut dirs = FxHashMap::default();
-        #[expect(clippy::iter_over_hash_type, reason = "pure inserts into the returned map; Go ranges the map too")]
-        for (dir_path, dir) in self.directories.iter() {
+        // pure inserts into the returned map; Go ranges the map too
+        dirs.extend(self.directories.iter().filter_map(|(dir_path, dir)| {
             if dir.has_node_modules {
-                dirs.insert(Path::new(tspath::combine_paths(dir_path.as_str(), &["node_modules"])), tspath::combine_paths(&dir.name, &["node_modules"]));
+                Some((Path::new(tspath::combine_paths(dir_path.as_str(), &["node_modules"])), tspath::combine_paths(&dir.name, &["node_modules"])))
+            } else {
+                None
             }
-        }
+        }));
         dirs
     }
 
@@ -529,18 +531,18 @@ impl Registry {
     pub fn get_cache_stats(&self) -> CacheStats {
         let mut stats = CacheStats { unique_package_count: self.unique_package_count, ..Default::default() };
 
-        #[expect(clippy::iter_over_hash_type, reason = "the stats Vec is sorted by unique bucket name after; Go ranges the map too")]
-        for (project_id, bucket) in self.projects.iter() {
+        // the stats Vec is sorted by unique bucket name after; Go ranges the map too
+        stats.project_buckets.extend(self.projects.iter().map(|(project_id, bucket)| {
             let export_count = bucket.index.as_ref().map_or(0, |i| i.entries.len());
-            stats.project_buckets.push(BucketStats {
+            BucketStats {
                 name: project_id.string(),
                 export_count,
                 file_count: bucket.paths.len(),
                 state: bucket.state.clone(),
                 dependency_names: bucket.dependency_names.clone(),
                 package_names: None,
-            });
-        }
+            }
+        }));
 
         #[expect(clippy::iter_over_hash_type, reason = "the stats Vec is sorted by unique bucket name after; the inner loop only adds to a set and sums; Go ranges the map too")]
         for (path, bucket) in self.node_modules.iter() {
@@ -772,22 +774,26 @@ impl registryBuilder<'_> {
         let mut added_projects: Vec<ProjectID> = Vec::new();
         let mut removed_projects: Vec<ProjectID> = Vec::new();
         // core.DiffMapsFunc(base.projects, neededProjects, nil onChanged)
-        #[expect(clippy::iter_over_hash_type, reason = "order-independent: adds missing buckets to the projects map; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)")]
-        for project_id in needed_projects.iter() {
+        // order-independent: adds missing buckets to the projects map; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)
+        added_projects.extend(needed_projects.iter().filter_map(|project_id| {
             if !self.base.projects.contains_key(project_id) {
                 // Need and don't have
                 self.projects.add(project_id.clone(), Shared::new(new_registry_bucket()));
-                added_projects.push(project_id.clone());
+                Some(project_id.clone())
+            } else {
+                None
             }
-        }
-        #[expect(clippy::iter_over_hash_type, reason = "order-independent: deletes unneeded buckets; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)")]
-        for project_id in self.base.projects.keys() {
+        }));
+        // order-independent: deletes unneeded buckets; the order only reaches log lines (Go's DiffMapsFunc ranges a map too)
+        removed_projects.extend(self.base.projects.keys().filter_map(|project_id| {
             if !needed_projects.contains(project_id) {
                 // Have and don't need
                 self.projects.delete(project_id);
-                removed_projects.push(project_id.clone());
+                Some(project_id.clone())
+            } else {
+                None
             }
-        }
+        }));
         if !logger.is_nil() {
             for project_id in &added_projects {
                 logger.logf(format_args!("Added project: {}", project_id));
@@ -1007,10 +1013,8 @@ impl registryBuilder<'_> {
             if let Some(program) = program {
                 all_resolved_package_names.insert(entry.key(), Some(get_resolved_package_names(ctx, program)));
                 add_project_reference_output_mappings(program, &mut project_reference_outputs);
-                #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the set too")]
-                for name in program.deep_import_package_names().keys() {
-                    all_deep_import_packages.add(name.clone());
-                }
+                // pure set inserts; Go ranges the set too
+                all_deep_import_packages.m.extend(program.deep_import_package_names().keys().iter().map(std::clone::Clone::clone));
             }
             true
         });
@@ -1345,13 +1349,13 @@ fn has_new_non_node_modules_files(program: &'static Program, bucket: &RegistryBu
     if bucket.state.new_program_structure != newProgramStructure::DifferentFileNames {
         return false;
     }
-    for &file in program.get_source_files() {
+    if program.get_source_files().iter().any(|&file| {
         if file.is_content_mapper_supplemental() || file.file_name().contains("/node_modules/") || is_ignored_file(program, file) {
-            continue;
+            return false;
         }
-        if !bucket.paths.contains_key(file.path()) {
-            return true;
-        }
+        !bucket.paths.contains_key(file.path())
+    }) {
+        return true;
     }
     false
 }
@@ -1573,11 +1577,11 @@ impl registryBuilder<'_> {
     ) -> Option<Set<String>> {
         // If any open files are in scope of this directory but not in scope of any package.json,
         // we need to add all packages in this node_modules directory.
-        #[expect(clippy::iter_over_hash_type, reason = "any match returns the same constant; no other effect; Go ranges the map too")]
-        for path in change.open_files.keys() {
-            if dir_path.contains_path(path) && self.get_nearest_ancestor_directory_with_package_json(path).is_none() {
-                return None;
-            }
+        // any match returns the same constant; no other effect; Go ranges the map too
+        if let Some(result) = change.open_files.keys().into_iter().find_map(|path| {
+            if dir_path.contains_path(path) && self.get_nearest_ancestor_directory_with_package_json(path).is_none() { Some(None) } else { None }
+        }) {
+            return result;
         }
 
         // Get all package.jsons that have this node_modules directory in their spine
@@ -1596,9 +1600,7 @@ impl registryBuilder<'_> {
         #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the map too")]
         for resolved_package_names in all_resolved_package_names.values() {
             if let Some(names) = resolved_package_names {
-                for name in names.keys() {
-                    dependencies.add(name.clone());
-                }
+                dependencies.m.extend(names.keys().iter().map(std::clone::Clone::clone));
             }
         }
 
@@ -1663,8 +1665,8 @@ impl registryBuilder<'_> {
         let Some(package_names) = package_names else {
             return result;
         };
-        #[expect(clippy::iter_over_hash_type, reason = "Go ranges packageNames.Keys() too, so the discovered packages come in map order there as well")]
-        for package_name in package_names.keys() {
+        // Go ranges packageNames.Keys() too, so the discovered packages come in map order there as well
+        result.extend(package_names.keys().iter().map(|package_name| {
             let types_package_name = module::get_types_package_name(package_name);
             let package_json = self.host.get_package_json(&tspath::combine_paths(dir_name, &["node_modules", package_name, "package.json"]));
             let mut types_package_json: Option<P<InfoCacheEntry>> = None;
@@ -1689,15 +1691,8 @@ impl registryBuilder<'_> {
                     &realpath,
                     &ComparePathsOptions { use_case_sensitive_file_names: self.host.fs().use_case_sensitive_file_names(), ..Default::default() },
                 );
-            result.push(Arc::new(discoveredPackage {
-                package_name: package_name.clone(),
-                package_json,
-                realpath,
-                types_package_json,
-                types_realpath,
-                is_local,
-            }));
-        }
+            Arc::new(discoveredPackage { package_name: package_name.clone(), package_json, realpath, types_package_json, types_realpath, is_local })
+        }));
         result
     }
 
@@ -1869,15 +1864,11 @@ fn install_extractions(discovered: &[Arc<discoveredPackage>], extraction_cache: 
         let Some(extraction) = extraction else {
             continue;
         };
-        #[expect(clippy::iter_over_hash_type, reason = "copies distinct keys into a map (maps.Copy in Go)")]
-        for (k, v) in &extraction.exports {
-            result.exports.insert(k.clone(), v.clone());
-        }
+        // copies distinct keys into a map (maps.Copy in Go)
+        result.exports.extend(extraction.exports.iter().map(|(k, v)| (k.clone(), v.clone())));
         let package_files = result.package_files.entry(pkg.package_name.clone()).or_default();
-        #[expect(clippy::iter_over_hash_type, reason = "copies distinct keys into a map (maps.Copy in Go)")]
-        for (k, v) in &extraction.package_files {
-            package_files.insert(k.clone(), v.clone());
-        }
+        // copies distinct keys into a map (maps.Copy in Go)
+        package_files.extend(extraction.package_files.iter().map(|(k, v)| (k.clone(), v.clone())));
         #[expect(clippy::iter_over_hash_type, reason = "names are distinct, so each per-key append is independent of the others; Go ranges the map too")]
         for (name, file_names) in &extraction.ambient_modules {
             result.ambient_module_names.entry(name.clone()).or_default().extend(file_names.iter().cloned());
@@ -1887,10 +1878,11 @@ fn install_extractions(discovered: &[Arc<discoveredPackage>], extraction_cache: 
         for (path, source) in &extraction.failed_ambient_module_lookup_sources {
             result.possible_failed_ambient_module_lookup_sources.load_or_store(path.clone(), Arc::clone(source));
         }
-        #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the set too")]
-        for target in extraction.failed_ambient_module_lookup_targets.keys() {
-            result.possible_failed_ambient_module_lookup_targets.add(target.clone());
-        }
+        // pure set inserts; Go ranges the set too
+        result
+            .possible_failed_ambient_module_lookup_targets
+            .m
+            .extend(extraction.failed_ambient_module_lookup_targets.keys().iter().map(std::clone::Clone::clone));
         if extraction.is_symlinked && pkg.is_local {
             result.workspace_packages.add(pkg.package_name.clone());
         }
@@ -1928,10 +1920,10 @@ impl registryBuilder<'_> {
         // non-nil maps, unindexed packages have nil maps.
         let mut all_package_files: PackageFiles = PackageFiles::default();
         if let Some(directory_package_names) = directory_package_names {
-            #[expect(clippy::iter_over_hash_type, reason = "pure inserts into all_package_files; Go ranges the set too")]
-            for pkg_name in directory_package_names.keys() {
-                all_package_files.insert(pkg_name.clone(), extraction.package_files.get(pkg_name).map(|m| Arc::new(m.clone())));
-            }
+            // pure inserts into all_package_files; Go ranges the set too
+            all_package_files.extend(
+                directory_package_names.keys().iter().map(|pkg_name| (pkg_name.clone(), extraction.package_files.get(pkg_name).map(|m| Arc::new(m.clone())))),
+            );
         }
 
         // Build Paths as reverse mapping from path to package name.
@@ -1940,10 +1932,8 @@ impl registryBuilder<'_> {
         #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the paths map from each workspace package's files; Go ranges the set too")]
         for pkg_name in extraction.workspace_packages.keys() {
             if let Some(files) = extraction.package_files.get(pkg_name) {
-                #[expect(clippy::iter_over_hash_type, reason = "distinct keys inserted with the same value; Go ranges the map too")]
-                for path in files.keys() {
-                    paths.insert(path.clone(), pkg_name.clone());
-                }
+                // distinct keys inserted with the same value; Go ranges the map too
+                paths.extend(files.keys().map(|path| (path.clone(), pkg_name.clone())));
             }
         }
 
@@ -1983,12 +1973,10 @@ impl registryBuilder<'_> {
             let old_bucket = old_entry.value().unwrap();
             if let Some(package_files) = &old_bucket.package_files {
                 for files in package_files.values().flatten() {
-                    #[expect(clippy::iter_over_hash_type, reason = "the collected paths are only deleted from entrypoints; Go ranges the map too")]
-                    for path in files.keys() {
-                        if self.base.entrypoints.contains_key(path) {
-                            result.removed_entrypoint_paths.push(path.clone());
-                        }
-                    }
+                    // the collected paths are only deleted from entrypoints; Go ranges the map too
+                    result
+                        .removed_entrypoint_paths
+                        .extend(files.keys().filter_map(|path| if self.base.entrypoints.contains_key(path) { Some(path.clone()) } else { None }));
                 }
             }
         }
@@ -2038,51 +2026,45 @@ impl registryBuilder<'_> {
             new_package_files.remove(pkg_name);
         }
         // Add newly extracted package files
-        #[expect(clippy::iter_over_hash_type, reason = "copies distinct keys into a map (maps.Copy in Go)")]
-        for (k, v) in &extraction.package_files {
-            new_package_files.insert(k.clone(), Some(Arc::new(v.clone())));
-        }
+        // copies distinct keys into a map (maps.Copy in Go)
+        new_package_files.extend(extraction.package_files.iter().map(|(k, v)| (k.clone(), Some(Arc::new(v.clone())))));
 
         // Clone Paths, removing dirty package paths
         let mut new_paths: FxHashMap<Path, String> = FxHashMap::with_capacity_and_hasher(existing_bucket.paths.len(), Default::default());
-        #[expect(clippy::iter_over_hash_type, reason = "filtered copy of distinct keys into a new map; Go ranges the map too")]
-        for (path, pkg_name) in existing_bucket.paths.iter() {
+        // filtered copy of distinct keys into a new map; Go ranges the map too
+        new_paths.extend(existing_bucket.paths.iter().filter_map(|(path, pkg_name)| {
             if dirty_packages.has(pkg_name) {
-                continue;
+                return None;
             }
-            new_paths.insert(path.clone(), pkg_name.clone());
-        }
+            Some((path.clone(), pkg_name.clone()))
+        }));
         // Add paths for newly extracted workspace packages
         #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the paths map from each workspace package's files; Go ranges the set too")]
         for pkg_name in extraction.workspace_packages.keys() {
             if let Some(files) = extraction.package_files.get(pkg_name) {
-                #[expect(clippy::iter_over_hash_type, reason = "distinct keys inserted with the same value; Go ranges the map too")]
-                for path in files.keys() {
-                    new_paths.insert(path.clone(), pkg_name.clone());
-                }
+                // distinct keys inserted with the same value; Go ranges the map too
+                new_paths.extend(files.keys().map(|path| (path.clone(), pkg_name.clone())));
             }
         }
 
         // Clone AmbientModuleNames, removing dirty package entries
         let mut new_ambient_module_names: FxHashMap<String, Vec<String>> =
             FxHashMap::with_capacity_and_hasher(existing_bucket.ambient_module_names.len(), Default::default());
-        #[expect(clippy::iter_over_hash_type, reason = "filtered copy of distinct keys into a new map; Go ranges the map too")]
-        for (module_name, file_names) in existing_bucket.ambient_module_names.iter() {
+        // filtered copy of distinct keys into a new map; Go ranges the map too
+        new_ambient_module_names.extend(existing_bucket.ambient_module_names.iter().filter_map(|(module_name, file_names)| {
             // Filter out files from dirty packages
             let mut filtered: Vec<String> = Vec::new();
-            for file_name in file_names {
+            filtered.extend(file_names.iter().filter_map(|file_name| {
                 let path = (self.base.to_path)(file_name);
                 if let Some(pkg_name) = existing_bucket.paths.get(&path) {
                     if dirty_packages.has(pkg_name) {
-                        continue;
+                        return None;
                     }
                 }
-                filtered.push(file_name.clone());
-            }
-            if !filtered.is_empty() {
-                new_ambient_module_names.insert(module_name.clone(), filtered);
-            }
-        }
+                Some(file_name.clone())
+            }));
+            if !filtered.is_empty() { Some((module_name.clone(), filtered)) } else { None }
+        }));
         // Add newly extracted ambient module names
         #[expect(clippy::iter_over_hash_type, reason = "names are distinct, so each per-key append is independent of the others; Go ranges the map too")]
         for (module_name, file_names) in &extraction.ambient_module_names {
@@ -2092,14 +2074,10 @@ impl registryBuilder<'_> {
         // Collect entrypoint paths that need to be removed from the registry-level map
         // (paths belonging to dirty packages)
         let mut removed_entrypoint_paths: Vec<Path> = Vec::new();
-        #[expect(clippy::iter_over_hash_type, reason = "the collected paths are only deleted from entrypoints; Go ranges the map too")]
-        for path in self.base.entrypoints.keys() {
-            if let Some(pkg_name) = existing_bucket.paths.get(path) {
-                if dirty_packages.has(pkg_name) {
-                    removed_entrypoint_paths.push(path.clone());
-                }
-            }
-        }
+        // the collected paths are only deleted from entrypoints; Go ranges the map too
+        removed_entrypoint_paths.extend(self.base.entrypoints.keys().filter_map(|path| {
+            if let Some(pkg_name) = existing_bucket.paths.get(path) { if dirty_packages.has(pkg_name) { Some(path.clone()) } else { None } } else { None }
+        }));
         // Build new entrypoints from extraction
         let mut new_entrypoints: FxHashMap<Path, Vec<Arc<ResolvedEntrypoint>>> = FxHashMap::default();
         for entrypoint_set in &extraction.entrypoints {

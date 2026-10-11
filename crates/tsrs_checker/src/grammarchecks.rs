@@ -923,12 +923,7 @@ impl Checker {
             return self.grammar_error_at_pos(node, types.pos(), 0, &diagnostics::X_0_list_cannot_be_empty, &[&list_type]);
         }
 
-        for &node in types.nodes() {
-            if self.check_grammar_expression_with_type_arguments(node) {
-                return true;
-            }
-        }
-        false
+        types.nodes().iter().any(|&node| self.check_grammar_expression_with_type_arguments(node))
     }
 
     // grammarchecks.go:885
@@ -1199,22 +1194,26 @@ impl Checker {
         self.check_grammar_jsx_name(node.tag_name());
         self.check_grammar_type_arguments(node, node.type_argument_list());
         let mut seen: FxHashSet<&'static str> = FxHashSet::default();
-        for &attr_node in node.attributes().unwrap().properties() {
+        if let Some(result) = node.attributes().unwrap().properties().iter().find_map(|&attr_node| {
             if attr_node.kind() == Kind::JsxSpreadAttribute {
-                continue;
+                return None;
             }
             let attr = attr_node.as_jsx_attribute();
             let name = attr.name;
             let initializer = attr.initializer;
             let text_of_name = name.text();
             if !seen.insert(text_of_name) {
-                return self.grammar_error_on_node(name, &diagnostics::JSX_elements_cannot_have_multiple_attributes_with_the_same_name, &[]);
+                return Some(self.grammar_error_on_node(name, &diagnostics::JSX_elements_cannot_have_multiple_attributes_with_the_same_name, &[]));
             }
             if let Some(initializer) = initializer {
                 if initializer.kind() == Kind::JsxExpression && initializer.expression().is_none() {
-                    return self.grammar_error_on_node(initializer, &diagnostics::JSX_attributes_must_only_be_assigned_a_non_empty_expression, &[]);
+                    return Some(self.grammar_error_on_node(initializer, &diagnostics::JSX_attributes_must_only_be_assigned_a_non_empty_expression, &[]));
                 }
             }
+
+            None
+        }) {
+            return result;
         }
         false
     }
@@ -1700,10 +1699,14 @@ impl Checker {
                 return self.grammar_error_on_node_skipped_on_no_emit(name, &diagnostics::Identifier_expected_esModule_is_reserved_as_an_exported_marker_when_transforming_ECMAScript_modules, &[]);
             }
         } else {
-            for &element in name.elements() {
+            if let Some(result) = name.elements().iter().find_map(|&element| {
                 if let Some(element_name) = element.name() {
-                    return self.check_grammar_for_es_module_marker_in_binding_name(element_name);
+                    return Some(self.check_grammar_for_es_module_marker_in_binding_name(element_name));
                 }
+
+                None
+            }) {
+                return result;
             }
         }
         false
@@ -2164,14 +2167,15 @@ impl Checker {
 
     // grammarchecks.go:2014
     pub(crate) fn check_grammar_top_level_elements_for_required_declare_modifier(&mut self, file: P<SourceFile>) -> bool {
-        for &decl in file.statements.nodes() {
+        file.statements.nodes().iter().any(|&decl| {
             if ast::is_declaration_node(decl) || decl.kind() == Kind::VariableStatement {
                 if self.check_grammar_top_level_element_for_required_declare_modifier(decl) {
                     return true;
                 }
             }
-        }
-        false
+
+            false
+        })
     }
 
     // grammarchecks.go:2025
@@ -2307,7 +2311,7 @@ impl Checker {
     // grammarchecks.go:2136
     pub(crate) fn check_grammar_type_only_named_imports_or_exports(&mut self, named_bindings: P<Node>) -> bool {
         let node_list = named_bindings.element_list();
-        for &specifier in node_list.nodes() {
+        if let Some(result) = node_list.nodes().iter().find_map(|&specifier| {
             let specifier_is_type_only: bool;
             let message: &'static Message;
             if specifier.kind() == Kind::ImportSpecifier {
@@ -2319,8 +2323,12 @@ impl Checker {
             }
 
             if specifier_is_type_only {
-                return self.grammar_error_on_first_token(specifier, message, &[]);
+                return Some(self.grammar_error_on_first_token(specifier, message, &[]));
             }
+
+            None
+        }) {
+            return result;
         }
 
         false
@@ -2379,10 +2387,14 @@ impl Checker {
             }
             let property_signature = member.as_property_signature_declaration();
             if let Some(modifiers) = member.modifiers() {
-                for &modifier in modifiers.nodes() {
+                if let Some(result) = modifiers.nodes().iter().find_map(|&modifier| {
                     if modifier.kind() == Kind::ReadonlyKeyword {
-                        return self.grammar_error_on_node(modifier, &diagnostics::An_import_attributes_property_cannot_have_a_readonly_modifier, &[]);
+                        Some(self.grammar_error_on_node(modifier, &diagnostics::An_import_attributes_property_cannot_have_a_readonly_modifier, &[]))
+                    } else {
+                        None
                     }
+                }) {
+                    return result;
                 }
             }
             let Some(type_node) = property_signature.type_() else {

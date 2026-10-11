@@ -31,9 +31,7 @@ pub(crate) fn whitespace_reg_exp_split(text: &str) -> Vec<&str> {
     while i < bytes.len() {
         if is_go_space(bytes[i] as char) {
             result.push(&text[beg..i]);
-            while i < bytes.len() && is_go_space(bytes[i] as char) {
-                i += 1;
-            }
+            i += (i..bytes.len()).take_while(|&index| is_go_space(bytes[index] as char)).count();
             beg = i;
         } else {
             i += 1;
@@ -126,12 +124,16 @@ pub(crate) fn range_reg_exp_find_string_submatch(text: &str) -> Option<[&str; 3]
             return Some([text, &text[..1], operand]);
         }
     }
-    for op in ["<=", ">="] {
+    if let Some(result) = (["<=", ">="]).into_iter().find_map(|op| {
         if let Some(after) = text.strip_prefix(op) {
             if let Some(operand) = rest(after) {
-                return Some([text, &text[..2], operand]);
+                return Some(Some([text, &text[..2], operand]));
             }
         }
+
+        None
+    }) {
+        return result;
     }
     rest(text).map(|operand| [text, "", operand])
 }
@@ -223,22 +225,11 @@ pub(crate) fn test_disjunction(alternatives: &[Vec<VersionComparator>], version:
         return true;
     }
 
-    for alternative in alternatives {
-        if test_alternative(alternative, version) {
-            return true;
-        }
-    }
-
-    false
+    alternatives.iter().any(|alternative| test_alternative(alternative, version))
 }
 
 pub(crate) fn test_alternative(alternative: &[VersionComparator], version: &Version) -> bool {
-    for comparator in alternative {
-        if !test_comparator(comparator, version) {
-            return false;
-        }
-    }
-    true
+    !(alternative.iter().any(|comparator| !test_comparator(comparator, version)))
 }
 
 pub(crate) fn test_comparator(comparator: &VersionComparator, version: &Version) -> bool {
@@ -277,7 +268,7 @@ pub(crate) fn parse_alternatives(text: &str) -> Option<Vec<Vec<VersionComparator
                 return None;
             }
         } else {
-            for simple in whitespace_reg_exp_split(r) {
+            comparators = whitespace_reg_exp_split(r).into_iter().try_fold(comparators, |mut comparators, simple| {
                 let m = range_reg_exp_find_string_submatch(simple.trim())?;
 
                 if let Some(parsed_comparators) = parse_comparator(m[1], m[2]) {
@@ -285,7 +276,9 @@ pub(crate) fn parse_alternatives(text: &str) -> Option<Vec<Vec<VersionComparator
                 } else {
                     return None;
                 }
-            }
+
+                Some(comparators)
+            })?;
         }
 
         alternatives.push(comparators);

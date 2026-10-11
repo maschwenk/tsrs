@@ -92,17 +92,11 @@ const TOKEN_MODIFIER_LOCAL: TokenModifier = 1 << 10;
 // semantictokens.go:109
 pub fn semantic_tokens_legend(client_capabilities: &lsproto::ResolvedSemanticTokensClientCapabilities) -> lsproto::SemanticTokensLegend {
     let mut types = Vec::with_capacity(TOKEN_TYPES.len());
-    for t in TOKEN_TYPES {
-        if client_capabilities.token_types.iter().any(|c| c == t.0) {
-            types.push(t.0.to_string());
-        }
-    }
+    types.extend(TOKEN_TYPES.into_iter().filter_map(|t| if client_capabilities.token_types.iter().any(|c| c == t.0) { Some(t.0.to_string()) } else { None }));
     let mut modifiers = Vec::with_capacity(TOKEN_MODIFIERS.len());
-    for m in TOKEN_MODIFIERS {
-        if client_capabilities.token_modifiers.iter().any(|c| c == m.0) {
-            modifiers.push(m.0.to_string());
-        }
-    }
+    modifiers.extend(
+        TOKEN_MODIFIERS.into_iter().filter_map(|m| if client_capabilities.token_modifiers.iter().any(|c| c == m.0) { Some(m.0.to_string()) } else { None }),
+    );
     lsproto::SemanticTokensLegend { token_types: types, token_modifiers: modifiers }
 }
 
@@ -118,10 +112,10 @@ impl LanguageService {
         let mut tokens: Vec<SemanticToken> = Vec::with_capacity(files.len());
         for projection in files {
             let mut c = program.get_type_checker_for_file(ctx, projection);
-            for mut token in self.collect_semantic_tokens(ctx, &mut c, projection, program) {
+            tokens.extend(self.collect_semantic_tokens(ctx, &mut c, projection, program).into_iter().map(|mut token| {
                 token.file = Some(projection);
-                tokens.push(token);
-            }
+                token
+            }));
         }
         sort_semantic_tokens(&mut tokens, &self.converters);
 
@@ -150,12 +144,14 @@ impl LanguageService {
         for mapped in &mapped_ranges {
             let projection = mapped.script;
             let mut c = program.get_type_checker_for_file(ctx, projection);
-            for mut token in self.collect_semantic_tokens_in_range(ctx, &mut c, projection, program, mapped.span.pos(), mapped.span.end()) {
-                token.file = Some(projection);
-                if seen.insert(token) {
-                    tokens.push(token);
-                }
-            }
+            tokens.extend(
+                self.collect_semantic_tokens_in_range(ctx, &mut c, projection, program, mapped.span.pos(), mapped.span.end()).into_iter().filter_map(
+                    |mut token| {
+                        token.file = Some(projection);
+                        if seen.insert(token) { Some(token) } else { None }
+                    },
+                ),
+            );
         }
         sort_semantic_tokens(&mut tokens, &self.converters);
 
@@ -535,22 +531,23 @@ fn encode_semantic_tokens(ctx: &Context, tokens: &[SemanticToken], converters: &
     let client_capabilities = &caps.text_document.semantic_tokens;
 
     // Map server token types to client-supported indices
-    let mut client_idx: u32 = 0;
-    for (i, server_type) in TOKEN_TYPES.iter().enumerate() {
-        if client_capabilities.token_types.iter().any(|c| c == server_type.0) {
-            type_mapping.insert(i as TokenType, client_idx);
-            client_idx += 1;
-        }
-    }
+    type_mapping.extend(
+        TOKEN_TYPES
+            .iter()
+            .enumerate()
+            .filter(|(_, server_type)| client_capabilities.token_types.iter().any(|c| c == server_type.0))
+            .enumerate()
+            .map(|(client_idx, (i, _))| (i as TokenType, client_idx as u32)),
+    );
 
     // Map server token modifiers to client-supported bit positions
-    let mut client_bit: u32 = 0;
-    for server_modifier in TOKEN_MODIFIERS {
-        if client_capabilities.token_modifiers.iter().any(|c| c == server_modifier.0) {
-            modifier_mapping.insert(server_modifier, client_bit);
-            client_bit += 1;
-        }
-    }
+    modifier_mapping.extend(
+        TOKEN_MODIFIERS
+            .into_iter()
+            .filter(|server_modifier| client_capabilities.token_modifiers.iter().any(|c| c == server_modifier.0))
+            .enumerate()
+            .map(|(client_bit, server_modifier)| (server_modifier, client_bit as u32)),
+    );
 
     // Each token encodes 5 uint32 values: deltaLine, deltaChar, length, tokenType, tokenModifiers
     let mut encoded: Vec<u32> = Vec::with_capacity(tokens.len() * 5);
@@ -565,13 +562,15 @@ fn encode_semantic_tokens(ctx: &Context, tokens: &[SemanticToken], converters: &
 
         // Map modifiers to client-supported bit mask
         let mut client_modifier_mask: u32 = 0;
-        for (i, server_modifier) in TOKEN_MODIFIERS.iter().enumerate() {
+        client_modifier_mask = TOKEN_MODIFIERS.iter().enumerate().fold(client_modifier_mask, |mut client_modifier_mask, (i, server_modifier)| {
             if token.token_modifier & (1 << i) != 0 {
                 if let Some(&client_bit) = modifier_mapping.get(server_modifier) {
                     client_modifier_mask |= 1 << client_bit;
                 }
             }
-        }
+
+            client_modifier_mask
+        });
 
         // Semantic tokens must describe one concrete source segment; synthesized and cross-segment
         // tokens do not identify a coherent token in the original text.

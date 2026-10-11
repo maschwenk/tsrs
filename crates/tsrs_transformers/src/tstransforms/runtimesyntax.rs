@@ -624,23 +624,25 @@ impl RuntimeSyntaxTransformer {
     fn visit_variable_statement(&self, node: P<Node>) -> Option<P<Node>> {
         if self.is_export_of_namespace(node) {
             let mut expressions: Vec<P<Node>> = Vec::new();
-            for &declaration in node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes() {
-                let v = declaration.as_variable_declaration();
-                if v.initializer().is_none() {
-                    continue;
-                }
-                if ast::is_binding_pattern(declaration.name().unwrap()) {
-                    let visited = self.visitor().visit_node(Some(declaration)).unwrap();
-                    let callback = |export_name: P<Node>, export_value: P<Node>, location: Option<&TextRange>| self.create_namespace_export_expression(export_name, export_value, location);
-                    let expression = flatten_destructuring_assignment(&self.base, visited, false /*needsValue*/, FlattenLevel::All, Some(&callback));
-                    expressions.push(expression);
-                } else {
-                    let expression = convert_variable_declaration_to_assignment_expression(self.emit_context(), declaration);
-                    if let Some(expression) = expression {
-                        expressions.push(expression);
+            expressions.extend(node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes().iter().filter_map(
+                |&declaration| {
+                    let v = declaration.as_variable_declaration();
+                    if v.initializer().is_none() {
+                        return None;
                     }
-                }
-            }
+                    if ast::is_binding_pattern(declaration.name().unwrap()) {
+                        let visited = self.visitor().visit_node(Some(declaration)).unwrap();
+                        let callback = |export_name: P<Node>, export_value: P<Node>, location: Option<&TextRange>| {
+                            self.create_namespace_export_expression(export_name, export_value, location)
+                        };
+                        let expression = flatten_destructuring_assignment(&self.base, visited, false /*needsValue*/, FlattenLevel::All, Some(&callback));
+                        Some(expression)
+                    } else {
+                        let expression = convert_variable_declaration_to_assignment_expression(self.emit_context(), declaration);
+                        if let Some(expression) = expression { Some(expression) } else { None }
+                    }
+                },
+            ));
             if expressions.is_empty() {
                 return None;
             }
@@ -698,11 +700,13 @@ impl RuntimeSyntaxTransformer {
     fn get_parameter_properties(&self, constructor: Option<P<Node>>) -> Vec<P<Node>> {
         let mut parameter_properties: Vec<P<Node>> = Vec::new();
         if let Some(constructor) = constructor {
-            for &parameter in constructor.parameters() {
-                if ast::is_parameter_property_declaration(parameter, constructor) {
-                    parameter_properties.push(parameter);
-                }
-            }
+            parameter_properties.extend(
+                constructor.parameters().iter().filter_map(
+                    |&parameter| {
+                        if ast::is_parameter_property_declaration(parameter, constructor) { Some(parameter) } else { None }
+                    },
+                ),
+            );
         }
         parameter_properties
     }
@@ -726,7 +730,7 @@ impl RuntimeSyntaxTransformer {
 
         if !parameter_properties.is_empty() {
             let mut new_members: Vec<P<Node>> = Vec::new();
-            for parameter in parameter_properties {
+            new_members.extend(parameter_properties.into_iter().filter_map(|parameter| {
                 if ast::is_identifier(parameter.name().unwrap()) {
                     let parameter_property = f.new_property_declaration(
                         None, /*modifiers*/
@@ -736,9 +740,11 @@ impl RuntimeSyntaxTransformer {
                         None, /*initializer*/
                     );
                     emit_context.set_original(parameter_property, parameter);
-                    new_members.push(parameter_property);
+                    Some(parameter_property)
+                } else {
+                    None
                 }
-            }
+            }));
             if !new_members.is_empty() {
                 new_members.extend_from_slice(members.nodes());
                 members = f.new_node_list(new_members);
@@ -768,7 +774,7 @@ impl RuntimeSyntaxTransformer {
 
         if !parameter_properties.is_empty() {
             let mut new_members: Vec<P<Node>> = Vec::new();
-            for parameter in parameter_properties {
+            new_members.extend(parameter_properties.into_iter().filter_map(|parameter| {
                 if ast::is_identifier(parameter.name().unwrap()) {
                     let parameter_property = f.new_property_declaration(
                         None, /*modifiers*/
@@ -778,9 +784,11 @@ impl RuntimeSyntaxTransformer {
                         None, /*initializer*/
                     );
                     emit_context.set_original(parameter_property, parameter);
-                    new_members.push(parameter_property);
+                    Some(parameter_property)
+                } else {
+                    None
                 }
-            }
+            }));
             if !new_members.is_empty() {
                 new_members.extend_from_slice(members.nodes());
                 members = f.new_node_list(new_members);
@@ -831,7 +839,7 @@ impl RuntimeSyntaxTransformer {
         //
 
         let mut parameter_property_assignments: Vec<P<Node>> = Vec::new();
-        for parameter in parameter_properties {
+        parameter_property_assignments.extend(parameter_properties.into_iter().filter_map(|parameter| {
             let parameter_name = parameter.name().unwrap();
             if ast::is_identifier(parameter_name) {
                 let property_name = parameter_name.clone_node(f);
@@ -848,9 +856,11 @@ impl RuntimeSyntaxTransformer {
                 ));
                 emit_context.set_original(parameter_property, parameter);
                 emit_context.add_emit_flags(parameter_property, EmitFlags::StartOnNewLine);
-                parameter_property_assignments.push(parameter_property);
+                Some(parameter_property)
+            } else {
+                None
             }
-        }
+        }));
 
         let super_path = find_super_statement_index_path(rest, 0);
 

@@ -231,18 +231,14 @@ impl CommandLineParser {
         let text_length = text.len();
         let mut pos = 0;
         while pos < text_length {
-            while pos < text_length && text[pos] <= ' ' {
-                pos += 1;
-            }
+            pos += (pos..text_length).take_while(|&index| text[index] <= ' ').count();
             if pos >= text_length {
                 break;
             }
             let start = pos;
             if text[pos] == '"' {
                 pos += 1;
-                while pos < text_length && text[pos] != '"' {
-                    pos += 1;
-                }
+                pos += (pos..text_length).take_while(|&index| text[index] != '"').count();
                 if pos < text_length {
                     args.push(text[start + 1..pos].iter().collect());
                     pos += 1;
@@ -253,9 +249,7 @@ impl CommandLineParser {
                     ));
                 }
             } else {
-                while pos < text_length && text[pos] > ' ' {
-                    pos += 1;
-                }
+                pos += (pos..text_length).take_while(|&index| text[index] > ' ').count();
                 args.push(text[start..pos].iter().collect());
             }
         }

@@ -209,13 +209,7 @@ pub fn parse_test_data(t: &T, contents: &str, file_name: &str) -> TestData {
 
 // test_parser.go:171
 fn has_unsupported_global_options_with_config(global_options: &OrderedMap<String, String>) -> bool {
-    for option in global_options.keys() {
-        match option.to_lowercase().as_str() {
-            "symlink" | "link" | "usecasesensitivefilenames" => continue,
-            _ => return true,
-        }
-    }
-    false
+    global_options.keys().any(|option| !matches!(option.to_lowercase().as_str(), "symlink" | "link" | "usecasesensitivefilenames"))
 }
 
 // test_parser.go:183
@@ -576,20 +570,12 @@ fn report_error(file_name: &str, line: i32, col: i32, message: &str) -> Fourslas
 // test_parser.go:499
 fn chomp_leading_space(content: &str) -> String {
     let lines: Vec<&str> = content.split('\n').collect();
-    for line in &lines {
-        if !line.is_empty() && line.as_bytes()[0] != b' ' {
-            return content.to_string();
-        }
+    if let Some(result) = lines.iter().find_map(|line| if !line.is_empty() && line.as_bytes()[0] != b' ' { Some(content.to_string()) } else { None }) {
+        return result;
     }
 
     let mut result = Vec::with_capacity(lines.len());
-    for line in &lines {
-        if !line.is_empty() {
-            result.push(&line[1..]);
-        } else {
-            result.push("");
-        }
-    }
+    result.extend(lines.iter().map(|line| if !line.is_empty() { &line[1..] } else { "" }));
     result.join("\n")
 }
 

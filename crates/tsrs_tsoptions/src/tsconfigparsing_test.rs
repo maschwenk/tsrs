@@ -964,9 +964,7 @@ fn test_parse_json_source_file_config_file_content() {
 
 fn object(entries: Vec<(&str, CompilerOptionsValue)>) -> CompilerOptionsValue {
     let mut m = OrderedMap::default();
-    for (k, v) in entries {
-        m.insert(k.to_string(), v);
-    }
+    m.extend(entries.into_iter().map(|(k, v)| (k.to_string(), v)));
     CompilerOptionsValue::Object(m)
 }
 

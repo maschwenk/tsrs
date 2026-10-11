@@ -179,9 +179,7 @@ impl Program {
         }
 
         let mut diagnostics = Vec::new();
-        for &file in self.p().get_source_files() {
-            diagnostics.extend(self.get_semantic_diagnostics_of_file(file));
-        }
+        diagnostics.extend(self.p().get_source_files().iter().flat_map(|&file| self.get_semantic_diagnostics_of_file(file)));
         diagnostics
     }
 
@@ -400,13 +398,16 @@ impl Program {
                 use rayon::prelude::*;
                 tsrs_compiler::worker_pool().install(|| entries.par_iter().map(resolve).collect())
             };
-            for (exists, package_json) in resolved {
-                if exists {
-                    package_jsons.push(package_json);
-                } else if package_json.contains("/node_modules/") {
-                    missing_package_jsons.push(package_json);
-                }
-            }
+            (missing_package_jsons, package_jsons) =
+                resolved.into_iter().fold((missing_package_jsons, package_jsons), |(mut missing_package_jsons, mut package_jsons), (exists, package_json)| {
+                    if exists {
+                        package_jsons.push(package_json);
+                    } else if package_json.contains("/node_modules/") {
+                        missing_package_jsons.push(package_json);
+                    }
+
+                    (missing_package_jsons, package_jsons)
+                });
         }
         *self.snapshot.package_jsons.borrow_mut() = Some(normalize_package_jsons(package_jsons));
         *self.snapshot.missing_package_jsons.borrow_mut() = Some(normalize_package_jsons(missing_package_jsons));

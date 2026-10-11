@@ -475,9 +475,7 @@ pub fn parse_rfc3339(s: &str) -> Result<SystemTime, String> {
     if b[i] == b'.' || b[i] == b',' {
         i += 1;
         let start = i;
-        while i < b.len() && b[i].is_ascii_digit() {
-            i += 1;
-        }
+        i += (i..b.len()).take_while(|&index| b[index].is_ascii_digit()).count();
         if i == start || i - start > 9 {
             return Err("bad fractional second".to_string());
         }

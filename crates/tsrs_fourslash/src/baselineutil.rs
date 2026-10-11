@@ -274,13 +274,13 @@ pub(crate) fn unique_files_in_span_order(spans: &[DocumentSpan]) -> Vec<lsproto:
     }
     let mut seen: FxHashMap<lsproto::DocumentUri, ()> = FxHashMap::default();
     let mut result = Vec::with_capacity(spans.len());
-    for span in spans {
+    result.extend(spans.iter().filter_map(|span| {
         if seen.contains_key(&span.uri) {
-            continue;
+            return None;
         }
         seen.insert(span.uri.clone(), ());
-        result.push(span.uri.clone());
-    }
+        Some(span.uri.clone())
+    }));
     result
 }
 
@@ -832,11 +832,7 @@ impl FourslashTest {
         let mut seen_first = false;
         for (file_name, lines) in &files_to_lines {
             let _ = writeln!(builder, "=== {file_name} ===");
-            for line in lines {
-                builder.push_str("// ");
-                builder.push_str(line);
-                builder.push('\n');
-            }
+            builder.extend(lines.iter().flat_map(|line| ["// ", line.as_str(), "\n"]));
 
             if seen_first {
                 builder.push_str("\n\n");

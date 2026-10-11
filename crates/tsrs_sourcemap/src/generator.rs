@@ -194,9 +194,7 @@ impl Generator {
             return Err("sourceIndex is out of range".to_string());
         }
         let sources_content = self.sources_content.get_or_insert_with(Vec::new);
-        while sources_content.len() <= source_index as usize {
-            sources_content.push(None);
-        }
+        sources_content.resize(sources_content.len().max(source_index as usize + 1), None);
         sources_content[source_index as usize] = Some(content.to_string());
         Ok(())
     }
@@ -492,16 +490,18 @@ impl Generator {
 // Go encoding/base64 StdEncoding (padded) encoder.
 fn base64_std_encode(out: &mut String, data: &[u8]) {
     const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    for chunk in data.chunks(3) {
+    out.extend(data.chunks(3).flat_map(|chunk| {
         let b0 = chunk[0] as u32;
         let b1 = chunk.get(1).copied().unwrap_or(0) as u32;
         let b2 = chunk.get(2).copied().unwrap_or(0) as u32;
         let v = (b0 << 16) | (b1 << 8) | b2;
-        out.push(ALPHABET[(v >> 18 & 0x3f) as usize] as char);
-        out.push(ALPHABET[(v >> 12 & 0x3f) as usize] as char);
-        out.push(if chunk.len() > 1 { ALPHABET[(v >> 6 & 0x3f) as usize] as char } else { '=' });
-        out.push(if chunk.len() > 2 { ALPHABET[(v & 0x3f) as usize] as char } else { '=' });
-    }
+        [
+            ALPHABET[(v >> 18 & 0x3f) as usize] as char,
+            ALPHABET[(v >> 12 & 0x3f) as usize] as char,
+            if chunk.len() > 1 { ALPHABET[(v >> 6 & 0x3f) as usize] as char } else { '=' },
+            if chunk.len() > 2 { ALPHABET[(v & 0x3f) as usize] as char } else { '=' },
+        ]
+    }));
 }
 
 // generator.go:372

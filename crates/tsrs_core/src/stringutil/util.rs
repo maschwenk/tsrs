@@ -145,15 +145,17 @@ pub fn guess_indentation(lines: &[&str]) -> usize {
 // https://tc39.es/ecma262/multipage/global-object.html#sec-encodeuri-uri
 pub fn encode_uri(s: &str) -> String {
     let mut builder = String::new();
-    for &b in s.as_bytes() {
-        if !should_escape_for_encode_uri(b) {
-            builder.push(b as char);
-            continue;
+    builder.extend(s.bytes().flat_map(|b| {
+        {
+            if should_escape_for_encode_uri(b) {
+                [Some('%'), Some(UPPERHEX[(b >> 4) as usize] as char), Some(UPPERHEX[(b & 0x0f) as usize] as char)]
+            } else {
+                [Some(b as char), None, None]
+            }
         }
-        builder.push('%');
-        builder.push(UPPERHEX[(b >> 4) as usize] as char);
-        builder.push(UPPERHEX[(b & 0x0f) as usize] as char);
-    }
+        .into_iter()
+        .flatten()
+    }));
     builder
 }
 
@@ -264,12 +266,8 @@ pub fn truncate_by_runes(str: &str, max_length: usize) -> &str {
     if max_length == 0 {
         return "";
     }
-    let mut rune_count = 0;
-    for (i, _) in str.char_indices() {
-        rune_count += 1;
-        if rune_count > max_length {
-            return &str[..i];
-        }
+    if let Some((i, _)) = str.char_indices().nth(max_length as usize) {
+        return &str[..i];
     }
     str
 }

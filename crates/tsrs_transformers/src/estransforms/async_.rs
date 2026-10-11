@@ -586,11 +586,13 @@ impl asyncTransformer {
         self.hoist_variable_declaration_list(node);
 
         let mut variables: Vec<P<Node>> = Vec::new();
-        for &decl in node.as_variable_declaration_list().declarations.nodes() {
-            if decl.as_variable_declaration().initializer().is_some() {
-                variables.push(decl);
-            }
-        }
+        variables.extend(
+            node.as_variable_declaration_list()
+                .declarations
+                .nodes()
+                .iter()
+                .filter_map(|&decl| if decl.as_variable_declaration().initializer().is_some() { Some(decl) } else { None }),
+        );
 
         if variables.is_empty() {
             if has_receiver {
@@ -602,9 +604,7 @@ impl asyncTransformer {
         }
 
         let mut expressions: Vec<P<Node>> = Vec::new();
-        for variable in variables {
-            expressions.push(self.transform_initialized_variable(variable));
-        }
+        expressions.extend(variables.into_iter().map(|variable| self.transform_initialized_variable(variable)));
         self.factory().inline_expressions(&expressions)
     }
 
@@ -649,10 +649,14 @@ impl asyncTransformer {
             return self.enclosing_function_parameter_names.borrow().as_ref().is_some_and(|names| names.contains(name.text()));
         }
         if ast::is_binding_pattern(name) {
-            for &element in name.as_binding_pattern().elements.nodes() {
-                if !ast::is_omitted_expression(element) && self.collides_with_parameter_name(element) {
-                    return true;
-                }
+            if name
+                .as_binding_pattern()
+                .elements
+                .nodes()
+                .iter()
+                .any(|&element| !ast::is_omitted_expression(element) && self.collides_with_parameter_name(element))
+            {
+                return true;
             }
         }
         false
@@ -944,7 +948,7 @@ pub(crate) fn assignment_target_contains_super_property(node: P<Node>) -> bool {
         Kind::ParenthesizedExpression => return assignment_target_contains_super_property(node.as_parenthesized_expression().expression()),
         Kind::ArrayLiteralExpression => return node.as_array_literal_expression().elements.nodes().iter().any(|&e| assignment_target_contains_super_property(e)),
         Kind::ObjectLiteralExpression => {
-            for &prop in node.as_object_literal_expression().properties.nodes() {
+            if node.as_object_literal_expression().properties.nodes().iter().any(|&prop| {
                 match prop.kind() {
                     Kind::PropertyAssignment => {
                         if assignment_target_contains_super_property(prop.as_property_assignment().initializer()) {
@@ -963,6 +967,10 @@ pub(crate) fn assignment_target_contains_super_property(node: P<Node>) -> bool {
                     }
                     _ => {}
                 }
+
+                false
+            }) {
+                return true;
             }
         }
         Kind::SpreadElement => return assignment_target_contains_super_property(node.as_spread_element().expression),
@@ -988,11 +996,11 @@ pub(crate) fn is_update_expression(node: P<Node>) -> bool {
 // isSimpleParameterList checks if every parameter has no initializer and an Identifier name.
 // async.go:963
 pub(crate) fn is_simple_parameter_list(params: &[P<Node>]) -> bool {
-    for &param in params {
+    if params.iter().any(|&param| {
         let p = param.as_parameter_declaration();
-        if p.initializer().is_some() || !ast::is_identifier(p.name()) {
-            return false;
-        }
+        p.initializer().is_some() || !ast::is_identifier(p.name())
+    }) {
+        return false;
     }
     true
 }

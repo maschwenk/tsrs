@@ -150,9 +150,7 @@ pub fn owned_strs(v: &[&str]) -> Vec<String> {
 
 pub fn map_of<K: Hash + Eq, V, const N: usize>(items: [(K, V); N]) -> OrderedMap<K, V> {
     let mut m = OrderedMap::default();
-    for (k, v) in items {
-        m.insert(k, v);
-    }
+    m.extend(items);
     m
 }
 
@@ -190,7 +188,7 @@ pub fn slice_str(s: &str, lo: Option<usize>, hi: Option<usize>) -> String {
 pub fn quote(s: &str) -> String {
     let mut b = String::with_capacity(s.len() + 2);
     b.push('"');
-    for c in s.chars() {
+    b = s.chars().fold(b, |mut b, c| {
         match c {
             '"' => b.push_str("\\\""),
             '\\' => b.push_str("\\\\"),
@@ -211,7 +209,9 @@ pub fn quote(s: &str) -> String {
             }
             c => b.push(c),
         }
-    }
+
+        b
+    });
     b.push('"');
     b
 }

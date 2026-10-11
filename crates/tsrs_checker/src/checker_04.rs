@@ -120,11 +120,7 @@ impl Checker {
     // checker.go:6598
     pub(crate) fn get_iteration_type_union(&mut self, iteration_types: &[IterationTypes], mut f: impl FnMut(&mut Checker, IterationTypes) -> Option<P<Type>>) -> Option<P<Type>> {
         let mut types: Vec<P<Type>> = Vec::new();
-        for &it in iteration_types {
-            if let Some(t) = f(self, it) {
-                types.push(t);
-            }
-        }
+        types.extend(iteration_types.iter().filter_map(|&it| if let Some(t) = f(self, it) { Some(t) } else { None }));
         if types.is_empty() {
             return None;
         }
@@ -168,11 +164,7 @@ impl Checker {
                 }
                 let all_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
                 let mut valid_signatures: Vec<P<Signature>> = Vec::new();
-                for &sig in all_signatures {
-                    if self.get_min_argument_count(sig) == 0 {
-                        valid_signatures.push(sig);
-                    }
-                }
+                valid_signatures.extend(all_signatures.iter().filter_map(|&sig| if self.get_min_argument_count(sig) == 0 { Some(sig) } else { None }));
                 if !valid_signatures.is_empty() {
                     let return_types: Vec<P<Type>> = valid_signatures.iter().map(|&sig| self.get_return_type_of_signature(sig)).collect();
                     let iterator_type = self.get_intersection_type(&return_types);
@@ -796,9 +788,11 @@ impl Checker {
             let symbol = c.get_symbol_of_declaration(node).unwrap();
             let target = c.resolve_alias(symbol);
             let declarations = target.declarations();
-            for &d in declarations {
+            result = declarations.iter().fold(result, |mut result, &d| {
                 result |= c.get_declaration_spaces(d);
-            }
+
+                result
+            });
             result
         }
         match node.kind() {
@@ -841,8 +835,8 @@ impl Checker {
             } else if seen_default {
                 self.error(Some(node), &diagnostics::Required_type_parameters_may_not_follow_optional_type_parameters, &[]);
             }
-            for j in 0..i {
-                if type_parameter_declarations[j].symbol() == node.symbol() {
+            for element in type_parameter_declarations[..i].iter() {
+                if element.symbol() == node.symbol() {
                     self.error(node.name(), &diagnostics::Duplicate_identifier_0, &[&tsrs_scanner::declaration_name_to_string(node.name())]);
                 }
             }
@@ -856,8 +850,8 @@ impl Checker {
             if is_type_reference_node(node) {
                 let t = c.get_type_from_type_reference(node);
                 if t.flags().intersects(TypeFlags::TypeParameter) {
-                    for i in index as usize..type_parameters.len() {
-                        if t.symbol() == c.get_symbol_of_declaration(type_parameters[i]) {
+                    for element in type_parameters.iter().skip(index as usize) {
+                        if t.symbol() == c.get_symbol_of_declaration(*element) {
                             c.error(Some(node), &diagnostics::Type_parameter_defaults_can_only_reference_previously_declared_type_parameters, &[]);
                         }
                     }
@@ -2117,11 +2111,11 @@ impl Checker {
         }
         let element_type: P<Type>;
         if !element_types.is_empty() {
-            for i in 0..element_types.len() {
-                let e = element_types[i];
+            for (i, element) in element_types.iter_mut().enumerate() {
+                let e = *element;
                 if element_infos[i].flags.intersects(ElementFlags::Variadic) {
                     let number_type = self.number_type;
-                    element_types[i] = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, AliasArg::None).unwrap_or(self.any_type);
+                    (*element) = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, AliasArg::None).unwrap_or(self.any_type);
                 }
             }
             element_type = self.get_union_type_ex(&element_types, UnionReduction::Subtype, AliasArg::None, None);
@@ -2318,11 +2312,15 @@ impl Checker {
     // checker.go:8429
     pub(crate) fn get_constituent_property(&mut self, object_type: P<Type>, property_name: &str) -> Option<P<Symbol>> {
         let apparent_type = self.get_apparent_type(object_type);
-        for t in apparent_type.distributed_iter() {
+        if let Some(result) = apparent_type.distributed_iter().into_iter().find_map(|t| {
             let prop = self.get_property_of_type(t, property_name);
             if prop.is_some() {
-                return prop;
+                return Some(prop);
             }
+
+            None
+        }) {
+            return result;
         }
         None
     }
@@ -2360,11 +2358,14 @@ impl Checker {
                 self.check_type_assignable_to(options_type, target, Some(args[1]), None);
             }
             if is_object_literal_expression(args[1]) {
-                for &prop in args[1].as_object_literal_expression().properties.nodes() {
+                if let Some(prop) = args[1].as_object_literal_expression().properties.nodes().iter().find_map(|&prop| {
                     if is_property_assignment(prop) && is_identifier(prop.name().unwrap()) && prop.name().unwrap().text() == "assert" {
-                        self.error(prop.name(), &diagnostics::Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert, &[]);
-                        break;
+                        Some(prop)
+                    } else {
+                        None
                     }
+                }) {
+                    self.error(prop.name(), &diagnostics::Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert, &[]);
                 }
             }
             import_attributes_type = self.get_type_of_property_of_type(options_type, "with");

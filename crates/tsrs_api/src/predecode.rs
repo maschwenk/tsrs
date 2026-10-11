@@ -153,19 +153,23 @@ fn check_external_integers(go_type: &str, o: &tsrs_core::collections::OrderedMap
         "core.BuildOptions" => tsrs_tsoptions::gojson::BUILD_OPTIONS_INTEGER_FIELDS.to_vec(),
         _ => return Ok(()),
     };
-    for (name, bits) in fields {
+    if let Some(result) = fields.into_iter().find_map(|(name, bits)| {
         if !matches!(o.get(name), Some(Value::Number(_))) {
-            continue;
+            return None;
         }
         let p = format!("{pointer}/{}", token(name));
         let go_int = if bits == 64 { "int" } else { "int32" };
-        let Some(lexeme) = lexemes.get(&p) else { continue };
+        let Some(lexeme) = lexemes.get(&p) else { return None };
         if lexeme.contains(['.', 'e', 'E']) {
-            return Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": invalid syntax"));
+            return Some(Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": invalid syntax")));
         }
         if bits == 64 && lexeme.parse::<i64>().is_err() {
-            return Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": value out of range"));
+            return Some(Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": value out of range")));
         }
+
+        None
+    }) {
+        return result;
     }
     Ok(())
 }
@@ -199,14 +203,9 @@ fn check_request_file_system(go_type: &str, o: &tsrs_core::collections::OrderedM
     let strings = |v: &Value, p: &str| -> Result<(), String> {
         match v {
             Value::Null => Ok(()),
-            Value::Array(items) => {
-                for (i, item) in items.iter().enumerate() {
-                    if !matches!(item, Value::Null | Value::String(_)) {
-                        return err(item, &format!("{p}/{i}"), "string");
-                    }
-                }
-                Ok(())
-            }
+            Value::Array(items) => items.iter().enumerate().try_for_each(|(i, item)| {
+                if matches!(item, Value::Null | Value::String(_)) { Ok(()) } else { err(item, &format!("{p}/{i}"), "string") }
+            }),
             _ => err(v, p, "[]string"),
         }
     };
@@ -336,9 +335,7 @@ struct Scanner<'a> {
 
 impl<'a> Scanner<'a> {
     fn ws(&mut self) {
-        while self.i < self.b.len() && matches!(self.b[self.i], b' ' | b'\t' | b'\n' | b'\r') {
-            self.i += 1;
-        }
+        self.i += (self.i..self.b.len()).take_while(|&index| matches!(self.b[index], b' ' | b'\t' | b'\n' | b'\r')).count();
     }
     // A string token, decoded like the parsed value's object keys (escapes such as `\u0073`).
     fn string(&mut self) -> String {
@@ -421,9 +418,7 @@ impl<'a> Scanner<'a> {
             }
             _ => {
                 let start = self.i;
-                while self.i < self.b.len() && !matches!(self.b[self.i], b',' | b'}' | b']' | b' ' | b'\t' | b'\n' | b'\r') {
-                    self.i += 1;
-                }
+                self.i += (self.i..self.b.len()).take_while(|&index| !matches!(self.b[index], b',' | b'}' | b']' | b' ' | b'\t' | b'\n' | b'\r')).count();
                 if let Some(numbers) = numbers {
                     let lexeme = &self.b[start..self.i];
                     if lexeme.first().is_some_and(|c| *c == b'-' || c.is_ascii_digit()) {

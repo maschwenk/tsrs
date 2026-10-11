@@ -245,24 +245,33 @@ impl CommonJSModuleTransformer {
                 emit_context.assign_comment_and_source_map_ranges(var_statement, node);
                 statements.push(var_statement);
 
-                for &specifier in export_clause.elements() {
+                statements.extend(export_clause.elements().iter().map(|&specifier| {
                     let specifier_name = specifier.property_name_or_name().unwrap();
                     let export_needs_import_default = ast::module_export_name_is_default(specifier_name);
 
                     let target = if export_needs_import_default { f.new_import_default_helper(generated_name) } else { generated_name };
 
-                    let export_name = if ast::is_string_literal(specifier.name().unwrap()) { f.new_string_literal_from_node(specifier.name().unwrap()) } else { f.get_export_name(specifier) };
+                    let export_name = if ast::is_string_literal(specifier.name().unwrap()) {
+                        f.new_string_literal_from_node(specifier.name().unwrap())
+                    } else {
+                        f.get_export_name(specifier)
+                    };
 
                     let exported_value = if ast::is_string_literal(specifier_name) {
                         f.new_element_access_expression(target, None /*questionDotToken*/, specifier_name, NodeFlags::None)
                     } else {
                         f.new_property_access_expression(target, None /*questionDotToken*/, specifier_name, NodeFlags::None)
                     };
-                    let statement = f.new_expression_statement(self.create_export_expression(export_name, exported_value, None /*location*/, true /*liveBinding*/));
+                    let statement = f.new_expression_statement(self.create_export_expression(
+                        export_name,
+                        exported_value,
+                        None, /*location*/
+                        true, /*liveBinding*/
+                    ));
                     emit_context.set_original(statement, specifier);
                     emit_context.assign_comment_and_source_map_ranges(statement, specifier);
-                    statements.push(statement);
-                }
+                    statement
+                }));
 
                 return single_or_many(Some(statements), f);
             }

@@ -126,17 +126,17 @@ impl MetadataSerializer {
 
         let mut expressions: Vec<P<Node>> = Vec::new();
         let parameters = get_parameters_of_decorated_declaration(value_declaration, container);
-        for (i, parameter) in parameters.map(|p| p.nodes()).unwrap_or(&[]).iter().enumerate() {
+        expressions.extend(parameters.map(|p| p.nodes()).unwrap_or(&[]).iter().enumerate().filter_map(|(i, parameter)| {
             let parameter = *parameter;
             if i == 0 && ast::is_identifier(parameter.name().unwrap()) && parameter.name().unwrap().text() == "this" {
-                continue;
+                return None;
             }
             if parameter.as_parameter_declaration().dot_dot_dot_token().is_some() {
-                expressions.push(self.serialize_type_node(ast::get_rest_parameter_element_type(parameter.type_node())));
+                Some(self.serialize_type_node(ast::get_rest_parameter_element_type(parameter.type_node())))
             } else {
-                expressions.push(self.serialize_type_of_node_(parameter, container));
+                Some(self.serialize_type_of_node_(parameter, container))
             }
-        }
+        }));
         self.f.new_array_literal_expression(self.f.new_node_list(expressions), false)
     }
 }

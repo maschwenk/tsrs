@@ -442,9 +442,7 @@ impl Checker {
             return vec![symbol];
         }
         let mut result = Vec::new();
-        for root in roots {
-            result.extend(self.get_root_symbols(root));
-        }
+        result.extend(roots.into_iter().flat_map(|root| self.get_root_symbols(root)));
         result
     }
 
@@ -461,11 +459,7 @@ impl Checker {
         if symbol.check_flags().intersects(CheckFlags::Synthetic) {
             let types = self.value_symbol_links.get(symbol).containing_type().unwrap().types().to_vec();
             let mut result = Vec::new();
-            for t in types {
-                if let Some(p) = self.get_property_of_type(t, symbol.name()) {
-                    result.push(p);
-                }
-            }
+            result.extend(types.into_iter().filter_map(|t| if let Some(p) = self.get_property_of_type(t, symbol.name()) { Some(p) } else { None }));
             return result;
         }
         if symbol.flags().intersects(SymbolFlags::Transient) {
@@ -600,12 +594,12 @@ impl Checker {
     // This is used as a quick check for whether a symbol is used at all in a file.
     pub fn is_symbol_referenced_in_file(&mut self, source_file: P<SourceFile>, definition: P<Node>, symbol: P<Symbol>) -> bool {
         let identifier_text = definition.text();
-        for token in get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())) {
+        if get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())).into_iter().any(|token| {
             if !ast::is_identifier(token) {
-                continue;
+                return false;
             }
             if token == definition || token.text() != identifier_text {
-                continue;
+                return false;
             }
             let ref_symbol = self.get_symbol_at_location_exported(token);
             if ref_symbol == Some(symbol) {
@@ -627,6 +621,10 @@ impl Checker {
                     }
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }
@@ -636,37 +634,36 @@ impl Checker {
     pub fn get_references_to_symbol_in_file(&mut self, source_file: P<SourceFile>, symbol: P<Symbol>) -> Vec<P<Node>> {
         let identifier_text = symbol.name();
         let mut result = Vec::new();
-        for token in get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())) {
+        result.extend(get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())).into_iter().filter_map(|token| {
             if !ast::is_identifier(token) {
-                continue;
+                return None;
             }
             if token.text() != identifier_text {
-                continue;
+                return None;
             }
             let ref_symbol = self.get_symbol_at_location_exported(token);
             if ref_symbol == Some(symbol) {
-                result.push(token);
-                continue;
+                return Some(token);
             }
             if let Some(parent) = token.parent() {
                 if parent.kind() == Kind::ShorthandPropertyAssignment {
                     let shorthand_symbol = self.get_shorthand_assignment_value_symbol(Some(parent));
                     if shorthand_symbol == Some(symbol) {
-                        result.push(token);
-                        continue;
+                        return Some(token);
                     }
                 }
             }
             if let Some(parent) = token.parent() {
                 if ast::is_export_specifier(parent) {
                     let local_symbol = self.get_local_symbol_for_export_specifier(token, ref_symbol, parent);
-                    if local_symbol == Some(symbol) {
-                        result.push(token);
-                        continue;
-                    }
+                    if local_symbol == Some(symbol) { Some(token) } else { None }
+                } else {
+                    None
                 }
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
@@ -803,16 +800,14 @@ impl Checker {
     // services.go:727
     pub(crate) fn get_type_parameter_constraint_for_position_across_signatures(&mut self, signatures: &[P<Signature>], position: usize) -> P<Type> {
         let mut relevant_constraints = Vec::new();
-        for signature in signatures {
+        relevant_constraints.extend(signatures.iter().filter_map(|signature| {
             if position >= signature.type_parameters().len() {
-                continue;
+                return None;
             }
             let relevant_type_parameter = signature.type_parameters()[position];
             let relevant_constraint = self.get_constraint_of_type_parameter(relevant_type_parameter);
-            if let Some(relevant_constraint) = relevant_constraint {
-                relevant_constraints.push(relevant_constraint);
-            }
-        }
+            if let Some(relevant_constraint) = relevant_constraint { Some(relevant_constraint) } else { None }
+        }));
         self.get_union_type(&relevant_constraints)
     }
 
@@ -822,11 +817,8 @@ impl Checker {
         let parent = node.parent().unwrap();
         if ast::has_type_arguments(parent) {
             let type_args = parent.type_arguments();
-            for (i, &arg) in type_args.iter().enumerate() {
-                if arg == node {
-                    type_argument_position = i as i32;
-                    break;
-                }
+            if let Some((i, _arg)) = type_args.iter().enumerate().find_map(|(i, &arg)| if arg == node { Some((i, arg)) } else { None }) {
+                type_argument_position = i as i32;
             }
         }
 
@@ -1013,12 +1005,12 @@ impl Checker {
             inference_candidates
         });
 
-        for candidate in other_candidates {
+        candidates.extend(other_candidates.into_iter().filter_map(|candidate| {
             if candidates_set.contains(&candidate) {
-                continue;
+                return None;
             }
-            candidates.push(candidate);
-        }
+            Some(candidate)
+        }));
 
         candidates
     }
@@ -1232,13 +1224,17 @@ impl Checker {
             return false;
         };
         let declarations = symbol.declarations().to_vec();
-        for decl in declarations {
+        if declarations.into_iter().any(|decl| {
             let sf = ast::get_source_file_of_node(decl);
             if let Some(sf) = sf {
                 if self.program.is_source_file_default_library(sf.path()) {
                     return true;
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }

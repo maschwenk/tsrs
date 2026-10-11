@@ -176,13 +176,16 @@ fn get_range_of_enclosing_comment(source_file: P<SourceFile>, position: i32, pre
     let trailing_ranges_of_previous_token = preceding_token.map(|t| scanner::get_trailing_comment_ranges(source_file.text(), t.end()));
     let leading_ranges_of_next_token = get_leading_comment_ranges_of_node(token_at_position, source_file);
     let comment_ranges = trailing_ranges_of_previous_token.into_iter().flatten().chain(leading_ranges_of_next_token.into_iter().flatten());
-    for comment_range in comment_ranges {
+    if let Some(result) = comment_ranges.into_iter().find_map(|comment_range| {
         if comment_range.text_range.contains_exclusive(position)
-            || position == comment_range.end()
-                && (comment_range.kind == Kind::SingleLineCommentTrivia || position as usize == source_file.text().len())
+            || position == comment_range.end() && (comment_range.kind == Kind::SingleLineCommentTrivia || position as usize == source_file.text().len())
         {
-            return Some(comment_range);
+            Some(Some(comment_range))
+        } else {
+            None
         }
+    }) {
+        return result;
     }
     None
 }

@@ -103,19 +103,21 @@ pub mod test_host {
                 }
                 let prefix = if path.ends_with('/') { path } else { format!("{path}/") };
                 let mut names: BTreeMap<String, u8> = BTreeMap::new();
-                for key in files.keys().filter(|k| k.starts_with(&prefix)) {
+                names.extend(files.keys().filter(|k| k.starts_with(&prefix)).map(|key| {
                     let tail = &key[prefix.len()..];
                     match tail.split_once('/') {
-                        Some((dir, _)) => names.insert(dir.to_string(), b'd'),
-                        None => names.insert(tail.to_string(), b'f'),
-                    };
-                }
+                        Some((dir, _)) => (dir.to_string(), b'd'),
+                        None => (tail.to_string(), b'f'),
+                    }
+                }));
                 let mut out = Vec::new();
-                for (name, kind) in names {
+                out = names.into_iter().fold(out, |mut out, (name, kind)| {
                     out.push(kind);
                     out.extend_from_slice(name.as_bytes());
                     out.push(0);
-                }
+
+                    out
+                });
                 Ok(out)
             }
             OP_REALPATH => Ok(path.into_bytes()),

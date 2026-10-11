@@ -115,7 +115,7 @@ pub(crate) fn unexpected_method(method: &str) -> ipc::Error {
 pub(crate) fn quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
-    for c in s.chars() {
+    out = s.chars().fold(out, |mut out, c| {
         match c {
             '\x07' => out.push_str("\\a"),
             '\x08' => out.push_str("\\b"),
@@ -134,7 +134,9 @@ pub(crate) fn quote(s: &str) -> String {
             }
             c => out.push(c),
         }
-    }
+
+        out
+    });
     out.push('"');
     out
 }

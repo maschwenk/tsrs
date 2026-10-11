@@ -33,7 +33,7 @@ impl LanguageService {
 
         let mapped_ranges = self.converters.from_lsp_range_intersecting_for_source_file(file, params.range, Feature::InlayHints);
         let mut result = Vec::with_capacity(mapped_ranges.len());
-        for mapped in &mapped_ranges {
+        result.extend(mapped_ranges.iter().flat_map(|mapped| {
             let projection = mapped.script;
             let mut checker = program.get_type_checker_for_file(ctx, projection);
             let mut inlay_hint_state = InlayHintState {
@@ -47,8 +47,8 @@ impl LanguageService {
                 result: Vec::new(),
             };
             inlay_hint_state.visit(projection.as_node());
-            result.extend(inlay_hint_state.result);
-        }
+            inlay_hint_state.result
+        }));
         Ok(lsproto::InlayHintsOrNull { inlay_hints: Some(result) })
     }
 }
@@ -249,9 +249,7 @@ impl InlayHintState<'_> {
         if let Some(s) = &hint_parts.string {
             hint_text.clone_from(s);
         } else if let Some(label_parts) = &hint_parts.inlay_hint_label_parts {
-            for part in label_parts {
-                hint_text.push_str(&part.value);
-            }
+            hint_text.extend(label_parts.iter().map(|part| part.value.as_str()));
         }
         let name = decl.name().unwrap();
         if !self.preferences.include_inlay_variable_type_hints_when_type_matches_name.is_true()
@@ -901,10 +899,10 @@ impl InlayHintState<'_> {
         if rest_type.is_tuple_type() {
             let element_infos = rest_type.target().unwrap().as_tuple_type().element_infos();
             let mut associated_names: Vec<Option<P<Node>>> = Vec::with_capacity(element_infos.len());
-            for element_info in element_infos {
+            associated_names.extend(element_infos.iter().map(|element_info| {
                 let labeled_element = element_info.labeled_declaration();
-                associated_names.push(labeled_element);
-            }
+                labeled_element
+            }));
             let index = pos - param_count;
             if (index as usize) < associated_names.len() {
                 if let Some(associated_name) = associated_names[index as usize] {
@@ -964,11 +962,12 @@ impl InlayHintState<'_> {
         // Go ranges over the (possibly nil) sequence; arguments are never JsxText.
         let ranges = get_leading_comment_ranges_of_node(node, self.file).unwrap();
         let file_text = self.file.text();
-        for r in ranges {
-            let comment_text = file_text[r.text_range.pos() as usize..r.text_range.end() as usize].trim_matches(|r: char| go_is_space(r) || r == '/' || r == '*');
-            if comment_text == name {
-                return true;
-            }
+        if ranges.into_iter().any(|r| {
+            let comment_text =
+                file_text[r.text_range.pos() as usize..r.text_range.end() as usize].trim_matches(|r: char| go_is_space(r) || r == '/' || r == '*');
+            comment_text == name
+        }) {
+            return true;
         }
 
         false

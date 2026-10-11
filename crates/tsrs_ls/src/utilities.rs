@@ -521,8 +521,8 @@ pub(crate) fn get_containing_node_if_in_heritage_clause(node: P<Node>) -> Option
 
 // utilities.go:448
 pub(crate) fn get_container_node(node: P<Node>) -> Option<P<Node>> {
-    let mut parent = node.parent();
-    while let Some(p) = parent {
+    let parent = node.parent();
+    if let Some(result) = std::iter::successors(parent, |p| p.parent()).find_map(|p| {
         match p.kind() {
             Kind::SourceFile
             | Kind::MethodDeclaration
@@ -534,10 +534,13 @@ pub(crate) fn get_container_node(node: P<Node>) -> Option<P<Node>> {
             | Kind::ClassDeclaration
             | Kind::InterfaceDeclaration
             | Kind::EnumDeclaration
-            | Kind::ModuleDeclaration => return Some(p),
+            | Kind::ModuleDeclaration => return Some(Some(p)),
             _ => {}
         }
-        parent = p.parent();
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -1114,10 +1117,14 @@ pub(crate) fn get_property_symbols_from_base_types(
                 if let Some(property_type_symbol) = property_type.symbol() {
                     // Visit the typeReference as well to see if it directly or indirectly uses that property
                     if let Some(property_symbol) = checker.get_property_of_type_exported(property_type, property_name) {
-                        for root_symbol in checker.get_root_symbols(property_symbol) {
+                        if let Some(result) = checker.get_root_symbols(property_symbol).into_iter().find_map(|root_symbol| {
                             if let Some(result) = cb(checker, root_symbol) {
-                                return Some(result);
+                                return Some(Some(result));
                             }
+
+                            None
+                        }) {
+                            return result;
                         }
                     }
                     if let Some(result) = recur(property_type_symbol, property_name, checker, cb, seen) {
@@ -1150,13 +1157,12 @@ pub(crate) fn get_property_symbol_of_object_binding_pattern_without_property_nam
 }
 
 // utilities.go:1010
-pub(crate) fn get_target_label(mut reference_node: Option<P<Node>>, label_name: &str) -> Option<P<Node>> {
+pub(crate) fn get_target_label(reference_node: Option<P<Node>>, label_name: &str) -> Option<P<Node>> {
     // todo: rewrite as `ast.FindAncestor`
-    while let Some(n) = reference_node {
-        if n.kind() == Kind::LabeledStatement && n.label().unwrap().text() == label_name {
-            return n.label();
-        }
-        reference_node = n.parent();
+    if let Some(result) = std::iter::successors(reference_node, |n| n.parent())
+        .find_map(|n| if n.kind() == Kind::LabeledStatement && n.label().unwrap().text() == label_name { Some(n.label()) } else { None })
+    {
+        return result;
     }
     None
 }

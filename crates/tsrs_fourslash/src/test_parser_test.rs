@@ -79,7 +79,7 @@ fn check_case(expected: &Value) -> Result<(), String> {
     if td.markers.len() != want_markers.len() {
         return Err(format!("{test}: {} markers, Go has {}", td.markers.len(), want_markers.len()));
     }
-    for (m, w) in td.markers.iter().zip(want_markers) {
+    if let Some(result) = td.markers.iter().zip(want_markers).into_iter().find_map(|(m, w)| {
         let got = (m.file_name.clone(), m.position as i64, (m.ls_position.line as i64, m.ls_position.character as i64), m.name.clone());
         let name = match field(w, "name") {
             Value::Null => None,
@@ -87,12 +87,16 @@ fn check_case(expected: &Value) -> Result<(), String> {
         };
         let want = (s(field(w, "fileName")), n(field(w, "position")), pos(field(w, "ls")), name);
         if got != want {
-            return Err(format!("{test}: marker differs:\n  rust {got:?}\n  go   {want:?}"));
+            return Some(Err(format!("{test}: marker differs:\n  rust {got:?}\n  go   {want:?}")));
         }
         let got_data = if m.data.is_empty() { Value::Null } else { Value::Object(m.data.iter().map(|(k, v)| (k.clone(), v.to_json())).collect()) };
         if got_data != *field(w, "data") {
-            return Err(format!("{test}: marker data differs:\n  rust {got_data:?}\n  go   {:?}", field(w, "data")));
+            return Some(Err(format!("{test}: marker data differs:\n  rust {got_data:?}\n  go   {:?}", field(w, "data"))));
         }
+
+        None
+    }) {
+        return result;
     }
 
     let mut names: Vec<String> = td.marker_positions.keys().cloned().collect();
@@ -107,7 +111,7 @@ fn check_case(expected: &Value) -> Result<(), String> {
     if td.ranges.len() != want_ranges.len() {
         return Err(format!("{test}: {} ranges, Go has {}", td.ranges.len(), want_ranges.len()));
     }
-    for (r, w) in td.ranges.iter().zip(want_ranges) {
+    if let Some(result) = td.ranges.iter().zip(want_ranges).into_iter().find_map(|(r, w)| {
         let marker_index = match &r.marker {
             None => -1,
             Some(m) => td.markers.iter().position(|x| std::sync::Arc::ptr_eq(x, m)).map(|i| i as i64).unwrap_or(-2),
@@ -122,8 +126,12 @@ fn check_case(expected: &Value) -> Result<(), String> {
         );
         let want = (s(field(w, "fileName")), n(field(w, "pos")), n(field(w, "end")), pos(field(w, "start")), pos(field(w, "stop")), n(field(w, "marker")));
         if got != want {
-            return Err(format!("{test}: range differs:\n  rust {got:?}\n  go   {want:?}"));
+            return Some(Err(format!("{test}: range differs:\n  rust {got:?}\n  go   {want:?}")));
         }
+
+        None
+    }) {
+        return result;
     }
 
     if td.symlinks != string_map(field(expected, "symlinks")) {

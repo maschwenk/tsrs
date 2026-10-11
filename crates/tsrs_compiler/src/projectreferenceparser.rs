@@ -68,12 +68,12 @@ impl<'a> projectReferenceParser<'a> {
 
     // projectreferenceparser.go:54
     fn start(&mut self, tasks: &mut [taskId]) {
-        for i in 0..tasks.len() {
-            let task = tasks[i];
+        for task_slot in tasks.iter_mut() {
+            let task = *task_slot;
             let path = self.to_path(&self.tasks[task].config_name);
             if let Some(&loaded_task) = self.tasks_by_file_name.get(&path) {
                 // dedup tasks to ensure correct file order, regardless of which task would be started first
-                tasks[i] = loaded_task;
+                *task_slot = loaded_task;
             } else {
                 self.tasks_by_file_name.insert(path, task);
                 self.parse_task(task);

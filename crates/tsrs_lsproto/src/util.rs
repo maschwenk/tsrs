@@ -54,12 +54,7 @@ impl IntegerOrString {
 
 // util.go:53
 fn diagnostic_exists_in_slice(elem: &Diagnostic, diags: &[Diagnostic]) -> bool {
-    for diag in diags {
-        if diagnostics_equal(elem, diag) {
-            return true;
-        }
-    }
-    false
+    diags.iter().any(|diag| diagnostics_equal(elem, diag))
 }
 
 // util.go:62
@@ -97,16 +92,8 @@ fn diagnostic_messages_equal(message1: &StringOrMarkupContent, message2: &String
 pub fn compare_diagnostics<'a>(list1: &'a [Diagnostic], list2: &'a [Diagnostic]) -> (Vec<&'a Diagnostic>, Vec<&'a Diagnostic>) {
     let mut missing_from_list1 = Vec::new();
     let mut missing_from_list2 = Vec::new();
-    for elem in list1 {
-        if !diagnostic_exists_in_slice(elem, list2) {
-            missing_from_list2.push(elem);
-        }
-    }
-    for elem in list2 {
-        if !diagnostic_exists_in_slice(elem, list1) {
-            missing_from_list1.push(elem);
-        }
-    }
+    missing_from_list2.extend(list1.iter().filter_map(|elem| if !diagnostic_exists_in_slice(elem, list2) { Some(elem) } else { None }));
+    missing_from_list1.extend(list2.iter().filter_map(|elem| if !diagnostic_exists_in_slice(elem, list1) { Some(elem) } else { None }));
     (missing_from_list1, missing_from_list2)
 }
 

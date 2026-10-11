@@ -224,13 +224,9 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
     let mut start = vol_len;
     while start < path.len() {
         let b = path.as_bytes();
-        while start < b.len() && is_sep(b[start]) {
-            start += 1;
-        }
+        start += (start..b.len()).take_while(|&index| is_sep(b[index])).count();
         let mut end = start;
-        while end < b.len() && !is_sep(b[end]) {
-            end += 1;
-        }
+        end += (end..b.len()).take_while(|&index| !is_sep(b[index])).count();
 
         // The next path component is in path[start:end].
         if end == start {
@@ -376,9 +372,7 @@ pub(crate) fn clean(path: &str) -> String {
             if out.len() > dotdot {
                 // can backtrack
                 let mut w = out.len() - 1;
-                while w > dotdot && out[w] != b'/' {
-                    w -= 1;
-                }
+                w -= (dotdot + 1..=w).rev().take_while(|&i| out[i] != b'/').count();
                 out.truncate(w);
             } else if !rooted {
                 // cannot backtrack, but not rooted, so append .. element.
@@ -395,10 +389,9 @@ pub(crate) fn clean(path: &str) -> String {
                 out.push(b'/');
             }
             // copy element
-            while r < n && b[r] != b'/' {
-                out.push(b[r]);
-                r += 1;
-            }
+            let end = r + b[r..n].iter().take_while(|&&byte| byte != b'/').count();
+            out.extend_from_slice(&b[r..end]);
+            r = end;
         }
     }
 

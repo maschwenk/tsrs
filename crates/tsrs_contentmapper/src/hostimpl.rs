@@ -786,10 +786,9 @@ impl timingCollector {
             }
             (request_wait, t.mappers.clone())
         };
-        let mut result =
-            Timings { mappers: OrderedMap::with_capacity_and_hasher(mappers.len(), Default::default()), request_wait };
-        for (identity, timing) in mappers {
-            result.mappers.insert(
+        let mut result = Timings { mappers: OrderedMap::with_capacity_and_hasher(mappers.len(), Default::default()), request_wait };
+        result.mappers.extend(mappers.into_iter().map(|(identity, timing)| {
+            (
                 identity,
                 MapperTimings {
                     spawn: timing.spawn.snapshot(),
@@ -798,8 +797,8 @@ impl timingCollector {
                     close_project: timing.close_project.snapshot(),
                     transform: timing.transform.snapshot(),
                 },
-            );
-        }
+            )
+        }));
         result
     }
 }
@@ -1395,7 +1394,7 @@ impl host {
         entry.option_diagnostics = Vec::with_capacity(result.option_diagnostics.len());
         for diagnostic in result.option_diagnostics {
             let mut path = Vec::with_capacity(diagnostic.path.len());
-            for raw_segment in &diagnostic.path {
+            path = diagnostic.path.iter().try_fold(path, |mut path, raw_segment| {
                 // Go switches on the raw segment's json.Kind: '"' a property, '0' an index, anything else malformed.
                 match raw_segment {
                     Value::String(property) => path.push(OptionPathSegment { property: property.clone(), ..Default::default() }),
@@ -1408,7 +1407,8 @@ impl host {
                     }
                     _ => return Err(ProjectError { kind: ProjectErrorKind::MalformedResponse }.into()),
                 }
-            }
+                Ok::<_, Error>(path)
+            })?;
             entry.option_diagnostics.push(OptionDiagnostic {
                 mapper: entry.mapper,
                 path,
@@ -1706,15 +1706,20 @@ impl Project for projectLease {
             return Vec::new();
         };
         let mut diagnostics = Vec::new();
-        for &mapper in &self.mappers {
-            let Some(entry) = projects.get(self.entry_key(mapper)) else {
-                continue;
-            };
-            if !entry.opened {
-                continue;
-            }
-            diagnostics.extend_from_slice(&entry.option_diagnostics);
-        }
+        diagnostics.extend(
+            self.mappers
+                .iter()
+                .filter_map(|&mapper| {
+                    let Some(entry) = projects.get(self.entry_key(mapper)) else {
+                        return None;
+                    };
+                    if !entry.opened {
+                        return None;
+                    }
+                    Some(entry.option_diagnostics.iter().cloned())
+                })
+                .flatten(),
+        );
         diagnostics
     }
 
@@ -1845,17 +1850,19 @@ fn decode_transform_result(
         diagnostic_directives: mapped.diagnostic_directives,
         ..Default::default()
     };
-    for (supplemental_index, supplemental) in supplemental.into_iter().enumerate() {
-        match decode_mapped_output(supplemental.mapped_output, original_text, position_encoding, diagnostic_source) {
-            Ok((mapped, _)) => result.supplemental.push(mapped),
+    result.supplemental = supplemental
+        .into_iter()
+        .enumerate()
+        .map(|(supplemental_index, supplemental)| match decode_mapped_output(supplemental.mapped_output, original_text, position_encoding, diagnostic_source) {
+            Ok((mapped, _)) => Ok(mapped),
             Err(mut err) => {
                 if let Error::DiagnosticDirective(directive_error) = &mut err {
                     directive_error.supplemental_index = supplemental_index as i32;
                 }
-                return Err(err);
+                Err(err)
             }
-        }
-    }
+        })
+        .collect::<Result<_, _>>()?;
     for d in &diagnostics {
         if d.start < 0 || d.length < 0 || d.start > i64::MAX - d.length {
             return Err(Error::Other(format!(
@@ -1996,16 +2003,10 @@ fn normalize_diagnostic_directives(
     // Go's indexedDirective, sorted with Go's (unstable) slices.SortFunc so that equal starts keep Go's order.
     let mut sorted: Vec<(ast::MappedDiagnosticDirective, usize)> = result.iter().copied().zip(0..).collect();
     goslices::sort_func(&mut sorted, |a, b| a.0.virtual_range.pos().cmp(&b.0.virtual_range.pos()) as i32);
-    for i in 1..sorted.len() {
-        if sorted[i].0.virtual_range.pos() < sorted[i - 1].0.virtual_range.end() {
-            return Err(DiagnosticDirectiveError {
-                kind: DiagnosticDirectiveErrorKind::Overlap,
-                index: sorted[i].1,
-                supplemental_index: -1,
-                ..Default::default()
-            }
-            .into());
-        }
+    if let Some(pair) = sorted.windows(2).find(|pair| pair[1].0.virtual_range.pos() < pair[0].0.virtual_range.end()) {
+        return Err(
+            DiagnosticDirectiveError { kind: DiagnosticDirectiveErrorKind::Overlap, index: pair[1].1, supplemental_index: -1, ..Default::default() }.into()
+        );
     }
     Ok(result)
 }

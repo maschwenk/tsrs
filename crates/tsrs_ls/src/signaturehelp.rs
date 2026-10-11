@@ -63,14 +63,18 @@ impl LanguageService {
     ) -> Result<lsproto::SignatureHelpResponse, lsproto::Error> {
         let (program, source_file) = self.get_program_and_file(document_uri);
         let positions = self.converters.from_lsp_position_for_source_file(source_file, position, Feature::SignatureHelp);
-        for projection in positions {
+        if let Some(result) = positions.into_iter().find_map(|projection| {
             if !projection.fidelity.is_single_segment() {
-                continue;
+                return None;
             }
             let items = self.get_signature_help_items(ctx, projection.position as i32, program, projection.script, context);
             if let Some(items) = items {
-                return Ok(lsproto::SignatureHelpOrNull { signature_help: Some(items) });
+                return Some(Ok(lsproto::SignatureHelpOrNull { signature_help: Some(items) }));
             }
+
+            None
+        }) {
+            return result;
         }
         Ok(lsproto::SignatureHelpOrNull::default())
     }
@@ -211,21 +215,23 @@ fn get_type_help_item(symbol: P<Symbol>, type_parameter: &[P<Type>], enclosing_d
     let mut printer = printer::new_printer(PrinterOptions { new_line: NewLineKind::LF, ..Default::default() }, printer::PrintHandlers::default(), None);
 
     let mut parameters: Vec<signatureHelpParameter> = Vec::with_capacity(type_parameter.len());
-    for &type_param in type_parameter {
-        parameters.push(create_signature_help_parameter_for_type_parameter(type_param, source_file, enclosing_declaration, c, &mut printer));
-    }
+    parameters.extend(
+        type_parameter
+            .iter()
+            .map(|&type_param| create_signature_help_parameter_for_type_parameter(type_param, source_file, enclosing_declaration, c, &mut printer)),
+    );
 
     // Creating display label
     let mut display_parts = String::new();
     display_parts.push_str(&c.symbol_to_string_exported(symbol));
     if !parameters.is_empty() {
         display_parts.push_str(scanner::token_to_string(Kind::LessThanToken));
-        for (i, type_parameter) in parameters.iter().enumerate() {
-            if i > 0 {
-                display_parts.push_str(", ");
-            }
-            display_parts.push_str(type_parameter.parameter_info.label.string.as_ref().unwrap());
-        }
+        display_parts.extend(
+            parameters
+                .iter()
+                .enumerate()
+                .flat_map(|(i, type_parameter)| [if i > 0 { ", " } else { "" }, type_parameter.parameter_info.label.string.as_deref().unwrap()]),
+        );
         display_parts.push_str(scanner::token_to_string(Kind::GreaterThanToken));
     }
 
@@ -251,11 +257,15 @@ impl LanguageService {
             return None;
         }
 
-        for &sf in program.get_source_files() {
+        if let Some(result) = program.get_source_files().iter().find_map(|&sf| {
             let result = self.find_signature_help_from_named_declarations(ctx, sf, name, argument_info, c);
             if result.is_some() {
-                return result;
+                return Some(result);
             }
+
+            None
+        }) {
+            return result;
         }
         None
     }
@@ -353,8 +363,8 @@ impl LanguageService {
             }
         }
         let mut items: Vec<Vec<signatureInformation>> = Vec::with_capacity(candidates.len());
-        for &candidate_signature in candidates {
-            items.push(self.get_signature_help_item(
+        items.extend(candidates.iter().map(|&candidate_signature| {
+            self.get_signature_help_item(
                 candidate_signature,
                 argument_info.is_type_parameter_list,
                 &call_target_display_parts,
@@ -364,23 +374,18 @@ impl LanguageService {
                 c,
                 doc_format,
                 vs_capability,
-            ));
-        }
+            )
+        }));
 
         let mut selected_item_index = 0;
         let mut item_seen = 0;
-        for i in 0..items.len() {
-            let item = &items[i];
+        for (i, element) in items.iter().enumerate() {
+            let item = &(*element);
             if Some(candidates[i]) == resolved_signature {
                 selected_item_index = item_seen;
                 if item.len() > 1 {
-                    let mut count = 0;
-                    for j in item {
-                        if j.is_variadic || j.parameters.len() as i32 >= argument_info.argument_count {
-                            selected_item_index = item_seen + count;
-                            break;
-                        }
-                        count += 1;
+                    if let Some(count) = item.iter().position(|j| j.is_variadic || j.parameters.len() as i32 >= argument_info.argument_count) {
+                        selected_item_index = item_seen + count;
                     }
                 }
             }
@@ -495,7 +500,7 @@ impl LanguageService {
         }
 
         let mut result: Vec<signatureInformation> = Vec::with_capacity(infos.len());
-        for info in infos {
+        result.extend(infos.into_iter().map(|info| {
             let mut label_dpw = new_display_parts_writer(vs_capability);
             if !call_target_symbol.is_empty() {
                 label_dpw.write_symbol(call_target_symbol, call_target_sym.unwrap());
@@ -503,14 +508,14 @@ impl LanguageService {
             label_dpw.write_from(&info.writer);
             label_dpw.write_from(&suffix_dpw);
 
-            result.push(signatureInformation {
+            signatureInformation {
                 label: label_dpw.string(),
                 documentation: documentation.clone(),
                 parameters: info.parameters,
                 is_variadic: info.is_variadic,
                 colorized_runs: label_dpw.get_runs().to_vec(),
-            });
-        }
+            }
+        }));
         result
     }
 }
@@ -557,9 +562,11 @@ impl LanguageService {
 
         let type_parameters: &[P<Type>] = if let Some(target) = candidate_signature.target() { target.type_parameters() } else { candidate_signature.type_parameters() };
         let mut signature_help_type_parameters: Vec<signatureHelpParameter> = Vec::with_capacity(type_parameters.len());
-        for &type_parameter in type_parameters {
-            signature_help_type_parameters.push(create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaration, c, &mut p));
-        }
+        signature_help_type_parameters.extend(
+            type_parameters
+                .iter()
+                .map(|&type_parameter| create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaration, c, &mut p)),
+        );
 
         let mut this_parameter: Vec<signatureHelpParameter> = Vec::new();
         if let Some(this) = candidate_signature.this_parameter() {
@@ -635,9 +642,12 @@ impl LanguageService {
 
         let mut signature_help_type_parameters: Vec<signatureHelpParameter> = Vec::with_capacity(candidate_signature.type_parameters().len());
         if !candidate_signature.type_parameters().is_empty() {
-            for &type_parameter in candidate_signature.type_parameters() {
-                signature_help_type_parameters.push(create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaratipn, c, &mut p));
-            }
+            signature_help_type_parameters.extend(
+                candidate_signature
+                    .type_parameters()
+                    .iter()
+                    .map(|&type_parameter| create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaratipn, c, &mut p)),
+            );
         }
 
         // Creating display label for type parameters like, <T, U>
@@ -1330,11 +1340,15 @@ fn try_get_parameter_info(starting_token: P<Node>, source_file: P<SourceFile>, c
 // signaturehelp.go:1302
 fn choose_better_symbol(s: P<Symbol>) -> P<Symbol> {
     if s.name() == ast::InternalSymbolNameType {
-        for &d in s.declarations() {
+        if let Some(result) = s.declarations().iter().find_map(|&d| {
             if ast::is_function_type_node(d) && ast::can_have_symbol(d.parent().unwrap()) {
                 // Go returns `d.Parent.Symbol()` (nil-able) where a symbol is expected.
-                return d.parent().unwrap().symbol().unwrap();
+                return Some(d.parent().unwrap().symbol().unwrap());
             }
+
+            None
+        }) {
+            return result;
         }
     }
     s

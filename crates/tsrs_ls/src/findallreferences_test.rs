@@ -113,9 +113,11 @@ fn test_implementations_worklist_does_not_blow_up() {
         assert!(data.is_some());
         let data = data.unwrap();
         let mut refs = 0;
-        for se in &data.symbols_and_entries {
+        refs = data.symbols_and_entries.iter().fold(refs, |mut refs, se| {
             refs += se.references.len();
-        }
+
+            refs
+        });
         (refs, data.symbols_and_entries.len())
     };
 

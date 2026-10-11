@@ -923,11 +923,7 @@ static typeFlagNames: [(TypeFlags, &str); 29] = [
 /// FormatTypeFlags returns the individual flag names as a slice of strings.
 pub fn format_type_flags(flags: TypeFlags) -> Vec<&'static str> {
     let mut result = Vec::with_capacity(flags.bits().count_ones() as usize);
-    for (flag, name) in typeFlagNames.iter() {
-        if flags.intersects(*flag) {
-            result.push(*name);
-        }
-    }
+    result.extend(typeFlagNames.iter().filter_map(|(flag, name)| if flags.intersects(*flag) { Some(*name) } else { None }));
     if result.is_empty() {
         result.push("None");
     }

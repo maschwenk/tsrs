@@ -27,11 +27,8 @@ impl LanguageService {
         // Extract highlights for the current file only.
         let mut document_highlights: Vec<lsproto::DocumentHighlight> = Vec::new();
         if let Some(multi_document_highlights) = result.multi_document_highlights {
-            for mh in multi_document_highlights {
-                if mh.uri == *document_uri {
-                    document_highlights.extend(mh.highlights);
-                }
-            }
+            document_highlights
+                .extend(multi_document_highlights.into_iter().filter_map(|mh| if mh.uri == *document_uri { Some(mh.highlights) } else { None }).flatten());
         }
         Ok(lsproto::DocumentHighlightsOrNull { document_highlights: Some(document_highlights) })
     }
@@ -58,11 +55,13 @@ impl LanguageService {
         let (program, source_file) = self.get_program_and_file(document_uri);
         let positions = self.converters.from_lsp_position_for_source_file(source_file, document_position, Feature::DocumentHighlights);
         let mut results: Vec<lsproto::MultiDocumentHighlightsOrNull> = Vec::with_capacity(positions.len());
-        for mapped in positions {
+        results.extend(positions.into_iter().filter_map(|mapped| {
             if mapped.fidelity.is_single_segment() {
-                results.push(self.provide_document_highlights_at_position(ctx, document_uri, mapped.position, program, mapped.script, files_to_search));
+                Some(self.provide_document_highlights_at_position(ctx, document_uri, mapped.position, program, mapped.script, files_to_search))
+            } else {
+                None
             }
-        }
+        }));
         Ok(combine_multi_document_highlights(results))
     }
 
@@ -110,15 +109,13 @@ impl LanguageService {
         // Resolve the source files to search, deduplicating by file name.
         let mut source_files: Vec<P<SourceFile>> = Vec::new();
         let mut seen_files: Set<String> = new_set_with_size_hint(files_to_search.len());
-        for uri in files_to_search {
+        source_files.extend(files_to_search.iter().filter_map(|uri| {
             let file_name = uri.file_name();
             if !seen_files.add_if_absent(file_name.clone()) {
-                continue;
+                return None;
             }
-            if let Some(sf) = program.get_source_file(&file_name) {
-                source_files.push(sf);
-            }
-        }
+            if let Some(sf) = program.get_source_file(&file_name) { Some(sf) } else { None }
+        }));
         if source_files.is_empty() {
             source_files = vec![source_file];
         }
@@ -156,11 +153,7 @@ fn combine_multi_document_highlights(results: Vec<lsproto::MultiDocumentHighligh
                 }
             };
             let ranges = seen.entry(document.uri.clone()).or_default();
-            for highlight in document.highlights {
-                if ranges.add_if_absent(highlight.range) {
-                    combined_documents[index].highlights.push(highlight);
-                }
-            }
+            combined_documents[index].highlights.extend(document.highlights.into_iter().filter(|highlight| ranges.add_if_absent(highlight.range)));
         }
     }
     lsproto::MultiDocumentHighlightsOrNull { multi_document_highlights: Some(combined_documents) }
@@ -195,12 +188,14 @@ impl LanguageService {
         }
 
         let mut result: Vec<lsproto::MultiDocumentHighlight> = Vec::new();
-        for sf in source_files {
+        result.extend(source_files.iter().filter_map(|sf| {
             let file_name = sf.original_file_name();
             if let Some(highlights) = file_highlights.remove(file_name) {
-                result.push(lsproto::MultiDocumentHighlight { uri: lsconv::file_name_to_document_uri(file_name), highlights });
+                Some(lsproto::MultiDocumentHighlight { uri: lsconv::file_name_to_document_uri(file_name), highlights })
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
@@ -299,12 +294,10 @@ impl LanguageService {
         }
         let mut highlights: Vec<lsproto::DocumentHighlight> = Vec::new();
         let kind = lsproto::DocumentHighlightKind::Read;
-        for &node in nodes {
+        highlights.extend(nodes.iter().filter_map(|&node| {
             let (lsp_range, fidelity) = self.create_lsp_range_from_node_for_feature(node, source_file, Feature::DocumentHighlights);
-            if !fidelity.is_none() {
-                highlights.push(lsproto::DocumentHighlight { range: lsp_range, kind: Some(kind) });
-            }
-        }
+            if !fidelity.is_none() { Some(lsproto::DocumentHighlight { range: lsp_range, kind: Some(kind) }) } else { None }
+        }));
         highlights
     }
 
@@ -317,18 +310,12 @@ impl LanguageService {
                 let mut symbol_decls: Vec<P<Node>> = Vec::new();
                 if ast::can_have_symbol(decl) {
                     if let Some(symbol) = decl.symbol() {
-                        for &d in symbol.declarations() {
-                            if node_test(d) {
-                                'outer: for c in get_children_from_non_jsdoc_node(d, source_file) {
-                                    for &k in keywords {
-                                        if c.kind() == k {
-                                            symbol_decls.push(c);
-                                            break 'outer;
-                                        }
-                                    }
-                                }
+                        symbol_decls.extend(symbol.declarations().iter().filter_map(|&d| {
+                            if !node_test(d) {
+                                return None;
                             }
-                        }
+                            get_children_from_non_jsdoc_node(d, source_file).into_iter().find(|c| keywords.contains(&c.kind()))
+                        }));
                     }
                 }
                 symbol_decls
@@ -416,11 +403,8 @@ fn get_if_else_keywords(if_statement: P<Node> /*IfStatement*/, source_file: P<So
             keywords.push(children[0]);
         }
         // Generally the 'else' keyword is second-to-last, so traverse backwards.
-        for &c in children.iter().rev() {
-            if c.kind() == Kind::ElseKeyword {
-                keywords.push(c);
-                break;
-            }
+        if let Some(c) = children.iter().rev().into_iter().find_map(|&c| if c.kind() == Kind::ElseKeyword { Some(c) } else { None }) {
+            keywords.push(c);
         }
         let else_statement = if_statement.as_if_statement().else_statement;
         match else_statement {
@@ -450,12 +434,10 @@ fn get_return_occurrences(node: P<Node>, source_file: P<SourceFile>) -> Vec<P<No
 
         // Get all throw statements not in a try block
         let throw_statements = aggregate_owned_throw_statements(body, source_file);
-        for throw in throw_statements {
+        keywords.extend(throw_statements.into_iter().filter_map(|throw| {
             let keyword = astnav::find_child_of_kind(throw, Kind::ThrowKeyword, source_file);
-            if let Some(keyword) = keyword {
-                keywords.push(keyword);
-            }
-        }
+            if let Some(keyword) = keyword { Some(keyword) } else { None }
+        }));
     }
     keywords
 }
@@ -512,12 +494,10 @@ fn get_throw_occurrences(node: P<Node>, source_file: P<SourceFile>) -> Vec<P<Nod
 
     // Aggregate all throw statements "owned" by this owner.
     let throw_statements = aggregate_owned_throw_statements(owner, source_file);
-    for throw in throw_statements {
+    keywords.extend(throw_statements.into_iter().filter_map(|throw| {
         let keyword = astnav::find_child_of_kind(throw, Kind::ThrowKeyword, source_file);
-        if let Some(keyword) = keyword {
-            keywords.push(keyword);
-        }
-    }
+        if let Some(keyword) = keyword { Some(keyword) } else { None }
+    }));
 
     // If the "owner" is a function, then we equate 'return' and 'throw' statements in their
     // ability to "jump out" of the function, and include occurrences for both
@@ -604,11 +584,13 @@ fn get_switch_case_default_occurrences(node: P<Node>, source_file: P<SourceFile>
         }
 
         let break_and_continue_statements = aggregate_all_break_and_continue_statements(clause, source_file);
-        for statement in break_and_continue_statements {
+        keywords.extend(break_and_continue_statements.into_iter().filter_map(|statement| {
             if statement.kind() == Kind::BreakStatement && owns_break_or_continue_statement(node, statement) {
-                keywords.push(lsutil::get_first_token(statement, source_file).unwrap());
+                Some(lsutil::get_first_token(statement, source_file).unwrap())
+            } else {
+                None
             }
-        }
+        }));
     }
 
     keywords
@@ -702,22 +684,23 @@ fn get_loop_break_continue_occurrences(node: P<Node>, source_file: P<SourceFile>
         keywords.push(token);
         if node.kind() == Kind::DoStatement {
             let loop_tokens = get_children_from_non_jsdoc_node(node, source_file);
-            for &loop_token in loop_tokens.iter().rev() {
-                if loop_token.kind() == Kind::WhileKeyword {
-                    keywords.push(loop_token);
-                    break;
-                }
+            if let Some(loop_token) =
+                loop_tokens.iter().rev().into_iter().find_map(|&loop_token| if loop_token.kind() == Kind::WhileKeyword { Some(loop_token) } else { None })
+            {
+                keywords.push(loop_token);
             }
         }
     }
 
     let break_and_continue_statements = aggregate_all_break_and_continue_statements(node, source_file);
-    for statement in break_and_continue_statements {
+    keywords.extend(break_and_continue_statements.into_iter().filter_map(|statement| {
         let token = lsutil::get_first_token(statement, source_file).unwrap();
         if owns_break_or_continue_statement(node, statement) && (token.kind() == Kind::BreakKeyword || token.kind() == Kind::ContinueKeyword) {
-            keywords.push(token);
+            Some(token)
+        } else {
+            None
         }
-    }
+    }));
 
     keywords
 }
@@ -730,11 +713,7 @@ fn get_async_and_await_occurrences(node: P<Node>, source_file: P<SourceFile>) ->
 
     let mut keywords: Vec<P<Node>> = Vec::new();
 
-    for &modifier in fun.modifier_nodes() {
-        if modifier.kind() == Kind::AsyncKeyword {
-            keywords.push(modifier);
-        }
-    }
+    keywords.extend(fun.modifier_nodes().iter().filter_map(|&modifier| if modifier.kind() == Kind::AsyncKeyword { Some(modifier) } else { None }));
 
     fun.for_each_child(&mut |child| {
         traverse_without_crossing_function(child, source_file, &mut |child| {
@@ -796,12 +775,10 @@ fn get_modifier_occurrences(kind: Kind, node: P<Node>, _source_file: P<SourceFil
     let mut result: Vec<P<Node>> = Vec::new();
 
     let nodes_to_search = get_nodes_to_search_for_modifier(node, ast::modifier_to_flag(kind));
-    for n in nodes_to_search {
+    result.extend(nodes_to_search.into_iter().filter_map(|n| {
         let modifier = find_modifier(n, kind);
-        if let Some(modifier) = modifier {
-            result.push(modifier);
-        }
-    }
+        if let Some(modifier) = modifier { Some(modifier) } else { None }
+    }));
     result
 }
 
@@ -842,11 +819,8 @@ fn get_nodes_to_search_for_modifier(declaration: P<Node>, modifier_flag: Modifie
             if modifier_flag.intersects(ModifierFlags::AccessibilityModifier | ModifierFlags::Readonly) {
                 let mut constructor: Option<P<Node>> = None;
 
-                for &member in nodes {
-                    if ast::is_constructor_declaration(member) {
-                        constructor = Some(member);
-                        break;
-                    }
+                if let Some(member) = nodes.iter().find_map(|&member| if ast::is_constructor_declaration(member) { Some(member) } else { None }) {
+                    constructor = Some(member);
                 }
                 if let Some(constructor) = constructor {
                     result.extend_from_slice(constructor.parameters());

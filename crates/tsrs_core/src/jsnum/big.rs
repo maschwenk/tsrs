@@ -86,11 +86,11 @@ fn shr(x: &[u32], s: usize) -> Vec<u32> {
         return Vec::new();
     }
     let mut z = Vec::with_capacity(x.len() - ws);
-    for i in ws..x.len() {
+    z.extend((ws..x.len()).map(|i| {
         let lo = x[i] >> bs;
         let hi = if bs != 0 && i + 1 < x.len() { x[i + 1] << (32 - bs) } else { 0 };
-        z.push(lo | hi);
-    }
+        lo | hi
+    }));
     norm(&mut z);
     z
 }
@@ -103,10 +103,11 @@ fn shl(x: &[u32], s: usize) -> Vec<u32> {
     let bs = s % 32;
     let mut z = vec![0u32; ws];
     let mut carry = 0u32;
-    for &l in x {
-        z.push((l << bs) | carry);
+    z.extend(x.iter().map(|&l| {
+        let value = (l << bs) | carry;
         carry = if bs != 0 { l >> (32 - bs) } else { 0 };
-    }
+        value
+    }));
     if carry != 0 {
         z.push(carry);
     }

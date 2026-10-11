@@ -480,10 +480,11 @@ fn test_has_relative_path_segment_matches_segment_split() {
     for len in 0..=11 {
         for mut code in 0..3usize.pow(len) {
             bytes.clear();
-            for _ in 0..len {
-                bytes.push(alphabet[code % 3]);
+            bytes.extend((0..len).map(|_| {
+                let byte = alphabet[code % 3];
                 code /= 3;
-            }
+                byte
+            }));
             let p = std::str::from_utf8(&bytes).unwrap();
             assert_eq!(has_relative_path_segment(p), by_segments(p), "{p}");
             let prefixed = format!("/ab/c{p}");
@@ -511,9 +512,7 @@ fn test_path_is_relative() {
         ("c:/foo/bar".into(), false),
     ];
     let old = tests.clone();
-    for (p, r) in old {
-        tests.push((p.replace('/', "\\"), r));
-    }
+    tests.extend(old.into_iter().map(|(p, r)| (p.replace('/', "\\"), r)));
     for (p, expected) in tests {
         assert_eq!(path_is_relative(&p), expected, "{p}");
     }

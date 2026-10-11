@@ -382,14 +382,8 @@ impl NameGenerator {
         ////	}
         ////}
 
-        let mut scope = self.get_scope(private_name).as_deref();
-        while let Some(s) = scope {
-            if s.reserved_names.contains(name) {
-                return true;
-            }
-            scope = s.next.as_deref();
-        }
-        false
+        let scope = self.get_scope(private_name).as_deref();
+        std::iter::successors(scope, |s| s.next.as_deref()).any(|s| s.reserved_names.contains(name))
     }
 }
 

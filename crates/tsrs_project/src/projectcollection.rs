@@ -122,10 +122,8 @@ impl ProjectCollection {
     // projectcollection.go:98
     fn fill_configured_projects(&self, projects: &mut Vec<Shared<Project>>) {
         let start = projects.len();
-        #[expect(clippy::iter_over_hash_type, reason = "collected, then sorted by unique project id as in Go")]
-        for p in self.configured_projects.values() {
-            projects.push(p.clone());
-        }
+        // collected, then sorted by unique project id as in Go
+        projects.extend(self.configured_projects.values().map(std::clone::Clone::clone));
         projects[start..].sort_by(|a, b| a.id().cmp(&b.id()));
     }
 
@@ -141,12 +139,8 @@ impl ProjectCollection {
     // ProjectsByID returns all projects keyed by project ID in stable order.
     pub fn projects_by_id(&self) -> OrderedMap<ID, Shared<Project>> {
         let mut projects: OrderedMap<ID, Shared<Project>> = OrderedMap::default();
-        for project in self.configured_projects() {
-            projects.set(project.id(), project);
-        }
-        for project in self.synthetic_projects() {
-            projects.set(project.id(), project);
-        }
+        projects.extend(self.configured_projects().into_iter().map(|project| (project.id(), project)));
+        projects.extend(self.synthetic_projects().into_iter().map(|project| (project.id(), project)));
         if let Some(inferred_project) = &self.inferred_project {
             projects.set(inferred_project.id(), inferred_project.clone());
         }
@@ -188,11 +182,9 @@ impl ProjectCollection {
     // (ones created by API via createProgram)
     pub fn get_language_service_projects_containing_file(&self, path: &Path) -> Vec<Arc<dyn ls::Project>> {
         let mut projects: Vec<Arc<dyn ls::Project>> = Vec::new();
-        for project in self.configured_projects() {
-            if project.contains_file(path) {
-                projects.push(Arc::<Project>::clone(project.arc()));
-            }
-        }
+        projects.extend(self.configured_projects().into_iter().filter_map(|project| -> Option<Arc<dyn ls::Project>> {
+            if project.contains_file(path) { Some(Arc::<Project>::clone(project.arc())) } else { None }
+        }));
         if let Some(inferred_project) = &self.inferred_project {
             if inferred_project.contains_file(path) {
                 projects.push(Arc::<Project>::clone(inferred_project.arc()));
@@ -218,16 +210,18 @@ impl ProjectCollection {
                         }
                     }
 
-                    #[expect(clippy::iter_over_hash_type, reason = "only inserts into a set; Go ranges the map too")]
-                    for project in self.configured_projects.values() {
-                        if project.contains_file(path) {
-                            let configured_id = project.id().configured().unwrap();
-                            open_projects.add(configured_id);
-                        }
+                // only inserts into a set; Go ranges the map too
+                open_projects.m.extend(self.configured_projects.values().filter_map(|project| {
+                    if project.contains_file(path) {
+                        let configured_id = project.id().configured().unwrap();
+                        Some(configured_id)
+                    } else {
+                        None
                     }
-                }
-                Arc::new(open_projects)
-            }))
+                }));
+            }
+            Arc::new(open_projects)
+        }))
     }
 
     // projectcollection.go:211
@@ -376,10 +370,8 @@ impl ProjectCollection {
 // projectcollection.go:202
 pub(crate) fn open_file_paths(overlays: &OverlayMap) -> Set<Path> {
     let mut open_files = new_set_with_size_hint(overlays.len());
-    #[expect(clippy::iter_over_hash_type, reason = "pure set insert; Go ranges the map too")]
-    for path in overlays.keys() {
-        open_files.add(path.clone());
-    }
+    // pure set insert; Go ranges the map too
+    open_files.m.extend(overlays.keys().map(std::clone::Clone::clone));
     open_files
 }
 

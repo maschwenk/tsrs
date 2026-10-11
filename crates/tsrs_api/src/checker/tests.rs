@@ -620,9 +620,11 @@ impl TestHost {
     fn ancestor_handle_at(&self, needle: &str, levels: usize) -> String {
         let sf = self.program().get_source_file(MAIN_FILE).unwrap();
         let mut node = tsrs_astnav::get_touching_property_name(sf, MAIN.find(needle).unwrap() as i32);
-        for _ in 0..levels {
+        node = (0..levels).fold(node, |mut node, _| {
             node = node.parent().unwrap();
-        }
+
+            node
+        });
         self.node_handle(node).unwrap()
     }
 

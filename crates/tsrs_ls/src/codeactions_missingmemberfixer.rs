@@ -119,7 +119,7 @@ impl<'a> missingMemberFixer<'a> {
                     ordered_accessors.push(accessors.second_accessor.unwrap());
                 }
 
-                for accessor in ordered_accessors {
+                nodes = ordered_accessors.into_iter().fold(nodes, |mut nodes, accessor| {
                     if ast::is_get_accessor_declaration(accessor) {
                         let type_node = self.create_type_node(t, enclosing_declaration, flags, node_builder, id_to_symbol);
                         let body = self.create_body(body, quote_preference, signature_only);
@@ -140,7 +140,14 @@ impl<'a> missingMemberFixer<'a> {
                         };
 
                         let type_node = self.create_type_node(t, enclosing_declaration, flags, node_builder, id_to_symbol);
-                        let parameters = create_dummy_parameters(self.factory(), 1, &[parameter.name().unwrap().text().to_string()], &[type_node], 1, ast::is_in_js_file(enclosing_declaration));
+                        let parameters = create_dummy_parameters(
+                            self.factory(),
+                            1,
+                            &[parameter.name().unwrap().text().to_string()],
+                            &[type_node],
+                            1,
+                            ast::is_in_js_file(enclosing_declaration),
+                        );
                         let body = self.create_body(body, quote_preference, signature_only);
                         nodes.push(self.factory().new_set_accessor_declaration(
                             modifiers,
@@ -152,7 +159,9 @@ impl<'a> missingMemberFixer<'a> {
                             body,
                         ));
                     }
-                }
+
+                    nodes
+                });
                 nodes
             }
 
@@ -181,10 +190,10 @@ impl<'a> missingMemberFixer<'a> {
                     return nodes;
                 }
 
-                for &signature in &signatures {
+                nodes.extend(signatures.iter().filter_map(|&signature| {
                     if let Some(signature_declaration) = signature.declaration() {
                         if signature_declaration.flags().intersects(NodeFlags::Ambient) {
-                            continue;
+                            return None;
                         }
                     }
 
@@ -198,10 +207,8 @@ impl<'a> missingMemberFixer<'a> {
                         declaration_name,
                         preserve_optional,
                     );
-                    if let Some(method) = method {
-                        nodes.push(method);
-                    }
-                }
+                    if let Some(method) = method { Some(method) } else { None }
+                }));
 
                 if signature_only {
                     return nodes;
@@ -240,9 +247,7 @@ impl<'a> missingMemberFixer<'a> {
     fn get_call_signatures(&mut self, t: P<Type>) -> Vec<P<Signature>> {
         if t.is_union() {
             let mut result = Vec::new();
-            for &member in t.types() {
-                result.extend_from_slice(self.type_checker.get_call_signatures(member));
-            }
+            result.extend(t.types().iter().flat_map(|&member| self.type_checker.get_call_signatures(member).iter().copied()));
             return result;
         }
         self.type_checker.get_call_signatures(t).to_vec()
@@ -320,7 +325,7 @@ impl<'a> missingMemberFixer<'a> {
 
         if let Some(tps) = type_parameters.filter(|tps| !tps.nodes().is_empty()) {
             let mut nodes = Vec::with_capacity(tps.nodes().len());
-            for &tp in tps.nodes() {
+            nodes.extend(tps.nodes().iter().map(|&tp| {
                 if ast::is_type_parameter_declaration(tp) {
                     let type_parameter = tp.as_type_parameter_declaration();
 
@@ -334,24 +339,31 @@ impl<'a> missingMemberFixer<'a> {
                         default_type = self.import_type_node(default_type, id_to_symbol);
                     }
 
-                    nodes.push(self.factory().update_type_parameter_declaration(tp, tp.modifiers(), tp.name().unwrap(), constraint, type_parameter.expression, default_type));
+                    self.factory().update_type_parameter_declaration(
+                        tp,
+                        tp.modifiers(),
+                        tp.name().unwrap(),
+                        constraint,
+                        type_parameter.expression,
+                        default_type,
+                    )
                 } else {
-                    nodes.push(tp);
+                    tp
                 }
-            }
+            }));
             type_parameters = Some(self.factory().new_node_list(nodes));
         }
 
         if let Some(ps) = parameters {
             let mut nodes = Vec::with_capacity(ps.nodes().len());
-            for &p in ps.nodes() {
+            nodes.extend(ps.nodes().iter().map(|&p| {
                 let parameter = p.as_parameter_declaration();
                 let mut parameter_type_node = parameter.type_();
                 if parameter_type_node.is_some() {
                     parameter_type_node = self.import_type_node(parameter_type_node, id_to_symbol);
                 }
 
-                nodes.push(self.factory().update_parameter_declaration(
+                self.factory().update_parameter_declaration(
                     p,
                     p.modifiers(),
                     parameter.dot_dot_dot_token(),
@@ -359,8 +371,8 @@ impl<'a> missingMemberFixer<'a> {
                     if is_js { None } else { parameter.question_token() },
                     parameter_type_node,
                     p.initializer(),
-                ));
-            }
+                )
+            }));
             parameters = Some(self.factory().new_node_list(nodes));
         }
 
@@ -471,10 +483,15 @@ impl<'a> missingMemberFixer<'a> {
 
         let max_non_rest_args = max_args_signature.parameters().len() as i32 - if max_args_signature.has_rest_parameter() { 1 } else { 0 };
         let mut parameter_names: Vec<String> = Vec::with_capacity(max_args_signature.parameters().len());
-        for symbol in max_args_signature.parameters() {
-            parameter_names.push(symbol.name().to_string());
-        }
-        let parameters = create_dummy_parameters(self.factory(), max_non_rest_args, &parameter_names, &[] /*types*/, min_argument_count, ast::is_in_js_file(enclosing_declaration));
+        parameter_names.extend(max_args_signature.parameters().iter().map(|symbol| symbol.name().to_string()));
+        let parameters = create_dummy_parameters(
+            self.factory(),
+            max_non_rest_args,
+            &parameter_names,
+            &[], /*types*/
+            min_argument_count,
+            ast::is_in_js_file(enclosing_declaration),
+        );
         let mut parameter_nodes = parameters.nodes().to_vec();
 
         let factory = self.factory();
@@ -531,9 +548,7 @@ impl<'a> missingMemberFixer<'a> {
         }
 
         let mut return_types: Vec<P<Type>> = Vec::with_capacity(signatures.len());
-        for &signature in signatures {
-            return_types.push(self.type_checker.get_return_type_of_signature_exported(signature));
-        }
+        return_types.extend(signatures.iter().map(|&signature| self.type_checker.get_return_type_of_signature_exported(signature)));
 
         let union_type = self.type_checker.get_union_type_exported(&return_types);
         let type_node = node_builder.type_to_type_node(self.type_checker, union_type, Some(enclosing_declaration), Flags::NoTruncation, InternalFlags::AllowUnresolvedNames, None /*typeArguments*/);

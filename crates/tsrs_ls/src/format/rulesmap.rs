@@ -13,10 +13,8 @@ pub(crate) fn get_rules(context: &FormattingContext, mut rules: Vec<&'static Rul
             let accept_rule_actions = !get_rule_action_exclusion(rule_action_mask);
             if rule.action() & accept_rule_actions != RuleAction::None {
                 let preds = rule.context();
-                for p in preds {
-                    if !p(context) {
-                        continue 'outer;
-                    }
+                if !preds.iter().all(|p| p(context)) {
+                    continue 'outer;
                 }
                 rules.push(rule);
                 rule_action_mask |= rule.action();

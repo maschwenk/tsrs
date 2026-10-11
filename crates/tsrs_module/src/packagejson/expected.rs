@@ -56,13 +56,17 @@ impl ExpectedValue for Vec<String> {
         match value {
             Json::Array(elements) => {
                 let mut result = Vec::with_capacity(elements.len());
-                for element in elements {
+                result = match elements.iter().try_fold(result, |mut result, element| {
                     let mut s = String::new();
                     if !s.unmarshal_from(element) {
-                        return false;
+                        return None;
                     }
                     result.push(s);
-                }
+                    Some(result)
+                }) {
+                    Some(result) => result,
+                    None => return false,
+                };
                 *self = result;
                 true
             }

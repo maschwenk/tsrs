@@ -33,10 +33,8 @@ pub(crate) fn is_class_named_evaluation_helper_block(emit_context: P<EmitContext
  */
 pub(crate) fn class_has_explicitly_assigned_name(emit_context: P<EmitContext>, node: P<Node>) -> bool {
     if emit_context.assigned_name(node).is_some() {
-        for &member in node.members() {
-            if is_class_named_evaluation_helper_block(emit_context, member) {
-                return true;
-            }
+        if node.members().iter().any(|&member| is_class_named_evaluation_helper_block(emit_context, member)) {
+            return true;
         }
     }
     false

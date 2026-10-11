@@ -740,12 +740,19 @@ fn get_pattern_from_first_matching_condition(target: &ExportsOrImports, conditio
     }
     if target.type_() == JSONValueType::Object {
         let obj = target.as_object();
-        for condition in obj.keys() {
-            if condition == "default" || conditions.iter().any(|c| c == condition) || (conditions.iter().any(|c| c == "types") && tsrs_module::is_applicable_versioned_types_key(condition)) {
+        if let Some(result) = obj.keys().into_iter().find_map(|condition| {
+            if condition == "default"
+                || conditions.iter().any(|c| c == condition)
+                || (conditions.iter().any(|c| c == "types") && tsrs_module::is_applicable_versioned_types_key(condition))
+            {
                 if let Some(pattern) = obj.get(condition) {
-                    return get_pattern_from_first_matching_condition(pattern, conditions);
+                    return Some(get_pattern_from_first_matching_condition(pattern, conditions));
                 }
             }
+
+            None
+        }) {
+            return result;
         }
     }
     String::new()
@@ -755,12 +762,10 @@ fn get_pattern_from_first_matching_condition(target: &ExportsOrImports, conditio
 fn get_ambient_module_completions(fragment: &str, fragment_directory: &str, type_checker: &mut Checker) -> Vec<String> {
     let ambient_modules = type_checker.get_ambient_modules();
     let mut non_relative_module_names: Vec<String> = Vec::new();
-    for sym in ambient_modules {
+    non_relative_module_names.extend(ambient_modules.into_iter().filter_map(|sym| {
         let module_name = get_ambient_module_name(sym);
-        if module_name.starts_with(fragment) && !module_name.contains('*') {
-            non_relative_module_names.push(module_name);
-        }
-    }
+        if module_name.starts_with(fragment) && !module_name.contains('*') { Some(module_name) } else { None }
+    }));
 
     if !fragment_directory.is_empty() {
         let module_name_with_separator = tspath::ensure_trailing_directory_separator(fragment_directory);
@@ -912,18 +917,16 @@ fn get_supported_extensions_for_module_resolution(options: &CompilerOptions, ext
     let mut extensions: Vec<String> = Vec::new();
     if let Some(checker) = checker {
         let ambient_modules = checker.get_ambient_modules();
-        for module in ambient_modules {
+        extensions.extend(ambient_modules.into_iter().filter_map(|module| {
             let name = get_ambient_module_name(module);
             if !name.starts_with("*.") || name.contains('/') {
-                continue;
+                return None;
             }
-            extensions.push(name[1..].to_string());
-        }
+            Some(name[1..].to_string())
+        }));
     }
     let supported_extensions = tsoptions::get_supported_extensions(Some(options), extra_extensions);
-    for ext in supported_extensions {
-        extensions.extend(ext);
-    }
+    extensions.extend(supported_extensions.into_iter().flatten());
     let module_resolution = options.get_module_resolution_kind();
     if module_resolution_uses_node_modules(module_resolution) {
         return tsoptions::get_supported_extensions_with_json_if_resolve_json_module(Some(options), &[extensions]).into_iter().flatten().collect();
@@ -980,10 +983,16 @@ impl LanguageService {
         let mut all_completions: Vec<moduleCompletionNameAndKind> = Vec::new();
         for base_directory in base_directories {
             let mut result = moduleCompletionNameAndKindSet::default();
-            self.get_completion_entries_for_directory_fragment(fragment, &base_directory, extension_options, program, true /*moduleSpecifierIsRelative*/, exclude, &mut result);
-            for (_, entry) in result.names {
-                all_completions.push(entry);
-            }
+            self.get_completion_entries_for_directory_fragment(
+                fragment,
+                &base_directory,
+                extension_options,
+                program,
+                true, /*moduleSpecifierIsRelative*/
+                exclude,
+                &mut result,
+            );
+            all_completions.extend(result.names.into_iter().map(|(_, entry)| entry));
         }
 
         // Deduplicate based on name, kind, and extension
@@ -997,30 +1006,33 @@ impl LanguageService {
 fn get_base_directories_from_root_dirs(root_dirs: &[String], base_path: &str, script_directory: &str, ignore_case: bool) -> Vec<String> {
     // Make all paths absolute/normalized if they are not already
     let mut normalized_root_dirs: Vec<String> = Vec::with_capacity(root_dirs.len());
-    for root_directory in root_dirs {
-        let normalized_path = if tspath::is_rooted_disk_path(root_directory) { root_directory.clone() } else { tspath::combine_paths(base_path, &[root_directory]) };
-        normalized_root_dirs.push(tspath::ensure_trailing_directory_separator(&tspath::normalize_path(&normalized_path)));
-    }
+    normalized_root_dirs.extend(root_dirs.iter().map(|root_directory| {
+        let normalized_path =
+            if tspath::is_rooted_disk_path(root_directory) { root_directory.clone() } else { tspath::combine_paths(base_path, &[root_directory]) };
+        tspath::ensure_trailing_directory_separator(&tspath::normalize_path(&normalized_path))
+    }));
 
     // Determine the path to the directory containing the script relative to the root directory it is contained within
     let mut relative_directory = String::new();
     let compare_paths_options = ComparePathsOptions { use_case_sensitive_file_names: !ignore_case, current_directory: base_path.to_string() };
-    for root_directory in &normalized_root_dirs {
-        if tspath::contains_path(root_directory, script_directory, &compare_paths_options) {
-            if root_directory.len() > script_directory.len() {
-                relative_directory = String::new();
-            } else {
-                relative_directory = script_directory[root_directory.len()..].to_string();
-            }
-            break;
+    if let Some(root_directory) = normalized_root_dirs
+        .iter()
+        .find_map(|root_directory| if tspath::contains_path(root_directory, script_directory, &compare_paths_options) { Some(root_directory) } else { None })
+    {
+        if root_directory.len() > script_directory.len() {
+            relative_directory = String::new();
+        } else {
+            relative_directory = script_directory[root_directory.len()..].to_string();
         }
     }
 
     // Now find a path for each potential directory that is to be merged with the one containing the script
     let mut directories: Vec<String> = Vec::new();
-    for root_directory in &normalized_root_dirs {
-        directories.push(tspath::remove_trailing_directory_separator(&tspath::combine_paths(root_directory, &[&relative_directory])).to_string());
-    }
+    directories.extend(
+        normalized_root_dirs
+            .iter()
+            .map(|root_directory| tspath::remove_trailing_directory_separator(&tspath::combine_paths(root_directory, &[&relative_directory])).to_string()),
+    );
     directories.push(tspath::remove_trailing_directory_separator(script_directory).to_string());
 
     deduplicate_strings(directories)
@@ -1033,11 +1045,7 @@ fn deduplicate_strings(slice: Vec<String>) -> Vec<String> {
     }
     let mut seen: FxHashSet<String> = FxHashSet::default();
     let mut result: Vec<String> = Vec::new();
-    for s in slice {
-        if seen.insert(s.clone()) {
-            result.push(s);
-        }
-    }
+    result.extend(slice.into_iter().filter_map(|s| if seen.insert(s.clone()) { Some(s) } else { None }));
     result
 }
 
@@ -1048,12 +1056,10 @@ fn deduplicate_module_completions(completions: Vec<moduleCompletionNameAndKind>)
     }
     let mut seen: FxHashSet<(String, moduleCompletionKind, String)> = FxHashSet::default();
     let mut result: Vec<moduleCompletionNameAndKind> = Vec::new();
-    for c in completions {
+    result.extend(completions.into_iter().filter_map(|c| {
         let k = (c.name.clone(), c.kind, c.extension.clone());
-        if seen.insert(k) {
-            result.push(c);
-        }
-    }
+        if seen.insert(k) { Some(c) } else { None }
+    }));
     result
 }
 
@@ -1367,13 +1373,14 @@ impl LanguageService {
             // If path is e.g. `foo/bar/*`, and fragment is `foo/b`, then remaining directory prefix is `bar/`,
             let remaining_directory_prefix = &path_prefix[fragment_directory.len()..];
             let mut completions: Vec<moduleCompletionNameAndKind> = Vec::new();
-            for pattern in patterns {
-                let mut modules = self.get_modules_for_paths_pattern("" /*fragment*/, package_directory, pattern, is_exports, is_imports, extension_options, program);
+            completions.extend(patterns.iter().flat_map(|pattern| {
+                let mut modules =
+                    self.get_modules_for_paths_pattern("" /*fragment*/, package_directory, pattern, is_exports, is_imports, extension_options, program);
                 for module in modules.iter_mut() {
                     module.name = format!("{}{}{}", remaining_directory_prefix, module.name, if module.kind == moduleCompletionKind::File { path_suffix } else { "" });
                 }
-                completions.extend(modules);
-            }
+                modules
+            }));
             return completions;
         }
         let remaining_fragment = &fragment[path_prefix.len()..];
@@ -1382,13 +1389,15 @@ impl LanguageService {
             remaining_directory_fragment = &path_prefix[fragment_directory.len()..];
         }
         let mut result = Vec::new();
-        for pattern in patterns {
-            let mut modules = self.get_modules_for_paths_pattern(remaining_fragment, package_directory, pattern, is_exports, is_imports, extension_options, program);
+        result.extend(patterns.iter().flat_map(|pattern| {
+            let mut modules =
+                self.get_modules_for_paths_pattern(remaining_fragment, package_directory, pattern, is_exports, is_imports, extension_options, program);
             for module in modules.iter_mut() {
-                module.name = format!("{}{}{}", remaining_directory_fragment, module.name, if module.kind == moduleCompletionKind::File { path_suffix } else { "" });
+                module.name =
+                    format!("{}{}{}", remaining_directory_fragment, module.name, if module.kind == moduleCompletionKind::File { path_suffix } else { "" });
             }
-            result.extend(modules);
-        }
+            modules
+        }));
         result
     }
 }
@@ -1485,9 +1494,7 @@ impl LanguageService {
         if !declaration_extension.is_empty() {
             matching_suffixes.push(tspath::change_extension(&normalized_suffix, &declaration_extension));
         }
-        for ext in &input_extensions {
-            matching_suffixes.push(tspath::change_extension(&normalized_suffix, ext));
-        }
+        matching_suffixes.extend(input_extensions.iter().map(|ext| tspath::change_extension(&normalized_suffix, ext)));
         matching_suffixes.push(normalized_suffix.clone());
 
         // If we have a suffix, then we read the directory all the way down to avoid returning completions for
@@ -1504,11 +1511,13 @@ impl LanguageService {
         let is_exports_or_imports_wildcard = (is_exports || is_imports) && pattern.ends_with("/*");
 
         let trim_prefix_and_suffix = |path: &str, prefix_str: &str| -> String {
-            for suffix in &matching_suffixes {
+            if let Some(result) = matching_suffixes.iter().find_map(|suffix| {
                 let Some(inner) = without_start_and_end(&tspath::normalize_path(path), prefix_str, suffix) else {
-                    continue;
+                    return None;
                 };
-                return remove_leading_directory_separator(&inner).to_string();
+                Some(remove_leading_directory_separator(&inner).to_string())
+            }) {
+                return result;
             }
             String::new()
         };
@@ -1519,34 +1528,45 @@ impl LanguageService {
             let matches = self.read_directory(directory, &extension_options.extensions_to_search, &include_globs);
 
             let mut result: Vec<moduleCompletionNameAndKind> = Vec::new();
-            for m in matches {
+            result.extend(matches.into_iter().filter_map(|m| {
                 let trimmed_with_pattern = trim_prefix_and_suffix(&m, &complete_prefix);
                 if !trimmed_with_pattern.is_empty() {
                     if contains_slash(&trimmed_with_pattern) {
                         let path_components = tspath::get_path_components(remove_leading_directory_separator(&trimmed_with_pattern), "");
                         if path_components.len() > 1 {
-                            result.push(moduleCompletionNameAndKind { name: path_components[1].clone(), kind: moduleCompletionKind::Directory, extension: String::new() });
+                            Some(moduleCompletionNameAndKind {
+                                name: path_components[1].clone(),
+                                kind: moduleCompletionKind::Directory,
+                                extension: String::new(),
+                            })
+                        } else {
+                            None
                         }
                     } else {
-                        let (name, mut extension) = get_filename_with_extension_option(&trimmed_with_pattern, program, extension_options, is_exports_or_imports_wildcard);
+                        let (name, mut extension) =
+                            get_filename_with_extension_option(&trimmed_with_pattern, program, extension_options, is_exports_or_imports_wildcard);
                         if extension.is_empty() {
                             extension = get_file_extension(&m);
                         }
-                        result.push(moduleCompletionNameAndKind { name, kind: moduleCompletionKind::File, extension });
+                        Some(moduleCompletionNameAndKind { name, kind: moduleCompletionKind::File, extension })
                     }
+                } else {
+                    None
                 }
-            }
+            }));
             result
         };
 
         let get_directory_matches = |directory_name: &str| -> Vec<moduleCompletionNameAndKind> {
             let directories = self.get_directories(directory_name);
             let mut result: Vec<moduleCompletionNameAndKind> = Vec::new();
-            for dir in directories {
+            result.extend(directories.into_iter().filter_map(|dir| {
                 if dir != "node_modules" {
-                    result.push(moduleCompletionNameAndKind { name: dir, kind: moduleCompletionKind::Directory, extension: String::new() });
+                    Some(moduleCompletionNameAndKind { name: dir, kind: moduleCompletionKind::Directory, extension: String::new() })
+                } else {
+                    None
                 }
-            }
+            }));
             result
         };
 
@@ -1680,9 +1700,7 @@ fn get_string_literal_types(t: Option<P<Type>>, uniques: Option<&mut FxHashSet<S
     let t = skip_constraint(t, type_checker);
     if t.is_union() {
         let mut types: Vec<P<Type>> = Vec::new();
-        for &element_type in t.types() {
-            types.extend(get_string_literal_types(Some(element_type), Some(uniques), type_checker));
-        }
+        types.extend(t.types().iter().flat_map(|&element_type| get_string_literal_types(Some(element_type), Some(uniques), type_checker)));
         return types;
     }
     if t.is_string_literal() && !t.is_enum_literal() && uniques.insert(string_literal_value(t).to_string()) {
@@ -1696,11 +1714,13 @@ fn get_already_used_types_in_string_literal_union(union: P<Node>, current: P<Nod
     // Go checks the type list for nil; the parser always creates it.
     let types_list = union.as_union_type_node().types();
     let mut values: Vec<String> = Vec::new();
-    for &type_node in types_list.nodes() {
+    values.extend(types_list.nodes().iter().filter_map(|&type_node| {
         if type_node != current && ast::is_literal_type_node(type_node) && ast::is_string_literal(type_node.as_literal_type_node().literal) {
-            values.push(type_node.as_literal_type_node().literal.text().to_string());
+            Some(type_node.as_literal_type_node().literal.text().to_string())
+        } else {
+            None
         }
-    }
+    }));
     values
 }
 
@@ -1816,16 +1836,12 @@ impl LanguageService {
             // for items of file kind based on the file extension provided in the item detail.
             return item;
         } else if let Some(properties) = &completion.from_properties {
-            for &symbol in &properties.symbols {
-                if symbol.name() == name {
-                    return self.create_completion_details_for_symbol(item, symbol, checker, location, position, doc_format);
-                }
+            if let Some(&symbol) = properties.symbols.iter().find(|symbol| symbol.name() == name) {
+                return self.create_completion_details_for_symbol(item, symbol, checker, location, position, doc_format);
             }
         } else if let Some(types) = &completion.from_types {
-            for &t in &types.types {
-                if string_literal_value(t) == name {
-                    return create_completion_details(item, name, "" /*documentation*/, doc_format);
-                }
+            if types.types.iter().any(|&t| string_literal_value(t) == name) {
+                return create_completion_details(item, name, "" /*documentation*/, doc_format);
             }
         }
         item
@@ -1927,11 +1943,11 @@ impl LanguageService {
         let comment_ranges: Vec<ast::CommentRange> = scanner::get_leading_comment_ranges(file.text(), token.pos()).collect();
 
         let mut found_range: Option<&ast::CommentRange> = None;
-        for comment_range in &comment_ranges {
-            if position >= comment_range.pos() && position <= comment_range.end() {
-                found_range = Some(comment_range);
-                break;
-            }
+        if let Some(comment_range) = comment_ranges
+            .iter()
+            .find_map(|comment_range| if position >= comment_range.pos() && position <= comment_range.end() { Some(comment_range) } else { None })
+        {
+            found_range = Some(comment_range);
         }
         let found_range = found_range?;
 

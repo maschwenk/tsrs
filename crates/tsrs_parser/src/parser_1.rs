@@ -707,9 +707,7 @@ impl Parser {
             return FxHashMap::default();
         }
         let mut result = FxHashMap::with_capacity_and_hasher(self.jsdoc_infos.len(), Default::default());
-        for info in &self.jsdoc_infos {
-            result.insert(info.parent, info.js_docs);
-        }
+        result.extend(self.jsdoc_infos.iter().map(|info| (info.parent, info.js_docs)));
         result
     }
 
@@ -842,7 +840,7 @@ impl Parser {
             if self.is_list_element(kind, false /*inErrorRecovery*/) {
                 let elt = parse_element(self, self.node_stack.len() - start);
                 if !self.reparse_list.is_empty() {
-                    for e in std::mem::take(&mut self.reparse_list) {
+                    outer_reparse_list = std::mem::take(&mut self.reparse_list).into_iter().fold(outer_reparse_list, |mut outer_reparse_list, e| {
                         // Propagate @typedef type alias declarations outwards to a context that permits them.
                         if (ast::is_js_type_alias_declaration(e) || ast::is_js_import_declaration(e))
                             && kind != ParsingContext::SourceElements
@@ -852,7 +850,9 @@ impl Parser {
                         } else {
                             self.node_stack.push(e);
                         }
-                    }
+
+                        outer_reparse_list
+                    });
                 }
                 self.node_stack.push(elt);
                 continue;
@@ -1053,12 +1053,16 @@ impl Parser {
         // We should be in at least one parsing context, be it SourceElements while parsing
         // a SourceFile, or JSDocComment when lazily parsing JSDoc.
         assert!(self.parsing_contexts != 0, "Missing parsing context");
-        for kind in ParsingContext::ALL {
+        if ParsingContext::ALL.into_iter().any(|kind| {
             if self.parsing_contexts & (1 << kind as i32) != 0 {
                 if self.is_list_element(kind, true /*inErrorRecovery*/) || self.is_list_terminator(kind) {
                     return true;
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }
@@ -2601,10 +2605,14 @@ impl Parser {
 }
 
 pub(crate) fn get_space_suggestion(expression_text: &str) -> String {
-    for keyword in viable_keyword_suggestions.iter() {
+    if let Some(result) = viable_keyword_suggestions.iter().find_map(|keyword| {
         if expression_text.len() > keyword.len() + 2 && expression_text.starts_with(keyword) {
-            return format!("{} {}", keyword, &expression_text[keyword.len()..]);
+            Some(format!("{} {}", keyword, &expression_text[keyword.len()..]))
+        } else {
+            None
         }
+    }) {
+        return result;
     }
     String::new()
 }

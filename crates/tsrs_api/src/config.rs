@@ -42,9 +42,7 @@ pub fn options_value_to_json(v: &CompilerOptionsValue) -> Value {
         CompilerOptionsValue::StringArray(a) => strings(a.iter().cloned()),
         CompilerOptionsValue::Object(m) => {
             let mut o = OrderedMap::default();
-            for (k, v) in m.iter() {
-                o.insert(k.clone(), options_value_to_json(v));
-            }
+            o.extend(m.iter().map(|(k, v)| (k.clone(), options_value_to_json(v))));
             Value::Object(o)
         }
         CompilerOptionsValue::EmptyStruct => Value::Object(OrderedMap::default()),
@@ -77,9 +75,7 @@ pub fn json_to_options_value(v: &Value) -> CompilerOptionsValue {
         Value::Array(a) => CompilerOptionsValue::Array(a.iter().map(json_to_options_value).collect()),
         Value::Object(o) => {
             let mut m = OrderedMap::default();
-            for (k, v) in o.iter() {
-                m.insert(k.clone(), json_to_options_value(v));
-            }
+            m.extend(o.iter().map(|(k, v)| (k.clone(), json_to_options_value(v))));
             CompilerOptionsValue::Object(m)
         }
     }

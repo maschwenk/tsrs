@@ -549,11 +549,13 @@ fn get_checker_associations_in_order(
         }
         if best_checker < 0 {
             best_checker = 0;
-            for (checker_index, &checker_weight) in checker_weights[1..].iter().enumerate() {
+            best_checker = checker_weights[1..].iter().enumerate().fold(best_checker, |mut best_checker, (checker_index, &checker_weight)| {
                 if checker_weight < checker_weights[best_checker as usize] {
                     best_checker = checker_index as i64 + 1;
                 }
-            }
+
+                best_checker
+            });
         }
         associations[file_index] = best_checker;
         checker_weights[best_checker as usize] += file_weights[file_index];
@@ -1144,9 +1146,7 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
             let piece_weights: Vec<u64> = lengths.iter().map(|&l| (w * l / length.max(1)).max(1)).collect();
             let s = plan.files.len();
             let split_file = splitcheck::SplitFile::new(file, pieces, config.shadow);
-            for k in split_file.queued_pieces() {
-                plan.piece_items.push((s, k, piece_weights[k]));
-            }
+            plan.piece_items.extend(split_file.queued_pieces().into_iter().map(|k| (s, k, piece_weights[k])));
             plan.owner_weights.push(piece_weights[0]);
             plan.split_of.insert(i, s);
             plan.files.push(split_file);
@@ -1186,10 +1186,10 @@ impl FileQueue {
         let mut prefix = Vec::with_capacity(positions.len() + 1);
         let mut sum = 0;
         prefix.push(0);
-        for &i in &positions {
+        prefix.extend(positions.iter().map(|&i| {
             sum += weight(i);
-            prefix.push(sum);
-        }
+            sum
+        }));
         let len = positions.len() as u64;
         FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32) }
     }
@@ -1405,18 +1405,16 @@ fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
     else {
         return (entries, 0);
     };
-    for line in lines {
+    entries.extend(lines.filter_map(|line| {
         let mut fields = line.splitn(3, '\t');
         let (Some(seconds), Some(checker), Some(file)) = (fields.next(), fields.next(), fields.next()) else {
-            continue;
+            return None;
         };
         let (Ok(seconds), Ok(checker)) = (seconds.parse::<f64>(), checker.parse::<usize>()) else {
-            continue;
+            return None;
         };
-        if seconds.is_finite() && seconds >= 0.0 && checker < checker_count {
-            entries.insert(file.to_string(), CostEntry { seconds, checker });
-        }
-    }
+        if seconds.is_finite() && seconds >= 0.0 && checker < checker_count { Some((file.to_string(), CostEntry { seconds, checker })) } else { None }
+    }));
     (entries, checker_count)
 }
 
@@ -1439,12 +1437,10 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
         }
     }
     let mut entries: Vec<(&str, f64, usize)> = Vec::new();
-    for (i, file) in program.files.iter().enumerate() {
+    entries.extend(program.files.iter().enumerate().filter_map(|(i, file)| {
         let skipped = (file.is_declaration_file.get() || ast::is_json_source_file(*file)) && program.skip_type_checking(*file, false);
-        if measured[i] >= 0.0 && !skipped {
-            entries.push((file.path(), measured[i], state.owner_at(i)));
-        }
-    }
+        if measured[i] >= 0.0 && !skipped { Some((file.path().as_str(), measured[i], state.owner_at(i))) } else { None }
+    }));
     entries.sort_by(|a, b| a.0.cmp(b.0));
     let mut out = String::with_capacity(entries.len() * 100);
     let _ = writeln!(out, "{COST_CACHE_MAGIC} checkers={}", state.checkers.len());
@@ -1711,12 +1707,12 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
             }
             let mut result = if previous.iter().all(|p| p.0 == usize::MAX) { fennel(&group_weights) } else { vec![usize::MAX; group_weights.len()] };
             let mut loads = vec![0i64; checker_count];
-            for g in 0..result.len() {
+            for (g, element) in result.iter_mut().enumerate() {
                 if previous[g].0 != usize::MAX {
-                    result[g] = previous[g].0;
+                    (*element) = previous[g].0;
                 }
-                if result[g] != usize::MAX {
-                    loads[result[g]] += group_weights[g];
+                if (*element) != usize::MAX {
+                    loads[*element] += group_weights[g];
                 }
             }
             // Groups without a previous checker (new files) go to the least loaded checker, largest first.
@@ -1807,7 +1803,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             break;
         }
         let mut best: Option<(f64, i64, usize, usize)> = None; // (new max, -affinity gain, group, destination)
-        for g in 0..costs.len() {
+        for (g, element) in costs.iter().enumerate() {
             if associations[g] != heavy {
                 continue;
             }
@@ -1815,15 +1811,15 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             for &n in &adjacency[g] {
                 affinity[associations[n]] += 1;
             }
-            let cost = costs[g] as f64;
+            let cost = (*element) as f64;
             for dest in 0..checker_count {
                 if dest == heavy {
                     continue;
                 }
                 let mut new_max = (loads[heavy] - cost).max(loads[dest] + cost * MOVE_COST_PREMIUM);
-                for c in 0..checker_count {
+                for (c, element) in loads[..checker_count].iter().enumerate() {
                     if c != heavy && c != dest {
-                        new_max = new_max.max(loads[c]);
+                        new_max = new_max.max(*element);
                     }
                 }
                 let key = (new_max, affinity[heavy] - affinity[dest], g, dest);
@@ -1922,9 +1918,7 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
 fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
-    for (i, &file) in files.iter().enumerate() {
-        file_indices.insert(file, i);
-    }
+    file_indices.extend(files.iter().enumerate().map(|(i, &file)| (file, i)));
     // The in-program import targets of each file, in resolution-map order (looking a resolved file name up
     // normalizes it, so this part runs on the worker pool); the adjacency lists are then built in file order.
     let targets_of = |file_index: usize| -> Vec<usize> {

@@ -1032,13 +1032,11 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
     let mut referenced_files = Vec::new();
     let mut type_references = Vec::new();
     if !compiler_options.no_resolve.is_true() && !opts.skip_module_resolution {
-        for ref_ in file.referenced_files.get().iter() {
-            referenced_files.push(tripleslash_reference_lookup(ctx, &ref_.file_name, file.file_name()).1);
-        }
-        for ref_ in file.type_reference_directives.get().iter() {
+        referenced_files.extend(file.referenced_files.get().iter().map(|ref_| tripleslash_reference_lookup(ctx, &ref_.file_name, file.file_name()).1));
+        type_references.extend(file.type_reference_directives.get().iter().map(|ref_| {
             let resolution_mode = get_mode_for_type_reference_directive_in_file(*ref_, file, meta, &options_for_file);
-            type_references.push(resolver.resolve_type_reference_directive(&ref_.file_name, &file_name, resolution_mode, redirect));
-        }
+            resolver.resolve_type_reference_directive(&ref_.file_name, &file_name, resolution_mode, redirect)
+        }));
     }
     let mut imports = Vec::new();
     let mut resolutions_in_file: ModeAwareCache<P<ResolvedModule>> = ModeAwareCache::default();
@@ -1237,12 +1235,10 @@ impl fileLoader {
         let imports_start = module_names.len() as i32;
 
         module_names.extend_from_slice(imports);
-        for &imp in file.module_augmentations.get() {
-            if imp.kind() == Kind::StringLiteral {
-                module_names.push(imp);
-            }
+        module_names.extend(file.module_augmentations.get().iter().filter_map(|&imp| {
+            if imp.kind() == Kind::StringLiteral { Some(imp) } else { None }
             // Do nothing if it's an Identifier; we don't need to do module resolution for `declare global`.
-        }
+        }));
 
         if self.opts.skip_module_resolution {
             return;
@@ -1564,11 +1560,15 @@ pub(crate) fn source_file_from_reference(
         );
     }
 
-    for ext in &supported_extensions[0] {
+    if let Some(result) = supported_extensions[0].iter().find_map(|ext| {
         let candidate = format!("{}{}", file_name, ext);
         if fs.file_exists(&candidate) {
-            return (candidate, None);
+            return Some((candidate, None));
         }
+
+        None
+    }) {
+        return result;
     }
 
     (

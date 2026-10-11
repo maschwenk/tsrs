@@ -1629,14 +1629,18 @@ pub(crate) fn is_use_strict_prologue_directive(source_file: P<SourceFile>, node:
 }
 
 pub fn find_use_strict_prologue(source_file: P<SourceFile>, statements: &[P<Node>]) -> Option<P<Node>> {
-    for &statement in statements {
+    if let Some(result) = statements.iter().find_map(|&statement| {
         if ast::is_prologue_directive(statement) {
             if is_use_strict_prologue_directive(source_file, statement) {
-                return Some(statement);
+                return Some(Some(statement));
             }
         } else {
-            return None;
+            return Some(None);
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -3133,10 +3137,8 @@ pub(crate) fn is_narrowable_reference(node: P<Node>) -> bool {
 
 pub(crate) fn has_narrowable_argument(expr: P<Node>) -> bool {
     let call = expr.as_call_expression();
-    for &argument in call.arguments().nodes() {
-        if contains_narrowable_reference(argument) {
-            return true;
-        }
+    if call.arguments().nodes().iter().any(|&argument| contains_narrowable_reference(argument)) {
+        return true;
     }
     if ast::is_property_access_expression(call.expression()) {
         if contains_narrowable_reference(call.expression().expression().unwrap()) {

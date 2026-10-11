@@ -294,7 +294,7 @@ impl Checker {
         let jsx_namespace = self.get_jsx_namespace_at(Some(node));
         let jsx_children_property_name = self.get_jsx_element_children_property_name(jsx_namespace);
         let mut discriminant_properties: Vec<P<Node>> = Vec::new();
-        for &p in node.properties() {
+        discriminant_properties.extend(node.properties().iter().filter_map(|&p| {
             let keep = 'keep: {
                 let symbol = p.symbol();
                 let Some(symbol) = symbol else {
@@ -307,12 +307,10 @@ impl Checker {
                 (initializer.is_none() || self.is_possibly_discriminant_value(initializer.unwrap()))
                     && self.is_discriminant_property(Some(contextual_type), symbol.name())
             };
-            if keep {
-                discriminant_properties.push(p);
-            }
-        }
+            if keep { Some(p) } else { None }
+        }));
         let mut discriminant_members: Vec<P<Symbol>> = Vec::new();
-        for s in self.get_properties_of_type(contextual_type).iter().copied() {
+        discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter_map(|s| {
             let keep = 'keep: {
                 if !s.flags().intersects(SymbolFlags::Optional) || node.symbol().is_none() {
                     break 'keep false;
@@ -327,10 +325,8 @@ impl Checker {
                 node.symbol().unwrap().members().and_then(|members| members.lookup(s.name())).is_none()
                     && self.is_discriminant_property(Some(contextual_type), s.name())
             };
-            if keep {
-                discriminant_members.push(s);
-            }
-        }
+            if keep { Some(s) } else { None }
+        }));
         let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
         let discriminated = self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator);
         self.discriminated_contextual_types.insert(key, discriminated);
@@ -956,20 +952,20 @@ impl Checker {
     // jsx.go:877
     pub(crate) fn check_jsx_children(&mut self, node: P<Node>, check_mode: CheckMode) -> Vec<P<Type>> {
         let mut child_types: Vec<P<Type>> = Vec::new();
-        for &child in node.children().nodes() {
+        child_types.extend(node.children().nodes().iter().filter_map(|&child| {
             // In React, JSX text that contains only whitespaces will be ignored so we don't want to type-check that
             // because then type of children property will have constituent of string type.
             if ast::is_jsx_text(child) {
-                if !child.as_jsx_text().contains_only_trivia_white_spaces {
-                    child_types.push(self.string_type);
-                }
-            } else if ast::is_jsx_expression(child) && child.expression().is_none() {
-                // empty jsx expressions don't *really* count as present children
-                continue;
+                if !child.as_jsx_text().contains_only_trivia_white_spaces { Some(self.string_type) } else { None }
             } else {
-                child_types.push(self.check_expression_for_mutable_location(child, check_mode));
+                if ast::is_jsx_expression(child) && child.expression().is_none() {
+                    // empty jsx expressions don't *really* count as present children
+                    None
+                } else {
+                    Some(self.check_expression_for_mutable_location(child, check_mode))
+                }
             }
-        }
+        }));
         child_types
     }
 

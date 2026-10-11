@@ -2555,11 +2555,8 @@ impl Parser {
         }
 
         if ast::can_have_illegal_decorators(node) {
-            for &modifier in modifiers {
-                if ast::is_decorator(modifier) {
-                    self.js_error_at_range(modifier.loc(), &diagnostics::Decorators_are_not_valid_here, &[]);
-                    break;
-                }
+            if let Some(modifier) = modifiers.iter().find_map(|&modifier| if ast::is_decorator(modifier) { Some(modifier) } else { None }) {
+                self.js_error_at_range(modifier.loc(), &diagnostics::Decorators_are_not_valid_here, &[]);
             }
         } else if ast::can_have_decorators(node) {
             let decorator_index = find_index(modifiers, |m| ast::is_decorator(m));
@@ -2574,8 +2571,8 @@ impl Parser {
                         } else if decorator_index < export_index {
                             // Find a trailing decorator after the export keyword
                             let mut trailing_decorator_index: i32 = -1;
-                            for i in export_index as usize..modifiers.len() {
-                                if ast::is_decorator(modifiers[i]) {
+                            for (i, element) in modifiers.iter().enumerate().skip(export_index as usize) {
+                                if ast::is_decorator(*element) {
                                     trailing_decorator_index = i as i32;
                                     break;
                                 }
@@ -2782,10 +2779,10 @@ pub(crate) fn attach_file_to_diagnostics(diagnostics: &[P<ast::Diagnostic>], fil
 
 pub(crate) fn get_comment_pragmas(_f: &mut ast::NodeFactory, source_text: &'static str) -> Vec<ast::Pragma> {
     let mut pragmas = Vec::new();
-    for comment_range in scanner::get_leading_comment_ranges(source_text, 0) {
+    pragmas.extend(scanner::get_leading_comment_ranges(source_text, 0).flat_map(|comment_range| {
         let comment = &source_text[comment_range.pos() as usize..comment_range.end() as usize];
-        pragmas.extend(extract_pragmas(comment_range, comment));
-    }
+        extract_pragmas(comment_range, comment)
+    }));
     pragmas
 }
 
@@ -2897,18 +2894,14 @@ fn match_(text: &str, pos: usize, s: &str) -> bool {
 fn skip_blanks(text: &str, pos: usize) -> usize {
     let bytes = text.as_bytes();
     let mut pos = pos;
-    while pos < bytes.len() && (bytes[pos] == b' ' || bytes[pos] == b'\t') {
-        pos += 1;
-    }
+    pos += (pos..bytes.len()).take_while(|&index| bytes[index] == b' ' || bytes[index] == b'\t').count();
     pos
 }
 
 fn skip_non_blanks(text: &str, pos: usize) -> usize {
     let bytes = text.as_bytes();
     let mut pos = pos;
-    while pos < bytes.len() && (bytes[pos] != b' ' && bytes[pos] != b'\t' && bytes[pos] != b'\r' && bytes[pos] != b'\n') {
-        pos += 1;
-    }
+    pos += (pos..bytes.len()).take_while(|&index| bytes[index] != b' ' && bytes[index] != b'\t' && bytes[index] != b'\r' && bytes[index] != b'\n').count();
     pos
 }
 
@@ -2925,13 +2918,8 @@ fn skip_to(text: &str, pos: usize, s: &str) -> i32 {
 }
 
 fn line_end_pos(text: &str, pos: usize) -> usize {
-    let mut pos = pos;
-    while pos < text.len() {
-        let ch = text[pos..].chars().next().unwrap();
-        if tsrs_core::stringutil::is_line_break(ch) {
-            return pos;
-        }
-        pos += ch.len_utf8();
+    if let Some((offset, _)) = text[pos..].char_indices().find(|&(_, ch)| tsrs_core::stringutil::is_line_break(ch)) {
+        return pos + offset;
     }
     text.len()
 }
@@ -2940,9 +2928,9 @@ fn extract_name(text: &str, pos: usize) -> String {
     let bytes = text.as_bytes();
     let start = pos;
     let mut pos = pos;
-    while pos < bytes.len() && (bytes[pos] >= b'A' && bytes[pos] <= b'Z' || bytes[pos] >= b'a' && bytes[pos] <= b'z' || bytes[pos] == b'-') {
-        pos += 1;
-    }
+    pos += (pos..bytes.len())
+        .take_while(|&index| bytes[index] >= b'A' && bytes[index] <= b'Z' || bytes[index] >= b'a' && bytes[index] <= b'z' || bytes[index] == b'-')
+        .count();
     text[start..pos].to_lowercase()
 }
 
@@ -2957,9 +2945,7 @@ fn extract_quoted_string(text: &str, pos: usize) -> Option<&str> {
     }
     let mut pos = pos + 1;
     let start = pos;
-    while pos < bytes.len() && bytes[pos] != quote {
-        pos += 1;
-    }
+    pos += (pos..bytes.len()).take_while(|&index| bytes[index] != quote).count();
     if pos == bytes.len() {
         return None;
     }

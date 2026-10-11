@@ -690,21 +690,24 @@ impl forawaitTransformer {
         // Add fixed parameters to preserve the function's `length` property.
         let f = self.factory();
         let mut new_parameters: Vec<P<Node>> = Vec::new();
-        for &parameter in node.parameters() {
+        new_parameters.extend(node.parameters().iter().map_while(|&parameter| {
             let param = parameter.as_parameter_declaration();
             if param.initializer().is_some() || param.dot_dot_dot_token().is_some() {
-                break;
+                return None;
             }
             let new_parameter = f.new_parameter_declaration(
                 None,
                 None,
-                f.new_generated_name_for_node_ex(param.name(), printer::AutoGenerateOptions { flags: GeneratedIdentifierFlags::ReservedInNestedScopes, ..Default::default() }),
+                f.new_generated_name_for_node_ex(
+                    param.name(),
+                    printer::AutoGenerateOptions { flags: GeneratedIdentifierFlags::ReservedInNestedScopes, ..Default::default() },
+                ),
                 None,
                 None,
                 None,
             );
-            new_parameters.push(new_parameter);
-        }
+            Some(new_parameter)
+        }));
         let new_parameters_array = f.new_node_list(new_parameters);
         new_parameters_array.loc.set(node.parameter_list().unwrap().loc.get());
         new_parameters_array

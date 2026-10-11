@@ -71,22 +71,22 @@ fn iterate_error_baseline(
         let message = flatten_diagnostic_message(diag);
 
         let mut err_lines = Vec::new();
-        for line in remove_test_path_prefixes(&message).split('\n') {
+        err_lines.extend(remove_test_path_prefixes(&message).split('\n').filter_map(|line| {
             let line = line.strip_suffix('\r').unwrap_or(line);
             if line.is_empty() {
-                continue;
+                return None;
             }
-            err_lines.push(format!("!!! {} TS{}: {}", diag.category.name(), diag.code, line));
-        }
+            Some(format!("!!! {} TS{}: {}", diag.category.name(), diag.code, line))
+        }));
 
-        for info in &diag.related_diagnostics {
+        err_lines.extend(diag.related_diagnostics.iter().map(|info| {
             let mut location = format!(" {}", format_location(info));
             location = remove_test_path_prefixes(&location);
             if !location.is_empty() && is_default_library_file(&info.file.file_name) {
                 location = DIAGNOSTICS_LOCATION_PATTERN.replace_all(&location, "$1:--:--").into_owned();
             }
-            err_lines.push(format!("!!! related TS{}{}: {}", info.code, location, flatten_diagnostic_message(info)));
-        }
+            format!("!!! related TS{}{}: {}", info.code, location, flatten_diagnostic_message(info))
+        }));
 
         for e in err_lines {
             output_lines.push_str(new_line());
@@ -179,14 +179,13 @@ fn rune_count(bytes: &[u8]) -> usize {
 // nonWhitespace.ReplaceAllString(s, " "), with Go's ASCII-only `\S`.
 fn replace_non_whitespace(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
-    for chunk in bytes.utf8_chunks() {
-        for c in chunk.valid().chars() {
-            out.push(if matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' ') { c } else { ' ' });
-        }
-        for _ in chunk.invalid() {
-            out.push(' ');
-        }
-    }
+    out.extend(bytes.utf8_chunks().flat_map(|chunk| {
+        chunk
+            .valid()
+            .chars()
+            .map(|c| if matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' ') { c } else { ' ' })
+            .chain(std::iter::repeat_n(' ', chunk.invalid().len()))
+    }));
     out
 }
 

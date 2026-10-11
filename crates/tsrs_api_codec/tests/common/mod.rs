@@ -61,23 +61,22 @@ pub fn rd(b: &[u8], o: usize) -> u32 {
 pub fn dump(b: &[u8]) -> Vec<String> {
     let nodes = rd(b, HEADER_OFFSET_NODES) as usize;
     let mut out = Vec::new();
-    let mut i = nodes + NODE_SIZE;
-    let mut j = 1;
-    while i + NODE_SIZE <= b.len() {
-        let kind = rd(b, i);
+    let i = nodes + NODE_SIZE;
+    let j = 1;
+    out.extend(b.get(i..).unwrap_or_default().chunks_exact(NODE_SIZE).enumerate().map(|(index, record)| {
+        let j = j + index;
+        let kind = rd(record, 0);
         let name = if kind == SYNTAX_KIND_NODE_LIST { "NodeList".to_string() } else { format!("{:?}", kind_from_u32(kind)) };
-        out.push(format!(
+        format!(
             "#{j} {name} [{}, {}) next={} parent={} data={:#010x} flags={:#x}",
-            rd(b, i + 4),
-            rd(b, i + 8),
-            rd(b, i + 12),
-            rd(b, i + 16),
-            rd(b, i + 20),
-            rd(b, i + 24)
-        ));
-        i += NODE_SIZE;
-        j += 1;
-    }
+            rd(record, 4),
+            rd(record, 8),
+            rd(record, 12),
+            rd(record, 16),
+            rd(record, 20),
+            rd(record, 24)
+        )
+    }));
     out
 }
 
@@ -111,13 +110,9 @@ pub fn first_difference(expected: &[u8], actual: &[u8]) -> Option<String> {
             msg += &format!("first node difference at record {}:\n  expected {e}\n  actual   {a}\n", k + 1);
             let lo = k.saturating_sub(3);
             msg += "  expected context:\n";
-            for l in &de[lo..(k + 4).min(de.len())] {
-                msg += &format!("    {l}\n");
-            }
+            msg.extend(de[lo..(k + 4).min(de.len())].iter().map(|l| format!("    {l}\n")));
             msg += "  actual context:\n";
-            for l in &da[lo..(k + 4).min(da.len())] {
-                msg += &format!("    {l}\n");
-            }
+            msg.extend(da[lo..(k + 4).min(da.len())].iter().map(|l| format!("    {l}\n")));
             return Some(msg);
         }
     }
@@ -194,10 +189,13 @@ pub fn structural(b: &[u8], keep_jsdoc: bool) -> Vec<String> {
 }
 
 pub fn diff_lines(expected: &[String], actual: &[String]) -> Option<String> {
-    for (k, (e, a)) in expected.iter().zip(actual).enumerate() {
-        if e != a {
-            return Some(format!("line {k}:\n  expected {e}\n  actual   {a}"));
-        }
+    if let Some(result) = expected
+        .iter()
+        .zip(actual)
+        .enumerate()
+        .find_map(|(k, (e, a))| if e != a { Some(Some(format!("line {k}:\n  expected {e}\n  actual   {a}"))) } else { None })
+    {
+        return result;
     }
     (expected.len() != actual.len()).then(|| format!("line count: expected {} actual {}", expected.len(), actual.len()))
 }

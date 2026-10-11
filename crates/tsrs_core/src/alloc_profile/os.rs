@@ -83,9 +83,7 @@ mod imp {
             }
             let text = cmd.output().map(|o| crate::utf8::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
             let mut lines = text.lines();
-            for ip in chunk {
-                out.push(lines.next().map(str::to_string).unwrap_or_else(|| format!("{ip:#x}")));
-            }
+            out.extend(chunk.iter().map(|ip| lines.next().map(str::to_string).unwrap_or_else(|| format!("{ip:#x}"))));
         }
         out
     }
@@ -183,10 +181,10 @@ mod imp {
                     lines.next(); // file:line
                 }
             }
-            for (i, ip) in chunk.iter().enumerate() {
+            out.extend(chunk.iter().enumerate().map(|(i, ip)| {
                 let names = groups.get(i).cloned().unwrap_or_default();
-                out.push(if names.is_empty() { format!("{ip:#x}") } else { names.join(" / ") });
-            }
+                if names.is_empty() { format!("{ip:#x}") } else { names.join(" / ") }
+            }));
         }
         out
     }
@@ -202,7 +200,5 @@ pub(crate) fn resolve_into(ips: &[usize], names: &mut FxHashMap<usize, String>, 
     if todo.is_empty() {
         return;
     }
-    for (ip, line) in todo.iter().zip(symbolize(&todo)) {
-        names.insert(*ip, clean(&line));
-    }
+    names.extend(todo.iter().zip(symbolize(&todo)).map(|(ip, line)| (*ip, clean(&line))));
 }

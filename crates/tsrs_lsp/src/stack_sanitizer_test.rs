@@ -51,13 +51,13 @@ fn test_sanitized_release_stack_trace_completions_request() {
 fn vscode_generic_secret_regex_find(s: &str) -> Option<(usize, usize)> {
     const KEYWORDS: [&str; 9] = ["key", "token", "sig", "secret", "signature", "password", "passwd", "pwd", "android:value"];
     let b = s.as_bytes();
-    for i in 0..b.len() {
-        for keyword in KEYWORDS {
+    if let Some(result) = (0..b.len()).find_map(|i| {
+        KEYWORDS.iter().find_map(|keyword| {
             let end = i + keyword.len();
-            if end < b.len() && b[i..end].eq_ignore_ascii_case(keyword.as_bytes()) && !b[end].is_ascii_alphanumeric() {
-                return Some((i, end + 1));
-            }
-        }
+            (end < b.len() && b[i..end].eq_ignore_ascii_case(keyword.as_bytes()) && !b[end].is_ascii_alphanumeric()).then_some((i, end + 1))
+        })
+    }) {
+        return Some(result);
     }
     None
 }

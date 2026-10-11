@@ -50,11 +50,11 @@ fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Va
     };
     let text = file.text();
     let mut result = Vec::with_capacity(lines.len());
-    for line in lines {
+    result.extend(lines.into_iter().map(|line| {
         let start = line_map[line as usize] as usize;
         let end = if ((line + 1) as usize) < line_map.len() { line_map[(line + 1) as usize] as usize } else { text.len() };
-        result.push(Obj::new().set("line", num(line)).set("text", Value::String(text[start..end].to_string())).build());
-    }
+        Obj::new().set("line", num(line)).set("text", Value::String(text[start..end].to_string())).build()
+    }));
     Some(Value::Array(result))
 }
 

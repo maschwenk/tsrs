@@ -645,9 +645,9 @@ impl ExistingNodeTree {
         }
         if node.kind() == Kind::JSDocTypeLiteral {
             let mut members: Vec<P<Node>> = Vec::new();
-            for &t in node.as_jsdoc_type_literal().jsdoc_property_tags {
+            members.extend(node.as_jsdoc_type_literal().jsdoc_property_tags.iter().filter_map(|&t| {
                 if t.kind() != Kind::JSDocPropertyTag && t.kind() != Kind::JSDocParameterTag {
-                    continue;
+                    return None;
                 }
                 let n = t.name().unwrap();
                 let target_name = if ast::is_identifier(n) {
@@ -656,13 +656,13 @@ impl ExistingNodeTree {
                     n.as_qualified_name().right // !!! TODO: without typesystem backup, doing this cast unguarded seems really suspect, even though it is what strada does
                 };
                 let name = self.visit_node(c, v, Some(target_name));
-                let should_be_optional = t.as_jsdoc_parameter_or_property_tag().is_bracketed
-                    || t.type_expression().is_some_and(|te| te.kind() == Kind::JSDocOptionalType);
+                let should_be_optional =
+                    t.as_jsdoc_parameter_or_property_tag().is_bracketed || t.type_expression().is_some_and(|te| te.kind() == Kind::JSDocOptionalType);
                 let question = if should_be_optional { Some(factory.new_token(Kind::QuestionToken)) } else { None };
                 let ty = self.visit_node(c, v, t.type_expression()); // !!! TODO: alternate lookup locations for the type? serialize on demand if it doesn't serialze? strada does something funky here.
 
-                members.push(factory.new_property_signature_declaration(None, name.unwrap(), question, ty, None));
-            }
+                Some(factory.new_property_signature_declaration(None, name.unwrap(), question, ty, None))
+            }));
             return Some(factory.new_type_literal_node(factory.new_node_list(members)));
         }
         // if (ast.IsExpressionWithTypeArguments(node) || ast.IsTypeReferenceNode(node)) && ast.IsJSDocIndexSignature(node) { /// !!! TODO: JSDocIndexSignature handling hasn't been ported - readd if it's readded

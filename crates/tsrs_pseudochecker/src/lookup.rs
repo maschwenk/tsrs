@@ -357,40 +357,34 @@ impl PseudoChecker {
             return new_pseudo_type_object_literal(&[]);
         }
         let mut results: Vec<P<PseudoObjectElement>> = Vec::with_capacity(properties.len());
-        for &e in properties {
-            match e.kind() {
-                Kind::MethodDeclaration => {
-                    let optional = e.as_method_declaration().postfix_token().is_some_and(|t| t.kind() == Kind::QuestionToken);
-                    if let Some(full_signature) = e.function_like_data().unwrap().full_signature() {
-                        results.push(new_pseudo_property_assignment(false, e.name().unwrap(), optional, new_pseudo_type_direct(full_signature)));
-                    } else {
-                        results.push(new_pseudo_object_method(
-                            e,
-                            e.name().unwrap(),
-                            optional,
-                            &self.clone_type_parameters(e.as_method_declaration().type_parameters()),
-                            &self.clone_parameters(e.parameter_list()),
-                            self.create_return_from_signature(e).unwrap(),
-                        ));
-                    }
-                }
-                Kind::PropertyAssignment => {
-                    results.push(new_pseudo_property_assignment(
-                        false,
+        results.extend(properties.iter().filter_map(|&e| match e.kind() {
+            Kind::MethodDeclaration => {
+                let optional = e.as_method_declaration().postfix_token().is_some_and(|t| t.kind() == Kind::QuestionToken);
+                if let Some(full_signature) = e.function_like_data().unwrap().full_signature() {
+                    Some(new_pseudo_property_assignment(false, e.name().unwrap(), optional, new_pseudo_type_direct(full_signature)))
+                } else {
+                    Some(new_pseudo_object_method(
+                        e,
                         e.name().unwrap(),
-                        e.as_property_assignment().postfix_token().is_some_and(|t| t.kind() == Kind::QuestionToken),
-                        self.type_from_expression(e.initializer().unwrap()).unwrap(),
-                    ));
+                        optional,
+                        &self.clone_type_parameters(e.as_method_declaration().type_parameters()),
+                        &self.clone_parameters(e.parameter_list()),
+                        self.create_return_from_signature(e).unwrap(),
+                    ))
                 }
-                Kind::SetAccessor | Kind::GetAccessor => {
-                    let member = self.get_accessor_member(e, e.name().unwrap());
-                    if let Some(member) = member {
-                        results.push(member);
-                    }
-                }
-                _ => {}
             }
-        }
+            Kind::PropertyAssignment => Some(new_pseudo_property_assignment(
+                false,
+                e.name().unwrap(),
+                e.as_property_assignment().postfix_token().is_some_and(|t| t.kind() == Kind::QuestionToken),
+                self.type_from_expression(e.initializer().unwrap()).unwrap(),
+            )),
+            Kind::SetAccessor | Kind::GetAccessor => {
+                let member = self.get_accessor_member(e, e.name().unwrap());
+                if let Some(member) = member { Some(member) } else { None }
+            }
+            _ => None,
+        }));
         new_pseudo_type_object_literal(&results)
     }
 
@@ -438,31 +432,27 @@ impl PseudoChecker {
             return Vec::new(); // empty object, ok
         }
         let mut error_nodes: Vec<P<Node>> = Vec::new();
-        for &e in properties {
+        error_nodes.extend(properties.iter().filter_map(|&e| {
             if e.flags().intersects(NodeFlags::ThisNodeHasError) {
-                error_nodes.push(e);
-                continue;
+                return Some(e);
             }
             if e.kind() == Kind::ShorthandPropertyAssignment || e.kind() == Kind::SpreadAssignment {
-                error_nodes.push(e);
-                continue;
+                return Some(e);
             }
             let name = e.name().unwrap();
             if name.flags().intersects(NodeFlags::ThisNodeHasError) {
-                error_nodes.push(name);
-                continue;
+                return Some(name);
             }
             if name.kind() == Kind::PrivateIdentifier {
-                error_nodes.push(e);
-                continue;
+                return Some(e);
             }
             if name.kind() == Kind::ComputedPropertyName {
                 let expression = name.expression().unwrap();
-                if !is_primitive_literal_value(expression, false) {
-                    error_nodes.push(name);
-                }
+                if !is_primitive_literal_value(expression, false) { Some(name) } else { None }
+            } else {
+                None
             }
-        }
+        }));
         error_nodes
     }
 
@@ -478,9 +468,7 @@ impl PseudoChecker {
         // we are in a const context producing a tuple type, there are no spread elements
         let elements = node.elements();
         let mut results: Vec<P<PseudoType>> = Vec::with_capacity(elements.len());
-        for &e in elements {
-            results.push(self.type_from_expression(e).unwrap());
-        }
+        results.extend(elements.iter().map(|&e| self.type_from_expression(e).unwrap()));
         new_pseudo_type_tuple(&results)
     }
 
@@ -493,10 +481,8 @@ impl PseudoChecker {
         if !is_in_const_context(node) {
             return vec![node];
         }
-        for &e in node.elements() {
-            if e.kind() == Kind::SpreadElement {
-                return vec![e];
-            }
+        if let Some(result) = node.elements().iter().find_map(|&e| if e.kind() == Kind::SpreadElement { Some(vec![e]) } else { None }) {
+            return result;
         }
         Vec::new()
     }
@@ -577,10 +563,10 @@ impl PseudoChecker {
             return Vec::new();
         }
         let mut result = Vec::with_capacity(nodes.nodes().len());
-        for &e in nodes.nodes() {
+        result.extend(nodes.nodes().iter().map(|&e| {
             e.as_type_parameter_declaration();
-            result.push(e);
-        }
+            e
+        }));
         result
     }
 }
@@ -650,10 +636,14 @@ pub(crate) fn is_optional_initialized_or_rest_parameter(node: P<Node>) -> bool {
 // determine "has required parameter after index i" with `i+1 < lastRequired`
 // (equivalently, `i < lastRequired-1`) in O(1).
 pub(crate) fn last_required_param_index(params: &[P<Node>]) -> i32 {
-    for (i, param) in params.iter().enumerate().rev() {
-        if !is_optional_initialized_or_rest_parameter(*param) {
-            return i as i32 + 1;
-        }
+    if let Some(result) = params
+        .iter()
+        .enumerate()
+        .rev()
+        .into_iter()
+        .find_map(|(i, param)| if !is_optional_initialized_or_rest_parameter(*param) { Some(i as i32 + 1) } else { None })
+    {
+        return result;
     }
     0
 }
@@ -746,7 +736,7 @@ impl PseudoChecker {
         }
         let last_required = last_required_param_index(nodes.nodes());
         let mut result = Vec::with_capacity(nodes.nodes().len());
-        for (i, &e) in nodes.nodes().iter().enumerate() {
+        result.extend(nodes.nodes().iter().enumerate().map(|(i, &e)| {
             let p = e.as_parameter_declaration();
             let mut optional = p.question_token().is_some();
             if !optional && p.initializer().is_some() {
@@ -755,13 +745,13 @@ impl PseudoChecker {
                 // This matches the checker's isOptionalParameter semantics.
                 optional = i as i32 >= last_required - 1;
             }
-            result.push(new_pseudo_parameter(
+            new_pseudo_parameter(
                 p.dot_dot_dot_token().is_some(),
                 e.name().unwrap(),
                 optional,
                 self.type_from_parameter_worker(e, i as i32, last_required).unwrap(),
-            ));
-        }
+            )
+        }));
         result
     }
 }

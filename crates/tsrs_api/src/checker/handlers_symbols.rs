@@ -29,11 +29,13 @@ pub(crate) fn get_symbols_at_positions(host: &dyn CheckerHost, p: &Params) -> Ch
     let file = s.source_file(&p.document("file")?)?;
     let positions = p.u32_array("positions")?;
     let mut out = Vec::with_capacity(positions.len());
-    for pos in positions {
+    out = positions.into_iter().try_fold(out, |mut out, pos| {
         let node = touching_property_name_at_utf16(file, pos);
         let symbol = s.c().get_symbol_at_location_exported(node);
         out.push(s.opt_symbol_response(symbol)?);
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -48,11 +50,13 @@ pub(crate) fn get_symbols_at_locations(host: &dyn CheckerHost, p: &Params) -> Ch
     let mut s = setup(host, p)?;
     let locations = p.string_array("locations")?;
     let mut out = Vec::with_capacity(locations.len());
-    for loc in locations {
+    out = locations.into_iter().try_fold(out, |mut out, loc| {
         let node = s.resolve_node(loc)?;
         let symbol = s.c().get_symbol_at_location_exported(node);
         out.push(s.opt_symbol_response(symbol)?);
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -67,11 +71,13 @@ pub(crate) fn get_symbols_of_source_files(host: &dyn CheckerHost, p: &Params) ->
     let mut s = setup(host, p)?;
     let files = p.documents("files")?;
     let mut out = Vec::with_capacity(files.len());
-    for f in &files {
+    out = files.iter().try_fold(out, |mut out, f| {
         let file = s.source_file(f)?;
         let symbol = s.c().get_symbol_at_location_exported(file.as_node());
         out.push(s.opt_symbol_response(symbol)?);
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -97,11 +103,13 @@ pub(crate) fn get_types_of_symbols(host: &dyn CheckerHost, p: &Params) -> Checke
     let mut s = setup(host, p)?;
     let refs = p.symbol_refs("symbols")?;
     let mut out = Vec::with_capacity(refs.len());
-    for r in &refs {
+    out = refs.iter().try_fold(out, |mut out, r| {
         let symbol = s.resolve_symbol(r)?;
         let t = s.c().get_type_of_symbol_exported(symbol);
         out.push(s.type_response(t)?);
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -195,12 +203,12 @@ pub(crate) fn get_jsdoc_tags(host: &dyn CheckerHost, p: &Params) -> CheckerResul
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     let mut out = Vec::with_capacity(tags.len());
-    for tag in tags {
+    out.extend(tags.into_iter().map(|tag| {
         let mut o = super::json::obj();
         o.set("name", Value::String(tag.name));
         o.str_nonempty("text", &tag.text);
-        out.push(o.build());
-    }
+        o.build()
+    }));
     Ok(Value::Array(out))
 }
 

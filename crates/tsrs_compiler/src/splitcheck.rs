@@ -239,10 +239,10 @@ impl SplitFile {
             drop(results);
             by_other.sort_unstable();
             let mut found = Vec::new();
-            for k in by_other {
+            found.extend(by_other.into_iter().flat_map(|k| {
                 let (added, _) = checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
-                found.extend(added);
-            }
+                added
+            }));
             *self.owner_found.lock().unwrap() = found;
             checker.add_piece_diagnostics(self.file, &[], &[]);
             return;

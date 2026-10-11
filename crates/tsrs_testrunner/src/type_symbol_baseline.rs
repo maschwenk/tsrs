@@ -45,9 +45,7 @@ fn generate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker,
     // !!! Perf baseline (not written by Go either)
     let perf_lines: Vec<String> = Vec::new();
     let baselines = iterate_baseline(all_files, full_walker, is_symbol_baseline);
-    for value in &baselines {
-        result.push_str(value);
-    }
+    result.extend(baselines.iter().map(String::as_str));
     if !result.is_empty() {
         return format!("//// [{header}] ////\r\n\r\n{}{result}", perf_lines.join("\n"));
     }
@@ -57,13 +55,10 @@ fn generate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker,
 fn iterate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker, is_symbol_baseline: bool) -> Vec<String> {
     let mut baselines = Vec::new();
 
-    for file in all_files {
+    baselines.extend(all_files.iter().map_while(|file| {
         let results = if is_symbol_baseline { full_walker.get_symbols(&file.unit_name) } else { full_walker.get_types(&file.unit_name) };
-        match file_baseline(&file.unit_name, &file.content, &results, is_symbol_baseline) {
-            Some(text) => baselines.push(text),
-            None => return baselines,
-        }
-    }
+        file_baseline(&file.unit_name, &file.content, &results, is_symbol_baseline)
+    }));
 
     baselines
 }
@@ -100,9 +95,7 @@ fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], i
         type_lines.push_str("\r\n");
         if !result.underline.is_empty() {
             type_lines.push('>');
-            for _ in 0..line_text.len() {
-                type_lines.push(' ');
-            }
+            type_lines.extend((0..line_text.len()).map(|_| ' '));
             type_lines.push_str(" : ");
             type_lines.push_str(&result.underline);
             type_lines.push_str("\r\n");
@@ -164,17 +157,17 @@ impl TypeWriterWalker {
     fn visit_node(&mut self, node: P<Node>, is_symbol_walk: bool) -> Vec<TypeWriterResult> {
         let nodes = for_each_ast_node(node);
         let mut results = Vec::new();
-        for n in nodes {
+        results.extend(nodes.into_iter().filter_map(|n| {
             if ast::is_expression_node(n)
                 || n.kind() == Kind::Identifier
                 || ast::is_declaration_name(n)
                 || ast::is_qualified_name(n) && ast::is_name_of_heritage_clause_type_reference(n) && (is_symbol_walk || ast::is_qualified_name(n.parent().unwrap()))
             {
-                if let Some(result) = self.write_type_or_symbol(n, is_symbol_walk) {
-                    results.push(result);
-                }
+                if let Some(result) = self.write_type_or_symbol(n, is_symbol_walk) { Some(result) } else { None }
+            } else {
+                None
             }
-        }
+        }));
         results
     }
 

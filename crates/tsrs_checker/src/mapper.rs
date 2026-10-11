@@ -260,10 +260,8 @@ impl TypeMapper {
                 }
             }
             TypeMapperData::Array { sources, targets } => {
-                for (i, s) in sources.iter().enumerate() {
-                    if t == *s {
-                        return targets[i];
-                    }
+                if let Some(result) = sources.iter().enumerate().find_map(|(i, s)| if t == *s { Some(targets[i]) } else { None }) {
+                    return result;
                 }
                 t
             }
@@ -275,10 +273,8 @@ impl TypeMapper {
                 }
             }
             TypeMapperData::Deferred { data } => {
-                for (i, s) in data.sources.iter().enumerate() {
-                    if t == *s {
-                        return data.targets[i](c);
-                    }
+                if let Some(result) = data.sources.iter().enumerate().find_map(|(i, s)| if t == *s { Some(data.targets[i](c)) } else { None }) {
+                    return result;
                 }
                 t
             }
@@ -296,17 +292,14 @@ impl TypeMapper {
             }
             TypeMapperData::Inference { n, fixing } => {
                 let inferences = n.inferences.get();
-                for (i, inference) in inferences.iter().enumerate() {
-                    if Some(t) == inference.type_parameter.get() {
-                        if fixing && !inference.is_fixed.get() {
-                            // Before we commit to a particular inference (and thus lock out any further inferences),
-                            // we infer from any intra-expression inference sites we have collected.
-                            c.infer_from_intra_expression_sites(n);
-                            clear_cached_inferences(n.inferences.get());
-                            inference.is_fixed.set(true);
-                        }
-                        return c.get_inferred_type(n, i as i32);
+                if let Some((i, inference)) = inferences.iter().enumerate().find(|(_, inference)| Some(t) == inference.type_parameter.get()) {
+                    if fixing && !inference.is_fixed.get() {
+                        // Before committing to an inference, infer from the collected intra-expression sites.
+                        c.infer_from_intra_expression_sites(n);
+                        clear_cached_inferences(n.inferences.get());
+                        inference.is_fixed.set(true);
                     }
+                    return c.get_inferred_type(n, i as i32);
                 }
                 t
             }

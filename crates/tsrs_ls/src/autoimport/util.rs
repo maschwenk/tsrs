@@ -55,16 +55,12 @@ pub(crate) fn go_unicode_is_lower(r: Rune) -> bool {
 pub(crate) fn word_indices(s: &str) -> Vec<usize> {
     let mut indices = Vec::new();
     let bytes = s.as_bytes();
-    for (byte_index, rune_value) in s.char_indices() {
+    indices.extend(s.char_indices().filter_map(|(byte_index, rune_value)| {
         if byte_index == 0 {
-            indices.push(byte_index);
-            continue;
+            return Some(byte_index);
         }
         if rune_value == '_' {
-            if byte_index + 1 < s.len() && bytes[byte_index + 1] != b'_' {
-                indices.push(byte_index + 1);
-            }
-            continue;
+            return (byte_index + 1 < s.len() && bytes[byte_index + 1] != b'_').then_some(byte_index + 1);
         }
         let r = rune_value as Rune;
         if stringutil::unicode_is_upper(r) {
@@ -74,10 +70,11 @@ pub(crate) fn word_indices(s: &str) -> Vec<usize> {
                 go_unicode_is_lower(next)
             };
             if go_unicode_is_lower(prev) || next_is_lower {
-                indices.push(byte_index);
+                return Some(byte_index);
             }
         }
-    }
+        None
+    }));
     indices
 }
 
@@ -97,14 +94,14 @@ pub(crate) fn get_package_names_in_node_modules(node_modules_dir: &str, fs: &dyn
         }
         if base_name.as_bytes()[0] == b'@' {
             let scoped_dir_path = tspath::combine_paths(node_modules_dir, &[base_name]);
-            for scoped_package_dir_name in &fs.get_accessible_entries(&scoped_dir_path).directories {
+            package_names.m.extend(fs.get_accessible_entries(&scoped_dir_path).directories.iter().map(|scoped_package_dir_name| {
                 let scoped_base_name = tspath::get_base_file_name(scoped_package_dir_name);
                 if base_name == "@types" {
-                    package_names.add(module::get_package_name_from_types_package_name(&tspath::combine_paths("@types", &[&scoped_base_name])));
+                    module::get_package_name_from_types_package_name(&tspath::combine_paths("@types", &[&scoped_base_name]))
                 } else {
-                    package_names.add(tspath::combine_paths(base_name, &[&scoped_base_name]));
+                    tspath::combine_paths(base_name, &[&scoped_base_name])
                 }
-            }
+            }));
             continue;
         }
         package_names.add(base_name.clone());
@@ -114,33 +111,37 @@ pub(crate) fn get_package_names_in_node_modules(node_modules_dir: &str, fs: &dyn
 
 // util.go:118
 pub(crate) fn get_default_like_export_name_from_declaration(symbol: P<Symbol>) -> String {
-    for &d in symbol.declarations() {
+    if let Some(result) = symbol.declarations().iter().find_map(|&d| {
         // "export default" in this case. See `ExportAssignment`for more details.
         if ast::is_export_assignment(d) {
             let inner_expression = ast::skip_outer_expressions(d.expression().unwrap(), ast::OEK::All);
             if ast::is_identifier(inner_expression) {
-                return inner_expression.text().to_string();
+                return Some(inner_expression.text().to_string());
             }
-            continue;
+            return None;
         }
         // "export { ~ as default }"
         if ast::is_export_specifier(d) && d.symbol().unwrap().flags() == SymbolFlags::Alias && d.property_name().is_some() {
             if d.property_name().unwrap().kind() == Kind::Identifier {
-                return d.property_name().unwrap().text().to_string();
+                return Some(d.property_name().unwrap().text().to_string());
             }
-            continue;
+            return None;
         }
         // GH#52694
         if let Some(name) = ast::get_name_of_declaration(Some(d)) {
             if name.kind() == Kind::Identifier {
-                return name.text().to_string();
+                return Some(name.text().to_string());
             }
         }
         if let Some(parent) = symbol.parent() {
             if !checker::is_external_module_symbol(parent) {
-                return parent.name().to_string();
+                return Some(parent.name().to_string());
             }
         }
+
+        None
+    }) {
+        return result;
     }
     String::new()
 }
@@ -155,31 +156,27 @@ pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Progra
     // @types names when the program resolves an import like "react" to
     // "@types/react/index.d.ts" via the PackageId.Name field.
     let mut resolved_package_names = new_set_with_size_hint(raw_names.len());
-    #[expect(clippy::iter_over_hash_type, reason = "only adds to a set; Go ranges the set too")]
-    for name in raw_names.keys() {
-        resolved_package_names.add(module::get_package_name_from_types_package_name(name));
-    }
+    // only adds to a set; Go ranges the set too
+    resolved_package_names.m.extend(raw_names.keys().iter().map(|name| module::get_package_name_from_types_package_name(name)));
 
     if let Some(types) = &program.options().types {
-        for name in types {
-            if name != "*" {
-                resolved_package_names.add(module::get_package_name_from_types_package_name(name));
-            }
-        }
+        resolved_package_names
+            .m
+            .extend(types.iter().filter_map(|name| if name != "*" { Some(module::get_package_name_from_types_package_name(name)) } else { None }));
     }
 
     if unresolved_package_names.len() > 0 {
         let mut checker = program.get_type_checker(ctx);
-        #[expect(clippy::iter_over_hash_type, reason = "read-only globals lookup, then adds to a set; Go ranges the set too")]
-        for name in unresolved_package_names.keys() {
+        // read-only globals lookup, then adds to a set; Go ranges the set too
+        resolved_package_names.m.extend(unresolved_package_names.keys().iter().filter_map(|name| {
             if let Some(symbol) = checker.try_find_ambient_module_exported(name) {
                 let declaring_file = ast::get_source_file_of_module(symbol).unwrap();
                 let package_name = tsrs_modulespecifiers::get_package_name_from_directory(declaring_file.file_name());
-                if !package_name.is_empty() {
-                    resolved_package_names.add(module::get_package_name_from_types_package_name(&package_name));
-                }
+                if !package_name.is_empty() { Some(module::get_package_name_from_types_package_name(&package_name)) } else { None }
+            } else {
+                None
             }
-        }
+        }));
     }
     resolved_package_names
 }

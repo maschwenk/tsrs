@@ -18,13 +18,17 @@ impl LanguageService {
     // response always carries a list.)
     fn to_ls_proto_text_edits(&self, file: P<SourceFile>, changes: &[TextChange]) -> Vec<lsproto::TextEdit> {
         let mut result = Vec::with_capacity(changes.len());
-        for c in changes {
+        result = match changes.iter().try_fold(result, |mut result, c| {
             let (lsp_range, fidelity) = self.converters.to_lsp_range(&file, TextRange::new(c.pos(), c.end()));
             if !fidelity.is_exact() {
-                return Vec::new();
+                return None;
             }
             result.push(lsproto::TextEdit { new_text: c.new_text.clone(), range: lsp_range });
-        }
+            Some(result)
+        }) {
+            Some(result) => result,
+            None => return Vec::new(),
+        };
         result
     }
 
@@ -66,21 +70,17 @@ impl LanguageService {
             let Some(span_map) = crate::lsconv::Script::span_map(&projection) else {
                 continue;
             };
-            for segment in span_map.segments() {
+            candidates.extend(span_map.segments().into_iter().filter_map(|segment| {
                 if segment.kind != spanmap::Kind::Verbatim || !segment.features.intersects(Feature::Formatting) {
-                    continue;
+                    return None;
                 }
                 let original_start = original_range.pos().max(segment.original_start);
                 let original_end = original_range.end().min(segment.original_end);
                 if original_start >= original_end {
-                    continue;
+                    return None;
                 }
-                candidates.push(MappedFormattingRange {
-                    projection,
-                    segment,
-                    original_range: TextRange::new(original_start, original_end),
-                });
-            }
+                Some(MappedFormattingRange { projection, segment, original_range: TextRange::new(original_start, original_end) })
+            }));
         }
 
         let mut edits: Vec<lsproto::TextEdit> = Vec::new();
@@ -89,20 +89,17 @@ impl LanguageService {
                 candidate.segment.virtual_start + candidate.original_range.pos() - candidate.segment.original_start,
                 candidate.segment.virtual_start + candidate.original_range.end() - candidate.segment.original_start,
             );
-            for change in self.get_formatting_edits_for_range(ctx, candidate.projection, options, virtual_range) {
+            edits.extend(self.get_formatting_edits_for_range(ctx, candidate.projection, options, virtual_range).into_iter().filter_map(|change| {
                 if change.pos() < virtual_range.pos() || change.end() > virtual_range.end() {
-                    continue;
+                    return None;
                 }
-                let (lsp_range, fidelity) = self.converters.to_lsp_range_for_feature(
-                    &candidate.projection,
-                    TextRange::new(change.pos(), change.end()),
-                    Feature::Formatting,
-                );
+                let (lsp_range, fidelity) =
+                    self.converters.to_lsp_range_for_feature(&candidate.projection, TextRange::new(change.pos(), change.end()), Feature::Formatting);
                 if !fidelity.is_exact() {
-                    continue;
+                    return None;
                 }
-                edits.push(lsproto::TextEdit { range: lsp_range, new_text: change.new_text });
-            }
+                Some(lsproto::TextEdit { range: lsp_range, new_text: change.new_text })
+            }));
         }
         // Go `slices.SortStableFunc` (CompareRanges, then the text).
         edits.sort_by(|a, b| lsproto::compare_ranges(a.range, b.range).cmp(&0).then_with(|| a.new_text.cmp(&b.new_text)));
@@ -261,7 +258,7 @@ pub(crate) fn get_range_of_enclosing_comment(
     let trailing_ranges_of_previous_token = preceding_token.map(|t| scanner::get_trailing_comment_ranges(file.text(), t.end()));
     let leading_ranges_of_next_token = get_leading_comment_ranges_of_node(token_at_position, file);
     let comment_ranges = trailing_ranges_of_previous_token.into_iter().flatten().chain(leading_ranges_of_next_token.into_iter().flatten());
-    for comment_range in comment_ranges {
+    if let Some(result) = comment_ranges.into_iter().find_map(|comment_range| {
         // The end marker of a single-line comment does not include the newline character.
         // In the following case where the cursor is at `^`, we are inside a comment:
         //
@@ -278,8 +275,12 @@ pub(crate) fn get_range_of_enclosing_comment(
         if comment_range.text_range.contains_exclusive(position)
             || position == comment_range.end() && (comment_range.kind == Kind::SingleLineCommentTrivia || position == file.text().len() as i32)
         {
-            return Some(comment_range);
+            return Some(Some(comment_range));
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }

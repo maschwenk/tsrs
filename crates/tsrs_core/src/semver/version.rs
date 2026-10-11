@@ -221,11 +221,15 @@ pub(crate) fn compare_pre_release_identifiers(left: &[String], right: &[String])
     // > Precedence for two pre-release versions with the same major, minor, and patch version
     // > MUST be determined by comparing each dot separated identifier from left to right until
     // > a difference is found [...]
-    for (l, r) in left.iter().zip(right.iter()) {
+    if let Some(result) = left.iter().zip(right.iter()).into_iter().find_map(|(l, r)| {
         let c = compare_pre_release_identifier(l, r);
         if c != 0 {
-            return c;
+            return Some(c);
         }
+
+        None
+    }) {
+        return result;
     }
     cmp_compare(left.len(), right.len())
 }
@@ -358,12 +362,9 @@ pub(crate) fn get_uint_component(text: &str) -> Result<u32, String> {
         return Err(format!("strconv.ParseUint: parsing {text:?}: invalid syntax"));
     }
     let mut r: u32 = 0;
-    for b in text.bytes() {
-        match r.checked_mul(10).and_then(|v| v.checked_add((b - b'0') as u32)) {
-            Some(v) => r = v,
-            None => return Err(format!("strconv.ParseUint: parsing {text:?}: value out of range")),
-        }
-    }
+    r = text.bytes().try_fold(r, |r, b| {
+        r.checked_mul(10).and_then(|v| v.checked_add((b - b'0') as u32)).ok_or_else(|| format!("strconv.ParseUint: parsing {text:?}: value out of range"))
+    })?;
     Ok(r)
 }
 

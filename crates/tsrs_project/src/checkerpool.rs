@@ -375,10 +375,10 @@ impl checkerPool {
             }
         }
         // Create in the first empty slot.
-        for i in 1..st.checkers.len() {
-            if st.checkers[i].is_none() {
+        for (i, element) in st.checkers.iter_mut().enumerate().skip(1) {
+            if (*element).is_none() {
                 (self.log)(&format!("checkerpool: Creating query checker {}", i));
-                st.checkers[i] = Some(self.new_pooled_checker());
+                (*element) = Some(self.new_pooled_checker());
                 return i;
             }
         }

@@ -228,9 +228,11 @@ fn make_long_key(words: &mut Vec<PKey>, types: &[P<Type>], reduction: UnionReduc
         words.extend(type_arguments.iter().map(|t| t.key()));
     }
     let mut h: u64 = reduction as u64 | (types.len() as u64) << 2;
-    for &k in words.iter() {
+    h = words.iter().fold(h, |mut h, &k| {
         h = (h ^ k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    }
+
+        h
+    });
     h ^= h >> 29;
     Some((reduction as u16 | u16::from(has_alias) << 2, h))
 }

@@ -44,9 +44,7 @@ const B: &str = "import { value, big } from \"./a\";\nexport const use = value;\
 /// a fresh checker does real work when `big` is resolved.
 fn a_ts(k: usize) -> String {
     let mut s = if k % 2 == 0 { "export const value: number = 1;\n".to_string() } else { "export const value: string = \"s\";\n".to_string() };
-    for i in 0..400 {
-        s.push_str(&format!("export interface I{i}<T> {{ p{i}: T; q{i}: I{}<T> | undefined; }}\n", (i + 1) % 400));
-    }
+    s.extend((0..400).map(|i| format!("export interface I{i}<T> {{ p{i}: T; q{i}: I{}<T> | undefined; }}\n", (i + 1) % 400)));
     s.push_str("export type Big = ");
     s.push_str(&(0..400).map(|i| format!("I{i}<number>")).collect::<Vec<_>>().join(" | "));
     s.push_str(";\n");

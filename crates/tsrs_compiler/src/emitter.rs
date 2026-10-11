@@ -258,9 +258,11 @@ mod emit {
         fn run_script_transformers(&mut self, emit_context: P<EmitContext>, mut source_file: P<SourceFile>) -> P<SourceFile> {
             let host = self.host;
             self.times.time(EmitPhase::ScriptTransform, || {
-                for transformer in get_script_transformers(emit_context, host, source_file) {
+                source_file = get_script_transformers(emit_context, host, source_file).into_iter().fold(source_file, |mut source_file, transformer| {
                     source_file = transformer.transform_source_file(source_file);
-                }
+
+                    source_file
+                });
                 source_file
             })
         }

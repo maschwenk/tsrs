@@ -188,9 +188,11 @@ impl<'h> Setup<'h> {
 
     pub(crate) fn types_response(&mut self, types: &[P<Type>]) -> CheckerResult<Value> {
         let mut out = Vec::with_capacity(types.len());
-        for t in types {
+        out = types.iter().try_fold(out, |mut out, t| {
             out.push(self.type_response(*t)?);
-        }
+
+            Ok::<_, CheckerError>(out)
+        })?;
         Ok(Value::Array(out))
     }
 

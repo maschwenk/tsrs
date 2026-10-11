@@ -94,18 +94,12 @@ pub(crate) fn merge_file_change_summary(dst: &mut FileChangeSummary, src: &FileC
     if src.invalidate_all {
         dst.invalidate_all = true;
     }
-    #[expect(clippy::iter_over_hash_type, reason = "pure set union into dst; Go ranges the set too")]
-    for uri in src.changed.keys() {
-        dst.changed.add(uri.clone());
-    }
-    #[expect(clippy::iter_over_hash_type, reason = "pure set union into dst; Go ranges the set too")]
-    for uri in src.created.keys() {
-        dst.created.add(uri.clone());
-    }
-    #[expect(clippy::iter_over_hash_type, reason = "pure set union into dst; Go ranges the set too")]
-    for uri in src.deleted.keys() {
-        dst.deleted.add(uri.clone());
-    }
+    // pure set union into dst; Go ranges the set too
+    dst.changed.m.extend(src.changed.keys().iter().map(std::clone::Clone::clone));
+    // pure set union into dst; Go ranges the set too
+    dst.created.m.extend(src.created.keys().iter().map(std::clone::Clone::clone));
+    // pure set union into dst; Go ranges the set too
+    dst.deleted.m.extend(src.deleted.keys().iter().map(std::clone::Clone::clone));
     if src.includes_watch_change_outside_node_modules {
         dst.includes_watch_change_outside_node_modules = true;
     }

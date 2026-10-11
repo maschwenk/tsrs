@@ -110,9 +110,7 @@ impl toBuildInfo<'_> {
             }
         }
         new_paths.sort();
-        for path in new_paths {
-            file_ids.push(self.to_file_id(path));
-        }
+        file_ids.extend(new_paths.into_iter().map(|path| self.to_file_id(path)));
         file_ids.sort_unstable();
         self.to_file_id_list_id_of_sorted_ids(file_ids)
     }
@@ -229,16 +227,13 @@ impl toBuildInfo<'_> {
     // snapshottobuildinfo.go:211
     fn collect_root_files(&mut self) {
         let program = self.program;
-        for file_name in program.command_line().file_names() {
+        self.roots.extend(program.command_line().file_names().iter().filter_map(|file_name| {
             let redirect = program.get_parse_file_redirect(file_name);
             let file = if !redirect.is_empty() { program.get_source_file(&redirect) } else { program.get_source_file(file_name) };
-            if let Some(file) = file {
-                self.roots.insert(
-                    file,
-                    tspath::to_path(file_name, &self.compare_paths_options.current_directory, self.compare_paths_options.use_case_sensitive_file_names),
-                );
-            }
-        }
+            file.map(|file| {
+                (file, tspath::to_path(file_name, &self.compare_paths_options.current_directory, self.compare_paths_options.use_case_sensitive_file_names))
+            })
+        }));
     }
 
     // snapshottobuildinfo.go:225
@@ -315,10 +310,10 @@ impl toBuildInfo<'_> {
     fn set_root_of_incremental_program(&mut self) {
         let mut keys: Vec<P<SourceFile>> = self.roots.keys().copied().collect();
         let mut ids: FxHashMap<P<SourceFile>, BuildInfoFileId> = FxHashMap::default();
-        for &k in &keys {
+        ids.extend(keys.iter().map(|&k| {
             let id = self.to_file_id(k.path());
-            ids.insert(k, id);
-        }
+            (k, id)
+        }));
         keys.sort_by_key(|k| ids[k]);
         for file in keys {
             let root_path = self.roots[&file].clone();
@@ -379,9 +374,10 @@ impl toBuildInfo<'_> {
         let known_ids = &self.file_name_to_file_id;
         let ids_if_known = |references: &std::sync::Arc<RefSet>| -> Option<Vec<BuildInfoFileId>> {
             let mut file_ids = Vec::with_capacity(references.len());
-            for path in references.iter() {
+            file_ids = references.iter().try_fold(file_ids, |mut file_ids, path| {
                 file_ids.push(*known_ids.get(path.as_str())?);
-            }
+                Some(file_ids)
+            })?;
             file_ids.sort_unstable();
             Some(file_ids)
         };
@@ -392,14 +388,14 @@ impl toBuildInfo<'_> {
             tsrs_compiler::worker_pool().install(|| references.par_iter().map(ids_if_known).collect())
         };
         let mut referenced_map = Vec::with_capacity(keys.len());
-        for ((file_path, references), known) in keys.iter().zip(&references).zip(known) {
+        referenced_map.extend(keys.iter().zip(&references).zip(known).map(|((file_path, references), known)| {
             let file_id = self.to_file_id(file_path);
             let file_id_list_id = match known {
                 Some(file_ids) => self.to_file_id_list_id_of_sorted_ids(file_ids),
                 None => self.to_file_id_list_id(references),
             };
-            referenced_map.push(BuildInfoReferenceMapEntry { file_id, file_id_list_id });
-        }
+            BuildInfoReferenceMapEntry { file_id, file_id_list_id }
+        }));
         self.build_info.referenced_map = referenced_map;
     }
 
@@ -435,13 +431,11 @@ impl toBuildInfo<'_> {
         let mut files = self.snapshot.emit_diagnostics_per_file.keys();
         files.sort();
         let mut result = Vec::with_capacity(files.len());
-        for file_path in files {
+        result.extend(files.into_iter().filter_map(|file_path| {
             let value = self.snapshot.emit_diagnostics_per_file.load(&file_path).unwrap();
             // Go stores a nil entry when the cache holds no diagnostics (it never does in practice).
-            if let Some(d) = self.to_build_info_diagnostics_of_file(&file_path, &value) {
-                result.push(d);
-            }
-        }
+            if let Some(d) = self.to_build_info_diagnostics_of_file(&file_path, &value) { Some(d) } else { None }
+        }));
         self.build_info.emit_diagnostics_per_file = result;
     }
 

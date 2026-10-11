@@ -508,15 +508,17 @@ impl watcher {
             if !is_in_directory_or_self(&physical_parent, physical_dir) {
                 return String::new();
             }
-            let mut count = 1;
-            #[expect(clippy::iter_over_hash_type, reason = "only counts matches; returns `parent` whichever entries were counted; Go ranges the map too")]
-            for dw in st.dir_watches.values() {
-                if is_in_directory_or_self(&parent, &dw.dir) && is_in_directory_or_self(&physical_parent, &dw.physical_dir) {
-                    count += 1;
-                    if count >= recursiveConsolidateThreshold {
-                        return parent;
-                    }
-                }
+            let count = 1;
+            // only counts matches; returns `parent` regardless of traversal order
+            if st
+                .dir_watches
+                .values()
+                .filter(|dw| is_in_directory_or_self(&parent, &dw.dir) && is_in_directory_or_self(&physical_parent, &dw.physical_dir))
+                .take((recursiveConsolidateThreshold - count) as usize)
+                .count()
+                >= (recursiveConsolidateThreshold - count) as usize
+            {
+                return parent;
             }
             let next = filepath_dir(&parent);
             if next == parent {
@@ -706,10 +708,11 @@ impl Watcher for watcher {
 impl watcher {
     // Every `watcher` is one of the package-level statics.
     fn as_static(&self) -> &'static watcher {
-        for w in [&*inotifyWatcher, &*fseventsWatcher, &*kqueueWatcher, &*windowsWatcher, &*fanotifyWatcher, &*unsupportedWatcher] {
-            if std::ptr::eq(w, self) {
-                return w;
-            }
+        if let Some(result) = ([&*inotifyWatcher, &*fseventsWatcher, &*kqueueWatcher, &*windowsWatcher, &*fanotifyWatcher, &*unsupportedWatcher])
+            .into_iter()
+            .find_map(|w| if std::ptr::eq(w, self) { Some(w) } else { None })
+        {
+            return result;
         }
         unreachable!("fswatch: watcher is not a package-level instance")
     }
@@ -837,9 +840,7 @@ pub(crate) fn watch_add_many(impl_: &Arc<dyn watcherImpl>, watches: &[Arc<dirWat
 
     if let Some(result) = impl_.subscribe_many(&to_add) {
         result?;
-        for w in to_add {
-            st.subscriptions.insert(dwKey(w));
-        }
+        st.subscriptions.extend(to_add.into_iter().map(dwKey));
         return Ok(());
     }
 

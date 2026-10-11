@@ -192,10 +192,8 @@ impl Tracker {
     // projection cannot be written back and marks the file unmappable.
     fn from_lsp_edit_range(&mut self, source_file: P<SourceFile>, lsproto_range: lsproto::Range) -> TextRange {
         let spans = self.converters.from_lsp_range_for_source_file(source_file, lsproto_range, Feature::All);
-        for span in &spans {
-            if span.fidelity.is_exact() && span.script == source_file {
-                return span.span;
-            }
+        if let Some(result) = spans.iter().find_map(|span| if span.fidelity.is_exact() && span.script == source_file { Some(span.span) } else { None }) {
+            return result;
         }
         self.unmappable_files.insert(source_file.original_file_name().to_string());
         if !spans.is_empty() {
@@ -444,13 +442,9 @@ impl Tracker {
         let deleted_nodes = self.deleted_nodes.clone();
         for deleted in &deleted_nodes {
             // Skip if this node is contained within another deleted node
-            let mut is_contained = false;
-            for other in &deleted_nodes {
-                if other.source_file == deleted.source_file && other.node != deleted.node && range_contains_range_exclusive(other.node, deleted.node) {
-                    is_contained = true;
-                    break;
-                }
-            }
+            let is_contained = deleted_nodes
+                .iter()
+                .any(|other| other.source_file == deleted.source_file && other.node != deleted.node && range_contains_range_exclusive(other.node, deleted.node));
             if is_contained {
                 continue;
             }

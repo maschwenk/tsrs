@@ -292,7 +292,7 @@ fn unescape(s: &str, mode: Encoding) -> Result<String, String> {
 pub(crate) fn go_quote(b: &[u8]) -> String {
     let mut out = String::from("\"");
     let s = tsrs_core::utf8::from_utf8_lossy(b);
-    for c in s.chars() {
+    out = s.chars().fold(out, |mut out, c| {
         match c {
             '\x07' => out.push_str("\\a"),
             '\x08' => out.push_str("\\b"),
@@ -303,10 +303,14 @@ pub(crate) fn go_quote(b: &[u8]) -> String {
             '\x0b' => out.push_str("\\v"),
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => { let _ = write!(out, "\\x{:02x}", c as u32); },
+            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
+                let _ = write!(out, "\\x{:02x}", c as u32);
+            }
             c => out.push(c),
         }
-    }
+
+        out
+    });
     out.push('"');
     out
 }
@@ -482,12 +486,8 @@ pub(crate) fn json_object_has_key(data: &Value, keys: &[&str]) -> i32 {
     let Value::Object(members) = data else {
         return -1;
     };
-    for name in members.keys() {
-        for (i, key) in keys.iter().enumerate() {
-            if name == key {
-                return i as i32;
-            }
-        }
+    if let Some(i) = members.keys().find_map(|name| keys.iter().position(|key| name == key)) {
+        return i as i32;
     }
     -1
 }

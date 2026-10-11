@@ -72,13 +72,15 @@ pub fn call_err(s: &Session, method: &str, params: &str) -> String {
 
 pub fn get<'a>(v: &'a Value, path: &str) -> &'a Value {
     let mut cur = v;
-    for key in path.split('.') {
+    cur = path.split('.').fold(cur, |mut cur, key| {
         cur = match cur {
             Value::Object(o) => o.get(key).unwrap_or_else(|| panic!("missing {key} in {}", json::marshal(v).unwrap())),
             Value::Array(a) => &a[key.parse::<usize>().unwrap()],
             _ => panic!("cannot index {key} in {}", json::marshal(v).unwrap()),
         };
-    }
+
+        cur
+    });
     cur
 }
 

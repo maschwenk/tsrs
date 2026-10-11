@@ -145,10 +145,8 @@ fn get_call_hierarchy_declaration_reference_node(node: Option<P<Node>>) -> Optio
     }
 
     if let Some(modifiers) = node.modifiers() {
-        for &m in modifiers.nodes() {
-            if m.kind() == Kind::DefaultKeyword {
-                return Some(m);
-            }
+        if let Some(result) = modifiers.nodes().iter().find_map(|&m| if m.kind() == Kind::DefaultKeyword { Some(Some(m)) } else { None }) {
+            return result;
         }
     }
 
@@ -175,12 +173,16 @@ fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (St
 
     if (ast::is_function_declaration(node) || ast::is_class_declaration(node)) && node.name().is_none() {
         if let Some(modifiers) = node.modifiers() {
-            for &m in modifiers.nodes() {
+            if let Some(result) = modifiers.nodes().iter().find_map(|&m| {
                 if m.kind() == Kind::DefaultKeyword {
                     let source_file = ast::get_source_file_of_node(node).unwrap();
                     let start = scanner::skip_trivia(source_file.text(), m.pos());
-                    return ("default".to_string(), start, m.end());
+                    return Some(("default".to_string(), start, m.end()));
                 }
+
+                None
+            }) {
+                return result;
             }
         }
     }
@@ -590,13 +592,11 @@ impl LanguageService {
     // callhierarchy.go:572
     fn convert_call_site_group_to_incoming_call(&self, program: &'static Program, entries: &[callSite]) -> Option<lsproto::CallHierarchyIncomingCall> {
         let mut from_ranges: Vec<lsproto::Range> = Vec::with_capacity(entries.len());
-        for entry in entries {
+        from_ranges.extend(entries.iter().filter_map(|entry| {
             let source_file = entry.source_file.as_source_file_p();
             let (lsp_range, fidelity) = self.converters.to_lsp_range_for_feature(&source_file, entry.text_range, Feature::CallHierarchy);
-            if !fidelity.is_none() {
-                from_ranges.push(lsp_range);
-            }
-        }
+            if !fidelity.is_none() { Some(lsp_range) } else { None }
+        }));
         let from = self.create_call_hierarchy_item(program, entries[0].declaration);
         let from = from?;
         if from_ranges.is_empty() {
@@ -713,16 +713,10 @@ impl LanguageService {
     ) -> Result<lsproto::CallHierarchyIncomingCallsResponse, lsproto::Error> {
         let program = self.get_program();
         let mut ref_entries = Vec::new();
-        for symbol_and_entry in &data.symbols_and_entries {
-            ref_entries.extend(symbol_and_entry.references.iter().cloned());
-        }
+        ref_entries.extend(data.symbols_and_entries.iter().flat_map(|symbol_and_entry| symbol_and_entry.references.iter().cloned()));
 
         let mut call_sites: Vec<callSite> = Vec::new();
-        for entry in &ref_entries {
-            if let Some(site) = convert_entry_to_call_site(entry) {
-                call_sites.push(site);
-            }
-        }
+        call_sites.extend(ref_entries.iter().filter_map(|entry| if let Some(site) = convert_entry_to_call_site(entry) { Some(site) } else { None }));
 
         if call_sites.is_empty() {
             return Ok(lsproto::CallHierarchyIncomingCallsOrNull::default());
@@ -735,11 +729,9 @@ impl LanguageService {
         }
 
         let mut result: Vec<lsproto::CallHierarchyIncomingCall> = Vec::new();
-        for (_, sites) in grouped.iter() {
-            if let Some(incoming_call) = self.convert_call_site_group_to_incoming_call(program, sites) {
-                result.push(incoming_call);
-            }
-        }
+        result.extend(grouped.iter().filter_map(|(_, sites)| {
+            if let Some(incoming_call) = self.convert_call_site_group_to_incoming_call(program, sites) { Some(incoming_call) } else { None }
+        }));
         Ok(lsproto::CallHierarchyIncomingCallsOrNull { call_hierarchy_incoming_calls: Some(result) })
     }
 }
@@ -782,9 +774,7 @@ impl callSiteCollector {
                 self.call_sites.push(callSite { declaration: decl, text_range, source_file: source_file.as_node() });
             }
             CallHierarchyDeclarations::Nodes(decls) => {
-                for d in decls {
-                    self.call_sites.push(callSite { declaration: d, text_range, source_file: source_file.as_node() });
-                }
+                self.call_sites.extend(decls.into_iter().map(|d| callSite { declaration: d, text_range, source_file: source_file.as_node() }));
             }
         }
     }
@@ -977,13 +967,11 @@ impl LanguageService {
     // callhierarchy.go:942
     fn convert_call_site_group_to_outgoing_call(&self, program: &'static Program, entries: &[callSite]) -> Option<lsproto::CallHierarchyOutgoingCall> {
         let mut from_ranges: Vec<lsproto::Range> = Vec::with_capacity(entries.len());
-        for entry in entries {
+        from_ranges.extend(entries.iter().filter_map(|entry| {
             let source_file = entry.source_file.as_source_file_p();
             let (lsp_range, fidelity) = self.converters.to_lsp_range_for_feature(&source_file, entry.text_range, Feature::CallHierarchy);
-            if !fidelity.is_none() {
-                from_ranges.push(lsp_range);
-            }
-        }
+            if !fidelity.is_none() { Some(lsp_range) } else { None }
+        }));
         let to = self.create_call_hierarchy_item(program, entries[0].declaration);
         let to = to?;
         if from_ranges.is_empty() {
@@ -1019,11 +1007,9 @@ impl LanguageService {
         }
 
         let mut result: Vec<lsproto::CallHierarchyOutgoingCall> = Vec::new();
-        for (_, sites) in grouped.iter() {
-            if let Some(outgoing_call) = self.convert_call_site_group_to_outgoing_call(program, sites) {
-                result.push(outgoing_call);
-            }
-        }
+        result.extend(grouped.iter().filter_map(|(_, sites)| {
+            if let Some(outgoing_call) = self.convert_call_site_group_to_outgoing_call(program, sites) { Some(outgoing_call) } else { None }
+        }));
 
         result.sort_by(|a, b| {
             let uri_comp = a.to.uri.0.cmp(&b.to.uri.0);
@@ -1050,14 +1036,14 @@ impl LanguageService {
         let declarations = self.call_hierarchy_declarations(file, position, program, false);
         let mut items: Vec<lsproto::CallHierarchyItem> = Vec::new();
         let mut seen: Set<lsproto::Location> = Set::new();
-        for declaration in declarations {
+        items.extend(declarations.into_iter().filter_map(|declaration| {
             if let Some(item) = self.create_call_hierarchy_item(program, declaration) {
                 let location = lsproto::Location { uri: item.uri.clone(), range: item.selection_range };
-                if seen.add_if_absent(location) {
-                    items.push(item);
-                }
+                if seen.add_if_absent(location) { Some(item) } else { None }
+            } else {
+                None
             }
-        }
+        }));
 
         if items.is_empty() {
             return Ok(lsproto::CallHierarchyItemsOrNull::default());
@@ -1162,11 +1148,7 @@ impl LanguageService {
                     }
                 }
                 Some(CallHierarchyDeclarations::Nodes(decls)) => {
-                    for declaration in decls {
-                        if seen.insert(declaration) {
-                            declarations.push(declaration);
-                        }
-                    }
+                    declarations.extend(decls.into_iter().filter_map(|declaration| if seen.insert(declaration) { Some(declaration) } else { None }));
                 }
                 None => {}
             }

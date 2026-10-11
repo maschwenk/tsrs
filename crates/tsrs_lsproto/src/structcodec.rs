@@ -58,11 +58,7 @@ pub fn check_required(seen: u64, required_names: &[&str], go_type: &str) -> Resu
     let missing = required_mask & !seen;
     if missing != 0 {
         let mut missing_props = Vec::new();
-        for (id, n) in required_names.iter().enumerate() {
-            if missing & (1 << id) != 0 {
-                missing_props.push(*n);
-            }
-        }
+        missing_props.extend(required_names.iter().enumerate().filter_map(|(id, n)| if missing & (1 << id) != 0 { Some(*n) } else { None }));
         return Err(JsonError::method(go_type, err_missing(&missing_props)));
     }
     Ok(())
@@ -152,9 +148,9 @@ pub fn unmarshal_discriminated_arm<T: Json>(v: &Value, union_go_type: &str, disc
         Some(d) if d > 0 => {
             let mut reordered = OrderedMap::default();
             reordered.reserve(members.len());
-            for (k, item) in members.iter().skip(d).take(1).chain(members.iter().take(d)).chain(members.iter().skip(d + 1)) {
-                reordered.insert(k.clone(), item.clone());
-            }
+            reordered.extend(
+                members.iter().skip(d).take(1).chain(members.iter().take(d)).chain(members.iter().skip(d + 1)).map(|(k, item)| (k.clone(), item.clone())),
+            );
             match T::from_json(&Value::Object(reordered)) {
                 Ok(arm) => return Ok(arm),
                 Err(err) => err,

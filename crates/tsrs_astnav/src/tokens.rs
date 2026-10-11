@@ -170,22 +170,18 @@ pub(crate) fn get_token_at_position_worker(
                 return node_list;
             }
             if st.node_after_left.get().is_none() {
-                for &node in list.nodes() {
-                    if !node.flags().intersects(NodeFlags::Reparsed) {
-                        st.node_after_left.set(Some(node));
-                        break;
-                    }
+                if let Some(node) = list.nodes().iter().find_map(|&node| if !node.flags().intersects(NodeFlags::Reparsed) { Some(node) } else { None }) {
+                    st.node_after_left.set(Some(node));
                 }
             }
             if st.next.get().is_none() {
                 if list.end() == position && include_preceding_token_at_end_position.is_some() {
                     st.left.set(list.end());
                     st.node_after_left.set(None);
-                    for &v in list.nodes().iter().rev() {
-                        if !v.flags().intersects(NodeFlags::Reparsed) {
-                            st.prev_subtree.set(Some(v));
-                            break;
-                        }
+                    if let Some(v) =
+                        list.nodes().iter().rev().into_iter().find_map(|&v| if !v.flags().intersects(NodeFlags::Reparsed) { Some(v) } else { None })
+                    {
+                        st.prev_subtree.set(Some(v));
                     }
                 } else if list.end() <= position {
                     st.left.set(list.end());
@@ -200,11 +196,10 @@ pub(crate) fn get_token_at_position_worker(
                         if cmp < 0 {
                             st.left.set(node.end());
                             st.node_after_left.set(None);
-                            for &n in &all_nodes[middle + 1..] {
-                                if !n.flags().intersects(NodeFlags::Reparsed) {
-                                    st.node_after_left.set(Some(n));
-                                    break;
-                                }
+                            if let Some(n) =
+                                all_nodes[middle + 1..].iter().find_map(|&n| if !n.flags().intersects(NodeFlags::Reparsed) { Some(n) } else { None })
+                            {
+                                st.node_after_left.set(Some(n));
                             }
                         }
                         cmp
@@ -493,11 +488,8 @@ pub fn find_preceding_token_ex(
                     // Find jsdoc preceding the foundChild.
                     let mut js_doc: Option<P<Node>> = None;
                     let node_jsdoc = n.jsdoc(Some(source_file.get()));
-                    for &n in node_jsdoc.iter().rev() {
-                        if n.pos() >= found_child.pos() {
-                            js_doc = Some(n);
-                            break;
-                        }
+                    if let Some(n) = node_jsdoc.iter().rev().into_iter().find_map(|&n| if n.pos() >= found_child.pos() { Some(n) } else { None }) {
+                        js_doc = Some(n);
                     }
                     if let Some(js_doc) = js_doc {
                         if !exclude_jsdoc && position < js_doc.end() {
@@ -707,10 +699,10 @@ fn find_rightmost_valid_token(
             }
 
             // Find preceding valid token.
-            for &token in tokens.iter().rev() {
-                if !ast::is_whitespace_only_jsx_text(token) {
-                    return Some(token);
-                }
+            if let Some(result) =
+                tokens.iter().rev().into_iter().find_map(|&token| if !ast::is_whitespace_only_jsx_text(token) { Some(Some(token)) } else { None })
+            {
+                return result;
             }
         }
 

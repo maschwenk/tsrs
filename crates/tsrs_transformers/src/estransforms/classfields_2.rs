@@ -443,11 +443,13 @@ impl classFieldsTransformer {
                 members_array.push(synthetic_static_block);
             }
 
-            for (i, &member) in nodes.iter().enumerate() {
-                if i as isize != class_this_idx && i as isize != named_eval_idx {
-                    members_array.push(member);
-                }
-            }
+            members_array.extend(
+                nodes.iter().enumerate().filter_map(
+                    |(i, &member)| {
+                        if i as isize != class_this_idx && i as isize != named_eval_idx { Some(member) } else { None }
+                    },
+                ),
+            );
             members = self.factory().new_node_list(members_array);
             members.loc.set(node.member_list().unwrap().loc.get());
         }
@@ -663,13 +665,7 @@ impl classFieldsTransformer {
             let body = body_node.as_block();
 
             // Copy prologue
-            for &stmt in body.statements.nodes() {
-                if ast::is_prologue_directive(stmt) {
-                    statements.push(stmt);
-                } else {
-                    break;
-                }
-            }
+            statements.extend(body.statements.nodes().iter().copied().take_while(|&stmt| ast::is_prologue_directive(stmt)));
             let mut statement_offset = statements.len();
 
             let super_path = find_super_statement_index_path(body.statements.nodes(), statement_offset);
@@ -738,16 +734,19 @@ impl classFieldsTransformer {
 
     // classfields.go:2637
     // addPropertyOrClassStaticBlockStatements generates assignment statements for property initializers.
-    pub(crate) fn add_property_or_class_static_block_statements(&self, mut statements: Vec<P<Node>>, properties: &[P<Node>], receiver: P<Node>) -> Vec<P<Node>> {
-        for &property in properties {
+    pub(crate) fn add_property_or_class_static_block_statements(
+        &self,
+        mut statements: Vec<P<Node>>,
+        properties: &[P<Node>],
+        receiver: P<Node>,
+    ) -> Vec<P<Node>> {
+        statements.extend(properties.iter().filter_map(|&property| {
             if ast::is_static(property) && !self.should_transform_private_elements_or_class_static_blocks.get() {
-                continue;
+                return None;
             }
             let statement = self.transform_property_or_class_static_block(property, receiver);
-            if let Some(statement) = statement {
-                statements.push(statement);
-            }
-        }
+            if let Some(statement) = statement { Some(statement) } else { None }
+        }));
         statements
     }
 
@@ -792,19 +791,19 @@ impl classFieldsTransformer {
     // generateInitializedPropertyExpressionsOrClassStaticBlock generates assignment expressions for property initializers.
     pub(crate) fn generate_initialized_property_expressions_or_class_static_block(&self, properties_or_class_static_blocks: &[P<Node>], receiver: P<Node>) -> Vec<P<Node>> {
         let mut expressions: Vec<P<Node>> = Vec::new();
-        for &property in properties_or_class_static_blocks {
+        expressions.extend(properties_or_class_static_blocks.iter().filter_map(|&property| {
             let expression: Option<P<Node>> = if ast::is_class_static_block_declaration(property) {
                 self.set_current_class_element_and(Some(property), Self::transform_class_static_block_declaration, property)
             } else {
                 self.transform_property(property, receiver)
             };
             let Some(expression) = expression else {
-                continue;
+                return None;
             };
             self.emit_context().set_original_ex(expression, property, true /*allowOverwrite*/);
             self.emit_context().assign_comment_and_source_map_ranges(expression, property);
-            expressions.push(expression);
-        }
+            Some(expression)
+        }));
         expressions
     }
 
@@ -1530,22 +1529,29 @@ impl classFieldsTransformer {
     // classfields.go:3400
     pub(crate) fn get_properties(&self, node: P<Node>, require_initializer: bool, is_static: bool) -> Vec<P<Node>> {
         let mut result = Vec::new();
-        for member in node.members() {
-            if ast::is_property_declaration(*member) && (!require_initializer || member.initializer().is_some()) && ast::has_static_modifier(*member) == is_static {
-                result.push(*member);
+        result.extend(node.members().iter().filter_map(|member| {
+            if ast::is_property_declaration(*member)
+                && (!require_initializer || member.initializer().is_some())
+                && ast::has_static_modifier(*member) == is_static
+            {
+                Some(*member)
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
     // classfields.go:3412
     pub(crate) fn get_static_properties_and_class_static_block(&self, node: P<Node>) -> Vec<P<Node>> {
         let mut result = Vec::new();
-        for member in node.members() {
+        result.extend(node.members().iter().filter_map(|member| {
             if ast::is_class_static_block_declaration(*member) || (ast::is_property_declaration(*member) && ast::has_static_modifier(*member)) {
-                result.push(*member);
+                Some(*member)
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 }
@@ -1553,12 +1559,7 @@ impl classFieldsTransformer {
 // classfields.go:3423
 // classHasClassThisAssignment checks if a class has a static block that is a class-this assignment.
 pub(crate) fn class_has_class_this_assignment(emit_context: P<EmitContext>, node: P<Node>) -> bool {
-    for member in node.members() {
-        if is_class_this_assignment_block(emit_context, *member) {
-            return true;
-        }
-    }
-    false
+    node.members().iter().any(|member| is_class_this_assignment_block(emit_context, *member))
 }
 
 // classfields.go:3432

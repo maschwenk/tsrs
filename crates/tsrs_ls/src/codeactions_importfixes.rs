@@ -71,7 +71,7 @@ fn get_import_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> Resul
     }
 
     let mut actions = Vec::new();
-    for fix_info in &info {
+    actions.extend(info.iter().filter_map(|fix_info| {
         let (edits, description, ok) = fix_info.fix.edits(
             ctx,
             fix_context.source_file,
@@ -82,14 +82,16 @@ fn get_import_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> Resul
         );
 
         if ok {
-            actions.push(CodeAction {
+            Some(CodeAction {
                 description,
                 changes: edits,
                 fix_id: IMPORT_FIX_ID.to_string(),
                 fix_all_description: diagnostics::Add_all_missing_imports.localize(&[]),
-            });
+            })
+        } else {
+            None
         }
-    }
+    }));
     Ok(actions)
 }
 
@@ -102,11 +104,7 @@ fn get_all_import_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> R
     let all_diagnostics = fix_context.program.get_semantic_diagnostics(ctx, Some(fix_context.source_file));
 
     let mut import_diags: Vec<P<Diagnostic>> = Vec::new();
-    for diag in all_diagnostics {
-        if is_fixable_diagnostic(diag, import_fix_error_codes()) {
-            import_diags.push(diag);
-        }
-    }
+    import_diags.extend(all_diagnostics.into_iter().filter_map(|diag| if is_fixable_diagnostic(diag, import_fix_error_codes()) { Some(diag) } else { None }));
 
     if import_diags.is_empty() {
         return Ok(None);
@@ -190,18 +188,16 @@ fn get_fix_infos(ch: &mut Checker, fix_context: &CodeFixContext, error_code: i32
         let symbol_names = get_symbol_names_to_import(fix_context.source_file, ch, symbol_token, &compiler_options);
 
         let mut all_type_only_fixes: Vec<fixInfo> = Vec::new();
-        for sn in &symbol_names {
+        all_type_only_fixes.extend(symbol_names.iter().filter_map(|sn| {
             if !sn.is_type_only {
-                continue;
+                return None;
             }
             if let Some(fix) = get_type_only_promotion_fix(fix_context.source_file, symbol_token, &sn.name, ch) {
-                all_type_only_fixes.push(fixInfo {
-                    fix: Arc::new(fix),
-                    symbol_name: sn.name.clone(),
-                    is_jsx_namespace_fix: false,
-                });
+                Some(fixInfo { fix: Arc::new(fix), symbol_name: sn.name.clone(), is_jsx_namespace_fix: false })
+            } else {
+                None
             }
-        }
+        }));
 
         // For JSX opening tags, there can be separate type-only errors for both the tag name
         // identifier and the JSX namespace identifier. When both produce valid fixes, we
@@ -245,9 +241,11 @@ fn get_fixes_info_for_umd_import(token: P<Node>, view: &View, ch: &mut Checker) 
     let is_valid_type_only_use_site = ast::is_valid_type_only_alias_use_site(token);
 
     let mut result = Vec::new();
-    for fix in view.get_fixes(&export, false, is_valid_type_only_use_site, None) {
-        result.push(fixInfo { fix, symbol_name: umd_symbol.name().to_string(), is_jsx_namespace_fix: false });
-    }
+    result.extend(view.get_fixes(&export, false, is_valid_type_only_use_site, None).into_iter().map(|fix| fixInfo {
+        fix,
+        symbol_name: umd_symbol.name().to_string(),
+        is_jsx_namespace_fix: false,
+    }));
     result
 }
 
@@ -320,13 +318,11 @@ fn get_fixes_info_for_non_umd_import(fix_context: &CodeFixContext, symbol_token:
             }
 
             let fixes = view.get_fixes(export, is_jsx_tag_name, is_valid_type_only_use_site, Some(usage_position));
-            for fix in fixes {
-                all_info.push(fixInfo {
-                    fix,
-                    symbol_name: symbol_name.clone(),
-                    is_jsx_namespace_fix: symbol_name != symbol_token.text(),
-                });
-            }
+            all_info.extend(fixes.into_iter().map(|fix| fixInfo {
+                fix,
+                symbol_name: symbol_name.clone(),
+                is_jsx_namespace_fix: symbol_name != symbol_token.text(),
+            }));
         }
     }
 

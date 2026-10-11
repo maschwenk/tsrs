@@ -198,9 +198,7 @@ fn is_ascii_digit(ch: u8) -> bool {
 // organizeimports.go:185
 fn ascii_digit_run_end(s: &[u8]) -> usize {
     let mut i = 0;
-    while i < s.len() && is_ascii_digit(s[i]) {
-        i += 1;
-    }
+    i += (i..s.len()).take_while(|&index| is_ascii_digit(s[index])).count();
     i
 }
 
@@ -552,11 +550,11 @@ fn detect_named_import_organization_by_sort_worker(
     }
 
     let mut named_imports_by_decl: Vec<&'static [P<Node>]> = Vec::with_capacity(import_decls_with_named.len());
-    for &imp in &import_decls_with_named {
+    named_imports_by_decl.extend(import_decls_with_named.iter().map(|&imp| {
         let clause = imp.as_import_declaration().import_clause.unwrap().as_import_clause();
         let named_imports = clause.named_bindings.unwrap().as_named_imports();
-        named_imports_by_decl.push(named_imports.elements.nodes());
-    }
+        named_imports.elements.nodes()
+    }));
 
     if !both_named_imports || types_to_test.is_empty() {
         let names_list: Vec<Vec<String>> = named_imports_by_decl
@@ -607,13 +605,7 @@ fn detect_named_import_organization_by_sort_worker(
     }
 
     for &best_type_order in types_to_test {
-        let mut is_best = true;
-        for &test_type_order in types_to_test {
-            if diff_of(&best_diff, test_type_order) < diff_of(&best_diff, best_type_order) {
-                is_best = false;
-                break;
-            }
-        }
+        let is_best = !(types_to_test.iter().any(|&test_type_order| diff_of(&best_diff, test_type_order) < diff_of(&best_diff, best_type_order)));
         if is_best {
             return Some(NamedImportSortResult {
                 named_import_comparer: best_comparer.get(&best_type_order).cloned(),
@@ -643,17 +635,13 @@ pub fn detect_module_specifier_case_by_sort(
     comparers_to_test: &[StringComparer],
 ) -> (Option<StringComparer>, bool) {
     let mut module_specifiers_by_group: Vec<Vec<String>> = Vec::with_capacity(import_decls_by_group.len());
-    for import_group in import_decls_by_group {
+    module_specifiers_by_group.extend(import_decls_by_group.iter().map(|import_group| {
         let mut module_names: Vec<String> = Vec::with_capacity(import_group.len());
-        for &decl in import_group {
-            if let Some(expr) = get_module_specifier_expression(decl) {
-                module_names.push(get_external_module_name(Some(expr)).to_string());
-            } else {
-                module_names.push(String::new());
-            }
-        }
-        module_specifiers_by_group.push(module_names);
-    }
+        module_names.extend(import_group.iter().map(|&decl| {
+            if let Some(expr) = get_module_specifier_expression(decl) { get_external_module_name(Some(expr)).to_string() } else { String::new() }
+        }));
+        module_names
+    }));
     let result = detect_case_sensitivity_by_sort(&module_specifiers_by_group, comparers_to_test);
     (result.comparer, result.is_sorted)
 }
@@ -690,11 +678,7 @@ fn detect_case_sensitivity_by_sort(original_groups: &[Vec<String>], comparers_to
 // organizeimports.go:651
 fn measure_sortedness<T>(arr: &[T], comparer: impl Fn(&T, &T) -> i32) -> usize {
     let mut i = 0;
-    for j in 0..arr.len().saturating_sub(1) {
-        if comparer(&arr[j], &arr[j + 1]) > 0 {
-            i += 1;
-        }
-    }
+    i += arr.windows(2).filter(|pair| comparer(&pair[0], &pair[1]) > 0).count();
     i
 }
 

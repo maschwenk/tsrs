@@ -62,7 +62,7 @@ fn normalize(v: &Value, ids: &mut Ids, in_symbol: bool) -> Value {
             // Visit keys sorted so first-appearance numbering does not depend on field order.
             let mut keys: Vec<&String> = o.keys().collect();
             keys.sort();
-            for k in keys {
+            out.extend(keys.into_iter().map(|k| {
                 let child = &o[k];
                 let nv = match (k.as_str(), child) {
                     ("id", Value::Number(n)) if in_symbol => ids.sym(*n),
@@ -79,8 +79,8 @@ fn normalize(v: &Value, ids: &mut Ids, in_symbol: bool) -> Value {
                     }
                     (key, _) => normalize(child, ids, SYMBOL_KEYS.contains(&key)),
                 };
-                out.insert(k.clone(), nv);
-            }
+                (k.clone(), nv)
+            }));
             Value::Object(out)
         }
         Value::Array(a) => Value::Array(a.iter().map(|x| normalize(x, ids, in_symbol)).collect()),
@@ -128,9 +128,7 @@ impl S {
         let mut o = tsrs_core::collections::OrderedMap::default();
         o.insert("snapshot".to_string(), Value::Number(self.snapshot));
         o.insert("project".to_string(), Value::String(self.project.clone()));
-        for (k, v) in extra {
-            o.insert(k.to_string(), v.clone());
-        }
+        o.extend(extra.iter().map(|(k, v)| (k.to_string(), v.clone())));
         Value::Object(o)
     }
 
@@ -166,9 +164,7 @@ impl S {
 
 pub(super) fn obj(pairs: &[(&str, Value)]) -> Value {
     let mut o = tsrs_core::collections::OrderedMap::default();
-    for (k, v) in pairs {
-        o.insert(k.to_string(), v.clone());
-    }
+    o.extend(pairs.iter().map(|(k, v)| (k.to_string(), v.clone())));
     Value::Object(o)
 }
 
@@ -347,10 +343,12 @@ fn session_responses_match_pinned_go() {
     let ours: HashMap<String, Value> = shapes().into_iter().collect();
     if let Ok(out) = std::env::var("TSRS_CHECKER_SHAPES_OUT") {
         let mut text = String::new();
-        for (q, r) in &ours {
+        text = ours.iter().fold(text, |mut text, (q, r)| {
             text.push_str(&json::marshal(&obj(&[("q", Value::String(q.clone())), ("r", r.clone())])).unwrap());
             text.push('\n');
-        }
+
+            text
+        });
         std::fs::write(out, text).unwrap();
     }
     let mut diffs = Vec::new();
@@ -458,13 +456,13 @@ fn type_flags_and_tuple_targets_match_pinned_go() {
     let session = Session::new(SessionOptions::new("/".to_string(), bundled::lib_path(), fs, false));
     let s = S { session: session.clone(), snapshot: 0.0, project: String::new(), lines: Vec::new() };
     let mut snaps = HashMap::new();
-    for fx in ["t", "m"] {
+    snaps.extend((["t", "m"]).into_iter().map(|fx| {
         let r = s.call("createSnapshot", &obj(&[("openProjects", Value::Array(vec![Value::String(format!("/{fx}/tsconfig.json"))]))])).unwrap();
         let Value::Number(snap) = get(&r, "snapshot") else { panic!() };
         let Value::Array(projects) = get(&r, "projects") else { panic!() };
         let Value::String(project) = get(&projects[0], "id") else { panic!() };
-        snaps.insert(fx, (snap, project));
-    }
+        (fx, (snap, project))
+    }));
     let mut ours = Vec::new();
     for line in CASES.lines().filter(|l| !l.is_empty()) {
         let f: Vec<&str> = line.split('\t').collect();

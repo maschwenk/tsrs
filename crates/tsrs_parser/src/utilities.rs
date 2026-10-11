@@ -30,17 +30,11 @@ pub fn get_jsdoc_comment_ranges(_f: &mut NodeFactory, comment_ranges: &[CommentR
         | Kind::ParenthesizedExpression
         | Kind::VariableDeclaration
         | Kind::ExportSpecifier => {
-            for comment_range in scanner::get_trailing_comment_ranges(text, node.pos()) {
-                comment_ranges.push(comment_range);
-            }
-            for comment_range in scanner::get_leading_comment_ranges(text, node.pos()) {
-                comment_ranges.push(comment_range);
-            }
+            comment_ranges.extend(scanner::get_trailing_comment_ranges(text, node.pos()));
+            comment_ranges.extend(scanner::get_leading_comment_ranges(text, node.pos()));
         }
         _ => {
-            for comment_range in scanner::get_leading_comment_ranges(text, node.pos()) {
-                comment_ranges.push(comment_range);
-            }
+            comment_ranges.extend(scanner::get_leading_comment_ranges(text, node.pos()));
         }
     }
     // Keep if the comment starts with '/**' but not if it is '/**/'

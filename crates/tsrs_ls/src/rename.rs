@@ -92,18 +92,22 @@ impl LanguageService {
     pub fn get_rename_info(&self, ctx: &Context, new_name: &str, document_uri: &lsproto::DocumentUri, position: lsproto::Position) -> RenameInfo {
         let (program, source_file) = self.get_program_and_file(document_uri);
         let positions = self.converters.from_lsp_position_for_source_file(source_file, position, Feature::Rename);
-        for mapped in positions {
+        if let Some(result) = positions.into_iter().find_map(|mapped| {
             if !mapped.fidelity.is_exact() {
-                continue;
+                return None;
             }
             let source_file = mapped.script;
             let mut node = astnav::get_touching_property_name(source_file, mapped.position);
             node = crate::utilities::get_adjusted_location(node, true /*forRename*/, Some(source_file));
             if node_is_eligible_for_rename(Some(node)) {
                 if let Some(rename_info) = self.get_rename_info_for_node(ctx, new_name, node, source_file, program) {
-                    return rename_info;
+                    return Some(rename_info);
                 }
             }
+
+            None
+        }) {
+            return result;
         }
         get_rename_info_error(ctx, &diagnostics::You_cannot_rename_this_element)
     }
@@ -140,24 +144,24 @@ impl LanguageService {
         let quote_preference = lsutil::get_quote_preference(source_file, self.user_preferences());
         let use_aliases_for_rename = self.user_preferences().use_aliases_for_rename.is_true_or_unknown();
 
-        for entry in &entries {
+        mapped_edits.extend(entries.iter().filter_map(|entry| {
             let uri = self.get_file_name_of_entry(entry);
             if self.user_preferences().allow_rename_of_import_path != Tristate::True
                 && entry.node.is_some_and(|node| ast::is_string_literal_like(node) && ast::try_get_import_from_module_specifier(node).is_some())
             {
-                continue;
+                return None;
             }
             let Some(rng) = self.rename_edit_range(entry) else {
                 // The occurrence lies outside a verbatim span of a content-mapped file, so it cannot be
                 // written back to the original text. Skip it and keep renaming the remaining occurrences.
-                continue;
+                return None;
             };
             let text_edit = lsproto::TextEdit {
                 range: rng,
                 new_text: self.get_text_for_rename(original_node, entry, &params.new_name, ch, quote_preference, use_aliases_for_rename),
             };
-            mapped_edits.push(mappedRenameEdit { uri, edit: text_edit });
-        }
+            Some(mappedRenameEdit { uri, edit: text_edit })
+        }));
         let Some(changes) = deduplicate_rename_edits(mapped_edits) else {
             return Ok(lsproto::WorkspaceEditOrNull::default());
         };
@@ -247,11 +251,22 @@ impl LanguageService {
     // renameBlockedReason returns a non-nil diagnostic message if the rename should be blocked
     // because the symbol is a library definition, a default keyword, or would cross node_modules boundaries.
     // rename.go:229
-    fn rename_blocked_reason(&self, source_file: P<SourceFile>, node: P<Node>, symbol: P<Symbol>, ch: &mut Checker, program: &'static Program) -> Option<&'static Message> {
-        for &declaration in symbol.declarations() {
+    fn rename_blocked_reason(
+        &self,
+        source_file: P<SourceFile>,
+        node: P<Node>,
+        symbol: P<Symbol>,
+        ch: &mut Checker,
+        program: &'static Program,
+    ) -> Option<&'static Message> {
+        if let Some(result) = symbol.declarations().iter().find_map(|&declaration| {
             if is_defined_in_library_file(program, declaration) {
-                return Some(&diagnostics::You_cannot_rename_elements_that_are_defined_in_the_standard_TypeScript_library);
+                Some(Some(&diagnostics::You_cannot_rename_elements_that_are_defined_in_the_standard_TypeScript_library))
+            } else {
+                None
             }
+        }) {
+            return result;
         }
 
         // Cannot rename `default` as in `import { default as foo } from "./someModule"`
@@ -295,20 +310,28 @@ fn would_rename_in_other_node_modules(original_file: P<SourceFile>, symbol: P<Sy
     let original_package = tsrs_module::parse_node_module_from_path(original_file.file_name(), false /*isFolder*/);
     if original_package.is_empty() {
         // Original source file is not in node_modules.
-        for &declaration in declarations {
+        if let Some(result) = declarations.iter().find_map(|&declaration| {
             if is_inside_node_modules(ast::get_source_file_of_node(declaration).unwrap().file_name()) {
-                return Some(&diagnostics::You_cannot_rename_elements_that_are_defined_in_a_node_modules_folder);
+                Some(Some(&diagnostics::You_cannot_rename_elements_that_are_defined_in_a_node_modules_folder))
+            } else {
+                None
             }
+        }) {
+            return result;
         }
         return None;
     }
 
     // Original source file is in node_modules.
-    for &declaration in declarations {
+    if let Some(result) = declarations.iter().find_map(|&declaration| {
         let decl_package = tsrs_module::parse_node_module_from_path(ast::get_source_file_of_node(declaration).unwrap().file_name(), false /*isFolder*/);
         if !decl_package.is_empty() && decl_package != original_package {
-            return Some(&diagnostics::You_cannot_rename_elements_that_are_defined_in_another_node_modules_folder);
+            return Some(Some(&diagnostics::You_cannot_rename_elements_that_are_defined_in_another_node_modules_folder));
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }

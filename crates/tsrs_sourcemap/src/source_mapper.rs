@@ -63,16 +63,19 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
         source_map.sources.iter().map(|source| tspath::get_normalized_absolute_path(source, &source_root)).collect();
     let use_case_sensitive_file_names = host.use_case_sensitive_file_names();
     let mut source_to_source_index_map = FxHashMap::with_capacity_and_hasher(source_file_absolute_paths.len(), Default::default());
-    for (i, source) in source_file_absolute_paths.iter().enumerate() {
-        source_to_source_index_map.insert(tspath::get_canonical_file_name(source, use_case_sensitive_file_names), i as SourceIndex);
-    }
+    source_to_source_index_map.extend(
+        source_file_absolute_paths
+            .iter()
+            .enumerate()
+            .map(|(i, source)| (tspath::get_canonical_file_name(source, use_case_sensitive_file_names), i as SourceIndex)),
+    );
 
     let mut decoded_mappings: Vec<MappedPosition> = Vec::new();
     let mut source_mappings: FxHashMap<SourceIndex, Vec<SourceMappedPosition>> = FxHashMap::default();
 
     // getDecodedMappings()
     let mut decoder = decode_mappings(&source_map.mappings);
-    for mapping in decoder.values() {
+    decoded_mappings.extend(decoder.values().map(|mapping| {
         // processMapping()
         let mut generated_position = -1;
         let line_info = host.get_ecma_line_info(&generated_absolute_file_path);
@@ -101,13 +104,8 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
             }
         }
 
-        decoded_mappings.push(MappedPosition {
-            generated_position,
-            source_index: mapping.source_index,
-            source_position,
-            name_index: mapping.name_index,
-        });
-    }
+        MappedPosition { generated_position, source_index: mapping.source_index, source_position, name_index: mapping.name_index }
+    }));
     if decoder.error().is_some() {
         decoded_mappings = Vec::new();
     }
@@ -239,11 +237,15 @@ pub fn get_document_position_mapper(host: &dyn Host, generated_file_name: &str) 
         possible_map_locations.push(map_file_name);
     }
     possible_map_locations.push(format!("{generated_file_name}.map"));
-    for location in &possible_map_locations {
+    if let Some(result) = possible_map_locations.iter().find_map(|location| {
         let map_file_name = tspath::get_normalized_absolute_path(location, &tspath::get_directory_path(generated_file_name));
         if let Some(map_file_contents) = host.read_file(&map_file_name) {
-            return convert_document_to_source_mapper(host, &map_file_contents, &map_file_name);
+            return Some(convert_document_to_source_mapper(host, &map_file_contents, &map_file_name));
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -300,10 +302,12 @@ pub(crate) fn try_parse_base64_url(url: &str) -> (&str, bool) {
     let Some(url) = url.strip_prefix("base64,") else {
         return ("", true);
     };
-    for r in url.chars() {
-        if !(stringutil::is_ascii_letter(r) || stringutil::is_digit(r) || r == '+' || r == '/' || r == '=') {
-            return ("", true);
-        }
+    if let Some(result) = url
+        .chars()
+        .into_iter()
+        .find_map(|r| if !(stringutil::is_ascii_letter(r) || stringutil::is_digit(r) || r == '+' || r == '/' || r == '=') { Some(("", true)) } else { None })
+    {
+        return result;
     }
     (url, true)
 }
@@ -328,7 +332,7 @@ fn base64_std_decode_string(s: &str) -> Option<Vec<u8>> {
             return None;
         }
         let mut v: u32 = 0;
-        for (i, &c) in chunk.iter().enumerate() {
+        v = chunk.iter().enumerate().try_fold(v, |mut v, (i, &c)| {
             let d = if i >= 4 - padding {
                 0
             } else {
@@ -339,7 +343,8 @@ fn base64_std_decode_string(s: &str) -> Option<Vec<u8>> {
                 d as u32
             };
             v = (v << 6) | d;
-        }
+            Some(v)
+        })?;
         out.push((v >> 16) as u8);
         if padding < 2 {
             out.push((v >> 8) as u8);

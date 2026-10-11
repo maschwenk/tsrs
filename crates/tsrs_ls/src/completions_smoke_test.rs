@@ -169,10 +169,10 @@ fn read_expected(name: &str) -> OrderedMap<String, Value> {
     let Ok(text) = std::fs::read_to_string(format!("{DIR}/{name}.out")) else {
         return expected;
     };
-    for line in text.lines() {
+    expected.extend(text.lines().map(|line| {
         let v = json::unmarshal(line).unwrap();
-        expected.insert(str_field(&v, "id").to_string(), v);
-    }
+        (str_field(&v, "id").to_string(), v)
+    }));
     expected
 }
 

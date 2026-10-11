@@ -308,9 +308,7 @@ pub fn same_map_nodes(nodes: &'static [P<Node>], mut f: impl FnMut(P<Node>) -> P
             let mut result: Vec<P<Node>> = Vec::with_capacity(nodes.len());
             result.extend_from_slice(&nodes[..i]);
             result.push(mapped);
-            for &rest in &nodes[i + 1..] {
-                result.push(f(rest));
-            }
+            result.extend(nodes[i + 1..].iter().map(|&rest| f(rest)));
             return alloc_slice(&result);
         }
     }

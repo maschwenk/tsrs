@@ -98,9 +98,7 @@ impl T {
         }
         let s = sub.state.into_inner().unwrap();
         let mut me = self.state.lock().unwrap();
-        for l in s.logs {
-            me.logs.push(format!("{}: {}", sub.name, l));
-        }
+        me.logs.extend(s.logs.into_iter().map(|l| format!("{}: {}", sub.name, l)));
         if s.failed {
             me.failed = true;
         }

@@ -55,11 +55,15 @@ impl CodeAction {
         if c != 0 {
             return c;
         }
-        for (i, edit) in self.changes.iter().enumerate() {
+        if let Some(result) = self.changes.iter().enumerate().find_map(|(i, edit)| {
             let c = edit.compare(&b.changes[i]);
             if c != 0 {
-                return c;
+                return Some(c);
             }
+
+            None
+        }) {
+            return result;
         }
         0
     }
@@ -106,10 +110,10 @@ impl LanguageService {
         if let Some(only) = &params.context.only {
             for &kind in only {
                 let matching_kinds = get_organize_imports_actions_for_kind(kind);
-                for matching_kind in matching_kinds {
+                actions.extend(matching_kinds.into_iter().map(|matching_kind| {
                     let organize_action = self.create_organize_imports_action(ctx, program, file, matching_kind);
-                    actions.push(organize_action);
-                }
+                    organize_action
+                }));
 
                 if is_fix_all_kind(kind) {
                     let fix_all_action = self.create_fix_all_action(ctx, program, file, &params.text_document.uri)?;
@@ -290,10 +294,10 @@ impl LanguageService {
         }
 
         let mut lsp_changes: OrderedMap<lsproto::DocumentUri, Vec<lsproto::TextEdit>> = OrderedMap::default();
-        for (file_name, edits) in changes {
+        lsp_changes.extend(changes.into_iter().map(|(file_name, edits)| {
             let file_uri = lsconv::file_name_to_document_uri(&file_name);
-            lsp_changes.insert(file_uri, edits);
-        }
+            (file_uri, edits)
+        }));
 
         lsproto::CommandOrCodeAction {
             code_action: Some(lsproto::CodeAction {
@@ -313,16 +317,7 @@ impl LanguageService {
 // syntactic, suggestion, declaration) to match ProvideDiagnostics.
 fn has_multiple_fixable_diagnostics(ctx: &Context, program: &'static Program, file: P<SourceFile>, error_codes: &[i32]) -> bool {
     let all_diags = get_all_diagnostics(ctx, program, file);
-    let mut count = 0;
-    for d in all_diags {
-        if is_fixable_diagnostic(d, error_codes) {
-            count += 1;
-            if count >= 2 {
-                return true;
-            }
-        }
-    }
-    false
+    all_diags.into_iter().filter(|d| is_fixable_diagnostic(*d, error_codes)).nth(1).is_some()
 }
 
 // codeactions.go:213
@@ -356,12 +351,7 @@ fn wants_quick_fixes(only: Option<&[lsproto::CodeActionKind]>) -> bool {
     if only.is_empty() {
         return true;
     }
-    for &kind in only {
-        if kind.contains(lsproto::CodeActionKind::QuickFix) {
-            return true;
-        }
-    }
-    false
+    only.iter().any(|&kind| kind.contains(lsproto::CodeActionKind::QuickFix))
 }
 
 // codeactions.go:299
@@ -385,11 +375,11 @@ fn get_organize_imports_actions_for_kind(requested_kind: lsproto::CodeActionKind
     ];
 
     let mut result = Vec::new();
-    for organize_kind in organize_imports_kinds {
-        if requested_kind.contains(organize_kind) {
-            result.push(organize_kind);
-        }
-    }
+    result.extend(organize_imports_kinds.into_iter().filter_map(
+        |organize_kind| {
+            if requested_kind.contains(organize_kind) { Some(organize_kind) } else { None }
+        },
+    ));
 
     if result.contains(&requested_kind) {
         return vec![requested_kind];

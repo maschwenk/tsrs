@@ -243,10 +243,11 @@ mod tests {
         for len in 0..=9 {
             for mut code in 0..3usize.pow(len) {
                 bytes.clear();
-                for _ in 0..len {
-                    bytes.push(alphabet[code % 3]);
+                bytes.extend((0..len).map(|_| {
+                    let byte = alphabet[code % 3];
                     code /= 3;
-                }
+                    byte
+                }));
                 let name = std::str::from_utf8(&bytes).unwrap();
                 assert_eq!(valid_path(name), by_elements(name), "{name}");
             }

@@ -92,14 +92,12 @@ fn deep_nesting_is_bounded() {
 fn syntax_errors_match_pinned_go_text() {
     let cases: Vec<Value> = serde_json::from_str(include_str!("fixtures/go_syntax_oracle.json")).unwrap();
     let mut mismatches = Vec::new();
-    for case in &cases {
+    mismatches.extend(cases.iter().filter_map(|case| {
         let input = hex(case["input"].as_str().unwrap());
         let go = case["error"].as_str().unwrap();
         let ours = tsrs_api_transport::strictjson::validate(&input).err().unwrap_or_default();
-        if ours != go {
-            mismatches.push(format!("{:?}\n   go: {go}\n  ours: {ours}", String::from_utf8_lossy(&input)));
-        }
-    }
+        if ours != go { Some(format!("{:?}\n   go: {go}\n  ours: {ours}", String::from_utf8_lossy(&input))) } else { None }
+    }));
     assert!(cases.len() >= 100, "{}", cases.len());
     assert!(mismatches.is_empty(), "{} of {} differ:\n{}", mismatches.len(), cases.len(), mismatches.join("\n"));
 }

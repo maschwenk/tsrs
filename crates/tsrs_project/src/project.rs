@@ -535,17 +535,13 @@ impl Project {
     // project.go:477
     pub(crate) fn has_potential_project_reference(&self, project_tree_request: &ProjectTreeRequest) -> bool {
         if let Some(command_line) = self.command_line {
-            for path in command_line.resolved_project_reference_paths() {
-                if project_tree_request.is_project_referenced(&self.to_path(path)) {
-                    return true;
-                }
+            if command_line.resolved_project_reference_paths().iter().any(|path| project_tree_request.is_project_referenced(&self.to_path(path))) {
+                return true;
             }
         } else if let Some(potential_project_references) = &self.potential_project_references {
-            #[expect(clippy::iter_over_hash_type, reason = "pure membership any(); Go ranges the set too")]
-            for path in potential_project_references.keys() {
-                if project_tree_request.is_project_referenced(path) {
-                    return true;
-                }
+            // pure membership any(); Go ranges the set too
+            if potential_project_references.keys().iter().any(|path| project_tree_request.is_project_referenced(path)) {
+                return true;
             }
         }
         false
@@ -680,11 +676,7 @@ impl Project {
                 let source_files = program.get_source_files();
                 let _ = write!(builder, "\tFiles ({})\n", source_files.len());
                 if write_file_names {
-                    for source_file in source_files {
-                        builder.push_str("\t\t");
-                        builder.push_str(source_file.file_name());
-                        builder.push('\n');
-                    }
+                    builder.extend(source_files.iter().flat_map(|source_file| ["\t\t", source_file.file_name(), "\n"]));
                     // !!!
                     // if writeFileExplanation {}
                 }

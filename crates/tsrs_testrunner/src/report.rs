@@ -63,11 +63,11 @@ pub fn load_summary(path: &Path) -> Summary {
     let mut summary = Summary::new();
     let Ok(text) = tsrs_core::utf8::read_to_string(path) else { return summary };
     let Ok(v) = serde_json::from_str::<Value>(&text) else { return summary };
-    for t in v["tests"].as_array().into_iter().flatten() {
+    summary.extend(v["tests"].as_array().into_iter().flatten().filter_map(|t| {
         let s = |k: &str| t[k].as_str().unwrap_or("").to_string();
-        let Some(class) = Class::parse(t["class"].as_str().unwrap_or("")) else { continue };
+        let Some(class) = Class::parse(t["class"].as_str().unwrap_or("")) else { return None };
         let extra = |k: &str| t[k].as_str().and_then(Class::parse).map(|c| (c, s(&format!("{k}_diff"))));
-        summary.insert(
+        Some((
             s("id"),
             Entry {
                 class,
@@ -82,8 +82,8 @@ pub fn load_summary(path: &Path) -> Summary {
                 jsmap: extra("js.map"),
                 sourcemap: extra("sourcemap.txt"),
             },
-        );
-    }
+        ))
+    }));
     summary
 }
 
@@ -111,13 +111,11 @@ pub fn write_summary(dir: &Path, json_path: &Path, summary: &Summary) {
     let _ = std::fs::create_dir_all(dir);
     let tots = totals(summary);
     let mut totals_json = serde_json::Map::new();
-    for (suite, counts) in &tots {
+    totals_json.extend(tots.iter().map(|(suite, counts)| {
         let mut m = serde_json::Map::new();
-        for c in Class::ALL {
-            m.insert(c.as_str().to_string(), json!(counts.get(&c).copied().unwrap_or(0)));
-        }
-        totals_json.insert(suite.clone(), Value::Object(m));
-    }
+        m.extend(Class::ALL.into_iter().map(|c| (c.as_str().to_string(), json!(counts.get(&c).copied().unwrap_or(0)))));
+        (suite.clone(), Value::Object(m))
+    }));
     let tests: Vec<Value> = summary
         .iter()
         .map(|(id, e)| {
@@ -145,13 +143,11 @@ pub fn write_summary(dir: &Path, json_path: &Path, summary: &Summary) {
             continue;
         }
         let mut m = serde_json::Map::new();
-        for (suite, counts) in &tots {
+        m.extend(tots.iter().map(|(suite, counts)| {
             let mut cm = serde_json::Map::new();
-            for c in Class::ALL {
-                cm.insert(c.as_str().to_string(), json!(counts.get(&c).copied().unwrap_or(0)));
-            }
-            m.insert(suite.clone(), Value::Object(cm));
-        }
+            cm.extend(Class::ALL.into_iter().map(|c| (c.as_str().to_string(), json!(counts.get(&c).copied().unwrap_or(0)))));
+            (suite.clone(), Value::Object(cm))
+        }));
         doc[format!("{ext}_totals")] = Value::Object(m);
     }
     if let Some(parent) = json_path.parent() {
@@ -160,12 +156,15 @@ pub fn write_summary(dir: &Path, json_path: &Path, summary: &Summary) {
     let _ = std::fs::write(json_path, serde_json::to_string_pretty(&doc).unwrap());
     for c in Class::ALL {
         let mut s = String::new();
-        for (id, e) in summary {
-            if e.class == c {
-                s.push_str(id);
-                s.push('\n');
-            }
-        }
+        s.extend(
+            summary
+                .iter()
+                .filter(|(id, e)| {
+                    let _ = id;
+                    e.class == c
+                })
+                .flat_map(|(id, _)| [id.as_str(), "\n"]),
+        );
         let _ = std::fs::write(dir.join(format!("{}.txt", c.as_str())), s);
     }
     // `<ext>-<class>.txt` name lists, written once any entry has that baseline.
@@ -175,12 +174,15 @@ pub fn write_summary(dir: &Path, json_path: &Path, summary: &Summary) {
         }
         for c in Class::ALL {
             let mut s = String::new();
-            for (id, e) in summary {
-                if e.extra(ext).is_some_and(|x| x.0 == c) {
-                    s.push_str(id);
-                    s.push('\n');
-                }
-            }
+            s.extend(
+                summary
+                    .iter()
+                    .filter(|(id, e)| {
+                        let _ = id;
+                        e.extra(ext).is_some_and(|x| x.0 == c)
+                    })
+                    .flat_map(|(id, _)| [id.as_str(), "\n"]),
+            );
             let _ = std::fs::write(dir.join(format!("{ext}-{}.txt", c.as_str())), s);
         }
     }
@@ -229,17 +231,21 @@ fn enclosing_fn(loc: &str) -> Option<String> {
     let path = if Path::new(file).is_absolute() { Path::new(file).to_path_buf() } else { crate::compiler_runner::repo_root().join(file) };
     let text = tsrs_core::utf8::read_to_string(path).ok()?;
     let lines: Vec<&str> = text.lines().collect();
-    for l in lines[..line.min(lines.len())].iter().rev() {
+    if let Some(result) = lines[..line.min(lines.len())].iter().rev().into_iter().find_map(|l| {
         let t = l.trim_start();
         if let Some(idx) = t.find("fn ") {
             let prefix = &t[..idx];
             if prefix.is_empty() || prefix.ends_with("pub ") || prefix.ends_with(") ") || prefix.ends_with("unsafe ") || prefix.ends_with("const ") {
                 let name: String = t[idx + 3..].chars().take_while(|c| c.is_alphanumeric() || *c == '_').collect();
                 if !name.is_empty() {
-                    return Some(name);
+                    return Some(Some(name));
                 }
             }
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }

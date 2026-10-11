@@ -112,9 +112,7 @@ fn transform_component(content: &str) -> Result<(String, Value), ipc::Error> {
                 continue;
             }
             let mut end = pos + 1;
-            while end < expr_end && is_identifier_part(bytes[end]) {
-                end += 1;
-            }
+            end += (end..expr_end).take_while(|&index| is_identifier_part(bytes[index])).count();
             w.write_mapped(&content[pos..end], pos, end, Kind::Atom);
             pos = end;
         }

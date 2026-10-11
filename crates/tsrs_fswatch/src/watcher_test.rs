@@ -68,12 +68,14 @@ fn path_comparer() {
             if comparer.contains(root, path) != want {
                 failures.push(format!("contains({:?}, {:?}), ignoreCase={}: want {}", root, path, ignore_case, want));
             }
-            for to in ["/display", "/"] {
+            failures.extend((["/display", "/"]).into_iter().filter_map(|to| {
                 let rebased = comparer.rebase(path, root, to);
                 if rebased.is_some() != want || rebased.as_ref().is_some_and(|r| *r != join_path_suffix(to, suffix)) {
-                    failures.push(format!("rebase({:?}, {:?}, {:?}), ignoreCase={}: got {:?}", path, root, to, ignore_case, rebased));
+                    Some(format!("rebase({:?}, {:?}, {:?}), ignoreCase={}: got {:?}", path, root, to, ignore_case, rebased))
+                } else {
+                    None
                 }
-            }
+            }));
         }
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));

@@ -94,29 +94,33 @@ impl LanguageService {
 
         if data.keyword_filters != KeywordCompletionFilters::None {
             let keyword_completions = get_keyword_completions(data.keyword_filters, !data.inside_jsdoc_tag_type_expression && ast::is_source_file_js(file));
-            for keyword_entry in keyword_completions {
+            sorted_entries.extend(keyword_completions.into_iter().filter_map(|keyword_entry| {
                 if data.is_type_only_location && crate::utilities::is_type_keyword(scanner::string_to_token(&keyword_entry.label))
                     || !data.is_type_only_location && is_contextual_keyword_in_auto_importable_expression_space(&keyword_entry.label)
                     || !unique_names.contains(&keyword_entry.label)
                 {
                     unique_names.insert(keyword_entry.label.clone());
-                    sorted_entries.push(keyword_entry);
+                    Some(keyword_entry)
+                } else {
+                    None
                 }
-            }
+            }));
         }
 
-        for keyword_entry in get_contextual_keywords(file, context_token, position) {
+        sorted_entries.extend(get_contextual_keywords(file, context_token, position).into_iter().filter_map(|keyword_entry| {
             if !unique_names.contains(&keyword_entry.label) {
                 unique_names.insert(keyword_entry.label.clone());
-                sorted_entries.push(CompletionItem::new(keyword_entry));
+                Some(CompletionItem::new(keyword_entry))
+            } else {
+                None
             }
-        }
+        }));
 
-        for literal in &literals {
+        sorted_entries.extend(literals.iter().map(|literal| {
             let literal_entry = create_completion_item_for_literal(file, &preferences, literal);
             unique_names.insert(literal_entry.label.clone());
-            sorted_entries.push(CompletionItem::new(literal_entry));
-        }
+            CompletionItem::new(literal_entry)
+        }));
 
         if !is_checked {
             sorted_entries = self.get_js_completion_entries(ctx, file, position, &mut unique_names, sorted_entries);
@@ -287,9 +291,7 @@ impl LanguageService {
         }
 
         let mut unique_set: FxHashSet<String> = FxHashSet::with_capacity_and_hasher(uniques.len(), Default::default());
-        for name in uniques.keys() {
-            unique_set.insert(name.clone());
-        }
+        unique_set.extend(uniques.keys().map(std::clone::Clone::clone));
         Ok((unique_set, sorted_entries))
     }
 }
@@ -729,16 +731,16 @@ impl LanguageService {
 
         let type_parameters_nodes = type_node.parameters();
         let mut parameters: Vec<P<Node>> = Vec::with_capacity(type_parameters_nodes.len());
-        for &parameter in type_parameters_nodes {
-            parameters.push(factory.new_parameter_declaration(
+        parameters.extend(type_parameters_nodes.iter().map(|&parameter| {
+            factory.new_parameter_declaration(
                 None, /*modifiers*/
                 parameter.as_parameter_declaration().dot_dot_dot_token(),
                 parameter.name().unwrap().clone_node(factory),
                 None, /*questionToken*/
                 None, /*typeNode*/
                 parameter.as_parameter_declaration().initializer(),
-            ));
-        }
+            )
+        }));
 
         let mut body = factory.new_block(factory.new_node_list(Vec::new() /*nodes*/), true /*multiLine*/);
         if is_snippet {
@@ -789,9 +791,9 @@ impl LanguageService {
 
         let preferences = self.user_preferences().clone();
         let mut methods = Vec::new();
-        for &member in members {
+        methods.extend(members.iter().filter_map(|&member| {
             if !is_object_literal_method_symbol(member) {
-                continue;
+                return None;
             }
             let (display_name, _) = get_completion_entry_display_name_for_symbol(
                 file,
@@ -802,16 +804,20 @@ impl LanguageService {
                 false, /*isJsxIdentifierExpected*/
             );
             if display_name.is_empty() {
-                continue;
+                return None;
             }
             let Some(entry) = self.get_entry_for_object_literal_method_completion(ctx, type_checker, member, enclosing_declaration, file) else {
-                continue;
+                return None;
             };
-            methods.push(objectLiteralMethodSymbol {
+            Some(objectLiteralMethodSymbol {
                 symbol: member,
-                origin: symbolOriginInfo { kind: symbolOriginInfoKind::ObjectLiteralMethod, data: symbolOriginData::ObjectLiteralMethod(entry), ..Default::default() },
-            });
-        }
+                origin: symbolOriginInfo {
+                    kind: symbolOriginInfoKind::ObjectLiteralMethod,
+                    data: symbolOriginData::ObjectLiteralMethod(entry),
+                    ..Default::default()
+                },
+            })
+        }));
         methods
     }
 }
@@ -957,12 +963,13 @@ impl LanguageService {
         }
 
         let mut texts: Vec<String> = Vec::with_capacity(completion_nodes.len());
-        for node in completion_nodes {
+        texts.extend(completion_nodes.into_iter().map(|node| {
             let decorators: &[P<Node>] = if Some(node) == decorated_node { &present_modifiers.decorators } else { &[] };
             let node = ast::replace_modifiers(&change_tracker.node_factory, node, create_modifier_list(&change_tracker.node_factory, modifiers, decorators));
-            let text = snippet_printer.print_and_format_node_with_settings(ctx, node, file, change::get_format_code_settings_for_writing(self.format_options(), file));
-            texts.push(text);
-        }
+            let text =
+                snippet_printer.print_and_format_node_with_settings(ctx, node, file, change::get_format_code_settings_for_writing(self.format_options(), file));
+            text
+        }));
 
         let insert_text = texts.join(&new_line);
         if insert_text.is_empty() {
@@ -1057,9 +1064,7 @@ fn modifier_like_kind(node: Option<P<Node>>) -> Kind {
 // completions.go:2835
 fn create_modifier_list(factory: &NodeFactory, flags: ModifierFlags, decorators: &[P<Node>]) -> Option<P<ast::ModifierList>> {
     let mut nodes: Vec<P<Node>> = Vec::new();
-    for &decorator in decorators {
-        nodes.push(decorator.clone_node(factory));
-    }
+    nodes.extend(decorators.iter().map(|&decorator| decorator.clone_node(factory)));
     nodes.extend(ast::create_modifiers_from_modifier_flags(flags, |k| factory.new_modifier(k)));
     if nodes.is_empty() {
         return None;
@@ -1629,10 +1634,12 @@ fn non_alias_can_be_referenced_at_type_location(symbol: P<Symbol>, type_checker:
         return true;
     }
     if symbol.flags().intersects(SymbolFlags::Module) && seen_modules_add_if_absent(&mut seen_modules, ast::get_symbol_id(symbol)) {
-        for e in type_checker.get_exports_of_module_exported(symbol) {
-            if symbol_can_be_referenced_at_type_location(e, type_checker, seen_modules.clone()) {
-                return true;
-            }
+        if type_checker
+            .get_exports_of_module_exported(symbol)
+            .into_iter()
+            .any(|e| symbol_can_be_referenced_at_type_location(e, type_checker, seen_modules.clone()))
+        {
+            return true;
         }
     }
     false

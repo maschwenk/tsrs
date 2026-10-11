@@ -428,10 +428,8 @@ impl DiagnosticsCollection {
                 return existing;
             }
             if let Some(collisions) = self.diagnostic_collisions.get(&key) {
-                for &collision in collisions {
-                    if equal_diagnostics(collision, diagnostic) {
-                        return collision;
-                    }
+                if let Some(result) = collisions.iter().find_map(|&collision| if equal_diagnostics(collision, diagnostic) { Some(collision) } else { None }) {
+                    return result;
                 }
             }
         }
@@ -505,13 +503,8 @@ impl DiagnosticsCollection {
     pub fn get_diagnostics(&self) -> Vec<P<Diagnostic>> {
         let mut diagnostics = Vec::with_capacity(self.count);
         diagnostics.extend_from_slice(&self.non_file_diagnostics);
-        #[expect(
-            clippy::iter_over_hash_type,
-            reason = "sorted by compare_diagnostics below, which orders by file first; the stable sort keeps each file's own order"
-        )]
-        for diags in self.file_diagnostics.values() {
-            diagnostics.extend_from_slice(diags);
-        }
+        // sorted by compare_diagnostics below, which orders by file first; the stable sort keeps each file's own order
+        diagnostics.extend(self.file_diagnostics.values().flat_map(|diags| diags.iter().copied()));
         diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
         diagnostics
     }
@@ -622,8 +615,8 @@ fn compare_message_chain_size(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> i32
     if c != 0 {
         return c;
     }
-    for i in 0..c1.len() {
-        let c = compare_message_chain_size(c1[i].message_chain(), c2[i].message_chain());
+    for (i, element) in c1.iter().enumerate() {
+        let c = compare_message_chain_size((*element).message_chain(), c2[i].message_chain());
         if c != 0 {
             return c;
         }
@@ -632,13 +625,13 @@ fn compare_message_chain_size(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> i32
 }
 
 fn compare_message_chain_content(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> i32 {
-    for i in 0..c1.len() {
-        let c = compare_string_slices(c1[i].message_args(), c2[i].message_args());
+    for (i, element) in c1.iter().enumerate() {
+        let c = compare_string_slices((*element).message_args(), c2[i].message_args());
         if c != 0 {
             return c;
         }
-        if !c1[i].message_chain().is_empty() {
-            let c = compare_message_chain_content(c1[i].message_chain(), c2[i].message_chain());
+        if !(*element).message_chain().is_empty() {
+            let c = compare_message_chain_content((*element).message_chain(), c2[i].message_chain());
             if c != 0 {
                 return c;
             }
@@ -652,8 +645,8 @@ fn compare_related_info(r1: &[P<Diagnostic>], r2: &[P<Diagnostic>]) -> i32 {
     if c != 0 {
         return c;
     }
-    for i in 0..r1.len() {
-        let c = compare_diagnostics(r1[i], r2[i]);
+    for (i, element) in r1.iter().enumerate() {
+        let c = compare_diagnostics(*element, r2[i]);
         if c != 0 {
             return c;
         }

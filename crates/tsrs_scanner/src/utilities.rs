@@ -23,14 +23,8 @@ pub(crate) fn is_jsdoc_type_expression_or_child(node: P<Node>) -> bool {
     if !node.flags().intersects(NodeFlags::JSDoc | NodeFlags::Reparsed) {
         return false;
     }
-    let mut current = Some(node);
-    while let Some(c) = current {
-        if ast::is_type_node(c) {
-            return true;
-        }
-        current = c.parent();
-    }
-    false
+    let current = Some(node);
+    std::iter::successors(current, |c| c.parent()).any(ast::is_type_node)
 }
 
 fn trim_left_white_space_like(s: &str) -> &str {
@@ -54,7 +48,7 @@ pub(crate) fn normalize_jsdoc_type_source_text(text: &str) -> String {
 
     let mut result = String::with_capacity(text.len());
     let new_line = "\n";
-    for (i, &line_start) in line_starts.iter().enumerate() {
+    result = line_starts.iter().enumerate().fold(result, |mut result, (i, &line_start)| {
         if i > 0 {
             result.push_str(new_line);
         }
@@ -64,7 +58,9 @@ pub(crate) fn normalize_jsdoc_type_source_text(text: &str) -> String {
         }
         let line = text[line_start as usize..line_end].trim_end_matches(|c: char| stringutil::is_line_break(c as i32));
         result.push_str(strip_leading_jsdoc_comment(line));
-    }
+
+        result
+    });
     result
 }
 
@@ -115,13 +111,15 @@ pub fn get_text_of_jsdoc_comment(comment: Option<P<NodeList>>) -> String {
         return String::new();
     };
     let mut b = String::new();
-    for &n in comment.nodes() {
+    b = comment.nodes().iter().fold(b, |mut b, &n| {
         match n.kind() {
             Kind::JSDocText => b.push_str(n.text()),
             Kind::JSDocLink | Kind::JSDocLinkCode | Kind::JSDocLinkPlain => b.push_str(&get_text_of_node(n)),
             _ => {}
         }
-    }
+
+        b
+    });
     let trimmed_len = b.trim_end_matches(char::is_whitespace).len();
     b.truncate(trimmed_len);
     b

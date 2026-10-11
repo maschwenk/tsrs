@@ -176,9 +176,7 @@ fn verify(program: &'static Program) {
                 continue;
             }
             symbols.check(symbol.addr(), &|| format!("symbol {} in {}", symbol.name(), file.file_name()));
-            for table in [symbol.members(), symbol.exports()].into_iter().flatten() {
-                pending_symbols.extend(table.values());
-            }
+            pending_symbols.extend([symbol.members(), symbol.exports()].into_iter().flatten().flat_map(|table| table.values()));
             for &decl in symbol.declarations() {
                 nodes.check(decl.addr(), &|| format!("declaration {:?} of {}", decl.kind(), symbol.name()));
                 freed.check(decl.addr(), &|| format!("declaration {:?} of {}", decl.kind(), symbol.name()));

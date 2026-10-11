@@ -921,12 +921,11 @@ pub fn walk_up_parenthesized_types(node: impl Into<Option<P<Node>>>) -> Option<P
 
 // Walks up the parents of a node to find the containing SourceFile
 pub fn get_source_file_of_node(node: impl Into<Option<P<Node>>>) -> Option<P<SourceFile>> {
-    let mut node = node.into();
-    while let Some(n) = node {
-        if n.kind() == Kind::SourceFile {
-            return Some(n.as_source_file_p());
-        }
-        node = n.parent();
+    let node = node.into();
+    if let Some(result) =
+        std::iter::successors(node, |n| n.parent()).find_map(|n| if n.kind() == Kind::SourceFile { Some(Some(n.as_source_file_p())) } else { None })
+    {
+        return result;
     }
     None
 }
@@ -977,12 +976,9 @@ pub fn find_many_ancestors(node: impl Into<Option<P<Node>>>, callbacks: &mut [&m
 
 // Walks up the parents of a node to find the ancestor that matches the kind
 pub fn find_ancestor_kind(node: impl Into<Option<P<Node>>>, kind: Kind) -> Option<P<Node>> {
-    let mut node = node.into();
-    while let Some(n) = node {
-        if n.kind() == kind {
-            return Some(n);
-        }
-        node = n.parent();
+    let node = node.into();
+    if let Some(result) = std::iter::successors(node, |n| n.parent()).find_map(|n| if n.kind() == kind { Some(Some(n)) } else { None }) {
+        return result;
     }
     None
 }
@@ -1017,13 +1013,10 @@ pub fn find_ancestor_or_quit(node: impl Into<Option<P<Node>>>, mut callback: imp
 }
 
 pub fn is_node_descendant_of(node: impl Into<Option<P<Node>>>, ancestor: impl Into<Option<P<Node>>>) -> bool {
-    let mut node = node.into();
+    let node = node.into();
     let ancestor = ancestor.into();
-    while let Some(n) = node {
-        if Some(n) == ancestor {
-            return true;
-        }
-        node = n.parent();
+    if let Some(result) = std::iter::successors(node, |n| n.parent()).find_map(|n| if Some(n) == ancestor { Some(true) } else { None }) {
+        return result;
     }
     false
 }
@@ -1052,9 +1045,11 @@ pub fn modifier_to_flag(token: Kind) -> ModifierFlags {
 
 pub fn modifiers_to_flags(modifiers: &[P<Node>]) -> ModifierFlags {
     let mut flags = ModifierFlags::None;
-    for modifier in modifiers {
+    flags = modifiers.iter().fold(flags, |mut flags, modifier| {
         flags |= modifier_to_flag(modifier.kind());
-    }
+
+        flags
+    });
     flags
 }
 
@@ -1309,10 +1304,8 @@ pub fn get_combined_node_flags(node: P<Node>) -> NodeFlags {
 pub fn get_jsdoc_deprecated_tag(node: P<Node>) -> Option<P<Node>> {
     for &jsdoc in node.jsdoc(None) {
         if let Some(tags) = jsdoc.as_jsdoc().tags {
-            for &tag in tags.nodes() {
-                if is_jsdoc_deprecated_tag(tag) {
-                    return Some(tag);
-                }
+            if let Some(result) = tags.nodes().iter().find_map(|&tag| if is_jsdoc_deprecated_tag(tag) { Some(Some(tag)) } else { None }) {
+                return result;
             }
         }
     }
@@ -1327,12 +1320,11 @@ pub fn is_deprecated_declaration_with_cached_flags(declaration: P<Node>, combine
     }
     // Walk up to find the node that directly has the flag, since JSDoc is
     // attached to that node (e.g. VariableStatement, not VariableDeclaration).
-    let mut n = Some(declaration);
-    while let Some(node) = n {
-        if node.flags().intersects(NodeFlags::PossiblyContainsDeprecatedTag) {
-            return get_jsdoc_deprecated_tag(node).is_some();
-        }
-        n = node.parent();
+    let n = Some(declaration);
+    if let Some(result) = std::iter::successors(n, |node| node.parent())
+        .find_map(|node| if node.flags().intersects(NodeFlags::PossiblyContainsDeprecatedTag) { Some(get_jsdoc_deprecated_tag(node).is_some()) } else { None })
+    {
+        return result;
     }
     false
 }

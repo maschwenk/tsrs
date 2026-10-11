@@ -642,11 +642,7 @@ impl SpanMap {
             return Vec::new();
         }
         let mut containing: Vec<Segment> = Vec::new();
-        for &segment in &start_segments {
-            if end <= segment.original_end {
-                containing.push(segment);
-            }
-        }
+        containing.extend(start_segments.iter().filter_map(|&segment| if end <= segment.original_end { Some(segment) } else { None }));
         if !containing.is_empty() {
             let mut results = original_to_virtual_spans_in_segments(&containing, start, end, feature);
             if !results.is_empty() {
@@ -662,14 +658,14 @@ impl SpanMap {
         starts.sort_unstable();
         ends.sort_unstable();
         let mut results = Vec::with_capacity(starts.len().min(ends.len()));
-        for (i, &virtual_start) in starts.iter().enumerate() {
+        results.extend(starts.iter().enumerate().filter_map(|(i, &virtual_start)| {
             // Go `slices.BinarySearch(ends, virtualStart)`.
             let end_index = ends.partition_point(|&e| e < virtual_start);
             if end_index == ends.len() || i + 1 < starts.len() && starts[i + 1] <= ends[end_index] {
-                continue;
+                return None;
             }
-            results.push(MappedSpan { span: new_text_range(virtual_start, ends[end_index]), fidelity: Fidelity::Approximate });
-        }
+            Some(MappedSpan { span: new_text_range(virtual_start, ends[end_index]), fidelity: Fidelity::Approximate })
+        }));
         results
     }
 }
@@ -691,27 +687,24 @@ impl SpanMap {
             return self.original_to_virtual_spans(r, feature);
         }
         let mut results = Vec::new();
-        for &segment in &self.segments {
+        results.extend(self.segments.iter().filter_map(|&segment| {
             if !supports_feature(segment, feature) {
-                continue;
+                return None;
             }
             let start = r.pos().max(segment.original_start);
             let end = r.end().min(segment.original_end);
             if start >= end {
-                continue;
+                return None;
             }
             if segment.kind == Kind::Verbatim {
-                results.push(MappedSpan {
-                    span: new_text_range(
-                        segment.virtual_start + (start - segment.original_start),
-                        segment.virtual_start + (end - segment.original_start),
-                    ),
+                Some(MappedSpan {
+                    span: new_text_range(segment.virtual_start + (start - segment.original_start), segment.virtual_start + (end - segment.original_start)),
                     fidelity: Fidelity::Exact,
-                });
+                })
             } else {
-                results.push(MappedSpan { span: new_text_range(segment.virtual_start, segment.virtual_end), fidelity: Fidelity::Atom });
+                Some(MappedSpan { span: new_text_range(segment.virtual_start, segment.virtual_end), fidelity: Fidelity::Atom })
             }
-        }
+        }));
         results
     }
 }
@@ -738,16 +731,16 @@ pub fn original_to_virtual_intersecting_spans(m: Option<&SpanMap>, r: TextRange,
 // spanmap.go:585
 pub(crate) fn original_start_projections(segments: &[Segment], start: TextPos, feature: Feature) -> Vec<TextPos> {
     let mut results = Vec::with_capacity(segments.len());
-    for &segment in segments {
+    results.extend(segments.iter().filter_map(|&segment| {
         if !supports_feature(segment, feature) {
-            continue;
+            return None;
         }
         if segment.kind == Kind::Verbatim {
-            results.push(clamp(segment.virtual_start + (start - segment.original_start), segment.virtual_start, segment.virtual_end));
+            Some(clamp(segment.virtual_start + (start - segment.original_start), segment.virtual_start, segment.virtual_end))
         } else {
-            results.push(segment.virtual_start);
+            Some(segment.virtual_start)
         }
-    }
+    }));
     results
 }
 
@@ -767,16 +760,16 @@ pub(crate) fn original_start_projections(segments: &[Segment], start: TextPos, f
 // spanmap.go:613
 pub(crate) fn original_end_projections(segments: &[Segment], end: TextPos, feature: Feature) -> Vec<TextPos> {
     let mut results = Vec::with_capacity(segments.len());
-    for &segment in segments {
+    results.extend(segments.iter().filter_map(|&segment| {
         if !supports_feature(segment, feature) {
-            continue;
+            return None;
         }
         if segment.kind == Kind::Verbatim {
-            results.push(clamp(segment.virtual_start + (end - segment.original_start), segment.virtual_start, segment.virtual_end));
+            Some(clamp(segment.virtual_start + (end - segment.original_start), segment.virtual_start, segment.virtual_end))
         } else {
-            results.push(segment.virtual_end);
+            Some(segment.virtual_end)
         }
-    }
+    }));
     results
 }
 
@@ -784,18 +777,18 @@ pub(crate) fn original_end_projections(segments: &[Segment], end: TextPos, featu
 // spanmap.go:629
 pub(crate) fn original_to_virtual_spans_in_segments(segments: &[Segment], start: TextPos, end: TextPos, feature: Feature) -> Vec<MappedSpan> {
     let mut results = Vec::with_capacity(segments.len());
-    for &segment in segments {
+    results.extend(segments.iter().filter_map(|&segment| {
         if !supports_feature(segment, feature) {
-            continue;
+            return None;
         }
         if segment.kind == Kind::Verbatim {
             let virtual_start = clamp(segment.virtual_start + (start - segment.original_start), segment.virtual_start, segment.virtual_end);
             let virtual_end = clamp(segment.virtual_start + (end - segment.original_start), virtual_start, segment.virtual_end);
-            results.push(MappedSpan { span: new_text_range(virtual_start, virtual_end), fidelity: Fidelity::Exact });
+            Some(MappedSpan { span: new_text_range(virtual_start, virtual_end), fidelity: Fidelity::Exact })
         } else {
-            results.push(MappedSpan { span: new_text_range(segment.virtual_start, segment.virtual_end), fidelity: Fidelity::Atom });
+            Some(MappedSpan { span: new_text_range(segment.virtual_start, segment.virtual_end), fidelity: Fidelity::Atom })
         }
-    }
+    }));
     results
 }
 
@@ -924,21 +917,11 @@ impl OriginalIndex {
         let mut segments = Vec::new();
         self.collect_segments_ending_at_or_after(1, 0, self.leaf_count, limit, pos, true, &mut segments);
         let mut groups = Vec::new();
-        let mut start = 0;
-        while start < segments.len() {
-            let mut end = start + 1;
-            while end < segments.len() && same_original_range(segments[start], segments[end]) {
-                end += 1;
-            }
-            let segment = segments[start];
-            if pos <= segment.original_end {
-                groups.push(SegmentGroupAtOriginalPosition {
-                    segments: segments[start..end].to_vec(),
-                    at_end: pos == segment.original_end && pos != segment.original_start,
-                });
-            }
-            start = end;
-        }
+        groups.extend(segments.chunk_by(|a, b| same_original_range(*a, *b)).filter_map(|group| {
+            let segment = group[0];
+            (pos <= segment.original_end)
+                .then(|| SegmentGroupAtOriginalPosition { segments: group.to_vec(), at_end: pos == segment.original_end && pos != segment.original_start })
+        }));
         groups
     }
 }
@@ -962,7 +945,7 @@ pub(crate) fn clamp(v: TextPos, lo: TextPos, hi: TextPos) -> TextPos {
 pub fn unmarshal(data: &[u8]) -> Result<P<SpanMap>, String> {
     let tuples = unmarshal_int32_tuples(data)?;
     let mut segments = Vec::with_capacity(tuples.len());
-    for (i, t) in tuples.iter().enumerate() {
+    segments = tuples.iter().enumerate().try_fold(segments, |mut segments, (i, t)| {
         if t.len() != 5 && t.len() != 6 {
             return Err(format!("span map segment {}: expected 5 or 6 values, got {}", i, t.len()));
         }
@@ -978,7 +961,8 @@ pub fn unmarshal(data: &[u8]) -> Result<P<SpanMap>, String> {
             segment.features = Feature::from_bits_retain(t[5]);
         }
         segments.push(segment);
-    }
+        Ok::<_, String>(segments)
+    })?;
     Ok(new(&segments))
 }
 
@@ -1028,7 +1012,7 @@ impl SpanMap {
     // spanmap.go:803
     pub fn marshal(&self) -> Result<Vec<u8>, String> {
         let mut tuples = Vec::with_capacity(self.segments.len());
-        for s in &self.segments {
+        tuples.extend(self.segments.iter().map(|s| {
             let mut tuple = vec![
                 Value::Number(s.virtual_start as f64),
                 Value::Number(s.virtual_end.wrapping_sub(s.virtual_start) as f64),
@@ -1039,8 +1023,8 @@ impl SpanMap {
             if s.features != Feature::All {
                 tuple.push(Value::Number(s.features.bits() as f64));
             }
-            tuples.push(Value::Array(tuple));
-        }
+            Value::Array(tuple)
+        }));
         json::marshal(&Value::Array(tuples)).map(String::into_bytes)
     }
 }

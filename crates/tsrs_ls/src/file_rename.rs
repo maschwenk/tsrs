@@ -53,39 +53,43 @@ impl LanguageService {
         if tspath::is_declaration_file_name(&old_path) && tspath::is_declaration_file_name(&new_path) {
             let dts_ext = tspath::get_declaration_file_extension(&old_path);
             let original_extensions = tspath::get_possible_original_input_extension_for_extension(&dts_ext);
-            for ext in &original_extensions {
+            document_changes.extend(original_extensions.iter().filter_map(|ext| {
                 let old_original_path = tspath::change_full_extension(&old_path, ext);
                 if self.host.file_exists(&old_original_path) {
                     let new_dts_ext = tspath::get_declaration_file_extension(&old_path);
                     let new_original_extensions = tspath::get_possible_original_input_extension_for_extension(&new_dts_ext);
                     if new_original_extensions.contains(ext) {
                         let new_original_path = tspath::change_full_extension(&new_path, ext);
-                        document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+                        Some(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
                             rename_file: Some(lsproto::RenameFile {
                                 old_uri: lsconv::file_name_to_document_uri(&old_original_path),
                                 new_uri: lsconv::file_name_to_document_uri(&new_original_path),
                                 ..Default::default()
                             }),
                             ..Default::default()
-                        });
+                        })
+                    } else {
+                        None
                     }
+                } else {
+                    None
                 }
-            }
+            }));
         }
 
         let (changes, _) = change_tracker.get_changes();
-        for (file_name, edits) in changes {
+        document_changes.extend(changes.into_iter().map(|(file_name, edits)| {
             let uri = lsconv::file_name_to_document_uri(&file_name);
             let lsp_edits: Vec<lsproto::TextEditOrAnnotatedTextEditOrSnippetTextEdit> =
                 edits.into_iter().map(|edit| lsproto::TextEditOrAnnotatedTextEditOrSnippetTextEdit { text_edit: Some(edit), ..Default::default() }).collect();
-            document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+            lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
                 text_document_edit: Some(lsproto::TextDocumentEdit {
                     text_document: lsproto::OptionalVersionedTextDocumentIdentifier { uri, ..Default::default() },
                     edits: lsp_edits,
                 }),
                 ..Default::default()
-            });
-        }
+            }
+        }));
 
         document_changes
     }
@@ -201,11 +205,13 @@ impl LanguageService {
         let module_specifier_preferences = self.user_preferences().module_specifier_preferences();
 
         let mut moved_files: Vec<movedFile> = Vec::new();
-        for &source_file in all_files {
+        moved_files.extend(all_files.iter().filter_map(|&source_file| {
             if let Some(new_file_name) = old_to_new(crate::lsconv::Script::original_file_name(&source_file)) {
-                moved_files.push(movedFile { source_file, new_file_name });
+                Some(movedFile { source_file, new_file_name })
+            } else {
+                None
             }
-        }
+        }));
 
         for &source_file in all_files {
             let old_file_name = crate::lsconv::Script::original_file_name(&source_file).to_string();
@@ -306,9 +312,12 @@ fn update_paths_property(
     let elements: Vec<P<Node>> = if ast::is_array_literal_expression(initializer) { initializer.elements().to_vec() } else { vec![initializer] };
 
     let mut found_exact_match = false;
-    for element in elements {
-        found_exact_match = try_update_config_string(config_file, config_dir, element, change_tracker, old_to_new, converters, use_case_sensitive_file_names) || found_exact_match;
-    }
+    found_exact_match = elements.into_iter().fold(found_exact_match, |mut found_exact_match, element| {
+        found_exact_match = try_update_config_string(config_file, config_dir, element, change_tracker, old_to_new, converters, use_case_sensitive_file_names)
+            || found_exact_match;
+
+        found_exact_match
+    });
     found_exact_match
 }
 
@@ -365,7 +374,7 @@ fn get_updated_import_specifier_from_moved_source_files(
     user_preferences: &modulespecifiers::UserPreferences,
 ) -> String {
     let resolution_mode = program.get_mode_for_usage_location(source_file, import_literal);
-    for candidate in moved_files {
+    if let Some(result) = moved_files.iter().find_map(|candidate| {
         let old_specifier = modulespecifiers::update_module_specifier(
             &program.options(),
             program,
@@ -377,10 +386,10 @@ fn get_updated_import_specifier_from_moved_source_files(
             ModuleSpecifierOptions { override_import_mode: resolution_mode },
         );
         if old_specifier != import_literal.text() {
-            continue;
+            return None;
         }
 
-        return modulespecifiers::update_module_specifier(
+        Some(modulespecifiers::update_module_specifier(
             &program.options(),
             program,
             source_file,
@@ -389,7 +398,9 @@ fn get_updated_import_specifier_from_moved_source_files(
             &candidate.new_file_name,
             user_preferences.clone(),
             ModuleSpecifierOptions { override_import_mode: resolution_mode },
-        );
+        ))
+    }) {
+        return result;
     }
     String::new()
 }

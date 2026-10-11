@@ -912,28 +912,59 @@ impl<'r> ResolutionState<'r> {
         }
 
         let mut expanding_keys: Vec<&'static str> = Vec::with_capacity(lookup_table.len());
-        for key in lookup_table.keys() {
-            if key.matches('*').count() == 1 || key.ends_with('/') {
-                expanding_keys.push(key);
-            }
-        }
+        expanding_keys.extend(lookup_table.keys().filter_map(
+            |key| {
+                if key.matches('*').count() == 1 || key.ends_with('/') { Some(key.as_str()) } else { None }
+            },
+        ));
         expanding_keys.sort_by(|a, b| compare_pattern_keys(a, b).cmp(&0));
 
-        for potential_target in expanding_keys {
+        if let Some(result) = expanding_keys.into_iter().find_map(|potential_target| {
             if self.features.intersects(NodeResolutionFeatures::ExportsPatternTrailers) && matches_pattern_with_trailer(potential_target, module_name) {
                 let target = &lookup_table[potential_target];
                 let star_pos = potential_target.find('*').unwrap();
                 let subpath = &module_name[potential_target[..star_pos].len()..module_name.len() - (potential_target.len() - 1 - star_pos)];
-                return self.load_module_from_target_export_or_import(extensions, module_name, scope, is_imports, target, subpath, true, potential_target);
+                return Some(self.load_module_from_target_export_or_import(
+                    extensions,
+                    module_name,
+                    scope,
+                    is_imports,
+                    target,
+                    subpath,
+                    true,
+                    potential_target,
+                ));
             } else if potential_target.ends_with('*') && module_name.starts_with(&potential_target[..potential_target.len() - 1]) {
                 let target = &lookup_table[potential_target];
                 let subpath = &module_name[potential_target.len() - 1..];
-                return self.load_module_from_target_export_or_import(extensions, module_name, scope, is_imports, target, subpath, true, potential_target);
+                return Some(self.load_module_from_target_export_or_import(
+                    extensions,
+                    module_name,
+                    scope,
+                    is_imports,
+                    target,
+                    subpath,
+                    true,
+                    potential_target,
+                ));
             } else if module_name.starts_with(potential_target) {
                 let target = &lookup_table[potential_target];
                 let subpath = &module_name[potential_target.len()..];
-                return self.load_module_from_target_export_or_import(extensions, module_name, scope, is_imports, target, subpath, false, potential_target);
+                return Some(self.load_module_from_target_export_or_import(
+                    extensions,
+                    module_name,
+                    scope,
+                    is_imports,
+                    target,
+                    subpath,
+                    false,
+                    potential_target,
+                ));
             }
+
+            None
+        }) {
+            return result;
         }
 
         continue_searching()
@@ -1053,11 +1084,15 @@ impl<'r> ResolutionState<'r> {
                     trace!(self.tracer, diagnostics::X_package_json_scope_0_has_invalid_type_for_target_of_specifier_1, scope.package_directory, module_name);
                     return continue_searching();
                 }
-                for elem in target.as_array() {
+                if let Some(result) = target.as_array().iter().find_map(|elem| {
                     let result = self.load_module_from_target_export_or_import(extensions, module_name, scope, is_imports, elem, subpath, is_pattern, key);
                     if !result.should_continue_searching() {
-                        return result;
+                        return Some(result);
                     }
+
+                    None
+                }) {
+                    return result;
                 }
                 trace!(self.tracer, diagnostics::X_package_json_scope_0_has_invalid_type_for_target_of_specifier_1, scope.package_directory, module_name);
                 continue_searching()
@@ -1145,17 +1180,21 @@ impl<'r> ResolutionState<'r> {
                     for ext in js_and_dts_extensions {
                         if tspath::file_extension_is(&possible_input_base, ext) {
                             let input_exts = tspath::get_possible_original_input_extension_for_extension(&possible_input_base);
-                            for possible_ext in &input_exts {
+                            if let Some(result) = input_exts.iter().find_map(|possible_ext| {
                                 if !extension_is_ok(self.extensions, possible_ext) {
-                                    continue;
+                                    return None;
                                 }
                                 let possible_input_with_input_extension = tspath::change_extension(&possible_input_base, possible_ext);
                                 if self.fs().file_exists(&possible_input_with_input_extension) {
                                     let resolved = self.load_file_name_from_package_json_field(self.extensions, &possible_input_with_input_extension, "");
                                     if !resolved.should_continue_searching() {
-                                        return resolved;
+                                        return Some(resolved);
                                     }
                                 }
+
+                                None
+                            }) {
+                                return result;
                             }
                         }
                     }
@@ -1560,17 +1599,21 @@ impl<'r> ResolutionState<'r> {
 
             trace!(self.tracer, diagnostics::Trying_other_entries_in_rootDirs);
             // then try to resolve using remaining entries in rootDirs
-            for root_dir in root_dirs {
+            if let Some(result) = root_dirs.iter().find_map(|root_dir| {
                 if Some(root_dir) == matched_root_dir {
                     // skip the initially matched entry
-                    continue;
+                    return None;
                 }
                 let candidate = tspath::combine_paths(&tspath::normalize_path(root_dir), &[suffix]);
                 trace!(self.tracer, diagnostics::Loading_0_from_the_root_dir_1_candidate_location_2, suffix, root_dir, candidate);
                 let resolved_file_name = loader(self, extensions, &candidate);
                 if !resolved_file_name.should_continue_searching() {
-                    return resolved_file_name;
+                    return Some(resolved_file_name);
                 }
+
+                None
+            }) {
+                return result;
             }
             trace!(self.tracer, diagnostics::Module_resolution_using_rootDirs_has_failed);
         }
@@ -1856,14 +1899,18 @@ impl<'r> ResolutionState<'r> {
         let ext = tspath::try_get_extension_from_path(file_name);
         let file_name_no_extension = tspath::remove_extension(file_name, ext);
         with_path_buffer(PathBuffer::Suffix, |path| {
-            for suffix in module_suffixes {
+            if let Some(result) = module_suffixes.iter().find_map(|suffix| {
                 path.clear();
                 path.push_str(file_name_no_extension);
                 path.push_str(suffix);
                 path.push_str(ext);
                 if self.try_file_lookup(path) {
-                    return Some(path.clone());
+                    return Some(Some(path.clone()));
                 }
+
+                None
+            }) {
+                return result;
             }
             None
         })
@@ -2386,7 +2433,7 @@ pub fn get_automatic_type_directive_names(options: &CompilerOptions, host: &dyn 
     let (type_roots, _) = options.get_effective_type_roots(host.get_current_directory());
     for root in &type_roots {
         if host.fs().directory_exists(root) {
-            for type_directive_path in host.fs().get_accessible_entries(root).directories {
+            wildcard_matches.extend(host.fs().get_accessible_entries(root).directories.into_iter().filter_map(|type_directive_path| {
                 let normalized = tspath::normalize_path(&type_directive_path);
                 let package_json_path = tspath::combine_paths(root, &[&normalized, "package.json"]);
                 let mut is_not_needed_package = false;
@@ -2399,24 +2446,26 @@ pub fn get_automatic_type_directive_names(options: &CompilerOptions, host: &dyn 
                 }
                 if !is_not_needed_package {
                     let base_file_name = tspath::get_base_file_name(&normalized);
-                    if !base_file_name.starts_with('.') {
-                        wildcard_matches.push(base_file_name);
-                    }
+                    if !base_file_name.starts_with('.') { Some(base_file_name) } else { None }
+                } else {
+                    None
                 }
-            }
+            }));
         }
     }
 
     // Order potentially matters in program construction, so substitute
     // in the wildcard in the position it was specified in the types array
     let mut result = Vec::new();
-    for t in options.types.as_deref().unwrap_or(&[]) {
+    result = options.types.as_deref().unwrap_or(&[]).iter().fold(result, |mut result, t| {
         if t == "*" {
             result.extend(wildcard_matches.iter().cloned());
         } else {
             result.push(t.clone());
         }
-    }
+
+        result
+    });
     tsrs_core::deduplicate(&result).into_owned()
 }
 
@@ -2443,10 +2492,8 @@ fn static_extension(extension: &str) -> &'static str {
         tspath::EXTENSION_CTS,
         tspath::EXTENSION_DCTS,
     ];
-    for known in KNOWN {
-        if *known == extension {
-            return known;
-        }
+    if let Some(result) = KNOWN.iter().find_map(|known| if *known == extension { Some(known) } else { None }) {
+        return result;
     }
     alloc_string(extension)
 }
@@ -2528,20 +2575,21 @@ impl DefaultResolver {
                 tsrs_vfs::vfsmatch::UNLIMITED_DEPTH,
             );
 
-            let compare_paths_options = ComparePathsOptions { use_case_sensitive_file_names: self.host.fs().use_case_sensitive_file_names(), ..Default::default() };
-            for file in &other_files {
+            let compare_paths_options =
+                ComparePathsOptions { use_case_sensitive_file_names: self.host.fs().use_case_sensitive_file_names(), ..Default::default() };
+            result.extend(other_files.iter().filter_map(|file| {
                 if main_resolution.is_resolved() && tspath::compare_paths(file, &main_resolution.as_ref().unwrap().path, &compare_paths_options) == 0 {
-                    continue;
+                    return None;
                 }
 
-                result.push(self.create_resolved_entrypoint_handling_symlink(
+                Some(self.create_resolved_entrypoint_handling_symlink(
                     file,
                     &tspath::resolve_path(package_name, &[&tspath::get_relative_path_from_directory(package_json.package_directory, file, &compare_paths_options)]),
                     None,
                     None,
                     Ending::Changeable,
-                ));
-            }
+                ))
+            }));
         }
 
         if !result.is_empty() {
@@ -2637,19 +2685,19 @@ impl ResolutionState<'_> {
                     &[tspath::change_full_extension(&exports_str.replacen('*', "**/*", 1), ".*")],
                     tsrs_vfs::vfsmatch::UNLIMITED_DEPTH,
                 );
-                for file in &files {
+                entrypoints.extend(files.iter().filter_map(|file| {
                     let Some(matched_star) = self.get_matched_star_for_pattern_entrypoint(file, leading_slice, trailing_slice, case_sensitive) else {
-                        continue;
+                        return None;
                     };
                     let module_specifier = tspath::resolve_path(package_name, &[&subpath.replacen('*', &matched_star, 1)]);
-                    entrypoints.push(self.resolver.create_resolved_entrypoint_handling_symlink(
+                    Some(self.resolver.create_resolved_entrypoint_handling_symlink(
                         file,
                         &module_specifier,
                         include_conditions.clone(),
                         exclude_conditions.clone(),
                         if exports_str.ends_with('*') { Ending::ExtensionChangeable } else { Ending::Fixed },
-                    ));
-                }
+                    ))
+                }));
             } else {
                 let parts_after_first = &tspath::get_path_components(exports_str, "")[2..];
                 if parts_after_first.iter().any(|p| p == "..") || parts_after_first.iter().any(|p| p == ".") || parts_after_first.iter().any(|p| p == "node_modules") {
@@ -2693,8 +2741,8 @@ impl ResolutionState<'_> {
                     let mut set = new_include_conditions.unwrap_or_default();
                     set.add(condition.clone());
                     new_include_conditions = Some(set);
-                    for prev_condition in &prev_conditions {
-                        exclude_conditions.get_or_insert_with(Set::new).add(prev_condition.clone());
+                    if !prev_conditions.is_empty() {
+                        exclude_conditions.get_or_insert_with(Set::new).m.extend(prev_conditions.iter().cloned());
                     }
                 }
 

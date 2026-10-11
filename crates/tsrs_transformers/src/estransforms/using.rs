@@ -507,12 +507,10 @@ impl usingDeclarationTransformer {
         let emit_context = self.emit_context();
         let mut expressions: Vec<P<Node>> = Vec::new();
         let is_exported = ast::has_syntactic_modifier(node, ModifierFlags::Export);
-        for &variable in node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes() {
+        expressions.extend(node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes().iter().filter_map(|&variable| {
             self.hoist_binding_element(variable, is_exported, Some(variable));
-            if variable.initializer().is_some() {
-                expressions.push(self.hoist_initialized_variable(variable));
-            }
-        }
+            if variable.initializer().is_some() { Some(self.hoist_initialized_variable(variable)) } else { None }
+        }));
         if !expressions.is_empty() {
             let statement = f.new_expression_statement(f.inline_expressions(&expressions).unwrap());
             emit_context.set_original(statement, node);

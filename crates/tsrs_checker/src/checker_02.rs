@@ -345,8 +345,8 @@ impl Checker {
                 let first = offset;
 
                 let mut last = offset;
-                for i in offset + 1..statements.len() {
-                    let next_node = statements[i];
+                for (i, element) in statements.iter().enumerate().skip(offset + 1) {
+                    let next_node = *element;
                     if !ast::is_potentially_executable_node(next_node) || !self.is_source_element_unreachable(next_node) {
                         break;
                     }
@@ -1191,13 +1191,22 @@ impl Checker {
     }
 
     // checker.go:3159
-    pub(crate) fn check_if_type_predicate_variable_is_declared_in_binding_pattern(&mut self, pattern: P<Node>, predicate_variable_node: P<Node>, predicate_variable_name: &str) -> bool {
-        for &element in pattern.elements() {
+    pub(crate) fn check_if_type_predicate_variable_is_declared_in_binding_pattern(
+        &mut self,
+        pattern: P<Node>,
+        predicate_variable_node: P<Node>,
+        predicate_variable_name: &str,
+    ) -> bool {
+        if pattern.elements().iter().any(|&element| {
             let Some(name) = element.name() else {
-                continue;
+                return false;
             };
             if ast::is_identifier(name) && name.text() == predicate_variable_name {
-                self.error(Some(predicate_variable_node), &diagnostics::A_type_predicate_cannot_reference_element_0_in_a_binding_pattern, &[&predicate_variable_name]);
+                self.error(
+                    Some(predicate_variable_node),
+                    &diagnostics::A_type_predicate_cannot_reference_element_0_in_a_binding_pattern,
+                    &[&predicate_variable_name],
+                );
                 return true;
             }
             if ast::is_array_binding_pattern(name) || ast::is_object_binding_pattern(name) {
@@ -1205,6 +1214,10 @@ impl Checker {
                     return true;
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }
@@ -1808,11 +1821,13 @@ impl Checker {
         }
         if has_non_ambient_class && !is_constructor && symbol.flags().intersects(SymbolFlags::Function) && !declarations.is_empty() {
             let mut related_diagnostics: Vec<P<Diagnostic>> = Vec::new();
-            for &declaration in &declarations {
+            related_diagnostics.extend(declarations.iter().filter_map(|&declaration| {
                 if ast::is_class_declaration(declaration) {
-                    related_diagnostics.push(create_diagnostic_for_node(Some(declaration), &diagnostics::Consider_adding_a_declare_modifier_to_this_class, &[]));
+                    Some(create_diagnostic_for_node(Some(declaration), &diagnostics::Consider_adding_a_declare_modifier_to_this_class, &[]))
+                } else {
+                    None
                 }
-            }
+            }));
             for &declaration in &declarations {
                 let diagnostic: Option<&'static Message> = match declaration.kind() {
                     Kind::ClassDeclaration => Some(&diagnostics::Class_declaration_cannot_implement_overload_list_for_0),
@@ -1837,13 +1852,13 @@ impl Checker {
             if let Some(body_declaration) = body_declaration {
                 let signatures = self.get_signatures_of_symbol(Some(symbol));
                 let body_signature = self.get_signature_from_declaration(body_declaration);
-                for &signature in &signatures {
-                    if !self.is_implementation_compatible_with_overload(body_signature, signature) {
-                        let error_node = signature.declaration.get();
-                        self.error(error_node, &diagnostics::This_overload_signature_is_not_compatible_with_its_implementation_signature, &[])
-                            .add_related_info(create_diagnostic_for_node(Some(body_declaration), &diagnostics::The_implementation_signature_is_declared_here, &[]));
-                        break;
-                    }
+                if let Some(signature) = signatures
+                    .iter()
+                    .find_map(|&signature| if !self.is_implementation_compatible_with_overload(body_signature, signature) { Some(signature) } else { None })
+                {
+                    let error_node = signature.declaration.get();
+                    self.error(error_node, &diagnostics::This_overload_signature_is_not_compatible_with_its_implementation_signature, &[])
+                        .add_related_info(create_diagnostic_for_node(Some(body_declaration), &diagnostics::The_implementation_signature_is_declared_here, &[]));
                 }
             }
         }

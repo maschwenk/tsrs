@@ -102,9 +102,7 @@ pub fn get_diagnostics_of_any_program_like(
         |diagnostics: &mut Vec<P<Diagnostic>>, get_diagnostics: &mut dyn FnMut(&Context, Option<P<SourceFile>>) -> Vec<P<Diagnostic>>| match files {
             None => diagnostics.extend(get_diagnostics(ctx, None)),
             Some(files) => {
-                for &file in files {
-                    diagnostics.extend(get_diagnostics(ctx, Some(file)));
-                }
+                diagnostics.extend(files.iter().flat_map(|&file| get_diagnostics(ctx, Some(file))));
             }
         };
 

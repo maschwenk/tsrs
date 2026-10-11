@@ -431,13 +431,11 @@ impl Checker {
             return Vec::new();
         }
         let mut result = Vec::new();
-        for target_prop in self.get_properties_of_type(target).iter().copied() {
+        result.extend(self.get_properties_of_type(target).iter().copied().filter_map(|target_prop| {
             let s = self.get_type_of_property_of_type(source, target_prop.name());
             let t = self.get_type_of_symbol(target_prop);
-            if self.is_exact_optional_property_mismatch(s, Some(t)) {
-                result.push(target_prop);
-            }
-        }
+            if self.is_exact_optional_property_mismatch(s, Some(t)) { Some(target_prop) } else { None }
+        }));
         result
     }
 
@@ -872,15 +870,17 @@ impl Checker {
     pub(crate) fn get_union_index_infos(&mut self, types: &[P<Type>]) -> Vec<P<IndexInfo>> {
         let source_infos = self.get_index_infos_of_type(types[0]);
         let mut result = Vec::new();
-        for info in source_infos {
+        result.extend(source_infos.iter().filter_map(|info| {
             let index_type = info.key_type.get().unwrap();
             if types.iter().all(|&t| self.get_index_info_of_type(t, index_type).is_some()) {
                 let value_types: Vec<P<Type>> = types.iter().map(|&t| self.get_index_type_of_type(t, index_type).unwrap()).collect();
                 let value_type = self.get_union_type(&value_types);
                 let is_readonly = types.iter().any(|&t| self.get_index_info_of_type(t, index_type).unwrap().is_readonly.get());
-                result.push(self.new_index_info(index_type, value_type, is_readonly, None, &[]));
+                Some(self.new_index_info(index_type, value_type, is_readonly, None, &[]))
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
@@ -1101,10 +1101,8 @@ impl Checker {
             if t.flags().intersects(TypeFlags::Union) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
                 return false;
             }
-            for &s in t.types() {
-                if self.may_be_const_type_variable(s) && self.is_const_type_variable(Some(s), depth) {
-                    return true;
-                }
+            if t.types().iter().any(|&s| self.may_be_const_type_variable(s) && self.is_const_type_variable(Some(s), depth)) {
+                return true;
             }
             return false;
         } else if t.flags().intersects(TypeFlags::IndexedAccess) {
@@ -1118,10 +1116,10 @@ impl Checker {
             let type_variable = self.get_homomorphic_type_variable(t);
             return type_variable.is_some() && self.is_const_type_variable(type_variable, depth);
         } else if self.is_generic_tuple_type(t) {
-            for (i, s) in self.get_element_types(t).iter().copied().enumerate() {
-                if t.target_tuple_type().element_infos.get()[i].flags.intersects(ElementFlags::Variadic) && self.is_const_type_variable(Some(s), depth) {
-                    return true;
-                }
+            if self.get_element_types(t).iter().copied().enumerate().any(|(i, s)| {
+                t.target_tuple_type().element_infos.get()[i].flags.intersects(ElementFlags::Variadic) && self.is_const_type_variable(Some(s), depth)
+            }) {
+                return true;
             }
         }
         false
@@ -2673,11 +2671,10 @@ impl Checker {
                 // Go's findInMap over the exports map (iteration order is unspecified in Go).
                 let mut exported_symbol: Option<P<Symbol>> = None;
                 if let Some(exports) = exports {
-                    for (_, symbol) in exports.entries() {
-                        if self.get_symbol_if_same_reference(symbol, local_symbol).is_some() {
-                            exported_symbol = Some(symbol);
-                            break;
-                        }
+                    if let Some(symbol) =
+                        exports.entries().into_iter().find_map(|(_, symbol)| self.get_symbol_if_same_reference(symbol, local_symbol).map(|_| symbol))
+                    {
+                        exported_symbol = Some(symbol);
                     }
                 }
                 let diagnostic = if let Some(exported_symbol) = exported_symbol {

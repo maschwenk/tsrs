@@ -131,17 +131,21 @@ pub(crate) fn is_literal(t: P<Type>) -> bool {
 pub(crate) fn get_recommended_completion(previous_token: P<Node>, contextual_type: P<Type>, type_checker: &mut Checker) -> Option<P<Symbol>> {
     let types: Vec<P<Type>> = if contextual_type.is_union() { contextual_type.types().to_vec() } else { vec![contextual_type] };
     // For a union, return the first one with a recommended completion.
-    for t in types {
+    if let Some(result) = types.into_iter().find_map(|t| {
         let symbol = t.symbol();
         // Don't make a recommended completion for an abstract class.
         if let Some(symbol) = symbol {
             if symbol.flags().intersects(SymbolFlags::EnumMember | SymbolFlags::Enum | SymbolFlags::Class) && !is_abstract_constructor_symbol(symbol) {
                 let result = get_first_symbol_in_chain(symbol, Some(previous_token), type_checker);
                 if result.is_some() {
-                    return result;
+                    return Some(result);
                 }
             }
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -412,14 +416,12 @@ pub(crate) fn all_keyword_completions() -> &'static [lsproto::CompletionItem] {
     static ALL_KEYWORD_COMPLETIONS: OnceLock<Vec<lsproto::CompletionItem>> = OnceLock::new();
     ALL_KEYWORD_COMPLETIONS.get_or_init(|| {
         let mut result = Vec::with_capacity((Kind::LastKeyword as i16 - Kind::FirstKeyword as i16 + 1) as usize);
-        for i in Kind::FirstKeyword as i16..=Kind::LastKeyword as i16 {
-            result.push(lsproto::CompletionItem {
-                label: scanner::token_to_string(Kind::from_i16(i)).to_string(),
-                kind: Some(lsproto::CompletionItemKind::Keyword),
-                sort_text: Some(SORT_TEXT_GLOBALS_OR_KEYWORDS.to_string()),
-                ..Default::default()
-            });
-        }
+        result.extend((Kind::FirstKeyword as i16..=Kind::LastKeyword as i16).map(|i| lsproto::CompletionItem {
+            label: scanner::token_to_string(Kind::from_i16(i)).to_string(),
+            kind: Some(lsproto::CompletionItemKind::Keyword),
+            sort_text: Some(SORT_TEXT_GLOBALS_OR_KEYWORDS.to_string()),
+            ..Default::default()
+        }));
         census_scrub_cached_items(&mut result);
         result
     })
@@ -628,22 +630,24 @@ impl LanguageService {
         mut sorted_entries: Vec<CompletionItem>,
     ) -> Vec<CompletionItem> {
         let name_table = file.get_name_table();
-        for (&name, &pos) in name_table {
+        sorted_entries.extend(name_table.into_iter().filter_map(|(&name, &pos)| {
             // Skip identifiers produced only from the current location
             if pos == position {
-                continue;
+                return None;
             }
             if !unique_names.contains(name) && scanner::is_identifier_text(name, LanguageVariant::Standard) {
                 unique_names.insert(name.to_string());
-                sorted_entries.push(CompletionItem::new(lsproto::CompletionItem {
+                Some(CompletionItem::new(lsproto::CompletionItem {
                     label: name.to_string(),
                     kind: Some(lsproto::CompletionItemKind::Text),
                     sort_text: Some(SORT_TEXT_JAVASCRIPT_IDENTIFIERS.to_string()),
                     commit_characters: Some(Vec::new()),
                     ..Default::default()
-                }));
+                }))
+            } else {
+                None
             }
-        }
+        }));
         sorted_entries
     }
 
@@ -1049,7 +1053,7 @@ fn get_apparent_properties(t: P<Type>, node: P<Node>, type_checker: &mut Checker
         return type_checker.get_apparent_properties(t);
     }
     let mut filtered: Vec<P<Type>> = Vec::new();
-    for &member_type in t.types() {
+    filtered.extend(t.types().iter().filter_map(|&member_type| {
         let excluded = member_type.flags().intersects(TypeFlags::Primitive)
             || type_checker.is_array_like_type_exported(member_type)
             || type_checker.is_type_invalid_due_to_union_discriminant(member_type, node)
@@ -1058,10 +1062,8 @@ fn get_apparent_properties(t: P<Type>, node: P<Node>, type_checker: &mut Checker
                 let apparent = type_checker.get_apparent_properties(member_type);
                 contains_non_public_properties(&apparent)
             };
-        if !excluded {
-            filtered.push(member_type);
-        }
-    }
+        if !excluded { Some(member_type) } else { None }
+    }));
     type_checker.get_all_possible_properties_of_types(&filtered)
 }
 
@@ -1155,9 +1157,7 @@ fn set_member_declared_by_spread_assignment(declaration: P<Node>, members: &mut 
             properties = t.as_structured_type().properties();
         }
     }
-    for property in properties {
-        members.insert(property.name().to_string());
-    }
+    members.extend(properties.iter().map(|property| property.name().to_string()));
 }
 
 // Returns the immediate owning class declaration of a context token,
@@ -1311,32 +1311,34 @@ pub(crate) fn filter_class_members_list(
     position: i32,
 ) -> Vec<P<Symbol>> {
     let mut existing_member_names: FxHashSet<String> = FxHashSet::default();
-    for &member in existing_members {
+    existing_member_names.extend(existing_members.iter().filter_map(|&member| {
         // Ignore omitted expressions for missing members.
-        if member.kind() != Kind::PropertyDeclaration && member.kind() != Kind::MethodDeclaration && member.kind() != Kind::GetAccessor && member.kind() != Kind::SetAccessor {
-            continue;
+        if member.kind() != Kind::PropertyDeclaration
+            && member.kind() != Kind::MethodDeclaration
+            && member.kind() != Kind::GetAccessor
+            && member.kind() != Kind::SetAccessor
+        {
+            return None;
         }
 
         // If this is the current item we are editing right now, do not filter it out
         if is_currently_editing_node(member, file, position) {
-            continue;
+            return None;
         }
 
         // Don't filter member even if the name matches if it is declared private in the list.
         if member.modifier_flags().intersects(ModifierFlags::Private) {
-            continue;
+            return None;
         }
 
         // Do not filter it out if the static presence doesn't match.
         if ast::is_static(member) != class_element_modifier_flags.intersects(ModifierFlags::Static) {
-            continue;
+            return None;
         }
 
         let existing_name = ast::get_property_name_for_property_name_node(member.name().unwrap());
-        if !existing_name.is_empty() {
-            existing_member_names.insert(existing_name.into_owned());
-        }
-    }
+        if !existing_name.is_empty() { Some(existing_name.into_owned()) } else { None }
+    }));
 
     base_symbols
         .iter()

@@ -174,9 +174,7 @@ fn convert_binding_element_to_object_assignment_pattern(emit_context: P<EmitCont
     let f = &emit_context.get().factory;
     let mut properties: Vec<P<Node>> = Vec::new();
     let elements = element.as_binding_pattern().elements;
-    for &e in elements.nodes() {
-        properties.push(convert_binding_element_to_object_assignment_element(emit_context, e));
-    }
+    properties.extend(elements.nodes().iter().map(|&e| convert_binding_element_to_object_assignment_element(emit_context, e)));
     let property_list = f.new_node_list(properties);
     property_list.loc.set(elements.loc.get());
     let object = f.new_object_literal_expression(property_list, false /*multiLine*/);
@@ -190,9 +188,7 @@ fn convert_binding_element_to_array_assignment_pattern(emit_context: P<EmitConte
     let f = &emit_context.get().factory;
     let mut out: Vec<P<Node>> = Vec::new();
     let elements = element.as_binding_pattern().elements;
-    for &e in elements.nodes() {
-        out.push(convert_binding_element_to_array_assignment_element(emit_context, e));
-    }
+    out.extend(elements.nodes().iter().map(|&e| convert_binding_element_to_array_assignment_element(emit_context, e)));
     let element_list = f.new_node_list(out);
     element_list.loc.set(elements.loc.get());
     let object = f.new_array_literal_expression(element_list, false /*multiLine*/);
@@ -263,8 +259,8 @@ pub fn find_super_statement_index_path(statements: &[P<Node>], start: usize) -> 
 
 // utilities.go:281
 fn find_super_statement_index_path_worker(statements: &[P<Node>], start: usize, indices: Vec<usize>) -> Option<Vec<usize>> {
-    for i in start..statements.len() {
-        let statement = statements[i];
+    for (i, element) in statements.iter().enumerate().skip(start) {
+        let statement = *element;
         if get_super_call_from_statement(statement).is_some() {
             let mut indices = indices;
             indices.push(i);

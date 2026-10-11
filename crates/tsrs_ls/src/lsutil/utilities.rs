@@ -66,14 +66,18 @@ pub fn probably_uses_semicolons(file: P<SourceFile>) -> bool {
 
 // utilities.go:77
 pub fn should_use_uri_style_node_core_modules(file: P<SourceFile>, program: &Program) -> Tristate {
-    for &node in file.imports() {
+    if let Some(result) = file.imports().iter().find_map(|&node| {
         if tsrs_core::node_core_modules().contains(node.text()) && !tsrs_core::is_exclusively_prefixed_node_core_module(node.text()) {
             if node.text().starts_with("node:") {
-                return Tristate::True;
+                return Some(Tristate::True);
             } else {
-                return Tristate::False;
+                return Some(Tristate::False);
             }
         }
+
+        None
+    }) {
+        return result;
     }
 
     program.uses_uri_style_node_core_modules()

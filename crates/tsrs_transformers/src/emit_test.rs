@@ -40,10 +40,16 @@ fn emit(files: &[(&str, &str)], file: &str, transforms: &[TransformerFactory]) -
         let context = printer::new_emit_context();
         let opts = TransformOptions { context, compiler_options: options, resolver: ReferenceResolverRef::Emit(resolver), emit_resolver: Some(resolver), get_emit_module_format_of_file: Rc::new(|_| tsrs_core::ModuleKind::ESNext) };
         let mut result = source_file;
-        for t in transforms {
+        result = transforms.iter().fold(result, |mut result, t| {
             result = t(&opts).unwrap().transform_source_file(result);
-        }
-        let mut p = printer::new_printer(printer::PrinterOptions { target: options.get_emit_script_target(), ..Default::default() }, printer::PrintHandlers::default(), Some(context));
+
+            result
+        });
+        let mut p = printer::new_printer(
+            printer::PrinterOptions { target: options.get_emit_script_target(), ..Default::default() },
+            printer::PrintHandlers::default(),
+            Some(context),
+        );
         p.emit_source_file(result)
     })
 }

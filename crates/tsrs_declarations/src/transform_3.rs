@@ -89,9 +89,7 @@ impl DeclarationTransformer {
             return self.factory().new_node_list(Vec::new());
         }
         let mut results = Vec::with_capacity(params.nodes().len());
-        for &p in params.nodes() {
-            results.push(self.ensure_parameter(p));
-        }
+        results.extend(params.nodes().iter().map(|&p| self.ensure_parameter(p)));
         self.factory().new_node_list(results)
     }
 
@@ -648,13 +646,10 @@ impl DeclarationTransformer {
             let mut host: Vec<P<Node>> = Vec::new();
             if let Some(n) = n.filter(|n| n.kind() == Kind::SyntaxList) {
                 // find the first named syntax list element and use its' name & modifiers
-                for c in n.iter_children() {
-                    if let Some(c_name) = c.name() {
-                        name = Some(c_name.clone_node(self.factory()));
-                        if let Some(c_modifiers) = c.modifiers() {
-                            modifiers = Some(c_modifiers.clone_list(self.factory().as_node_factory()));
-                        }
-                        break;
+                if let Some((c, c_name)) = n.iter_children().into_iter().find_map(|c| c.name().map(|c_name| (c, c_name))) {
+                    name = Some(c_name.clone_node(self.factory()));
+                    if let Some(c_modifiers) = c.modifiers() {
+                        modifiers = Some(c_modifiers.clone_list(self.factory().as_node_factory()));
                     }
                 }
                 host = n.as_syntax_list().children.to_vec();

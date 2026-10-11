@@ -2820,17 +2820,14 @@ pub fn primitive_type_alias_suggestions() -> &'static [(&'static str, P<Symbol>)
         // Process-wide: never in a freeable region (language server).
         let _arena = tsrs_core::arena::enter_thread_arena();
         let mut result = Vec::new();
-        for (primitive, builtin) in [
-            ("string", "String"),
-            ("number", "Number"),
-            ("boolean", "Boolean"),
-            ("object", "Object"),
-            ("bigint", "BigInt"),
-            ("symbol", "Symbol"),
-        ] {
-            let sym = Symbol::new(SymbolFlags::TypeAlias | SymbolFlags::Transient, primitive);
-            result.push((builtin, sym));
-        }
+        result.extend(
+            ([("string", "String"), ("number", "Number"), ("boolean", "Boolean"), ("object", "Object"), ("bigint", "BigInt"), ("symbol", "Symbol")])
+                .into_iter()
+                .map(|(primitive, builtin)| {
+                    let sym = Symbol::new(SymbolFlags::TypeAlias | SymbolFlags::Transient, primitive);
+                    (builtin, sym)
+                }),
+        );
         result
     })
 }

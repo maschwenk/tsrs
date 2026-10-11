@@ -230,19 +230,21 @@ fn get_missing_members(type_checker: &mut Checker, class_declaration: P<Node>, i
 
     let mut missing_members = Vec::new();
     for &implemented_type in implemented_types {
-        for &symbol in type_checker.get_properties_of_type(implemented_type) {
+        missing_members.extend(type_checker.get_properties_of_type(implemented_type).iter().filter_map(|&symbol| {
             if class_members.is_some_and(|m| m.lookup(symbol.name()).is_some()) {
-                continue;
+                return None;
             }
             if inherited_members.contains_key(symbol.name()) || seen_members.contains_key(symbol.name()) {
-                continue;
+                return None;
             }
             let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
             if !flags.intersects(ModifierFlags::Private) {
                 seen_members.insert(symbol.name(), symbol);
-                missing_members.push(symbol);
+                Some(symbol)
+            } else {
+                None
             }
-        }
+        }));
     }
     missing_members
 }
@@ -256,12 +258,10 @@ fn get_inherited_members(type_checker: &mut Checker, class_declaration: P<Node>)
     let base_type = type_checker.get_type_at_location(type_node);
 
     let mut inherited_members = FxHashMap::default();
-    for &symbol in type_checker.get_properties_of_type(base_type) {
+    inherited_members.extend(type_checker.get_properties_of_type(base_type).iter().filter_map(|&symbol| {
         let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
-        if !flags.intersects(ModifierFlags::Private) {
-            inherited_members.insert(symbol.name(), symbol);
-        }
-    }
+        if !flags.intersects(ModifierFlags::Private) { Some((symbol.name(), symbol)) } else { None }
+    }));
     inherited_members
 }
 

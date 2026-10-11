@@ -251,10 +251,8 @@ pub fn is_name_of_heritage_clause_type_reference(mut node: P<Node>) -> bool {
 
 pub fn get_heritage_clause(node: P<Node>, kind: Kind) -> Option<P<Node>> {
     if let Some(clauses) = get_heritage_clauses(node) {
-        for &clause in clauses.nodes() {
-            if clause.as_heritage_clause().token == kind {
-                return Some(clause);
-            }
+        if let Some(result) = clauses.nodes().iter().find_map(|&clause| if clause.as_heritage_clause().token == kind { Some(Some(clause)) } else { None }) {
+            return result;
         }
     }
     None
@@ -957,15 +955,19 @@ pub(crate) fn get_module_instance_state_worker(
                 if decl.module_specifier.is_none() && export_clause.kind() == Kind::NamedExports {
                     let mut state = ModuleInstanceState::NonInstantiated;
                     let ancestors = push_ancestor(&push_ancestor(ancestors, node), export_clause);
-                    for &specifier in export_clause.elements() {
+                    state = match export_clause.elements().iter().try_fold(state, |mut state, &specifier| {
                         let specifier_state = get_module_instance_state_for_alias_target(specifier, &ancestors, visited);
                         if specifier_state > state {
                             state = specifier_state;
                         }
                         if state == ModuleInstanceState::Instantiated {
-                            return state;
+                            return Err(state);
                         }
-                    }
+                        Ok(state)
+                    }) {
+                        Ok(value) => value,
+                        Err(value) => return value,
+                    };
                     return state;
                 }
             }
@@ -1241,11 +1243,10 @@ pub fn get_node_at_position(file: P<SourceFile>, position: i32, include_jsdoc: b
     loop {
         let mut child: Option<P<Node>> = None;
         if include_jsdoc {
-            for &jsdoc in current.jsdoc(Some(file.get())) {
-                if node_contains_position(jsdoc, position) {
-                    child = Some(jsdoc);
-                    break;
-                }
+            if let Some(jsdoc) =
+                current.jsdoc(Some(file.get())).iter().find_map(|&jsdoc| if node_contains_position(jsdoc, position) { Some(jsdoc) } else { None })
+            {
+                child = Some(jsdoc);
             }
         }
         if child.is_none() {
@@ -1373,10 +1374,8 @@ pub fn get_jsx_runtime_import(base: &str, options: &CompilerOptions) -> String {
 pub fn get_pragma_from_source_file(file: Option<P<SourceFile>>, name: &str) -> Option<&'static Pragma> {
     let mut result = None;
     if let Some(file) = file {
-        for pragma in file.pragmas() {
-            if pragma.name == name {
-                result = Some(pragma); // Last one wins
-            }
+        if let Some(pragma) = file.pragmas().iter().rev().find(|pragma| pragma.name == name) {
+            result = Some(pragma); // Last one wins
         }
     }
     result

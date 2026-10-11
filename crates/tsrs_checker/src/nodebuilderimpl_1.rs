@@ -130,12 +130,7 @@ impl NodeBuilderImpl {
         let ctx = self.ctx();
         let type_stack = ctx.type_stack.borrow();
         let n = type_stack.len() as i32 - 1;
-        for i in 0..n.max(0) as usize {
-            if type_stack[i] == Some(t) {
-                return true;
-            }
-        }
-        false
+        (0..n.max(0) as usize).any(|i| type_stack[i] == Some(t))
     }
 
     // shouldExpandType decides whether to expand this type at the current depth.
@@ -253,21 +248,27 @@ impl NodeBuilderImpl {
             if self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) && type_arguments.is_some() && !type_arguments.unwrap().nodes().is_empty() {
                 let access = self.create_access_expression(c, type_ref.type_name);
                 let mut expr = self.create_expression_with_type_arguments(c, access, type_arguments);
-                for id in get_access_stack(ref_) {
+                expr = get_access_stack(ref_).into_iter().fold(expr, |mut expr, id| {
                     expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
-                }
+
+                    expr
+                });
                 return Some(expr);
             }
             let mut type_name: P<Node> = type_ref.type_name;
-            for id in get_access_stack(ref_) {
+            type_name = get_access_stack(ref_).into_iter().fold(type_name, |mut type_name, id| {
                 type_name = self.f.new_qualified_name(type_name, id);
-            }
+
+                type_name
+            });
             return Some(self.f.update_type_reference_node(root, type_name, ref_.type_argument_list()));
         }
         let mut expr = self.create_access_expression(c, root);
-        for id in get_access_stack(ref_) {
+        expr = get_access_stack(ref_).into_iter().fold(expr, |mut expr, id| {
             expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
-        }
+
+            expr
+        });
         Some(expr)
     }
 }
@@ -438,8 +439,8 @@ pub(crate) fn array_is_homogeneous<T: Clone>(array: &[T], mut comparer: impl FnM
         return true;
     }
     let first = &array[0];
-    for i in 1..array.len() {
-        let target = &array[i];
+    for element in array.iter().skip(1) {
+        let target = &(*element);
         if !comparer(first.clone(), target.clone()) {
             return false;
         }
@@ -776,12 +777,15 @@ impl NodeBuilderImpl {
                         symbol_name = symbol.name().to_string();
                     } else {
                         let mut results: FxHashMap<P<Symbol>, &'static str> = FxHashMap::default();
-                        for (name, ex) in exports.entries() {
-                            if c.get_symbol_if_same_reference(ex, symbol).is_some() && !is_late_bound_name(name) && name != ast::InternalSymbolNameExportEquals {
-                                results.insert(ex, name);
+                        results.extend(exports.entries().into_iter().filter_map(|(name, ex)| {
+                            if c.get_symbol_if_same_reference(ex, symbol).is_some() && !is_late_bound_name(name) && name != ast::InternalSymbolNameExportEquals
+                            {
+                                Some((ex, name))
                                 // break // must collect all results and sort them - exports are randomly iterated
+                            } else {
+                                None
                             }
-                        }
+                        }));
                         let mut result_symbols: Vec<P<Symbol>> = results.keys().copied().collect();
                         if !result_symbols.is_empty() {
                             c.sort_symbols(&mut result_symbols);
@@ -1775,15 +1779,15 @@ impl NodeBuilderImpl {
         if target_symbol.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface | SymbolFlags::Alias) {
             let mut results: Vec<P<Node>> = Vec::new();
             let params = c.get_local_type_parameters_of_class_or_interface_or_type_alias(symbol);
-            for param in params {
-                results.push(self.type_parameter_to_declaration(c, param));
-            }
+            results.extend(params.into_iter().map(|param| self.type_parameter_to_declaration(c, param)));
             return results;
         } else if target_symbol.flags().intersects(SymbolFlags::Function) {
             let mut results: Vec<P<Node>> = Vec::new();
-            for param in c.get_type_parameters_from_declaration(symbol.value_declaration().unwrap()) {
-                results.push(self.type_parameter_to_declaration(c, param));
-            }
+            results.extend(
+                c.get_type_parameters_from_declaration(symbol.value_declaration().unwrap())
+                    .into_iter()
+                    .map(|param| self.type_parameter_to_declaration(c, param)),
+            );
             return results;
         }
         Vec::new()

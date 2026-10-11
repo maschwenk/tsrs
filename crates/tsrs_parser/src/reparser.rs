@@ -229,20 +229,9 @@ impl Parser {
                 if ast::is_identifier(name) && !scanner::is_valid_identifier(name.as_identifier().text()) {
                     // drop invalid chars for _, if empty, write _0, etc., so we have a valid param name to emit later
                     let mut result = String::new();
-                    for (i, ch) in name.as_identifier().text().char_indices() {
-                        if i == 0 {
-                            if !scanner::is_identifier_start(ch as i32) {
-                                result.push('_');
-                            } else {
-                                result.push(ch);
-                            }
-                            continue;
-                        } else if !scanner::is_identifier_part(ch as i32) {
-                            result.push('_');
-                        } else {
-                            result.push(ch);
-                        }
-                    }
+                    result.extend(name.as_identifier().text().char_indices().map(|(i, ch)| {
+                        if if i == 0 { scanner::is_identifier_start(ch as i32) } else { scanner::is_identifier_part(ch as i32) } { ch } else { '_' }
+                    }));
                     if result.is_empty() {
                         result.push('_');
                         result.push_str(&pi.to_string());
@@ -393,13 +382,17 @@ impl Parser {
                 match parent.kind() {
                     Kind::VariableStatement => {
                         if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
-                            for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
-                                if declaration.type_node().is_none() && tag.type_expression().is_some() {
-                                    let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node());
-                                    declaration.as_mutable().set_type(t);
-                                    self.finish_mutated_node(declaration);
-                                    return;
-                                }
+                            if let Some(&declaration) = declaration_list
+                                .as_variable_declaration_list()
+                                .declarations
+                                .nodes()
+                                .iter()
+                                .find(|declaration| declaration.type_node().is_none() && tag.type_expression().is_some())
+                            {
+                                let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node());
+                                declaration.as_mutable().set_type(t);
+                                self.finish_mutated_node(declaration);
+                                return;
                             }
                         }
                     }
@@ -460,14 +453,13 @@ impl Parser {
             Kind::JSDocSatisfiesTag => match parent.kind() {
                 Kind::VariableStatement => {
                     if let Some(declaration_list) = Some(parent.as_variable_statement().declaration_list) {
-                        for &declaration in declaration_list.as_variable_declaration_list().declarations.nodes() {
-                            if declaration.initializer().is_some() && tag.type_expression().is_some() {
-                                let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
-                                let cast = self.make_new_cast(t, declaration.initializer().unwrap(), false /*isAssertion*/);
-                                declaration.as_mutable().set_initializer(cast);
-                                self.finish_mutated_node(declaration);
-                                break;
-                            }
+                        if let Some(declaration) = declaration_list.as_variable_declaration_list().declarations.nodes().iter().find_map(|&declaration| {
+                            if declaration.initializer().is_some() && tag.type_expression().is_some() { Some(declaration) } else { None }
+                        }) {
+                            let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
+                            let cast = self.make_new_cast(t, declaration.initializer().unwrap(), false /*isAssertion*/);
+                            declaration.as_mutable().set_initializer(cast);
+                            self.finish_mutated_node(declaration);
                         }
                     }
                 }
@@ -696,9 +688,7 @@ impl Parser {
                                 if ast::has_same_property_access_name(target.expression, source.expression) {
                                     if let (None, Some(source_type_arguments)) = (target.type_arguments.get(), source.type_arguments.get()) {
                                         let mut new_arguments: Vec<P<Node>> = Vec::with_capacity(source_type_arguments.nodes().len());
-                                        for &arg in source_type_arguments.nodes() {
-                                            new_arguments.push(self.add_deep_clone_reparse(Some(arg)).unwrap());
-                                        }
+                                        new_arguments.extend(source_type_arguments.nodes().iter().map(|&arg| self.add_deep_clone_reparse(Some(arg)).unwrap()));
                                         let list = self.new_node_list(source_type_arguments.loc.get(), &new_arguments);
                                         target.type_arguments.set(Some(list));
                                         self.finish_mutated_node(target_node);
@@ -802,18 +792,22 @@ fn find_matching_parameter(fun: P<Node>, parameter_tag: P<Node>, js_doc: P<Node>
             }
         }
     }
-    for (parameter_index, &parameter) in fun.parameters().iter().enumerate() {
+    if let Some(result) = fun.parameters().iter().enumerate().find_map(|(parameter_index, &parameter)| {
         let parameter_index = parameter_index as i32;
         if parameter.name().unwrap().kind() == Kind::Identifier {
             let tag_name = parameter_tag.name().unwrap();
             if tag_name.kind() == Kind::Identifier
                 && ((parameter.name().unwrap().text() == tag_name.text()) || (parameter_index == tag_index && tag_name.text().is_empty()))
             {
-                return Some(parameter);
+                return Some(Some(parameter));
             }
         } else if parameter_index == tag_index {
-            return Some(parameter);
+            return Some(Some(parameter));
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }

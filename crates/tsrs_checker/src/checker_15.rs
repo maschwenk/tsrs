@@ -56,9 +56,7 @@ impl Checker {
             let spans = template.as_template_expression().template_spans.nodes();
             let mut args = Vec::with_capacity(spans.len() + 1);
             args.push(first_arg);
-            for span in spans {
-                args.push(span.expression().unwrap());
-            }
+            args.extend(spans.iter().map(|span| span.expression().unwrap()));
             return args;
         } else if ast::is_decorator(node) {
             return self.get_effective_decorator_arguments(node);
@@ -76,8 +74,8 @@ impl Checker {
         if spread_index >= 0 {
             // Create synthetic arguments from spreads of tuple types.
             let mut effective_args = args[..spread_index as usize].to_vec();
-            for i in spread_index as usize..args.len() {
-                let arg = args[i];
+            for (_i, element) in args.iter().enumerate().skip(spread_index as usize) {
+                let arg = *element;
                 let mut spread_type = None;
                 // We can call checkExpressionCached because spread expressions never have a contextual type.
                 if ast::is_spread_element(arg) {
@@ -88,16 +86,21 @@ impl Checker {
                     }
                 }
                 if let Some(spread_type) = spread_type.filter(|&t| is_tuple_type(t)) {
-                    for (i, t) in self.get_element_types(spread_type).iter().copied().enumerate() {
+                    effective_args.extend(self.get_element_types(spread_type).iter().copied().enumerate().map(|(i, t)| {
                         let element_infos = spread_type.target_tuple_type().element_infos();
                         let flags = element_infos[i].flags;
                         let mut synthetic_type = t;
                         if flags.intersects(ElementFlags::Rest) {
                             synthetic_type = self.create_array_type(t);
                         }
-                        let synthetic_arg = self.create_synthetic_expression(arg, synthetic_type, flags.intersects(ElementFlags::Variable), element_infos[i].labeled_declaration);
-                        effective_args.push(synthetic_arg);
-                    }
+                        let synthetic_arg = self.create_synthetic_expression(
+                            arg,
+                            synthetic_type,
+                            flags.intersects(ElementFlags::Variable),
+                            element_infos[i].labeled_declaration,
+                        );
+                        synthetic_arg
+                    }));
                 } else {
                     effective_args.push(arg);
                 }
@@ -161,10 +164,10 @@ impl Checker {
         if let Some(signature) = signature {
             let params = signature.parameters.get();
             let mut args = Vec::with_capacity(params.len());
-            for &param in params {
+            args.extend(params.iter().map(|&param| {
                 let t = self.get_type_of_symbol(param);
-                args.push(self.create_synthetic_expression(expr, t, false, None));
-            }
+                self.create_synthetic_expression(expr, t, false, None)
+            }));
             return args;
         }
         panic!("Decorator signature not found")
@@ -744,17 +747,15 @@ impl Checker {
             return None;
         }
         let mut mapped_types = self.free_type_lists.pop().unwrap_or_default();
-        for &i in relevant.iter() {
+        mapped_types.extend(relevant.iter().filter_map(|&i| {
             let s = types[i as usize];
             let mapped = if s.flags().intersects(TypeFlags::Union) {
                 self.map_type_ex(s, |c, t| c.contextual_property_type_of_constituent(t, name, name_type), true /*noReductions*/)
             } else {
                 self.contextual_property_type_of_constituent(s, name, name_type)
             };
-            if let Some(mapped) = mapped {
-                mapped_types.push(mapped);
-            }
-        }
+            if let Some(mapped) = mapped { Some(mapped) } else { None }
+        }));
         let result = if mapped_types.is_empty() { None } else { Some(self.get_union_type_ex(&mapped_types, UnionReduction::None, AliasArg::None, None)) };
         self.free_type_list(mapped_types);
         Some(result)
@@ -936,12 +937,7 @@ impl ObjectLiteralDiscriminator {
         } else {
             prop_type = c.undefined_type;
         }
-        for s in prop_type.distributed_iter() {
-            if c.is_type_assignable_to(s, t) {
-                return true;
-            }
-        }
-        false
+        prop_type.distributed_iter().into_iter().any(|s| c.is_type_assignable_to(s, t))
     }
 }
 
@@ -957,30 +953,34 @@ impl Checker {
             Some(discriminated) => discriminated,
             None => {
                 let mut discriminant_properties = Vec::new();
-                for &p in node.properties() {
+                discriminant_properties.extend(node.properties().iter().filter_map(|&p| {
                     let keep = 'keep: {
                         let Some(symbol) = p.symbol() else {
                             break 'keep false;
                         };
                         if ast::is_property_assignment(p) {
-                            break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap()) && self.is_discriminant_property(Some(contextual_type), symbol.name());
+                            break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap())
+                                && self.is_discriminant_property(Some(contextual_type), symbol.name());
                         }
                         if ast::is_shorthand_property_assignment(p) {
                             break 'keep self.is_discriminant_property(Some(contextual_type), symbol.name());
                         }
                         false
                     };
-                    if keep {
-                        discriminant_properties.push(p);
-                    }
-                }
+                    if keep { Some(p) } else { None }
+                }));
                 let mut discriminant_members = Vec::new();
-                for s in self.get_properties_of_type(contextual_type).iter().copied() {
+                discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter_map(|s| {
                     let node_members = node.symbol().unwrap().members();
-                    if s.flags().intersects(SymbolFlags::Optional) && node_members.map_or(true, |m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name()) {
-                        discriminant_members.push(s);
+                    if s.flags().intersects(SymbolFlags::Optional)
+                        && node_members.map_or(true, |m| m.lookup(s.name()).is_none())
+                        && self.is_discriminant_property(Some(contextual_type), s.name())
+                    {
+                        Some(s)
+                    } else {
+                        None
                     }
-                }
+                }));
                 let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
                 self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator)
             }
@@ -994,11 +994,18 @@ impl Checker {
         let key_property_name = self.get_key_property_name(union_type);
         if !key_property_name.is_empty() {
             let mut prop_node = None;
-            for &p in node.properties() {
-                if p.symbol().is_some() && ast::is_property_assignment(p) && p.symbol().unwrap().name() == key_property_name && self.is_possibly_discriminant_value(p.initializer().unwrap()) {
-                    prop_node = Some(p);
-                    break;
+            if let Some(p) = node.properties().iter().find_map(|&p| {
+                if p.symbol().is_some()
+                    && ast::is_property_assignment(p)
+                    && p.symbol().unwrap().name() == key_property_name
+                    && self.is_possibly_discriminant_value(p.initializer().unwrap())
+                {
+                    Some(p)
+                } else {
+                    None
                 }
+            }) {
+                prop_node = Some(p);
             }
             if let Some(prop_node) = prop_node {
                 let prop_type = self.get_context_free_type_of_expression(prop_node.initializer().unwrap());
@@ -1105,10 +1112,13 @@ impl Checker {
 
     // checker.go:31375
     pub(crate) fn find_contextual_node(&mut self, node: P<Node>, include_caches: bool) -> i32 {
-        for (i, info) in self.contextual_infos.iter().enumerate() {
-            if node == info.node && (include_caches || !info.is_cache) {
-                return i as i32;
-            }
+        if let Some(result) = self
+            .contextual_infos
+            .iter()
+            .enumerate()
+            .find_map(|(i, info)| if node == info.node && (include_caches || !info.is_cache) { Some(i as i32) } else { None })
+        {
+            return result;
         }
         -1
     }
@@ -1201,10 +1211,14 @@ impl Checker {
 
     // checker.go:31454
     pub(crate) fn get_inference_context(&mut self, node: P<Node>) -> Option<P<InferenceContext>> {
-        for v in self.inference_context_infos.iter().rev() {
-            if crate::is_node_descendant_of(Some(node), v.node) {
-                return v.context;
-            }
+        if let Some(result) = self
+            .inference_context_infos
+            .iter()
+            .rev()
+            .into_iter()
+            .find_map(|v| if crate::is_node_descendant_of(Some(node), v.node) { Some(v.context) } else { None })
+        {
+            return result;
         }
         None
     }
@@ -1344,9 +1358,11 @@ impl Checker {
             return TypeFacts::None;
         } else if flags.intersects(TypeFlags::Union) {
             let mut facts = TypeFacts::None;
-            for &t in t.types() {
+            facts = t.types().iter().fold(facts, |mut facts, &t| {
                 facts |= self.get_type_facts_worker(t, caller_only_needs);
-            }
+
+                facts
+            });
             return facts;
         } else if flags.intersects(TypeFlags::Intersection) {
             return self.get_intersection_type_facts(t, caller_only_needs);
@@ -1976,10 +1992,14 @@ impl Checker {
             } else if ast::is_jsdoc_parameter_tag(parent) && parent.name() == Some(node) {
                 let func = ast::get_node_at_position(ast::get_source_file_of_node(node).unwrap(), node.pos(), false);
                 if ast::is_function_like(func) {
-                    for &param in func.parameters() {
+                    if let Some(result) = func.parameters().iter().find_map(|&param| {
                         if ast::is_identifier(param.name().unwrap()) && param.name().unwrap().text() == node.text() {
-                            return self.get_symbol_of_node(param);
+                            Some(self.get_symbol_of_node(param))
+                        } else {
+                            None
                         }
+                    }) {
+                        return result;
                     }
                 }
             }
@@ -2403,11 +2423,15 @@ impl Checker {
     pub(crate) fn get_this_type_from_contextual_type(&mut self, t: P<Type>) -> Option<P<Type>> {
         self.map_type(t, |c, t| {
             if t.flags().intersects(TypeFlags::Intersection) {
-                for &t in t.types() {
+                if let Some(result) = t.types().iter().find_map(|&t| {
                     let type_arg = c.get_this_type_argument(t);
                     if type_arg.is_some() {
-                        return type_arg;
+                        return Some(type_arg);
                     }
+
+                    None
+                }) {
+                    return result;
                 }
                 None
             } else {
@@ -2428,11 +2452,11 @@ impl Checker {
     pub(crate) fn get_applicable_index_infos(&mut self, t: P<Type>, key_type: P<Type>) -> Vec<P<IndexInfo>> {
         let index_infos = self.get_index_infos_of_type(t);
         let mut result = Vec::new();
-        for &info in index_infos {
-            if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
-                result.push(info);
-            }
-        }
+        result.extend(index_infos.iter().filter_map(
+            |&info| {
+                if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) { Some(info) } else { None }
+            },
+        ));
         result
     }
 
@@ -2445,13 +2469,13 @@ impl Checker {
                     if let Some(declaration) = info.declaration.get() {
                         declarations = vec![declaration];
                     } else {
-                        for info in self.get_index_infos_of_type(t).iter().copied() {
+                        declarations.extend(self.get_index_infos_of_type(t).iter().copied().filter_map(|info| {
                             if let Some(declaration) = info.declaration.get() {
-                                if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) {
-                                    declarations.push(declaration);
-                                }
+                                if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) { Some(declaration) } else { None }
+                            } else {
+                                None
                             }
-                        }
+                        }));
                     }
                     if !declarations.is_empty() {
                         let symbol = self.new_symbol(SymbolFlags::Property, InternalSymbolNameIndex);

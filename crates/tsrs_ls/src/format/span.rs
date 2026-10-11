@@ -120,30 +120,11 @@ pub(crate) fn prepare_range_contains_error_function(errors: &[P<Diagnostic>], or
     }
     sorted.sort_by_key(|d| d.pos());
 
-    let mut index = 0;
+    let index = 0;
     Box::new(move |r: TextRange| -> bool {
         // in current implementation sequence of arguments [r1, r2...] is monotonically increasing.
         // 'index' tracks the index of the most recent error that was checked.
-        loop {
-            if index >= sorted.len() {
-                // all errors in the range were already checked -> no error in specified range
-                return false;
-            }
-
-            let err = sorted[index];
-
-            if r.end() <= err.pos() {
-                // specified range ends before the error referred by 'index' - no error in range
-                return false;
-            }
-
-            if r.overlaps(err.loc()) {
-                // specified range overlaps with error range
-                return true;
-            }
-
-            index += 1;
-        }
+        return sorted.iter().skip(index).take_while(|err| r.end() > err.pos()).any(|err| r.overlaps(err.loc()));
     })
 }
 
@@ -565,8 +546,7 @@ impl FormatSpanWorker {
         }
 
         let mut inherited_indentation = -1;
-        for i in 0..nodes.nodes().len() {
-            let child = nodes.nodes()[i];
+        for (i, &child) in nodes.nodes().iter().enumerate() {
             inherited_indentation = self.process_child_node(
                 node,
                 indenter.cloned(),
@@ -1186,11 +1166,13 @@ impl FormatSpanWorker {
         let mut parts: Vec<TextRange> =
             Vec::with_capacity(text[comment_range.pos() as usize..comment_range.end() as usize].matches('\n').count());
         let mut start_pos = comment_range.pos();
-        for line in start_line..end_line {
+        parts = (start_line..end_line).fold(parts, |mut parts, line| {
             let end_of_line = scanner::get_ecma_end_line_position(self.source_file, line);
             parts.push(TextRange::new(start_pos, end_of_line));
             start_pos = scanner::get_ecma_line_starts(self.source_file.get())[(line + 1) as usize] as i32;
-        }
+
+            parts
+        });
 
         if indent_final_line {
             parts.push(TextRange::new(start_pos, comment_range.end()));
@@ -1214,13 +1196,13 @@ impl FormatSpanWorker {
 
         // shift all parts on the delta size
         let delta = indentation - non_whitespace_in_first_part_column;
-        for i in start_index..parts.len() {
+        for (i, element) in parts.iter().enumerate().skip(start_index) {
             let start_line_pos = scanner::get_ecma_line_starts(self.source_file.get())[start_line as usize] as i32;
             let mut non_whitespace_character = non_whitespace_in_first_part_character;
             let mut non_whitespace_column = non_whitespace_in_first_part_column;
             if i != 0 {
                 (non_whitespace_character, non_whitespace_column) =
-                    find_first_non_whitespace_character_and_column(parts[i].pos(), parts[i].end(), self.source_file, &self.fc().options);
+                    find_first_non_whitespace_character_and_column((*element).pos(), (*element).end(), self.source_file, &self.fc().options);
             }
             let new_indentation = non_whitespace_column + delta;
             if new_indentation > 0 {
@@ -1341,11 +1323,12 @@ impl FormatSpanWorker {
             // processed by processTrivia (which skips comments not contained by originalRange).
             // Cap previousRangeTriviaEnd before such comments so the trailing edit contiguity
             // check in execute() won't pair across unprocessed comment content.
-            for trivia in &current_token_info.trailing_trivia {
-                if is_comment(trivia.kind) && !trivia.loc.contained_by(self.original_range) {
-                    self.previous_range_trivia_end = trivia.loc.pos();
-                    break;
-                }
+            if let Some(trivia) = current_token_info
+                .trailing_trivia
+                .iter()
+                .find_map(|trivia| if is_comment(trivia.kind) && !trivia.loc.contained_by(self.original_range) { Some(trivia) } else { None })
+            {
+                self.previous_range_trivia_end = trivia.loc.pos();
             }
             self.process_trivia(&current_token_info.trailing_trivia, Some(parent), self.child_context_node, Some(dynamic_indenation));
         }

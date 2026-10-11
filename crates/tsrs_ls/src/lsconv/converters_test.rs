@@ -184,10 +184,12 @@ function utf8SeqLen(b) {
 fn run_js_reference(texts: &[&str]) -> Option<Vec<Vec<(i64, u32, u32)>>> {
     let mut input: Vec<u8> = Vec::new();
     input.extend_from_slice(&(texts.len() as u32).to_le_bytes());
-    for s in texts {
+    input = texts.iter().fold(input, |mut input, s| {
         input.extend_from_slice(&(s.len() as u32).to_le_bytes());
         input.extend_from_slice(s.as_bytes());
-    }
+
+        input
+    });
 
     let mut child = match Command::new("node").arg("-e").arg(JS_REFERENCE_SCRIPT).stdin(Stdio::piped()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
         Ok(child) => child,

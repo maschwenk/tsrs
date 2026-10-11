@@ -77,15 +77,15 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
         let message = dw::flatten_diagnostic_message(diag, HARNESS_NEW_LINE);
 
         let mut err_lines = Vec::new();
-        for line in remove_test_path_prefixes(&message, false).split('\n') {
+        err_lines.extend(remove_test_path_prefixes(&message, false).split('\n').filter_map(|line| {
             let line = line.strip_suffix('\r').unwrap_or(line);
             if line.is_empty() {
-                continue;
+                return None;
             }
-            err_lines.push(format!("!!! {} TS{}: {}", diag.category.name(), diag.code, line));
-        }
+            Some(format!("!!! {} TS{}: {}", diag.category.name(), diag.code, line))
+        }));
 
-        for info in &diag.related {
+        err_lines.extend(diag.related.iter().map(|info| {
             let mut location = String::new();
             if let Some(file) = &info.file {
                 location = format!(" {}", format_location(file, info.pos, &format_opts(), |output, text, _| output.push_str(text)));
@@ -94,8 +94,8 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
             if !location.is_empty() && is_default_library_file(&info.file.as_ref().unwrap().file_name) {
                 location = DIAGNOSTICS_LOCATION_PATTERN.replace_all(&location, "$1:--:--").into_owned();
             }
-            err_lines.push(format!("!!! related TS{}{}: {}", info.code, location, dw::flatten_diagnostic_message(info, HARNESS_NEW_LINE)));
-        }
+            format!("!!! related TS{}{}: {}", info.code, location, dw::flatten_diagnostic_message(info, HARNESS_NEW_LINE))
+        }));
 
         for e in err_lines {
             output_lines.push_str(new_line());
@@ -194,14 +194,13 @@ fn rune_count(bytes: &[u8]) -> usize {
 // `[\t\n\f\r ]` becomes a single space.
 fn replace_non_whitespace(bytes: &[u8]) -> String {
     let mut out = String::with_capacity(bytes.len());
-    for chunk in bytes.utf8_chunks() {
-        for c in chunk.valid().chars() {
-            out.push(if matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' ') { c } else { ' ' });
-        }
-        for _ in chunk.invalid() {
-            out.push(' ');
-        }
-    }
+    out.extend(bytes.utf8_chunks().flat_map(|chunk| {
+        chunk
+            .valid()
+            .chars()
+            .map(|c| if matches!(c, '\t' | '\n' | '\x0C' | '\r' | ' ') { c } else { ' ' })
+            .chain(std::iter::repeat_n(' ', chunk.invalid().len()))
+    }));
     out
 }
 

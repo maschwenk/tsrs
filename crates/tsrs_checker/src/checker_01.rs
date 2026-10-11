@@ -137,20 +137,20 @@ use rustc_hash::FxHashMap;
 // checker.go:1128
 pub(crate) fn create_file_index_map(files: &[P<SourceFile>]) -> FxHashMap<P<SourceFile>, i32> {
     let mut result = FxHashMap::with_capacity_and_hasher(files.len(), Default::default());
-    for (i, file) in files.iter().enumerate() {
-        result.insert(*file, i as i32);
-    }
+    result.extend(files.iter().enumerate().map(|(i, file)| (*file, i as i32)));
     result
 }
 
 // checker.go:1136
 pub(crate) fn count_global_symbols(files: &[P<SourceFile>]) -> i32 {
     let mut count = 0;
-    for file in files {
+    count = files.iter().fold(count, |mut count, file| {
         if !ast::is_external_or_common_js_module(*file) {
             count += file.locals().map_or(0, |locals| locals.len()) as i32;
         }
-    }
+
+        count
+    });
     count
 }
 
@@ -224,13 +224,17 @@ impl Checker {
 
 // checker.go:1241
 pub(crate) fn get_global_type_declaration(symbol: P<Symbol>) -> Option<P<Node>> {
-    for declaration in symbol.declarations().iter() {
+    if let Some(result) = symbol.declarations().iter().find_map(|declaration| {
         match declaration.kind() {
             Kind::ClassDeclaration | Kind::InterfaceDeclaration | Kind::EnumDeclaration | Kind::TypeAliasDeclaration => {
-                return Some(*declaration);
+                return Some(Some(*declaration));
             }
             _ => {}
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -460,13 +464,7 @@ impl Checker {
                 // all the exports both from the pattern and from the augmentation, but
                 // 'getMergedSymbol()' on *.foo only gives you exports from *.foo.
                 let pattern_ambient_modules = self.pattern_ambient_modules.clone();
-                let mut some = false;
-                for module in &pattern_ambient_modules {
-                    if main_module == self.get_merged_symbol(module.symbol) {
-                        some = true;
-                        break;
-                    }
-                }
+                let some = pattern_ambient_modules.iter().any(|module| main_module == self.get_merged_symbol(module.symbol));
                 if some {
                     let merged = self.merge_symbol(module_augmentation_symbol, main_module, true /*unidirectional*/);
                     // moduleName will be a StringLiteral since this is not `declare global`.
@@ -906,11 +904,11 @@ impl Checker {
 // checker.go:1804
 pub(crate) fn get_primitive_type_alias_suggestions(symbols: Option<P<SymbolTable>>) -> Vec<P<Symbol>> {
     let mut result = Vec::new();
-    for (builtin_name, suggestion) in primitive_type_alias_suggestions() {
-        if symbols.is_some_and(|symbols| symbols.has(builtin_name)) {
-            result.push(*suggestion);
-        }
-    }
+    result.extend(
+        primitive_type_alias_suggestions()
+            .iter()
+            .filter_map(|(builtin_name, suggestion)| if symbols.is_some_and(|symbols| symbols.has(builtin_name)) { Some(*suggestion) } else { None }),
+    );
     result
 }
 
@@ -1345,19 +1343,22 @@ pub(crate) fn is_same_scope_descendent_of(initial: P<Node>, parent: Option<P<Nod
     let Some(parent) = parent else {
         return false;
     };
-    let mut n = Some(initial);
-    while let Some(cur) = n {
+    let n = Some(initial);
+    if let Some(result) = std::iter::successors(n, |cur| cur.parent()).find_map(|cur| {
         if cur == parent {
-            return true;
+            return Some(true);
         }
         if cur == stop_at
             || ast::is_function_like(cur)
                 && (ast::get_immediately_invoked_function_expression(cur).is_none()
                     || ast::get_function_flags(Some(cur)).intersects(ast::FunctionFlags::AsyncGenerator))
         {
-            return false;
+            return Some(false);
         }
-        n = cur.parent();
+
+        None
+    }) {
+        return result;
     }
     false
 }

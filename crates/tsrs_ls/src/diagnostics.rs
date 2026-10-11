@@ -56,9 +56,11 @@ impl LanguageService {
     pub(crate) fn to_lsp_diagnostics(&self, ctx: &Context, diagnostics: &[&[P<Diagnostic>]]) -> Vec<lsproto::Diagnostic> {
         let report_style_checks_as_warnings = self.user_preferences().report_style_checks_as_warnings.is_true();
         let mut size = 0;
-        for diag_slice in diagnostics {
+        size = diagnostics.iter().fold(size, |mut size, diag_slice| {
             size += diag_slice.len();
-        }
+
+            size
+        });
         let mut lsp_diagnostics: Vec<lsproto::Diagnostic> = Vec::with_capacity(size);
         // Compiler diagnostics located entirely in a content-mapped file's synthesized code have no location
         // in the original file. Collect them per file and surface them through a single aggregate at the top
@@ -74,10 +76,10 @@ impl LanguageService {
                 lsp_diagnostics.push(lsconv::diagnostic_to_lsp_pull(ctx, &self.converters, diag, report_style_checks_as_warnings));
             }
         }
-        for (file, diags) in synthesized_by_file {
+        lsp_diagnostics.extend(synthesized_by_file.into_iter().map(|(file, diags)| {
             let aggregate = aggregate_synthesized_diagnostics(file, &diags);
-            lsp_diagnostics.push(lsconv::diagnostic_to_lsp_pull(ctx, &self.converters, aggregate, report_style_checks_as_warnings));
-        }
+            lsconv::diagnostic_to_lsp_pull(ctx, &self.converters, aggregate, report_style_checks_as_warnings)
+        }));
         lsp_diagnostics
     }
 }

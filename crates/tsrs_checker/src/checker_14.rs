@@ -911,12 +911,7 @@ impl Checker {
 
     // checker.go:29084
     pub(crate) fn has_signature_with_arity_greater_than(&mut self, symbol: P<Symbol>, arity: i32) -> bool {
-        for signature in self.get_signatures_of_symbol(Some(symbol)) {
-            if self.get_parameter_count(signature) > arity {
-                return true;
-            }
-        }
-        false
+        self.get_signatures_of_symbol(Some(symbol)).into_iter().any(|signature| self.get_parameter_count(signature) > arity)
     }
 
     // checker.go:29093
@@ -1355,10 +1350,9 @@ impl Checker {
         }
         if t.flags().intersects(TypeFlags::Intersection) {
             let optionality = self.get_combined_mapped_type_optionality(t.types()[0]);
-            for &t in &t.types()[1..] {
-                if self.get_combined_mapped_type_optionality(t) != optionality {
-                    return 0;
-                }
+            if let Some(result) = t.types()[1..].iter().find_map(|&t| if self.get_combined_mapped_type_optionality(t) != optionality { Some(0) } else { None })
+            {
+                return result;
             }
             return optionality;
         }
@@ -1455,12 +1449,16 @@ impl Checker {
     // checker.go:29602
     pub(crate) fn get_constraint_declaration(&mut self, t: P<Type>) -> Option<P<Node>> {
         if let Some(symbol) = t.symbol() {
-            for &d in symbol.declarations().iter() {
+            if let Some(result) = symbol.declarations().iter().find_map(|&d| {
                 if is_type_parameter_declaration(d) {
                     if let Some(constraint) = d.as_type_parameter_declaration().constraint {
-                        return Some(constraint);
+                        return Some(Some(constraint));
                     }
                 }
+
+                None
+            }) {
+                return result;
             }
         }
         None

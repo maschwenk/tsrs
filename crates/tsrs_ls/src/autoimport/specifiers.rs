@@ -18,7 +18,7 @@ impl View {
         let registry = self.registry();
         if !export.package_name.is_empty() {
             if let Some(entrypoints) = registry.entrypoints.get(&export.path) {
-                for entrypoint in entrypoints {
+                if let Some(result) = entrypoints.iter().find_map(|entrypoint| {
                     let include_is_subset = entrypoint.include_conditions.as_ref().is_none_or(|i| i.is_subset_of(&self.conditions));
                     let excluded = entrypoint.exclude_conditions.as_ref().is_some_and(|e| self.conditions.intersects(e));
                     if include_is_subset && !excluded {
@@ -32,9 +32,13 @@ impl View {
                         );
 
                         if !modulespecifiers::is_excluded_by_regex(&specifier, &user_preferences.auto_import_specifier_exclude_regexes) {
-                            return (specifier, ResultKind::NodeModules);
+                            return Some((specifier, ResultKind::NodeModules));
                         }
                     }
+
+                    None
+                }) {
+                    return result;
                 }
                 return (String::new(), ResultKind::None);
             }
@@ -63,12 +67,14 @@ impl View {
         // !!! unsure when this could return multiple specifiers combined with the
         //     new node_modules code. Possibly with local symlinks, which should be
         //     very rare.
-        for specifier in specifiers {
+        if let Some(result) = specifiers.into_iter().find_map(|specifier| {
             if specifier.contains("/node_modules/") {
-                continue;
+                return None;
             }
             cache.store(export.path.clone(), specifier.clone());
-            return (specifier, kind);
+            Some((specifier, kind))
+        }) {
+            return result;
         }
         cache.store(export.path.clone(), String::new());
         (String::new(), ResultKind::None)

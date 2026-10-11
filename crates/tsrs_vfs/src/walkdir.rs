@@ -127,9 +127,7 @@ impl WalkState {
 
         let entries = file_system.get_accessible_entries(path);
         let mut directories: FxHashSet<&str> = FxHashSet::default();
-        for name in &entries.directories {
-            directories.insert(name.as_str());
-        }
+        directories.extend(entries.directories.iter().map(std::string::String::as_str));
         let mut names: Vec<&str> = entries.directories.iter().map(|s| s.as_str()).collect();
         names.extend(entries.files.iter().map(|s| s.as_str()));
         names.sort_unstable();

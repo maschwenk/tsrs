@@ -469,15 +469,10 @@ pub(crate) fn get_new_requires(
     // const { default: foo, bar, etc } = require('./mod');
     if default_import.is_some() || !named_imports.is_empty() {
         let mut binding_elements: Vec<P<Node>> = Vec::new();
-        for named_import in named_imports {
+        binding_elements.extend(named_imports.iter().map(|named_import| {
             let property_name = if named_import.property_name.is_empty() { None } else { Some(f.new_identifier(alloc_str(&named_import.property_name))) };
-            binding_elements.push(f.new_binding_element(
-                None, /*dotDotDotToken*/
-                property_name,
-                Some(f.new_identifier(alloc_str(&named_import.name))),
-                None, /*initializer*/
-            ));
-        }
+            f.new_binding_element(None /*dotDotDotToken*/, property_name, Some(f.new_identifier(alloc_str(&named_import.name))), None /*initializer*/)
+        }));
         if let Some(default_import) = default_import {
             binding_elements.insert(
                 0,
@@ -682,12 +677,12 @@ impl View {
 
         let existing_imports = self.get_existing_imports();
         let matching_declarations = existing_imports.get(&export.module_id).map(|v| v.as_slice()).unwrap_or(&[]);
-        for existing_import in matching_declarations {
+        if let Some(result) = matching_declarations.iter().find_map(|existing_import| {
             let namespace_prefix = get_namespace_like_import_text(existing_import.node);
             if namespace_prefix.is_empty() || existing_import.module_specifier.is_empty() {
-                continue;
+                return None;
             }
-            return Some(Fix {
+            Some(Some(Fix {
                 auto_import_fix: lsproto::AutoImportFix {
                     kind: lsproto::AutoImportFixKind::UseNamespace,
                     name: export.name().to_string(),
@@ -700,7 +695,9 @@ impl View {
                     ..Default::default()
                 },
                 ..Default::default()
-            });
+            }))
+        }) {
+            return result;
         }
 
         None
@@ -875,11 +872,15 @@ fn get_import_kind(importing_file: P<SourceFile>, export: &Export, program: &Pro
                 return lsproto::ImportKind::Named;
             }
             // !!! cache this?
-            for &statement in importing_file.statements.nodes() {
+            if let Some(result) = importing_file.statements.nodes().iter().find_map(|&statement| {
                 // `import foo` parses as an ImportEqualsDeclaration even though it could be an ImportDeclaration
                 if ast::is_import_equals_declaration(statement) && !ast::node_is_missing(Some(statement.as_import_equals_declaration().module_reference)) {
-                    return lsproto::ImportKind::CommonJS;
+                    return Some(lsproto::ImportKind::CommonJS);
                 }
+
+                None
+            }) {
+                return result;
             }
             // !!! this logic feels weird; we're basically trying to predict if shouldUseRequire is going to
             //     be true. The meaning of "default import" is different depending on whether we write it as
@@ -993,21 +994,25 @@ fn detect_syntax_indicators(file: P<SourceFile>, options: &CompilerOptions) -> (
     }
     // Fall back to scanning Imports() for actual import/export declarations
     // (not require() calls or dynamic imports).
-    for &imp in file.imports() {
+    if let Some(result) = file.imports().iter().find_map(|&imp| {
         if imp.flags().intersects(NodeFlags::Synthesized) {
-            continue;
+            return None;
         }
         let Some(parent) = imp.parent() else {
-            continue;
+            return None;
         };
         match parent.kind() {
-            Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => return (true, has_cjs),
+            Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => return Some((true, has_cjs)),
             Kind::ExternalModuleReference => {
                 // import x = require("...") — this is ESM-ish syntax
-                return (true, has_cjs);
+                return Some((true, has_cjs));
             }
             _ => {}
         }
+
+        None
+    }) {
+        return result;
     }
     (false, has_cjs)
 }
@@ -1041,15 +1046,19 @@ impl View {
         }
 
         // 5. Match the first other JS file in the program that's unambiguously CJS or ESM
-        for &other_file in self.program.get_source_files() {
+        if let Some(result) = self.program.get_source_files().iter().find_map(|&other_file| {
             if other_file == self.importing_file || !ast::is_source_file_js(other_file) || self.program.is_source_file_from_external_library(other_file) {
-                continue;
+                return None;
             }
             match detect_syntax(other_file, &self.program.options()) {
-                fileSyntaxKind::CJS => return true,
-                fileSyntaxKind::ESM => return false,
+                fileSyntaxKind::CJS => return Some(true),
+                fileSyntaxKind::ESM => return Some(false),
                 fileSyntaxKind::Ambiguous => {}
             }
+
+            None
+        }) {
+            return result;
         }
 
         // 6. Literally nothing to go on

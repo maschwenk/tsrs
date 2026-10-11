@@ -337,17 +337,10 @@ mod heap_sample {
         if let Some(path) = want_tsv {
             use std::io::Write;
             let mut out = String::from("group\tlive_bytes\tpeak_bytes\ttotal_bytes\tframes\n");
-            for (i, site) in state.stacks.iter().enumerate() {
+            out.extend(state.stacks.iter().enumerate().map(|(i, site)| {
                 let frames = if site.stack[0] == 1 { vec!["<arena chunks>".to_string()] } else { frames_of(&site.stack, &names, 12) };
-                out.push_str(&format!(
-                    "{}\t{}\t{}\t{}\t{}\n",
-                    group_name(site.group),
-                    site.live,
-                    state.peak.get(i).copied().unwrap_or(0),
-                    site.total,
-                    frames.join(" <- ")
-                ));
-            }
+                format!("{}\t{}\t{}\t{}\t{}\n", group_name(site.group), site.live, state.peak.get(i).copied().unwrap_or(0), site.total, frames.join(" <- "))
+            }));
             if let Ok(mut f) = std::fs::File::create(&path) {
                 let _ = f.write_all(out.as_bytes());
             }
@@ -578,9 +571,7 @@ pub(crate) fn census_would_free_since(since: usize) {
         let data = &mut *data;
         census::with_guard(|| {
             let seq = census::next_seq();
-            for &(addr, size, _, _) in data.blocks.get(since..).unwrap_or(&[]) {
-                data.would_free.push((addr, size, seq));
-            }
+            data.would_free.extend(data.blocks.get(since..).unwrap_or(&[]).iter().map(|&(addr, size, _, _)| (addr, size, seq)));
         });
     });
 }

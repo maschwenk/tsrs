@@ -175,12 +175,9 @@ pub fn for_each_emitted_file(
     source_files: &[P<SourceFile>],
     force_dts_emit: bool,
 ) -> bool {
-    for &source_file in source_files {
-        if action(&get_output_paths_for(source_file, options, host, ForceEmitPaths { dts: force_dts_emit, ..Default::default() }), source_file) {
-            return true;
-        }
-    }
-    false
+    source_files.iter().any(|&source_file| {
+        action(&get_output_paths_for(source_file, options, host, ForceEmitPaths { dts: force_dts_emit, ..Default::default() }), source_file)
+    })
 }
 
 fn extension_refs(extensions: &[String]) -> Vec<&str> {

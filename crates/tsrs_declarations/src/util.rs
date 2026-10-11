@@ -44,12 +44,7 @@ pub(crate) fn can_produce_diagnostics(node: P<Node>) -> bool {
 
 // util.go:52
 pub(crate) fn can_reuse_modifier_nodes(nodes: &[P<Node>]) -> bool {
-    for &node in nodes {
-        if ast::is_modifier(node) && node.flags().intersects(NodeFlags::Reparsed) {
-            return false;
-        }
-    }
-    true
+    !(nodes.iter().any(|&node| ast::is_modifier(node) && node.flags().intersects(NodeFlags::Reparsed)))
 }
 
 // util.go:61
@@ -79,12 +74,7 @@ pub(crate) fn get_binding_name_visible(resolver: Resolver, elem: P<Node>) -> boo
     };
     if ast::is_binding_pattern(name) {
         // If any child binding pattern element has been marked visible (usually by collect linked aliases), then this is visible
-        for &elem in name.elements() {
-            if get_binding_name_visible(resolver, elem) {
-                return true;
-            }
-        }
-        false
+        name.elements().iter().any(|&elem| get_binding_name_visible(resolver, elem))
     } else {
         resolver.is_declaration_visible(elem)
     }

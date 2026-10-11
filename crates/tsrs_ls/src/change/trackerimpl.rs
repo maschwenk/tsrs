@@ -30,7 +30,7 @@ impl Tracker {
             // For a content-mapped file, a mapper may reorder source text relative to the original document.
             // Convert first, then sort and check for overlap in the space where edits are actually applied.
             let mut text_changes = Vec::with_capacity(changes_in_file.len());
-            for change in &changes_in_file {
+            text_changes.extend(changes_in_file.iter().map(|change| {
                 // !!! targetSourceFile
 
                 let new_text = self.compute_new_text(change, source_file, source_file);
@@ -40,8 +40,8 @@ impl Tracker {
                 // if (span.length == newText.length && stringContainsAt(targetSourceFile.text, newText, span.start)) { return nil }
 
                 let range = self.to_lsp_edit_range(source_file, change.text_range);
-                text_changes.push(lsproto::TextEdit { new_text, range });
-            }
+                lsproto::TextEdit { new_text, range }
+            }));
 
             if !text_changes.is_empty() {
                 changes.entry(file_name.clone()).or_default().extend(text_changes);
@@ -67,17 +67,12 @@ impl Tracker {
                 *text_changes = deduped;
             }
             // verify that change intervals do not overlap, except possibly at end points.
-            let n = text_changes.len();
-            for i in 0..n.saturating_sub(1) {
-                if text_edits_conflict(&text_changes[i], &text_changes[i + 1], projection_count > 1) {
-                    if projection_count > 1 {
-                        // Projections of one original range disagree about how to edit it. That is a property of
-                        // the mapper's output rather than a bug here, so drop the file instead of failing.
-                        self.unmappable_files.insert(file_name.clone());
-                        break;
-                    }
-                    // assert change[i].End <= change[i + 1].Start
-                    panic!("changes overlap: {:?} and {:?}", text_changes[i].range, text_changes[i + 1].range);
+            if let Some(pair) = text_changes.windows(2).find(|pair| text_edits_conflict(&pair[0], &pair[1], projection_count > 1)) {
+                if projection_count > 1 {
+                    // Conflicting projections cannot be applied to the original file.
+                    self.unmappable_files.insert(file_name.clone());
+                } else {
+                    panic!("changes overlap: {:?} and {:?}", pair[0].range, pair[1].range);
                 }
             }
         }
@@ -374,24 +369,18 @@ impl Tracker {
             // return the end of the comment and track it for the next nodes to adjust.
             let line_starts = source_file.ecma_line_map();
             let node_end_line = scanner::compute_line_of_position(line_starts, node.end());
-            for comment in scanner::get_trailing_comment_ranges(source_file.text(), node.end()) {
-                // Single line can break the loop as trivia will only be this line.
-                // Comments on subsequent lines are also ignored.
-                if comment.kind == Kind::SingleLineCommentTrivia || scanner::compute_line_of_position(line_starts, comment.pos()) > node_end_line {
-                    break;
-                }
-
-                // Get the end line of the comment and compare against the end line of the node.
-                // If the comment end line position and the multiline comment extends to multiple lines,
-                // then is safe to return the end position.
-                let comment_end_line = scanner::compute_line_of_position(line_starts, comment.end());
-                if comment_end_line > node_end_line {
-                    return scanner::skip_trivia_ex(
-                        source_file.text(),
-                        comment.end(),
-                        Some(&scanner::SkipTriviaOptions { stop_after_line_break: true, stop_at_comments: true, ..Default::default() }),
-                    );
-                }
+            if let Some(comment) = scanner::get_trailing_comment_ranges(source_file.text(), node.end())
+                // Ignore single-line comments and comments starting on subsequent lines.
+                .take_while(|comment| {
+                    comment.kind != Kind::SingleLineCommentTrivia && scanner::compute_line_of_position(line_starts, comment.pos()) <= node_end_line
+                })
+                .find(|comment| scanner::compute_line_of_position(line_starts, comment.end()) > node_end_line)
+            {
+                return scanner::skip_trivia_ex(
+                    source_file.text(),
+                    comment.end(),
+                    Some(&scanner::SkipTriviaOptions { stop_after_line_break: true, stop_at_comments: true, ..Default::default() }),
+                );
             }
         }
 
@@ -541,17 +530,9 @@ impl Tracker {
 // dedupeIdenticalEdits drops exact duplicates from a sorted slice of edits. When a mapper copies one span
 // of the original into more than one projection, an edit computed against each projection describes the
 // same change to the same original range; emitting it once per projection would apply it repeatedly.
-fn dedupe_identical_edits(edits: Vec<lsproto::TextEdit>) -> Vec<lsproto::TextEdit> {
-    let mut deduped: Vec<lsproto::TextEdit> = Vec::with_capacity(edits.len());
-    for edit in edits {
-        if let Some(last) = deduped.last() {
-            if last.range == edit.range && last.new_text == edit.new_text {
-                continue;
-            }
-        }
-        deduped.push(edit);
-    }
-    deduped
+fn dedupe_identical_edits(mut edits: Vec<lsproto::TextEdit>) -> Vec<lsproto::TextEdit> {
+    edits.dedup_by(|a, b| a.range == b.range && a.new_text == b.new_text);
+    edits
 }
 
 // trackerimpl.go:96
@@ -567,9 +548,7 @@ pub(crate) fn text_edits_conflict(a: &lsproto::TextEdit, b: &lsproto::TextEdit, 
 fn leading_indentation(text: &str) -> &str {
     let bytes = text.as_bytes();
     let mut end = 0;
-    while end < bytes.len() && (bytes[end] == b' ' || bytes[end] == b'\t') {
-        end += 1;
-    }
+    end += (end..bytes.len()).take_while(|&index| bytes[index] == b' ' || bytes[index] == b'\t').count();
     &text[..end]
 }
 
@@ -588,10 +567,10 @@ pub fn get_format_code_settings_for_writing(options: FormatCodeSettings, source_
 
 // trackerimpl.go:452
 pub(crate) fn has_comments_before_line_break(text: &str, start: i32) -> bool {
-    for ch in text[start as usize..].chars() {
-        if !stringutil::is_white_space_single_line(ch as i32) {
-            return ch == '/';
-        }
+    if let Some(result) =
+        text[start as usize..].chars().into_iter().find_map(|ch| if !stringutil::is_white_space_single_line(ch as i32) { Some(ch == '/') } else { None })
+    {
+        return result;
     }
     false
 }

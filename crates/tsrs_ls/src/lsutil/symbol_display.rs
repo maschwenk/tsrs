@@ -141,11 +141,7 @@ impl ScriptElementKindModifier {
     // symbol_display.go:135
     pub fn strings(self) -> FxHashSet<&'static str> {
         let mut result = FxHashSet::default();
-        for &(flag, name) in SCRIPT_ELEMENT_KIND_MODIFIER_NAMES {
-            if self.intersects(flag) {
-                result.insert(name);
-            }
-        }
+        result.extend(SCRIPT_ELEMENT_KIND_MODIFIER_NAMES.iter().filter_map(|&(flag, name)| if self.intersects(flag) { Some(name) } else { None }));
         result
     }
 }
@@ -289,11 +285,8 @@ fn get_symbol_kind_of_constructor_property_method_accessor_function_or_var(
             if flags.intersects(SymbolFlags::Transient) && symbol.check_flags().intersects(CheckFlags::Synthetic) {
                 // If union property is result of union of non method (property/accessors/variables), it is labeled as property
                 let mut union_property_kind = ScriptElementKind::Unknown;
-                for root_symbol in &roots {
-                    if root_symbol.flags().intersects(SymbolFlags::PropertyOrAccessor | SymbolFlags::Variable) {
-                        union_property_kind = ScriptElementKind::MemberVariableElement;
-                        break;
-                    }
+                if roots.iter().any(|root_symbol| root_symbol.flags().intersects(SymbolFlags::PropertyOrAccessor | SymbolFlags::Variable)) {
+                    union_property_kind = ScriptElementKind::MemberVariableElement;
                 }
                 if union_property_kind == ScriptElementKind::Unknown {
                     // If this was union of all methods,

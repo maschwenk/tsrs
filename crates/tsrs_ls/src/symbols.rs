@@ -57,15 +57,13 @@ impl LanguageService {
         projections.extend_from_slice(file.supplemental_source_files());
         let mut symbols: Vec<lsproto::DocumentSymbol> = Vec::new();
         let mut seen: FxHashSet<(String, lsproto::SymbolKind, lsproto::Range)> = FxHashSet::default();
-        for projection in projections {
-            for symbol in self.get_document_symbols_for_children(ctx, projection.as_node(), projection) {
+        symbols.extend(projections.into_iter().flat_map(|projection| self.get_document_symbols_for_children(ctx, projection.as_node(), projection)).filter_map(
+            |symbol| {
                 let symbol = doc_sym_to_lsp(&symbol);
                 let key = (symbol.name.clone(), symbol.kind, symbol.range);
-                if seen.insert(key) {
-                    symbols.push(symbol);
-                }
-            }
-        }
+                seen.insert(key).then_some(symbol)
+            },
+        ));
         if lsproto::get_client_capabilities(ctx).text_document.document_symbol.hierarchical_document_symbol_support {
             return Ok(lsproto::SymbolInformationsOrDocumentSymbolsOrNull { document_symbols: Some(symbols), ..Default::default() });
         }
@@ -459,9 +457,7 @@ fn merge_expandos(symbols: Vec<DocSym>) -> Vec<DocSym> {
             }
         }
     }
-    for symbol in symbols.into_iter().flatten() {
-        merged_symbols.push(symbol);
-    }
+    merged_symbols.extend(symbols.into_iter().flatten());
     merged_symbols
 }
 
@@ -576,11 +572,12 @@ fn get_call_expression_name(node: P<Node>) -> String {
 // symbols.go:501
 fn get_call_expression_literal_args(call_expr: P<Node>) -> String {
     let mut parts = Vec::new();
-    for &arg in call_expr.arguments() {
-        if ast::is_string_literal_like(arg) || ast::is_template_expression(arg) {
-            parts.push(scanner::get_text_of_node(arg));
-        }
-    }
+    parts.extend(
+        call_expr
+            .arguments()
+            .iter()
+            .filter_map(|&arg| if ast::is_string_literal_like(arg) || ast::is_template_expression(arg) { Some(scanner::get_text_of_node(arg)) } else { None }),
+    );
     parts.join(", ")
 }
 
@@ -634,11 +631,13 @@ pub fn provide_workspace_symbols(
     // (Go iterates a map in random order; the matches are sorted below.)
     let mut source_files: FxHashMap<Path, P<SourceFile>> = FxHashMap::default();
     for program in programs {
-        for &source_file in program.source_files() {
+        source_files.extend(program.source_files().iter().filter_map(|&source_file| {
             if (program.has_ts_file() || !source_file.is_declaration_file.get()) && !should_exclude_file(source_file, program, exclude_library_symbols) {
-                source_files.insert(source_file.path().clone(), source_file);
+                Some((source_file.path().clone(), source_file))
+            } else {
+                None
             }
-        }
+        }));
     }
     // Create DeclarationInfos for all declarations in the source files.
     let mut infos: Vec<DeclarationInfo> = Vec::new();
@@ -648,20 +647,23 @@ pub fn provide_workspace_symbols(
             return Ok(lsproto::SymbolInformationsOrWorkspaceSymbolsOrNull::default());
         }
         let declaration_map = source_file.get_declaration_map();
-        for (name, declarations) in declaration_map {
-            let score = get_match_score(name, query);
-            if score >= 0 {
-                for &declaration in declarations {
-                    infos.push(DeclarationInfo { name: name.clone(), declaration, match_score: score });
-                }
-            }
-        }
+        infos.extend(
+            declaration_map
+                .iter()
+                .filter_map(|(name, declarations)| {
+                    let score = get_match_score(name, query);
+                    (score >= 0).then_some((name, declarations, score))
+                })
+                .flat_map(|(name, declarations, score)| {
+                    declarations.iter().map(move |&declaration| DeclarationInfo { name: name.clone(), declaration, match_score: score })
+                }),
+        );
     }
     // Sort the DeclarationInfos and return the top 256 matches.
     goslices::sort_func(&mut infos, compare_declaration_infos);
     let count = infos.len().min(256);
     let mut symbols: Vec<lsproto::SymbolInformation> = Vec::with_capacity(count);
-    for info in &infos[0..count] {
+    symbols.extend(infos[0..count].iter().filter_map(|info| {
         let node = info.declaration;
         let source_file = ast::get_source_file_of_node(node).unwrap();
         let container = get_container_node(info.declaration);
@@ -679,7 +681,7 @@ pub fn provide_workspace_symbols(
         let (location, fidelity) = converters.to_lsp_location_for_feature(&source_file, name_range, Feature::DocumentSymbols);
         if !fidelity.is_single_segment() {
             // The name has no counterpart in the original text, so there is nothing to navigate to.
-            continue;
+            return None;
         }
         let symbol = lsproto::SymbolInformation {
             name: info.name.clone(),
@@ -688,8 +690,8 @@ pub fn provide_workspace_symbols(
             container_name,
             ..Default::default()
         };
-        symbols.push(symbol);
-    }
+        Some(symbol)
+    }));
 
     Ok(lsproto::SymbolInformationsOrWorkspaceSymbolsOrNull { symbol_informations: Some(symbols), ..Default::default() })
 }

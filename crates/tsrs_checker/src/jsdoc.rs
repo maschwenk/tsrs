@@ -7,15 +7,17 @@ impl Checker {
     // jsdoc.go:9
     pub(crate) fn check_unmatched_jsdoc_parameters(&mut self, node: P<Node>) {
         let mut jsdoc_parameters: Vec<P<Node>> = Vec::new();
-        for tag in get_all_jsdoc_tags(node) {
+        jsdoc_parameters.extend(get_all_jsdoc_tags(node).into_iter().filter_map(|tag| {
             if tag.kind() == Kind::JSDocParameterTag {
                 let name = tag.as_jsdoc_parameter_or_property_tag().name();
                 if ast::is_identifier(name) && name.text().is_empty() {
-                    continue;
+                    return None;
                 }
-                jsdoc_parameters.push(tag);
+                Some(tag)
+            } else {
+                None
             }
-        }
+        }));
 
         if jsdoc_parameters.is_empty() {
             return;

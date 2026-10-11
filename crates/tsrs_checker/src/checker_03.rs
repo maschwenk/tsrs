@@ -48,11 +48,9 @@ impl Checker {
                 self.check_source_element(base_type_node.expression());
                 if !base_type_node.type_arguments().is_empty() {
                     self.check_source_elements(base_type_node.type_arguments());
-                    for constructor in self.get_constructors_for_type_arguments(static_base_type, base_type_node.type_arguments(), base_type_node) {
-                        if !self.check_type_argument_constraints(base_type_node, constructor.type_parameters()) {
-                            break;
-                        }
-                    }
+                    self.get_constructors_for_type_arguments(static_base_type, base_type_node.type_arguments(), base_type_node)
+                        .into_iter()
+                        .all(|constructor| self.check_type_argument_constraints(base_type_node, constructor.type_parameters()));
                 }
                 let base_with_this = self.get_type_with_this_argument(base_type, class_type_data.this_type.get(), false);
                 if !self.check_type_assignable_to(type_with_this, base_with_this, None, None) {
@@ -220,12 +218,12 @@ impl Checker {
             if source_parameters.len() < min_type_argument_count || source_parameters.len() > max_type_argument_count {
                 return false;
             }
-            for (i, &source) in source_parameters.iter().enumerate() {
+            if source_parameters.iter().enumerate().any(|(i, &source)| {
                 let target = target_parameters[i];
                 // If the type parameter node does not have the same name as the resolved type
                 // parameter at this position, we report an error.
                 if source.name().unwrap().text() != target.symbol().unwrap().name() {
-                    return false;
+                    return true;
                 }
                 // If the type parameter node does not have an identical constraintNode as the resolved
                 // type parameter at this position, we report an error.
@@ -236,7 +234,7 @@ impl Checker {
                 if let (Some(constraint_node), Some(target_constraint)) = (constraint_node, target_constraint) {
                     let constraint_type = self.get_type_from_type_node(constraint_node);
                     if !self.is_type_identical_to(constraint_type, target_constraint) {
-                        return false;
+                        return true;
                     }
                 }
                 // If the type parameter node has a default and it is not identical to the default
@@ -246,9 +244,13 @@ impl Checker {
                 if let (Some(default_node), Some(target_default)) = (default_node, target_default) {
                     let default_type = self.get_type_from_type_node(default_node);
                     if !self.is_type_identical_to(default_type, target_default) {
-                        return false;
+                        return true;
                     }
                 }
+
+                false
+            }) {
+                return false;
             }
         }
         true
@@ -725,13 +727,10 @@ impl Checker {
             // the index signature (i.e. property and index signature are declared in separate inherited interfaces).
             let mut error_node = local_prop_declaration.or(local_index_declaration);
             if error_node.is_none() && interface_declaration.is_some() {
-                let mut some = false;
-                for &base in self.get_base_types(t) {
-                    if self.get_property_of_object_type(base, prop.name()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
-                        some = true;
-                        break;
-                    }
-                }
+                let some = self
+                    .get_base_types(t)
+                    .iter()
+                    .any(|&base| self.get_property_of_object_type(base, prop.name()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some());
                 if !some {
                     error_node = interface_declaration;
                 }
@@ -787,13 +786,9 @@ impl Checker {
             // both index signatures (i.e. the index signatures are declared in separate inherited interfaces).
             let mut error_node = local_check_declaration.or(local_index_declaration);
             if error_node.is_none() && interface_declaration.is_some() {
-                let mut some = false;
-                for &base in self.get_base_types(t) {
-                    if self.get_index_info_of_type(base, check_info.key_type()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some() {
-                        some = true;
-                        break;
-                    }
-                }
+                let some = self.get_base_types(t).iter().any(|&base| {
+                    self.get_index_info_of_type(base, check_info.key_type()).is_some() && self.get_index_type_of_type(base, info.key_type()).is_some()
+                });
                 if !some {
                     error_node = interface_declaration;
                 }
@@ -886,8 +881,15 @@ impl Checker {
     }
 
     // checker.go:5051
-    pub(crate) fn is_property_initialized_in_static_blocks(&mut self, prop_name: P<Node>, prop_type: P<Type>, static_blocks: &[P<Node>], start_pos: i32, end_pos: i32) -> bool {
-        for &static_block in static_blocks {
+    pub(crate) fn is_property_initialized_in_static_blocks(
+        &mut self,
+        prop_name: P<Node>,
+        prop_type: P<Type>,
+        static_blocks: &[P<Node>],
+        start_pos: i32,
+        end_pos: i32,
+    ) -> bool {
+        if static_blocks.iter().any(|&static_block| {
             // static block must be within the provided range as they are evaluated in document order (unlike constructors)
             if static_block.pos() >= start_pos && static_block.pos() <= end_pos {
                 let this_keyword = self.factory.new_keyword_expression(Kind::ThisKeyword);
@@ -901,6 +903,10 @@ impl Checker {
                     return true;
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }
@@ -991,11 +997,12 @@ impl Checker {
         let mut seen: FxHashMap<&'static str, InheritanceInfo> = FxHashMap::default();
         let declared_members = self.resolve_declared_members(t).unwrap().declared_members.get();
         if let Some(declared_members) = declared_members {
-            for (id, p) in declared_members.entries() {
-                if self.is_named_member(p, id) {
-                    seen.insert(p.name(), InheritanceInfo { prop: p, containing_type: t });
-                }
-            }
+            seen.extend(
+                declared_members
+                    .entries()
+                    .into_iter()
+                    .filter_map(|(id, p)| if self.is_named_member(p, id) { Some((p.name(), InheritanceInfo { prop: p, containing_type: t })) } else { None }),
+            );
         }
         let mut identical = true;
         for &base in base_types {
@@ -1245,10 +1252,16 @@ pub(crate) fn is_instantiated_module(node: P<Node>, preserve_const_enums: bool) 
 
 // checker.go:5357
 pub(crate) fn get_first_non_ambient_class_or_function_declaration(symbol: P<Symbol>) -> Option<P<Node>> {
-    for &declaration in symbol.declarations().iter() {
-        if (is_class_declaration(declaration) || is_function_declaration(declaration) && node_is_present(declaration.body())) && !declaration.flags().intersects(NodeFlags::Ambient) {
-            return Some(declaration);
+    if let Some(result) = symbol.declarations().iter().find_map(|&declaration| {
+        if (is_class_declaration(declaration) || is_function_declaration(declaration) && node_is_present(declaration.body()))
+            && !declaration.flags().intersects(NodeFlags::Ambient)
+        {
+            Some(Some(declaration))
+        } else {
+            None
         }
+    }) {
+        return result;
     }
     None
 }
@@ -1867,12 +1880,7 @@ impl Checker {
         let Some(exports) = module_symbol.exports() else {
             return false;
         };
-        for symbol in exports.values() {
-            if symbol.name() != InternalSymbolNameExportEquals && self.get_symbol_flags(symbol).intersects(kind) {
-                return true;
-            }
-        }
-        false
+        exports.values().into_iter().any(|symbol| symbol.name() != InternalSymbolNameExportEquals && self.get_symbol_flags(symbol).intersects(kind))
     }
 
     // checker.go:5912
@@ -2448,7 +2456,7 @@ impl Checker {
     pub(crate) fn get_iteration_types_of_iterable_worker(&mut self, t: P<Type>, use_: IterationUse, error_node: Option<P<Node>>, no_cache: bool) -> IterationTypes {
         if t.flags().intersects(TypeFlags::Union) {
             let mut all_iteration_types: Vec<IterationTypes> = Vec::with_capacity(t.types().len());
-            for &constituent in t.types() {
+            all_iteration_types = match t.types().iter().try_fold(all_iteration_types, |mut all_iteration_types, &constituent| {
                 let iteration_types = self.get_iteration_types_of_iterable_worker(constituent, use_, None, no_cache);
                 if !iteration_types.has_types() {
                     if let Some(error_node) = error_node {
@@ -2456,10 +2464,15 @@ impl Checker {
                             c.report_type_not_iterable_error(error_node, t, use_.intersects(IterationUse::AllowsAsyncIterablesFlag));
                         });
                     }
-                    return IterationTypes::default();
+                    return std::ops::ControlFlow::Break(IterationTypes::default());
                 }
                 all_iteration_types.push(iteration_types);
-            }
+
+                std::ops::ControlFlow::Continue(all_iteration_types)
+            }) {
+                std::ops::ControlFlow::Continue(value) => value,
+                std::ops::ControlFlow::Break(value) => return value,
+            };
             return self.combine_iteration_types(&all_iteration_types);
         }
         let mut diags: Vec<P<Diagnostic>> = Vec::new();

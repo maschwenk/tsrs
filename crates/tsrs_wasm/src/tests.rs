@@ -33,9 +33,7 @@ fn setup(files: &[(&str, &str)]) -> MutexGuard<'static, ()> {
 fn reset(files: &[(&str, &str)]) {
     let mut map = host::test_host::FILES.lock().unwrap();
     map.clear();
-    for (path, text) in files {
-        map.insert(path.to_string(), text.as_bytes().to_vec());
-    }
+    map.extend(files.iter().map(|(path, text)| (path.to_string(), text.as_bytes().to_vec())));
     host::test_host::FAIL_WRITES.lock().unwrap().clear();
 }
 
@@ -142,9 +140,11 @@ fn emit_through_the_host_matches_native() {
     assert_eq!((status, native_status), (0, 0), "{stdout} {listing:?}");
 
     let mut expected = Vec::new();
-    for name in ["a.js", "a.js.map", "a.d.ts", "a.d.ts.map", "b.js", "b.js.map", "b.d.ts", "b.d.ts.map"] {
-        expected.push((format!("{root}/out/{name}"), std::fs::read(dir.join("out").join(name)).unwrap()));
-    }
+    expected.extend(
+        (["a.js", "a.js.map", "a.d.ts", "a.d.ts.map", "b.js", "b.js.map", "b.d.ts", "b.d.ts.map"])
+            .into_iter()
+            .map(|name| (format!("{root}/out/{name}"), std::fs::read(dir.join("out").join(name)).unwrap())),
+    );
     expected.sort();
     let files = host::test_host::FILES.lock().unwrap();
     let written: Vec<(String, Vec<u8>)> = files.iter().filter(|(k, _)| k.contains("/out/")).map(|(k, v)| (k.clone(), v.clone())).collect();

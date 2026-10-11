@@ -101,9 +101,7 @@ fn script_range(content: &str) -> Result<(usize, usize), ipc::Error> {
 fn leading_import_range(content: &str, script_start: usize, script_end: usize) -> (usize, usize) {
     let bytes = content.as_bytes();
     let mut start = script_start;
-    while start < script_end && is_space_byte(bytes[start]) {
-        start += 1;
-    }
+    start += (start..script_end).take_while(|&index| is_space_byte(bytes[index])).count();
     let mut end = start;
     while end < script_end && content[end..script_end].starts_with("import ") {
         let Some(line_end) = content[end..script_end].find('\n') else {
@@ -111,13 +109,9 @@ fn leading_import_range(content: &str, script_start: usize, script_end: usize) -
             break;
         };
         end += line_end;
-        while end < script_end && is_space_byte(bytes[end]) {
-            end += 1;
-        }
+        end += (end..script_end).take_while(|&index| is_space_byte(bytes[index])).count();
     }
-    while end > start && is_space_byte(bytes[end - 1]) {
-        end -= 1;
-    }
+    end -= (start..end).rev().take_while(|&i| is_space_byte(bytes[i])).count();
     (start, end)
 }
 

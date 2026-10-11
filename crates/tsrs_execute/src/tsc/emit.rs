@@ -171,10 +171,7 @@ fn list_files_worker(input: &EmitInput, emit_result: &tsrs_compiler::EmitResult)
         input.write(&tsrs_core::utf8::from_utf8_lossy(&out));
     } else if options.list_files.is_true() || options.list_files_only.is_true() {
         let mut out = String::new();
-        for file in input.program.get_source_files() {
-            out.push_str(file.file_name());
-            out.push('\n');
-        }
+        out.extend(input.program.get_source_files().iter().flat_map(|file| [file.file_name(), "\n"]));
         input.write(&out);
     }
 }

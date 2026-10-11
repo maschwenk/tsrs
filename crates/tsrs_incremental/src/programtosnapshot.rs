@@ -103,11 +103,9 @@ impl toProgramSnapshot {
         // Files of the old state that the new program does not have.
         let mut deleted_files: rustc_hash::FxHashSet<Path> = rustc_hash::FxHashSet::default();
         if let Some(old) = old {
-            for path in old.file_infos.keys() {
-                if self.program.get_source_file_by_path(&path).is_none() {
-                    deleted_files.insert(path);
-                }
-            }
+            deleted_files.extend(
+                old.file_infos.keys().into_iter().filter_map(|path| if self.program.get_source_file_by_path(&path).is_none() { Some(path) } else { None }),
+            );
         }
         let new_options = self.snapshot.options();
         // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
@@ -396,19 +394,17 @@ fn checker_references_of(file: P<SourceFile>, checker: &mut Checker, ambient_mod
     let ambient_module_files = declaring_files.unwrap_or_else(|| {
         let mut declaring_files = Vec::new();
         let mut seen: rustc_hash::FxHashSet<P<SourceFile>> = rustc_hash::FxHashSet::default();
-        for ambient_module in checker.get_ambient_modules() {
-            for &declaration in ambient_module.declarations() {
-                let Some(file_of_decl) = ast::get_source_file_of_node(declaration) else { continue };
-                if seen.insert(file_of_decl) {
-                    declaring_files.push(file_of_decl);
-                }
-            }
-        }
+        declaring_files.extend(
+            checker
+                .get_ambient_modules()
+                .into_iter()
+                .flat_map(|ambient_module| ambient_module.declarations().iter().copied())
+                .filter_map(ast::get_source_file_of_node)
+                .filter(|&file| seen.insert(file)),
+        );
         let mut paths = Set::default();
         paths.m.reserve(declaring_files.len());
-        for f in &declaring_files {
-            paths.add(f.path().clone());
-        }
+        paths.m.extend(declaring_files.iter().map(|f| f.path().clone()));
         let declaring_files = std::sync::Arc::new((declaring_files, seen, std::sync::Arc::new(paths)));
         ambient_module_files_by_checker.lock().unwrap().insert(key, Arc::clone(&declaring_files));
         declaring_files
@@ -436,16 +432,18 @@ fn referenced_files_of(
     let source_file_directory = tspath::get_directory_path(file.file_name());
     // Triple slash references, then type reference directives.
     let mut file_name_paths: Vec<Path> = Vec::new();
-    for referenced_file in file.referenced_files() {
-        file_name_paths.push(referenced_file_path_from_file_name(program, &referenced_file.file_name, &source_file_directory));
-    }
+    file_name_paths.extend(
+        file.referenced_files().iter().map(|referenced_file| referenced_file_path_from_file_name(program, &referenced_file.file_name, &source_file_directory)),
+    );
     if let Some(type_refs_in_file) = program.get_resolved_type_reference_directives().get(file.path()) {
-        #[expect(clippy::iter_over_hash_type, reason = "the paths go into a set, and references_equal does not depend on their order")]
-        for type_ref in type_refs_in_file.values() {
+        // the paths go into a set, and references_equal does not depend on their order
+        file_name_paths.extend(type_refs_in_file.values().filter_map(|type_ref| {
             if !type_ref.resolved_file_name.is_empty() {
-                file_name_paths.push(referenced_file_path_from_file_name(program, type_ref.resolved_file_name, &source_file_directory));
+                Some(referenced_file_path_from_file_name(program, type_ref.resolved_file_name, &source_file_directory))
+            } else {
+                None
             }
-        }
+        }));
     }
 
     if let Some(old) = old {
@@ -465,16 +463,8 @@ fn referenced_files_of(
     let in_shared = |path: &Path| ambient_paths.has(path) && !(file_is_ambient && path == file.path());
     let mut own: Set<Path> = Set::default();
     own.m.reserve(import_files.len() + file_name_paths.len() + augmentation_files.len());
-    for f in import_files.into_iter().chain(augmentation_files) {
-        if !in_shared(f.path()) {
-            own.add(f.path().clone());
-        }
-    }
-    for path in file_name_paths {
-        if !in_shared(&path) {
-            own.add(path);
-        }
-    }
+    own.m.extend(import_files.into_iter().chain(augmentation_files).filter_map(|f| if !in_shared(f.path()) { Some(f.path().clone()) } else { None }));
+    own.m.extend(file_name_paths.into_iter().filter_map(|path| if !in_shared(&path) { Some(path) } else { None }));
     let shared_len = ambient_paths.len() - usize::from(file_is_ambient);
     if own.len() + shared_len == 0 {
         return None;
@@ -545,7 +535,7 @@ fn repopulate_diagnostics_of_file(diags: &DiagnosticsCache, p: &'static Compiler
 fn repopulate_diagnostics_list(diags: &[P<Diagnostic>], p: &'static CompilerProgram, file: P<SourceFile>) -> Option<Vec<P<Diagnostic>>> {
     let mut changed = false;
     let mut result = Vec::with_capacity(diags.len());
-    for &d in diags {
+    result = diags.iter().fold(result, |mut result, &d| {
         match repopulate_diagnostic_message_chain(d.message_chain(), p, file) {
             Some(repopulated) => {
                 let clone = d.clone_diagnostic();
@@ -555,7 +545,9 @@ fn repopulate_diagnostics_list(diags: &[P<Diagnostic>], p: &'static CompilerProg
             }
             None => result.push(d),
         }
-    }
+
+        result
+    });
     if !changed {
         return None;
     }
@@ -587,9 +579,7 @@ fn repopulate_diagnostic_message_chain(chain: &[P<Diagnostic>], p: &'static Comp
                 ..Default::default()
             };
             // Recursively handle nested chains
-            for &nested in c.message_chain() {
-                b.message_chain.push(ast_diag_to_build_info_diag(nested));
-            }
+            b.message_chain.extend(c.message_chain().iter().map(|&nested| ast_diag_to_build_info_diag(nested)));
             result.push(repopulate_diagnostic_chain(&b, p, Some(file)));
             changed = true;
         } else {
@@ -625,8 +615,6 @@ fn ast_diag_to_build_info_diag(d: P<Diagnostic>) -> buildInfoDiagnosticWithFileN
         repopulate_info: d.repopulate_info().cloned(),
         ..Default::default()
     };
-    for &nested in d.message_chain() {
-        b.message_chain.push(ast_diag_to_build_info_diag(nested));
-    }
+    b.message_chain.extend(d.message_chain().iter().map(|&nested| ast_diag_to_build_info_diag(nested)));
     b
 }

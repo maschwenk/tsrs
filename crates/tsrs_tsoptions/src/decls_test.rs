@@ -9,9 +9,7 @@ use crate::parsinghelpers::for_each_compiler_options_field;
 #[test]
 fn test_compiler_options_declaration() {
     let mut decls: FxHashMap<String, &'static CommandLineOption> = FxHashMap::default();
-    for decl in OPTIONS_DECLARATIONS.iter() {
-        decls.insert(decl.name.to_lowercase(), decl);
-    }
+    decls.extend(OPTIONS_DECLARATIONS.iter().map(|decl| (decl.name.to_lowercase(), *decl)));
 
     let internal_options = [
         "allowNonTsExtensions",
@@ -55,8 +53,6 @@ fn test_compiler_options_declaration() {
         decls.remove(&opt.to_lowercase());
     }
 
-    for decl in decls.values() {
-        errors.push(format!("Option declaration {} is not present in CompilerOptions", decl.name));
-    }
+    errors.extend(decls.values().map(|decl| format!("Option declaration {} is not present in CompilerOptions", decl.name)));
     assert!(errors.is_empty(), "{errors:#?}");
 }

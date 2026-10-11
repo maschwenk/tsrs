@@ -507,10 +507,7 @@ fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<Sourc
     let _ = write!(builder, "{}: ", diagnostic.code());
     builder.push_str(diagnostic.message_key().0);
     builder.push('\n');
-    for arg in diagnostic.message_args() {
-        builder.push_str(arg);
-        builder.push('\n');
-    }
+    builder.extend(diagnostic.message_args().iter().flat_map(|arg| [arg.as_str(), "\n"]));
     for &chain in diagnostic.message_chain() {
         diagnostic_to_string_builder(Some(chain), file, builder);
     }

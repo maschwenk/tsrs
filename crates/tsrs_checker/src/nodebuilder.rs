@@ -173,25 +173,19 @@ impl NodeBuilder {
         // Simplify declarations by applying original modifiers
         let f = &self.impl_.f;
         let mut result = Vec::with_capacity(nodes.len());
-        for node in nodes {
-            match node.kind() {
-                Kind::ClassDeclaration => {
-                    result.push(simplify_class_declaration(f, node, symbol));
+        result.extend(nodes.into_iter().filter_map(|node| match node.kind() {
+            Kind::ClassDeclaration => Some(simplify_class_declaration(f, node, symbol)),
+            Kind::EnumDeclaration => Some(simplify_modifiers(f, node, ast::is_enum_declaration, symbol)),
+            Kind::InterfaceDeclaration => {
+                if meaning.intersects(SymbolFlags::Interface) {
+                    Some(simplify_modifiers(f, node, ast::is_interface_declaration, symbol))
+                } else {
+                    None
                 }
-                Kind::EnumDeclaration => {
-                    result.push(simplify_modifiers(f, node, ast::is_enum_declaration, symbol));
-                }
-                Kind::InterfaceDeclaration => {
-                    if meaning.intersects(SymbolFlags::Interface) {
-                        result.push(simplify_modifiers(f, node, ast::is_interface_declaration, symbol));
-                    }
-                }
-                Kind::ModuleDeclaration => {
-                    result.push(simplify_modifiers(f, node, ast::is_module_declaration, symbol));
-                }
-                _ => {}
             }
-        }
+            Kind::ModuleDeclaration => Some(simplify_modifiers(f, node, ast::is_module_declaration, symbol)),
+            _ => None,
+        }));
 
         self.exit_context_slice(result)
     }

@@ -117,9 +117,7 @@ impl projectReferenceFileMapper {
         let mut result = Vec::new();
         if let Some(refs) = self.references_in_config_file.get(&self.root_config_path()) {
             result.reserve(refs.len());
-            for ref_path in refs {
-                result.push(self.config_to_project_reference.get(ref_path).copied().flatten());
-            }
+            result.extend(refs.iter().map(|ref_path| self.config_to_project_reference.get(ref_path).copied().flatten()));
         }
         result
     }
@@ -210,22 +208,26 @@ impl projectReferenceFileMapper {
         parent: P<ParsedCommandLine>,
         seen_ref: &mut FxHashSet<Path>,
     ) -> bool {
-        for (index, path) in references.iter().enumerate() {
+        if references.iter().enumerate().any(|(index, path)| {
             if !seen_ref.insert(path.clone()) {
-                continue;
+                return false;
             }
             let config = self.config_to_project_reference.get(path).copied().flatten();
             if !f(path, config, parent, index) {
-                return false;
+                return true;
             }
             let child_refs = self.references_in_config_file.get(path).map(|v| v.as_slice()).unwrap_or(&[]);
             // A reference that did not resolve has no references of its own (Go recurses with a nil parent over
             // an empty list).
             if let Some(config) = config {
                 if !self.range_resolved_reference_worker(child_refs, f, config, seen_ref) {
-                    return false;
+                    return true;
                 }
             }
+
+            false
+        }) {
+            return false;
         }
         true
     }

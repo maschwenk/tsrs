@@ -93,11 +93,7 @@ pub(crate) fn decode_semantic_tokens(f: &FourslashTest, data: &[u32], token_type
 
         // Get modifiers
         let mut modifiers: Vec<&str> = Vec::new();
-        for (i, m) in token_modifiers.iter().enumerate() {
-            if token_modifier_mask & (1 << i) != 0 {
-                modifiers.push(m);
-            }
-        }
+        modifiers.extend(token_modifiers.iter().enumerate().filter_map(|(i, m)| if token_modifier_mask & (1 << i) != 0 { Some(m.as_str()) } else { None }));
 
         // Build full type string (type.modifier1.modifier2)
         let mut type_str = token_type.clone();
@@ -125,8 +121,6 @@ pub(crate) fn decode_semantic_tokens(f: &FourslashTest, data: &[u32], token_type
 // semantictokens.go:124
 pub(crate) fn format_semantic_tokens(tokens: &[SemanticToken]) -> String {
     let mut lines = Vec::new();
-    for (i, tok) in tokens.iter().enumerate() {
-        lines.push(format!("  [{}] {{Type: {}, Text: {}}}", i, quote(&tok.type_), quote(&tok.text)));
-    }
+    lines.extend(tokens.iter().enumerate().map(|(i, tok)| format!("  [{}] {{Type: {}, Text: {}}}", i, quote(&tok.type_), quote(&tok.text))));
     lines.join("\n")
 }

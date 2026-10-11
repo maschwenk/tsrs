@@ -18,14 +18,16 @@ fn main() {
     let mode = std::env::args().nth(1).unwrap_or_else(|| "resolve".into());
     let mut hash = std::collections::hash_map::DefaultHasher::new();
     let mut files = Vec::new();
-    for i in 0..1000 {
-        files.push((format!("/repo/src/mod{i}.ts"), "export const x = 1".to_string()));
-        files.push((
-            format!("/repo/node_modules/pkg{i}/package.json"),
-            format!(r#"{{"name":"pkg{i}","version":"1.0.0","exports":{{"types":"./index.d.ts","default":"./index.js"}}}}"#),
-        ));
-        files.push((format!("/repo/node_modules/pkg{i}/index.d.ts"), "export const x: number".to_string()));
-    }
+    files.extend((0..1000).flat_map(|i| {
+        [
+            (format!("/repo/src/mod{i}.ts"), "export const x = 1".to_string()),
+            (
+                format!("/repo/node_modules/pkg{i}/package.json"),
+                format!(r#"{{"name":"pkg{i}","version":"1.0.0","exports":{{"types":"./index.d.ts","default":"./index.js"}}}}"#),
+            ),
+            (format!("/repo/node_modules/pkg{i}/index.d.ts"), "export const x: number".to_string()),
+        ]
+    }));
     let host = Box::leak(Box::new(Host { fs: Box::new(cachedvfs::from(vfstest::from_map(files, true))) }));
     let mut options = CompilerOptions { module_resolution: ModuleResolutionKind::Bundler, module: ModuleKind::ESNext, ..Default::default() };
     if mode == "suffix" {

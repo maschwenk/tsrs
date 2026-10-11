@@ -57,10 +57,8 @@ pub fn from_string(s: &str) -> Number {
         _ => {}
     }
 
-    for b in s.bytes() {
-        if !is_number_byte(b) {
-            return nan();
-        }
+    if let Some(result) = s.bytes().into_iter().find_map(|b| if !is_number_byte(b) { Some(nan()) } else { None }) {
+        return result;
     }
 
     if let Some(n) = try_parse_int(s) {

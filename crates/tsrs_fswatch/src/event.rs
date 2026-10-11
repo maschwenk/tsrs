@@ -233,13 +233,13 @@ impl eventListState {
     // event.go:154
     fn snapshot_since_locked(&self, start_seq: u64) -> Vec<Event> {
         let mut out = Vec::with_capacity(self.entries.len());
-        #[expect(clippy::iter_over_hash_type, reason = "order-independent: entries are keyed by path, so a batch has at most one event per path, and Go ranges the map too (getEvents: \"Order is not guaranteed\")")]
-        for (path, e) in &self.entries {
+        // order-independent: entries are keyed by path, so a batch has at most one event per path, and Go ranges the map too (getEvents: "Order is not guaranteed")
+        out.extend(self.entries.iter().filter_map(|(path, e)| {
             let Some(kind) = e.kind_since(start_seq) else {
-                continue;
+                return None;
             };
-            out.push(Event { kind, path: path.clone(), included_watch_root: e.included_watch_root });
-        }
+            Some(Event { kind, path: path.clone(), included_watch_root: e.included_watch_root })
+        }));
         out
     }
 

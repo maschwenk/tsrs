@@ -891,14 +891,14 @@ pub(crate) fn compare_tuple_types(t1: &'static TupleType, t2: &'static TupleType
     if e1.len() != e2.len() {
         return e1.len() as i32 - e2.len() as i32;
     }
-    for i in 0..e1.len() {
-        let r = e1[i].flags.bits() as i32 - e2[i].flags.bits() as i32;
+    for (i, element) in e1.iter().enumerate() {
+        let r = (*element).flags.bits() as i32 - e2[i].flags.bits() as i32;
         if r != 0 {
             return r;
         }
     }
-    for i in 0..e1.len() {
-        let r = compare_element_labels(e1[i].labeled_declaration, e2[i].labeled_declaration);
+    for (i, element) in e1.iter().enumerate() {
+        let r = compare_element_labels((*element).labeled_declaration, e2[i].labeled_declaration);
         if r != 0 {
             return r;
         }
@@ -925,11 +925,15 @@ pub(crate) fn compare_type_lists(c: &mut Checker, s1: &[P<Type>], s2: &[P<Type>]
     if s1.len() != s2.len() {
         return s1.len() as i32 - s2.len() as i32;
     }
-    for (i, &t1) in s1.iter().enumerate() {
+    if let Some(result) = s1.iter().enumerate().find_map(|(i, &t1)| {
         let r = compare_types(c, Some(t1), Some(s2[i]));
         if r != 0 {
-            return r;
+            return Some(r);
         }
+
+        None
+    }) {
+        return result;
     }
     0
 }
@@ -1091,9 +1095,7 @@ impl<T: Copy + Eq + std::hash::Hash> orderedSet<T> {
                 return;
             }
             let mut m = FxHashSet::with_capacity_and_hasher(self.values.len(), Default::default());
-            for &v in &self.values[..self.values.len() - 1] {
-                m.insert(v);
-            }
+            m.extend(self.values[..self.values.len() - 1].iter().map(|&v| v));
             self.values_by_key = Some(m);
         }
         self.values_by_key.as_mut().unwrap().insert(value);
@@ -1107,12 +1109,8 @@ pub(crate) fn get_containing_function_or_class_static_block(node: P<Node>) -> Op
 
 // utilities.go:912
 pub(crate) fn is_node_descendant_of(node: Option<P<Node>>, ancestor: P<Node>) -> bool {
-    let mut node = node;
-    while let Some(n) = node {
-        if n == ancestor {
-            return true;
-        }
-        node = n.parent();
+    if let Some(result) = std::iter::successors(node, |n| n.parent()).find_map(|n| if n == ancestor { Some(true) } else { None }) {
+        return result;
     }
     false
 }
@@ -1628,12 +1626,16 @@ pub(crate) fn all_declarations_in_same_source_file(symbol: P<Symbol>) -> bool {
     let declarations = symbol.declarations();
     if declarations.len() > 1 {
         let mut source_file: Option<P<SourceFile>> = None;
-        for (i, &d) in declarations.iter().enumerate() {
+        if declarations.iter().enumerate().any(|(i, &d)| {
             if i == 0 {
                 source_file = ast::get_source_file_of_node(d);
             } else if ast::get_source_file_of_node(d) != source_file {
-                return false;
+                return true;
             }
+
+            false
+        }) {
+            return false;
         }
     }
     true
@@ -1684,11 +1686,7 @@ pub(crate) fn introduces_arguments_exotic_object(node: P<Node>) -> bool {
 pub(crate) fn symbols_to_array(symbols: Option<P<SymbolTable>>) -> Vec<P<Symbol>> {
     let mut result = Vec::new();
     if let Some(symbols) = symbols {
-        for (id, symbol) in symbols.entries() {
-            if !is_reserved_member_name(id) {
-                result.push(symbol);
-            }
-        }
+        result.extend(symbols.entries().into_iter().filter_map(|(id, symbol)| if !is_reserved_member_name(id) { Some(symbol) } else { None }));
     }
     result
 }

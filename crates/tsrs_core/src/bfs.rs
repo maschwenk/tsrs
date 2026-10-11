@@ -30,11 +30,7 @@ impl<K: Hash + Eq, N> BreadthFirstSearchLevel<'_, K, N> {
     }
 
     pub fn range(&self, mut f: impl FnMut(&N) -> bool) {
-        for job in self.jobs.values() {
-            if !f(&job.node) {
-                return;
-            }
-        }
+        self.jobs.values().all(|job| f(&job.node));
     }
 }
 
@@ -82,11 +78,7 @@ pub fn breadth_first_search_parallel_ex<K: Hash + Eq + Clone, N: Clone + 'static
 
     let create_path = |job: Option<P<BreadthFirstSearchJob<N>>>| -> Vec<N> {
         let mut path = Vec::new();
-        let mut job = job;
-        while let Some(j) = job {
-            path.push(j.node.clone());
-            job = j.parent;
-        }
+        path.extend(std::iter::successors(job, |j| j.parent).map(|j| j.node.clone()));
         path
     };
 

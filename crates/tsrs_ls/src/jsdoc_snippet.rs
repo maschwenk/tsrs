@@ -516,10 +516,8 @@ fn is_jsdoc_snippet_prefix(prefix: &str) -> bool {
     if start + 3 > trimmed.len() {
         return false;
     }
-    for &b in &trimmed[start + 1..] {
-        if b != b'*' {
-            return false;
-        }
+    if trimmed[start + 1..].iter().any(|&b| b != b'*') {
+        return false;
     }
     trimmed.len() - start >= 3
 }
@@ -550,21 +548,14 @@ fn is_jsdoc_snippet_suffix(suffix: &str) -> bool {
         return false;
     }
     let bytes = trimmed.as_bytes();
-    for &b in &bytes[..bytes.len() - 1] {
-        if b != b'*' {
-            return false;
-        }
-    }
-    true
+    !(bytes[..bytes.len() - 1].iter().any(|&b| b != b'*'))
 }
 
 // jsdoc_snippet.go:541 (Go `(int, bool)`)
 fn get_jsdoc_snippet_suffix_end(suffix: &str) -> (usize, bool) {
     let bytes = suffix.as_bytes();
     let mut pos = skip_single_line_whitespace(suffix, 0);
-    while pos < bytes.len() && bytes[pos] == b'*' {
-        pos += 1;
-    }
+    pos += (pos..bytes.len()).take_while(|&index| bytes[index] == b'*').count();
     if pos < bytes.len() && bytes[pos] == b'/' {
         return (pos + 1, true);
     }

@@ -34,9 +34,7 @@ fn flattened_message(d: P<Diagnostic>, new_line: &str, indent: usize, out: &mut 
     out.push_str(&d.localize());
     for chain in d.message_chain() {
         out.push_str(new_line);
-        for _ in 0..=indent {
-            out.push_str("  ");
-        }
+        out.extend((0..=indent).map(|_| "  "));
         flattened_message(*chain, new_line, indent + 1, out);
     }
 }

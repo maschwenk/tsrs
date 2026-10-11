@@ -69,7 +69,7 @@ pub fn get_harness_option(name: &str) -> Option<&'static CommandLineOption> {
 // compilerVaryBy (compiler_runner.go getCompilerVaryByMap) and the option kinds used for variations.
 pub fn tsoptions_option_table() -> OptionTable {
     let mut vary_by = FxHashSet::default();
-    for option in tsoptions::OPTIONS_DECLARATIONS.iter() {
+    vary_by.extend(tsoptions::OPTIONS_DECLARATIONS.iter().filter_map(|option| {
         if !option.is_command_line_only
             && (option.kind == CommandLineOptionKind::Boolean || option.kind == CommandLineOptionKind::Enum)
             && (option.affects_program_structure
@@ -81,9 +81,11 @@ pub fn tsoptions_option_table() -> OptionTable {
                 || option.affects_declaration_path
                 || option.affects_build_info)
         {
-            vary_by.insert(option.name.to_lowercase());
+            Some(option.name.to_lowercase())
+        } else {
+            None
         }
-    }
+    }));
     // explicit variations that do not match above conditions
     vary_by.insert("noemit".to_string());
     vary_by.insert("isolatedmodules".to_string());
@@ -221,12 +223,9 @@ fn new_vfs_parse_config_host_with_symlinks(
     use_case_sensitive_file_names: bool,
 ) -> VfsParseConfigHost {
     let mut entries: Vec<(String, vfstest::MapFile)> = files.iter().map(|(k, v)| (k.clone(), vfstest::MapFile::from(v.as_str()))).collect();
-    for (link, target) in symlinks {
-        entries.push((
-            tspath::get_normalized_absolute_path(link, current_directory),
-            vfstest::symlink(&tspath::get_normalized_absolute_path(target, current_directory)),
-        ));
-    }
+    entries.extend(symlinks.iter().map(|(link, target)| {
+        (tspath::get_normalized_absolute_path(link, current_directory), vfstest::symlink(&tspath::get_normalized_absolute_path(target, current_directory)))
+    }));
     VfsParseConfigHost { vfs: Box::new(vfstest::from_map(entries, use_case_sensitive_file_names)), current_directory: current_directory.to_string() }
 }
 
@@ -236,9 +235,7 @@ pub fn parse_test_ts_config(content: &test_case_parser::TestCaseContent) -> Opti
     let current_directory = &content.current_directory;
     // unit tests always list files explicitly
     let mut all_files = BTreeMap::new();
-    for unit in &content.test_unit_data {
-        all_files.insert(tspath::get_normalized_absolute_path(&unit.name, current_directory), unit.content.clone());
-    }
+    all_files.extend(content.test_unit_data.iter().map(|unit| (tspath::get_normalized_absolute_path(&unit.name, current_directory), unit.content.clone())));
     all_files.insert(tspath::get_normalized_absolute_path(&data.name, current_directory), data.content.clone());
     // Config parsing keeps `&'static dyn ParseConfigHost`; the host is leaked like everything in the arena.
     let parse_config_host: &'static VfsParseConfigHost =
@@ -348,18 +345,18 @@ mod tests {
         let mut go_skip = rustc_hash::FxHashMap::default();
         for line in names.lines() {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();
-            for variant in v["variants"].as_array().into_iter().flatten() {
+            go_skip.extend(v["variants"].as_array().into_iter().flatten().map(|variant| {
                 let stem = compiler_runner::baseline_stem(variant["name"].as_str().unwrap());
-                go_skip.insert(format!("{}/{stem}", v["suite"].as_str().unwrap()), variant.get("skip").is_some());
-            }
+                (format!("{}/{stem}", v["suite"].as_str().unwrap()), variant.get("skip").is_some())
+            }));
         }
         let mut go_files = rustc_hash::FxHashMap::default();
-        for line in diags.lines() {
+        go_files.extend(diags.lines().map(|line| {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();
             let stem = compiler_runner::baseline_stem(v["name"].as_str().unwrap());
             let files: Vec<String> = v["files"].as_array().into_iter().flatten().map(|f| f["name"].as_str().unwrap().to_string()).collect();
-            go_files.insert(format!("{}/{stem}", v["suite"].as_str().unwrap()), files);
-        }
+            (format!("{}/{stem}", v["suite"].as_str().unwrap()), files)
+        }));
         let table = tsoptions_option_table();
         let mut problems = Vec::new();
         let mut checked = 0;

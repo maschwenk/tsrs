@@ -854,13 +854,13 @@ impl Session {
 
         let projects = snapshot.project_collection.language_service_projects();
         let mut services = Vec::with_capacity(projects.len());
-        for project in projects {
+        services.extend(projects.into_iter().filter_map(|project| {
             let Some(program) = project.get_program() else {
-                continue;
+                return None;
             };
 
-            services.push(Arc::new(new_language_service(ProjectID(project.id().0), program, Arc::<Snapshot>::clone(&snapshot), &active_file)));
-        }
+            Some(Arc::new(new_language_service(ProjectID(project.id().0), program, Arc::<Snapshot>::clone(&snapshot), &active_file)))
+        }));
         services
     }
 
@@ -1135,12 +1135,10 @@ impl Session {
             watchers.extend(w.outside_workspace_watchers.iter().cloned());
             if !watchers.is_empty() {
                 let mut new_watchers: OrderedMap<WatcherID, lsproto::FileSystemWatcher> = OrderedMap::default();
-                for (i, watcher) in watchers.iter().enumerate() {
+                new_watchers.extend(watchers.iter().enumerate().filter_map(|(i, watcher)| {
                     let glob_id = WatcherID(format!("{}.{}", w.watcher_id, i));
-                    if self.watches.acquire(watcher, glob_id.clone()) {
-                        new_watchers.set(glob_id, watcher.clone());
-                    }
-                }
+                    if self.watches.acquire(watcher, glob_id.clone()) { Some((glob_id, watcher.clone())) } else { None }
+                }));
                 let mut watch_errors = Vec::new();
                 for (id, watcher) in new_watchers.iter() {
                     // Create a fresh timeout per client call so earlier calls
@@ -1191,12 +1189,10 @@ impl Session {
             watchers.extend(w.outside_workspace_watchers.iter().cloned());
             if !watchers.is_empty() {
                 let mut removed_ids = Vec::new();
-                for watcher in &watchers {
+                removed_ids.extend(watchers.iter().filter_map(|watcher| {
                     let (id, removed) = self.watches.release(watcher);
-                    if removed {
-                        removed_ids.push(id);
-                    }
-                }
+                    if removed { Some(id) } else { None }
+                }));
                 for id in removed_ids {
                     let (call_ctx, call_cancel) = ctx.with_timeout(watchRequestTimeout);
                     let result = client.unwatch_files(&call_ctx, id.clone());
@@ -1273,24 +1269,29 @@ impl Session {
             Some(|_: &Path, removed_entry: &Shared<configFileEntry>| removed.push(removed_entry.clone())),
             Some(|_: &Path, old_entry: &Shared<configFileEntry>, new_entry: &Shared<configFileEntry>| changed.push((old_entry.clone(), new_entry.clone()))),
         );
-        for added_entry in &added {
-            errors.extend(self.update_watch(&ctx, None, added_entry.root_files_watch.as_ref()));
-        }
-        for removed_entry in &removed {
-            errors.extend(self.update_watch(&ctx, removed_entry.root_files_watch.as_ref(), None));
-        }
-        for (old_entry, new_entry) in &changed {
-            errors.extend(self.update_watch(&ctx, old_entry.root_files_watch.as_ref(), new_entry.root_files_watch.as_ref()));
-        }
+        errors.extend(added.iter().flat_map(|added_entry| self.update_watch(&ctx, None, added_entry.root_files_watch.as_ref())));
+        errors.extend(removed.iter().flat_map(|removed_entry| self.update_watch(&ctx, removed_entry.root_files_watch.as_ref(), None)));
+        errors.extend(
+            changed.iter().flat_map(|(old_entry, new_entry)| self.update_watch(&ctx, old_entry.root_files_watch.as_ref(), new_entry.root_files_watch.as_ref())),
+        );
         // Retry config watchers whose IDs didn't change but whose previous registration failed.
-        #[expect(clippy::iter_over_hash_type, reason = "order-independent: retries each pending config watcher by its own ID; Go ranges the map too, so the registrations go out in map order there as well")]
-        for (path, new_entry) in new_configs.iter() {
-            if let Some(old_entry) = old_configs.get(path) {
-                if old_entry.root_files_watch.id() == new_entry.root_files_watch.id() && self.watches.is_pending(&new_entry.root_files_watch.id()) {
-                    errors.extend(self.update_watch(&ctx, None, new_entry.root_files_watch.as_ref()));
-                }
-            }
-        }
+        // order-independent: retries each pending config watcher by its own ID; Go ranges the map too, so the registrations go out in map order there as well
+        errors.extend(
+            new_configs
+                .iter()
+                .filter_map(|(path, new_entry)| {
+                    if let Some(old_entry) = old_configs.get(path) {
+                        if old_entry.root_files_watch.id() == new_entry.root_files_watch.id() && self.watches.is_pending(&new_entry.root_files_watch.id()) {
+                            Some(self.update_watch(&ctx, None, new_entry.root_files_watch.as_ref()))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    }
+                })
+                .flatten(),
+        );
 
         let old_projects = old_snapshot.project_collection.projects_by_id();
         let new_projects = new_snapshot.project_collection.projects_by_id();
@@ -1628,9 +1629,7 @@ impl Session {
         let diagnostics = if self.config().enable_validation.is_false() { &[] } else { diagnostics };
         let ctx = self.with_current_locale(ctx);
         let mut lsp_diagnostics = Vec::with_capacity(diagnostics.len());
-        for &diag in diagnostics {
-            lsp_diagnostics.push(lsconv::diagnostic_to_lsp_push(&ctx, converters, diag));
-        }
+        lsp_diagnostics.extend(diagnostics.iter().map(|&diag| lsconv::diagnostic_to_lsp_push(&ctx, converters, diag)));
 
         if let Some(client) = &self.client {
             if let Err(err) = client.publish_diagnostics(

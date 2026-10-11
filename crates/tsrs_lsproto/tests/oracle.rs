@@ -43,17 +43,15 @@ fn oracle() {
 fn oracle_file_name() {
     let data = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/testdata/filename.txt")).unwrap();
     let mut failures = Vec::new();
-    for line in data.lines() {
+    failures.extend(data.lines().filter_map(|line| {
         let (uri, expected) = line.split_once('\t').unwrap();
         let uri = tsrs_lsproto::DocumentUri::from(uri);
         let got = match std::panic::catch_unwind(|| uri.file_name()) {
             Ok(name) => name,
             Err(payload) => format!("PANIC {}", payload.downcast_ref::<String>().cloned().unwrap_or_default()),
         };
-        if got != expected {
-            failures.push(format!("{uri}: go {expected:?}, rust {got:?}"));
-        }
-    }
+        if got != expected { Some(format!("{uri}: go {expected:?}, rust {got:?}")) } else { None }
+    }));
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
 

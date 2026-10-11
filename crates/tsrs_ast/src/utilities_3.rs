@@ -962,13 +962,13 @@ pub fn class_element_or_class_element_parameter_is_decorated(use_legacy_decorato
         return true;
     }
     if let Some(parameters) = parameters {
-        for &parameter in parameters.nodes() {
+        if parameters.nodes().iter().any(|&parameter| {
             if is_this_parameter(parameter) {
-                continue;
+                return false;
             }
-            if node_is_decorated(use_legacy_decorators, parameter, Some(node), Some(parent)) {
-                return true;
-            }
+            node_is_decorated(use_legacy_decorators, parameter, Some(node), Some(parent))
+        }) {
+            return true;
         }
     }
     false
@@ -1037,15 +1037,13 @@ pub fn get_all_accessor_declarations(parent_declarations: &[P<Node>], accessor: 
     let accessor_name = get_property_name_for_property_name_node(accessor.name().unwrap());
     let accessor_static = is_static(accessor);
     let mut matches = Vec::new();
-    for &member in parent_declarations {
+    matches.extend(parent_declarations.iter().filter_map(|&member| {
         if !is_accessor(member) || is_static(member) != accessor_static {
-            continue;
+            return None;
         }
         let member_name = get_property_name_for_property_name_node(member.name().unwrap());
-        if member_name == accessor_name {
-            matches.push(member);
-        }
-    }
+        if member_name == accessor_name { Some(member) } else { None }
+    }));
     get_all_accessor_declarations_for_declaration(accessor, &matches)
 }
 
@@ -1264,10 +1262,8 @@ pub fn is_whitespace_only_jsx_text(node: P<Node>) -> bool {
 
 // utilities.go:3056
 pub fn for_each_child_and_jsdoc(node: P<Node>, source_file: &'static SourceFile, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-    for &jsdoc in node.jsdoc(Some(source_file)) {
-        if v(jsdoc) {
-            return true;
-        }
+    if node.jsdoc(Some(source_file)).iter().any(|&jsdoc| v(jsdoc)) {
+        return true;
     }
     node.for_each_child(v)
 }

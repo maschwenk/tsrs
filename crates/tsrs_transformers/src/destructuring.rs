@@ -316,7 +316,7 @@ impl<'a> flattener<'a> {
         }
 
         let mut decls: Vec<P<Node>> = Vec::with_capacity(self.declarations.len());
-        for pending in &self.declarations {
+        decls.extend(self.declarations.iter().map(|pending| {
             let f = self.factory();
             let mut expr = pending.value;
             if !pending.pending_expressions.is_empty() {
@@ -329,8 +329,8 @@ impl<'a> flattener<'a> {
             if let Some(original) = pending.original {
                 self.tx.emit_context().set_original(decl, original);
             }
-            decls.push(decl);
-        }
+            decl
+        }));
 
         if decls.len() == 1 {
             return Some(decls[0]);
@@ -488,12 +488,7 @@ pub fn binding_or_assignment_element_assigns_to_name(element: P<Node>, name: &st
 // destructuring.go:441
 fn binding_or_assignment_pattern_assigns_to_name(pattern: P<Node>, name: &str) -> bool {
     let elements = ast::get_elements_of_binding_or_assignment_pattern(pattern);
-    for &element in elements {
-        if binding_or_assignment_element_assigns_to_name(element, name) {
-            return true;
-        }
-    }
-    false
+    elements.iter().any(|&element| binding_or_assignment_element_assigns_to_name(element, name))
 }
 
 // BindingOrAssignmentElementContainsNonLiteralComputedName checks if any element has a non-literal computed property name.

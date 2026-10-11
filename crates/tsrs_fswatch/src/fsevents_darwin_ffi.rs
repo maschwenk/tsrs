@@ -340,12 +340,17 @@ pub(crate) enum streamStartError {
 // callback's queue, start and flush it. On failure the callback is closed (Go: `cb.close()`).
 pub(crate) fn create_and_start_stream(paths: &[String], cb: &mut Box<streamCallback>) -> Result<fsEventStream, streamStartError> {
     let mut cf_strings = Vec::with_capacity(paths.len());
-    for path in paths {
+    cf_strings = match paths.iter().try_fold(cf_strings, |mut cf_strings, path| {
         match cf_string_create(path) {
             Some(s) => cf_strings.push(s),
-            None => return Err(streamStartError::CFStringCreateNull),
+            None => return std::ops::ControlFlow::Break(Err(streamStartError::CFStringCreateNull)),
         }
-    }
+
+        std::ops::ControlFlow::Continue(cf_strings)
+    }) {
+        std::ops::ControlFlow::Continue(value) => value,
+        std::ops::ControlFlow::Break(value) => return value,
+    };
     let Some(paths_to_watch) = cf_array_create(&cf_strings) else {
         return Err(streamStartError::CFArrayCreateNull);
     };

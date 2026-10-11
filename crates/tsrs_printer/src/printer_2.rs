@@ -682,10 +682,11 @@ impl Printer {
         if is_partially_emitted_expression(node) {
             let pee = node.as_partially_emitted_expression();
             if node.pos() != pee.expression().pos() {
-                for comment in scanner::get_trailing_comment_ranges(current_source_file.text(), pee.expression().pos()) {
-                    if self.comment_will_emit_new_line(comment) {
-                        return true;
-                    }
+                if scanner::get_trailing_comment_ranges(current_source_file.text(), pee.expression().pos())
+                    .into_iter()
+                    .any(|comment| self.comment_will_emit_new_line(comment))
+                {
+                    return true;
                 }
             }
             return self.will_emit_leading_new_line(pee.expression());

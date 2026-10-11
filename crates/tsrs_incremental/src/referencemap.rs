@@ -100,11 +100,7 @@ impl ReferenceMap {
         });
         let mut result = Vec::new();
         if self.referenced_by.get().is_none() && self.queries.fetch_add(1, Ordering::Relaxed) < SCAN_QUERIES {
-            for (refs, owners) in groups {
-                if refs.has(path) {
-                    result.extend(owners.iter().cloned());
-                }
-            }
+            result.extend(groups.iter().filter_map(|(refs, owners)| if refs.has(path) { Some(owners.iter().cloned()) } else { None }).flatten());
             return result;
         }
         let referenced_by = self.referenced_by.get_or_init(|| {
@@ -122,9 +118,7 @@ impl ReferenceMap {
             referenced_by
         });
         if let Some(sets) = referenced_by.get(path) {
-            for &i in sets {
-                result.extend(groups[i as usize].1.iter().cloned());
-            }
+            result.extend(sets.iter().flat_map(|&i| groups[i as usize].1.iter().cloned()));
         }
         result
     }

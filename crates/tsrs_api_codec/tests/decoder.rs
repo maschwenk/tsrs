@@ -41,11 +41,7 @@ fn roundtrip(name: &str, bytes: &[u8], what: &str) -> Result<(), String> {
 fn decode_go_server_encodings() {
     let mut errors = Vec::new();
     let fixtures = fixtures();
-    for (name, _) in &fixtures {
-        if let Err(e) = roundtrip(name, &golden(name), "go server") {
-            errors.push(e);
-        }
-    }
+    errors.extend(fixtures.iter().filter_map(|(name, _)| if let Err(e) = roundtrip(name, &golden(name), "go server") { Some(e) } else { None }));
     eprintln!("decoded {} go-server encodings, {} failures", fixtures.len(), errors.len());
     assert!(errors.is_empty(), "{}", errors.join("\n"));
 }
@@ -54,11 +50,7 @@ fn decode_go_server_encodings() {
 fn decode_js_client_encodings() {
     let mut errors = Vec::new();
     let fixtures = fixtures();
-    for (name, _) in &fixtures {
-        if let Err(e) = roundtrip(name, &client_golden(name), "js client") {
-            errors.push(e);
-        }
-    }
+    errors.extend(fixtures.iter().filter_map(|(name, _)| if let Err(e) = roundtrip(name, &client_golden(name), "js client") { Some(e) } else { None }));
     eprintln!("decoded {} js-client encodings, {} failures", fixtures.len(), errors.len());
     assert!(errors.is_empty(), "{}", errors.join("\n"));
 }
@@ -122,7 +114,7 @@ fn decode_rejects_malformed_input_without_panicking() {
     for name in ["basic.ts", "complex.ts", "jsx_component.tsx", "jsdoc_checked.js", "unicode_text.ts"] {
         let good = golden(name);
         let mut inputs: Vec<Vec<u8>> = (0..good.len()).step_by(7).map(|n| good[..n].to_vec()).collect();
-        for _ in 0..1500 {
+        inputs.extend((0..1500).map(|_| {
             let mut b = good.clone();
             let at = (next() as usize) % b.len();
             if next() % 2 == 0 {
@@ -134,8 +126,8 @@ fn decode_rejects_malformed_input_without_panicking() {
                     b[at..at + 4].copy_from_slice(&v.to_le_bytes());
                 }
             }
-            inputs.push(b);
-        }
+            b
+        }));
         for input in inputs {
             cases += 1;
             let r = std::panic::catch_unwind(|| decode_nodes(&input).map(|d| d.root().kind()));

@@ -87,14 +87,7 @@ fn format_new_baseline(command_line: &[String], opts: &str, file_names: &str, er
     let mut formatted = String::new();
     formatted.push_str("Args::\n");
     formatted.push('[');
-    for (i, arg) in command_line.iter().enumerate() {
-        if i > 0 {
-            formatted.push_str(", ");
-        }
-        formatted.push('"');
-        formatted.push_str(arg);
-        formatted.push('"');
-    }
+    formatted.extend(command_line.iter().enumerate().flat_map(|(i, arg)| [if i > 0 { ", " } else { "" }, "\"", arg.as_str(), "\""]));
     formatted.push(']');
     formatted.push_str("\n\nCompilerOptions::\n");
     formatted.push_str(opts);
@@ -111,14 +104,7 @@ fn format_new_baseline_build(command_line: &[String], opts: &str, compiler_opts:
     let mut formatted = String::new();
     formatted.push_str("Args::\n");
     formatted.push('[');
-    for (i, arg) in command_line.iter().enumerate() {
-        if i > 0 {
-            formatted.push_str(", ");
-        }
-        formatted.push('"');
-        formatted.push_str(arg);
-        formatted.push('"');
-    }
+    formatted.extend(command_line.iter().enumerate().flat_map(|(i, arg)| [if i > 0 { ", " } else { "" }, "\"", arg.as_str(), "\""]));
     formatted.push(']');
     formatted.push_str("\n\nbuildOptions::\n");
     formatted.push_str(opts);

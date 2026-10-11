@@ -305,9 +305,9 @@ impl Timings {
             mappers: OrderedMap::with_capacity_and_hasher(self.mappers.len(), Default::default()),
             request_wait: self.request_wait.saturating_sub(previous.request_wait),
         };
-        for (identity, current) in &self.mappers {
+        result.mappers.extend(self.mappers.iter().map(|(identity, current)| {
             let before = previous.mappers.get(identity).copied().unwrap_or_default();
-            result.mappers.insert(
+            (
                 identity.clone(),
                 MapperTimings {
                     spawn: operation_timing_since(current.spawn, before.spawn),
@@ -316,8 +316,8 @@ impl Timings {
                     close_project: operation_timing_since(current.close_project, before.close_project),
                     transform: operation_timing_since(current.transform, before.transform),
                 },
-            );
-        }
+            )
+        }));
         result
     }
 }
@@ -584,7 +584,7 @@ impl From<ipc::Error> for Error {
 pub(crate) fn quote(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     out.push('"');
-    for c in s.chars() {
+    out = s.chars().fold(out, |mut out, c| {
         match c {
             '\x07' => out.push_str("\\a"),
             '\x08' => out.push_str("\\b"),
@@ -606,7 +606,9 @@ pub(crate) fn quote(s: &str) -> String {
                 let _ = write!(out, "\\U{:08x}", c as u32);
             }
         }
-    }
+
+        out
+    });
     out.push('"');
     out
 }

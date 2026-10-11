@@ -337,11 +337,7 @@ pub(crate) fn create_external_helpers_import_declaration_if_needed(
 // externalmoduleinfo.go:318
 fn get_imported_helpers(emit_context: P<EmitContext>, source_file: P<SourceFile>) -> Vec<SP<EmitHelper>> {
     let mut helpers = Vec::new();
-    for helper in emit_context.get_emit_helpers(source_file.as_node()) {
-        if !helper.scoped {
-            helpers.push(helper);
-        }
-    }
+    helpers.extend(emit_context.get_emit_helpers(source_file.as_node()).into_iter().filter_map(|helper| if !helper.scoped { Some(helper) } else { None }));
     helpers
 }
 
@@ -402,11 +398,7 @@ pub(crate) fn get_import_needs_import_star_helper(node: P<Node>) -> bool {
     }
     let named_imports = bindings.as_named_imports();
     let mut default_ref_count = 0;
-    for &binding in named_imports.elements.nodes() {
-        if is_named_default_reference(binding) {
-            default_ref_count += 1;
-        }
-    }
+    default_ref_count += named_imports.elements.nodes().iter().filter(|&&binding| is_named_default_reference(binding)).count();
     let len = named_imports.elements.nodes().len();
     // Import star is required if there's default named refs mixed with non-default refs, or if theres non-default refs and it has a default import
     (default_ref_count > 0 && default_ref_count != len) || ((len - default_ref_count) != 0 && ast::is_default_import(node))
