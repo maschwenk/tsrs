@@ -1,0 +1,85 @@
+# CodSpeed (https://codspeed.io): bench/codspeed.yml type-checks a few bench projects single-threaded under CodSpeed's
+# CPU simulation, which counts instructions and simulated cache misses in one run, so the result does not depend on the
+# machine. Runs on GitHub-hosted runners (free for public repositories); CodSpeed comments on pull requests with the
+# change against main. The wall-time benchmark stays on Depot (.depot/workflows/bench.yml). bench/README.md "CodSpeed".
+# Security: read-only GITHUB_TOKEN plus an OIDC token for the CodSpeed upload, no secrets.
+
+name: CodSpeed
+
+on:
+  push:
+    branches: [main, ci/codspeed]
+  pull_request:
+    branches: [main]
+  # CodSpeed dispatches this to backfill main.
+  workflow_dispatch:
+
+# Pushes to main each run to completion; a newer commit on the same pull request cancels the older run.
+concurrency:
+  group: codspeed-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  # The projects of bench/codspeed.yml, set up by bench/run.py.
+  PROJECTS: Compiler-Unions,xstate-main,webpack,drizzle-orm
+
+jobs:
+  benchmarks:
+    name: Run benchmarks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 24
+
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
+      - name: Cache key for the bench projects
+        id: keys
+        run: echo "work=$(python3 bench/run.py --print-cache-keys --projects "$PROJECTS" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache the bench projects
+        uses: actions/cache@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+            bench/.work/solutions
+          key: codspeed-work-${{ runner.os }}-${{ steps.keys.outputs.work }}
+
+      - name: Set up the bench projects
+        run: python3 bench/run.py --setup-only --projects "$PROJECTS"
+
+      - name: Set up Rust
+        uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: codspeed
+
+      # The release profile without the PGO training of the npm binaries, whose profile changes with every build and
+      # would move the counts. Symbols kept for CodSpeed's flame graphs.
+      - name: Build tsrs
+        env:
+          CARGO_PROFILE_RELEASE_STRIP: none
+        run: cargo build --release --locked -p tsrs_cli
+
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@f842b9a3ffe213dbb81768fd7f7eeb4dfcf1c369 # v5.4.2
+        env:
+          RAYON_NUM_THREADS: "1"
+        with:
+          mode: simulation
+          config: bench/codspeed.yml
+          simulation-track-subprocess: true

@@ -1,0 +1,14 @@
+# CodSpeed benchmarks (.github/workflows/codspeed.yml, bench/README.md "CodSpeed"). Paths are the bench/run.py
+# checkouts; the workflow's PROJECTS lists the same projects.
+$schema: https://raw.githubusercontent.com/CodSpeedHQ/codspeed/refs/heads/main/schemas/codspeed.schema.json
+benchmarks:
+  - name: xstate-main-direct
+    exec: target/release/tsrs -p bench/.work/solutions/xstate-main --noEmit --incremental false --singleThreaded --pretty false
+  - name: Compiler-Unions
+    exec: bench/codspeed-check.sh bench/.work/suite/cases/solutions/Compiler-Unions/tsconfig.json
+  - name: xstate-main
+    exec: bench/codspeed-check.sh bench/.work/solutions/xstate-main
+  - name: webpack
+    exec: bench/codspeed-check.sh bench/.work/solutions/webpack
+  - name: drizzle-orm
+    exec: bench/codspeed-check.sh bench/.work/solutions/drizzle-orm
