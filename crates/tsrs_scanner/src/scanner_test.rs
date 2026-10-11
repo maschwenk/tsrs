@@ -1,5 +1,5 @@
-use tsrs_ast::Kind;
-use tsrs_core::stringutil;
+use tsrs_ast::{CommentDirective, CommentDirectiveKind, Kind, TokenFlags};
+use tsrs_core::{TextRange, stringutil};
 
 use crate::utilities::normalize_jsdoc_type_source_text;
 use crate::Scanner;
@@ -49,6 +49,85 @@ fn test_mark_rewind_restores_token_and_comment_directives() {
     assert_eq!(s.scan(), Kind::Identifier);
     assert_eq!(s.token_value(), "b");
     assert_eq!(s.comment_directives().len(), 1);
+}
+
+#[test]
+fn test_mark_rewind_restores_multiline_comment_flags_and_directives() {
+    let text = "a /**\r\n * @deprecated old\u{2028} * @ts-ignore */ b /*\n * @ts-expect-error */ c";
+    let mut s = Scanner::new();
+    s.set_text(text);
+    assert_eq!(s.scan(), Kind::Identifier);
+    let before_comment = s.mark();
+
+    assert_eq!(s.scan(), Kind::Identifier);
+    assert_eq!(s.token_value(), "b");
+    assert_eq!(
+        s.token_flags(),
+        TokenFlags::PrecedingLineBreak
+            | TokenFlags::PrecedingJSDocComment
+            | TokenFlags::PrecedingJSDocWithDeprecated
+    );
+    let token = (s.token_range(), s.token_full_start(), s.token_flags());
+    let directives = s.comment_directives();
+    assert_eq!(
+        directives,
+        &[CommentDirective {
+            kind: CommentDirectiveKind::Ignore,
+            loc: TextRange::new(
+                u32::try_from(text.find(" * @ts-ignore").unwrap()).unwrap(),
+                u32::try_from(text.find("*/").unwrap() + 2).unwrap(),
+            ),
+        }]
+    );
+    assert_eq!(s.scan(), Kind::Identifier);
+    assert_eq!(s.token_value(), "c");
+    assert_eq!(s.comment_directives().len(), 2);
+    assert_eq!(directives.len(), 1);
+
+    s.rewind(before_comment);
+    assert_eq!(s.token_value(), "a");
+    assert_eq!(s.token_flags(), TokenFlags::None);
+    assert!(s.comment_directives().is_empty());
+    assert_eq!(s.scan(), Kind::Identifier);
+    assert_eq!(s.token_value(), "b");
+    assert_eq!(
+        (s.token_range(), s.token_full_start(), s.token_flags()),
+        token
+    );
+    assert_eq!(s.comment_directives(), directives);
+}
+
+#[test]
+fn test_multiline_comment_trivia_uses_final_line_for_directives() {
+    let cases = [
+        "/* @ts-expect-error\r\n \t* @ts-ignore € */x\n/* @ts-expect-error */y",
+        "/* @ts-expect-error\nfirst\u{2028} \t* @ts-ignore € */x\n/* @ts-expect-error */y",
+        "/* @ts-expect-error\nfirst\u{2029} \t* @ts-ignore € */x\n/* @ts-expect-error */y",
+    ];
+    for text in cases {
+        let comment_end = u32::try_from(text.find("*/").unwrap() + 2).unwrap();
+        let final_line_start = u32::try_from(text.find(" \t* @ts-ignore").unwrap()).unwrap();
+        let mut s = Scanner::new();
+        s.set_text(text);
+        s.set_skip_trivia(false);
+        assert_eq!(s.scan(), Kind::MultiLineCommentTrivia);
+        assert_eq!(s.token_range(), TextRange::new(0, comment_end));
+        assert_eq!(s.token_flags(), TokenFlags::PrecedingLineBreak);
+        assert_eq!(
+            s.comment_directives(),
+            &[CommentDirective {
+                kind: CommentDirectiveKind::Ignore,
+                loc: TextRange::new(final_line_start, comment_end)
+            }]
+        );
+        assert_eq!(s.scan(), Kind::Identifier);
+        assert_eq!(s.token_value(), "x");
+        assert_eq!(
+            s.token_range(),
+            TextRange::new(comment_end, comment_end + 1)
+        );
+        assert_eq!(s.token_flags(), TokenFlags::None);
+    }
 }
 
 #[test]

@@ -1035,8 +1035,9 @@ impl Scanner {
                 self.state.pos += size;
 
                 if stringutil::is_line_break(ch1) {
-                    last_line_start = self.state.pos;
                     self.state.token_flags |= TokenFlags::PrecedingLineBreak;
+                    (comment_closed, last_line_start) = self.scan_multi_line_comment_tail();
+                    break;
                 }
             }
 
@@ -1070,6 +1071,32 @@ impl Scanner {
             Kind::SlashToken
         };
         Some(token)
+    }
+
+    // After the first line break, only the closing delimiter and final line start remain relevant.
+    // Keep the final line start for comment directives; CRLF ends after LF, like the scalar loop.
+    fn scan_multi_line_comment_tail(&mut self) -> (bool, u32) {
+        let start = self.state.pos as usize;
+        debug_assert!(start <= self.end as usize);
+        debug_assert!(self.text[..start].chars().next_back().is_some_and(|ch| stringutil::is_line_break(ch as Rune)));
+        let remaining = &self.text.as_bytes()[start..self.end as usize];
+        let closing = memchr::memmem::find(remaining, b"*/");
+        let body_end = closing.unwrap_or(remaining.len());
+        let mut search_end = body_end;
+        let mut last_line_start = start;
+        while let Some(i) = memchr::memrchr3(b'\r', b'\n', 0xE2, &remaining[..search_end]) {
+            if remaining[i] != 0xE2 {
+                last_line_start = start + i + 1;
+                break;
+            }
+            if i + 2 < body_end && remaining[i + 1] == 0x80 && matches!(remaining[i + 2], 0xA8 | 0xA9) {
+                last_line_start = start + i + 3;
+                break;
+            }
+            search_end = i;
+        }
+        self.state.pos = (start + body_end + if closing.is_some() { 2 } else { 0 }) as u32;
+        (closing.is_some(), last_line_start as u32)
     }
 
     fn scan_byte_number(&mut self) -> Option<Kind> {
