@@ -419,12 +419,49 @@ impl Checker {
     // utilities.go:361
     pub(crate) fn sort_symbols(&mut self, symbols: &mut [P<Symbol>]) {
         if self.program.source_files_complete() {
+            if symbols.len() > 2 && self.sort_symbols_by_key(symbols) {
+                return;
+            }
             symbols.sort_by(|&a, &b| self.compare_symbols(Some(a), Some(b)).cmp(&0));
         } else {
             // Not a total order (see `Program::source_files_complete`): Rust's sort would panic, Go's pdqsort sorts
             // anyway; its port gives Go's order.
             tsrs_core::goslices::sort_func(symbols, |&a, &b| self.compare_symbols(Some(a), Some(b)));
         }
+    }
+
+    /// tsrs-only: `sort_symbols` with each symbol's place computed once instead of in every comparison. With every
+    /// file of the program indexed, `compare_symbols` orders by (a first declaration, its file's index, its position,
+    /// name, id), lexicographically. False (nothing sorted) when a declaration's file has no index.
+    fn sort_symbols_by_key(&mut self, symbols: &mut [P<Symbol>]) -> bool {
+        let mut keyed: Vec<(bool, i32, i32, &'static str, P<Symbol>)> = Vec::with_capacity(symbols.len());
+        for &symbol in symbols.iter() {
+            let key = match symbol.declarations().first() {
+                Some(&d) => {
+                    let (file, index) = self.source_file_and_index_of_node(d);
+                    // Index 0 is also what a file without one gets.
+                    if file == 0 || index == 0 && ast::get_source_file_of_node(d).is_none_or(|s| !self.file_index_map.contains_key(&s)) {
+                        return false;
+                    }
+                    (false, index, d.pos())
+                }
+                None => (true, 0, 0),
+            };
+            keyed.push((key.0, key.1, key.2, symbol.name(), symbol));
+        }
+        // The id last, and only for a tie (getting it assigns one, as in `compare_symbols_worker`).
+        keyed.sort_by(|a, b| {
+            (a.0, a.1, a.2).cmp(&(b.0, b.1, b.2)).then_with(|| compare_names(a.3, b.3).cmp(&0)).then_with(|| {
+                if a.4 == b.4 {
+                    return std::cmp::Ordering::Equal;
+                }
+                ((ast::get_symbol_id(a.4).0 as i64 - ast::get_symbol_id(b.4).0 as i64) as i32).cmp(&0)
+            })
+        });
+        for (slot, k) in symbols.iter_mut().zip(keyed) {
+            *slot = k.4;
+        }
+        true
     }
 
     // utilities.go:365
