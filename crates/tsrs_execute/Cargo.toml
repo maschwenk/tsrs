@@ -15,7 +15,7 @@ tsrs_diagnostics.workspace = true
 tsrs_ast.workspace = true
 tsrs_vfs.workspace = true
 tsrs_tsoptions.workspace = true
-tsrs_compiler = { path = "../tsrs_compiler", default-features = false }
+tsrs_compiler.workspace = true
 tsrs_incremental.workspace = true
 tsrs_contentmapper.workspace = true
 tsrs_ipc.workspace = true
@@ -29,8 +29,6 @@ similar = "3"
 tsrs_contentmappertest.workspace = true
 
 [features]
-default = ["checker"]
-checker = ["tsrs_compiler/checker"]
 site-counts = ["tsrs_compiler/site-counts"]
 work-census = ["tsrs_compiler/work-census"]
 alloc-profile = ["tsrs_core/alloc-profile"]

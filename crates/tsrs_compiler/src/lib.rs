@@ -1,11 +1,8 @@
-#[cfg(feature = "checker")]
 mod checker_program;
 mod checkerpool;
-#[cfg(feature = "checker")]
 mod checkerpool_stats;
 pub mod diagnosticwriter;
 mod emitter;
-#[cfg(feature = "checker")]
 mod emithost;
 mod file_include;
 mod fileloader;
@@ -17,28 +14,23 @@ mod affinity;
 mod outputpaths;
 mod processing_diagnostic;
 mod program;
-#[cfg(feature = "checker")]
 mod program_emit;
-#[cfg(feature = "checker")]
 mod programlike;
 mod splitcheck;
 mod sharedgraph;
 mod projectreferencedtsfakinghost;
 mod projectreferencefilemapper;
 mod projectreferenceparser;
-#[cfg(all(test, feature = "checker"))]
+#[cfg(test)]
 mod program_test;
-#[cfg(all(test, feature = "checker"))]
+#[cfg(test)]
 mod contentmapper_test;
-#[cfg(all(test, feature = "checker"))]
+#[cfg(test)]
 mod modulespecifiers_oracle_test;
 
 pub use checkerpool::{assignment_stats_enabled, checker_count_upper_bound, set_checker_assignment_from_cli, set_checker_cost_cache_from_cli, parse_memory_size, set_max_memory_from_cli, use_go_default_checker_count, Checker, CheckerHandle, CheckerPool, Context, PooledChecker};
-#[cfg(feature = "checker")]
 pub use emitter::EmitOnly;
-#[cfg(feature = "checker")]
 pub use programlike::{get_diagnostics_of_any_program_like, ProgramLike};
-#[cfg(feature = "checker")]
 pub use program_emit::{combine_emit_results, handle_no_emit_options, EmitOptions, EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
 pub use file_include::FileIncludeReason;
 pub use fileregions::{enable as enable_file_regions, enable_lazy_dts, lazy_dts_allowed, leaf_settings_from_env, stats_report as leaf_stats_report, LeafMode, LeafSettings};

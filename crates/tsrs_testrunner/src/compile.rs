@@ -108,7 +108,6 @@ pub struct CompilationResult {
     pub host: Arc<dyn CompilerHost>,
     pub tsconfig: Option<P<ParsedCommandLine>>,
     // The emit outputs, only under `--baselines js` (docs/EMIT.md section 8).
-    #[cfg(feature = "checker")]
     pub emit: Option<crate::emit_harness::EmitOutputs>,
 }
 
@@ -122,23 +121,21 @@ pub fn dts_only_mode() -> bool {
 }
 
 fn js_baselines() -> bool {
-    cfg!(feature = "checker") && !crate::syntax_only() && crate::extra_baselines() & crate::EXTRA_JS != 0
+    !crate::syntax_only() && crate::extra_baselines() & crate::EXTRA_JS != 0
 }
 
 // Any emit baseline (`.js`, `.js.map`, `.sourcemap.txt`) switches the compilation to Go's pre-/post-emit programs.
 fn emit_baselines() -> bool {
-    cfg!(feature = "checker") && !crate::syntax_only() && crate::extra_baselines() & (crate::EXTRA_JS | crate::EXTRA_JSMAP | crate::EXTRA_SOURCEMAP) != 0
+    !crate::syntax_only() && crate::extra_baselines() & (crate::EXTRA_JS | crate::EXTRA_JSMAP | crate::EXTRA_SOURCEMAP) != 0
 }
 
 // Go `result.Repeat` / `compileDeclarationFiles` call CompileFilesEx again with the test's harness settings.
-#[cfg(feature = "checker")]
 struct Recompiler<'a> {
     harness_options: &'a HarnessOptions,
     current_directory: &'a str,
     symlinks: &'a BTreeMap<String, String>,
 }
 
-#[cfg(feature = "checker")]
 impl crate::emit_harness::Recompile for Recompiler<'_> {
     fn compile(&self, input_files: &[TestFile], other_files: &[TestFile], options: CompilerOptions, tsconfig: Option<P<ParsedCommandLine>>) -> CompilationResult {
         compile_files_ex(input_files, other_files, self.harness_options, options, self.current_directory, self.symlinks, tsconfig).unwrap()
@@ -239,9 +236,7 @@ fn compile_files_ex(
 
     let fs = vfstest::from_map(testfs, harness_options.use_case_sensitive_file_names);
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(fs));
-    #[cfg(feature = "checker")]
     let recorder = emit_baselines().then(|| crate::emit_harness::new_output_recorder_fs(Arc::clone(&fs)));
-    #[cfg(feature = "checker")]
     let fs: Arc<dyn FS> = match &recorder {
         Some(r) => Arc::<crate::emit_harness::OutputRecorderFS>::clone(r),
         None => fs,
@@ -256,7 +251,6 @@ fn compile_files_ex(
 
     let inner = compiler::new_compiler_host(current_directory, fs, &bundled::lib_path(), None, None, None);
     let host: Arc<dyn CompilerHost> = Arc::new(CachedCompilerHost { inner });
-    #[cfg(feature = "checker")]
     if let Some(recorder) = recorder {
         let (diagnostics, program, emit_result) =
             crate::emit_harness::compile_files_with_host_emit(Arc::clone(&host), config, harness_options, &|host, config| create_program_like(host, config));
@@ -268,12 +262,10 @@ fn compile_files_ex(
 }
 
 // harnessutil.go:953 testBuildInfoReader: reads the build info as if this compiler had written it.
-#[cfg(feature = "checker")]
 struct testBuildInfoReader {
     inner: Box<dyn tsrs_incremental::BuildInfoReader>,
 }
 
-#[cfg(feature = "checker")]
 impl tsrs_incremental::BuildInfoReader for testBuildInfoReader {
     fn read_build_info(&self, config: &ParsedCommandLine) -> Option<tsrs_incremental::BuildInfo> {
         let mut r = self.inner.read_build_info(config)?;
@@ -284,7 +276,6 @@ impl tsrs_incremental::BuildInfoReader for testBuildInfoReader {
 
 // harnessutil.go:970 (createProgram), used by the emit harness (`--baselines js`): an `incremental` program is
 // wrapped in `incremental.NewProgram` like Go's. The default mode (no emit baselines) keeps the plain program below.
-#[cfg(feature = "checker")]
 fn create_program_like(host: Arc<dyn CompilerHost>, config: P<ParsedCommandLine>) -> &'static dyn compiler::ProgramLike {
     let program = create_program(Arc::clone(&host), config);
     if config.compiler_options().unwrap().incremental.is_true() {
@@ -331,7 +322,6 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
         harness_options,
         host,
         tsconfig,
-        #[cfg(feature = "checker")]
         emit: None,
     }
 }
@@ -387,7 +377,6 @@ const SKIPPED_EMIT_TESTS: [&str; 8] = [
 
 // compiler_runner.go:440 (verifyJavaScriptOutput). `None`: no `.js` baseline for this test (not requested, no
 // non-declaration files, or a skipped emit test); a panic while building it is `Err` (Go RecoverAndFail).
-#[cfg(feature = "checker")]
 fn verify_javascript_output(
     item: &TestItem,
     result: &CompilationResult,
@@ -432,23 +421,9 @@ fn verify_javascript_output(
     }
 }
 
-#[cfg(not(feature = "checker"))]
-fn verify_javascript_output(
-    _: &TestItem,
-    _: &CompilationResult,
-    _: &[TestFile],
-    _: &[TestFile],
-    _: &[TestFile],
-    _: &test_case_parser::TestCaseContent,
-    _: &str,
-) -> Option<Result<String, String>> {
-    None
-}
-
 // verifyTypesAndSymbols (compiler_runner.go). Go runs the JS emit (verifyJavaScriptOutput) between the error
 // baseline and this; it runs here only under `--baselines js`, so in the default mode checker work the emitter
 // would do first does not happen.
-#[cfg(feature = "checker")]
 fn verify_types_and_symbols(
     item: &TestItem,
     result: &CompilationResult,
@@ -470,7 +445,6 @@ fn verify_types_and_symbols(
 }
 
 // compiler_runner.go:468 (verifySourceMapOutput) and :485 (verifySourceMapRecord). A panic or `t.Fatal` is `Err`.
-#[cfg(feature = "checker")]
 fn verify_source_maps(result: &CompilationResult) -> Option<compiler_runner::SourceMapBaselines> {
     let want = crate::extra_baselines();
     if !emit_baselines() || want & (crate::EXTRA_JSMAP | crate::EXTRA_SOURCEMAP) == 0 {
@@ -525,16 +499,6 @@ fn verify_source_maps(result: &CompilationResult) -> Option<compiler_runner::Sou
         None
     };
     Some(compiler_runner::SourceMapBaselines { js_map, sourcemap })
-}
-
-#[cfg(not(feature = "checker"))]
-fn verify_source_maps(_: &CompilationResult) -> Option<compiler_runner::SourceMapBaselines> {
-    None
-}
-
-#[cfg(not(feature = "checker"))]
-fn verify_types_and_symbols(_: &TestItem, _: &CompilationResult, _: &[TestFile], _: &[TestFile]) -> Option<compiler_runner::TypesAndSymbols> {
-    None
 }
 
 pub fn convert_diagnostics(diagnostics: &[P<Diagnostic>]) -> Vec<Diag> {

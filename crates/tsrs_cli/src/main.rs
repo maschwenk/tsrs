@@ -165,10 +165,8 @@ fn main() {
         .join()
         .unwrap_or(tsc::ExitStatus::NotImplemented);
     // TSRS_UNION_CACHE_STATS / TSRS_UNION_CACHE=shadow: the union front cache's totals.
-    #[cfg(feature = "checker")]
     tsrs_compiler::Checker::union_cache_finish();
     // TSRS_INFER_MEMO_STATS / TSRS_INFER_MEMO=shadow: the inference memo's totals.
-    #[cfg(feature = "checker")]
     tsrs_compiler::Checker::infer_memo_finish();
     tsrs_core::memsplit::report("exit");
     let _ = std::io::Write::flush(&mut std::io::stdout());

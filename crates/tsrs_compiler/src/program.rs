@@ -841,7 +841,6 @@ impl Program {
     }
 
     // TSRS_ASSIGNMENT_STATS report (checkerpool_stats.rs).
-    #[cfg(feature = "checker")]
     pub fn checker_assignment_report(&'static self) -> String {
         crate::checkerpool_stats::report(self, self.pool())
     }
@@ -2009,7 +2008,6 @@ impl Program {
     // runs one task per file, each taking the file's checker from the pool; with the built-in pool the files run
     // grouped by checker on the checker threads (in file order within a checker), like the other checker-backed
     // diagnostics. With an external pool each file takes its checker from the pool, as in Go.
-    #[cfg(feature = "checker")]
     pub fn get_declaration_diagnostics(&'static self, ctx: &Context, source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
         let result = match (source_file, self.compiler_checker_pool()) {
             (Some(file), _) => self.get_declaration_diagnostics_for_file(ctx, None, file),
@@ -2030,15 +2028,8 @@ impl Program {
         filter_and_sort_diagnostics(&result)
     }
 
-    // Declaration emit needs the checker; without it declaration diagnostics are empty.
-    #[cfg(not(feature = "checker"))]
-    pub fn get_declaration_diagnostics(&'static self, _ctx: &Context, _source_file: Option<P<SourceFile>>) -> Vec<P<Diagnostic>> {
-        Vec::new()
-    }
-
     // program.go:1626. `c` is the file's checker when the caller already holds it (Go `newEmitHost` takes it from
     // the pool); with `None` it is taken here.
-    #[cfg(feature = "checker")]
     fn get_declaration_diagnostics_for_file(&'static self, ctx: &Context, c: Option<&mut Checker>, source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
         crate::fileregions::assert_not_freed(source_file);
         if source_file.is_declaration_file.get() {
@@ -2991,7 +2982,6 @@ pub fn get_diagnostics_of_any_program(
                 // Incremental programs cache checking globals with file diagnostics;
                 // a late sweep would also collect incidental signature-generation globals.
                 all_diagnostics.extend(tsrs_core::phases::time("Diagnostics: global (after)", || program.get_global_diagnostics(ctx)));
-                #[cfg(feature = "checker")]
                 crate::checkerpool::write_file_times(program);
             }
 
@@ -3003,7 +2993,6 @@ pub fn get_diagnostics_of_any_program(
             }
         }
     }
-    #[cfg(feature = "checker")]
     crate::checkerpool::write_cost_cache(program);
     all_diagnostics
 }

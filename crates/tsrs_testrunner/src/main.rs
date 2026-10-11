@@ -6,7 +6,7 @@ static GLOBAL: mimalloc_safe::MiMalloc = mimalloc_safe::MiMalloc;
 mod baseline;
 #[cfg(feature = "compiler")]
 mod compile;
-#[cfg(feature = "checker")]
+#[cfg(feature = "compiler")]
 mod emit_harness;
 mod compiler_runner;
 mod diagnosticwriter;
@@ -24,9 +24,9 @@ mod sourcemap_recorder;
 mod sourcemap_baseline;
 mod test_case_parser;
 mod tsbaseline;
-#[cfg(feature = "checker")]
+#[cfg(feature = "compiler")]
 mod type_symbol_baseline;
-#[cfg(feature = "checker")]
+#[cfg(feature = "compiler")]
 mod types_dump;
 mod worker;
 
@@ -62,7 +62,7 @@ const USAGE: &str = "usage:
                                       (hash, lines, path per file) and <out>/<kind>/<path>.<kind>; --sample walks only
                                       the listed files (e.g. from tools/project-types-sample.py), in program order
   --syntax-only (any command): no checker; only config/program/syntactic diagnostics; results in target/test-results-syntax
-                (implied when built without the `checker` feature)
+                (implied in an oracle-only build without the `compiler` feature)
 dev options (any command): --oracle <diags.jsonl> render Go-captured diagnostics instead of compiling;
                            --options <options.json> option table dumped by tools/oracle/testrunner";
 
@@ -511,7 +511,7 @@ fn cmd_crashes(mut args: Args) {
     report::print_crashes(&summary, top, examples);
 }
 
-#[cfg(feature = "checker")]
+#[cfg(feature = "compiler")]
 fn cmd_types_dump(mut args: Args) {
     let project = args.value("-p").or_else(|| args.value("--project")).unwrap_or_else(|| ".".to_string());
     let out = PathBuf::from(args.value("--out").unwrap_or_else(|| {
@@ -548,7 +548,7 @@ fn main() {
     let cmd = argv.remove(0);
     let mut args = Args { rest: argv };
     let spec = BackendSpec { oracle: args.value("--oracle"), options: args.value("--options") };
-    if args.flag("--syntax-only") || cfg!(not(feature = "checker")) {
+    if args.flag("--syntax-only") || cfg!(not(feature = "compiler")) {
         SYNTAX_ONLY.store(true, std::sync::atomic::Ordering::Relaxed);
     }
     let mut extra = args.value("--baselines").map_or(0, |v| parse_baselines(&v));
@@ -581,7 +581,7 @@ fn main() {
         "list" => cmd_list(args, &spec),
         #[cfg(feature = "compiler")]
         "materialize" => cmd_materialize(args, &spec),
-        #[cfg(feature = "checker")]
+        #[cfg(feature = "compiler")]
         "types-dump" => cmd_types_dump(args),
         "__worker" => {
             worker::worker_main(spec);

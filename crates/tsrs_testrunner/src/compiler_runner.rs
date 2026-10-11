@@ -89,7 +89,7 @@ pub fn read_reference_baseline(suite: &str, name: &str) -> Option<String> {
 pub fn read_reference_extra_baseline(suite: &str, name: &str, ext: &str) -> Option<String> {
     let path = testdata_path().join("baselines/reference").join(suite).join(format!("{name}.{ext}"));
     let text = std::fs::read(path).ok().map(|b| tsrs_core::utf8::from_utf8_lossy(&b).into_owned());
-    #[cfg(feature = "checker")]
+    #[cfg(feature = "compiler")]
     if ext == "js" && crate::compile::dts_only_mode() {
         let block = extract_dts_block(text.as_deref().unwrap_or(""));
         return (block != crate::baseline::NO_CONTENT).then_some(block);

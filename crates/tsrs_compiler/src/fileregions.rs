@@ -213,10 +213,7 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
 /// whatever the value.
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
-    #[cfg(feature = "checker")]
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
-    #[cfg(not(feature = "checker"))]
-    let checker_census = false;
     if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
         return LeafSettings::default();
     }

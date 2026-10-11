@@ -8,49 +8,10 @@ use tsrs_core::P;
 use crate::program::{sort_and_deduplicate_diagnostics, Program};
 use crate::splitcheck;
 
-#[cfg(feature = "checker")]
 pub use tsrs_checker::{Checker, Context};
 
-#[cfg(feature = "checker")]
 fn new_checker(program: &'static Program) -> Box<Checker> {
     tsrs_checker::new_checker(program)
-}
-
-// Built without the checker crate: programs can be created, parsed and bound, but nothing can
-// be type checked.
-#[cfg(not(feature = "checker"))]
-pub struct Checker {
-    pub type_count: u32,
-    pub symbol_count: u32,
-    pub total_instantiation_count: u32,
-    pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
-}
-
-#[cfg(not(feature = "checker"))]
-pub use tsrs_core::context::Context;
-
-#[cfg(not(feature = "checker"))]
-impl Checker {
-    pub fn get_diagnostics_exported(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
-        unimplemented!("tsrs_compiler was built without the `checker` feature")
-    }
-
-    pub fn get_suggestion_diagnostics(&mut self, _ctx: &Context, _source_file: P<SourceFile>) -> Vec<P<Diagnostic>> {
-        unimplemented!("tsrs_compiler was built without the `checker` feature")
-    }
-
-    pub fn get_global_diagnostics(&mut self) -> Vec<P<Diagnostic>> {
-        unimplemented!("tsrs_compiler was built without the `checker` feature")
-    }
-
-    pub fn was_canceled(&mut self) -> bool {
-        false
-    }
-}
-
-#[cfg(not(feature = "checker"))]
-fn new_checker(_program: &'static Program) -> Box<Checker> {
-    Box::new(Checker { type_count: 0, symbol_count: 0, total_instantiation_count: 0, lazy_member_stats: Default::default() })
 }
 
 // checkerpool.go:24
@@ -244,10 +205,7 @@ impl SlotChecker {
         let region = tsrs_core::arena::Region::new_scratch(1 << 20);
         let checker = {
             let _scope = region.enter_scratch();
-            #[cfg(feature = "checker")]
             let fork = crate::sharedgraph::fresh_fork();
-            #[cfg(not(feature = "checker"))]
-            let fork = None;
             fork.unwrap_or_else(|| new_checker(program))
         };
         SlotChecker { checker, region: Some(region) }
@@ -724,14 +682,12 @@ impl checkerPool {
             let shared = crate::sharedgraph::enabled() && !program.single_threaded();
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
-                #[cfg(feature = "checker")]
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
                 let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
                 // With the shared graph (sharedgraph.rs) the pool's checkers are plain until the type-check pass makes
                 // them forks of the seed.
                 run_work_group(self.single_threaded, self.checker_count, |i| {
                     let c = SlotChecker::new(program, recycle);
-                    #[cfg(feature = "checker")]
                     if shared && i == 0 {
                         crate::sharedgraph::note_fresh_checker(&c.checker);
                     }
@@ -901,7 +857,6 @@ impl checkerPool {
         // (`fileregions::classify`): as for every checker, the leaf guard (`Checker::is_unreadable_check_leaf`) then
         // keeps it from reading a leaf file, which may be freed while the seed runs or while a frozen object points into
         // it.
-        #[cfg(feature = "checker")]
         if allow_steal && state.shared_graph {
             static SEED_STARTED: std::sync::Once = std::sync::Once::new();
             SEED_STARTED.call_once(|| crate::sharedgraph::start_seed(self.program, state.weights.clone(), state.recycle));
@@ -919,7 +874,6 @@ impl checkerPool {
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
             // Without `--maxMemory` the checker becomes a fork of the seed now, waiting for it; with it, at its first
             // file boundary after the freeze (`switch_to_fork` below), so that the pool does not wait for the seed.
-            #[cfg(feature = "checker")]
             if allow_steal && state.shared_graph && !state.recycle {
                 let _region = guard.enter();
                 crate::sharedgraph::fork_into(&mut guard.checker);
@@ -976,10 +930,7 @@ impl checkerPool {
                     // Read by the other checker threads only to pick the largest; a stale value picks another one.
                     region_sizes[checker_idx].store(guard.region_bytes(), std::sync::atomic::Ordering::Relaxed);
                 }
-                #[cfg(feature = "checker")]
                 let switch_to_fork = recycle && state.shared_graph && !guard.checker.is_fork && crate::sharedgraph::try_base().is_some();
-                #[cfg(not(feature = "checker"))]
-                let switch_to_fork = false;
                 if switch_to_fork
                     || recycle
                     && guard.region_bytes() >= retire_min()

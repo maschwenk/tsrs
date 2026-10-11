@@ -1,5 +1,5 @@
 // Go's emitter.go: first the parts type checking depends on (sourceFileMayBeEmitted, declaration diagnostics), then
-// the emitter itself (`mod emit`, checker feature only).
+// the emitter itself (`mod emit`).
 
 use tsrs_ast::{self as ast, SourceFile};
 use tsrs_core::tspath::{self, ComparePathsOptions};
@@ -104,7 +104,6 @@ fn is_source_file_not_json(file: P<SourceFile>) -> bool {
 }
 
 // emitter.go:566. Runs inside the caller's `CheckerSlot::lend` (the host's resolver borrows the checker from it).
-#[cfg(feature = "checker")]
 pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHost, program: &Program, file: P<SourceFile>) -> Vec<P<tsrs_ast::Diagnostic>> {
     // TODO: use p.getSourceFilesToEmit cache
     // Go passes the emit host as the SourceFileMayBeEmittedHost; its methods forward to the program.
@@ -126,10 +125,8 @@ pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHo
 // resolver. Nothing here runs unless a caller invokes `Program::emit` (the CLI does unless the options disable emit).
 // ---------------------------------------------------------------------------------------------------------------
 
-#[cfg(feature = "checker")]
 pub use self::emit::*;
 
-#[cfg(feature = "checker")]
 mod emit {
     use tsrs_ast::{self as ast, new_compiler_diagnostic, Diagnostic, DiagnosticsCollection, SourceFile};
     use tsrs_core::tspath::{self, ComparePathsOptions};

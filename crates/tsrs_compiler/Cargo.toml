@@ -21,22 +21,18 @@ tsrs_tsoptions.workspace = true
 tsrs_modulespecifiers.workspace = true
 tsrs_spanmap.workspace = true
 tsrs_contentmapper.workspace = true
-tsrs_checker = { workspace = true, optional = true }
-tsrs_declarations = { workspace = true, optional = true }
-tsrs_printer = { workspace = true, optional = true }
-tsrs_transformers = { workspace = true, optional = true }
+tsrs_checker.workspace = true
+tsrs_declarations.workspace = true
+tsrs_printer.workspace = true
+tsrs_transformers.workspace = true
 rustc-hash.workspace = true
 rayon.workspace = true
 
 [features]
-# The type checker and emit (tsrs_checker, tsrs_declarations, tsrs_printer, tsrs_transformers). Without this feature
-# the program still loads, parses and binds files (enough for --listFilesOnly), but cannot check or emit.
-default = ["checker"]
-checker = ["dep:tsrs_checker", "dep:tsrs_declarations", "dep:tsrs_printer", "dep:tsrs_transformers"]
 # Creation-site counters of checker objects (tsrs_core::sitecount).
-site-counts = ["tsrs_checker?/site-counts"]
-work-census = ["tsrs_checker?/work-census"]
+site-counts = ["tsrs_checker/site-counts"]
+work-census = ["tsrs_checker/work-census"]
 # TOOL: TSRS_AST_SIZING=<file> (tsrs_ast/ast-sizing, notes/mem-compact-ast-sizing.md).
 ast-sizing = ["tsrs_ast/ast-sizing"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files.
-assignment-stats = ["checker", "tsrs_checker/assignment-stats"]
+assignment-stats = ["tsrs_checker/assignment-stats"]
