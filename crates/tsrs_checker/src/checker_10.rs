@@ -1766,6 +1766,7 @@ impl Checker {
     }
 
     // Can change from false to true once the type of the symbol is resolved.
+    #[inline]
     pub(crate) fn is_symbol_unaffected_by_instantiation(&mut self, symbol: P<Symbol>, m: Option<P<TypeMapper>>) -> bool {
         let links = self.value_symbol_links.get(symbol);
         if m.is_some_and(|m| m.maps_this_only()) && is_thisless(symbol) {
