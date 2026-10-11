@@ -18,3 +18,8 @@ bitflags.workspace = true
 [dev-dependencies]
 tsrs_vfs.workspace = true
 mimalloc-safe.workspace = true
+divan = { version = "5.0.2", package = "codspeed-divan-compat" }
+
+[[bench]]
+name = "parser"
+harness = false

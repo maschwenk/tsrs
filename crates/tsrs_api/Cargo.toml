@@ -27,3 +27,10 @@ tsrs_printer.workspace = true
 tsrs_api_codec.workspace = true
 # Re-entrancy helpers only (thread-local request context set by the connection); no protocol code.
 tsrs_api_transport.workspace = true
+
+[dev-dependencies]
+divan = { version = "5.0.2", package = "codspeed-divan-compat" }
+
+[[bench]]
+name = "transpile"
+harness = false

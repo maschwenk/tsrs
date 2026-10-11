@@ -2,6 +2,7 @@
 
 [![npm](https://img.shields.io/npm/v/tsrs)](https://www.npmjs.com/package/tsrs)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
+[![CodSpeed](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://app.codspeed.io/maschwenk/tsrs?utm_source=badge)
 
 tsrs is a Rust port of the TypeScript 7 compiler and language server. It's a drop-in replacement for `tsc`: same
 flags, same tsconfig, same errors.

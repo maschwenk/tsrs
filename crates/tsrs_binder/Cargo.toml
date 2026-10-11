@@ -16,4 +16,9 @@ rustc-hash.workspace = true
 bitflags.workspace = true
 
 [dev-dependencies]
+divan = { version = "5.0.2", package = "codspeed-divan-compat" }
 tsrs_parser.workspace = true
+
+[[bench]]
+name = "binder"
+harness = false

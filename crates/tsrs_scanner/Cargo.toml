@@ -14,3 +14,10 @@ tsrs_ast.workspace = true
 rustc-hash.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
+
+[dev-dependencies]
+divan = { version = "5.0.2", package = "codspeed-divan-compat" }
+
+[[bench]]
+name = "scanner"
+harness = false

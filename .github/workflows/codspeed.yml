@@ -1,0 +1,65 @@
+# CodSpeed (https://codspeed.io) performance tracking: builds the divan benchmarks of the compiler pipeline
+# (crates/tsrs_scanner, tsrs_parser, tsrs_binder, tsrs_compiler and tsrs_api `benches/`) with cargo-codspeed and runs
+# them under CodSpeed's CPU simulation instrument, which counts instructions and cache behaviour instead of wall time,
+# so results are stable on shared GitHub-hosted runners. Reports are posted on pull requests and tracked for main.
+# Complements the wall-time bench of .depot/workflows/bench.yml (whole projects, release binary), which this does not
+# replace.
+# Security: read-only token; `id-token: write` only to authenticate with CodSpeed through OpenID Connect (no secret).
+
+name: CodSpeed
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  # Lets CodSpeed trigger backtest runs to build initial history.
+  workflow_dispatch:
+
+# A newer commit on the same pull request cancels its older run; every push to main runs to completion.
+concurrency:
+  group: codspeed-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+
+jobs:
+  benchmarks:
+    name: Run benchmarks
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Read the pinned Rust toolchain (rust-toolchain.toml)
+        id: rust
+        shell: bash
+        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
+
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: ${{ steps.rust.outputs.toolchain }}
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: codspeed
+
+      - name: Install cargo-codspeed
+        run: cargo install cargo-codspeed --locked --version 5.0.2
+
+      - name: Build the benchmarks
+        run: cargo codspeed build -m simulation -p tsrs_scanner -p tsrs_parser -p tsrs_binder -p tsrs_compiler -p tsrs_api
+
+      - name: Run the benchmarks
+        uses: CodSpeedHQ/action@f842b9a3ffe213dbb81768fd7f7eeb4dfcf1c369 # v5.4.2
+        with:
+          mode: simulation
+          run: cargo codspeed run

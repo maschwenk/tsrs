@@ -40,3 +40,10 @@ work-census = ["tsrs_checker?/work-census"]
 ast-sizing = ["tsrs_ast/ast-sizing"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files.
 assignment-stats = ["checker", "tsrs_checker/assignment-stats"]
+
+[dev-dependencies]
+divan = { version = "5.0.2", package = "codspeed-divan-compat" }
+
+[[bench]]
+name = "checker"
+harness = false
