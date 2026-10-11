@@ -5,7 +5,7 @@ use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use rustc_hash::FxHashMap;
-use tsrs_core::collections::{OrderedMap, OrderedSet, OrderedSetExt};
+use tsrs_core::collections::{OrderedSet, OrderedSetExt};
 
 // Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
 // gosig into this directory: it rewrites every file listed in checker.json.
@@ -77,7 +77,7 @@ impl Checker {
     pub(crate) fn create_union_or_intersection_property(&mut self, containing_type: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
         let mut prop_flags = SymbolFlags::None;
         let mut single_prop: Option<P<Symbol>> = None;
-        let mut prop_set: OrderedSet<P<Symbol>> = OrderedSet::default();
+        let mut prop_set: orderedSet<P<Symbol>> = orderedSet::default();
         let mut index_types: Vec<P<Type>> = Vec::new();
         let is_union = containing_type.flags().intersects(TypeFlags::Union);
         // Flags we want to propagate to the result if they exist in all source symbols
@@ -125,10 +125,12 @@ impl Checker {
                                 None => false,
                             };
                         } else {
-                            if prop_set.size() == 0 {
+                            if prop_set.values.is_empty() {
                                 prop_set.add(sp);
                             }
-                            prop_set.add(prop);
+                            if !prop_set.contains(prop) {
+                                prop_set.add(prop);
+                            }
                         }
                         // classes created by mixins are represented as intersections
                         // and overriding a property in a derived class redefines it completely at runtime
@@ -191,9 +193,9 @@ impl Checker {
             return None;
         };
         if is_union
-            && (prop_set.size() != 0 || check_flags.intersects(CheckFlags::Partial))
+            && (!prop_set.values.is_empty() || check_flags.intersects(CheckFlags::Partial))
             && check_flags.intersects(CheckFlags::ContainsPrivate | CheckFlags::ContainsProtected | CheckFlags::ContainsWritePrivate | CheckFlags::ContainsWriteProtected)
-            && !(prop_set.size() != 0 && self.has_common_declaration(&prop_set))
+            && !(!prop_set.values.is_empty() && self.has_common_declaration(&prop_set.values))
         {
             // A property in a union has a private or protected declaration in one constituent, but is missing
             // or has a different declaration in another constituent. If the private or protected declaration is
@@ -209,7 +211,7 @@ impl Checker {
                 check_flags &= !CheckFlags::ContainsWritePublic;
             }
         }
-        if prop_set.size() == 0 && !check_flags.intersects(CheckFlags::ReadPartial) && index_types.is_empty() {
+        if prop_set.values.is_empty() && !check_flags.intersects(CheckFlags::ReadPartial) && index_types.is_empty() {
             if !merged_instantiations {
                 return Some(single_prop);
             }
@@ -234,17 +236,18 @@ impl Checker {
             links.set_write_type(write_type);
             return Some(clone);
         }
-        if prop_set.size() == 0 {
+        if prop_set.values.is_empty() {
             prop_set.add(single_prop);
         }
-        let mut declarations: Vec<P<Node>> = Vec::new();
+        let props = prop_set.values;
+        let mut declarations: Vec<P<Node>> = Vec::with_capacity(props.len());
         let mut first_type: Option<P<Type>> = None;
         let mut name_type: Option<P<Type>> = None;
-        let mut prop_types: Vec<P<Type>> = Vec::new();
+        let mut prop_types = self.free_type_lists.pop().unwrap_or_default();
+        prop_types.reserve(props.len() + index_types.len());
         let mut write_types: Option<Vec<P<Type>>> = None;
         let mut first_value_declaration: Option<P<Node>> = None;
         let mut has_non_uniform_value_declaration = false;
-        let props: Vec<P<Symbol>> = prop_set.iter().copied().collect();
         for prop in props {
             if first_value_declaration.is_none() {
                 first_value_declaration = prop.value_declaration();
@@ -293,7 +296,8 @@ impl Checker {
             result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
             let deferred = self.deferred_symbol_links.get(result);
             deferred.parent.set(Some(containing_type));
-            deferred.constituents.set(alloc_vec(prop_types));
+            deferred.constituents.set(alloc_slice(&prop_types));
+            self.free_type_list(prop_types);
             deferred.write_constituents.set(write_types.map_or(&[][..], alloc_vec));
             return Some(result);
         }
@@ -302,6 +306,7 @@ impl Checker {
         } else {
             links.resolved_type.set(Some(self.get_intersection_type(&prop_types)));
         }
+        self.free_type_list(prop_types);
         if let Some(write_types) = write_types {
             if is_union {
                 links.set_write_type(Some(self.get_union_type(&write_types)));
@@ -334,7 +339,7 @@ pub(crate) fn is_prototype_property(symbol: P<Symbol>) -> bool {
 
 impl Checker {
     // checker.go:22041
-    pub(crate) fn has_common_declaration(&mut self, symbols: &OrderedSet<P<Symbol>>) -> bool {
+    pub(crate) fn has_common_declaration(&mut self, symbols: &[P<Symbol>]) -> bool {
         let mut common_declarations: OrderedSet<P<Node>> = OrderedSet::default();
         for symbol in symbols.iter() {
             let symbol_declarations = symbol.declarations();
@@ -577,7 +582,8 @@ impl Checker {
         } else {
             None
         };
-        let mut counts: OrderedMap<&'static str, i32> = OrderedMap::default();
+        // A pooled map (Go's is garbage after the call); a recursive call takes another one.
+        let mut counts = self.free_property_counts.pop().unwrap_or_default();
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
                 for prop in self.get_properties_of_type(t) {
@@ -596,16 +602,23 @@ impl Checker {
         }
         // Check if any property appears in more than one constituent type and reduces to 'never'.
         // Go in the order the properties were found so the combined properties are created in the same order every time.
-        for (prop_name, count) in counts {
+        let mut result = false;
+        for i in 0..counts.len() {
+            let (&prop_name, &count) = counts.get_index(i).unwrap();
             if count > 1 {
                 if let Some(prop) = self.get_property_of_union_or_intersection_type(t, prop_name, true /*skipObjectFunctionPropertyAugment*/) {
                     if self.is_never_reduced_property(prop) {
-                        return true;
+                        result = true;
+                        break;
                     }
                 }
             }
         }
-        false
+        if counts.capacity() <= 1024 {
+            counts.clear();
+            self.free_property_counts.push(counts);
+        }
+        result
     }
 
     // checker.go:22240
