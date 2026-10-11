@@ -216,7 +216,9 @@ pub fn get_encoded_root_length(path: &str) -> i32 {
     }
 
     // URL
-    if let Some(scheme_end) = path.find(URL_SCHEME_SEPARATOR) {
+    // `path.find("://")` by its colons: the substring searcher's setup cost more than the search (most paths here are
+    // relative module names without a colon).
+    if let Some(scheme_end) = memchr::memchr_iter(b':', bytes).find(|&i| bytes[i + 1..].starts_with(b"//")) {
         let authority_start = scheme_end + URL_SCHEME_SEPARATOR.len();
         if let Some(authority_length) = path[authority_start..].find('/') {
             // URL: "file:///", "file://server/", "file://server/path"
