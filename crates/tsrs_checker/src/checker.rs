@@ -1131,6 +1131,8 @@ pub struct Checker {
     pub(crate) unmatched_found_pool: Vec<Vec<Option<Option<P<Symbol>>>>>,
     /// Reused buffers for `some_property_reduces_to_never` (checker_11.rs), one per nested call.
     pub(crate) name_counts_pool: Vec<crate::checker_11::NameCounts>,
+    /// Reused name sets for `get_properties_of_union_or_intersection_type` (checker_09.rs), one per nested call.
+    pub(crate) name_set_pool: Vec<crate::checker_11::NameSet>,
     /// `contextual_property_type_of_large_union` (checker_15.rs): per (union, name hash), the name, the
     /// `members_reset_epoch` it was computed in and the positions of the constituents that can contribute.
     pub(crate) contextual_relevant: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[u32]>)>>,
@@ -1560,6 +1562,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
         name_counts_pool: Vec::new(),
+        name_set_pool: Vec::new(),
         contextual_relevant: FxHashMap::default(),
         discriminant_property_types: FxHashMap::default(),
         constituent_flags: FxHashMap::default(),
@@ -2061,6 +2064,7 @@ impl Checker {
             augment_filter: base.augment_filter.clone(),
             unmatched_found_pool: Vec::new(),
             name_counts_pool: Vec::new(),
+            name_set_pool: Vec::new(),
             contextual_relevant: FxHashMap::default(),
             discriminant_property_types: FxHashMap::default(),
             constituent_flags: FxHashMap::default(),

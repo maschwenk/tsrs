@@ -370,6 +370,65 @@ impl NameCounts {
     }
 }
 
+/// A set of names hashed with the 32-bit name hash symbol tables use, by linear probing: the per-call name sets of
+/// property walks, without `FxHashSet<&str>`'s hashing of every byte.
+#[derive(Default)]
+pub(crate) struct NameSet {
+    len: usize,
+    /// Empty slots are `None`.
+    slots: Vec<(u32, Option<&'static str>)>,
+}
+
+impl NameSet {
+    pub(crate) fn clear(&mut self) {
+        if self.len != 0 {
+            // A large table is dropped rather than cleared, so that one large set does not slow every later use.
+            if self.slots.len() > 64 {
+                self.slots = Vec::new();
+            } else {
+                self.slots.fill((0, None));
+            }
+            self.len = 0;
+        }
+    }
+
+    /// Adds `name`; false if it was already in the set.
+    pub(crate) fn insert(&mut self, name: &'static str) -> bool {
+        if (self.len + 1) * 2 > self.slots.len() {
+            self.grow();
+        }
+        let hash = HashedName::new(name).hash();
+        let mask = self.slots.len() - 1;
+        let mut i = hash as usize & mask;
+        loop {
+            match self.slots[i] {
+                (_, None) => {
+                    self.slots[i] = (hash, Some(name));
+                    self.len += 1;
+                    return true;
+                }
+                (h, Some(n)) if h == hash && (std::ptr::eq(n, name) || n == name) => return false,
+                _ => i = (i + 1) & mask,
+            }
+        }
+    }
+
+    fn grow(&mut self) {
+        let size = (self.slots.len() * 2).max(16);
+        let old = std::mem::replace(&mut self.slots, vec![(0, None); size]);
+        let mask = size - 1;
+        for (hash, name) in old {
+            if name.is_some() {
+                let mut i = hash as usize & mask;
+                while self.slots[i].1.is_some() {
+                    i = (i + 1) & mask;
+                }
+                self.slots[i] = (hash, name);
+            }
+        }
+    }
+}
+
 /**
  * Return whether this symbol is a member of a prototype somewhere
  * Note that this is not tracked well within the compiler, so the answer may be incorrect.
