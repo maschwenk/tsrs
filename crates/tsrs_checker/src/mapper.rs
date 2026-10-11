@@ -274,22 +274,29 @@ impl TypeMapper {
                     t
                 }
             }
-            TypeMapperData::Merged { m1, m2 } => {
-                let t1 = m1.map(c, t);
-                m2.map(c, t1)
-            }
-            TypeMapperData::Composite { m1, m2 } => {
-                let t1 = m1.map(c, t);
-                if t1 != t {
-                    return c.instantiate_type(t1, Some(m2));
-                }
-                m2.map(c, t)
-            }
+            TypeMapperData::Merged { m1, m2 } => Self::map_merged(m1, m2, c, t),
+            TypeMapperData::Composite { m1, m2 } => Self::map_composite(m1, m2, c, t),
             data => Self::map_rare(data, c, t),
         }
     }
 
-    /// `map` for the kinds that run arbitrary code (out of line, so the common kinds need few saved registers).
+    // The kinds that call back are out of line so that `map` needs no stack frame for the others.
+    #[inline(never)]
+    fn map_merged(m1: P<TypeMapper>, m2: P<TypeMapper>, c: &mut Checker, t: P<Type>) -> P<Type> {
+        let t1 = m1.map(c, t);
+        m2.map(c, t1)
+    }
+
+    #[inline(never)]
+    fn map_composite(m1: P<TypeMapper>, m2: P<TypeMapper>, c: &mut Checker, t: P<Type>) -> P<Type> {
+        let t1 = m1.map(c, t);
+        if t1 != t {
+            return c.instantiate_type(t1, Some(m2));
+        }
+        m2.map(c, t)
+    }
+
+    /// `map` for the kinds that run arbitrary code.
     #[inline(never)]
     fn map_rare(data: TypeMapperData, c: &mut Checker, t: P<Type>) -> P<Type> {
         match data {
