@@ -199,6 +199,16 @@ impl Identifier {
         unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(source_text_ptr(Self::text_index(word)).add(end - len), len)) }
     }
 
+    /// `text().len()`, without forming the text (a compact identifier keeps its length in the word).
+    #[inline]
+    pub fn text_len(&self) -> usize {
+        let word = self.word.get();
+        if Self::mode(word) == MODE_TEXT {
+            return self.stored_text().len();
+        }
+        ((word >> LEN_SHIFT) & LEN_MAX) as usize
+    }
+
     #[cold]
     fn stored_text(&self) -> &'static str {
         // SAFETY: identifiers in `MODE_TEXT` were allocated as `IdentifierWithText` (`repr(C)`, identifier first).
