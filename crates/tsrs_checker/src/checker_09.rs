@@ -2328,7 +2328,7 @@ impl Checker {
             let symbol = if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
                 t.as_structured_type().members().and_then(|m| m.lookup_hashed(key))
             } else {
-                self.get_member_of_unresolved_structured_type(t, name, instantiate)
+                self.get_member_of_unresolved_structured_type_hashed(t, key, instantiate)
             };
             if let Some(symbol) = symbol {
                 if !include_type_only_members
@@ -3208,16 +3208,21 @@ impl Checker {
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_lazy_declared_member(&mut self, lm: P<LazyMemberTable>, symbol: P<Symbol>, name: &'static str) -> P<Symbol> {
-        let existing = lm.declared.lookup(name);
+        self.get_lazy_declared_member_hashed(lm, symbol, HashedName::new(name))
+    }
+
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    fn get_lazy_declared_member_hashed(&mut self, lm: P<LazyMemberTable>, symbol: P<Symbol>, key: HashedName<'static>) -> P<Symbol> {
+        let existing = lm.declared.lookup_hashed(key);
         if let Some(result) = existing {
             return result;
         }
         let mut result = symbol;
-        if lm.ready.get().unwrap().unaffected.get().binary_search(&name).is_err() {
+        if lm.ready.get().unwrap().unaffected.get().binary_search(&key.name).is_err() {
             self.lazy_member_stats.member_table_declared_instantiated += 1;
             result = self.new_instantiated_symbol(symbol, Some(lm.mapper));
         }
-        lm.declared.set(name, result);
+        lm.declared.set_hashed(key, result);
         result
     }
 
@@ -3238,6 +3243,13 @@ impl Checker {
     // only test for the member or look at its flags).
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_member_of_unresolved_structured_type(&mut self, t: P<Type>, name: &str, instantiate: bool) -> Option<P<Symbol>> {
+        self.get_member_of_unresolved_structured_type_hashed(t, HashedName::new(name), instantiate)
+    }
+
+    /// `get_member_of_unresolved_structured_type` of a name hashed beforehand.
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    pub(crate) fn get_member_of_unresolved_structured_type_hashed(&mut self, t: P<Type>, key: HashedName<'_>, instantiate: bool) -> Option<P<Symbol>> {
+        let name = key.name;
         if t.object_flags().intersects(ObjectFlags::Mapped) && !is_reserved_member_name(name) {
             if let Some(lazy) = self.get_lazy_mapped_table(t) {
                 if let Some(member) = self.get_lazy_mapped_type_member(t, &lazy, name) {
@@ -3247,19 +3259,19 @@ impl Checker {
         }
         let lm = self.get_ready_lazy_member_table(t);
         let Some(lm) = lm.filter(|_| !is_reserved_member_name(name)) else {
-            return self.resolve_structured_type_members(t).unwrap().members().and_then(|m| m.lookup(name));
+            return self.resolve_structured_type_members(t).unwrap().members().and_then(|m| m.lookup_hashed(key));
         };
         self.lazy_member_stats.member_lookups += 1;
         // The declared member, else the first base type's property (see addInheritedMembers).
         let mut result: Option<P<Symbol>> = None;
         let declared_members = self.resolve_declared_members(t.object_target().unwrap()).unwrap().declared_members.get();
-        if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
+        if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry_hashed(key)) {
             if self.is_named_member(decl, name) {
                 if instantiate {
-                    result = Some(self.get_lazy_declared_member(lm, decl, name));
+                    result = Some(self.get_lazy_declared_member_hashed(lm, decl, key.with_name(name)));
                 } else {
                     self.lazy_member_stats.has_prop_uninstantiated += 1;
-                    result = Some(lm.declared.lookup(name).unwrap_or(decl));
+                    result = Some(lm.declared.lookup_hashed(key).unwrap_or(decl));
                 }
             }
         }

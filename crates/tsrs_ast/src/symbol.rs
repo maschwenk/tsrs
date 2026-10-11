@@ -757,8 +757,13 @@ impl SymbolMap {
         self.extra.get_or_insert().odd_keys.push((i as u32, key));
     }
 
+    #[inline]
     fn insert(&mut self, name: &'static str, symbol: P<Symbol>) {
-        let hash = hash_name(name);
+        self.insert_hashed(name, hash_name(name), symbol);
+    }
+
+    /// `insert` of a name hashed beforehand (`hash` = `hash_name(name)`).
+    fn insert_hashed(&mut self, name: &'static str, hash: u32, symbol: P<Symbol>) {
         if let Some(i) = if self.extra.may_contain(hash) { self.search(name, hash) } else { None } {
             // Go keeps the stored key; it is no longer the new symbol's name when that differs.
             self.entries[i].set_symbol(symbol);
@@ -852,6 +857,13 @@ impl<'a> HashedName<'a> {
     pub fn hash(&self) -> u32 {
         self.hash
     }
+
+    /// The same key for another string with the same text (a table's stored key for the looked-up name).
+    #[inline]
+    pub fn with_name<'b>(self, name: &'b str) -> HashedName<'b> {
+        debug_assert_eq!(self.name, name);
+        HashedName { name, hash: self.hash }
+    }
 }
 
 /// A 256-bit Bloom filter of the keys of a few tables taken together (two bits per key, other hash bits than a
@@ -929,6 +941,13 @@ impl SymbolTable {
         m.position(name).map(|i| (m.key(i), m.entries[i].symbol()))
     }
 
+    /// `lookup_entry` of a name hashed beforehand.
+    #[inline]
+    pub fn lookup_entry_hashed(&self, key: HashedName<'_>) -> Option<(&'static str, P<Symbol>)> {
+        let m = self.0.borrow();
+        m.position_hashed(key.name, key.hash).map(|i| (m.key(i), m.entries[i].symbol()))
+    }
+
     #[inline]
     pub fn set(&self, name: &'static str, symbol: P<Symbol>) {
         self.0.borrow_mut().insert(name, symbol);
@@ -937,6 +956,12 @@ impl SymbolTable {
     /// Makes room for `additional` more entries (for a table about to be filled), allocating exactly that much.
     pub fn reserve(&self, additional: usize) {
         self.0.borrow_mut().entries.reserve_exact(additional);
+    }
+
+    /// `set` of a name hashed beforehand.
+    #[inline]
+    pub fn set_hashed(&self, key: HashedName<'static>, symbol: P<Symbol>) {
+        self.0.borrow_mut().insert_hashed(key.name, key.hash, symbol);
     }
 
     pub fn delete(&self, name: &str) {
