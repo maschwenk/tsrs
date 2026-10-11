@@ -2504,8 +2504,23 @@ impl Checker {
     }
 
     // Go's getSignaturesOfStructuredType returns the stored slice; this is it without the copy.
+    /// A type with resolved members has no lazy member table, so the resolved signatures are the answer (a mapped
+    /// type's early return aside); that path makes no call and saves no registers.
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn signatures_of_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
+        if t.flags().intersects(TypeFlags::StructuredType)
+            && t.object_flags_lazy().intersects(ObjectFlags::MembersResolved)
+            && !(self.lazy_members && t.object_flags().intersects(ObjectFlags::Mapped))
+        {
+            let resolved = t.as_structured_type();
+            return if kind == SignatureKind::Call { resolved.call_signatures() } else { resolved.construct_signatures() };
+        }
+        self.signatures_of_unresolved_structured_type(t, kind)
+    }
+
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    #[inline(never)]
+    fn signatures_of_unresolved_structured_type(&mut self, t: P<Type>, kind: SignatureKind) -> &'static [P<Signature>] {
         if !t.flags().intersects(TypeFlags::StructuredType) {
             return &[];
         }
@@ -2543,7 +2558,16 @@ impl Checker {
     }
 
     // Go's getIndexInfosOfStructuredType returns the stored slice; this is it without the copy.
+    /// As `signatures_of_structured_type`: resolved members answer without a call.
     pub(crate) fn index_infos_of_structured_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
+        if t.flags().intersects(TypeFlags::StructuredType) && t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
+            return t.as_structured_type().index_infos();
+        }
+        self.index_infos_of_unresolved_structured_type(t)
+    }
+
+    #[inline(never)]
+    fn index_infos_of_unresolved_structured_type(&mut self, t: P<Type>) -> &'static [P<IndexInfo>] {
         if t.flags().intersects(TypeFlags::StructuredType) {
             if let Some(lm) = self.get_ready_lazy_member_table(t) {
                 self.lazy_member_stats.member_index_info_queries += 1;
