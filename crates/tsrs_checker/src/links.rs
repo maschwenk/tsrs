@@ -431,7 +431,9 @@ impl<V: 'static> IdLinkStore<V> {
         }
     }
 
-    #[inline(never)]
+    /// Inline: a call here would make every caller that inlines `narrow_slot` save registers on its hit path
+    /// (`get_type_of_symbol`'s cached-type return).
+    #[inline]
     fn dense_slot(dense: P<[Cell<u32>; ID_GROUP]>, i: usize) -> Option<u32> {
         dense[i].get().checked_sub(1)
     }
