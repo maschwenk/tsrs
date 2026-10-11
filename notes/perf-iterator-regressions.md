@@ -1,8 +1,60 @@
-# Iterator refactor regressions (PR 317)
+# Iterator refactor regressions (PRs 317 and 325)
 
 The [original PR comparison](https://github.com/maschwenk/tsrs/pull/317#issuecomment-6106599399)
 reported 0.036–0.339% more single-threaded instructions on 16 of 17 public projects, with unchanged diagnostics.
 This investigation removes regressions from the refactor; it does not introduce a new performance optimization.
+The final branch is below the pre-refactor baseline on all 17 projects, by 0.007–0.338%. Most iterator conversions
+remain; the measured hot loops and stateful traversal retain their original control flow.
+
+## Final result
+
+[PR 317](https://github.com/maschwenk/tsrs/pull/317) merged during the investigation. The remaining relation-loop
+correction is [PR 325](https://github.com/maschwenk/tsrs/pull/325), head `ac5ce4fb`.
+The [direct final comparison](https://depot.dev/orgs/qw3zz3l8cs/workflows/m5908hr0jq) builds pre-refactor main
+`e99e1816` and that head on the same 32-vCPU AMD EPYC 9R45 Linux runner with unchanged release settings.
+All 17 instruction counts decrease; all 34 diagnostic/exit comparisons match. This run uses one timed repetition
+at one checker, a separate single-threaded instruction count, and no poisoned-arena run. It is an instruction
+comparison, not a wall-time improvement claim. RSS below is the instruction run's peak in MiB.
+
+| Public project | Pre-refactor instructions | Final instructions | Change | Peak RSS, before → after |
+| --- | ---: | ---: | ---: | ---: |
+| vscode | 88,966,333,477 | 88,944,609,068 | -0.024% | 1605.13 → 1605.30 |
+| xstate-main | 6,026,576,782 | 6,016,358,521 | -0.170% | 182.76 → 182.71 |
+| webpack | 11,971,388,863 | 11,967,290,457 | -0.034% | 312.90 → 312.79 |
+| mui-docs | 37,857,548,432 | 37,850,302,798 | -0.019% | 742.04 → 741.81 |
+| Compiler | 1,963,285,665 | 1,962,037,484 | -0.064% | 59.57 → 60.02 |
+| Compiler-Unions | 3,746,427,757 | 3,742,971,596 | -0.092% | 63.34 → 63.48 |
+| cal-diy | 32,320,894,333 | 32,283,321,889 | -0.116% | 775.36 → 774.10 |
+| formbricks-web | 41,991,952,129 | 41,971,714,688 | -0.048% | 1102.29 → 1104.91 |
+| supabase-studio | 44,023,266,140 | 44,020,142,065 | -0.007% | 876.39 → 876.98 |
+| t3code-server | 43,357,511,095 | 43,331,519,819 | -0.060% | 738.75 → 738.61 |
+| mikro-orm | 65,877,605,872 | 65,654,705,240 | -0.338% | 1137.56 → 1136.93 |
+| next-packages-next | 18,527,735,090 | 18,520,091,521 | -0.041% | 445.75 → 446.00 |
+| next-root | 13,629,880,097 | 13,597,446,872 | -0.238% | 316.98 → 316.85 |
+| storybook | 10,247,272,617 | 10,243,080,690 | -0.041% | 281.86 → 282.35 |
+| nuxt | 9,308,441,254 | 9,306,310,666 | -0.023% | 280.37 → 280.41 |
+| playwright | 8,374,438,602 | 8,370,516,637 | -0.047% | 244.37 → 244.87 |
+| drizzle-orm | 12,612,432,998 | 12,604,493,893 | -0.063% | 394.80 → 395.11 |
+
+The [follow-up PR gate](https://depot.dev/orgs/qw3zz3l8cs/workflows/rxwznq3r7s), comparing the already merged
+first correction (`7dda02ff`, same code as `37942867`) with the follow-up's merge `8d4b8722`, passes all 102
+comparisons at 1/4/16/32 checkers, three timed repetitions, and poisoned arenas. Relative to the first correction,
+it adds 0.001% on Compiler, 0.005% on Compiler-Unions, 0.008% on next-packages-next and 0.006% on Storybook;
+the direct table above confirms all four remain below the pre-refactor baseline.
+
+A [three-repetition paired Supabase run](https://depot.dev/orgs/qw3zz3l8cs/workflows/z4m8029pqr) confirms the final
+residual correction against `e99e1816`, omitting `--extendedDiagnostics`:
+
+| Mode | Median instructions, before → after | Median peak RSS, bytes, before → after |
+| --- | ---: | ---: |
+| Single-threaded | 44,024,727,769 → 44,021,590,486 | 919,498,752 → 919,134,208 |
+| Default checker count | 85,441,564,434 → 86,013,969,478 | 1,855,393,792 → 1,869,012,992 |
+
+Default-mode counts vary between runs (the final instruction samples span 84.942–86.287 G);
+use single-threaded instructions for the comparison. These RSS measurements do not establish a memory win.
+The allocation-profile comparison below shows unchanged allocation counts, arena requests and peak live heap.
+Workspace CI, both required lints, full conformance, 29 regressions, Node API, Wasm and arena safety pass for the
+final code. The final documentation update does not change that code.
 
 ## Method
 

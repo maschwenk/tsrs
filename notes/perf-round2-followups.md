@@ -143,7 +143,9 @@ with the switch off, which is why it is not in the default build.
 - Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
   0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic
   search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone
-  does not establish equivalent cost. The note records the isolated cause and the corrected branch's measurements.
+  does not establish equivalent cost. The final direct comparison is below the pre-refactor baseline on all 17
+  projects; retain the template iterators whose isolated reversion regressed counts. The note records the causes,
+  rejected candidates, allocation checks and instruction/RSS measurements.
 
 - Derived equality and ordering on the niche-encoded `TextPos` enum (PR #306;
   notes/perf-unsigned-positions.md): extra discriminant handling despite a four-byte encoding that already supplies
