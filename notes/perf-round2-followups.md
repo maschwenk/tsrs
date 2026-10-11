@@ -171,6 +171,21 @@ with the switch off, which is why it is not in the default build.
   +4% wall from page faults); retiring a checker only where its queue changes directory (no instruction change: the
   rebuild cost is the shared base); staggering the checkers' first retirements (-2.2% peak for +2.5% instructions).
 
+- Finalizing and freeing each `--maxMemory` checker as soon as its queue empties (notes/mem-finish-checkers.md):
+  exact diagnostics and counters, no replacement-checker rebuild, but peak RSS changed only 4.0372 -> 4.0360 GiB
+  (-0.03%) on a large private monorepo. Work stealing kept first-to-last checker completion within 70 ms, after the
+  process had already reached its peak. Reverted; revisit only with measured checker-tail imbalance across the peak.
+
+- Other earlier-freeing options on a large private monorepo (notes/mem-retire-minimum.md): relation-cache thresholds
+  saved at most 1.12% peak RSS even when emptied after every file (+4.15% instructions); broader leaf placement was
+  0.9% worse than the existing prediction, which already covered 99.5% of exact leaf nodes; moving leaf release to
+  the earliest exact diagnostic boundary changed peak by +0.07%. Rejected. Lowering `--maxMemory`'s checker-region
+  retirement floor was different: zero versus 128 MiB at a 3 GiB target saved 8.81% peak RSS for +7.34% instructions
+  and +2.72% wall, so the zero floor landed. A 2 GiB target reached 2.1912 GiB (-51.83% against uncapped) but cost
+  +68.5% wall; targets below that rebuilt checker state fast enough to raise the peak again. Across all 17 public
+  benchmark projects, zero saved 15-27% on 13, was neutral on three, and provided no reproducible memory win on
+  drizzle-orm when its target was below the attainable front-end-plus-fresh-checker floor.
+
 - Oxc-style numeric-literal conversion and `dragonbox_ecma` formatting (notes/perf-oxc-numbers.md): exact against
   pinned Go and all existing passing baselines, but no qualifying gain on Compiler, Compiler-Unions, xstate-main
   or vscode. After repeating a noisy xstate sample, the largest median paired single-threaded instruction

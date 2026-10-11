@@ -1,8 +1,8 @@
 // `--maxMemory` (tsrs_compiler checkerpool.rs `retire_checker`, notes/mem-recycle-checkers.md): above the target,
 // the `--noEmit` type-check pass retires its largest checker and checks the rest of that checker's files with a fresh
-// one. With a 1 MiB target and no minimum checker size (TSRS_RETIRE_MIN=0) checkers are retired after nearly every
-// file. Each case of
-// testdata/regressions must still print tsgo-ref's output (expected.txt), also in poison mode (TSRS_ARENA_POISON=1:
+// one. With a 1 MiB target and the default zero minimum checker size, checkers are retired after nearly every file.
+// Every case in testdata/regressions must still print tsgo-ref's output (expected.txt), also in poison mode
+// (TSRS_ARENA_POISON=1:
 // a retired checker's region is filled with 0xA5 and kept, so any later read of it crashes), and with the relation
 // caches emptied after every file.
 
@@ -17,11 +17,18 @@ fn run(dir: &Path, checkers: &str, poison: bool, extended: bool) -> String {
 fn run_with(dir: &Path, checkers: &str, poison: bool, extended: bool, relation_limit: Option<&str>) -> String {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_tsrs"));
     cmd.current_dir(dir).args(["-p", ".", "--pretty", "false", "--checkers", checkers, "--maxMemory", "1M"]);
-    cmd.env("TSRS_RETIRE_MIN", "0");
     if extended {
         cmd.arg("--extendedDiagnostics");
     }
-    for var in ["TSRS_CHECKER_ASSIGNMENT", "TSRS_FILE_TIMES", "TSRS_ASSIGNMENT_STATS", "TSRS_HEAP_CENSUS", "TSRS_CENSUS", "TSRS_MAX_MEMORY"] {
+    for var in [
+        "TSRS_CHECKER_ASSIGNMENT",
+        "TSRS_FILE_TIMES",
+        "TSRS_ASSIGNMENT_STATS",
+        "TSRS_HEAP_CENSUS",
+        "TSRS_CENSUS",
+        "TSRS_MAX_MEMORY",
+        "TSRS_RETIRE_MIN",
+    ] {
         cmd.env_remove(var);
     }
     match relation_limit {

@@ -299,12 +299,13 @@ fn max_memory() -> usize {
     *MAX.get_or_init(|| CLI_MAX_MEMORY.get().copied().or_else(|| std::env::var("TSRS_MAX_MEMORY").ok().and_then(|v| parse_memory_size(&v))).unwrap_or(0))
 }
 
-// A checker whose region holds less than this is never retired (`TSRS_RETIRE_MIN=<size>` overrides it, for tests):
-// a fresh checker rebuilds ~200-300 MiB of library and shared-module types on the 38k-file codebase, so retiring
-// smaller ones costs that again for little memory.
+// A checker whose region holds less than this is never retired (`TSRS_RETIRE_MIN=<size>` overrides it). The default
+// is zero: `--maxMemory` explicitly prioritizes footprint, and a 128 MiB floor kept a large private monorepo 11%
+// farther above a 3 GiB target. Raising the floor trades memory for less rebuilding when a target is below the front
+// end plus fresh-checker footprint (notes/mem-retire-minimum.md).
 fn retire_min() -> usize {
     static MIN: OnceLock<usize> = OnceLock::new();
-    *MIN.get_or_init(|| std::env::var("TSRS_RETIRE_MIN").ok().and_then(|v| parse_memory_size(&v)).unwrap_or(128 << 20))
+    *MIN.get_or_init(|| std::env::var("TSRS_RETIRE_MIN").ok().and_then(|v| parse_memory_size(&v)).unwrap_or(0))
 }
 
 #[expect(clippy::non_send_fields_in_send_ty, reason = "the checker: touched only under its mutex (see above)")]

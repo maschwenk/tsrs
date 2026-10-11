@@ -30,7 +30,9 @@ Alongside the supported `tsc` flags, tsrs offers options to control performance:
 - `--checkerCostCache <file>` remembers how long each file took to check and uses that to balance threads on the next
   run (up to ~15% faster on repeated runs).
 - `--maxMemory <size>` (for example `12G`; `--noEmit` checks only) keeps the process near that much memory: above it,
-  tsrs replaces its largest checker with a fresh one, trading CPU for memory. The diagnostics are the same.
+  tsrs replaces its largest checker with a fresh one, trading CPU for memory. It keeps retiring regions of any size
+  by default; set `TSRS_RETIRE_MIN=128M` to limit rebuilding when speed matters more than approaching the target. The
+  diagnostics are the same.
 - `--checkerAssignment go` splits files across threads the way tsgo does, for byte-identical output with tsgo.
 - `--noLazyMembers` turns off a set of checker optimizations that are not yet merged upstream. They never change
   diagnostics; the patches are in [`upstream/`](../upstream/).
