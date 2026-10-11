@@ -1589,30 +1589,36 @@ impl Binder {
             if original_keyword_kind == Kind::Identifier {
                 return;
             }
-            if original_keyword_kind >= Kind::FirstFutureReservedWord && original_keyword_kind <= Kind::LastFutureReservedWord {
-                let message = self.get_strict_mode_identifier_message(node);
-                self.error_on_node(node, message, &[&scanner::declaration_name_to_string(Some(node))]);
-            } else if original_keyword_kind == Kind::AwaitKeyword {
-                if ast::is_external_module(self.file) && ast::is_in_top_level_context(node) {
-                    self.error_on_node(
-                        node,
-                        &diagnostics::Identifier_expected_0_is_a_reserved_word_at_the_top_level_of_a_module,
-                        &[&scanner::declaration_name_to_string(Some(node))],
-                    );
-                } else if node.flags().intersects(NodeFlags::AwaitContext) {
-                    self.error_on_node(
-                        node,
-                        &diagnostics::Identifier_expected_0_is_a_reserved_word_that_cannot_be_used_here,
-                        &[&scanner::declaration_name_to_string(Some(node))],
-                    );
-                }
-            } else if original_keyword_kind == Kind::YieldKeyword && node.flags().intersects(NodeFlags::YieldContext) {
+            self.check_contextual_keyword(node, original_keyword_kind);
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn check_contextual_keyword(&mut self, node: P<Node>, original_keyword_kind: Kind) {
+        if original_keyword_kind >= Kind::FirstFutureReservedWord && original_keyword_kind <= Kind::LastFutureReservedWord {
+            let message = self.get_strict_mode_identifier_message(node);
+            self.error_on_node(node, message, &[&scanner::declaration_name_to_string(Some(node))]);
+        } else if original_keyword_kind == Kind::AwaitKeyword {
+            if ast::is_external_module(self.file) && ast::is_in_top_level_context(node) {
+                self.error_on_node(
+                    node,
+                    &diagnostics::Identifier_expected_0_is_a_reserved_word_at_the_top_level_of_a_module,
+                    &[&scanner::declaration_name_to_string(Some(node))],
+                );
+            } else if node.flags().intersects(NodeFlags::AwaitContext) {
                 self.error_on_node(
                     node,
                     &diagnostics::Identifier_expected_0_is_a_reserved_word_that_cannot_be_used_here,
                     &[&scanner::declaration_name_to_string(Some(node))],
                 );
             }
+        } else if original_keyword_kind == Kind::YieldKeyword && node.flags().intersects(NodeFlags::YieldContext) {
+            self.error_on_node(
+                node,
+                &diagnostics::Identifier_expected_0_is_a_reserved_word_that_cannot_be_used_here,
+                &[&scanner::declaration_name_to_string(Some(node))],
+            );
         }
     }
 
