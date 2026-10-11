@@ -3,6 +3,7 @@
 use std::fmt::Display;
 
 use bitflags::bitflags;
+use tsrs_core::ThinSliceCell;
 
 use crate::*;
 
@@ -194,11 +195,13 @@ pub struct ErrorChain {
 pub struct RecursionStackEntry {
     pub t: P<Type>,
     pub(crate) identity_key: Cell<u64>,
+    /// For an entry whose recursion identity target is an intersection, the keys of its constituents' identities.
+    pub(crate) intersection_keys: ThinSliceCell<u64>,
 }
 
 impl RecursionStackEntry {
     pub(crate) fn new(t: P<Type>) -> RecursionStackEntry {
-        RecursionStackEntry { t, identity_key: Cell::new(0) }
+        RecursionStackEntry { t, identity_key: Cell::new(0), intersection_keys: ThinSliceCell::new(&[]) }
     }
 }
 

@@ -1155,8 +1155,14 @@ impl Checker {
                 let kept = e.identity_key.get();
                 if kept != 0 {
                     let target = get_recursion_identity_target(self, e.t);
-                    let fresh = if target.flags().intersects(TypeFlags::Intersection) { RECURSION_KEY_INTERSECTION | target.pack() } else { recursion_key(get_recursion_identity_from_target(target)) };
-                    assert!(kept == fresh, "TSRS_DEEP_NESTED=shadow: the kept recursion identity of type {} changed", e.t.id.0);
+                    let same = if target.flags().intersects(TypeFlags::Intersection) {
+                        let mut fresh = Vec::new();
+                        collect_intersection_recursion_keys(self, target, &mut fresh);
+                        kept == RECURSION_KEY_INTERSECTION && e.intersection_keys.get() == fresh.as_slice()
+                    } else {
+                        kept == recursion_key(get_recursion_identity_from_target(target))
+                    };
+                    assert!(same, "TSRS_DEEP_NESTED=shadow: the kept recursion identity of type {} changed", e.t.id.0);
                 }
             }
         }
@@ -1168,7 +1174,8 @@ impl Checker {
         let top = stack.last().filter(|e| e.t == t && e.identity_key.get() == 0);
         if target.flags().intersects(TypeFlags::Intersection) {
             if let Some(top) = top {
-                top.identity_key.set(RECURSION_KEY_INTERSECTION | target.pack());
+                top.intersection_keys.set(intersection_recursion_keys(self, target));
+                top.identity_key.set(RECURSION_KEY_INTERSECTION);
             }
             for &t in target.types() {
                 if self.is_deeply_nested_on_stack(t, stack, max_depth) {
@@ -1189,18 +1196,14 @@ impl Checker {
             if entry_key == 0 {
                 let target = get_recursion_identity_target(self, e.t);
                 entry_key = if target.flags().intersects(TypeFlags::Intersection) {
-                    RECURSION_KEY_INTERSECTION | target.pack()
+                    e.intersection_keys.set(intersection_recursion_keys(self, target));
+                    RECURSION_KEY_INTERSECTION
                 } else {
                     recursion_key(get_recursion_identity_from_target(target))
                 };
                 e.identity_key.set(entry_key);
             }
-            let matches = if entry_key & RECURSION_KEY_TAG == RECURSION_KEY_INTERSECTION {
-                // SAFETY: the low bits are `pack` of the entry's recursion identity target, a live type.
-                intersection_has_matching_recursion_identity(self, unsafe { P::unpack(entry_key) }, identity)
-            } else {
-                entry_key == key
-            };
+            let matches = if entry_key == RECURSION_KEY_INTERSECTION { e.intersection_keys.get().contains(&key) } else { entry_key == key };
             if matches {
                 // We only count occurrences with a higher type id than the previous occurrence, since higher
                 // type ids are an indicator of newer instantiations caused by recursion.
@@ -1217,9 +1220,8 @@ impl Checker {
     }
 }
 
-const RECURSION_KEY_TAG: u64 = 7 << 48;
-/// A `RecursionStackEntry` identity key for an entry whose recursion identity target is an intersection (the target
-/// packed in the low bits): such an entry matches an identity of one of its constituents.
+/// The identity key of a `RecursionStackEntry` whose recursion identity target is an intersection: such an entry
+/// matches the identity of any of its constituents (`intersection_keys`).
 const RECURSION_KEY_INTERSECTION: u64 = 4 << 48;
 
 /// A nonzero word for each recursion identity, equal for equal identities.
@@ -1246,25 +1248,30 @@ pub(crate) fn has_matching_recursion_identity(c: &mut Checker, t: P<Type>, ident
 /// `has_matching_recursion_identity` of an intersection recursion identity target.
 #[inline(never)]
 fn intersection_has_matching_recursion_identity(c: &mut Checker, target: P<Type>, identity: RecursionId) -> bool {
-    // tsrs: the identities of the constituents (nested intersections' included) are kept per intersection: the
-    // deeply-nested test asks this of every intersection on the relater's stack each time, and they never change.
-    if let Some(ids) = c.intersection_recursion_ids.get(&target) {
-        return ids.contains(&identity);
-    }
-    let mut ids = Vec::new();
-    collect_intersection_recursion_ids(c, target, &mut ids);
-    let found = ids.contains(&identity);
-    c.intersection_recursion_ids.insert(target, ids.into_boxed_slice());
-    found
+    intersection_recursion_keys(c, target).contains(&recursion_key(identity))
 }
 
-fn collect_intersection_recursion_ids(c: &mut Checker, target: P<Type>, ids: &mut Vec<RecursionId>) {
+/// The `recursion_key`s of the identities of an intersection recursion identity target's constituents (nested
+/// intersections' included). tsrs: kept per intersection; the deeply-nested tests ask about them again and again, and
+/// they never change.
+fn intersection_recursion_keys(c: &mut Checker, target: P<Type>) -> &'static [u64] {
+    if let Some(&keys) = c.intersection_recursion_ids.get(&target) {
+        return keys;
+    }
+    let mut keys = Vec::new();
+    collect_intersection_recursion_keys(c, target, &mut keys);
+    let keys = alloc_slice(&keys);
+    c.intersection_recursion_ids.insert(target, keys);
+    keys
+}
+
+fn collect_intersection_recursion_keys(c: &mut Checker, target: P<Type>, keys: &mut Vec<u64>) {
     for &t in target.types() {
         let t = get_recursion_identity_target(c, t);
         if t.flags().intersects(TypeFlags::Intersection) {
-            collect_intersection_recursion_ids(c, t, ids);
+            collect_intersection_recursion_keys(c, t, keys);
         } else {
-            ids.push(get_recursion_identity_from_target(t));
+            keys.push(recursion_key(get_recursion_identity_from_target(t)));
         }
     }
 }
