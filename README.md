@@ -261,3 +261,7 @@ A derivative of microsoft/TypeScript (Copyright Microsoft Corporation), licensed
 ([`LICENSE`](LICENSE), [`NOTICE`](NOTICE)). The bundled `lib.*.d.ts` files are TypeScript's. Not affiliated with or
 endorsed by Microsoft. The port was written largely by AI coding agents, directed and reviewed by Max Schwenk; its
 correctness rests on the test results above rather than on review alone.
+
+## Acknowledgments
+
+Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for generously transferring the `tsrs` npm package name to this project.
