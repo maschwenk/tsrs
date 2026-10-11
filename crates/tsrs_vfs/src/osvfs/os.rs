@@ -572,6 +572,12 @@ impl IoFS for DirFS {
         })
     }
 
+    fn file_type(&self, name: &str) -> Result<FileMode, FsError> {
+        let full = self.join(name)?;
+        count(&STAT_CALLS);
+        metadata_file_type(&full)
+    }
+
     fn read_dir(&self, name: &str) -> Result<Vec<IoDirEntry>, FsError> {
         let full = self.join(name)?;
         count(&READ_DIR_CALLS);
@@ -597,6 +603,25 @@ impl IoFS for DirFS {
         count(&READ_FILE_CALLS);
         fs::read(&full).map_err(io_error)
     }
+}
+
+#[cfg(target_os = "linux")]
+fn metadata_file_type(path: &str) -> Result<FileMode, FsError> {
+    use rustix::fs::{AtFlags, CWD, FileType, StatxFlags};
+
+    match rustix::fs::statx(CWD, path, AtFlags::empty(), StatxFlags::TYPE) {
+        Ok(statx) => {
+            let file_type = FileType::from_raw_mode(statx.stx_mode.into());
+            Ok(if file_type.is_dir() { FileMode::Dir } else { FileMode::None })
+        }
+        Err(rustix::io::Errno::NOSYS) => fs::metadata(path).map(|md| file_type_mode(md.file_type())).map_err(io_error),
+        Err(err) => Err(io_error(err.into())),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn metadata_file_type(path: &str) -> Result<FileMode, FsError> {
+    fs::metadata(path).map(|md| file_type_mode(md.file_type())).map_err(io_error)
 }
 
 #[cfg(test)]
