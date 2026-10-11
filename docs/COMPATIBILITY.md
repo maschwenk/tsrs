@@ -43,12 +43,11 @@ Updating this table (../AGENTS.md says when; commands and paths below are relati
 | Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass |
 | Automatic type acquisition, telemetry, profiling (language server) | no | not ported |
 | Node API server (`--api`) | yes, with gaps | upstream client test suites pass; request-filesystem Go fixtures exercise the production implementation in default tests; no profiling requests, no Windows named pipes ([Node API](NODE_API.md)) |
-| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | since 0.12.0; macOS arm64 and Linux x64/arm64; next release adds GNU/musl suffixes and musl builds; earlier releases used `@maschwenk` |
+| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | 0.14.0: macOS arm64 and Linux x64/arm64 GNU/musl, selected by libc; earlier Linux packages used unsuffixed GNU names, and releases before 0.12.0 used `@maschwenk` |
 | WebAssembly (`@ts-rs/wasm`) | yes | single-threaded; renamed in 0.12.0; byte-identical to native `--singleThreaded` on a 2,000-case conformance sample ([experiment note](../notes/wasm-build.md)) |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
 | `--watch` | no | exits with "not supported" |
 | `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage |
 | `--locale` | ignored | messages are English only |
 | `--generateTrace` | no | warns "Failed to start tracing" (tsgo's message when it can't write a trace) and type-checks as without the flag |
-| Prebuilt binaries | yes | macOS arm64, Linux x64/arm64 (glibc; musl in the next release); no Windows or Intel macOS |
-
+| Prebuilt binaries | yes | macOS arm64, Linux x64/arm64 (glibc and musl since 0.14.0); no Windows or Intel macOS |
