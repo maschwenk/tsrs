@@ -245,12 +245,12 @@ impl Checker {
         let mut declarations: Vec<P<Node>> = Vec::new();
         let mut first_type: Option<P<Type>> = None;
         let mut name_type: Option<P<Type>> = None;
-        let mut prop_types: Vec<P<Type>> = Vec::new();
+        // tsrs: a pooled list, and the set walked in place.
+        let mut prop_types = self.free_type_lists.pop().unwrap_or_default();
         let mut write_types: Option<Vec<P<Type>>> = None;
         let mut first_value_declaration: Option<P<Node>> = None;
         let mut has_non_uniform_value_declaration = false;
-        let props: Vec<P<Symbol>> = prop_set.iter().copied().collect();
-        for prop in props {
+        for &prop in prop_set.iter() {
             if first_value_declaration.is_none() {
                 first_value_declaration = prop.value_declaration();
             } else if prop.value_declaration().is_some() && prop.value_declaration() != first_value_declaration {
@@ -298,8 +298,9 @@ impl Checker {
             result.check_flags.set(result.check_flags.get() | CheckFlags::DeferredType);
             let deferred = self.deferred_symbol_links.get(result);
             deferred.parent.set(Some(containing_type));
-            deferred.constituents.set(alloc_vec(prop_types));
+            deferred.constituents.set(alloc_slice(&prop_types));
             deferred.write_constituents.set(write_types.map_or(&[][..], alloc_vec));
+            self.free_type_list(prop_types);
             return Some(result);
         }
         if is_union {
@@ -307,6 +308,7 @@ impl Checker {
         } else {
             links.resolved_type.set(Some(self.get_intersection_type(&prop_types)));
         }
+        self.free_type_list(prop_types);
         if let Some(write_types) = write_types {
             if is_union {
                 links.set_write_type(Some(self.get_union_type(&write_types)));
