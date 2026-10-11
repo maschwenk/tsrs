@@ -2916,7 +2916,9 @@ impl Checker {
         // Whether instantiateSymbol returns a member itself depends on what is resolved now.
         let mut unaffected: Vec<&'static str> = Vec::new();
         if let Some(declared_members) = resolved.declared_members.get() {
-            for (id, symbol) in declared_members.entries() {
+            // By position instead of a snapshot: the tests below add no member to a table and delete none.
+            for i in 0..declared_members.len() {
+                let (id, symbol) = declared_members.entry(i);
                 if self.is_named_member(symbol, id) {
                     self.lazy_member_stats.member_table_declared_members += 1;
                     if self.is_symbol_unaffected_by_instantiation(symbol, Some(lm.mapper)) {
