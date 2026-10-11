@@ -118,7 +118,7 @@ impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
                 let index = self.len;
                 slot.insert(LinkSlot { key, index });
                 if index as usize % LINK_CHUNK == 0 {
-                    self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+                    self.chunks.push(PSlot::first(tsrs_core::alloc_slice_default::<PSlot<V>>(LINK_CHUNK)));
                 }
                 self.len += 1;
                 if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.index_by_pkey(key).map(|i| p.at(i))) {
@@ -263,7 +263,7 @@ impl<K: 'static, V: KeyedLinks + Default + LinkCopy + 'static> KeyedLinkStore<K,
                 tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
                 let index = self.len;
                 if index as usize % LINK_CHUNK == 0 {
-                    self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+                    self.chunks.push(PSlot::first(tsrs_core::alloc_slice_default::<PSlot<V>>(LINK_CHUNK)));
                 }
                 self.len += 1;
                 let value = keyed_at(&self.chunks, index);
@@ -508,7 +508,7 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
         if slot as usize % ID_LINK_CHUNK == 0 {
-            self.chunks.push(PSlot::first(alloc_vec((0..ID_LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+            self.chunks.push(PSlot::first(tsrs_core::alloc_slice_default::<PSlot<V>>(ID_LINK_CHUNK)));
         }
         self.len += 1;
         if id <= u32::MAX as u64 {

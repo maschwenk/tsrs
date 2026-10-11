@@ -370,6 +370,19 @@ impl Arena {
 
     #[inline]
     #[expect(clippy::mut_from_ref, reason = "a fresh block, as in alloc_with")]
+    pub(crate) fn alloc_slice_default<T: Default>(&self, len: usize) -> &mut [T] {
+        let p = self.alloc_layout(Layout::array::<T>(len).expect("arena slice layout")).cast::<T>();
+        // SAFETY: fresh memory for `len` items, each written once before the slice is made.
+        unsafe {
+            for i in 0..len {
+                p.as_ptr().add(i).write(T::default());
+            }
+            std::slice::from_raw_parts_mut(p.as_ptr(), len)
+        }
+    }
+
+    #[inline]
+    #[expect(clippy::mut_from_ref, reason = "a fresh block, as in alloc_with")]
     pub(crate) fn alloc_vec<T>(&self, items: Vec<T>) -> &mut [T] {
         let len = items.len();
         let p = self.alloc_layout(Layout::array::<T>(len).expect("arena slice layout")).cast::<T>();

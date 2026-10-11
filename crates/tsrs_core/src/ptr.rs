@@ -1266,6 +1266,21 @@ pub fn alloc_vec<T>(items: Vec<T>) -> &'static [T] {
     s
 }
 
+/// `alloc_vec` of `len` default values, written in place (no vector to build and copy).
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+pub fn alloc_slice_default<T: Default>(len: usize) -> &'static [T] {
+    if len == 0 {
+        return &[];
+    }
+    let s: &'static [T] = with_arena(|a| {
+        let s = a.alloc_slice_default(len);
+        a.track_drop(s.as_mut_ptr(), s.len());
+        &*s
+    });
+    profile!([T], len * std::mem::size_of::<T>(), s.as_ptr() as usize);
+    s
+}
+
 /// `alloc_slice` that first takes a block of the right size from the current thread's free list (see `free`).
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]
