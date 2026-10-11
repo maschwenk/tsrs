@@ -15,8 +15,9 @@
 //! - instantiated nothing (`instantiation_count` and `total_instantiation_count` unchanged), so the TS2589 budget sees
 //!   the same counts with or without the cache;
 //! - did not take one of the two reductions whose answer reads state that can still change (string literals matched by
-//!   template literals: relations and inference; constrained type variables: base constraints, which read circularity
-//!   state), counted by `impure`;
+//!   template literals: relations and inference, counted only for a literal that passes the text test of the template's
+//!   first and last texts, which reads nothing else; constrained type variables: base constraints, which read
+//!   circularity state), counted by `impure`;
 //! - and did not return `errorType`: TS2590 "too complex to represent" reports at `currentNode` and caches nothing,
 //!   so every such call must run again (an `any` input that is an error type returns it too and is not stored either).
 //!

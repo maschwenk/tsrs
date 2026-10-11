@@ -73,8 +73,6 @@ impl Checker {
                 self.remove_redundant_literal_types(type_set, includes, union_reduction == UnionReduction::Subtype);
             }
             if includes.intersects(TypeFlags::StringLiteral) && includes.intersects(TypeFlags::TemplateLiteral | TypeFlags::StringMapping) {
-                // tsrs: relations and inference; never stored in the union front cache (unioncache.rs).
-                self.union_front_cache.impure = self.union_front_cache.impure.wrapping_add(1);
                 *type_set = self.remove_string_literals_matched_by_template_literals(type_set);
             }
             if includes.intersects(TypeFlags::IncludesConstrainedTypeVariable) {
@@ -318,10 +316,15 @@ impl Checker {
     // checker.go:26327
     pub(crate) fn remove_string_literals_matched_by_template_literals(&mut self, types: &[P<Type>]) -> Vec<P<Type>> {
         let mut types = types.to_vec();
-        let mut templates: Vec<P<Type>> = Vec::new();
+        // Each template with the first and last texts of a template literal type.
+        let mut templates: Vec<(P<Type>, Option<(&'static str, &'static str)>)> = Vec::new();
         for &t in &types {
             if self.is_pattern_literal_type(t) {
-                templates.push(t);
+                let ends = t.flags().intersects(TypeFlags::TemplateLiteral).then(|| {
+                    let texts = t.as_template_literal_type().texts();
+                    (texts[0], texts[texts.len() - 1])
+                });
+                templates.push((t, ends));
             }
         }
         if !templates.is_empty() {
@@ -329,21 +332,24 @@ impl Checker {
             while i > 0 {
                 i -= 1;
                 let t = types[i];
-                if t.flags().intersects(TypeFlags::StringLiteral)
-                    && templates.iter().any(|&template| {
-                        // tsrs: the text test `inferFromLiteralPartsToTemplateLiteral` starts with, done before the
-                        // call; a literal that fails it is not matched, and the call would have done nothing else.
-                        if template.flags().intersects(TypeFlags::TemplateLiteral) {
-                            let texts = template.as_template_literal_type().texts();
-                            let (start, end) = (texts[0], texts[texts.len() - 1]);
-                            let value = get_string_literal_value(t);
-                            if value.len() < start.len() + end.len() || !value.starts_with(start) || !value.ends_with(end) {
-                                return false;
-                            }
+                if !t.flags().intersects(TypeFlags::StringLiteral) {
+                    continue;
+                }
+                let value = get_string_literal_value(t);
+                let matched = templates.iter().any(|&(template, ends)| {
+                    // tsrs: the text test `inferFromLiteralPartsToTemplateLiteral` starts with, done before the call;
+                    // a literal that fails it is not matched, and the call would have done nothing else.
+                    if let Some((start, end)) = ends {
+                        if value.len() < start.len() + end.len() || !value.starts_with(start) || !value.ends_with(end) {
+                            return false;
                         }
-                        self.is_type_matched_by_template_literal_or_string_mapping(t, template)
-                    })
-                {
+                    }
+                    // tsrs: relations and inference, so the union is not stored in the union front cache
+                    // (unioncache.rs); a reduction that never gets here read only the literals' and templates' texts.
+                    self.union_front_cache.impure = self.union_front_cache.impure.wrapping_add(1);
+                    self.is_type_matched_by_template_literal_or_string_mapping(t, template)
+                });
+                if matched {
                     types.remove(i);
                 }
             }
