@@ -2207,6 +2207,9 @@ impl Checker {
         self.get_property_of_type_worker(t, name, false /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/, false /*instantiate*/).is_some()
     }
 
+    // relater_2.rs `source_keyed_positions` relies on how this finds a property of a resolved object type: one of its
+    // members, else (for a name `may_be_augment_member` lets through) a member of `Function` or `Object`. A new way
+    // to find one must be added there too.
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_property_of_type_worker(&mut self, t: P<Type>, name: &str, skip_object_function_property_augment: bool, include_type_only_members: bool, instantiate: bool) -> Option<P<Symbol>> {
         let t = self.get_reduced_apparent_type(t);

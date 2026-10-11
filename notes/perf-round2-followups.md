@@ -129,7 +129,7 @@ with the switch off, which is why it is not in the default build.
 ## Source-keyed property walk (landed; notes/perf-source-keyed-properties.md)
 
 `propertiesRelatedTo` against a target with many more properties than the source walks only the positions the
-source lookup can match, in target order: mui-docs -2.5% single-threaded instructions, a large private monorepo -1.0%
+source lookup can match, in target order: mui-docs -2.6% single-threaded instructions, a large private monorepo -1.2%
 at 8 checkers, vscode and xstate-main unchanged; output byte-identical.
 
 ## Measured and rejected (do not redo)

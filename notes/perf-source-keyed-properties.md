@@ -19,12 +19,18 @@ those whose name passes `may_be_augment_member`. Every other position is a looku
 walk does nothing; skipping it removes no relation, adds none and reorders none, so results, relation caches, type
 creation order and the first reported failure are those of the full walk.
 
-Per large target, `Checker::target_property_positions` keeps the positions of the augment-named properties and a
-name lookup: a slot -> position vector over the target's member table when every listed property is in it, else a
-sorted (name hash, position) vector (interfaces whose properties include inherited ones). Each entry is kept with the
-property list it was built from and rebuilt when the list differs (members reset). The position buffer is pooled.
-A first version with an `FxHashMap<&str, u32>` per target cost +2.6% peak memory on mui-docs; the slot vector and
-the sorted fallback bring that to +0.3%.
+Per large target, `Checker::target_property_positions` keeps a `hashbrown::HashTable<u32>` of the target's property
+positions, found by name, and the positions whose name passes `may_be_augment_member`. An entry is kept with the
+property list it was built from (a members reset makes a new list). It is not invalidated by `members_reset_epoch`:
+the augment positions only need to include every name `Object` / `Function` has, which comes from the lib and does
+not change when the filter is rebuilt (an unbuilt filter answers yes), and on mui-docs rebuilding every table after
+each reset cost 0.34 G instructions (0.8%). `get_property_of_type_worker` says that this walk relies on how it finds a
+property.
+
+Variants measured on mui-docs (single-threaded instructions; main 44.07 G): an `FxHashMap<&str, u32>` per target,
+-2.5% but +2.6% peak memory; a slot -> position vector over the target's member table with a sorted name-hash
+fallback, -2.5% and +0.3% peak, 60 more lines; a sorted (name hash, position) vector only, -1.3% (the binary search
+per source member); a pool for the position buffer, no difference (not kept); the hash table, -2.6%.
 
 Debug builds assert the claim on every use: every position whose lookup finds a property is walked.
 
@@ -35,12 +41,12 @@ after a warm-up; `bench/count.py` is Linux-only.
 
 | project | before | after | peak memory |
 | --- | ---: | ---: | --- |
-| mui-docs | 44.09 G | 43.00 G (-2.5%) | 777-778 -> 779-780 MB |
-| xstate-main | 6.182 G | 6.175 G (-0.1%) | |
-| vscode | 89.4-90.6 G | 89.4-90.4 G (no change) | |
+| mui-docs | 44.07 G | 42.94 G (-2.6%) | 777-780 -> 778-785 MB |
+| xstate-main | 6.179 G | 6.172 G (-0.1%) | |
+| vscode | 89.4-90.6 G | 89.4-90.4 G (no change; measured on an earlier variant) | |
 
-A large private monorepo, 8 checkers (medians of 3): 1.3723 T -> 1.3585 T instructions (-1.0%), wall 17.99 ->
-17.81 s, peak 17.32 -> 17.33 GB.
+A large private monorepo, 8 checkers (medians of 3): 1.3723 T -> 1.3559 T instructions (-1.2%), wall 17.96 ->
+17.79 s, peak 17.35 -> 17.36 GB.
 
 Output: byte-identical on all four, and on the conformance suite (13,458 / 15,197 error baselines, all 12,779 `.types`
 and `.symbols` as before, also with a debug build, so the assertion ran on every use), fourslash (4,066 passed, as

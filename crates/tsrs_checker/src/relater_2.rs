@@ -2136,20 +2136,16 @@ impl Relater {
         // log data) is walked only at the positions where the source lookup below can find something, in the same
         // order, so the same properties are related in the same order and report the same first failure.
         if excluded_properties.len() == 0 && !numeric_names_only && properties.len() >= SOURCE_KEYED_MIN_TARGET_PROPERTIES {
-            let mut positions = c.source_keyed_pool.pop().unwrap_or_default();
-            if self.source_keyed_positions(c, source, target, properties, &mut positions) {
-                for &i in &positions {
+            if let Some(positions) = self.source_keyed_positions(c, source, target, properties) {
+                for i in positions {
                     let related = self.target_property_related_to(c, source, target, properties[i as usize], found.get(i as usize).copied().flatten(), report_errors, optionals_only, false, intersection_state);
                     if related == Ternary::False {
-                        result = Ternary::False;
-                        break;
+                        return Ternary::False;
                     }
                     result &= related;
                 }
-                c.source_keyed_pool.push(positions);
                 return result;
             }
-            c.source_keyed_pool.push(positions);
         }
         for (i, target_prop) in exclude_properties(&properties, excluded_properties).iter().copied().enumerate() {
             let related = self.target_property_related_to(c, source, target, target_prop, found.get(i).copied().flatten(), report_errors, optionals_only, numeric_names_only, intersection_state);
@@ -2181,57 +2177,29 @@ impl Relater {
         Ternary::True
     }
 
-    /// tsrs-only: fills `positions` with the positions in `properties` (the target's) at which
-    /// `get_property_of_type(source, name)` can return a property, sorted; false (and `positions` untouched or
-    /// partly filled) when `source` is not a resolved object type with few enough members. For such
-    /// a source the lookup finds either one of its members or, for a name `may_be_augment_member` lets through, a
-    /// member of `Object` or `Function` (checker_09.rs `get_property_of_type_worker`), so every other position is a
-    /// miss the full walk would skip after the lookup.
-    fn source_keyed_positions(&self, c: &mut Checker, source: P<Type>, target: P<Type>, properties: &'static [P<Symbol>], positions: &mut Vec<u32>) -> bool {
+    /// tsrs-only: the positions in `properties` (the target's) at which `get_property_of_type(source, name)` can
+    /// return a property, sorted; None when `source` is not a resolved object type with few enough members. For such
+    /// a source the lookup finds one of its members or, for a name `may_be_augment_member` lets through, a member of
+    /// `Object` or `Function` (checker_09.rs `get_property_of_type_worker`), so every other position is a miss after
+    /// which the full walk does nothing.
+    fn source_keyed_positions(&self, c: &mut Checker, source: P<Type>, target: P<Type>, properties: &'static [P<Symbol>]) -> Option<Vec<u32>> {
         if !source.flags().intersects(TypeFlags::Object) || !source.object_flags_lazy().intersects(ObjectFlags::MembersResolved) || c.get_reduced_apparent_type(source) != source {
-            return false;
+            return None;
         }
-        let Some(members) = source.as_structured_type().members() else {
-            return false;
-        };
+        let members = source.as_structured_type().members()?;
         if members.len() * SOURCE_KEYED_RATIO > properties.len() {
-            return false;
+            return None;
         }
-        let target_members = if target.flags().intersects(TypeFlags::Object) && target.object_flags_lazy().intersects(ObjectFlags::MembersResolved) { target.as_structured_type().members() } else { None };
-        let member_count = target_members.map_or(0, |m| m.len());
-        let stale = c.target_property_positions.get(&target).is_none_or(|p| p.member_count != member_count || !std::ptr::eq(p.properties, properties) && p.properties != properties);
-        if stale {
-            let table = TargetPropertyPositions::new(c, target_members, properties);
+        if c.target_property_positions.get(&target).is_none_or(|p| !std::ptr::eq(p.properties, properties)) {
+            let table = TargetPropertyPositions::new(c, properties);
             c.target_property_positions.insert(target, Box::new(table));
         }
         let table = &c.target_property_positions[&target];
-        positions.clear();
-        positions.extend_from_slice(&table.augment);
+        let mut positions = table.augment.clone();
         for i in 0..members.len() {
-            let (name, _) = members.entry(i);
-            match &table.lookup {
-                PositionLookup::Slots(by_member) => {
-                    // `by_member` was built from the same property list and a member table of the same size; a slot
-                    // whose property has another name means the table changed some other way: walk everything.
-                    let Some(slot) = target_members.and_then(|m| m.position_of(name)) else { continue };
-                    match by_member.get(slot) {
-                        Some(&position) if position == u32::MAX => {}
-                        Some(&position) if properties[position as usize].name() == name => positions.push(position),
-                        _ => return false,
-                    }
-                }
-                PositionLookup::Names(by_hash) => {
-                    let hash = name_hash(name);
-                    let start = by_hash.partition_point(|&(h, _)| h < hash);
-                    for &(h, position) in &by_hash[start..] {
-                        if h != hash {
-                            break;
-                        }
-                        if properties[position as usize].name() == name {
-                            positions.push(position);
-                        }
-                    }
-                }
+            let name = members.entry(i).0;
+            if let Some(&position) = table.by_name.find(name_hash(name), |&p| properties[p as usize].name() == name) {
+                positions.push(position);
             }
         }
         positions.sort_unstable();
@@ -2241,7 +2209,7 @@ impl Relater {
         for (i, prop) in properties.iter().enumerate() {
             debug_assert!(c.get_property_of_type(source, prop.name()).is_none() || positions.binary_search(&(i as u32)).is_ok(), "source-keyed walk skipped {} (position {i})", prop.name());
         }
-        true
+        Some(positions)
     }
 
     // relater.go:4302
@@ -3116,56 +3084,32 @@ impl Relater {
 const SOURCE_KEYED_MIN_TARGET_PROPERTIES: usize = 64;
 const SOURCE_KEYED_RATIO: usize = 4;
 
-/// tsrs-only: for a target type, how to find the position of a property in its property list
-/// (`get_properties_of_type`) by name, and the positions of the properties whose name `may_be_augment_member` lets
-/// through. Kept with the property list it was built from: a different list (members reset) builds it again.
+/// tsrs-only: the positions of a target type's properties (`get_properties_of_type`), found by name, and the
+/// positions of the properties whose name `may_be_augment_member` lets through. Kept with the list it was built from
+/// and rebuilt for another list (a members reset makes a new one). The augment positions only need to include every
+/// name a member of `Object` / `Function` has: those come from the lib and do not change when the filter is rebuilt
+/// after a reset, and a filter that cannot be built yet answers yes.
 pub(crate) struct TargetPropertyPositions {
     properties: &'static [P<Symbol>],
-    /// The size of the target's member table when this was built (0 without one).
-    member_count: usize,
-    lookup: PositionLookup,
+    /// Positions in `properties`, hashed by the property's name.
+    by_name: hashbrown::HashTable<u32>,
     augment: Vec<u32>,
 }
 
-enum PositionLookup {
-    /// The position of each slot of the target's member table (`u32::MAX`: not a listed property); the table itself
-    /// finds the name. Used when every listed property is in the table.
-    Slots(Vec<u32>),
-    /// Otherwise (an interface's inherited properties, a type without a member table): (name hash, position),
-    /// sorted.
-    Names(Vec<(u32, u32)>),
-}
-
-fn name_hash(name: &str) -> u32 {
+fn name_hash(name: &str) -> u64 {
     use std::hash::{Hash, Hasher};
     let mut h = rustc_hash::FxHasher::default();
     name.hash(&mut h);
-    h.finish() as u32
+    h.finish()
 }
 
 impl TargetPropertyPositions {
-    fn new(c: &mut Checker, members: Option<P<SymbolTable>>, properties: &'static [P<Symbol>]) -> TargetPropertyPositions {
-        let mut augment = Vec::new();
-        for (i, prop) in properties.iter().enumerate() {
-            if c.may_be_augment_member(HashedName::new(prop.name())) {
-                augment.push(i as u32);
-            }
+    fn new(c: &mut Checker, properties: &'static [P<Symbol>]) -> TargetPropertyPositions {
+        let mut by_name = hashbrown::HashTable::with_capacity(properties.len());
+        for i in 0..properties.len() as u32 {
+            by_name.insert_unique(name_hash(properties[i as usize].name()), i, |&p| name_hash(properties[p as usize].name()));
         }
-        let slots = members.and_then(|members| {
-            let mut by_member = vec![u32::MAX; members.len()];
-            for (i, prop) in properties.iter().enumerate() {
-                by_member[members.position_of(prop.name())?] = i as u32;
-            }
-            Some(by_member)
-        });
-        let lookup = match slots {
-            Some(by_member) => PositionLookup::Slots(by_member),
-            None => {
-                let mut by_hash: Vec<(u32, u32)> = properties.iter().enumerate().map(|(i, prop)| (name_hash(prop.name()), i as u32)).collect();
-                by_hash.sort_unstable();
-                PositionLookup::Names(by_hash)
-            }
-        };
-        TargetPropertyPositions { properties, member_count: members.map_or(0, |m| m.len()), lookup, augment }
+        let augment = (0..properties.len() as u32).filter(|&i| c.may_be_augment_member(HashedName::new(properties[i as usize].name()))).collect();
+        TargetPropertyPositions { properties, by_name, augment }
     }
 }

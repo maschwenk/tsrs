@@ -868,12 +868,6 @@ impl SymbolTable {
         m.position(name).map(|i| m.entries[i].symbol())
     }
 
-    /// The insertion-order position of `name` (the `i` of `entry(i)`), if present.
-    #[inline]
-    pub fn position_of(&self, name: &str) -> Option<usize> {
-        self.0.borrow().position(name)
-    }
-
     /// `lookup` that also returns the stored key.
     #[inline]
     pub fn lookup_entry(&self, name: &str) -> Option<(&'static str, P<Symbol>)> {
