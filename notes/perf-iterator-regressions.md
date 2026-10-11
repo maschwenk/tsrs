@@ -25,10 +25,11 @@ The flow-cache scan retains its indexed loop. Selected hot ancestor searches, co
 collection and scanner cursor walks retain their original loops as well. These are exceptions to the stylistic
 refactor, not changes to the checker's algorithms or compiler optimization settings.
 
-## Compiler measurements
+## Initial compiler measurements
 
 Three single-threaded runs per build on Depot's 32-vCPU AMD EPYC 9R45 Linux runners, median instructions.
-The baseline is `4f9eda48`, before the refactor; the original PR is `0f359f85`. These profiling builds retain symbols
+The baseline is `4f9eda48`, before the refactor; the original PR is `0f359f85`, and the first correction is
+`6786879e`. These profiling builds retain symbols
 (`CARGO_PROFILE_RELEASE_STRIP=none`) with the same release optimizations. The original PR/baseline probe is
 [here](https://depot.dev/orgs/qw3zz3l8cs/workflows/v78zdn64h4); the explicitly applied correction is
 [here](https://depot.dev/orgs/qw3zz3l8cs/workflows/1n7btftcj0).
@@ -50,11 +51,33 @@ with one parser/checker reports heap allocation counts of 405,225 → 404,445 fo
 439,453 → 436,681 for Compiler-Unions (original PR → correction). Arena bytes and peak live heap bytes are
 unchanged. Restoring the outer union loop, type-list comparator, union-worker body, union-capacity folds, or
 union-cache hash fold separately did not recover the remaining Compiler-Unions increase, so those reversions
-are not retained. The complete PR benchmark remains necessary to assess the other projects.
+are not retained. The full project comparison below uses current main after resolving the unsigned-position refactor conflicts.
 
 Workspace all-feature checks, required lint scripts, 29 regression cases, formatter cases and the dependency
 traversal case pass. The full conformance gate reports 13,458 error-baseline passes and 12,779 each for types and
 symbols, with no crashes or timeouts; all 18 result lists match the original PR.
+
+## Remaining hot paths after merging main
+
+The first full run against `f6365f22` retained small instruction increases, including +0.053% on VS Code,
++0.061% on Supabase and +0.021% on Compiler-Unions. All 102 diagnostic/exit comparisons matched. Further
+isolated measurements use `7a1d78e7` as the control, with the same single-threaded command and three runs:
+
+| Reversion from that control | Compiler instructions | Compiler-Unions instructions |
+| --- | ---: | ---: |
+| Control | 1,963,176,510 | 3,747,386,884 |
+| Four ancestor walks | 1,962,656,553 | 3,746,902,279 |
+| Template-literal collector | 1,963,058,322 | 3,745,819,049 |
+| Six other union helpers | 1,963,044,832 | 3,747,321,848 |
+
+The ancestor comparison is
+[here](https://depot.dev/orgs/qw3zz3l8cs/workflows/sj1brs4zbh), and the collector isolation is
+[here](https://depot.dev/orgs/qw3zz3l8cs/workflows/8h062mp9z5).
+
+Retain loops in the four ancestor walks: `successors` computes the next parent before yielding the node, including
+when the search is about to return. Retain the template-literal collector and the measured group of six other
+union helpers. Reverting the union subset search had no effect, and reverting the property-literal collector
+slightly increased instructions, so both retain their iterator forms.
 
 ## Formatter and dependency traversal
 

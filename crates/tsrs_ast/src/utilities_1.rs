@@ -922,12 +922,14 @@ pub fn walk_up_parenthesized_types(node: impl Into<Option<P<Node>>>) -> Option<P
 }
 
 // Walks up the parents of a node to find the containing SourceFile
+// Keep early-returning parent walks as loops; see notes/perf-iterator-regressions.md.
 pub fn get_source_file_of_node(node: impl Into<Option<P<Node>>>) -> Option<P<SourceFile>> {
-    let node = node.into();
-    if let Some(result) =
-        std::iter::successors(node, |n| n.parent()).find_map(|n| if n.kind() == Kind::SourceFile { Some(Some(n.as_source_file_p())) } else { None })
-    {
-        return result;
+    let mut node = node.into();
+    while let Some(n) = node {
+        if n.kind() == Kind::SourceFile {
+            return Some(n.as_source_file_p());
+        }
+        node = n.parent();
     }
     None
 }
@@ -1018,10 +1020,13 @@ pub fn find_ancestor_or_quit(node: impl Into<Option<P<Node>>>, mut callback: imp
 }
 
 pub fn is_node_descendant_of(node: impl Into<Option<P<Node>>>, ancestor: impl Into<Option<P<Node>>>) -> bool {
-    let node = node.into();
+    let mut node = node.into();
     let ancestor = ancestor.into();
-    if let Some(result) = std::iter::successors(node, |n| n.parent()).find_map(|n| if Some(n) == ancestor { Some(true) } else { None }) {
-        return result;
+    while let Some(n) = node {
+        if Some(n) == ancestor {
+            return true;
+        }
+        node = n.parent();
     }
     false
 }
@@ -1325,11 +1330,12 @@ pub fn is_deprecated_declaration_with_cached_flags(declaration: P<Node>, combine
     }
     // Walk up to find the node that directly has the flag, since JSDoc is
     // attached to that node (e.g. VariableStatement, not VariableDeclaration).
-    let n = Some(declaration);
-    if let Some(result) = std::iter::successors(n, |node| node.parent())
-        .find_map(|node| if node.flags().intersects(NodeFlags::PossiblyContainsDeprecatedTag) { Some(get_jsdoc_deprecated_tag(node).is_some()) } else { None })
-    {
-        return result;
+    let mut n = Some(declaration);
+    while let Some(node) = n {
+        if node.flags().intersects(NodeFlags::PossiblyContainsDeprecatedTag) {
+            return get_jsdoc_deprecated_tag(node).is_some();
+        }
+        n = node.parent();
     }
     false
 }

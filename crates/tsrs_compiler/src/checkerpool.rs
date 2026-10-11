@@ -1217,8 +1217,8 @@ impl FileQueue {
         let r = self
             .range
             .try_update(
-                std::sync::atomic::Ordering::Relaxed,
-                std::sync::atomic::Ordering::Relaxed,
+                std::sync::atomic::Ordering::Relaxed, // Only claims the position; publishes no data.
+                std::sync::atomic::Ordering::Relaxed, // A failed claim only retries the range value.
                 |r| {
                     ((r & QUEUE_LOW) < (r >> 32)).then(|| if front { r + 1 } else { r - (1 << 32) })
                 },

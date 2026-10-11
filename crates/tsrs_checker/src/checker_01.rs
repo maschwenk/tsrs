@@ -1386,22 +1386,19 @@ pub(crate) fn is_same_scope_descendent_of(initial: P<Node>, parent: Option<P<Nod
     let Some(parent) = parent else {
         return false;
     };
-    let n = Some(initial);
-    if let Some(result) = std::iter::successors(n, |cur| cur.parent()).find_map(|cur| {
+    let mut n = Some(initial);
+    while let Some(cur) = n {
         if cur == parent {
-            return Some(true);
+            return true;
         }
         if cur == stop_at
             || ast::is_function_like(cur)
                 && (ast::get_immediately_invoked_function_expression(cur).is_none()
                     || ast::get_function_flags(Some(cur)).intersects(ast::FunctionFlags::AsyncGenerator))
         {
-            return Some(false);
+            return false;
         }
-
-        None
-    }) {
-        return result;
+        n = cur.parent();
     }
     false
 }

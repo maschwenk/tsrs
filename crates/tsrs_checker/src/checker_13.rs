@@ -318,7 +318,12 @@ impl Checker {
     pub(crate) fn remove_string_literals_matched_by_template_literals(&mut self, types: &[P<Type>]) -> Vec<P<Type>> {
         let mut types = types.to_vec();
         let mut templates: Vec<P<Type>> = Vec::new();
-        templates.extend(types.iter().filter_map(|&t| if self.is_pattern_literal_type(t) { Some(t) } else { None }));
+        // Keep this measured hot collector as a loop; see notes/perf-iterator-regressions.md.
+        for &t in &types {
+            if self.is_pattern_literal_type(t) {
+                templates.push(t);
+            }
+        }
         if !templates.is_empty() {
             let mut i = types.len();
             while i > 0 {
@@ -933,14 +938,10 @@ impl Checker {
     // primitive type, and missingType is matched by undefinedType (and vice versa).
     // checker.go:26866
     pub(crate) fn each_union_contains(&mut self, union_types: &[P<Type>], t: P<Type>) -> bool {
-        if union_types.iter().any(|&u| {
+        for &u in union_types {
             if !self.union_contains_type(u, t, true /*matchSymbol*/) {
-                return true;
+                return false;
             }
-
-            false
-        }) {
-            return false;
         }
         true
     }
@@ -983,9 +984,9 @@ impl Checker {
         let mut constituents = types.to_vec();
         for i in 0..count {
             let mut n = i;
-            for (j, element) in types.iter().enumerate().rev() {
-                if (*element).flags().intersects(TypeFlags::Union) {
-                    let source_types = (*element).types();
+            for j in (0..types.len()).rev() {
+                if types[j].flags().intersects(TypeFlags::Union) {
+                    let source_types = types[j].types();
                     let length = source_types.len();
                     constituents[j] = source_types[n % length];
                     n /= length;
@@ -1016,19 +1017,17 @@ pub(crate) fn get_constituent_count(t: P<Type>) -> usize {
 // checker.go:26932
 pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> usize {
     let mut n = 0;
-    n = types.iter().fold(n, |mut n, &t| {
+    for &t in types {
         n += get_constituent_count(t);
-
-        n
-    });
+    }
     n
 }
 
 impl Checker {
     // checker.go:26940
     pub(crate) fn filter_types(&mut self, types: &mut [P<Type>], mut predicate: impl FnMut(&mut Checker, P<Type>) -> bool) {
-        for element in types.iter_mut() {
-            (*element) = self.filter_type(*element, &mut predicate);
+        for i in 0..types.len() {
+            types[i] = self.filter_type(types[i], &mut predicate);
         }
     }
 
@@ -2339,15 +2338,11 @@ impl Checker {
     // checker.go:27815
     pub(crate) fn get_declaring_constructor(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
         let declarations = symbol.declarations();
-        if let Some(result) = declarations.iter().find_map(|&declaration| {
+        for &declaration in declarations {
             let container = get_this_container(declaration, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
             if is_constructor_declaration(container) {
-                return Some(Some(container));
+                return Some(container);
             }
-
-            None
-        }) {
-            return result;
         }
         None
     }
@@ -2567,10 +2562,12 @@ impl Checker {
         } else if flags.intersects(TypeFlags::TemplateLiteral) {
             let types = t.types();
             let mut constraints: Vec<P<Type>> = Vec::with_capacity(types.len());
-            constraints.extend(types.iter().filter_map(|&s| {
+            for &s in types {
                 let constraint = self.get_next_base_constraint(Some(s), stack);
-                if let Some(constraint) = constraint { Some(constraint) } else { None }
-            }));
+                if let Some(constraint) = constraint {
+                    constraints.push(constraint);
+                }
+            }
             if constraints.len() == types.len() {
                 return Some(self.get_template_literal_type(t.as_template_literal_type().texts(), &constraints));
             }
@@ -2614,7 +2611,7 @@ impl Checker {
             let element_types = self.get_element_types(t);
             let element_infos = t.target_tuple_type().element_infos();
             let mut new_elements: Vec<P<Type>> = Vec::with_capacity(element_types.len());
-            new_elements.extend(element_types.iter().enumerate().map(|(i, &v)| {
+            for (i, &v) in element_types.iter().enumerate() {
                 let mut new_element = v;
                 if v.flags().intersects(TypeFlags::TypeParameter) && element_infos[i].flags.intersects(ElementFlags::Variadic) {
                     let constraint = self.get_next_base_constraint(Some(v), stack);
@@ -2624,8 +2621,8 @@ impl Checker {
                         }
                     }
                 }
-                new_element
-            }));
+                new_elements.push(new_element);
+            }
             return Some(self.create_tuple_type_ex(&new_elements, element_infos, t.target_tuple_type().readonly.get()));
         }
         Some(t)
