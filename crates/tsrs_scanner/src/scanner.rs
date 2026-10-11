@@ -391,6 +391,20 @@ static ASCII_IDENTIFIER_PART: [bool; 256] = {
 };
 pub(crate) const RUNE_ERROR: Rune = 0xFFFD;
 
+static STRING_LITERAL_END: [[bool; 256]; 2] = {
+    let mut table = [[false; 256]; 2];
+    let mut i = 0;
+    while i < table.len() {
+        table[i][b'\\' as usize] = true;
+        table[i][b'\r' as usize] = true;
+        table[i][b'\n' as usize] = true;
+        i += 1;
+    }
+    table[0][b'\'' as usize] = true;
+    table[1][b'"' as usize] = true;
+    table
+};
+
 /// Go `utf8.DecodeRuneInString` over raw bytes: `(RuneError, 0)` for empty input,
 /// `(RuneError, 1)` for an invalid encoding.
 #[inline]
@@ -2106,50 +2120,78 @@ impl Scanner {
             self.state.token_flags |= TokenFlags::SingleQuote;
         }
         self.state.pos += 1;
-        // Fast path for simple strings without escape sequences.
-        let rest = &self.text.as_bytes()[self.state.pos as usize..];
-        let mut capacity = 16;
-        if let Some(str_len) = memchr::memchr(quote, rest) {
-            if str_len == 0 {
-                self.state.pos += 1;
-                return "";
+        let start = self.state.pos;
+        let table = &STRING_LITERAL_END[usize::from(quote == b'"')];
+        if jsx_attribute_string {
+            let rest = &self.text.as_bytes()[start as usize..];
+            if let Some(str_len) = memchr::memchr(quote, rest) {
+                self.state.pos += str_len as u32;
+            } else {
+                self.state.pos = self.text.len() as u32;
             }
-            let str_bytes = &rest[..str_len];
-            if jsx_attribute_string || memchr::memchr3(b'\\', b'\r', b'\n', str_bytes).is_none() {
-                let s = self.slice(self.state.pos, self.state.pos + str_len as u32);
-                self.state.pos += str_len as u32 + 1;
-                return s;
-            }
-            capacity = str_len;
+        } else {
+            self.scan_string_text(table);
         }
+        if self.char() == Some(quote) {
+            let end = self.state.pos;
+            self.state.pos += 1;
+            return if start == end { "" } else { self.slice(start, end) };
+        }
+        self.scan_string_slow(quote, start, table)
+    }
+
+    #[inline]
+    fn scan_string_text(&mut self, table: &[bool; 256]) {
+        let text = &self.text.as_bytes()[self.state.pos as usize..];
+        let (batches, tail) = text.as_chunks::<32>();
+        let mut scanned = 0;
+        for batch in batches {
+            for (i, &byte) in batch.iter().enumerate() {
+                if table[byte as usize] {
+                    self.state.pos += (scanned + i) as u32;
+                    return;
+                }
+            }
+            scanned += batch.len();
+        }
+        for &byte in tail {
+            if table[byte as usize] {
+                break;
+            }
+            scanned += 1;
+        }
+        self.state.pos += scanned as u32;
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn scan_string_slow(&mut self, quote: u8, mut start: u32, table: &[bool; 256]) -> &'static str {
+        // Keep the original first-quote capacity estimate on the allocating path.
+        let rest = &self.text.as_bytes()[self.state.pos as usize..];
+        let capacity = memchr::memchr(quote, rest).map_or(16, |offset| (self.state.pos - start) as usize + offset);
         let mut sb = ArenaStringBuilder::with_capacity(capacity);
-        let mut start = self.state.pos;
         loop {
+            sb.push_str(self.slice(start, self.state.pos));
             let Some(ch) = self.char() else {
-                sb.push_str(self.slice(start, self.state.pos));
                 self.state.token_flags |= TokenFlags::Unterminated;
                 self.error(&diagnostics::Unterminated_string_literal);
                 break;
             };
             if ch == quote {
-                sb.push_str(self.slice(start, self.state.pos));
                 self.state.pos += 1;
                 break;
             }
-            if ch == b'\\' && !jsx_attribute_string {
-                sb.push_str(self.slice(start, self.state.pos));
+            if ch == b'\\' {
                 let escaped = self.scan_escape_sequence(EscapeSequenceScanningFlags::String | EscapeSequenceScanningFlags::ReportErrors);
                 sb.push_str(&escaped);
                 start = self.state.pos;
+                self.scan_string_text(table);
                 continue;
             }
-            if (ch == b'\n' || ch == b'\r') && !jsx_attribute_string {
-                sb.push_str(self.slice(start, self.state.pos));
-                self.state.token_flags |= TokenFlags::Unterminated;
-                self.error(&diagnostics::Unterminated_string_literal);
-                break;
-            }
-            self.state.pos += 1;
+            debug_assert!(ch == b'\n' || ch == b'\r');
+            self.state.token_flags |= TokenFlags::Unterminated;
+            self.error(&diagnostics::Unterminated_string_literal);
+            break;
         }
         sb.into_str()
     }
