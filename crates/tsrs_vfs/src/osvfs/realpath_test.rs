@@ -3,6 +3,28 @@ use tsrs_core::tspath;
 use super::os_test::{mklink, temp_dir};
 use super::*;
 
+#[cfg(not(any(target_os = "linux", windows)))]
+#[derive(Default)]
+struct PrefixCache {
+    paths: std::sync::Mutex<std::collections::HashSet<String>>,
+    hits: std::sync::atomic::AtomicUsize,
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+impl RealpathPrefixCache for PrefixCache {
+    fn is_canonical_prefix(&self, path: &str) -> bool {
+        let found = self.paths.lock().unwrap().contains(path);
+        if found {
+            self.hits.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        }
+        found
+    }
+
+    fn store_canonical_prefix(&self, path: &str) {
+        self.paths.lock().unwrap().insert(path.to_string());
+    }
+}
+
 fn setup_symlinks() -> (String, String) {
     let tmp = temp_dir();
 
@@ -53,6 +75,61 @@ fn test_realpath_relative_symlink_and_missing() {
     // A path that does not exist is returned unchanged.
     let missing = format!("{}/does/not/exist.ts", tmp);
     assert_eq!(fs.realpath(&missing), missing);
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+#[test]
+fn test_realpath_reuses_canonical_directory_prefix() {
+    let tmp = std::fs::canonicalize(temp_dir()).unwrap();
+    let tmp = tspath::normalize_slashes(&tmp.to_string_lossy());
+    let directory = format!("{}/a/b/c", tmp);
+    std::fs::create_dir_all(&directory).unwrap();
+    let first = format!("{}/first.ts", directory);
+    let second = format!("{}/second.ts", directory);
+    std::fs::write(&first, "").unwrap();
+    std::fs::write(&second, "").unwrap();
+
+    let cache = PrefixCache::default();
+    assert_eq!(
+        os_fs_realpath_with_prefix_cache(&first, &cache),
+        os_fs_realpath(&first)
+    );
+    assert_eq!(
+        os_fs_realpath_with_prefix_cache(&second, &cache),
+        os_fs_realpath(&second)
+    );
+    assert!(cache.hits.load(std::sync::atomic::Ordering::Relaxed) > 0);
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+#[test]
+fn test_realpath_prefix_cache_preserves_relative_symlink_and_dotdot() {
+    let tmp = std::fs::canonicalize(temp_dir()).unwrap();
+    let tmp = tspath::normalize_slashes(&tmp.to_string_lossy());
+    std::fs::create_dir_all(format!("{}/real/sub", tmp)).unwrap();
+    std::fs::write(format!("{}/real/sub/f.ts", tmp), "").unwrap();
+    mklink("real/sub", &format!("{}/rel", tmp), true);
+
+    let cache = PrefixCache::default();
+    let target = format!("{}/real/sub/f.ts", tmp);
+    assert_eq!(
+        os_fs_realpath_with_prefix_cache(&target, &cache),
+        os_fs_realpath(&target)
+    );
+
+    // The prefix cache must not change EvalSymlinks' physical ".." behavior.
+    for path in [
+        format!("{}/rel/f.ts", tmp),
+        format!("{}/rel/../sub/f.ts", tmp),
+        format!("{}/rel/../real/sub/f.ts", tmp),
+    ] {
+        assert_eq!(
+            os_fs_realpath_with_prefix_cache(&path, &cache),
+            os_fs_realpath(&path),
+            "cached realpath differed for {path}"
+        );
+    }
+    assert!(cache.hits.load(std::sync::atomic::Ordering::Relaxed) > 0);
 }
 
 #[test]

@@ -6,7 +6,7 @@ use std::time::SystemTime;
 use tsrs_core::{stringutil, tspath};
 
 use crate::internal::{self, Common, IoDirEntry, IoFS};
-use crate::{Entries, FileInfo, FileMode, FsError, FS};
+use crate::{Entries, FileInfo, FileMode, FsError, FS, RealpathPrefixCache};
 
 // tsrs-only: file system calls made through this FS, printed as `--extendedDiagnostics` rows.
 static STAT_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
@@ -140,6 +140,18 @@ impl FS for OsFS {
         os_fs_realpath(path)
     }
 
+    fn realpath_with_prefix_cache(&self, path: &str, cache: &dyn RealpathPrefixCache) -> String {
+        #[cfg(not(any(target_os = "linux", windows)))]
+        {
+            return os_fs_realpath_with_prefix_cache(path, cache);
+        }
+        #[cfg(any(target_os = "linux", windows))]
+        {
+            let _ = cache;
+            os_fs_realpath(path)
+        }
+    }
+
     fn write_file(&self, path: &str, content: &str) -> Result<(), String> {
         self.write_file_ensuring_dir(path, content, false)
     }
@@ -165,6 +177,23 @@ fn os_fs_realpath(path: &str) -> String {
     let orig = path;
     let path = from_slash(path);
     let path = match native_realpath(&path) {
+        Ok(p) => p,
+        Err(_) => return orig.to_string(),
+    };
+    let path = match abs(&path) {
+        Ok(p) => p,
+        Err(_) => return orig.to_string(),
+    };
+    tspath::normalize_slashes(&path)
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+fn os_fs_realpath_with_prefix_cache(path: &str, cache: &dyn RealpathPrefixCache) -> String {
+    let _ = internal::root_length(path); // Assert path is rooted
+
+    let orig = path;
+    let path = from_slash(path);
+    let path = match walk_symlinks(&path, Some(cache)) {
         Ok(p) => p,
         Err(_) => return orig.to_string(),
     };
@@ -205,12 +234,12 @@ fn native_realpath(path: &str) -> io::Result<String> {
 
 #[cfg(not(any(target_os = "linux", windows)))]
 fn native_realpath(path: &str) -> io::Result<String> {
-    walk_symlinks(path)
+    walk_symlinks(path, None)
 }
 
 // filepath.walkSymlinks (the Unix variant, used by filepath.EvalSymlinks).
 #[cfg(not(any(target_os = "linux", windows)))]
-fn walk_symlinks(path: &str) -> io::Result<String> {
+fn walk_symlinks(path: &str, cache: Option<&dyn RealpathPrefixCache>) -> io::Result<String> {
     let is_sep = |b: u8| b == b'/';
     let mut path = path.to_string();
     let mut vol_len = 0usize;
@@ -222,6 +251,26 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
     let mut dest = vol.clone();
     let mut links_walked = 0;
     let mut start = vol_len;
+    if let Some(cache) = cache {
+        let mut prefix_end = path.len();
+        while prefix_end > vol_len {
+            while prefix_end > vol_len && is_sep(path.as_bytes()[prefix_end - 1]) {
+                prefix_end -= 1;
+            }
+            if cache.is_canonical_prefix(&path[..prefix_end]) {
+                dest.push_str(&path[vol_len..prefix_end]);
+                start = prefix_end;
+                break;
+            }
+            let Some(separator) = path[..prefix_end].rfind('/') else {
+                break;
+            };
+            if separator < vol_len {
+                break;
+            }
+            prefix_end = separator;
+        }
+    }
     while start < path.len() {
         let b = path.as_bytes();
         while start < b.len() && is_sep(b[start]) {
@@ -287,6 +336,11 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
         if !fi.file_type().is_symlink() {
             if !fi.is_dir() && end < path.len() {
                 return Err(io::Error::from_raw_os_error(20 /* ENOTDIR */));
+            }
+            if fi.is_dir() {
+                if let Some(cache) = cache {
+                    cache.store_canonical_prefix(&dest);
+                }
             }
             start = end;
             continue;

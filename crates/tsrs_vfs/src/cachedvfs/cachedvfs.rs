@@ -2,6 +2,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::SystemTime;
 
 use crate::FS as VFS;
+#[cfg(not(any(target_os = "linux", windows)))]
+use crate::RealpathPrefixCache;
 use crate::{Entries, FileInfo};
 
 // SyncMap is collections.SyncMap: a concurrent map with Load/Store/Clear, keyed by path strings and probed with
@@ -37,6 +39,8 @@ pub struct FS<T: VFS> {
     file_exists_cache: SyncMap<bool>,
     get_accessible_entries_cache: SyncMap<Entries>,
     realpath_cache: SyncMap<String>,
+    #[cfg(not(any(target_os = "linux", windows)))]
+    realpath_prefix_cache: SyncMap<()>,
     stat_cache: SyncMap<Option<FileInfo>>,
 }
 
@@ -48,6 +52,8 @@ pub fn from<T: VFS>(fs: T) -> FS<T> {
         file_exists_cache: SyncMap::new(),
         get_accessible_entries_cache: SyncMap::new(),
         realpath_cache: SyncMap::new(),
+        #[cfg(not(any(target_os = "linux", windows)))]
+        realpath_prefix_cache: SyncMap::new(),
         stat_cache: SyncMap::new(),
     }
 }
@@ -68,6 +74,8 @@ impl<T: VFS> FS<T> {
         self.file_exists_cache.clear();
         self.get_accessible_entries_cache.clear();
         self.realpath_cache.clear();
+        #[cfg(not(any(target_os = "linux", windows)))]
+        self.realpath_prefix_cache.clear();
         self.stat_cache.clear();
     }
 
@@ -77,6 +85,19 @@ impl<T: VFS> FS<T> {
 
     fn enabled(&self) -> bool {
         self.enabled.load(Ordering::SeqCst)
+    }
+}
+
+#[cfg(not(any(target_os = "linux", windows)))]
+impl<T: VFS> RealpathPrefixCache for FS<T> {
+    fn is_canonical_prefix(&self, path: &str) -> bool {
+        self.enabled() && self.realpath_prefix_cache.load(path).is_some()
+    }
+
+    fn store_canonical_prefix(&self, path: &str) {
+        if self.enabled() {
+            self.realpath_prefix_cache.store(path, ());
+        }
     }
 }
 
@@ -138,8 +159,13 @@ impl<T: VFS> VFS for FS<T> {
             if let Some(ret) = self.realpath_cache.load(path) {
                 return ret;
             }
+        } else {
+            return self.fs.realpath(path);
         }
 
+        #[cfg(not(any(target_os = "linux", windows)))]
+        let ret = self.fs.realpath_with_prefix_cache(path, self);
+        #[cfg(any(target_os = "linux", windows))]
         let ret = self.fs.realpath(path);
 
         if self.enabled() {

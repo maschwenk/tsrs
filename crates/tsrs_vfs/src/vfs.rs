@@ -4,6 +4,14 @@ use std::time::SystemTime;
 use bitflags::bitflags;
 use rustc_hash::FxHashSet;
 
+// RealpathPrefixCache is an optional cache used by file systems that resolve a
+// path one component at a time. Entries are directories already proved to be
+// canonical (none of their components is a symlink).
+pub trait RealpathPrefixCache: Sync {
+    fn is_canonical_prefix(&self, path: &str) -> bool;
+    fn store_canonical_prefix(&self, path: &str);
+}
+
 // FS is a file system abstraction.
 pub trait FS: Send + Sync {
     // UseCaseSensitiveFileNames returns true if the file system is case-sensitive.
@@ -39,6 +47,13 @@ pub trait FS: Send + Sync {
     // Realpath returns the "real path" of the specified path,
     // following symlinks and correcting filename casing.
     fn realpath(&self, path: &str) -> String;
+
+    // realpath_with_prefix_cache is the same operation with an optional place
+    // to retain component-walk results. File systems that do not walk path
+    // components keep the ordinary Realpath behavior.
+    fn realpath_with_prefix_cache(&self, path: &str, _cache: &dyn RealpathPrefixCache) -> String {
+        self.realpath(path)
+    }
 }
 
 macro_rules! forward_fs {
@@ -75,6 +90,13 @@ macro_rules! forward_fs {
         }
         fn realpath(&self, path: &str) -> String {
             (**self).realpath(path)
+        }
+        fn realpath_with_prefix_cache(
+            &self,
+            path: &str,
+            cache: &dyn RealpathPrefixCache,
+        ) -> String {
+            (**self).realpath_with_prefix_cache(path, cache)
         }
     };
 }

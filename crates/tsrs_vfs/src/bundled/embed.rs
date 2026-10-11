@@ -5,7 +5,7 @@ use rustc_hash::FxHashMap;
 
 use super::embed_generated::EMBEDDED_CONTENTS;
 use super::libs_generated::LIB_NAMES;
-use crate::{Entries, FileInfo, FileMode, FS};
+use crate::{Entries, FileInfo, FileMode, FS, RealpathPrefixCache};
 
 pub(crate) const EMBEDDED: bool = true;
 
@@ -127,6 +127,13 @@ impl<T: FS> FS for WrappedFS<T> {
             return path.to_string();
         }
         self.fs.realpath(path)
+    }
+
+    fn realpath_with_prefix_cache(&self, path: &str, cache: &dyn RealpathPrefixCache) -> String {
+        if split_path(path).is_some() {
+            return path.to_string();
+        }
+        self.fs.realpath_with_prefix_cache(path, cache)
     }
 
     fn write_file(&self, path: &str, data: &str) -> Result<(), String> {
