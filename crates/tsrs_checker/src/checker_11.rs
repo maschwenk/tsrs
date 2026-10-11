@@ -328,6 +328,48 @@ impl Checker {
     }
 }
 
+/// The occurrence count of each property name over a list of property lists, in first-occurrence order (Go's
+/// `collections.OrderedMap[string, int]` in `somePropertyReducesToNever`).
+#[derive(Default)]
+pub(crate) struct NameCounts {
+    pub(crate) lists: Vec<&'static [P<Symbol>]>,
+    /// (name, name hash, count), in first-occurrence order.
+    pub(crate) entries: Vec<(&'static str, u32, i32)>,
+    /// Open addressing over `entries`: 0 is empty, otherwise an entry index plus one.
+    table: Vec<u32>,
+}
+
+impl NameCounts {
+    fn count_lists(&mut self, total: usize) {
+        self.entries.clear();
+        let size = (total * 2).max(16).next_power_of_two();
+        self.table.clear();
+        self.table.resize(size, 0);
+        let mask = size - 1;
+        for &list in &self.lists {
+            for prop in list {
+                let name = prop.name();
+                let hash = HashedName::new(name).hash();
+                let mut i = hash as usize & mask;
+                loop {
+                    let slot = self.table[i];
+                    if slot == 0 {
+                        self.entries.push((name, hash, 1));
+                        self.table[i] = self.entries.len() as u32;
+                        break;
+                    }
+                    let entry = &mut self.entries[slot as usize - 1];
+                    if entry.1 == hash && (std::ptr::eq(entry.0, name) || entry.0 == name) {
+                        entry.2 += 1;
+                        break;
+                    }
+                    i = (i + 1) & mask;
+                }
+            }
+        }
+    }
+}
+
 /**
  * Return whether this symbol is a member of a prototype somewhere
  * Note that this is not tracked well within the compiler, so the answer may be incorrect.
@@ -582,29 +624,33 @@ impl Checker {
         } else {
             None
         };
-        // A pooled map (Go's is garbage after the call); a recursive call takes another one.
-        let mut counts = self.free_property_counts.pop().unwrap_or_default();
+        // tsrs: the counts are kept in a pooled `NameCounts` (Go's ordered map, without its per-name allocation and
+        // hashing); every constituent's property list is fetched first, in order, as before.
+        let mut counts = self.name_counts_pool.pop().unwrap_or_default();
+        counts.lists.clear();
+        let mut total = 0;
         for (i, &t) in types.iter().enumerate() {
             if Some(i) != skipped {
-                for prop in self.get_properties_of_type(t) {
-                    *counts.entry(prop.name()).or_insert(0) += 1;
-                }
+                let props = self.get_properties_of_type(t);
+                total += props.len();
+                counts.lists.push(props);
             }
         }
+        counts.count_lists(total);
         if let Some(skipped) = skipped {
             self.lazy_member_stats.some_property_skipped_constituents += 1;
-            for i in 0..counts.len() {
-                let prop_name = *counts.get_index(i).unwrap().0;
+            for i in 0..counts.entries.len() {
+                let prop_name = counts.entries[i].0;
                 if self.get_property_of_type_ex(types[skipped], prop_name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/).is_some() {
-                    *counts.get_index_mut(i).unwrap().1 += 1;
+                    counts.entries[i].2 += 1;
                 }
             }
         }
         // Check if any property appears in more than one constituent type and reduces to 'never'.
         // Go in the order the properties were found so the combined properties are created in the same order every time.
         let mut result = false;
-        for i in 0..counts.len() {
-            let (&prop_name, &count) = counts.get_index(i).unwrap();
+        for i in 0..counts.entries.len() {
+            let (prop_name, _, count) = counts.entries[i];
             if count > 1 {
                 if let Some(prop) = self.get_property_of_union_or_intersection_type(t, prop_name, true /*skipObjectFunctionPropertyAugment*/) {
                     if self.is_never_reduced_property(prop) {
@@ -614,10 +660,7 @@ impl Checker {
                 }
             }
         }
-        if counts.capacity() <= 1024 {
-            counts.clear();
-            self.free_property_counts.push(counts);
-        }
+        self.name_counts_pool.push(counts);
         result
     }
 

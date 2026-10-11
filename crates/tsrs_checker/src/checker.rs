@@ -1129,6 +1129,8 @@ pub struct Checker {
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
     /// Reused buffers for `get_unmatched_property_recording` (relater_1.rs), one per nested `propertiesRelatedTo`.
     pub(crate) unmatched_found_pool: Vec<Vec<Option<Option<P<Symbol>>>>>,
+    /// Reused buffers for `some_property_reduces_to_never` (checker_11.rs), one per nested call.
+    pub(crate) name_counts_pool: Vec<crate::checker_11::NameCounts>,
     /// `contextual_property_type_of_large_union` (checker_15.rs): per (union, name hash), the name, the
     /// `members_reset_epoch` it was computed in and the positions of the constituents that can contribute.
     pub(crate) contextual_relevant: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[u32]>)>>,
@@ -1352,7 +1354,6 @@ pub struct Checker {
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub free_strings: Vec<String>, // Rust-only: empty buffers for text built and dropped in one call
     pub free_name_sets: Vec<FxHashSet<&'static str>>, // Rust-only: empty sets for names seen during one walk
-    pub free_property_counts: Vec<OrderedMap<&'static str, i32>>, // Rust-only: empty maps for `some_property_reduces_to_never`
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
     pub within_unreachable_code: bool,
@@ -1552,6 +1553,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_stats: Default::default(),
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
+        name_counts_pool: Vec::new(),
         contextual_relevant: FxHashMap::default(),
         discriminant_property_types: FxHashMap::default(),
         constituent_flags: FxHashMap::default(),
@@ -1759,7 +1761,6 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         free_type_lists: Vec::new(),
         free_strings: Vec::new(),
         free_name_sets: Vec::new(),
-        free_property_counts: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
         within_unreachable_code: false,
@@ -2049,6 +2050,7 @@ impl Checker {
             lazy_member_stats: base.lazy_member_stats.clone(),
             augment_filter: base.augment_filter.clone(),
             unmatched_found_pool: Vec::new(),
+            name_counts_pool: Vec::new(),
             contextual_relevant: FxHashMap::default(),
             discriminant_property_types: FxHashMap::default(),
             constituent_flags: FxHashMap::default(),
@@ -2256,7 +2258,6 @@ impl Checker {
             free_type_lists: Vec::new(),
             free_strings: Vec::new(),
             free_name_sets: Vec::new(),
-            free_property_counts: Vec::new(),
             ambient_modules_once: base.ambient_modules_once.clone(),
             ambient_modules: base.ambient_modules.clone(),
             within_unreachable_code: base.within_unreachable_code.clone(),
