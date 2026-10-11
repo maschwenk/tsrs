@@ -16,12 +16,11 @@ bitflags::bitflags! {
     }
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum QuoteChar {
-    SingleQuote = '\'' as u32,
-    DoubleQuote = '"' as u32,
-    Backtick = '`' as u32,
+    SingleQuote = 0x27,
+    DoubleQuote = 0x22,
+    Backtick = 0x60,
 }
 
 fn jsx_escaped_chars_map(ch: stringutil::Rune) -> Option<&'static str> {

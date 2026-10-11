@@ -4,7 +4,6 @@ use std::sync::LazyLock;
 
 use crate::*;
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum AssignmentKind {
     #[default]

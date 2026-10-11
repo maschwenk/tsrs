@@ -400,7 +400,6 @@ impl ProtocolJson for MappedOutput {
 // DiagnosticDirectivePolicy is the numeric policy stored in a mapped diagnostic directive tuple.
 // hostimpl.go:125 (Go `type DiagnosticDirectivePolicy uint8`: a decoded tuple can carry any uint8, which
 // normalizeDiagnosticDirectives rejects. Named values are associated constants, like `tsrs_spanmap::Kind`.)
-#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub struct DiagnosticDirectivePolicy(pub u8);
 

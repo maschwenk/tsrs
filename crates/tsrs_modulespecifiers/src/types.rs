@@ -22,7 +22,6 @@ pub trait CheckerShape {
     fn get_aliased_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol>;
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ResultKind {
     #[default]
@@ -153,7 +152,6 @@ pub struct ModuleSpecifierOptions {
     pub override_import_mode: ResolutionMode,
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum RelativePreferenceKind {
     #[default]
@@ -163,7 +161,6 @@ pub enum RelativePreferenceKind {
     ExternalNonRelative,
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ModuleSpecifierEnding {
     #[default]
@@ -173,7 +170,6 @@ pub enum ModuleSpecifierEnding {
     TsExtension,
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MatchingMode {
     #[default]
@@ -216,7 +212,6 @@ pub struct NodeModulePathParts {
     pub file_name_index: usize,
 }
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum nodeModulesPathParseState {
     BeforeNodeModules,

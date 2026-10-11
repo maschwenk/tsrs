@@ -185,7 +185,6 @@ bitflags! {
     }
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum SignatureKind {
     #[default]
@@ -193,7 +192,6 @@ pub enum SignatureKind {
     Construct,
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum IndexKind {
     #[default]
@@ -201,7 +199,6 @@ pub enum IndexKind {
     Number,
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MemberOverrideStatus {
     #[default]
@@ -619,7 +616,6 @@ pub struct DeclaredTypeLinks {
 
 // Links for switch clauses
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ExhaustiveState {
     #[default]
@@ -647,7 +643,6 @@ pub struct ArrayLiteralLinks {
 
 // Links for late-binding containers
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MembersOrExportsResolutionKind {
     #[default]
@@ -1211,7 +1206,6 @@ pub struct Type {
 
 /// `Type.object_flags`. Shared graph: a frozen type's flags written by a fork go to the fork's overlay,
 /// kept by type id (`Overlay::id_word`); with nothing frozen this is a `Cell`.
-#[repr(transparent)]
 pub struct ObjectFlagsCell(Cell<ObjectFlags>);
 
 impl ObjectFlagsCell {
@@ -1456,7 +1450,6 @@ pub trait TypePayload: Sized + 'static {
 }
 
 /// Which data struct follows a type's header (one variant per `TypeData` variant).
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TypeDataTag {
     Intrinsic,
@@ -3257,7 +3250,6 @@ pub struct CompositeSignature {
     pub signatures: Cell<&'static [P<Signature>]>, // Individual signatures
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum TypePredicateKind {
     #[default]

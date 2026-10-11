@@ -5,7 +5,6 @@ use tsrs_core::collections::{new_ordered_map_with_size_hint, OrderedMap};
 
 use super::json::Json;
 
-#[repr(i8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum JSONValueType {
     #[default]

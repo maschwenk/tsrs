@@ -12,7 +12,6 @@ pub struct WatchOptions {
     pub exclude_files: Option<Vec<String>>,
 }
 
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum WatchFileKind {
     #[default]
@@ -25,7 +24,6 @@ pub enum WatchFileKind {
     UseFsEventsOnParentDirectory = 6,
 }
 
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum WatchDirectoryKind {
     #[default]
@@ -36,7 +34,6 @@ pub enum WatchDirectoryKind {
     FixedChunkSizePolling = 4,
 }
 
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum PollingKind {
     #[default]

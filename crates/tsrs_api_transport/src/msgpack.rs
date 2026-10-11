@@ -8,7 +8,6 @@ use crate::protocol::{ProtocolReader, ProtocolWriter};
 
 /// protocol_msgpack.go MessageType.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[repr(u8)]
 pub enum MessageType {
     Unknown = 0,
     Request = 1,

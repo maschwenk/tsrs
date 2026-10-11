@@ -2,7 +2,6 @@ use crate::*;
 
 // TypeMapperKind
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum TypeMapperKind {
     #[default]
@@ -404,7 +403,6 @@ pub(crate) unsafe fn recycle_mapper_with_targets(m: P<TypeMapper>, targets: *con
 
 /// A stored mapper: `Cell<Option<P<TypeMapper>>>` whose `new` / `set` mark the mapper escaped (`escape_mapper`).
 #[derive(Default)]
-#[repr(transparent)]
 pub struct MapperCell(Cell<Option<P<TypeMapper>>>);
 
 impl MapperCell {

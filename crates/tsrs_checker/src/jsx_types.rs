@@ -16,7 +16,6 @@ bitflags! {
     }
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum JsxReferenceKind {
     #[default]

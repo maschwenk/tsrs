@@ -150,6 +150,13 @@ with the switch off, which is why it is not in the default build.
   masks and bounded IDs retain their width, emitter indexes avoid narrowing, and genuine signed domains remain
   signed. Before/after validation and measurements are recorded in the same note.
 
+- Unnecessary Rust representations (notes/rust-repr-layouts.md): 83 ordinary enum, newtype and struct `repr`
+  attributes were removed while 24 unsafe/FFI/layout contracts and the language-service tree were left alone.
+  Several internal enums shrink from 4 bytes to 1, but public macOS VS Code screening found peak RSS within
+  -0.11% to +0.27%; wall time was noisy and Linux instruction counting was unavailable. Retained at the owner's
+  explicit request as Rust data-model cleanup, without a speedup claim. Revisit performance only with the Linux
+  all-project instruction job or a profile showing these enum layouts matter.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.

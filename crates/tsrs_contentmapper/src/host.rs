@@ -14,7 +14,6 @@ use crate::hostimpl::{DiagnosticDirectivePolicy, PositionEncoding};
 
 // TransformErrorKind identifies the stage at which a content mapper transform failed.
 // host.go:14
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum TransformErrorKind {
     #[default]
@@ -58,7 +57,6 @@ impl TransformError {
 
 // DiagnosticDirectiveErrorKind identifies why a diagnostic directive was rejected.
 // host.go:43
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum DiagnosticDirectiveErrorKind {
     #[default]
@@ -102,7 +100,6 @@ impl InvalidVirtualExtensionError {
 
 // ProjectErrorKind identifies why a mapper's openProject response was rejected.
 // host.go:75
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ProjectErrorKind {
     #[default]
@@ -137,7 +134,6 @@ impl ProjectError {
 
 // InitializeErrorKind identifies why a mapper's initialize response was rejected.
 // host.go:108
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum InitializeErrorKind {
     #[default]

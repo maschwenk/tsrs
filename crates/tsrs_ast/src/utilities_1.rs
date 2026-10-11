@@ -989,7 +989,6 @@ pub fn find_ancestor_kind(node: impl Into<Option<P<Node>>>, kind: Kind) -> Optio
     None
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum FindAncestorResult {
     False,

@@ -5,7 +5,6 @@ use crate::{Entries, FS};
 
 // This file implements the glob matching algorithm specified in MATCHING_ALGORITHM.md.
 
-#[repr(i8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Usage {
     Files,

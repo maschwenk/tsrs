@@ -370,7 +370,6 @@ pub struct IdLinkStore<V: 'static> {
 /// Slots as `slot - before` (0 = no links); `before` is one less than the first slot the group got (wrapping; slots
 /// only grow). When an offset does not fit, `dense` points at the 4-byte form (`slot + 1`, 0 = no links), which is
 /// read instead of `slots` from then on.
-#[repr(C)]
 struct IdGroup {
     before: u32,
     dense: Cell<Option<P<[Cell<u32>; ID_GROUP]>>>,

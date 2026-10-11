@@ -1,4 +1,3 @@
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum Tristate {
     #[default]

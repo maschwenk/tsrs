@@ -8,7 +8,6 @@ use std::sync::OnceLock;
 use std::time::Instant;
 
 #[derive(Clone, Copy)]
-#[repr(usize)]
 pub enum Cat {
     /// Whole prefetch job (metadata + read + parse + bind + resolve + speculative spawns).
     JobWall,

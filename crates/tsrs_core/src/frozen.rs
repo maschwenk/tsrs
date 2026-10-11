@@ -210,7 +210,6 @@ impl<T> Drop for FrozenRefMut<'_, T> {
 /// `Cell<T>` for fields of shared arena objects (binder symbols) that only their owner writes: after binding,
 /// checkers write these fields only on objects they created themselves (transient symbols). Checked builds
 /// verify that with `shared_check` (`TSRS_CHECK_SHARED=1`); otherwise it is a plain `Cell`.
-#[repr(transparent)]
 #[derive(Default)]
 pub struct OwnedCell<T>(Cell<T>);
 

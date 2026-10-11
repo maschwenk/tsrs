@@ -19,7 +19,6 @@ use tsrs_core::{P, TextRange, new_text_range};
 // Kind describes how positions inside a segment relate the virtual span to the original span.
 // spanmap.go:22 (Go `type Kind int32`: a decoded span map can carry any int32, which Validate reports. Named
 // values are associated constants, as for `tsrs_core::ModuleKind`.)
-#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub struct Kind(pub i32);
 
@@ -77,7 +76,6 @@ pub(crate) const FEATURE_MASK: Feature = Feature::All;
 
 // Fidelity describes how faithfully a mapped span reflects the original.
 // spanmap.go:71
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum Fidelity {
     // FidelityExact means the span fell entirely within a single verbatim segment and maps precisely.

@@ -1222,7 +1222,6 @@ impl Printer {
     }
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub(crate) enum commentSeparator {
     None,

@@ -13,7 +13,6 @@ use crate::references::collect_external_module_references;
 use crate::types::ParseFlags;
 use crate::utilities::{get_language_variant, is_keyword_or_punctuation, token_is_identifier_or_keyword};
 
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum ParsingContext {
     SourceElements,          // Elements in source file

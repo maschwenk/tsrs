@@ -15,7 +15,6 @@ use tsrs_core::{alloc_slice, P};
 // done any use-site checks until we're ready to map the `PseudoType` into a `Node`, and can cache
 // `PseudoType`s across multiple target positions.
 
-#[repr(i16)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum PseudoTypeKind {
     Direct,
@@ -282,7 +281,6 @@ impl PseudoObjectElement {
     }
 }
 
-#[repr(i8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum PseudoObjectElementKind {
     Method,

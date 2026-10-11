@@ -257,7 +257,6 @@ pub struct SignatureToSignatureDeclarationOptions {
 
 pub const MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH: usize = 3;
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum propertyNameNodeKind {
     Identifier,

@@ -358,7 +358,6 @@ impl CompilerOptions {
     }
 }
 
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ModuleDetectionKind {
     #[default]
@@ -377,7 +376,6 @@ impl ModuleDetectionKind {
 
 /// Go `type ModuleKind int32`: any int32 is representable (the API can receive values with no named constant, which
 /// Go keeps and compiles with). Named values are associated constants, usable as patterns.
-#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct ModuleKind(pub i32);
 
@@ -475,7 +473,6 @@ pub const RESOLUTION_MODE_ESM: ResolutionMode = ModuleKind::ESNext;
 /// Go `type ModuleResolutionKind int32`: any int32 is representable (the API can receive values with no named constant; Go keeps
 /// them and panics only when a module is actually resolved, see `tsrs_module` resolver). Named values are
 /// associated constants, usable as patterns.
-#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct ModuleResolutionKind(pub i32);
 
@@ -551,7 +548,6 @@ impl fmt::Display for ModuleResolutionKind {
     }
 }
 
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum NewLineKind {
     #[default]
@@ -586,7 +582,6 @@ impl NewLineKind {
 
 /// Go `type ScriptTarget int32`: any int32 is representable (the API can receive values with no named constant, which
 /// Go keeps and compiles with). Named values are associated constants, usable as patterns.
-#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct ScriptTarget(pub i32);
 
@@ -672,7 +667,6 @@ impl fmt::Display for ScriptTarget {
 
 /// Go `type JsxEmit int32`: any int32 is representable (the API can receive values with no named constant, which
 /// Go keeps and compiles with). Named values are associated constants, usable as patterns.
-#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct JsxEmit(pub i32);
 

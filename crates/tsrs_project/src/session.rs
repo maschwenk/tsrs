@@ -32,7 +32,6 @@ use crate::snapshotfs::{is_node_modules_path, is_relevant_extension};
 use crate::snapshothost::{new_snapshot_host, SnapshotHost};
 use crate::watch::{file_system_watcher_glob_string, new_watch_registry, watchRegistry, WatchedFiles, WatchedFilesExt, WatcherID};
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum UpdateReason {
     #[default]

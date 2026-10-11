@@ -10,7 +10,6 @@ use tsrs_diagnostics::{self as diagnostics, Category, Key, Message};
 use crate::SourceFile;
 
 // RepopulateDiagnosticKind indicates the kind of repopulation for a diagnostic chain entry.
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum RepopulateDiagnosticKind {
     ModeMismatch = 1,

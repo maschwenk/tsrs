@@ -1,4 +1,3 @@
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ScriptKind {
     #[default]

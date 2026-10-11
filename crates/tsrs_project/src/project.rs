@@ -138,7 +138,6 @@ pub fn parse_synthetic_project_id(value: &str) -> Option<SyntheticProjectID> {
     Some(new_synthetic_project_id(id))
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum Kind {
     #[default]
@@ -158,7 +157,6 @@ impl Kind {
     }
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ProgramUpdateKind {
     #[default]
@@ -168,7 +166,6 @@ pub enum ProgramUpdateKind {
     NewFiles = 3,
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum PendingReload {
     #[default]

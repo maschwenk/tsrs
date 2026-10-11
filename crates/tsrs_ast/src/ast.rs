@@ -1613,7 +1613,6 @@ fn reverse_access_kind(a: AccessKind) -> AccessKind {
     }
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum AccessKind {
     Read,      // Only reads from a variable
@@ -1691,7 +1690,6 @@ pub struct PatternAmbientModule {
     pub symbol: P<Symbol>,
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum CommentDirectiveKind {
     #[default]
@@ -1967,7 +1965,6 @@ impl SourceFile {
 }
 
 // ast.go:2607
-#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MappedDiagnosticDirectivePolicy {
     #[default]

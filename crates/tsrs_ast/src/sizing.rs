@@ -158,7 +158,6 @@ layouts! {
 
 // Identifier roles: which field of which parent holds the identifier.
 #[derive(Clone, Copy, PartialEq, Eq)]
-#[repr(u8)]
 enum Role {
     Expr,
     PropAccessExpr,

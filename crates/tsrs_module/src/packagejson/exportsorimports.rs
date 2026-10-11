@@ -5,7 +5,6 @@ use tsrs_core::collections::OrderedMap;
 use super::json::Json;
 use super::jsonvalue::{JSONData, JSONValueType};
 
-#[repr(i8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub(crate) enum ObjectKind {
     #[default]

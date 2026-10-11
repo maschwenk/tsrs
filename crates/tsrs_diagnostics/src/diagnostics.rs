@@ -5,7 +5,6 @@ use rustc_hash::FxHashMap;
 
 use crate::generated::ALL_MESSAGES;
 
-#[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum Category {
     Warning,

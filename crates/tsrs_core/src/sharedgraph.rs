@@ -323,7 +323,6 @@ fn decode<T: Copy>(bits: [u64; 2]) -> T {
 }
 
 /// A `Cell` for a lazily filled field of an arena object that may be frozen (see the module docs).
-#[repr(transparent)]
 pub struct OvCell<T>(Cell<T>);
 
 impl<T: Copy + Default + PartialEq> Default for OvCell<T> {
@@ -509,7 +508,6 @@ impl<T: Copy + Default> Default for OvExact<T> {
 
 /// `OvCell` for a word whose unwritten value is not its default (a tag bit set at creation): a frozen cell always
 /// looks in the overlay first (one hash lookup per read of a frozen cell).
-#[repr(transparent)]
 pub struct OvExact<T>(Cell<T>);
 
 impl<T: Copy> OvExact<T> {

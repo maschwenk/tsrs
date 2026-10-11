@@ -118,7 +118,6 @@ pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-#[repr(i32)]
 pub enum ExitStatus {
     Success = 0,
     DiagnosticsPresent_OutputsSkipped = 1,

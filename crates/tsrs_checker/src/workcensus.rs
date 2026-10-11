@@ -35,7 +35,6 @@ pub fn census_path() -> Option<&'static str> {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-#[repr(u8)]
 pub enum Cat {
     File,
     CondInst,

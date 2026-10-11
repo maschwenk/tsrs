@@ -3,7 +3,6 @@ use tsrs_core::P;
 
 use crate::{is_optional_chain, Kind, Node};
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum OperatorPrecedence {
     // Invalid is lower than all valid precedences. Returning it will cause binary expression parsing to stop.
@@ -263,7 +262,6 @@ pub fn get_leftmost_expression(mut node: P<Node>, stop_at_call_expressions: bool
     }
 }
 
-#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum TypePrecedence {
     // Conditional precedence (lowest)
