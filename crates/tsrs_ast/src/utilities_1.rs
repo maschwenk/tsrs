@@ -976,9 +976,12 @@ pub fn find_many_ancestors(node: impl Into<Option<P<Node>>>, callbacks: &mut [&m
 
 // Walks up the parents of a node to find the ancestor that matches the kind
 pub fn find_ancestor_kind(node: impl Into<Option<P<Node>>>, kind: Kind) -> Option<P<Node>> {
-    let node = node.into();
-    if let Some(result) = std::iter::successors(node, |n| n.parent()).find_map(|n| if n.kind() == kind { Some(Some(n)) } else { None }) {
-        return result;
+    let mut node = node.into();
+    while let Some(n) = node {
+        if n.kind() == kind {
+            return Some(n);
+        }
+        node = n.parent();
     }
     None
 }

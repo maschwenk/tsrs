@@ -260,9 +260,9 @@ impl Checker {
                 // We cache results of flow type resolution for shared nodes that were previously visited in
                 // the same getFlowTypeOfReference invocation. A node is considered shared when it is the
                 // antecedent of more than one node.
-                for element in self.shared_flows.iter().skip(f.shared_flow_start.get() as usize) {
-                    if (*element).flow == flow {
-                        let shared = *element;
+                for i in f.shared_flow_start.get() as usize..self.shared_flows.len() {
+                    if self.shared_flows[i].flow == flow {
+                        let shared = self.shared_flows[i];
                         f.depth.set(entry_depth);
                         if let Some(frame) = frame {
                             // A later walk of this frame may compute the node instead: it consumes what that took.

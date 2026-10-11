@@ -1112,13 +1112,10 @@ impl Checker {
 
     // checker.go:31375
     pub(crate) fn find_contextual_node(&mut self, node: P<Node>, include_caches: bool) -> i32 {
-        if let Some(result) = self
-            .contextual_infos
-            .iter()
-            .enumerate()
-            .find_map(|(i, info)| if node == info.node && (include_caches || !info.is_cache) { Some(i as i32) } else { None })
-        {
-            return result;
+        for (i, info) in self.contextual_infos.iter().enumerate() {
+            if node == info.node && (include_caches || !info.is_cache) {
+                return i as i32;
+            }
         }
         -1
     }

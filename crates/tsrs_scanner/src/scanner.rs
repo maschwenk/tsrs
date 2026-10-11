@@ -1409,17 +1409,25 @@ impl Scanner {
         let mut pos = start as usize;
         if multiline {
             // Skip whitespace
-            pos += (pos..end_u).take_while(|&index| text[index] == b' ' || text[index] == b'\t').count();
+            while pos < end_u && (text[pos] == b' ' || text[pos] == b'\t') {
+                pos += 1;
+            }
             // Skip combinations of / and *
-            pos += (pos..end_u).take_while(|&index| text[index] == b'/' || text[index] == b'*').count();
+            while pos < end_u && (text[pos] == b'/' || text[pos] == b'*') {
+                pos += 1;
+            }
         } else {
             // Skip opening //
             pos += 2;
             // Skip another / if present
-            pos += (pos..end_u).take_while(|&index| text[index] == b'/').count();
+            while pos < end_u && text[pos] == b'/' {
+                pos += 1;
+            }
         }
         // Skip whitespace
-        pos += (pos..end_u).take_while(|&index| text[index] == b' ' || text[index] == b'\t').count();
+        while pos < end_u && (text[pos] == b' ' || text[pos] == b'\t') {
+            pos += 1;
+        }
         // Directive must start with '@'
         if !(pos < end_u && text[pos] == b'@') {
             return;

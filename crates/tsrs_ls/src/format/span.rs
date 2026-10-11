@@ -120,11 +120,31 @@ pub(crate) fn prepare_range_contains_error_function(errors: &[P<Diagnostic>], or
     }
     sorted.sort_by_key(|d| d.pos());
 
-    let index = 0;
+    let mut index = 0;
     Box::new(move |r: TextRange| -> bool {
         // in current implementation sequence of arguments [r1, r2...] is monotonically increasing.
         // 'index' tracks the index of the most recent error that was checked.
-        return sorted.iter().skip(index).take_while(|err| r.end() > err.pos()).any(|err| r.overlaps(err.loc()));
+        // Keep it across calls so earlier diagnostics are not scanned again (notes/perf-iterator-regressions.md).
+        loop {
+            if index >= sorted.len() {
+                // all errors in the range were already checked -> no error in specified range
+                return false;
+            }
+
+            let err = sorted[index];
+
+            if r.end() <= err.pos() {
+                // specified range ends before the error referred by 'index' - no error in range
+                return false;
+            }
+
+            if r.overlaps(err.loc()) {
+                // specified range overlaps with error range
+                return true;
+            }
+
+            index += 1;
+        }
     })
 }
 

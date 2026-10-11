@@ -1109,8 +1109,12 @@ pub(crate) fn get_containing_function_or_class_static_block(node: P<Node>) -> Op
 
 // utilities.go:912
 pub(crate) fn is_node_descendant_of(node: Option<P<Node>>, ancestor: P<Node>) -> bool {
-    if let Some(result) = std::iter::successors(node, |n| n.parent()).find_map(|n| if n == ancestor { Some(true) } else { None }) {
-        return result;
+    let mut node = node;
+    while let Some(n) = node {
+        if n == ancestor {
+            return true;
+        }
+        node = n.parent();
     }
     false
 }
@@ -1686,7 +1690,11 @@ pub(crate) fn introduces_arguments_exotic_object(node: P<Node>) -> bool {
 pub(crate) fn symbols_to_array(symbols: Option<P<SymbolTable>>) -> Vec<P<Symbol>> {
     let mut result = Vec::new();
     if let Some(symbols) = symbols {
-        result.extend(symbols.entries().into_iter().filter_map(|(id, symbol)| if !is_reserved_member_name(id) { Some(symbol) } else { None }));
+        for (id, symbol) in symbols.entries() {
+            if !is_reserved_member_name(id) {
+                result.push(symbol);
+            }
+        }
     }
     result
 }

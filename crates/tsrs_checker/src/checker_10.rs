@@ -647,20 +647,19 @@ impl Checker {
         };
         let mut result = Vec::new();
         let declarations = symbol.declarations();
-        result.extend(declarations.iter().enumerate().filter_map(|(i, &decl)| {
+        for (i, &decl) in declarations.iter().enumerate() {
             if !ast::is_function_like(decl) {
-                return None;
+                continue;
             }
             // Don't include signature if node is the implementation of an overloaded function. A node is considered
             // an implementation node if it has a body and the previous node is of the same kind and immediately
             // precedes the implementation node (i.e. has the same parent and ends where the implementation starts).
             if i > 0 && decl.body().is_some() {
                 let previous = declarations[i - 1];
-                if decl.parent() == previous.parent()
-                    && decl.kind() == previous.kind()
+                if decl.parent() == previous.parent() && decl.kind() == previous.kind()
                     && (decl.pos() == previous.end() || previous.flags().intersects(NodeFlags::Reparsed))
                 {
-                    return None;
+                    continue;
                 }
             }
             // If this is a function or method declaration, get the signature from the @type tag for the sake of optional parameters.
@@ -669,8 +668,8 @@ impl Checker {
             if sig.is_none() {
                 sig = Some(self.get_signature_from_declaration(decl));
             }
-            Some(sig.unwrap())
-        }));
+            result.push(sig.unwrap());
+        }
         result
     }
 

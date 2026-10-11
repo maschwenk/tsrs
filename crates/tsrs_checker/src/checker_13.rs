@@ -103,7 +103,8 @@ impl Checker {
                 // named unions' constituents answers every constituent's question; the binary searches, one per
                 // named union per constituent, were most of the `compare_types` calls on the 38k-file codebase.
                 let mut named: FxHashSet<P<Type>> = FxHashSet::default();
-                named.extend(named_unions.iter().flat_map(|u| u.types().iter().copied()));
+                // Extend each known-length constituent slice so the set reserves before inserting.
+                named_unions.iter().for_each(|u| named.extend(u.types().iter().copied()));
                 reduced_types.extend(type_set.iter().copied().filter(|t| !named.contains(t)));
             } else {
                 reduced_types
@@ -1312,15 +1313,16 @@ fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type
 // so they take `c` like `compare_types`.
 /// `maybe_type_of_kind` of any of `types`.
 /// A loop rather than `any` with a closure: the recursive closure was not inlined, a call per constituent.
+/// Rechecked in notes/perf-iterator-regressions.md; keep this loop when refactoring iterator use.
 fn maybe_constituent_of_kind(types: &[P<Type>], kind: TypeFlags) -> bool {
-    if types.iter().any(|&t| {
+    for &t in types {
         let flags = t.flags();
         if flags.intersects(kind) {
             return true;
         }
-        flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind)
-    }) {
-        return true;
+        if flags.intersects(TypeFlags::UnionOrIntersection) && maybe_constituent_of_kind(t.types(), kind) {
+            return true;
+        }
     }
     false
 }

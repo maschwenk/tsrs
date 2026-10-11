@@ -140,6 +140,11 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
+  0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic
+  search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone
+  does not establish equivalent cost. The note records the isolated cause and the corrected branch's measurements.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.

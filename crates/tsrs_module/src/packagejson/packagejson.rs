@@ -73,7 +73,9 @@ impl Fields {
             if let Some(deps) = deps.get_value() {
                 let mut sorted: Vec<(&String, &String)> = deps.iter().collect();
                 sorted.sort_unstable_by(|a, b| a.0.cmp(b.0));
-                sorted.into_iter().all(|(name, version)| f(name, version, field));
+                if !sorted.into_iter().all(|(name, version)| f(name, version, field)) {
+                    return;
+                }
             }
         }
     }
