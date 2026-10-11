@@ -1,4 +1,5 @@
 use std::cell::OnceCell;
+use std::collections::hash_map::Entry;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, Kind, ModifierFlags, Node, NodeFlags, NodeId, SourceFile, Symbol, SymbolFlags};
@@ -1152,15 +1153,19 @@ impl LanguageService {
             if let Some(response_calls) = response.call_hierarchy_incoming_calls {
                 for call in response_calls {
                     let location = lsproto::Location { uri: call.from.uri.clone(), range: call.from.selection_range };
-                    if let Some(&existing) = seen.get(&location) {
-                        for from_range in call.from_ranges {
-                            if !calls[existing].from_ranges.contains(&from_range) {
-                                calls[existing].from_ranges.push(from_range);
+                    match seen.entry(location) {
+                        Entry::Occupied(entry) => {
+                            let existing = *entry.get();
+                            for from_range in call.from_ranges {
+                                if !calls[existing].from_ranges.contains(&from_range) {
+                                    calls[existing].from_ranges.push(from_range);
+                                }
                             }
                         }
-                    } else {
-                        seen.insert(location, calls.len());
-                        calls.push(call);
+                        Entry::Vacant(entry) => {
+                            entry.insert(calls.len());
+                            calls.push(call);
+                        }
                     }
                 }
             }
@@ -1185,15 +1190,19 @@ impl LanguageService {
         for declaration in declarations {
             for call in self.get_outgoing_calls(program, declaration) {
                 let location = lsproto::Location { uri: call.to.uri.clone(), range: call.to.selection_range };
-                if let Some(&existing) = seen.get(&location) {
-                    for from_range in call.from_ranges {
-                        if !calls[existing].from_ranges.contains(&from_range) {
-                            calls[existing].from_ranges.push(from_range);
+                match seen.entry(location) {
+                    Entry::Occupied(entry) => {
+                        let existing = *entry.get();
+                        for from_range in call.from_ranges {
+                            if !calls[existing].from_ranges.contains(&from_range) {
+                                calls[existing].from_ranges.push(from_range);
+                            }
                         }
                     }
-                } else {
-                    seen.insert(location, calls.len());
-                    calls.push(call);
+                    Entry::Vacant(entry) => {
+                        entry.insert(calls.len());
+                        calls.push(call);
+                    }
                 }
             }
         }

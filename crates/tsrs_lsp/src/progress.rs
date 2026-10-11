@@ -225,8 +225,7 @@ impl projectLoadingProgress {
                 selected::event(ev) => {
                     let text = self.reporter.localize(ev.message, &ev.args);
                     if !ev.finish {
-                        let count = loading.get(&text).copied().unwrap_or(0);
-                        loading.insert(text.clone(), count + 1);
+                        *loading.entry(text.clone()).or_default() += 1;
                         if token.is_empty() {
                             token_id += 1;
                             token = format!("tsgo-loading-{}", token_id);
@@ -243,11 +242,12 @@ impl projectLoadingProgress {
                             begun = self.begin_or_report(&token, &text, begun);
                         }
                     } else {
-                        let count = loading.get(&text).copied().unwrap_or(0);
-                        if count <= 1 {
-                            loading.shift_remove(&text);
-                        } else {
-                            loading.insert(text.clone(), count - 1);
+                        if let Some(count) = loading.get_mut(&text) {
+                            if *count <= 1 {
+                                loading.shift_remove(&text);
+                            } else {
+                                *count -= 1;
+                            }
                         }
                         if token.is_empty() {
                             continue;

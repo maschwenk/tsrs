@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use indexmap::map::Entry;
 use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeList, SourceFile};
 use tsrs_core::collections::OrderedMap;
@@ -929,10 +930,13 @@ impl Tracker {
 
     // tracker.go:723
     fn get_insert_node_at_start_insert_options(&mut self, source_file: P<SourceFile>, node: P<Node>, indentation: i32) -> NodeOptions {
-        let has_previous_insertion = self.nodes_with_insertions_at_start.contains_key(&node);
-        if !has_previous_insertion {
-            self.nodes_with_insertions_at_start.insert(node, nodesInsertedAtStartState { node, source_file });
-        }
+        let has_previous_insertion = match self.nodes_with_insertions_at_start.entry(node) {
+            Entry::Occupied(_) => true,
+            Entry::Vacant(entry) => {
+                entry.insert(nodesInsertedAtStartState { node, source_file });
+                false
+            }
+        };
 
         let members = get_members_or_properties(node);
         let is_object_literal = ast::is_object_literal_expression(node);

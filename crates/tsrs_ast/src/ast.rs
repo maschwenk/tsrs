@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::collections::hash_map::Entry;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Once, OnceLock, RwLock};
@@ -2067,17 +2068,9 @@ impl SourceFile {
                     || is_private_identifier(node)
                 {
                     let text = node.text();
-                    if name_table.contains_key(text) {
-                        name_table.insert(text, NameTableEntry::Multiple);
-                    } else {
-                        name_table.insert(
-                            text,
-                            NameTableEntry::Unique(
-                                node.pos()
-                                    .expect_source("parsed names have source positions"),
-                            ),
-                        );
-                    }
+                    name_table.entry(text)
+                        .and_modify(|entry| *entry = NameTableEntry::Multiple)
+                        .or_insert_with(|| NameTableEntry::Unique(node.pos().expect_source("parsed names have source positions")));
                 }
 
                 node.for_each_child(&mut |c| walk(c, file, name_table));
@@ -2435,20 +2428,25 @@ impl SourceFile {
         let mut token_cache = self.token_cache.lock().unwrap();
         let loc = TextRange::new(pos, end);
         let key = TokenCacheKey { parent, loc };
-        if let Some(&token) = token_cache.get(&key) {
-            if token.kind() != kind {
-                panic!("Token cache mismatch: {:?} != {:?}", token.kind(), kind);
+        match token_cache.entry(key) {
+            Entry::Occupied(entry) => {
+                let token = *entry.get();
+                if token.kind() != kind {
+                    panic!("Token cache mismatch: {:?} != {:?}", token.kind(), kind);
+                }
+                token
             }
-            return token;
+            Entry::Vacant(entry) => {
+                if parent.flags().intersects(NodeFlags::Reparsed) {
+                    panic!("Cannot create token from reparsed node of kind {:?}", parent.kind());
+                }
+                let token = create_token(kind, self, pos, end, flags);
+                token.set_loc(loc);
+                token.set_parent(Some(parent));
+                entry.insert(token);
+                token
+            }
         }
-        if parent.flags().intersects(NodeFlags::Reparsed) {
-            panic!("Cannot create token from reparsed node of kind {:?}", parent.kind());
-        }
-        let token = create_token(kind, self, pos, end, flags);
-        token.set_loc(loc);
-        token.set_parent(Some(parent));
-        token_cache.insert(key, token);
-        token
     }
 }
 

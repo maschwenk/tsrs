@@ -144,16 +144,13 @@ impl ImportAdder for importAdder {
                 });
 
                 if fix.import_kind == lsproto::ImportKind::Named {
-                    let prev_type_only = entry.named_imports.get(&symbol_name).map(|p| p.add_as_type_only).unwrap_or_default();
-                    entry.named_imports.insert(
-                        symbol_name.clone(),
-                        newImportBinding {
-                            kind: lsproto::ImportKind::Named,
-                            name: symbol_name,
-                            add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
-                            property_name: existing_fix.named_import.as_ref().unwrap().property_name.clone(),
-                        },
-                    );
+                    let binding = entry.named_imports.entry(symbol_name.clone()).or_default();
+                    *binding = newImportBinding {
+                        kind: lsproto::ImportKind::Named,
+                        name: symbol_name,
+                        add_as_type_only: reduce_add_as_type_only_values(binding.add_as_type_only, fix.add_as_type_only),
+                        property_name: existing_fix.named_import.as_ref().unwrap().property_name.clone(),
+                    };
                 } else {
                     // Default import
                     assert!(
@@ -190,32 +187,26 @@ impl ImportAdder for importAdder {
                     }
 
                     lsproto::ImportKind::Named => {
-                        let prev_type_only = entry.named_imports.get(&symbol_name).map(|p| p.add_as_type_only).unwrap_or_default();
-                        entry.named_imports.insert(
-                            symbol_name.clone(),
-                            newImportBinding {
-                                kind: lsproto::ImportKind::Named,
-                                name: symbol_name,
-                                add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
-                                // !!! propertyName
-                                ..Default::default()
-                            },
-                        );
+                        let binding = entry.named_imports.entry(symbol_name.clone()).or_default();
+                        *binding = newImportBinding {
+                            kind: lsproto::ImportKind::Named,
+                            name: symbol_name,
+                            add_as_type_only: reduce_add_as_type_only_values(binding.add_as_type_only, fix.add_as_type_only),
+                            // !!! propertyName
+                            ..Default::default()
+                        };
                     }
 
                     lsproto::ImportKind::CommonJS => {
                         if compiler_options.verbatim_module_syntax == tsrs_core::Tristate::True {
-                            let prev_type_only = entry.named_imports.get(&symbol_name).map(|p| p.add_as_type_only).unwrap_or_default();
-                            entry.named_imports.insert(
-                                symbol_name.clone(),
-                                newImportBinding {
-                                    kind: lsproto::ImportKind::CommonJS,
-                                    name: symbol_name,
-                                    add_as_type_only: reduce_add_as_type_only_values(prev_type_only, fix.add_as_type_only),
-                                    // !!! propertyName
-                                    ..Default::default()
-                                },
-                            );
+                            let binding = entry.named_imports.entry(symbol_name.clone()).or_default();
+                            *binding = newImportBinding {
+                                kind: lsproto::ImportKind::CommonJS,
+                                name: symbol_name,
+                                add_as_type_only: reduce_add_as_type_only_values(binding.add_as_type_only, fix.add_as_type_only),
+                                // !!! propertyName
+                                ..Default::default()
+                            };
                         } else {
                             assert!(
                                 entry.namespace_like_import.as_ref().is_none_or(|n| n.name == symbol_name),
@@ -352,31 +343,14 @@ impl importAdder {
         // require two separate import declarations, so we build this into the map key.
         let type_only_key = new_imports_key(module_specifier, true /*topLevelTypeOnly*/);
         let non_type_only_key = new_imports_key(module_specifier, false /*topLevelTypeOnly*/);
-        let has_type_only_entry = self.new_imports.contains_key(&type_only_key);
-        let has_non_type_only_entry = self.new_imports.contains_key(&non_type_only_key);
-        let new_entry = importsCollection { use_require, ..Default::default() };
-
-        if import_kind == lsproto::ImportKind::Default && add_as_type_only == lsproto::AddAsTypeOnly::Required {
-            if has_type_only_entry {
-                return self.new_imports.get_mut(&type_only_key).unwrap();
-            }
-            self.new_imports.insert(type_only_key.clone(), new_entry);
-            return self.new_imports.get_mut(&type_only_key).unwrap();
-        }
-
-        if add_as_type_only == lsproto::AddAsTypeOnly::Allowed && (has_type_only_entry || has_non_type_only_entry) {
-            if has_type_only_entry {
-                return self.new_imports.get_mut(&type_only_key).unwrap();
-            }
-            return self.new_imports.get_mut(&non_type_only_key).unwrap();
-        }
-
-        if has_non_type_only_entry {
-            return self.new_imports.get_mut(&non_type_only_key).unwrap();
-        }
-
-        self.new_imports.insert(non_type_only_key.clone(), new_entry);
-        self.new_imports.get_mut(&non_type_only_key).unwrap()
+        let key = if (import_kind == lsproto::ImportKind::Default && add_as_type_only == lsproto::AddAsTypeOnly::Required)
+            || (add_as_type_only == lsproto::AddAsTypeOnly::Allowed && self.new_imports.contains_key(&type_only_key))
+        {
+            type_only_key
+        } else {
+            non_type_only_key
+        };
+        self.new_imports.entry(key).or_insert_with(|| importsCollection { use_require, ..Default::default() })
     }
 
     // import_adder.go:374

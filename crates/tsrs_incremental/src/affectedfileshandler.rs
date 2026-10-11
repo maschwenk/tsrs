@@ -5,8 +5,9 @@
 // order is random. The declaration signatures of the files referencing a changed file are computed a level at a
 // time with one emit per level, which runs each checker's files on that checker's thread (getFilesAffectedBy).
 
-use std::rc::Rc;
 use std::cell::{Cell, RefCell};
+use std::collections::hash_map::Entry;
+use std::rc::Rc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, SourceFile, SymbolFlags};
@@ -202,7 +203,7 @@ impl affectedFilesHandler<'_> {
         while !frontier.is_empty() {
             let mut level: Vec<Option<P<SourceFile>>> = Vec::new();
             level.extend(frontier.into_iter().filter_map(|current_path| {
-                if let std::collections::hash_map::Entry::Vacant(entry) = seen_file_names_map.entry(current_path) {
+                if let Entry::Vacant(entry) = seen_file_names_map.entry(current_path) {
                     let current_file = self.program.p().get_source_file_by_path(entry.key());
                     entry.insert(current_file);
                     Some(current_file)
@@ -248,10 +249,10 @@ impl affectedFilesHandler<'_> {
         seen_file_names_map.insert(file.path().clone(), Some(file));
         let mut queue = sorted(self.program.snapshot.referenced_map.get_referenced_by(file.path()));
         while let Some(current_path) = queue.pop() {
-            if !seen_file_names_map.contains_key(&current_path) {
-                let current_file = self.program.p().get_source_file_by_path(&current_path);
-                seen_file_names_map.insert(current_path.clone(), current_file);
-                let (queue_for_file, fast_return) = f(current_file, &current_path);
+            if let Entry::Vacant(entry) = seen_file_names_map.entry(current_path) {
+                let current_file = self.program.p().get_source_file_by_path(entry.key());
+                let entry = entry.insert_entry(current_file);
+                let (queue_for_file, fast_return) = f(current_file, entry.key());
                 if fast_return {
                     return seen_file_names_map;
                 }

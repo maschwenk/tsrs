@@ -1,11 +1,11 @@
 // Port of tsc/internal/api/module_resolution.go (static + callback module resolvers, createModuleResolver /
 // releaseModuleResolver / resolveModuleName) and tsc/internal/module/staticresolver.go.
 
-use std::sync::Weak;
-use rustc_hash::FxHashMap;
+use std::collections::hash_map::Entry;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, Weak};
 
+use rustc_hash::FxHashMap;
 use tsrs_core::context::Context;
 use tsrs_core::json::{self, Value};
 use tsrs_core::tspath::{self, Path};
@@ -412,10 +412,14 @@ impl Session {
             };
             let mode = mode_from(e.get("resolutionMode"), &format!("module resolution entry {i}"))?;
             let key = StaticKey { module_name: module_name.clone(), directory, mode };
-            if entries.contains_key(&key) {
-                return Err(ApiError::client(format!("duplicate static module resolution for {module_name:?}")));
+            match entries.entry(key) {
+                Entry::Occupied(_) => {
+                    return Err(ApiError::client(format!("duplicate static module resolution for {module_name:?}")));
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(static_resolution_to_resolved_module(e.get("result"), &cwd)?);
+                }
             }
-            entries.insert(key, static_resolution_to_resolved_module(e.get("result"), &cwd)?);
         }
         Ok(Some(Arc::new(StaticResolutions { fallback_to_resolver: fallback, entries, current_directory: cwd, use_case_sensitive_file_names: self.use_case_sensitive_file_names() })))
     }

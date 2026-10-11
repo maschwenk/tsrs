@@ -145,9 +145,10 @@ impl<T: Named + Clone> Index<T> {
             } else {
                 // Subsequent word starts keyed by lowercase
                 first = to_lower(first);
-                if !seen_runes.get(&first).copied().unwrap_or(false) {
+                let seen = seen_runes.entry(first).or_default();
+                if !*seen {
                     self.index.entry(first).or_default().push(entry_index);
-                    seen_runes.insert(first, true);
+                    *seen = true;
                 }
             }
         }

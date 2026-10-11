@@ -1,4 +1,6 @@
+use std::collections::hash_map::Entry;
 use std::sync::Arc;
+
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, ModifierFlags, Node, SourceFile, Symbol};
 use tsrs_checker::{self as checker, Checker, Type};
@@ -244,12 +246,15 @@ fn get_missing_members(type_checker: &mut Checker, class_declaration: P<Node>, i
             if class_members.is_some_and(|m| m.lookup(symbol.name()).is_some()) {
                 return None;
             }
-            if inherited_members.contains_key(symbol.name()) || seen_members.contains_key(symbol.name()) {
+            if inherited_members.contains_key(symbol.name()) {
                 return None;
             }
+            let Entry::Vacant(entry) = seen_members.entry(symbol.name()) else {
+                return None;
+            };
             let flags = checker::get_declaration_modifier_flags_from_symbol_exported(symbol);
             if !flags.intersects(ModifierFlags::Private) {
-                seen_members.insert(symbol.name(), symbol);
+                entry.insert(symbol);
                 Some(symbol)
             } else {
                 None

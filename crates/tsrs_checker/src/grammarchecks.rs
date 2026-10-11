@@ -1256,16 +1256,17 @@ impl Checker {
                     continue;
                 }
 
-                let existing_kind = seen.get(&effective_name).copied().unwrap_or_default();
+                let entry = seen.entry(effective_name).or_default();
+                let existing_kind = *entry;
                 if existing_kind.is_empty() {
-                    seen.insert(effective_name, current_kind);
+                    *entry = current_kind;
                 } else if current_kind.intersects(DeclarationMeaning::Method) && existing_kind.intersects(DeclarationMeaning::Method) {
                     self.grammar_error_on_node(name, &diagnostics::Duplicate_identifier_0, &[&scanner::get_text_of_node(name)]);
                 } else if current_kind.intersects(DeclarationMeaning::PropertyAssignment) && existing_kind.intersects(DeclarationMeaning::PropertyAssignment) {
                     self.grammar_error_on_node(name, &diagnostics::An_object_literal_cannot_have_multiple_properties_with_the_same_name, &[&scanner::get_text_of_node(name)]);
                 } else if current_kind.intersects(DeclarationMeaning::GetOrSetAccessor) && existing_kind.intersects(DeclarationMeaning::GetOrSetAccessor) {
                     if existing_kind != DeclarationMeaning::GetOrSetAccessor && current_kind != existing_kind {
-                        seen.insert(effective_name, current_kind | existing_kind);
+                        *entry = current_kind | existing_kind;
                     } else {
                         return self.grammar_error_on_node(name, &diagnostics::An_object_literal_cannot_have_multiple_get_Slashset_accessors_with_the_same_name, &[]);
                     }

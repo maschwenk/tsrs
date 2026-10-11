@@ -1,10 +1,13 @@
-use crate::stringutil;
-use crate::stringutil::{decode_rune, push_rune, unicode_to_lower};
-use rustc_hash::{FxHashMap, FxHashSet};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::fmt;
 use std::ops::Deref;
+
+use rustc_hash::{FxHashMap, FxHashSet};
+
+use crate::stringutil;
+use crate::stringutil::{decode_rune, push_rune, unicode_to_lower};
 
 #[derive(Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct Path(pub std::sync::Arc<str>);
@@ -1256,10 +1259,13 @@ fn get_common_parents_worker(component_groups: &[Vec<String>], min_components: u
                     let mut new_groups: FxHashMap<Path, (Vec<String>, Vec<Vec<String>>)> = FxHashMap::default();
                     for g in component_groups {
                         let key = to_path(&g[last_common_index], &options.current_directory, options.use_case_sensitive_file_names);
-                        if !new_groups.contains_key(&key) {
-                            ordered_groups.push(key.clone());
-                        }
-                        let entry = new_groups.entry(key).or_default();
+                        let entry = match new_groups.entry(key) {
+                            Entry::Occupied(entry) => entry.into_mut(),
+                            Entry::Vacant(entry) => {
+                                ordered_groups.push(entry.key().clone());
+                                entry.insert(Default::default())
+                            }
+                        };
                         entry.0 = g[..last_common_index + 1].to_vec();
                         entry.1.push(g[last_common_index + 1..].to_vec());
                     }

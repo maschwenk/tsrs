@@ -2396,14 +2396,11 @@ impl<'a> RefState<'a> {
     // (see `add_to_group`).
     // findallreferences.go:1991
     pub(crate) fn reference_adder(&mut self, search_symbol: P<Symbol>) -> usize {
-        if let Some(&index) = self.symbol_to_references.get(&search_symbol) {
-            return index;
-        }
-        let symbol_and_entries = new_symbol_and_entries(DefinitionKind::Symbol, None, Some(search_symbol), Vec::new());
-        self.result.push(symbol_and_entries);
-        let index = self.result.len() - 1;
-        self.symbol_to_references.insert(search_symbol, index);
-        index
+        *self.symbol_to_references.entry(search_symbol).or_insert_with(|| {
+            let symbol_and_entries = new_symbol_and_entries(DefinitionKind::Symbol, None, Some(search_symbol), Vec::new());
+            self.result.push(symbol_and_entries);
+            self.result.len() - 1
+        })
     }
 
     fn add_to_group(&mut self, index: usize, node: P<Node>, kind: EntryKind) {

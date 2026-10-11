@@ -1,5 +1,6 @@
-use std::fmt::Write as _;
 use std::any::Any;
+use std::collections::hash_map::Entry;
+use std::fmt::Write as _;
 use std::io::{Read, Write};
 use std::panic::AssertUnwindSafe;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -8,13 +9,12 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use rustc_hash::{FxHashMap, FxHashSet};
+use tsrs_core::CompilerOptions;
+use tsrs_core::collections::{OrderedMap, Set};
 use tsrs_core::context::{self, CancelCauseFunc, CancelFunc, Context, ContextError, Locale};
 use tsrs_lsproto as lsproto;
 use tsrs_lsproto::jsonrpc::{self, MessageKind, ID};
 use tsrs_lsproto::{Error, ErrorCode, ErrorTag, Json, Message, Method, RequestMessage, ResponseMessage};
-use tsrs_core::collections::OrderedMap;
-use tsrs_core::CompilerOptions;
-use tsrs_core::collections::Set;
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
 use tsrs_ls::{lsutil, LanguageService};
@@ -1860,10 +1860,11 @@ impl Server {
                         deduped.extend(text_document_edit.edits.iter().filter_map(|edit| {
                             if let Some(text_edit) = &edit.text_edit {
                                 let key = (uri.clone(), text_edit.range);
-                                if seen_edits.get(&key).is_some_and(|prev| *prev == text_edit.new_text) {
+                                let entry = seen_edits.entry(key);
+                                if matches!(&entry, Entry::Occupied(entry) if *entry.get() == text_edit.new_text) {
                                     return None;
                                 }
-                                seen_edits.insert(key, text_edit.new_text.clone());
+                                entry.insert_entry(text_edit.new_text.clone());
                             }
                             Some(edit.clone())
                         }));

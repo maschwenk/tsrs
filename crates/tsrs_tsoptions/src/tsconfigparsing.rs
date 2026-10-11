@@ -1769,7 +1769,7 @@ fn parse_json_config_file_content_worker(
                     content_mapper_source_file,
                     ext_node,
                 ));
-            } else if seen_content_mapper_extensions.contains(canonical_ext.as_str()) {
+            } else if !seen_content_mapper_extensions.insert(canonical_ext) {
                 errors.push(set_content_mapper_diagnostic_location(
                     new_compiler_diagnostic(
                         &diagnostics::Content_mapper_file_extension_0_is_registered_by_more_than_one_content_mapper,
@@ -1779,7 +1779,6 @@ fn parse_json_config_file_content_worker(
                     ext_node,
                 ));
             } else {
-                seen_content_mapper_extensions.insert(canonical_ext.clone());
                 content_mapper_extensions.push(ext.clone());
                 valid_extensions.push(ext.clone());
             }

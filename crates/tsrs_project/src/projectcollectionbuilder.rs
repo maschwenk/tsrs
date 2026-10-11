@@ -267,12 +267,13 @@ impl ProjectCollectionBuilder {
             let mut api_state = self.api_state.borrow_mut();
             #[expect(clippy::iter_over_hash_type, reason = "each unique key adjusts only its own counter and set membership; Go ranges the set too")]
             for project_path in close_projects.keys() {
-                let count = api_state.open_projects.get(project_path).copied().unwrap_or(0);
-                if count > 1 {
-                    api_state.open_projects.insert(project_path.clone(), count - 1);
-                } else if count == 1 {
-                    api_state.open_projects.remove(project_path);
-                    projects_to_close.get_or_insert_with(FxHashSet::default).insert(project_path.clone());
+                if let Some(count) = api_state.open_projects.get_mut(project_path) {
+                    if *count > 1 {
+                        *count -= 1;
+                    } else if *count == 1 {
+                        api_state.open_projects.remove(project_path);
+                        projects_to_close.get_or_insert_with(FxHashSet::default).insert(project_path.clone());
+                    }
                 }
             }
         }
@@ -301,9 +302,9 @@ impl ProjectCollectionBuilder {
             let mut api_state = self.api_state.borrow_mut();
             #[expect(clippy::iter_over_hash_type, reason = "per-key refcount update on unique keys; Go ranges the set too")]
             for path in close_files.keys() {
-                if let Some(entry) = api_state.open_files.get(path).cloned() {
+                if let Some(entry) = api_state.open_files.get_mut(path) {
                     if entry.ref_count > 1 {
-                        api_state.open_files.insert(path.clone(), apiOpenedFile { ref_count: entry.ref_count - 1, ..entry });
+                        entry.ref_count -= 1;
                     } else {
                         api_state.open_files.remove(path);
                     }

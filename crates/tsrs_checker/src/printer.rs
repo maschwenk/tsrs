@@ -1,9 +1,12 @@
+use std::collections::hash_map::Entry;
 use std::rc::Rc;
-use crate::*;
+
+use rustc_hash::FxHashMap;
+use tsrs_ast as ast;
 use tsrs_ast::*;
 use tsrs_core::*;
-use tsrs_ast as ast;
-use rustc_hash::FxHashMap;
+
+use crate::*;
 
 // Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
 // gosig into this directory: it rewrites every file listed in checker.json.
@@ -1096,10 +1099,9 @@ impl Checker {
             let mut visited_symbol_tables_map = ctx.visited_symbol_tables_map.borrow_mut();
             let visited_symbol_tables = visited_symbol_tables_map.entry(sym_id).or_default();
 
-            if visited_symbol_tables.contains(&table_id) {
+            if !visited_symbol_tables.insert(table_id) {
                 return Vec::new();
             }
-            visited_symbol_tables.insert(table_id);
         }
 
         let res = self.try_symbol_table(ctx, t, table_id, ignore_qualification, is_local_name_lookup);
@@ -1680,13 +1682,13 @@ impl ModuleExportIndex {
     fn add_file_with_target(&mut self, target: P<Symbol>, file: u32) {
         let node = u32::try_from(self.files.len()).expect("module export index too large");
         match self.by_target.entry(target) {
-            std::collections::hash_map::Entry::Occupied(mut head) => {
+            Entry::Occupied(mut head) => {
                 if self.files[*head.get() as usize].0 != file {
                     self.files.push((file, *head.get()));
                     *head.get_mut() = node;
                 }
             }
-            std::collections::hash_map::Entry::Vacant(head) => {
+            Entry::Vacant(head) => {
                 self.files.push((file, Self::END));
                 head.insert(node);
             }

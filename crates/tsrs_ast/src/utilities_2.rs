@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::sync::LazyLock;
 
 use rustc_hash::FxHashMap;
@@ -917,13 +918,18 @@ pub(crate) fn get_module_instance_state_cached(
     visited: &mut FxHashMap<NodeId, ModuleInstanceState>,
 ) -> ModuleInstanceState {
     let node_id = get_node_id(node);
-    if let Some(&cached) = visited.get(&node_id) {
-        if cached != ModuleInstanceState::Unknown {
-            return cached;
+    match visited.entry(node_id) {
+        Entry::Occupied(entry) => {
+            let cached = *entry.get();
+            if cached != ModuleInstanceState::Unknown {
+                return cached;
+            }
+            return ModuleInstanceState::NonInstantiated;
         }
-        return ModuleInstanceState::NonInstantiated;
+        Entry::Vacant(entry) => {
+            entry.insert(ModuleInstanceState::Unknown);
+        }
     }
-    visited.insert(node_id, ModuleInstanceState::Unknown);
     let result = get_module_instance_state_worker(node, ancestors, visited);
     visited.insert(node_id, result);
     result

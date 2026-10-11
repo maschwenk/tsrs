@@ -140,6 +140,12 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Combined symbol lookup/insert APIs from PR 338 (`notes/perf-lookup-insert.md`): the repository-wide refactor
+  originally increased single-threaded instructions on 11/17 public projects. Restoring the existing symbol-table
+  lookup/insertion paths and binder/checker symbol creation, while keeping ordinary map-entry cleanup, leaves all
+  17 below main by 0.021-0.312% on Linux. The grouped reversion is measured; individual helper costs are not.
+  Revisit only with an isolated implementation that preserves hit-path cost. No standalone speed or memory win.
+
 - Within the flow-walk skip (notes/perf-flow-skip-unnarrowed.md, landed): computing an assertion candidate's effects
   signature in the skip check instead of peeking at it (overflowed the 512 MB stack on vscode: it starts resolution
   chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);

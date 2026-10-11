@@ -506,10 +506,11 @@ impl isolatedDeclarationsFixer<'_> {
     // codeactions_fixmissingtypeannotation.go:568
     fn fix_isolated_declaration_error(&mut self, node: P<Node>) -> String {
         // Avoid creating duplicate fixes for the same node
-        if self.fixed_nodes.get(&node).copied().unwrap_or(false) {
+        let fixed = self.fixed_nodes.entry(node).or_default();
+        if *fixed {
             return String::new();
         }
-        self.fixed_nodes.insert(node, true);
+        *fixed = true;
 
         match node.kind() {
             Kind::Parameter | Kind::PropertyDeclaration | Kind::VariableDeclaration => self.add_type_to_variable_like(node),

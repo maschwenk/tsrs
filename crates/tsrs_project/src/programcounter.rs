@@ -1,3 +1,4 @@
+use std::collections::hash_map::Entry;
 use std::sync::Mutex;
 
 use rustc_hash::FxHashMap;
@@ -24,17 +25,18 @@ impl programCounter {
     // programcounter.go:25
     pub(crate) fn deref(&self, program: &'static Program) -> bool {
         let mut refs = self.mu.lock().unwrap();
-        let Some(&count) = refs.get(&key(program)) else {
+        let Entry::Occupied(mut entry) = refs.entry(key(program)) else {
             return false;
         };
-        let count = count
+        let count = entry
+            .get()
             .checked_sub(1)
             .expect("program reference count went below zero");
         if count == 0 {
-            refs.remove(&key(program));
+            entry.remove();
             return true;
         }
-        refs.insert(key(program), count);
+        *entry.get_mut() = count;
         false
     }
 

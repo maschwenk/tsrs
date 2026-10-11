@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
@@ -71,16 +73,20 @@ impl<'a> projectReferenceParser<'a> {
         for task_slot in tasks.iter_mut() {
             let task = *task_slot;
             let path = self.to_path(&self.tasks[task].config_name);
-            if let Some(&loaded_task) = self.tasks_by_file_name.get(&path) {
-                // dedup tasks to ensure correct file order, regardless of which task would be started first
-                *task_slot = loaded_task;
-            } else {
-                self.tasks_by_file_name.insert(path, task);
-                self.parse_task(task);
-                let mut sub_tasks = std::mem::take(&mut self.tasks[task].sub_tasks);
-                self.start(&mut sub_tasks);
-                self.tasks[task].sub_tasks = sub_tasks;
+            match self.tasks_by_file_name.entry(path) {
+                Entry::Occupied(entry) => {
+                    // dedup tasks to ensure correct file order, regardless of which task would be started first
+                    *task_slot = *entry.get();
+                    continue;
+                }
+                Entry::Vacant(entry) => {
+                    entry.insert(task);
+                }
             }
+            self.parse_task(task);
+            let mut sub_tasks = std::mem::take(&mut self.tasks[task].sub_tasks);
+            self.start(&mut sub_tasks);
+            self.tasks[task].sub_tasks = sub_tasks;
         }
     }
 

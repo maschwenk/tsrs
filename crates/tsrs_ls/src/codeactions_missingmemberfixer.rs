@@ -654,8 +654,9 @@ pub(crate) fn create_dummy_parameters(
             format!("arg{}", i)
         };
 
-        let count = parameter_name_counts.get(&parameter_name).copied().unwrap_or(0);
-        parameter_name_counts.insert(parameter_name.clone(), count + 1);
+        let count_entry = parameter_name_counts.entry(parameter_name.clone()).or_default();
+        let count = *count_entry;
+        *count_entry += 1;
 
         if count > 0 {
             parameter_name += &count.to_string();

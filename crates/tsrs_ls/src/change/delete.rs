@@ -237,8 +237,9 @@ fn delete_node_in_list(t: &mut Tracker, deleted_nodes_in_lists: &mut OrderedMap<
 
     // Note: We will only delete a comma *after* a node. This will leave a trailing comma if we delete the last node.
     // That's handled in the end by finishTrailingCommaAfterDeletingNodesInList.
-    assert!(!deleted_nodes_in_lists.get(&node).copied().unwrap_or(false), "Deleting a node twice");
-    deleted_nodes_in_lists.insert(node, true);
+    let deleted = deleted_nodes_in_lists.entry(node).or_default();
+    assert!(!*deleted, "Deleting a node twice");
+    *deleted = true;
 
     let start_pos = t.start_position_to_delete_node_in_list(source_file, node);
     let end_pos = if index == containing_list.nodes().len() - 1 {

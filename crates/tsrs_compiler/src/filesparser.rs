@@ -1,4 +1,6 @@
+use std::collections::hash_map::Entry;
 use std::sync::Arc;
+
 use rayon::prelude::*;
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, Node, SourceFile, SourceFileMetaData};
@@ -1072,17 +1074,23 @@ impl filesParser {
 
                     if let Some(seen_ignore_case) = &mut tasks_seen_by_name_ignore_case {
                         let path_lower_case = tspath::to_file_name_lower_case(loader.tasks[task].path.as_str());
-                        if let Some(&task_by_ignore_case) = seen_ignore_case.get(&path_lower_case) {
-                            let (p, n) =
-                                (loader.tasks[task_by_ignore_case].path.clone(), loader.tasks[task_by_ignore_case].normalized_file_path.to_string());
-                            include_data.add_processing_diagnostics_for_file_casing(
-                                p,
-                                &n,
-                                loader.tasks[task].normalized_file_path.as_ref(),
-                                include_reason,
-                            );
-                        } else {
-                            seen_ignore_case.insert(path_lower_case, task);
+                        match seen_ignore_case.entry(path_lower_case) {
+                            Entry::Occupied(entry) => {
+                                let task_by_ignore_case = *entry.get();
+                                let (p, n) = (
+                                    loader.tasks[task_by_ignore_case].path.clone(),
+                                    loader.tasks[task_by_ignore_case].normalized_file_path.to_string(),
+                                );
+                                include_data.add_processing_diagnostics_for_file_casing(
+                                    p,
+                                    &n,
+                                    loader.tasks[task].normalized_file_path.as_ref(),
+                                    include_reason,
+                                );
+                            }
+                            Entry::Vacant(entry) => {
+                                entry.insert(task);
+                            }
                         }
                     }
 

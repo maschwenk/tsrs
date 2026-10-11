@@ -1919,14 +1919,12 @@ impl Program {
                 };
 
                 // Report error if multiple files write into same file
-                if emit_files_seen.contains(&emit_file_key) {
+                if !emit_files_seen.insert(emit_file_key) {
                     // Already seen the same emit file - report error
                     self.block_emitting_of_file(
                         emit_file_name,
                         new_compiler_diagnostic(&diagnostics::Cannot_write_file_0_because_it_would_be_overwritten_by_multiple_input_files, &[emit_file_name]),
                     );
-                } else {
-                    emit_files_seen.insert(emit_file_key);
                 }
             }
         }

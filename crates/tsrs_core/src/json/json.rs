@@ -2,8 +2,11 @@
 // type with Go-compatible encoding (v2 defaults: no HTML escaping, invalid UTF-8 allowed,
 // ES6 number formatting) and a strict RFC 8259 parser.
 
-use crate::collections::OrderedMap;
 use std::fmt::Write;
+
+use indexmap::map::Entry;
+
+use crate::collections::OrderedMap;
 
 #[derive(Clone, Debug, PartialEq, Default)]
 pub enum Value {
@@ -298,10 +301,14 @@ impl JsonParser<'_> {
                     self.pos += 1;
                     self.skip_ws();
                     let value = self.parse_value()?;
-                    if members.contains_key(&key) {
-                        return self.err(&format!("duplicate object member name {}", marshal_string(&key)));
+                    match members.entry(key) {
+                        Entry::Occupied(entry) => {
+                            return self.err(&format!("duplicate object member name {}", marshal_string(entry.key())));
+                        }
+                        Entry::Vacant(entry) => {
+                            entry.insert(value);
+                        }
                     }
-                    members.insert(key, value);
                     self.skip_ws();
                     match self.s.get(self.pos) {
                         Some(b',') => self.pos += 1,

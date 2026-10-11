@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+
 use rustc_hash::FxHashMap;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::{self, Value};
@@ -218,13 +220,13 @@ impl Generator {
             &self.path_options,
         );
 
-        let source_index = match self.source_to_source_index_map.get(&source) {
-            Some(&source_index) => source_index,
-            None => {
+        let source_index = match self.source_to_source_index_map.entry(source) {
+            Entry::Occupied(entry) => *entry.get(),
+            Entry::Vacant(entry) => {
                 let source_index = SourceIndex::Index(self.sources.len() as u32);
-                self.sources.push(source.clone());
+                self.sources.push(entry.key().clone());
                 self.raw_sources.push(file_name.to_string());
-                self.source_to_source_index_map.insert(source, source_index);
+                entry.insert(source_index);
                 source_index
             }
         };

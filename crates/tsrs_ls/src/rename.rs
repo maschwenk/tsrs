@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+
 use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, Type};
@@ -51,13 +53,17 @@ fn deduplicate_rename_edits(mapped_edits: Vec<mappedRenameEdit>) -> Option<Order
     let mut unique_edits: Vec<mappedRenameEdit> = Vec::with_capacity(mapped_edits.len());
     for mapped_edit in mapped_edits {
         let key = renameEditKey { uri: mapped_edit.uri.clone(), text_range: mapped_edit.edit.range };
-        if let Some(existing_text) = edit_texts.get(&key) {
-            if *existing_text != mapped_edit.edit.new_text {
-                return None;
+        match edit_texts.entry(key) {
+            Entry::Occupied(entry) => {
+                if *entry.get() != mapped_edit.edit.new_text {
+                    return None;
+                }
+                continue;
             }
-            continue;
+            Entry::Vacant(entry) => {
+                entry.insert(mapped_edit.edit.new_text.clone());
+            }
         }
-        edit_texts.insert(key, mapped_edit.edit.new_text.clone());
         unique_edits.push(mapped_edit);
     }
     let mut changes: OrderedMap<lsproto::DocumentUri, Vec<lsproto::TextEdit>> = OrderedMap::default();

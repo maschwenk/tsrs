@@ -1,6 +1,7 @@
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
+use indexmap::map::Entry;
 use rustc_hash::FxHashMap;
 use tsrs_compiler::Program;
 use tsrs_core::collections::{OrderedMap, Set};
@@ -98,11 +99,10 @@ impl LanguageService {
             item: projectAndTextDocumentPosition<'a>,
         ) {
             let id = item.project.id();
-            if results.contains_key(&id) {
-                return;
+            if let Entry::Vacant(entry) = results.entry(id) {
+                entry.insert(response::default());
+                queue.push(item);
             }
-            results.insert(id, response::default());
-            queue.push(item);
         }
 
         // Initial set of projects and locations in the queue, starting with default project

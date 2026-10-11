@@ -1438,11 +1438,9 @@ impl getCompletionDataState {
                         false, /*isJsxIdentifierExpected*/
                     );
                     if !display_name.is_empty() {
-                        let mut original_sort_text = self.symbol_to_sort_text_map.get(&symbol_id).cloned().unwrap_or_default();
-                        if original_sort_text.is_empty() {
-                            original_sort_text = SORT_TEXT_LOCATION_PRIORITY.to_string();
-                        }
-                        self.symbol_to_sort_text_map.insert(symbol_id, object_literal_property_sort_text(&original_sort_text, &display_name));
+                        let sort_text = self.symbol_to_sort_text_map.entry(symbol_id).or_default();
+                        let original_sort_text = if sort_text.is_empty() { SORT_TEXT_LOCATION_PRIORITY } else { sort_text.as_str() };
+                        *sort_text = object_literal_property_sort_text(original_sort_text, &display_name);
                     }
                 }
             }

@@ -9,9 +9,10 @@
 // removed when the region owning the file is freed (`Region::on_free` runs before the memory is reused), so a
 // table never outlives the nodes it points to; files outside any region live for the process.
 
-use rustc_hash::FxHashMap;
+use std::collections::hash_map::Entry;
 use std::sync::{Arc, Mutex};
 
+use rustc_hash::FxHashMap;
 use tsrs_api_codec::{self as codec, NodeIndexTable};
 use tsrs_ast::{Node, SourceFile, SourceFileParseOptions};
 use tsrs_compiler::Program;
@@ -115,10 +116,12 @@ impl Session {
     /// Go `GetOrComputeData`: keeps an existing table for the file, else stores `table`.
     fn store_table(&self, addr: usize, table: Arc<NodeIndexTable>) -> Arc<NodeIndexTable> {
         let mut tables = self.source_files.tables.lock().unwrap();
-        if let Some(t) = tables.get(&addr) {
-            return Arc::clone(t);
+        match tables.entry(addr) {
+            Entry::Occupied(entry) => return Arc::clone(entry.get()),
+            Entry::Vacant(entry) => {
+                entry.insert(Arc::clone(&table));
+            }
         }
-        tables.insert(addr, Arc::clone(&table));
         drop(tables);
         if let Some(region) = tsrs_core::arena::Region::containing(addr) {
             let weak = self.weak_self();

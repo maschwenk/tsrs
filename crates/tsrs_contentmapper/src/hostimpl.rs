@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::hash_map::Entry;
 use std::fmt;
 use std::io::{self, Write};
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
@@ -1204,9 +1205,10 @@ impl Host for host {
         let (Some(conns), Some(projects), Some(project_leases)) = (conns, projects, project_leases) else {
             return None;
         };
-        if let Some(lease) = project_leases.get(&key) {
-            return Some(lease.retain_locked());
-        }
+        let lease_entry = match project_leases.entry(key) {
+            Entry::Occupied(entry) => return Some(entry.get().retain_locked()),
+            Entry::Vacant(entry) => entry,
+        };
         let mut entries = OrderedMap::with_capacity_and_hasher(spec.mappers.len(), Default::default());
         for &mapper in &spec.mappers {
             let entry_key = format!("{}:{}", mapper.identity(), next_project_id);
@@ -1226,13 +1228,13 @@ impl Host for host {
         }
         let lease = Arc::new(projectLease {
             host: self.this.upgrade().expect("a content mapper host is alive while it is used"),
-            key: key.clone(),
+            key: lease_entry.key().clone(),
             mappers: spec.mappers.clone(),
             entries,
             refs: AtomicUsize::new(1),
             once: Once::new(),
         });
-        project_leases.insert(key, Arc::clone(&lease));
+        lease_entry.insert(Arc::clone(&lease));
         Some(lease)
     }
 

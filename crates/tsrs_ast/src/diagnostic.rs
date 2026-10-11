@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::cmp::Ordering;
+use std::collections::hash_map::Entry;
 use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -433,21 +434,21 @@ impl DiagnosticsCollection {
 
     pub fn add(&mut self, diagnostic: P<Diagnostic>) -> P<Diagnostic> {
         let key = get_diagnostic_location_key(diagnostic);
-        if let Some(&existing) = self.diagnostic_index.get(&key) {
-            if equal_diagnostics(existing, diagnostic) {
-                return existing;
+        match self.diagnostic_index.entry(key) {
+            Entry::Vacant(e) => {
+                e.insert(diagnostic);
             }
-            if let Some(collisions) = self.diagnostic_collisions.get(&key) {
+            Entry::Occupied(e) => {
+                let existing = *e.get();
+                if equal_diagnostics(existing, diagnostic) {
+                    return existing;
+                }
+                let collisions = self.diagnostic_collisions.entry(e.key().clone()).or_default();
                 if let Some(result) = collisions.iter().find_map(|&collision| if equal_diagnostics(collision, diagnostic) { Some(collision) } else { None }) {
                     return result;
                 }
+                collisions.push(diagnostic);
             }
-        }
-        match self.diagnostic_index.entry(key) {
-            std::collections::hash_map::Entry::Vacant(e) => {
-                e.insert(diagnostic);
-            }
-            std::collections::hash_map::Entry::Occupied(e) => self.diagnostic_collisions.entry(e.key().clone()).or_default().push(diagnostic),
         }
 
         self.count += 1;

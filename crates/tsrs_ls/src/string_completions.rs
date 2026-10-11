@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol};
@@ -867,10 +868,16 @@ impl LanguageService {
             }
 
             if fragment_directory.is_empty() {
-                if !seen.get(&package_name).copied().unwrap_or(false) {
-                    result.add(moduleCompletionNameAndKind { name: package_name.clone(), kind: moduleCompletionKind::ExternalModuleName, extension: String::new() });
-                    seen.insert(package_name, true);
+                let entry = seen.entry(package_name);
+                if matches!(&entry, Entry::Occupied(entry) if *entry.get()) {
+                    continue;
                 }
+                result.add(moduleCompletionNameAndKind {
+                    name: entry.key().clone(),
+                    kind: moduleCompletionKind::ExternalModuleName,
+                    extension: String::new(),
+                });
+                entry.insert_entry(true);
             } else {
                 let base_directory = tspath::combine_paths(directory, &[&type_directory_name]);
                 let remaining_fragment = try_remove_directory_prefix(fragment_directory, &package_name, program.use_case_sensitive_file_names());

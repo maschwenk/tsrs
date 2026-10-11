@@ -11,6 +11,7 @@
 // snapshot's `SnapshotData` is dropped (`CheckerSnapshotState::drop`, right after `SnapshotData::drop` derefs the
 // project snapshot); no request can reach the registry by then, and after release every lookup fails.
 
+use std::collections::hash_map::Entry;
 use std::sync::Mutex;
 
 use rustc_hash::FxHashMap;
@@ -100,10 +101,10 @@ impl CheckerRegistry {
         let id = tsrs_ast::get_symbol_id(symbol).0;
         let mut st = self.lock();
         Self::check_live(&st)?;
-        match st.symbols.get(&id) {
-            Some(existing) => assert!(*existing == symbol, "duplicate symbol"),
-            None => {
-                st.symbols.insert(id, symbol);
+        match st.symbols.entry(id) {
+            Entry::Occupied(entry) => assert!(*entry.get() == symbol, "duplicate symbol"),
+            Entry::Vacant(entry) => {
+                entry.insert(symbol);
             }
         }
         let project = st.symbol_projects.entry(id).or_insert_with(|| canonical_project.to_string()).clone();
@@ -136,10 +137,10 @@ impl CheckerRegistry {
         let mut st = self.lock();
         Self::check_live(&st)?;
         let reg = Self::project_for_checker(&mut st, project, checker_id);
-        match reg.types.get(&id) {
-            Some(existing) => assert!(*existing == t, "duplicate type"),
-            None => {
-                reg.types.insert(id, t);
+        match reg.types.entry(id) {
+            Entry::Occupied(entry) => assert!(*entry.get() == t, "duplicate type"),
+            Entry::Vacant(entry) => {
+                entry.insert(t);
             }
         }
         Ok(id)
@@ -171,10 +172,10 @@ impl CheckerRegistry {
         let mut st = self.lock();
         Self::check_live(&st)?;
         let reg = Self::project_for_checker(&mut st, project, checker_id);
-        match reg.signatures.get(&id) {
-            Some(existing) => assert!(*existing == sig, "duplicate signature"),
-            None => {
-                reg.signatures.insert(id, sig);
+        match reg.signatures.entry(id) {
+            Entry::Occupied(entry) => assert!(*entry.get() == sig, "duplicate signature"),
+            Entry::Vacant(entry) => {
+                entry.insert(sig);
             }
         }
         Ok(id)

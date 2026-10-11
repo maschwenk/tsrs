@@ -521,14 +521,9 @@ impl Checker {
                                     key_types.clear();
                                     key_types_of = of;
                                 }
-                                let t = match key_types.get(&target) {
-                                    Some(&t) => t,
-                                    None => {
-                                        let t = self.get_type_of_property_of_type(target, key_property.name());
-                                        key_types.insert(target, t);
-                                        t
-                                    }
-                                };
+                                let t = *key_types
+                                    .entry(target)
+                                    .or_insert_with(|| self.get_type_of_property_of_type(target, key_property.name()));
                                 if let Some(t) = t {
                                     if is_unit_type(t) && Some(self.get_regular_type_of_literal_type(t)) != key_property_type {
                                         continue;

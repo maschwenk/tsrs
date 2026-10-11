@@ -1,10 +1,13 @@
-use crate::*;
+use std::collections::hash_map::Entry;
+
+use rustc_hash::FxHashMap;
+use tsrs_ast as ast;
 use tsrs_ast::*;
 use tsrs_core::*;
-use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
-use rustc_hash::FxHashMap;
+
+use crate::*;
 
 // Generated as signature stubs by tools/gosig (checker.json); the bodies have since been ported by hand. Do not re-run
 // gosig into this directory: it rewrites every file listed in checker.json.
@@ -1009,11 +1012,12 @@ impl Checker {
             let base_with_this = self.get_type_with_this_argument(base, t.as_interface_type().this_type.get(), false);
             let properties = self.get_properties_of_type(base_with_this);
             for &prop in properties {
-                match seen.get(prop.name()).map(|e| (e.prop, e.containing_type)) {
-                    None => {
-                        seen.insert(prop.name(), InheritanceInfo { prop, containing_type: base });
+                match seen.entry(prop.name()) {
+                    Entry::Vacant(entry) => {
+                        entry.insert(InheritanceInfo { prop, containing_type: base });
                     }
-                    Some((existing_prop, existing_containing_type)) => {
+                    Entry::Occupied(entry) => {
+                        let InheritanceInfo { prop: existing_prop, containing_type: existing_containing_type } = *entry.get();
                         let is_inherited_property = existing_containing_type != t;
                         if is_inherited_property && !self.is_property_identical_to(existing_prop, prop) {
                             identical = false;

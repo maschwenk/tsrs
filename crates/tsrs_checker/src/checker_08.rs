@@ -174,12 +174,7 @@ impl Checker {
     // system ignores case) and hashes it, per import of every resolution; its tables do not change while checking.
     fn get_source_file_for_resolved_module(&mut self, file_name: &'static str) -> Option<P<SourceFile>> {
         let key = (file_name.as_ptr() as usize, file_name.len());
-        if let Some(&file) = self.resolved_module_source_files.get(&key) {
-            return file;
-        }
-        let file = self.program.get_source_file_for_resolved_module(file_name);
-        self.resolved_module_source_files.insert(key, file);
-        file
+        *self.resolved_module_source_files.entry(key).or_insert_with(|| self.program.get_source_file_for_resolved_module(file_name))
     }
 
     // checker.go:15399

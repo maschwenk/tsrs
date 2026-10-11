@@ -1,11 +1,14 @@
-use crate::*;
+use std::collections::hash_map::Entry;
+use std::fmt::Display;
+
+use rustc_hash::FxHashMap;
+use tsrs_ast as ast;
 use tsrs_ast::*;
 use tsrs_core::*;
-use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
-use rustc_hash::FxHashMap;
-use std::fmt::Display;
+
+use crate::*;
 
 // Non-function declarations in relater.go:1-2579 live in relater_types.rs.
 
@@ -1867,13 +1870,13 @@ impl Checker {
                 let mut duplicate = false;
                 for d in discriminant.distributed_iter() {
                     let key = self.get_regular_type_of_literal_type(d);
-                    match types_by_key.get(&key).copied() {
-                        None => {
-                            types_by_key.insert(key, t);
+                    match types_by_key.entry(key) {
+                        Entry::Vacant(entry) => {
+                            entry.insert(t);
                         }
-                        Some(existing) => {
-                            if existing != self.unknown_type {
-                                types_by_key.insert(key, self.unknown_type);
+                        Entry::Occupied(mut entry) => {
+                            if *entry.get() != self.unknown_type {
+                                entry.insert(self.unknown_type);
                                 duplicate = true;
                             }
                         }

@@ -136,9 +136,7 @@ pub fn breadth_first_search_parallel_ex<K: Hash + Eq + Clone, N: Clone + 'static
         for jobs in next {
             for j in jobs {
                 let key = get_key(&j.node);
-                if !next_jobs.has(&key) {
-                    next_jobs.set(key, j);
-                }
+                next_jobs.entry(key).or_insert(j);
             }
         }
         level = next_jobs;

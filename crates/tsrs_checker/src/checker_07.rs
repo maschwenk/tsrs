@@ -809,8 +809,7 @@ impl Checker {
             if skipped_private_members.contains(left_prop.name()) || !self.is_spreadable_property(left_prop) {
                 continue;
             }
-            if members.lookup(left_prop.name()).is_some() {
-                let right_prop = members.lookup(left_prop.name()).unwrap();
+            if let Some(right_prop) = members.lookup(left_prop.name()) {
                 let right_type = self.get_type_of_symbol(right_prop);
                 if right_prop.flags().intersects(SymbolFlags::Optional) {
                     let mut declarations = left_prop.declarations().to_vec();

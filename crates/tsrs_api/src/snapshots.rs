@@ -2,6 +2,7 @@
 // createSnapshotResponse / computeSnapshotChanges / handleRelease / handleGetDefaultProjectForFile, and
 // proto.go NewProjectResponse.
 
+use std::collections::hash_map::Entry;
 use std::sync::Arc;
 
 use rustc_hash::FxHashMap;
@@ -186,8 +187,9 @@ impl Session {
             let file_name = d.to_absolute_file_name(&cwd);
             let path = self.to_path(&file_name);
             let open = req.open_files.get_or_insert_with(FxHashMap::default);
-            if !open.contains_key(&path) {
-                open.insert(path.clone(), file_name.clone());
+            if let Entry::Vacant(entry) = open.entry(path) {
+                let path = entry.key().clone();
+                entry.insert(file_name.clone());
                 req.ensure_files.insert(path, file_name);
             }
         }
