@@ -1517,6 +1517,124 @@ pub fn arena_pin() {
     with_arena(|a| a.bump_epoch());
 }
 
+/// A UTF-8 string constructed directly in the current arena.
+///
+/// Growing allocates a larger arena block and leaves the previous block behind, as a bump allocator cannot free it.
+/// Give the builder a realistic initial capacity when possible. Like every arena allocation API in this module, a
+/// builder must not outlive or cross the allocation scope in which it was created.
+pub struct ArenaStringBuilder {
+    ptr: std::ptr::NonNull<u8>,
+    len: usize,
+    capacity: usize,
+}
+
+impl ArenaStringBuilder {
+    /// Creates an empty builder without allocating.
+    #[inline]
+    pub fn new() -> ArenaStringBuilder {
+        ArenaStringBuilder { ptr: std::ptr::NonNull::dangling(), len: 0, capacity: 0 }
+    }
+
+    /// Creates an empty builder with at least `capacity` bytes allocated in the current arena.
+    #[inline]
+    #[cfg_attr(feature = "alloc-profile", track_caller)]
+    pub fn with_capacity(capacity: usize) -> ArenaStringBuilder {
+        if capacity == 0 {
+            return ArenaStringBuilder::new();
+        }
+        ArenaStringBuilder { ptr: arena_string_capacity(capacity), len: 0, capacity }
+    }
+
+    /// Number of initialized UTF-8 bytes.
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    #[inline]
+    fn reserve(&mut self, additional: usize) {
+        let required = self.len.checked_add(additional).expect("arena string length overflow");
+        if required > self.capacity {
+            self.grow(required);
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn grow(&mut self, required: usize) {
+        let doubled = self.capacity.checked_mul(2).unwrap_or(required);
+        let capacity = doubled.max(required).max(16);
+        let ptr = arena_string_capacity(capacity);
+        if self.len != 0 {
+            // SAFETY: the old block contains `len` initialized bytes, and the new block has `capacity >= len` bytes.
+            // Separate arena allocations do not overlap.
+            unsafe { std::ptr::copy_nonoverlapping(self.ptr.as_ptr(), ptr.as_ptr(), self.len) };
+        }
+        self.ptr = ptr;
+        self.capacity = capacity;
+    }
+
+    #[inline]
+    pub fn push_str(&mut self, value: &str) {
+        self.reserve(value.len());
+        if !value.is_empty() {
+            // SAFETY: reserve left at least `value.len()` bytes after `len`; the source is a valid separate `str`.
+            unsafe { std::ptr::copy_nonoverlapping(value.as_ptr(), self.ptr.as_ptr().add(self.len), value.len()) };
+            self.len += value.len();
+        }
+    }
+
+    #[inline]
+    pub fn push(&mut self, value: char) {
+        let mut bytes = [0; 4];
+        self.push_str(value.encode_utf8(&mut bytes));
+    }
+
+    /// Finalizes the builder. The returned string lives as long as the arena allocation scope.
+    #[inline]
+    pub fn into_str(self) -> &'static str {
+        if self.len == 0 {
+            return "";
+        }
+        // SAFETY: the first `len` bytes were written only by `push_str` and `push`, so they are valid UTF-8. The
+        // allocation is in the arena and follows this module's arena-lifetime contract.
+        #[expect(clippy::disallowed_methods, reason = "the builder preserves UTF-8 validity by construction")]
+        unsafe { std::str::from_utf8_unchecked(std::slice::from_raw_parts(self.ptr.as_ptr(), self.len)) }
+    }
+}
+
+impl Default for ArenaStringBuilder {
+    fn default() -> Self {
+        ArenaStringBuilder::new()
+    }
+}
+
+impl fmt::Write for ArenaStringBuilder {
+    fn write_str(&mut self, value: &str) -> fmt::Result {
+        self.push_str(value);
+        Ok(())
+    }
+
+    fn write_char(&mut self, value: char) -> fmt::Result {
+        self.push(value);
+        Ok(())
+    }
+}
+
+#[inline]
+#[cfg_attr(feature = "alloc-profile", track_caller)]
+fn arena_string_capacity(capacity: usize) -> std::ptr::NonNull<u8> {
+    let layout = std::alloc::Layout::from_size_align(capacity, 1).expect("arena string capacity overflow");
+    let ptr = with_arena(|a| a.alloc_layout(layout));
+    profile!(str, capacity, ptr.addr().get());
+    ptr
+}
+
 /// Copies a string into the arena.
 #[inline]
 #[cfg_attr(feature = "alloc-profile", track_caller)]
@@ -1673,6 +1791,11 @@ mod tests {
         let v = alloc_vec(vec![String::from("a"), String::from("b")]);
         assert_eq!(v.len(), 2);
         assert_eq!(alloc_str("hello"), "hello");
+        let mut builder = ArenaStringBuilder::with_capacity(2);
+        builder.push_str("hello");
+        builder.push(' ');
+        builder.push_str("🦀");
+        assert_eq!(builder.into_str(), "hello 🦀");
     }
 
     #[test]

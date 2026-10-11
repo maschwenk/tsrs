@@ -32,13 +32,13 @@
 //! on rewind, as the Go parser does.
 
 use std::borrow::Cow;
-use std::fmt::Display;
+use std::fmt::{Display, Write as _};
 use std::sync::OnceLock;
 
 use rustc_hash::FxHashMap;
 use tsrs_ast as ast;
 use tsrs_ast::{CommentDirective, CommentDirectiveKind, CommentRange, Kind, Node, NodeFlags, SourceFile, SourceFileLike, TokenFlags};
-use tsrs_core::{alloc_str, jsnum, stringutil, LanguageVariant, ScriptTarget, TextPos, TextRange, UTF16Offset, P};
+use tsrs_core::{alloc_str, jsnum, stringutil, ArenaStringBuilder, LanguageVariant, ScriptTarget, TextPos, TextRange, UTF16Offset, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 
@@ -770,10 +770,10 @@ impl Scanner {
             let start = a_start - base;
             return &self.text[start..start + a.len() + b.len()];
         }
-        let mut s = String::with_capacity(a.len() + b.len());
+        let mut s = ArenaStringBuilder::with_capacity(a.len() + b.len());
         s.push_str(a);
         s.push_str(b);
-        alloc_str(&s)
+        s.into_str()
     }
 
     /// Returns `s` as a `'static` value without copying if it already is a slice of the text.
@@ -1098,7 +1098,10 @@ impl Scanner {
                         if raw_text.starts_with("0x") && &raw_text[2..] == digits {
                             self.state.token_value = raw_text;
                         } else {
-                            self.state.token_value = alloc_str(&format!("0x{digits}"));
+                            let mut value = ArenaStringBuilder::with_capacity(2 + digits.len());
+                            value.push_str("0x");
+                            value.push_str(digits);
+                            self.state.token_value = value.into_str();
                         }
                         self.pin_unless_source(digits, self.state.token_value);
                         self.hex_number_cache.insert(digits, self.state.token_value);
@@ -1108,23 +1111,25 @@ impl Scanner {
                 }
                 if self.char_at(1) == 'B' as i32 || self.char_at(1) == 'b' as i32 {
                     self.state.pos += 2;
-                    let mut digits = self.scan_binary_or_octal_digits(2);
-                    if digits.is_empty() {
+                    let (value, has_digits) = self.scan_binary_or_octal_digits(2, "0b");
+                    if !has_digits {
                         self.error(&diagnostics::Binary_digit_expected);
-                        digits = "0".to_string();
+                        self.state.token_value = "0b0";
+                    } else {
+                        self.state.token_value = value;
                     }
-                    self.state.token_value = alloc_str(&format!("0b{digits}"));
                     self.state.token_flags |= TokenFlags::BinarySpecifier;
                     break 'digit self.scan_big_int_suffix();
                 }
                 if self.char_at(1) == 'O' as i32 || self.char_at(1) == 'o' as i32 {
                     self.state.pos += 2;
-                    let mut digits = self.scan_binary_or_octal_digits(8);
-                    if digits.is_empty() {
+                    let (value, has_digits) = self.scan_binary_or_octal_digits(8, "0o");
+                    if !has_digits {
                         self.error(&diagnostics::Octal_digit_expected);
-                        digits = "0".to_string();
+                        self.state.token_value = "0o0";
+                    } else {
+                        self.state.token_value = value;
                     }
-                    self.state.token_value = alloc_str(&format!("0o{digits}"));
                     self.state.token_flags |= TokenFlags::OctalSpecifier;
                     break 'digit self.scan_big_int_suffix();
                 }
@@ -1957,11 +1962,11 @@ impl Scanner {
             if let Some(escaped) =
                 self.scan_identifier_escape(|ch| is_identifier_start(ch), variant == IdentifierVariant::RegExpGroupName)
             {
-                let mut value = String::new();
+                let mut value = ArenaStringBuilder::with_capacity((self.state.pos - start) as usize * 2);
                 value.push_str(self.slice(start, identifier_start));
                 value.push(rune_to_char(escaped));
                 value.push_str(self.scan_identifier_parts(variant));
-                self.state.token_value = alloc_str(&value);
+                self.state.token_value = value.into_str();
                 return true;
             }
         }
@@ -1969,7 +1974,7 @@ impl Scanner {
     }
 
     fn scan_identifier_parts(&mut self, variant: IdentifierVariant) -> &'static str {
-        let mut sb: Option<String> = None;
+        let mut sb: Option<ArenaStringBuilder> = None;
         let mut start = self.state.pos;
         let language_variant = if variant == IdentifierVariant::JSX { LanguageVariant::JSX } else { LanguageVariant::Standard };
         loop {
@@ -1984,7 +1989,8 @@ impl Scanner {
                     |ch| is_identifier_part_ex(ch, language_variant),
                     variant == IdentifierVariant::RegExpGroupName,
                 ) {
-                    let sb = sb.get_or_insert_with(String::new);
+                    let so_far = (escape_start - start) as usize;
+                    let sb = sb.get_or_insert_with(|| ArenaStringBuilder::with_capacity((so_far * 2).max(16)));
                     sb.push_str(self.slice(start, escape_start));
                     sb.push(rune_to_char(escaped));
                     start = self.state.pos;
@@ -1997,7 +2003,7 @@ impl Scanner {
             None => self.slice(start, self.state.pos),
             Some(mut sb) => {
                 sb.push_str(self.slice(start, self.state.pos));
-                alloc_str(&sb)
+                sb.into_str()
             }
         }
     }
@@ -2037,6 +2043,7 @@ impl Scanner {
         self.state.pos += 1;
         // Fast path for simple strings without escape sequences.
         let rest = &self.text.as_bytes()[self.state.pos as usize..];
+        let mut capacity = 16;
         if let Some(str_len) = memchr::memchr(quote as u8, rest) {
             if str_len == 0 {
                 self.state.pos += 1;
@@ -2048,8 +2055,9 @@ impl Scanner {
                 self.state.pos += str_len as i32 + 1;
                 return s;
             }
+            capacity = str_len;
         }
-        let mut sb = String::new();
+        let mut sb = ArenaStringBuilder::with_capacity(capacity);
         let mut start = self.state.pos;
         loop {
             let ch = self.char();
@@ -2079,7 +2087,7 @@ impl Scanner {
             }
             self.state.pos += 1;
         }
-        self.intern_value(&sb)
+        sb.into_str()
     }
 
     fn scan_template_and_set_token_value(&mut self, should_emit_invalid_escape_error: bool) -> Kind {
@@ -2087,7 +2095,7 @@ impl Scanner {
         self.state.pos += 1;
         let mut start = self.state.pos;
         // Go collects the parts in a slice and joins them; a single untouched part is a text slice.
-        let mut parts: Option<String> = None;
+        let mut parts: Option<ArenaStringBuilder> = None;
         let token;
         loop {
             self.scan_ascii_while(|b| b != b'`' && b != b'$' && b != b'\\' && b != b'\r');
@@ -2112,7 +2120,8 @@ impl Scanner {
                 break;
             }
             if ch == '\\' as i32 {
-                let buf = parts.get_or_insert_with(String::new);
+                let so_far = (self.state.pos - start) as usize;
+                let buf = parts.get_or_insert_with(|| ArenaStringBuilder::with_capacity((so_far * 2).max(16)));
                 buf.push_str(self.slice(start, self.state.pos));
                 let flags = EscapeSequenceScanningFlags::String
                     | if should_emit_invalid_escape_error { EscapeSequenceScanningFlags::ReportErrors } else { EscapeSequenceScanningFlags::empty() };
@@ -2124,7 +2133,8 @@ impl Scanner {
             // Speculated ECMAScript 6 Spec 11.8.6.1:
             // <CR><LF> and <CR> LineTerminatorSequences are normalized to <LF> for Template Values
             if ch == '\r' as i32 {
-                let buf = parts.get_or_insert_with(String::new);
+                let so_far = (self.state.pos - start) as usize;
+                let buf = parts.get_or_insert_with(|| ArenaStringBuilder::with_capacity((so_far * 2).max(16)));
                 buf.push_str(self.slice(start, self.state.pos));
                 self.state.pos += 1;
                 if self.char() == '\n' as i32 {
@@ -2139,12 +2149,12 @@ impl Scanner {
         token
     }
 
-    fn finish_template_parts(&mut self, parts: &mut Option<String>, start: i32, end: i32) {
+    fn finish_template_parts(&mut self, parts: &mut Option<ArenaStringBuilder>, start: i32, end: i32) {
         self.state.token_value = match parts.take() {
             None => self.slice(start, end),
             Some(mut buf) => {
                 buf.push_str(self.slice(start, end));
-                alloc_str(&buf)
+                buf.into_str()
             }
         };
     }
@@ -2457,7 +2467,9 @@ impl Scanner {
                     fixed_part = Cow::Borrowed(digits);
                 } else {
                     let val = parse_int_64(digits, 8);
-                    self.state.token_value = alloc_str(&val.to_string());
+                    let mut value = ArenaStringBuilder::with_capacity(digits.len());
+                    write!(value, "{val}").unwrap();
+                    self.state.token_value = value.into_str();
                     self.state.token_flags |= TokenFlags::Octal;
                     let with_minus = self.state.token == Kind::MinusToken;
                     let literal = format!("{}0o{:o}", if with_minus { "-" } else { "" }, val);
@@ -2496,7 +2508,13 @@ impl Scanner {
             }
         }
         if self.state.token_flags.intersects(TokenFlags::ContainsSeparator) {
-            let mut value = String::from(&*fixed_part);
+            let capacity = fixed_part.len()
+                + usize::from(!fractional_part.is_empty())
+                + fractional_part.len()
+                + exponent_preamble.len()
+                + exponent_part.len();
+            let mut value = ArenaStringBuilder::with_capacity(capacity);
+            value.push_str(&fixed_part);
             if !fractional_part.is_empty() {
                 value.push('.');
                 value.push_str(&fractional_part);
@@ -2505,7 +2523,7 @@ impl Scanner {
                 value.push_str(exponent_preamble);
                 value.push_str(&exponent_part);
             }
-            self.state.token_value = self.intern_value(&value);
+            self.state.token_value = value.into_str();
         } else {
             self.state.token_value = self.slice(start, end);
         }
@@ -2648,17 +2666,18 @@ impl Scanner {
             cached
         } else {
             let original = digits;
-            let mut result = Cow::Borrowed(digits);
-            if self.state.token_flags.intersects(TokenFlags::ContainsSeparator) {
-                result = Cow::Owned(result.replace('_', ""));
-            }
-            // standardize hex literals to lowercase
-            if result.bytes().any(|b| b.is_ascii_uppercase()) {
-                result = Cow::Owned(result.to_ascii_lowercase());
-            }
-            let digits = match result {
-                Cow::Borrowed(s) => s,
-                Cow::Owned(s) => alloc_str(&s),
+            let has_separator = self.state.token_flags.intersects(TokenFlags::ContainsSeparator);
+            let has_uppercase = digits.bytes().any(|b| b.is_ascii_uppercase());
+            let digits = if has_separator || has_uppercase {
+                let mut result = ArenaStringBuilder::with_capacity(digits.len());
+                for byte in digits.bytes() {
+                    if byte != b'_' {
+                        result.push(byte.to_ascii_lowercase() as char);
+                    }
+                }
+                result.into_str()
+            } else {
+                digits
             };
             self.pin_unless_source(original, digits);
             self.hex_digit_cache.insert(original, digits);
@@ -2666,14 +2685,17 @@ impl Scanner {
         }
     }
 
-    fn scan_binary_or_octal_digits(&mut self, base: i32) -> String {
-        let mut sb = String::new();
+    fn scan_binary_or_octal_digits(&mut self, base: i32, prefix: &str) -> (&'static str, bool) {
+        let mut sb = ArenaStringBuilder::with_capacity(16);
+        sb.push_str(prefix);
+        let mut has_digits = false;
         let mut allow_separator = false;
         let mut is_previous_token_separator = false;
         loop {
             let ch = self.char();
             if stringutil::is_digit(ch) && ch - ('0' as i32) < base {
                 sb.push(ch as u8 as char);
+                has_digits = true;
                 allow_separator = true;
                 is_previous_token_separator = false;
             } else if ch == '_' as i32 {
@@ -2694,7 +2716,7 @@ impl Scanner {
         if is_previous_token_separator {
             self.error_at(&diagnostics::Numeric_separators_are_not_allowed_here, self.state.pos - 1, 1, &[]);
         }
-        sb
+        (sb.into_str(), has_digits)
     }
 
     fn scan_big_int_suffix(&mut self) -> Kind {

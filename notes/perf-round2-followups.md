@@ -156,6 +156,12 @@ with the switch off, which is why it is not in the default build.
   gate). Initially rejected on performance, then both changes were applied at the owner's explicit request on
   2026-10-11 to align with Oxc. These measurements do not establish a speedup; further performance work needs a
   numeric-conversion profile or new evidence of a qualifying whole-project improvement.
+- Scanner arena string construction (notes/perf-scanner-arena-builder.md, branch
+  `codex/scanner-arena-builder`): exact over 14,013 public VS Code files; parse-only heap allocations -16.8% and
+  instructions about -0.10%. Abandoned growth buffers add about 0.7 MB of arena requests without changing chunk
+  capacity or peak RSS. Retained as an independent implementation at the owner's request on 2026-10-11. Repeat
+  only with an exact-sizing or composed design that can move whole-project instructions or peak memory across a
+  landing threshold.
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables
