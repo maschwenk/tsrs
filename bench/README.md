@@ -9,10 +9,10 @@ fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two (with b
 has every table, and [the latest results](RESULTS.md) show the 16-vCPU machine's default-mode tables: each compiler at
 its own thread count, tsgo, tsrs and bun check side by side.
 
-The [README chart](results/latest.svg) shows wall time and peak RSS from those `wide` measurements, using the
-PGO-optimized `dist` build. The results commit step runs `bench/publish.py` to generate the tables and SVG together;
-README.md links to stable paths and is not rewritten by CI. Bars are scaled within each project and metric;
-shorter bars are better. Exact values, error comparisons and links to all modes and raw measurements are in the report.
+The [README chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using those
+`wide` measurements and the PGO-optimized `dist` build. The results commit step runs `bench/publish.py` to generate
+the tables and SVG together; README.md links to stable paths and is not rewritten by CI. The cards share the same
+time and memory scales; shorter bars are better. Error comparisons, all modes and raw measurements are in the report.
 
 ```sh
 cargo build --release -p tsrs_cli
@@ -205,16 +205,17 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this
 repository is connected to Depot CI; Depot's runners for GitHub Actions only serve organization-owned repositories, and
 a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions stayed queued). It runs on every push to
-`main` except pushes that touch only `README.md`, `bench/RESULTS.md` or `bench/results/**`, and on `workflow_dispatch`.
+`main` except pushes that touch only `README.md`, `bench/RESULTS.md`, `bench/large-projects.svg` or `bench/results/**`,
+and on `workflow_dispatch`.
 Nobody waits on it, so it is built for unattended runs: one run per push (the concurrency group is the commit, so a push during a run
 starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
 2026-10-07 one shared group let a later push replace the queued bench, and bursts of merges left most commits without
 a results file), never cancelled, network steps retried, and the results commit re-created on top of the latest
-`main` before pushing. Runs overlap and finish in any order, so `bench/RESULTS.md` and `bench/results/latest.svg` keep
-the newest commit's results: a run
-whose commit is an ancestor of the one the table came from (its last line names it) adds its results file and leaves
-the tables and chart alone, and the regression flag compares a run with the nearest earlier benchmarked ancestor of its commit,
-not with the newest file by date. A pull request that changes code must not carry a CI-skip marker in its title, body or commit subjects (CI's
+`main` before pushing. Runs overlap and finish in any order, so `bench/RESULTS.md` and `bench/large-projects.svg` keep
+the newest commit's results: a run whose commit is an ancestor of the one the table came from (its last line names
+it) adds its results file and leaves the tables and chart alone. The regression flag compares a run with the nearest
+earlier benchmarked ancestor of its commit, not with the newest file by date. A pull request that changes code must
+not carry a CI-skip marker in its title, body or commit subjects (CI's
 `skip-marker` job, `tools/ci/skip_marker.py`): `gh pr merge --squash` copies them into the commit message, and such a
 commit lands without CI and without a results file; notes-only pull requests carry the marker on purpose. A commit
 whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst of merges) is backfilled with `depot ci dispatch --repo maschwenk/tsrs --workflow bench.yml --ref main --input
@@ -226,8 +227,7 @@ file is committed, and the tables and chart update only when no newer commit's r
 the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and `measure-wide` 10 for tsrs and
 `bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run).
 [The historical 64-vCPU comparison](RESULTS.md#historical-comparison-on-64-vcpus) uses the 20-run mean of
-`bench-compare.yml`. The README chart updates with the latest tables. The older
-[large-project snapshot](RESULTS.md#large-project-chart-snapshot) retains its original date and source.
+`bench-compare.yml`. The README chart updates with the latest tables.
 
 The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
 Runner vCPUs and checker threads are separate: `cpus=16` with `threads=64` runs 64 software workers on
@@ -265,8 +265,7 @@ once the four application projects were in):
    `measure` jobs' 5 and `measure-wide`'s 10 do; the result records every mode's in `mode_reps`) and that no
    (project, mode) is measured twice; then the regression flag and the results commit. The `Commit results` step
    runs `bench/publish.py` after fetching main on every push retry to keep the tables and chart current together.
-   The machine that
-   measured the most cells is the run's; a cell measured on another records its own `machine`. All `--checkers 16`
+   The machine that measured the most cells is the run's; a cell measured on another records its own `machine`. All `--checkers 16`
    cells do, and the table names their machine. A fixed-spec project measured on a different CPU model or C library
    (so far every `depot-ubuntu-24.04-8` has been the same model) is noted under the table, and the regression flag
    compares that project only with runs on the same model. A run started from a branch

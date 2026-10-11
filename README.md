@@ -13,7 +13,7 @@ pnpm add -D tsrs
 pnpm exec tsrs --noEmit
 ```
 
-[![Benchmark wall time and peak memory for tsgo, tsrs and bun check across seventeen projects](bench/results/latest.svg)](bench/RESULTS.md)
+[![TypeScript 7 versus tsrs: wall time and peak memory on VS Code, T3 Code and MUI docs](bench/large-projects.svg)](bench/RESULTS.md)
 
 ## Compatibility
 

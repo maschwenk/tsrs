@@ -74,44 +74,12 @@ Shared CI machines vary by a few percent between runs of the same code; the sing
 [All modes](results/2026-10-11-fa529e47e5ed.md) · [Raw measurements](results/2026-10-11-fa529e47e5ed.json)
 <!-- bench:end -->
 
-## Large-project chart snapshot
+## README chart
 
-The [historical large-project chart](large-projects.svg) is a static snapshot of the **2026-10-11 14:32 UTC** CI benchmark at
-`tsrs` commit `b8bdd76bf789`, using each project's `wide` results. It shows **median wall time and peak RSS**
-at default settings. CI does not regenerate the SVG.
-
-[Raw measurements](results/2026-10-11-b8bdd76bf789.json) ·
-[All settings](results/2026-10-11-b8bdd76bf789.md) · [Methodology](README.md#what-is-measured)
-
-- **Machine:** Depot `depot-ubuntu-24.04-16`, 16 vCPUs, 63 GiB RAM, Linux x86_64, AMD EPYC 9R45.
-- **TypeScript:** `typescript@7.0.2`, the native Go compiler, 4 checker threads, median of 3 runs.
-- **`tsrs`:** `0.13.0-ts7.1.0-dev.20260929`, PGO-optimized `dist` build with BOLT, built like the npm release;
-  up to 16 checker threads, median of 10 runs. Rust compiler: `rustc 1.99.0 (b940084d7 2026-09-28)`.
-
-The harness interleaves compiler runs, measures process wall time and maximum resident set size, and disables
-incremental compilation. Both native binaries run directly, without a Node launcher.
-
-| Repository and measured project | Files | Time: TypeScript 7 → `tsrs` | Peak memory: TypeScript 7 → `tsrs` | Speedup | Less peak memory |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| [VS Code](https://github.com/microsoft/vscode), `src` | 10,427 | 10.96 s → 0.86 s | 7.63 GiB → 2.09 GiB | **12.7×** | **73%** |
-| [T3 Code](https://github.com/pingdotgg/t3code), `apps/server` | 2,945 | 13.66 s → 1.37 s | 6.19 GiB → 2.14 GiB | **10.0×** | **65%** |
-| [MUI docs](https://github.com/mui/material-ui), `docs` | 16,766 | 12.24 s → 0.86 s | 7.50 GiB → 1.60 GiB | **14.2×** | **79%** |
-
-File counts are `tsrs`'s compiled program files, including dependencies and TypeScript libraries, for the named
-project within each repository. TypeScript 7.0.2 loads 2,941 files for T3 Code; `tsrs` loads 2,945. The other two
-counts agree. Ratios use unrounded medians; GiB means bytes divided by 2³⁰. All three rows share a 0–16 second
-time scale and a 0–8 GiB memory scale.
-
-The compilers follow different TypeScript revisions: `tsrs` ports 7.1-dev commit `b85298b6a81f`. For VS Code and
-T3 Code, the matching nightly `typescript@7.1.0-dev.20260930.4` reports exactly `tsrs`'s diagnostic locations and
-codes. All timed runs completed; VS Code and T3 Code contain diagnostics, so these are completed type checks
-rather than error-free builds.
-
-| Project | Pinned repository commit | Diagnostics: TypeScript 7.0.2 → `tsrs` |
-| --- | --- | ---: |
-| VS Code | `9cf0128b9822` | 359 → 371 |
-| T3 Code | `9bd1d8009a6b` | 5 → 6 |
-| MUI docs | `6780195595c1` | 0 → 0 |
+The [chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using the latest
+`wide` results above. CI redraws it with the summary tables. File counts come from tsrs and include libraries and
+dependencies. All three cards share a time scale and a memory scale; shorter bars are better. Ratios use unrounded
+medians. The SVG metadata records the measured commit, date, hardware and repetition counts.
 
 ## Historical comparison on 64 vCPUs
 

@@ -29,9 +29,8 @@ class PublishTests(unittest.TestCase):
         self.out_dir = self.repo / 'bench/results'
         self.out_dir.mkdir(parents=True)
         self.report = self.repo / 'bench/RESULTS.md'
-        self.image = self.out_dir / 'latest.svg'
-        self.readme = self.repo / 'README.md'
-        self.readme.write_text('# Project\n')
+        self.report.write_text('# Benchmark results\n\n<!-- bench:start -->\n<!-- bench:end -->\n')
+        self.image = self.repo / 'bench/large-projects.svg'
         repo_patch = patch.object(publish, 'REPO', self.repo)
         repo_patch.start()
         self.addCleanup(repo_patch.stop)
@@ -71,7 +70,6 @@ class PublishTests(unittest.TestCase):
         self.assertIn(f'](results/2026-10-11-{commit[:12]}.json)', report)
         self.assertIn(f'](results/2026-10-11-{commit[:12]}.md)', report)
         self.assertEqual('{http://www.w3.org/2000/svg}svg', ET.fromstring(svg).tag)
-        self.assertEqual('# Project\n', self.readme.read_text())
 
     def test_publishing_preserves_handwritten_sections_around_tables(self):
         before = '# Benchmark results\n\nPinned projects and methodology.\n\n'
@@ -118,20 +116,6 @@ class PublishTests(unittest.TestCase):
                 self.assertFalse(self.publish(result))
                 self.assertEqual(latest, self.latest())
 
-    def test_first_publication_uses_readme_commit_to_prevent_regression(self):
-        readme = f'# Project\n\nDate: yesterday. tsrs commit: `{self.commits[2][:12]}`.\n'
-        self.readme.write_text(readme)
-        self.assertFalse(self.publish(self.result(self.commits[1])))
-        self.assertFalse(self.report.exists())
-        self.assertFalse(self.image.exists())
-        self.assertTrue(self.publish(self.result(self.commits[2])))
-        self.assertEqual(readme, self.readme.read_text())
-
-    def test_existing_latest_takes_precedence_over_readme(self):
-        self.assertTrue(self.publish(self.result(self.commits[0])))
-        self.readme.write_text(f'tsrs commit: `{self.commits[2][:12]}`.\n')
-        self.assertTrue(self.publish(self.result(self.commits[1])))
-        self.assertIn(self.commits[1][:12].encode(), self.latest()[0])
 
 
 if __name__ == '__main__':

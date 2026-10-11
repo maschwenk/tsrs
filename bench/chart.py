@@ -1,113 +1,139 @@
 #!/usr/bin/env python3
-"""Draw the README benchmark chart from a recorded result, without running a benchmark."""
+"""Draw the README's three-project chart from a recorded benchmark result."""
 from __future__ import annotations
 
 import argparse
-from html import escape
 import json
 import math
 from pathlib import Path
-import textwrap
+import xml.etree.ElementTree as ET
 
 import run
 
 
-TOOLS = (("tsgo", "tsgo", "#497bc6"), ("tsrs", "tsrs", "#138a7a"), ("bun", "bun check", "#b77915"))
+PROJECTS = (("vscode", "VS Code", "microsoft/vscode · src"),
+            ("t3code-server", "T3 Code", "pingdotgg/t3code · apps/server"),
+            ("mui-docs", "MUI docs", "mui/material-ui · docs"))
+COLORS = {"tsgo": "#3178c6", "tsrs": "#087b5b"}
+GIB = 2**30
 
 
-def svg(result: dict, mode: str = "wide") -> str:
-    """Compare each project's wall time and peak RSS; unavailable samples have no bar."""
-    rows = sorted(((name, project[mode]) for name, project in result["projects"].items() if mode in project),
-                  key=lambda item: run.speedup_sort_key({mode: item[1]}, mode))
-    if not rows:
+def measured(cell: dict, compiler: str, metric: str) -> float | None:
+    sample = cell.get(compiler) or {}
+    value = sample.get(metric)
+    return value if (sample.get("ok_runs") and isinstance(value, (int, float))
+                     and math.isfinite(value) and value >= 0) else None
+
+
+def comparison(metric: str, tsgo: float | None, tsrs: float | None) -> str:
+    if tsgo is None or tsrs is None or tsgo <= 0 or (metric == "wall_s" and tsrs <= 0):
+        return "n/a"
+    if metric == "wall_s":
+        return f"{tsgo / tsrs:.1f}× faster" if tsgo >= tsrs else f"{tsrs / tsgo:.1f}× slower"
+    percent = 100 * (1 - tsrs / tsgo)
+    return f"{abs(percent):.0f}% {'less' if percent >= 0 else 'more'}"
+
+
+def svg(result: dict) -> str:
+    """Keep the original README layout and shared scales, growing scales only when necessary."""
+    mode = "wide"
+    if not any(mode in project for project in result["projects"].values()):
         raise ValueError(f"no benchmark results for mode {mode!r}")
-    tools = TOOLS if any("bun" in cell for _, cell in rows) else TOOLS[:2]
-    whole, odd = run.cell_machines(result)
-    mixed = any(cell_mode == mode for _, cell_mode, _ in odd)
-    machine = whole.get(mode, result["machine"])
-    hardware = "Multiple machines; see the detailed results." if mixed else machine["label"].replace("`", "")
-    if mode in ("default", "wide"):
-        setting = "Default settings" + (f" on {machine['cpus']} vCPUs" if not mixed else "")
-    else:
-        setting = run.MODE_NAMES.get(mode, mode).replace("`", "")
-    metadata = [setting + f" · {len(rows)} projects", *textwrap.wrap(hardware, width=140),
-                run.reps_text(result, [mode]).capitalize() + "."]
-    commit = result["tsrs"]["commit"][:12]
+    cells = {name: result["projects"].get(name, {}).get(mode, {}) for name, _, _ in PROJECTS}
+    scales = {}
+    for metric, minimum, step in (("wall_s", 16, 4), ("peak_rss_bytes", 8 * GIB, 2 * GIB)):
+        maximum = max((measured(cell, compiler, metric) or 0 for cell in cells.values()
+                       for compiler in COLORS), default=0)
+        scales[metric] = max(minimum, math.ceil(maximum / step) * step)
+    root = ET.Element("svg", {"xmlns": "http://www.w3.org/2000/svg", "width": "960", "height": "940",
+                              "viewBox": "0 0 960 940", "role": "img", "aria-labelledby": "title description"})
+    ET.SubElement(root, "title", id="title").text = "TypeScript 7 versus tsrs on VS Code, T3 Code and MUI docs"
+    description = ET.SubElement(root, "desc", id="description")
+    details = []
+    for name, title, source in PROJECTS:
+        cell = cells[name]
+        files = measured(cell, "tsrs", "files")
+        counts = f"{files:,.0f}" if files is not None else "n/a"
+        detail = f"{title} ({source}): {counts} files loaded by tsrs. "
+        if name == "t3code-server":
+            detail += "Heavy use of Effect and Zod. "
+        for metric, label in (("wall_s", "Time"), ("peak_rss_bytes", "Peak memory")):
+            values = [measured(cell, compiler, metric) for compiler in COLORS]
+            detail += (f"{label}: TypeScript 7 {format_value(metric, values[0])}; "
+                       f"tsrs {format_value(metric, values[1])}; {comparison(metric, *values)}. ")
+        if cell:
+            detail += f"Machine: {cell.get('machine', result['machine'])['label'].replace('`', '')}. "
+        details.append(detail)
     build = run.TSRS_BUILDS[result["tsrs"].get("build", "release")].replace("`", "")
-    versions = f"tsgo {result['tsgo']['version']}"
-    if len(tools) == 3:
-        versions += f" · Bun {(result.get('bun') or {}).get('version', 'version not recorded')}"
-    footer = [f"{result['date']} · tsrs {commit} · {build}", versions,
-              "Rows sorted by tsrs speedup over tsgo. Error counts and methodology are in the detailed results."]
-    width, row_height = 1200, 66 if len(tools) == 3 else 50
-    legend_y = 80 + len(metadata) * 22
-    scale_y, header_y = legend_y + 35, legend_y + 78
-    rows_y = header_y + 20
-    footer_y = rows_y + len(rows) * row_height + 31
-    height = footer_y + len(footer) * 22 + 14
-    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-           f'viewBox="0 0 {width} {height}" role="img" aria-labelledby="title description">',
-           '<title id="title">Type-checking benchmark: wall time and peak memory</title>',
-           '<desc id="description">' + escape(f"{setting}. {hardware} {run.reps_text(result, [mode])}. "
-           "Bars scaled within each project; lower is better. Values are wall-clock seconds and peak resident "
-           "memory. Failed or unavailable measurements are marked n/a and have no bar. "
-           f"Measured {result['date']}, tsrs commit {commit}.") + '</desc>',
-           '<style>text{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;fill:#213547}'
-           '.muted{fill:#526476}.number{font-variant-numeric:tabular-nums}</style>',
-           f'<rect width="{width}" height="{height}" rx="16" fill="#fff"/>']
+    description.text = "".join(details) + (
+        f"Lower is better. {run.reps_text(result, [mode]).capitalize()}, using default compiler settings. tsrs uses {build}. "
+        f"File counts include libraries and dependencies. Shared bar scales: time 0–{scales['wall_s']:g} seconds, "
+        f"memory 0–{scales['peak_rss_bytes'] / GIB:g} GiB. Failed or unavailable measurements are marked n/a. "
+        f"Measured {result['date']}; tsrs commit {result['tsrs']['commit']}. "
+        f"TypeScript {result['tsgo']['version']}; TypeScript reference {(result.get('reference') or {}).get('commit', 'not recorded')}.")
+    ET.SubElement(root, "metadata").text = (
+        f"Generated by bench/chart.py; mode: {mode}; tsrs commit: {result['tsrs']['commit']}; "
+        f"measured: {result['date']}; build: {result['tsrs'].get('build', 'release')}. "
+        "Details: https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md")
 
-    def text(x, y, value, size=14, weight=400, css="", anchor="start"):
-        out.append(f'<text x="{x}" y="{y}" font-size="{size}" font-weight="{weight}" '
-                   f'class="{css}" text-anchor="{anchor}">{escape(str(value))}</text>')
+    def element(parent, tag, **attrs):
+        return ET.SubElement(parent, tag, {key.replace('_', '-'): str(value) for key, value in attrs.items()})
 
-    text(32, 46, "Type-checking performance", 28, 700)
-    for i, line in enumerate(metadata):
-        text(32, 76 + i * 22, line, 14, css="muted")
-    for i, (_, name, color) in enumerate(tools):
-        x = 32 + i * 150
-        out.append(f'<rect x="{x}" y="{legend_y - 11}" width="13" height="13" rx="3" fill="{color}"/>')
-        text(x + 21, legend_y, name, 15, 600)
-    text(32, scale_y, "Bars scaled within each project; lower is better", 15, 600)
-    text(32, header_y, "PROJECT", 12, 700, "muted")
-    text(238, header_y, "WALL TIME", 12, 700, "muted")
-    text(718, header_y, "PEAK MEMORY", 12, 700, "muted")
-    for index, (name, cell) in enumerate(rows):
-        y = rows_y + index * row_height
-        if index % 2 == 0:
-            out.append(f'<rect x="20" y="{y}" width="1160" height="{row_height}" rx="6" fill="#f4f7fa"/>')
-        text(32, y + row_height / 2 + 5, name, 14, 600)
-        for x, metric, formatter in ((238, "wall_s", run.fmt_s), (718, "peak_rss_bytes", run.fmt_mem)):
-            values = []
-            for tool, _, _ in tools:
-                sample = cell.get(tool) or {}
-                value = sample.get(metric)
-                values.append(value if sample.get("ok_runs") and isinstance(value, (int, float))
-                              and math.isfinite(value) and value >= 0 else None)
-            maximum = max((v for v in values if v is not None), default=0)
-            for i, ((_, tool_name, color), value) in enumerate(zip(tools, values)):
-                bar_y = y + 9 + i * 17
-                label = formatter(value)
-                out.append('<g><title>' + escape(f"{name}: {tool_name}, {metric}: {label}") + '</title>')
-                if value is not None and value > 0:
-                    out.append(f'<rect x="{x}" y="{bar_y}" width="{340 * value / maximum:.2f}" '
-                               f'height="11" rx="3" fill="{color}"/>')
-                text(x + 428, bar_y + 11, label, 13, 600 if tool_name == "tsrs" else 400, "number", "end")
-                out.append('</g>')
-    out.append(f'<path d="M 694 {header_y - 12} V {rows_y + len(rows) * row_height}" stroke="#dce4eb"/>')
-    for i, line in enumerate(footer):
-        text(32, footer_y + i * 22, line, 12, css="muted")
-    out.append('</svg>')
-    return "\n".join(out) + "\n"
+    def text(parent, x, y, value, size, weight=None, fill=None, end=False):
+        attrs = dict(x=x, y=y, font_size=size)
+        if weight is not None:
+            attrs['font_weight'] = weight
+        if fill:
+            attrs['fill'] = fill
+        if end:
+            attrs['text_anchor'] = 'end'
+        element(parent, "text", **attrs).text = value
+
+    element(root, "rect", x=0.5, y=0.5, width=959, height=939, rx=20, fill="#fafcfb", stroke="#dce5e1")
+    drawing = element(root, "g", font_family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fill="#162d27")
+    text(drawing, 40, 55, "TypeScript 7 vs tsrs", 34, 700)
+    for index, (name, title, source) in enumerate(PROJECTS):
+        y = 88 + index * 282
+        cell = cells[name]
+        card = element(drawing, "g", id=name)
+        element(card, "rect", x=24, y=y, width=912, height=266, rx=12, fill="#ffffff", stroke="#e0e8e3")
+        text(card, 48, y + 37, title, 27, 700)
+        text(card, 48, y + 64, source, 17, fill="#52655e")
+        files = measured(cell, "tsrs", "files")
+        text(card, 912, y + 37, (f"{files:,.0f}" if files is not None else "n/a") + " files", 25, 700, end=True)
+        if name == "t3code-server":
+            text(card, 912, y + 64, "Heavy use of Effect and Zod", 17, fill="#52655e", end=True)
+        element(card, "line", x1=48, y1=y + 81, x2=912, y2=y + 81, stroke="#e3eae6")
+        for metric, label, x in (("wall_s", "Time", 48), ("peak_rss_bytes", "Peak memory", 514)):
+            panel = element(card, "g", data_metric=metric)
+            values = [measured(cell, compiler, metric) for compiler in COLORS]
+            text(panel, x, y + 115, label, 19, 600)
+            text(panel, x + 398, y + 115, comparison(metric, *values), 23, 700, COLORS['tsrs'], end=True)
+            for offset, (compiler, value) in enumerate(zip(COLORS, values)):
+                label_y, bar_y = y + 145 + offset * 62, y + 155 + offset * 62
+                text(panel, x, label_y, "TypeScript 7" if compiler == "tsgo" else "tsrs", 17, 400 if offset == 0 else 700)
+                text(panel, x + 398, label_y, format_value(metric, value), 19, 700, COLORS[compiler], end=True)
+                element(panel, "rect", x=x, y=bar_y, width=398, height=20, rx=3, fill="#eef3f0")
+                if value is not None:
+                    element(panel, "rect", data_compiler=compiler, x=x, y=bar_y,
+                            width=f"{398 * value / scales[metric]:.4f}", height=20, rx=3, fill=COLORS[compiler])
+    ET.indent(root, space="  ")
+    return ET.tostring(root, encoding="unicode") + "\n"
+
+
+def format_value(metric: str, value: float | None) -> str:
+    if value is None:
+        return "n/a"
+    return run.fmt_s(value) if metric == "wall_s" else f"{value / GIB:.2f} GiB"
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("result", type=Path, help="recorded benchmark result (.json)")
     parser.add_argument("--output", type=Path, required=True, help="SVG destination")
-    parser.add_argument("--mode", default="wide", choices=run.MODE_FLAGS)
     args = parser.parse_args()
     try:
-        image = svg(json.loads(args.result.read_text()), args.mode)
+        image = svg(json.loads(args.result.read_text()))
     except ValueError as error:
         parser.error(str(error))
     args.output.parent.mkdir(parents=True, exist_ok=True)
