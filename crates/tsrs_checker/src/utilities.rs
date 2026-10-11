@@ -470,6 +470,10 @@ impl Checker {
         let Some(n2) = n2 else {
             return -1;
         };
+        // Two nodes with one parent are in one file (most comparisons sort the members of one declaration).
+        if n1.parent().is_some() && n1.parent() == n2.parent() && n1.kind() != Kind::SourceFile && n2.kind() != Kind::SourceFile {
+            return n1.pos() - n2.pos();
+        }
         let (s1, f1) = self.source_file_and_index_of_node(n1);
         let (s2, f2) = self.source_file_and_index_of_node(n2);
         if s1 != s2 {
