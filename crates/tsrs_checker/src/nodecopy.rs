@@ -253,10 +253,8 @@ impl NodeBuilderImpl {
             return None;
         }
         let ctx = self.ctx();
-        let existing_length = existing
-            .loc()
-            .len()
-            .expect("reused node has a source range") as usize;
+        // Synthetic nodes have both positions set to -1 in Go, so their length is zero.
+        let existing_length = existing.loc().len().unwrap_or(0) as usize;
         ctx.approximate_length
             .set(ctx.approximate_length.get() + existing_length);
         transformed
