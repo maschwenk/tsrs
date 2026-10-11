@@ -71,20 +71,36 @@ Rows are sorted by speedup over tsgo. Wall time is the process's wall clock; pea
 Shared CI machines vary by a few percent between runs of the same code; the single-threaded instruction counts in `bench/results/` are the exact measure. Date: 2026-10-11 09:57 UTC. tsrs commit: `e883456c0758`. Method: [benchmark methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md).
 <!-- bench:end -->
 
-## VS Code chart snapshot
+## Large-project chart snapshot
 
-The [README chart](vscode.svg) is a one-time snapshot of the default-setting VS Code results measured on
-**2026-10-11 at 09:57 UTC**, at tsrs commit `e883456c0758`. It does not update with the tables above.
-[Recorded results](results/2026-10-11-e883456c0758.md) · [Raw measurements](results/2026-10-11-e883456c0758.json).
+The [README chart](large-projects.svg) is a one-time snapshot of three large benchmark targets measured on
+**2026-10-11 at 10:55 UTC**, at tsrs commit `306c14f5b3ec`. It does not update with the tables above.
+[Recorded results](results/2026-10-11-306c14f5b3ec.md) · [Raw measurements](results/2026-10-11-306c14f5b3ec.json),
+using each project's `wide` results and machine metadata.
 
 - **Machine:** Depot CI `depot-ubuntu-24.04-16`, 16 vCPUs, 63 GB RAM, Linux x86_64, AMD EPYC 9R45.
 - **TypeScript:** `typescript@7.0.2` (the official Go compiler), 4 checker threads, median of 3 runs.
 - **tsrs:** `0.13.0-ts7.1.0-dev.20260929`, PGO `dist` build, 16 checker threads, median of 10 runs.
-- **Results:** 10.771 s versus 0.8565 s wall time; 8,047,595,520 versus 2,244,261,888 bytes peak RSS. Ratios use these
-  unrounded values: **12.6× faster** and **72% less peak memory**.
+
+| Repository and measured project | Files | Time: TypeScript 7 → tsrs | Peak memory: TypeScript 7 → tsrs | Speedup | Less peak memory |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| [MUI](https://github.com/mui/material-ui), `docs` | 16,766 | 11.95 s → 0.83 s | 7.45 GiB → 1.60 GiB | **14.4×** | **79%** |
+| [Supabase](https://github.com/supabase/supabase), `apps/studio` | 12,550 | 6.72 s → 0.62 s | 4.88 GiB → 1.69 GiB | **10.8×** | **65%** |
+| [VS Code](https://github.com/microsoft/vscode), `src` | 10,427 | 10.92 s → 0.82 s | 7.55 GiB → 2.09 GiB | **13.2×** | **72%** |
+
+File counts are tsrs's compiled program files, including dependencies and TypeScript libraries, for the named project
+within each repository. Supabase's TypeScript 7.0.2 run loads 12,546 files; tsrs's pinned 7.1-dev version loads 12,550.
+Ratios use the unrounded measurements below (TypeScript 7 → tsrs); memory in the chart is bytes divided by 2³⁰.
+
+| Project | Wall time (seconds) | Peak RSS (bytes) |
+| --- | ---: | ---: |
+| MUI docs | 11.945 → 0.8295 | 8,003,997,696 → 1,712,949,248 |
+| Supabase Studio | 6.718 → 0.6245 | 5,235,961,856 → 1,817,638,912 |
+| VS Code | 10.917 → 0.8245 | 8,108,687,360 → 2,243,448,832 |
 
 Both compilers use their default thread settings. tsrs follows the pinned TypeScript 7.1-dev commit `b85298b6a81f`,
-so this compares different TypeScript versions: TypeScript 7.0.2 reports 359 errors on VS Code; tsrs reports 371.
+so this compares different TypeScript versions. MUI docs has no errors in either compiler; the error counts
+(TypeScript 7.0.2 versus tsrs) are 0 versus 9 on Supabase Studio and 359 versus 371 on VS Code.
 The reference nightly `typescript@7.1.0-dev.20260930.4`, built from the pinned commit plus one CI-only commit,
 reports the same diagnostics as tsrs. See [the error comparison](README.md#what-is-measured) for how this is checked.
 

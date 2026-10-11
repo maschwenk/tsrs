@@ -23,11 +23,12 @@ Prebuilt binaries are available for macOS arm64 and Linux x64/arm64 (glibc). See
 
 ## Less waiting. Less memory.
 
-Type-checking the VS Code repository, with each compiler's default settings:
+Type-checking three large projects—MUI docs, Supabase Studio and VS Code—with each compiler's default settings:
 
-[![VS Code benchmark: tsrs takes 0.86 seconds and 2.09 GiB peak memory; TypeScript 7 takes 10.77 seconds and 7.49 GiB.](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/vscode.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#vs-code-chart-snapshot)
+[![tsrs versus TypeScript 7: MUI docs, 16,766 files, 14.4× faster and 79% less peak memory; Supabase Studio, 12,550 files, 10.8× faster and 65% less; VS Code, 10,427 files, 13.2× faster and 72% less.](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#large-project-chart-snapshot)
 
-Snapshot from October 11, 2026, on 16 vCPUs. [Measurement details](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#vs-code-chart-snapshot)
+Snapshot from October 11, 2026, on 16 vCPUs. File counts include dependencies and TypeScript libraries.
+[Measurement details](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#large-project-chart-snapshot)
 and [latest results across 17 projects](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md).
 
 ## Compatibility

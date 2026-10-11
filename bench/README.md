@@ -213,7 +213,7 @@ the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and
 `bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run).
 [The historical 64-vCPU comparison](RESULTS.md#historical-comparison-on-64-vcpus) uses the 20-run mean of
 `bench-compare.yml`. The README chart is a one-time snapshot of a 16-vCPU publish; its
-[date and source](RESULTS.md#vs-code-chart-snapshot) stay fixed when CI updates the summary tables.
+[date and source](RESULTS.md#large-project-chart-snapshot) stay fixed when CI updates the summary tables.
 
 The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
 Runner vCPUs and checker threads are separate: `cpus=16` with `threads=64` runs 64 software workers on
