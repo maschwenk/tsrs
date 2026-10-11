@@ -161,6 +161,32 @@ tsrs's errors (the table's errors paragraph names such projects).
   differences (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
 
+## README measurements with Hyperfine
+
+The README chart uses a separate, manually run [Hyperfine 2](https://github.com/sharkdp/hyperfine) measurement of
+VS Code `src`, T3 Code `apps/server` and MUI `docs`. It compares `tsrs` with the TypeScript nightly built from the
+source revision it ports. Each compiler gets 3 warmup runs and 20 measured runs, at default settings and with
+`--checkers 4`. The chart uses the default-setting medians for wall time and peak RSS; the raw exports also retain
+the individual measurements and their spread.
+
+Run it on the existing 16-vCPU Depot probe workflow:
+
+```sh
+depot ci dispatch --repo maschwenk/tsrs --workflow perf-probe.yml --ref main \
+  --input runner=depot-ubuntu-24.04-16 \
+  --input projects=vscode,t3code-server,mui-docs \
+  --input script=bench/hyperfine.sh
+```
+
+This builds `tsrs` with `cargo build --release --locked -p tsrs_cli`. It does not use the PGO `dist` build of the
+regression benchmark. The runner checks that both compilers finish and report matching diagnostic locations and
+codes before timing them. Hyperfine invokes the native binaries directly, without a shell or Node launcher, and
+measures both wall time and peak RSS. Only the preflight's expected diagnostic exit codes are accepted.
+
+The `perf-probe` artifact contains `hyperfine/metadata.json`, the exact commands, diagnostic logs and a raw
+Hyperfine JSON export for each project and checker setting. The [chart snapshot](RESULTS.md#large-project-chart-snapshot)
+records the measured commit, hardware and results. The SVG is updated by hand; this workflow does not regenerate it.
+
 ## Regression flag
 
 Wall time on a shared VM moves 2-4% between runs with no code change (2026-10-04, 64 runs: the tsrs/tsgo ratio moved
@@ -212,7 +238,7 @@ file is committed, and the summary table is applied only when no newer commit's 
 the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and `measure-wide` 10 for tsrs and
 `bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run).
 [The historical 64-vCPU comparison](RESULTS.md#historical-comparison-on-64-vcpus) uses the 20-run mean of
-`bench-compare.yml`. The README chart is a one-time snapshot of a 16-vCPU publish; its
+`bench-compare.yml`. The README chart is a one-time [Hyperfine measurement](#readme-measurements-with-hyperfine); its
 [date and source](RESULTS.md#large-project-chart-snapshot) stay fixed when CI updates the summary tables.
 
 The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
