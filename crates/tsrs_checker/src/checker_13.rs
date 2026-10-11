@@ -330,7 +330,19 @@ impl Checker {
                 i -= 1;
                 let t = types[i];
                 if t.flags().intersects(TypeFlags::StringLiteral)
-                    && templates.iter().any(|&template| self.is_type_matched_by_template_literal_or_string_mapping(t, template))
+                    && templates.iter().any(|&template| {
+                        // tsrs: the text test `inferFromLiteralPartsToTemplateLiteral` starts with, done before the
+                        // call; a literal that fails it is not matched, and the call would have done nothing else.
+                        if template.flags().intersects(TypeFlags::TemplateLiteral) {
+                            let texts = template.as_template_literal_type().texts();
+                            let (start, end) = (texts[0], texts[texts.len() - 1]);
+                            let value = get_string_literal_value(t);
+                            if value.len() < start.len() + end.len() || !value.starts_with(start) || !value.ends_with(end) {
+                                return false;
+                            }
+                        }
+                        self.is_type_matched_by_template_literal_or_string_mapping(t, template)
+                    })
                 {
                     types.remove(i);
                 }
