@@ -151,7 +151,7 @@ fn natural_collation_key(s: &str) -> String {
 
 // organizeimports.go:137
 fn remove_diacritics(s: &str) -> String {
-    norm_nfd_string(s).chars().filter(|&r| !unicode_is_mn(r as i32)).collect()
+    norm_nfd_string(s).chars().filter(|&r| !unicode_is_mn(r as u32)).collect()
 }
 
 // organizeimports.go:146
@@ -245,8 +245,8 @@ fn compare_organize_imports_case(
     let min_len = a_runes.len().min(b_runes.len());
 
     for i in 0..min_len {
-        let a_upper = unicode_is_upper(a_runes[i] as i32);
-        let b_upper = unicode_is_upper(b_runes[i] as i32);
+        let a_upper = unicode_is_upper(a_runes[i] as u32);
+        let b_upper = unicode_is_upper(b_runes[i] as u32);
         if a_upper != b_upper {
             match case_first {
                 OrganizeImportsCaseFirst::Upper => {

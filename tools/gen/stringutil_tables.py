@@ -52,6 +52,6 @@ with open(os.path.join(DST, 'js_case_generated.rs'), 'w') as f:
     f.write('#[derive(Clone, Copy, PartialEq, Eq, Debug)]\npub(crate) enum SpecialCasingCondition {\n    None,\n    FinalSigma,\n}\n\n')
     f.write('#[derive(Clone, Copy, Debug)]\npub(crate) struct SpecialCasingMapping {\n    pub lower: &\'static str,\n    pub upper: &\'static str,\n    pub conditional_lower: &\'static str,\n    pub condition: SpecialCasingCondition,\n}\n\n')
     f.write('// Sorted by code point; looked up with binary search (Go uses a map).\n')
-    f.write(f'pub(crate) static SPECIAL_CASING_MAPPINGS: &[(i32, SpecialCasingMapping)] = &[\n{"".join(lines)}];\n\n')
+    f.write(f'pub(crate) static SPECIAL_CASING_MAPPINGS: &[(u32, SpecialCasingMapping)] = &[\n{"".join(lines)}];\n\n')
     f.write(convert_tables(case))
 print(len(entries), 'casing entries')

@@ -656,7 +656,7 @@ impl LanguageService {
                     let line_start = format::get_line_start_position_for_position(position, file);
                     let mut no_comment_prefix = true;
                     for r in file.text()[line_start as usize..position as usize].chars() {
-                        if !(stringutil::is_white_space_single_line(r) || r == '*' || r == '/' || r == '(' || r == ')' || r == '|') {
+                        if !(stringutil::is_white_space_single_line(r as u32) || r == '*' || r == '/' || r == '(' || r == ')' || r == '|') {
                             no_comment_prefix = false;
                             break;
                         }

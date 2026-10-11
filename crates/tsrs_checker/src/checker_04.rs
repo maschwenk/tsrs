@@ -2671,7 +2671,7 @@ impl Checker {
                             .expect_source("parsed nodes have source positions"),
                         Some(&options),
                     );
-                    if stringutil::is_line_break(text.as_bytes()[(pos - 1) as usize]) {
+                    if stringutil::is_line_break(u32::from(text.as_bytes()[(pos - 1) as usize])) {
                         related_information = Some(create_diagnostic_for_node(Some(expression), &diagnostics::Are_you_missing_a_semicolon, &[]));
                     }
                 }

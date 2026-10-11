@@ -212,7 +212,7 @@ impl View {
             if !scanner::is_identifier_text(&name, LanguageVariant::Standard) {
                 continue;
             }
-            if for_jsx && !(tsrs_core::stringutil::unicode_is_upper(name.as_bytes()[0] as i32) || e.is_renameable()) {
+            if for_jsx && !(tsrs_core::stringutil::unicode_is_upper(u32::from(name.as_bytes()[0])) || e.is_renameable()) {
                 continue;
             }
             let mut target = e.export_id.clone();

@@ -753,9 +753,9 @@ pub(crate) fn get_possible_symbol_reference_positions(
         // before and after it have to be a non-identifier char).
         let end_position = position + symbol_name_length;
 
-        if (position == 0 || !tsrs_scanner::is_identifier_part(bytes[position - 1] as i32))
+        if (position == 0 || !tsrs_scanner::is_identifier_part(u32::from(bytes[position - 1])))
             && (end_position == source_length
-                || !tsrs_scanner::is_identifier_part(bytes[end_position] as i32))
+                || !tsrs_scanner::is_identifier_part(u32::from(bytes[end_position])))
         {
             // Found a real match.  Keep searching.
             positions.push(position.try_into().expect("source position fits in u32"));

@@ -342,7 +342,7 @@ pub(crate) fn generate_identifier_for_arbitrary_string(text: &str) -> String {
 
     // Convert "(example, text)" into "_example_text_"
     for (pos, ch) in text.char_indices() {
-        let valid_char = if pos == 0 { scanner::is_identifier_start(ch as i32) } else { scanner::is_identifier_part(ch as i32) };
+        let valid_char = if pos == 0 { scanner::is_identifier_start(ch as u32) } else { scanner::is_identifier_part(ch as u32) };
         if valid_char {
             if needs_underscore {
                 identifier.push('_');

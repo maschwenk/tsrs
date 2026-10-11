@@ -3192,7 +3192,7 @@ fn line_end_pos(text: &str, pos: usize) -> usize {
     let mut pos = pos;
     while pos < text.len() {
         let ch = text[pos..].chars().next().unwrap();
-        if tsrs_core::stringutil::is_line_break(ch) {
+        if tsrs_core::stringutil::is_line_break(ch as u32) {
             return pos;
         }
         pos += ch.len_utf8();

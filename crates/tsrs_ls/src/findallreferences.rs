@@ -2005,7 +2005,7 @@ pub(crate) fn get_possible_symbol_reference_positions(
         let p = position;
         let end_position = p + symbol_name_length;
 
-        if (p == 0 || !scanner::is_identifier_part(text[p - 1] as i32)) && (end_position == source_length || !scanner::is_identifier_part(text[end_position] as i32)) {
+        if (p == 0 || !scanner::is_identifier_part(u32::from(text[p - 1]))) && (end_position == source_length || !scanner::is_identifier_part(u32::from(text[end_position]))) {
             // Found a real match.  Keep searching.
             positions.push(u32::try_from(p).expect("source position exceeds u32"));
         }

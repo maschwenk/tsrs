@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::fmt::Display;
 
 use rustc_hash::FxHashSet;
-use tsrs_core::{stringutil, ScriptTarget};
+use tsrs_core::{stringutil, stringutil::Rune, ScriptTarget};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 
@@ -32,16 +32,16 @@ bitflags::bitflags! {
 }
 
 /// Go `charCodeToRegExpFlag[ch]` ("comma ok").
-pub(crate) fn char_code_to_reg_exp_flag(ch: i32) -> Option<RegularExpressionFlags> {
-    Some(match u8::try_from(ch).ok()? {
-        b'd' => RegularExpressionFlags::HasIndices,
-        b'g' => RegularExpressionFlags::Global,
-        b'i' => RegularExpressionFlags::IgnoreCase,
-        b'm' => RegularExpressionFlags::Multiline,
-        b's' => RegularExpressionFlags::DotAll,
-        b'u' => RegularExpressionFlags::Unicode,
-        b'v' => RegularExpressionFlags::UnicodeSets,
-        b'y' => RegularExpressionFlags::Sticky,
+pub(crate) fn char_code_to_reg_exp_flag(ch: Rune) -> Option<RegularExpressionFlags> {
+    Some(match ch {
+        0x64 => RegularExpressionFlags::HasIndices,
+        0x67 => RegularExpressionFlags::Global,
+        0x69 => RegularExpressionFlags::IgnoreCase,
+        0x6D => RegularExpressionFlags::Multiline,
+        0x73 => RegularExpressionFlags::DotAll,
+        0x75 => RegularExpressionFlags::Unicode,
+        0x76 => RegularExpressionFlags::UnicodeSets,
+        0x79 => RegularExpressionFlags::Sticky,
         _ => return None,
     })
 }
@@ -400,7 +400,7 @@ impl RegExpParser {
                                 if !max_str.is_empty() || self.char() == Some(b'}') {
                                     self.error(&diagnostics::Incomplete_quantifier_Digit_expected, digits_start, 0, &[]);
                                 } else {
-                                    let s = rune_string(ch);
+                                    let s = rune_string(u32::from(ch));
                                     self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, start, 1, &[&s]);
                                     is_previous_term_quantifiable = true;
                                     continue;
@@ -414,7 +414,7 @@ impl RegExpParser {
                             }
                         } else if min_str.is_empty() {
                             if self.any_unicode_mode_or_non_annex_b {
-                                let s = rune_string(ch);
+                                let s = rune_string(u32::from(ch));
                                 self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, start, 1, &[&s]);
                             }
                             is_previous_term_quantifiable = true;
@@ -460,7 +460,7 @@ impl RegExpParser {
                         return;
                     }
                     if self.any_unicode_mode_or_non_annex_b || ch == b')' {
-                        let s = rune_string(ch);
+                        let s = rune_string(u32::from(ch));
                         self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
                     }
                     self.inc_pos(1);
@@ -576,9 +576,9 @@ impl RegExpParser {
             Some(0x63) /* c */ => {
                 self.inc_pos(1);
                 let ch = self.char();
-                if let Some(ch) = ch.filter(|&ch| stringutil::is_ascii_letter(ch)) {
+                if let Some(ch) = ch.filter(|&ch| stringutil::is_ascii_letter(u32::from(ch))) {
                     self.inc_pos(1);
-                    return Cow::Owned(rune_string(ch & 0x1f));
+                    return Cow::Owned(rune_string(u32::from(ch & 0x1f)));
                 }
                 if self.any_unicode_mode_or_non_annex_b {
                     self.error(&diagnostics::X_c_must_be_followed_by_an_ASCII_letter, self.pos() - 2, 2, &[]);
@@ -586,11 +586,11 @@ impl RegExpParser {
                     self.dec_pos(1);
                     return Cow::Borrowed("\\");
                 }
-                Cow::Owned(ch.map(rune_string).unwrap_or_else(|| rune_string(RUNE_ERROR)))
+                Cow::Owned(ch.map(|ch| rune_string(u32::from(ch))).unwrap_or_else(|| rune_string(RUNE_ERROR)))
             }
             Some(ch @ (0x5E | 0x24 | 0x2F | 0x5C | 0x2E | 0x2A | 0x2B | 0x3F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x7C)) => {
                 self.inc_pos(1);
-                Cow::Owned(rune_string(ch))
+                Cow::Owned(rune_string(u32::from(ch)))
             }
             _ => {
                 self.dec_pos(1); // back up to include the backslash for scanEscapeSequence
@@ -869,7 +869,7 @@ impl RegExpParser {
                         &[],
                     );
                     if self.char() == Some(b'&') {
-                        let s = rune_string(ch.expect("class content is not at end"));
+                        let s = rune_string(u32::from(ch.expect("class content is not at end")));
                         self.error(
                             &diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash,
                             self.pos(),
@@ -960,12 +960,12 @@ impl RegExpParser {
                             );
                         }
                         if self.char() == Some(b'&') {
-                            let s = rune_string(ch.expect("class content is not at end"));
+                            let s = rune_string(u32::from(ch.expect("class content is not at end")));
                             self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
                             self.inc_pos(1);
                         }
                     } else {
-                        let s = rune_string(ch.expect("class content is not at end"));
+                        let s = rune_string(u32::from(ch.expect("class content is not at end")));
                         self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos() - 1, 1, &[&s]);
                     }
                 }
@@ -1073,7 +1073,7 @@ impl RegExpParser {
                 }
                 Some(inner_ch @ (0x26 | 0x2D | 0x21 | 0x23 | 0x25 | 0x2C | 0x3A | 0x3B | 0x3C | 0x3D | 0x3E | 0x40 | 0x60 | 0x7E)) => {
                     self.inc_pos(1);
-                    return Cow::Owned(rune_string(inner_ch));
+                    return Cow::Owned(rune_string(u32::from(inner_ch)));
                 }
                 _ => return self.scan_character_escape(false /*atomEscape*/),
             }
@@ -1097,7 +1097,7 @@ impl RegExpParser {
         }
         match ch {
             Some(ch @ (0x2F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x2D | 0x7C)) => {
-                let s = rune_string(ch);
+                let s = rune_string(u32::from(ch));
                 self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
                 self.inc_pos(1);
                 return Cow::Owned(s);
@@ -1129,7 +1129,7 @@ impl RegExpParser {
                 }
                 0x2D /* - */ => {
                     self.inc_pos(1);
-                    Cow::Owned(rune_string(b'-'))
+                    Cow::Owned(rune_string(u32::from(b'-')))
                 }
                 _ => {
                     if self.scan_character_class_escape() {
@@ -1260,7 +1260,7 @@ impl RegExpParser {
                         );
                     }
                 } else if self.any_unicode_mode_or_non_annex_b {
-                    let s = rune_string(ch);
+                    let s = rune_string(u32::from(ch));
                     self.error(
                         &diagnostics::X_0_must_be_followed_by_a_Unicode_property_value_expression_enclosed_in_braces,
                         self.pos() - 2,
@@ -1301,7 +1301,7 @@ impl RegExpParser {
         let start = self.pos();
         while self.pos() < self.end {
             let ch = self.char().expect("position is before regexp end");
-            if !is_word_character(i32::from(ch)) {
+            if !is_word_character(u32::from(ch)) {
                 break;
             }
             self.inc_pos(1);
@@ -1360,14 +1360,14 @@ impl RegExpParser {
         if self.char() == Some(ch) {
             self.inc_pos(1);
         } else {
-            let s = rune_string(ch);
+            let s = rune_string(u32::from(ch));
             self.error(&diagnostics::X_0_expected, self.pos(), 0, &[&s]);
         }
     }
 
     fn scan_digits(&mut self) {
         let start = self.pos();
-        while self.pos() < self.end && self.char().is_some_and(stringutil::is_digit) {
+        while self.pos() < self.end && self.char().is_some_and(|ch| stringutil::is_digit(u32::from(ch))) {
             self.inc_pos(1);
         }
         self.scanner.state.token_value = &self.text()[start as usize..self.pos() as usize];

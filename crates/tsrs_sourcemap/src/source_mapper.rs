@@ -324,7 +324,7 @@ pub(crate) fn try_parse_base64_url(url: &str) -> (&str, bool) {
         return ("", true);
     };
     for r in url.chars() {
-        if !(stringutil::is_ascii_letter(r) || stringutil::is_digit(r) || r == '+' || r == '/' || r == '=') {
+        if !(stringutil::is_ascii_letter(r as u32) || stringutil::is_digit(r as u32) || r == '+' || r == '/' || r == '=') {
             return ("", true);
         }
     }

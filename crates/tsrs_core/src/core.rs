@@ -474,7 +474,7 @@ pub fn get_spelling_suggestion_with_max_candidate_count<T, S: AsRef<str>>(
     get_spelling_suggestion_worker(name, candidates, get_name, compare, max_candidates)
 }
 
-fn to_runes(s: &str) -> Vec<i32> {
+fn to_runes(s: &str) -> Vec<stringutil::Rune> {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;
@@ -554,8 +554,8 @@ struct LevenshteinBuffers {
 
 fn levenshtein_with_max(
     buffers: &mut LevenshteinBuffers,
-    s1: &[i32],
-    s2: &[i32],
+    s1: &[stringutil::Rune],
+    s2: &[stringutil::Rune],
     max_value: f64,
 ) -> Option<f64> {
     let buffer_size = s2.len() + 1;

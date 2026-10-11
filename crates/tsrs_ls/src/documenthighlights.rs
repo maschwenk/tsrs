@@ -361,7 +361,7 @@ impl LanguageService {
                 let mut j = if_token_start;
                 while j > else_end {
                     j -= 1;
-                    if !stringutil::is_white_space_single_line(text[j as usize]) {
+                    if !stringutil::is_white_space_single_line(u32::from(text[j as usize])) {
                         should_combine = false;
                         break;
                     }

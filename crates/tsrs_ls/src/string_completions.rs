@@ -1892,7 +1892,7 @@ fn has_triple_slash_prefix(comment_text: &str) -> bool {
 //   - ok indicates whether the match was successful
 // string_completions.go:2134
 fn parse_triple_slash_directive_fragment(text: &str) -> Option<(String, String, String)> {
-    let is_ws = |c: char| stringutil::is_white_space_like(c);
+    let is_ws = |c: char| stringutil::is_white_space_like(c as u32);
     let mut rest = text;
     if !rest.starts_with("///") {
         return None;
@@ -1907,7 +1907,7 @@ fn parse_triple_slash_directive_fragment(text: &str) -> Option<(String, String, 
     }
     rest = &rest["<reference".len()..];
 
-    if rest.is_empty() || !stringutil::is_white_space_like(rest.as_bytes()[0] as i32) {
+    if rest.is_empty() || !stringutil::is_white_space_like(u32::from(rest.as_bytes()[0])) {
         return None;
     }
     rest = rest.trim_start_matches(is_ws);

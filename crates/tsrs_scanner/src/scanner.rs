@@ -42,7 +42,8 @@ use tsrs_ast::{
     SourceFileLike, TokenFlags,
 };
 use tsrs_core::{
-    ArenaStringBuilder, LanguageVariant, P, ScriptTarget, TextRange, UTF16Offset, alloc_str, jsnum, stringutil,
+    ArenaStringBuilder, LanguageVariant, P, ScriptTarget, TextRange, UTF16Offset, alloc_str, jsnum,
+    stringutil::{self, Rune},
 };
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
@@ -379,7 +380,7 @@ static BYTE_HANDLERS: [ByteHandler; 256] = {
     table
 };
 
-pub(crate) const RUNE_SELF: i32 = 0x80;
+pub(crate) const RUNE_SELF: Rune = 0x80;
 
 /// `[A-Za-z0-9_$]` by byte.
 static ASCII_IDENTIFIER_PART: [bool; 256] = {
@@ -392,30 +393,23 @@ static ASCII_IDENTIFIER_PART: [bool; 256] = {
     }
     t
 };
-pub(crate) const RUNE_ERROR: i32 = 0xFFFD;
+pub(crate) const RUNE_ERROR: Rune = 0xFFFD;
 
 /// Go `utf8.DecodeRuneInString` over raw bytes: `(RuneError, 0)` for empty input,
 /// `(RuneError, 1)` for an invalid encoding.
 #[inline]
-pub(crate) fn decode_rune(b: &[u8]) -> (i32, usize) {
-    let (ch, size) = decode_char(b);
-    (ch as i32, size)
-}
-
-/// Decode UTF-8 while preserving scalar validity in the return type.
-#[inline]
-pub(crate) fn decode_char(b: &[u8]) -> (char, usize) {
+pub(crate) fn decode_rune(b: &[u8]) -> (Rune, usize) {
     let Some(&b0) = b.first() else {
-        return ('\u{FFFD}', 0);
+        return (RUNE_ERROR, 0);
     };
     if b0 < 0x80 {
-        return (b0 as char, 1);
+        return (u32::from(b0), 1);
     }
-    decode_char_slow(b)
+    decode_rune_slow(b)
 }
 
 #[cold]
-fn decode_char_slow(b: &[u8]) -> (char, usize) {
+fn decode_rune_slow(b: &[u8]) -> (Rune, usize) {
     let b0 = b[0] as u32;
     let cont = |i: usize, lo: u8, hi: u8| -> Option<u32> {
         let c = *b.get(i)?;
@@ -426,7 +420,7 @@ fn decode_char_slow(b: &[u8]) -> (char, usize) {
     };
     let (r, size) = match b0 {
         0xC2..=0xDF => match cont(1, 0x80, 0xBF) {
-            Some(c1) => ((((b0 & 0x1F) << 6) | c1) as i32, 2),
+            Some(c1) => (((b0 & 0x1F) << 6) | c1, 2),
             None => (RUNE_ERROR, 1),
         },
         0xE0..=0xEF => {
@@ -436,7 +430,7 @@ fn decode_char_slow(b: &[u8]) -> (char, usize) {
                 _ => (0x80, 0xBF),
             };
             match (cont(1, lo, hi), cont(2, 0x80, 0xBF)) {
-                (Some(c1), Some(c2)) => ((((b0 & 0x0F) << 12) | (c1 << 6) | c2) as i32, 3),
+                (Some(c1), Some(c2)) => (((b0 & 0x0F) << 12) | (c1 << 6) | c2, 3),
                 _ => (RUNE_ERROR, 1),
             }
         }
@@ -447,27 +441,24 @@ fn decode_char_slow(b: &[u8]) -> (char, usize) {
                 _ => (0x80, 0xBF),
             };
             match (cont(1, lo, hi), cont(2, 0x80, 0xBF), cont(3, 0x80, 0xBF)) {
-                (Some(c1), Some(c2), Some(c3)) => ((((b0 & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3) as i32, 4),
+                (Some(c1), Some(c2), Some(c3)) => (((b0 & 0x07) << 18) | (c1 << 12) | (c2 << 6) | c3, 4),
                 _ => (RUNE_ERROR, 1),
             }
         }
         _ => (RUNE_ERROR, 1),
     };
-    debug_assert!(char::from_u32(r as u32).is_some());
-    // SAFETY: the lead/continuation byte bounds above exclude overlong encodings, surrogates (ED),
-    // and values above U+10FFFF (F4). Every invalid encoding returns the valid scalar U+FFFD.
-    (unsafe { char::from_u32_unchecked(r as u32) }, size)
+    (r, size)
 }
 
 /// Go `utf8.DecodeLastRuneInString`.
-pub(crate) fn decode_last_rune(b: &[u8]) -> (i32, usize) {
+pub(crate) fn decode_last_rune(b: &[u8]) -> (Rune, usize) {
     let end = b.len();
     if end == 0 {
         return (RUNE_ERROR, 0);
     }
     let last = b[end - 1];
     if last < 0x80 {
-        return (last as i32, 1);
+        return (u32::from(last), 1);
     }
     let lim = end.saturating_sub(4);
     let mut start = end - 1;
@@ -486,12 +477,12 @@ pub(crate) fn decode_last_rune(b: &[u8]) -> (i32, usize) {
 
 /// Go `string(r)`: invalid code points (surrogates, out of range) become U+FFFD.
 #[inline]
-pub(crate) fn rune_to_char(r: impl stringutil::AsRune) -> char {
-    char::from_u32(r.as_rune() as u32).unwrap_or('\u{FFFD}')
+pub(crate) fn rune_to_char(r: Rune) -> char {
+    char::from_u32(r).unwrap_or('\u{FFFD}')
 }
 
 #[inline]
-pub(crate) fn rune_string(r: impl stringutil::AsRune) -> String {
+pub(crate) fn rune_string(r: Rune) -> String {
     rune_to_char(r).to_string()
 }
 
@@ -724,22 +715,16 @@ impl Scanner {
     }
 
     #[inline]
-    pub(crate) fn char_and_size(&self) -> (i32, u32) {
-        let (ch, size) = self.decoded_char_and_size();
-        (ch as i32, size)
-    }
-
-    #[inline]
-    fn decoded_char_and_size(&self) -> (char, u32) {
+    pub(crate) fn char_and_size(&self) -> (Rune, u32) {
         // Fast path: a single ASCII byte.
         if self.state.pos < self.end {
             let b = self.text.as_bytes()[self.state.pos as usize];
             if b < 0x80 {
-                return (b as char, 1);
+                return (u32::from(b), 1);
             }
         }
         let (r, size) =
-            decode_char(&self.text.as_bytes()[(self.state.pos as usize).min(self.text.len())..]);
+            decode_rune(&self.text.as_bytes()[(self.state.pos as usize).min(self.text.len())..]);
         (r, size as u32)
     }
 
@@ -998,7 +983,7 @@ impl Scanner {
 
     fn scan_byte_dot(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
-        let token = if next.is_some_and(stringutil::is_digit) {
+        let token = if next.is_some_and(|ch| stringutil::is_digit(u32::from(ch))) {
             self.scan_number()
         } else if next == Some(b'.') && self.char_at(2) == Some(b'.') {
             self.state.pos += 3;
@@ -1045,7 +1030,7 @@ impl Scanner {
                     break;
                 }
 
-                if ch1 == '*' as i32 && self.char_at(1) == Some(b'/') {
+                if ch1 == '*' as Rune && self.char_at(1) == Some(b'/') {
                     self.state.pos += 2;
                     comment_closed = true;
                     break;
@@ -1233,7 +1218,7 @@ impl Scanner {
     }
 
     fn scan_byte_question(&mut self) -> Option<Kind> {
-        let token = if self.char_at(1) == Some(b'.') && !self.char_at(2).is_some_and(stringutil::is_digit) {
+        let token = if self.char_at(1) == Some(b'.') && !self.char_at(2).is_some_and(|ch| stringutil::is_digit(u32::from(ch))) {
             self.state.pos += 2;
             Kind::QuestionDotToken
         } else if self.char_at(1) == Some(b'?') {
@@ -1549,7 +1534,7 @@ impl Scanner {
                     self.state.token_flags |= TokenFlags::Unterminated;
                     break;
                 }
-                let ch = text[p as usize] as i32;
+                let ch = u32::from(text[p as usize]);
                 if stringutil::is_line_break(ch) {
                     self.state.token_flags |= TokenFlags::Unterminated;
                     break;
@@ -1557,18 +1542,18 @@ impl Scanner {
                     // Parsing an escape character;
                     // reset the flag and just advance to the next char.
                     in_escape = false;
-                } else if ch == '/' as i32 && !in_character_class {
+                } else if ch == '/' as Rune && !in_character_class {
                     // A slash within a character class is permissible,
                     // but in general it signals the end of the regexp literal.
                     break;
-                } else if ch == '[' as i32 {
+                } else if ch == '[' as Rune {
                     in_character_class = true;
-                } else if ch == '\\' as i32 {
+                } else if ch == '\\' as Rune {
                     in_escape = true;
-                } else if ch == ']' as i32 {
+                } else if ch == ']' as Rune {
                     in_character_class = false;
                 } else if !in_character_class
-                    && ch == '(' as i32
+                    && ch == '(' as Rune
                     && p + 1 < end
                     && text[(p + 1) as usize] == b'?'
                     && p + 2 < end
@@ -1620,7 +1605,7 @@ impl Scanner {
                 // Whitespaces and semicolons at the end are not likely to be part of the regex
                 while p > start_of_reg_exp_body {
                     let (ch, size) = decode_last_rune(&text[..p as usize]);
-                    if stringutil::is_white_space_like(ch) || ch == ';' as i32 {
+                    if stringutil::is_white_space_like(ch) || ch == ';' as Rune {
                         p -= size as u32;
                     } else {
                         break;
@@ -1745,10 +1730,10 @@ impl Scanner {
             // firstNonWhitespace = 0 to indicate that we want leading whitespace
             loop {
                 let (ch, size) = self.char_and_size();
-                if size == 0 || ch == '{' as i32 {
+                if size == 0 || ch == '{' as Rune {
                     break;
                 }
-                if ch == '<' as i32 {
+                if ch == '<' as Rune {
                     if is_conflict_marker_trivia(self.text, self.state.pos) {
                         self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
                         self.state.token = Kind::ConflictMarkerTrivia;
@@ -1756,9 +1741,9 @@ impl Scanner {
                     }
                     break;
                 }
-                if ch == '>' as i32 {
+                if ch == '>' as Rune {
                     self.error_at(&diagnostics::Unexpected_token_Did_you_mean_or_gt, self.state.pos, 1, &[]);
-                } else if ch == '}' as i32 {
+                } else if ch == '}' as Rune {
                     self.error_at(&diagnostics::Unexpected_token_Did_you_mean_or_rbrace, self.state.pos, 1, &[]);
                 }
                 // FirstNonWhitespace is 0, then we only see whitespaces so far. If we see a linebreak, we want to ignore that whitespaces.
@@ -1844,11 +1829,11 @@ impl Scanner {
         self.state.token_start = self.state.pos;
         let text = self.text.as_bytes();
         let (mut ch, mut size) = self.char_and_size();
-        while (self.state.pos as usize) < self.text.len() && !stringutil::is_line_break(ch) && ch != '`' as i32 {
+        while (self.state.pos as usize) < self.text.len() && !stringutil::is_line_break(ch) && ch != '`' as Rune {
             if !in_backticks {
-                if ch == '{' as i32 {
+                if ch == '{' as Rune {
                     break;
-                } else if ch == '@' as i32 {
+                } else if ch == '@' as Rune {
                     // @ doesn't start a new tag inside ``, and elsewhere, only after whitespace and before identifier
                     let (previous, _) = decode_last_rune(&text[..self.state.pos as usize]);
                     if stringutil::is_white_space_single_line(previous) {
@@ -1903,7 +1888,7 @@ impl Scanner {
             }
             0x40 /* @ */ => Some(Kind::AtToken),
             0x0D | 0x0A => {
-                if ch == '\r' as i32 && self.char() == Some(b'\n') {
+                if ch == '\r' as Rune && self.char() == Some(b'\n') {
                     self.state.pos += 1;
                 }
                 self.state.token_flags |= TokenFlags::PrecedingLineBreak;
@@ -1951,7 +1936,7 @@ impl Scanner {
         let ch = self.char();
         // Fast path for simple ASCII identifiers
         if variant != IdentifierVariant::JSX
-            && ch.is_some_and(|ch| stringutil::is_ascii_letter(ch) || ch == b'_' || ch == b'$')
+            && ch.is_some_and(|ch| stringutil::is_ascii_letter(u32::from(ch)) || ch == b'_' || ch == b'$')
         {
             self.state.pos += 1;
             self.scan_ascii_while(|b| ASCII_IDENTIFIER_PART[b as usize]);
@@ -1962,24 +1947,24 @@ impl Scanner {
             }
             self.state.pos = identifier_start;
         }
-        let (mut ch, mut size) = self.decoded_char_and_size();
+        let (mut ch, mut size) = self.char_and_size();
         if is_identifier_start(ch) {
             let language_variant = if variant == IdentifierVariant::JSX { LanguageVariant::JSX } else { LanguageVariant::Standard };
             loop {
                 self.state.pos += size;
-                (ch, size) = self.decoded_char_and_size();
+                (ch, size) = self.char_and_size();
                 if !is_identifier_part_ex(ch, language_variant) {
                     break;
                 }
             }
             self.state.token_value = self.slice(start, self.state.pos);
-            if ch == '\\' {
+            if ch == '\\' as Rune {
                 let parts = self.scan_identifier_parts(variant);
                 self.state.token_value = self.concat_value(self.state.token_value, parts);
             }
             return true;
         }
-        if ch == '\\' {
+        if ch == '\\' as Rune {
             if let Some(escaped) =
                 self.scan_identifier_escape(|ch| is_identifier_start(ch), variant == IdentifierVariant::RegExpGroupName)
             {
@@ -1999,12 +1984,12 @@ impl Scanner {
         let mut start = self.state.pos;
         let language_variant = if variant == IdentifierVariant::JSX { LanguageVariant::JSX } else { LanguageVariant::Standard };
         loop {
-            let (ch, size) = self.decoded_char_and_size();
+            let (ch, size) = self.char_and_size();
             if is_identifier_part_ex(ch, language_variant) {
                 self.state.pos += size;
                 continue;
             }
-            if ch == '\\' {
+            if ch == '\\' as Rune {
                 let escape_start = self.state.pos;
                 if let Some(escaped) = self.scan_identifier_escape(
                     |ch| is_identifier_part_ex(ch, language_variant),
@@ -2202,26 +2187,26 @@ impl Scanner {
                 if ch == b'0' {
                     // Although '0' preceding any digit is treated as LegacyOctalEscapeSequence,
                     // '\08' should separately be interpreted as '\0' + '8'.
-                    if !self.char().is_some_and(stringutil::is_digit) {
+                    if !self.char().is_some_and(|ch| stringutil::is_digit(u32::from(ch))) {
                         return Cow::Borrowed("\x00");
                     }
                 }
                 if ch <= b'3' {
                     // '\01', '\011'
                     // '\1', '\17', '\177'
-                    if self.char().is_some_and(stringutil::is_octal_digit) {
+                    if self.char().is_some_and(|ch| stringutil::is_octal_digit(u32::from(ch))) {
                         self.state.pos += 1;
                     }
                 }
                 // '\17', '\177'
                 // '\4', '\47' but not '\477'
-                if self.char().is_some_and(stringutil::is_octal_digit) {
+                if self.char().is_some_and(|ch| stringutil::is_octal_digit(u32::from(ch))) {
                     self.state.pos += 1;
                 }
                 // '\47'
                 self.state.token_flags |= TokenFlags::ContainsInvalidEscape;
                 if flags.intersects(EscapeSequenceScanningFlags::ReportInvalidEscapeErrors) {
-                    let code = i64::from_str_radix(self.slice(start + 1, self.state.pos), 8).unwrap_or(0) as i32;
+                    let code = u32::from_str_radix(self.slice(start + 1, self.state.pos), 8).unwrap_or(0);
                     let arg = format!("\\x{:02x}", code);
                     if flags.intersects(EscapeSequenceScanningFlags::RegularExpression)
                         && !flags.intersects(EscapeSequenceScanningFlags::AtomEscape)
@@ -2255,7 +2240,7 @@ impl Scanner {
                         let text = self.slice(start, self.state.pos);
                         self.error_at(&diagnostics::Escape_sequence_0_is_not_allowed, start, self.state.pos - start, &[&text]);
                     }
-                    return Cow::Owned(rune_string(ch));
+                    return Cow::Owned(rune_string(u32::from(ch)));
                 }
                 Cow::Borrowed(self.slice(start, self.state.pos))
             }
@@ -2331,7 +2316,7 @@ impl Scanner {
             0x78 /* x */ => {
                 // '\xDD'
                 while self.state.pos < start + 4 {
-                    if !self.char().is_some_and(stringutil::is_hex_digit) {
+                    if !self.char().is_some_and(|ch| stringutil::is_hex_digit(u32::from(ch))) {
                         self.state.token_flags |= TokenFlags::ContainsInvalidEscape;
                         if flags.intersects(EscapeSequenceScanningFlags::ReportInvalidEscapeErrors) {
                             self.error(&diagnostics::Hexadecimal_digit_expected);
@@ -2341,7 +2326,7 @@ impl Scanner {
                     self.state.pos += 1;
                 }
                 self.state.token_flags |= TokenFlags::HexEscape;
-                let escaped_value = i64::from_str_radix(self.slice(start + 2, self.state.pos), 16).unwrap_or(0) as i32;
+                let escaped_value = u32::from_str_radix(self.slice(start + 2, self.state.pos), 16).unwrap_or(0);
                 Cow::Owned(rune_string(escaped_value))
             }
             // when encountering a LineContinuation (i.e. a backslash and a line terminator sequence),
@@ -2354,7 +2339,7 @@ impl Scanner {
             }
             0x0A /* \n */ => Cow::Borrowed(""),
             _ => {
-                let mut ch = i32::from(ch);
+                let mut ch = u32::from(ch);
                 // ch was read as a single byte; for multi-byte UTF-8 characters,
                 // we need to decode the full rune and advance past all its bytes.
                 if ch >= RUNE_SELF {
@@ -2666,8 +2651,8 @@ impl Scanner {
     fn scan_digits(&mut self) -> (&'static str, bool) {
         let start = self.state.pos;
         let mut is_octal = true;
-        while self.char().is_some_and(stringutil::is_digit) {
-            if !self.char().is_some_and(stringutil::is_octal_digit) {
+        while self.char().is_some_and(|ch| stringutil::is_digit(u32::from(ch))) {
+            if !self.char().is_some_and(|ch| stringutil::is_octal_digit(u32::from(ch))) {
                 is_octal = false;
             }
             self.state.pos += 1;
@@ -2687,7 +2672,7 @@ impl Scanner {
         let mut is_previous_token_separator = false;
         while digit_count < min_count || scan_as_many_as_possible {
             let ch = self.char();
-            if ch.is_some_and(stringutil::is_hex_digit) {
+            if ch.is_some_and(|ch| stringutil::is_hex_digit(u32::from(ch))) {
                 allow_separator = can_have_separators;
                 is_previous_token_separator = false;
                 digit_count += 1;
@@ -2873,7 +2858,7 @@ pub fn is_valid_identifier(s: &str) -> bool {
         return false;
     }
     for (i, ch) in s.char_indices() {
-        if i == 0 && !is_identifier_start(ch) || i != 0 && !is_identifier_part(ch) {
+        if i == 0 && !is_identifier_start(ch as Rune) || i != 0 && !is_identifier_part(ch as Rune) {
             return false;
         }
     }
@@ -2881,28 +2866,26 @@ pub fn is_valid_identifier(s: &str) -> bool {
 }
 
 // Section 6.1.4
-pub(crate) fn is_word_character(ch: i32) -> bool {
-    stringutil::is_ascii_letter(ch) || stringutil::is_digit(ch) || ch == '_' as i32
+pub(crate) fn is_word_character(ch: Rune) -> bool {
+    stringutil::is_ascii_letter(ch) || stringutil::is_digit(ch) || ch == '_' as Rune
 }
 
 #[inline]
-pub fn is_identifier_start(ch: impl stringutil::AsRune) -> bool {
-    let rune = ch.as_rune();
-    stringutil::is_ascii_letter(ch) || rune == '_' as i32 || rune == '$' as i32 || rune >= RUNE_SELF && stringutil::is_unicode_identifier_start(ch)
+pub fn is_identifier_start(ch: Rune) -> bool {
+    stringutil::is_ascii_letter(ch) || ch == '_' as Rune || ch == '$' as Rune || ch >= RUNE_SELF && stringutil::is_unicode_identifier_start(ch)
 }
 
 #[inline]
-pub fn is_identifier_part(ch: impl stringutil::AsRune) -> bool {
+pub fn is_identifier_part(ch: Rune) -> bool {
     is_identifier_part_ex(ch, LanguageVariant::Standard)
 }
 
 #[inline]
-pub fn is_identifier_part_ex(ch: impl stringutil::AsRune, language_variant: LanguageVariant) -> bool {
-    let rune = ch.as_rune();
-    is_word_character(rune)
-        || rune == '$' as i32
-        || rune >= RUNE_SELF && stringutil::is_unicode_identifier_part(ch)
-        || language_variant == LanguageVariant::JSX && rune == '-' as i32 // ":" is part of JSXNamespacedName, but not JSXIdentifier.
+pub fn is_identifier_part_ex(ch: Rune, language_variant: LanguageVariant) -> bool {
+    is_word_character(ch)
+        || ch == '$' as Rune
+        || ch >= RUNE_SELF && stringutil::is_unicode_identifier_part(ch)
+        || language_variant == LanguageVariant::JSX && ch == '-' as Rune // ":" is part of JSXNamespacedName, but not JSXIdentifier.
 }
 
 fn token_to_text() -> &'static [&'static str] {
@@ -2965,7 +2948,7 @@ pub fn skip_trivia_ex(text: &str, pos: u32, options: Option<&SkipTriviaOptions>)
         let (ch, size) = decode_rune(&bytes[pos as usize..]);
         match ch {
             0x0D | 0x0A => {
-                if ch == '\r' as i32 && pos + 1 < text_len && bytes[(pos + 1) as usize] == b'\n' {
+                if ch == '\r' as Rune && pos + 1 < text_len && bytes[(pos + 1) as usize] == b'\n' {
                     pos += 1;
                 }
                 pos += 1;
@@ -3030,7 +3013,7 @@ pub fn skip_trivia_ex(text: &str, pos: u32, options: Option<&SkipTriviaOptions>)
                 }
             }
             _ => {
-                if ch > MAX_ASCII_CHARACTER as i32 && stringutil::is_white_space_like(ch) {
+                if ch > MAX_ASCII_CHARACTER as Rune && stringutil::is_white_space_like(ch) {
                     pos += size as u32;
                     continue;
                 }
@@ -3057,7 +3040,7 @@ pub(crate) fn is_conflict_marker_trivia(text: &str, pos: u32) -> bool {
     }
 
     // Conflict markers must be at the start of a line.
-    let mut at_line_start = pos == 0 || stringutil::is_line_break(bytes[(pos - 1) as usize] as i32);
+    let mut at_line_start = pos == 0 || stringutil::is_line_break(u32::from(bytes[(pos - 1) as usize]));
     if !at_line_start && pos >= 2 {
         let (prev, _) = decode_last_rune(&bytes[..(pos - 2) as usize]);
         at_line_start = stringutil::is_line_break(prev);
@@ -3092,20 +3075,20 @@ pub(crate) fn scan_conflict_marker_trivia(
     let (mut ch, mut size) = decode_rune(&bytes[pos as usize..]);
     let length = bytes.len() as u32;
 
-    if ch == '<' as i32 || ch == '>' as i32 {
+    if ch == '<' as Rune || ch == '>' as Rune {
         while pos < length && !stringutil::is_line_break(ch) {
             pos += size as u32;
             (ch, size) = decode_rune(&bytes[pos as usize..]);
         }
     } else {
-        if ch != '|' as i32 && ch != '=' as i32 {
+        if ch != '|' as Rune && ch != '=' as Rune {
             panic!("Assertion failed: ch must be either '|' or '='");
         }
         // Consume everything from the start of a ||||||| or ======= marker to the start
         // of the next ======= or >>>>>>> marker.
         while pos < length {
             let current_char = bytes[pos as usize];
-            if (current_char == b'=' || current_char == b'>') && current_char as i32 != ch && is_conflict_marker_trivia(text, pos) {
+            if (current_char == b'=' || current_char == b'>') && u32::from(current_char) != ch && is_conflict_marker_trivia(text, pos) {
                 break;
             }
 
@@ -3658,7 +3641,7 @@ impl Iterator for CommentRangeIter {
             let (ch, size) = decode_rune(&text[self.pos as usize..]);
             match ch {
                 0x0D | 0x0A => {
-                    if ch == '\r' as i32 && self.pos + 1 < len && text[(self.pos + 1) as usize] == b'\n' {
+                    if ch == '\r' as Rune && self.pos + 1 < len && text[(self.pos + 1) as usize] == b'\n' {
                         self.pos += 1;
                     }
                     self.pos += 1;

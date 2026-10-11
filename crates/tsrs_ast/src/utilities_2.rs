@@ -6,7 +6,7 @@ use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ResolutionMode, ScriptKind
 
 use crate::*;
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum JSDeclarationKind {
     #[default]
@@ -885,7 +885,7 @@ pub(crate) fn pop_ancestor(ancestors: &[P<Node>], node: P<Node>) -> (&[P<Node>],
     (&ancestors[..n], Some(ancestors[n]))
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ModuleInstanceState {
     #[default]

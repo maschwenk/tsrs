@@ -310,12 +310,12 @@ impl Tracker {
                     astnav::get_start_of_node(token, source_file, false),
                     source_file,
                 ) {
-                    if pos > 0 && stringutil::is_line_break(text.as_bytes()[pos as usize - 1] as i32) {
+                    if pos > 0 && stringutil::is_line_break(u32::from(text.as_bytes()[pos as usize - 1])) {
                         return pos - 1;
                     }
                     return pos;
                 }
-                if stringutil::is_line_break(text.as_bytes()[pos as usize] as i32) {
+                if stringutil::is_line_break(u32::from(text.as_bytes()[pos as usize])) {
                     return pos;
                 }
             }
