@@ -408,7 +408,6 @@ version = "0.13.0"
 dependencies = [
  "libc",
  "libmimalloc-sys2",
- "mimalloc-safe",
  "rustc-hash",
  "tsrs_api",
  "tsrs_api_transport",
