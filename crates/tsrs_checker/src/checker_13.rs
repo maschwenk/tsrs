@@ -39,8 +39,16 @@ impl Checker {
     }
 
     fn get_union_type_worker_inner(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> {
+        let mut type_set = self.free_type_lists.pop().unwrap_or_default();
+        let result = self.get_union_type_from_set(types, union_reduction, alias, origin, &mut type_set);
+        self.free_type_list(type_set);
+        result
+    }
+
+    /// The rest of `get_union_type_worker_inner`, with the type set built in `type_set` (an empty buffer).
+    fn get_union_type_from_set(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>, type_set: &mut Vec<P<Type>>) -> P<Type> {
         let mut origin = origin;
-        let (mut type_set, includes) = self.add_types_to_union(types);
+        let includes = self.add_types_to_union_into(types, type_set);
         if union_reduction != UnionReduction::None {
             if includes.intersects(TypeFlags::AnyOrUnknown) {
                 if includes.intersects(TypeFlags::Any) {
@@ -62,21 +70,21 @@ impl Checker {
             if includes.intersects(TypeFlags::Enum | TypeFlags::Literal | TypeFlags::UniqueESSymbol | TypeFlags::TemplateLiteral | TypeFlags::StringMapping)
                 || includes.intersects(TypeFlags::Void) && includes.intersects(TypeFlags::Undefined)
             {
-                type_set = self.remove_redundant_literal_types(&type_set, includes, union_reduction == UnionReduction::Subtype);
+                self.remove_redundant_literal_types(type_set, includes, union_reduction == UnionReduction::Subtype);
             }
             if includes.intersects(TypeFlags::StringLiteral) && includes.intersects(TypeFlags::TemplateLiteral | TypeFlags::StringMapping) {
                 // tsrs: relations and inference; never stored in the union front cache (unioncache.rs).
                 self.union_front_cache.impure = self.union_front_cache.impure.wrapping_add(1);
-                type_set = self.remove_string_literals_matched_by_template_literals(&type_set);
+                *type_set = self.remove_string_literals_matched_by_template_literals(type_set);
             }
             if includes.intersects(TypeFlags::IncludesConstrainedTypeVariable) {
                 // tsrs: reads base constraints; never stored in the union front cache (unioncache.rs).
                 self.union_front_cache.impure = self.union_front_cache.impure.wrapping_add(1);
-                type_set = self.remove_constrained_type_variables(&type_set);
+                *type_set = self.remove_constrained_type_variables(type_set);
             }
             if union_reduction == UnionReduction::Subtype {
-                match self.remove_subtypes(&type_set, includes.intersects(TypeFlags::Object)) {
-                    Some(reduced) => type_set = reduced,
+                match self.remove_subtypes(type_set, includes.intersects(TypeFlags::Object)) {
+                    Some(reduced) => *type_set = reduced,
                     None => return self.error_type,
                 }
             }
@@ -108,7 +116,7 @@ impl Checker {
                 }
                 reduced_types.extend(type_set.iter().copied().filter(|t| !named.contains(t)));
             } else {
-                for &t in &type_set {
+                for &t in type_set.iter() {
                     if !named_unions.iter().any(|u| contains_type(self, u.types(), t)) {
                         reduced_types.push(t);
                     }
@@ -132,7 +140,7 @@ impl Checker {
         }
         let object_flags = if_else(includes.intersects(TypeFlags::NotPrimitiveUnion), ObjectFlags::None, ObjectFlags::PrimitiveUnion)
             | if_else(includes.intersects(TypeFlags::Intersection), ObjectFlags::ContainsIntersections, ObjectFlags::None);
-        self.get_union_type_from_sorted_list(&type_set, object_flags, alias, origin)
+        self.get_union_type_from_sorted_list(type_set, object_flags, alias, origin)
     }
 
     // This function assumes the constituent type list is sorted and deduplicated.
@@ -172,7 +180,8 @@ impl Checker {
     /// `compare_types` ends with the type id, so distinct types never compare equal and every correct sort of the same
     /// list gives the same order. That holds only while `compare_symbols` is a total order
     /// (`Program::source_files_complete`); otherwise this sorts as Go does.
-    pub(crate) fn add_types_to_union(&mut self, source_types: &[P<Type>]) -> (Vec<P<Type>>, TypeFlags) {
+    /// Go's `addTypesToUnion`, into `types` (an empty buffer).
+    pub(crate) fn add_types_to_union_into(&mut self, source_types: &[P<Type>], types: &mut Vec<P<Type>>) -> TypeFlags {
         let total_order = self.program.source_files_complete();
         let mut capacity = source_types.len();
         if source_types.len() == 2 {
@@ -185,7 +194,7 @@ impl Checker {
                 capacity /= 2;
             }
         }
-        let mut types: Vec<P<Type>> = Vec::with_capacity(capacity);
+        types.reserve(capacity);
         let mut includes = TypeFlags::empty();
         fn add_type(c: &mut Checker, types: &mut Vec<P<Type>>, includes: &mut TypeFlags, t: P<Type>) {
             let flags = t.flags();
@@ -221,12 +230,12 @@ impl Checker {
                 }
             }
             // Two sorted, unique runs: merge them (a constituent of both is added once).
-            merge_sorted_types(self, source_types[0].types(), source_types[1].types(), true /*dedup*/, &mut |c, t| add_type(c, &mut types, &mut includes, t));
-            return (types, includes);
+            merge_sorted_types(self, source_types[0].types(), source_types[1].types(), true /*dedup*/, &mut |c, t| add_type(c, types, &mut includes, t));
+            return includes;
         }
         // The flattened list is a sequence of ascending runs: a new run starts at an input whose first constituent is
         // below the last one before it.
-        let mut run_starts: Vec<usize> = Vec::new();
+        let mut run_starts = self.free_index_lists.pop().unwrap_or_default();
         let mut last_type: Option<P<Type>> = None;
         for &t in source_types {
             if Some(t) != last_type {
@@ -237,10 +246,10 @@ impl Checker {
                         includes |= TypeFlags::Union;
                     }
                     for &s in u.types() {
-                        add_type(self, &mut types, &mut includes, s);
+                        add_type(self, types, &mut includes, s);
                     }
                 } else {
-                    add_type(self, &mut types, &mut includes, t);
+                    add_type(self, types, &mut includes, t);
                 }
                 if total_order && start > 0 && types.len() > start && compare_types(self, Some(types[start - 1]), Some(types[start])) > 0 {
                     run_starts.push(start);
@@ -251,9 +260,9 @@ impl Checker {
         if types.len() >= 2 {
             // Sort and deduplicate types
             if !total_order {
-                tsrs_core::goslices::sort_stable_func(&mut types, |&a, &b| compare_types(self, Some(a), Some(b)));
+                tsrs_core::goslices::sort_stable_func(types, |&a, &b| compare_types(self, Some(a), Some(b)));
             } else if !run_starts.is_empty() {
-                merge_ascending_runs(self, &mut types, &run_starts);
+                merge_ascending_runs(self, types, &run_starts);
             }
             let mut unique = 1;
             for i in 1..types.len() {
@@ -265,7 +274,9 @@ impl Checker {
             }
             types.truncate(unique);
         }
-        (types, includes)
+        run_starts.clear();
+        self.free_index_lists.push(run_starts);
+        includes
     }
 
     // checker.go:26294
@@ -286,8 +297,7 @@ impl Checker {
     }
 
     // checker.go:26308
-    pub(crate) fn remove_redundant_literal_types(&mut self, types: &[P<Type>], includes: TypeFlags, reduce_void_undefined: bool) -> Vec<P<Type>> {
-        let mut types = types.to_vec();
+    pub(crate) fn remove_redundant_literal_types(&mut self, types: &mut Vec<P<Type>>, includes: TypeFlags, reduce_void_undefined: bool) {
         let mut i = types.len();
         while i > 0 {
             i -= 1;
@@ -298,12 +308,11 @@ impl Checker {
                 || flags.intersects(TypeFlags::BigIntLiteral) && includes.intersects(TypeFlags::BigInt)
                 || flags.intersects(TypeFlags::UniqueESSymbol) && includes.intersects(TypeFlags::ESSymbol)
                 || reduce_void_undefined && flags.intersects(TypeFlags::Undefined) && includes.intersects(TypeFlags::Void)
-                || is_fresh_literal_type(t) && contains_regular_literal_type(self, &types, i, t.as_literal_type().regular_type().unwrap());
+                || is_fresh_literal_type(t) && contains_regular_literal_type(self, types, i, t.as_literal_type().regular_type().unwrap());
             if remove {
                 types.remove(i);
             }
         }
-        types
     }
 
     // checker.go:26327
@@ -1252,33 +1261,40 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
             return;
         }
     }
-    let mut bounds: Vec<usize> = Vec::with_capacity(run_starts.len() + 2);
+    let mut bounds = c.free_index_lists.pop().unwrap_or_default();
     bounds.push(0);
     bounds.extend_from_slice(run_starts);
     bounds.push(n);
     let mut src = std::mem::take(types);
-    let mut dst: Vec<P<Type>> = Vec::with_capacity(n);
+    let mut dst = c.free_type_lists.pop().unwrap_or_default();
+    dst.reserve(n);
     while bounds.len() > 2 {
         let runs = bounds.len() - 1;
-        let mut next: Vec<usize> = Vec::with_capacity(runs / 2 + 2);
-        next.push(0);
         dst.clear();
+        // The bounds of the merged runs replace the old ones in place: the k-th new bound is written after the reads
+        // of bounds 2k..2k+2.
+        let mut written = 1;
         let mut j = 0;
         while j < runs {
-            if j + 1 < runs {
+            let end = if j + 1 < runs {
                 merge_sorted_types(c, &src[bounds[j]..bounds[j + 1]], &src[bounds[j + 1]..bounds[j + 2]], false /*dedup*/, &mut |_, t| dst.push(t));
-                next.push(bounds[j + 2]);
                 j += 2;
+                bounds[j]
             } else {
                 dst.extend_from_slice(&src[bounds[j]..bounds[j + 1]]);
-                next.push(bounds[j + 1]);
                 j += 1;
-            }
+                bounds[j]
+            };
+            bounds[written] = end;
+            written += 1;
         }
+        bounds.truncate(written);
         std::mem::swap(&mut src, &mut dst);
-        bounds = next;
     }
     *types = src;
+    c.free_type_list(dst);
+    bounds.clear();
+    c.free_index_lists.push(bounds);
 }
 
 /// Merges two runs sorted by `compare_types` (a total order in which only identical types compare equal), passing
