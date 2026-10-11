@@ -1342,13 +1342,13 @@ pub struct Checker {
     pub skip_direct_inference_nodes: Set<P<Node>>,
     pub ctx: Option<Context>, // Go nil until checkSourceFile
     pub active_mappers: Vec<P<TypeMapper>>,
+    /// One cache per active mapper; the caches past `active_mappers.len()` are cleared ones kept for reuse.
     pub active_type_mappers_caches: Vec<PackedMap<CacheHashKey, P<Type>>>,
     // Mappers and inference contexts `getConditionalType` made, recycled when it returns (notes/mem-recycle.md).
     pub scratch_mappers: Vec<P<TypeMapper>>,
     pub scratch_contexts: Vec<P<InferenceContext>>,
     /// `getTailRecursionRoot` mappers with the type-argument lists made for them, recycled with `scratch_mappers`.
     pub scratch_mapper_lists: Vec<(P<TypeMapper>, &'static [P<Type>])>,
-    pub free_type_mapper_caches: Vec<PackedMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub free_signature_lists: Vec<Vec<P<Signature>>>, // Rust-only: empty buffers for `reorder_candidates`
     pub free_index_lists: Vec<Vec<usize>>, // Rust-only: empty buffers for the run bounds of union construction
@@ -1759,7 +1759,6 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         scratch_mappers: Vec::new(),
         scratch_contexts: Vec::new(),
         scratch_mapper_lists: Vec::new(),
-        free_type_mapper_caches: Vec::new(),
         free_type_lists: Vec::new(),
         free_signature_lists: Vec::new(),
         free_index_lists: Vec::new(),
@@ -2260,7 +2259,6 @@ impl Checker {
             scratch_mappers: Vec::new(),
             scratch_contexts: Vec::new(),
             scratch_mapper_lists: Vec::new(),
-            free_type_mapper_caches: Vec::new(),
             free_type_lists: Vec::new(),
             free_signature_lists: Vec::new(),
             free_index_lists: Vec::new(),

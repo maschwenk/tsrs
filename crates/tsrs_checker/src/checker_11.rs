@@ -1025,7 +1025,6 @@ impl Checker {
         // stored only when the mapper was already active), so its lookup can only miss: no key is built for it.
         let key = if index == -1 {
             self.push_active_mapper(m);
-            debug_assert!(self.active_type_mappers_caches.last().is_some_and(|cache| cache.is_empty()));
             None
         } else {
             let key = active_mapper_cache_key(t, alias);
@@ -1103,10 +1102,14 @@ impl Checker {
 
     // checker.go:22571
     pub(crate) fn push_active_mapper(&mut self, mapper: P<TypeMapper>) {
+        // Go reuses a cleared map left in the slice capacity by popActiveMapper (here: the caches past the active
+        // mappers stay in the list, cleared).
+        let depth = self.active_mappers.len();
         self.active_mappers.push(mapper);
-        // Go reuses a cleared map left in the slice capacity by popActiveMapper (here: a pool of cleared maps).
-        let cache = self.free_type_mapper_caches.pop().unwrap_or_default();
-        self.active_type_mappers_caches.push(cache);
+        if self.active_type_mappers_caches.len() == depth {
+            self.active_type_mappers_caches.push(PackedMap::default());
+        }
+        debug_assert!(self.active_type_mappers_caches[depth].is_empty());
     }
 
     // checker.go:22586
@@ -1114,14 +1117,13 @@ impl Checker {
         self.active_mappers.pop();
         tsrs_core::census_scrub_slack(&mut self.active_mappers);
         // Go clears the map and leaves it in the list for later reuse.
-        let mut cache = self.active_type_mappers_caches.pop().unwrap();
+        let cache = &mut self.active_type_mappers_caches[self.active_mappers.len()];
         if cache.capacity() > 64 && cache.capacity() > 4 * cache.len() {
             // A table one large instantiation grew is not worth clearing (clearing touches every bucket).
-            cache = PackedMap::default();
+            *cache = PackedMap::default();
         } else {
             cache.clear();
         }
-        self.free_type_mapper_caches.push(cache);
     }
 
     // checker.go:22596
@@ -1131,7 +1133,7 @@ impl Checker {
 
     // checker.go:22600
     pub(crate) fn clear_active_mapper_caches(&mut self) {
-        for cache in self.active_type_mappers_caches.iter_mut() {
+        for cache in self.active_type_mappers_caches[..self.active_mappers.len()].iter_mut() {
             cache.clear();
         }
     }

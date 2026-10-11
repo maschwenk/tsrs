@@ -246,7 +246,7 @@ impl Checker {
         h.row("object_type_instantiations", self.object_type_instantiations.heap_stat());
         h.row("object_type_instantiations (inner maps)", inner);
         let mut inner = HeapStat::default();
-        for m in self.active_type_mappers_caches.iter().chain(self.free_type_mapper_caches.iter()) {
+        for m in self.active_type_mappers_caches.iter() {
             inner.add(m.heap_stat());
         }
         h.row("active/free type mapper caches (inner maps)", inner);
