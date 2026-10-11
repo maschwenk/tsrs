@@ -2262,7 +2262,7 @@ pub struct ParsedPatterns {
     // first. The best match (`find_best_pattern_match`: the longest prefix, then the first pattern) is the first
     // pattern that matches among those whose prefix starts the candidate, tried from the longest prefix: a few
     // lookups instead of testing every pattern (hundreds in a monorepo's `paths`).
-    by_prefix: std::collections::HashMap<Box<[u8]>, Vec<u32>, rustc_hash::FxBuildHasher>,
+    by_prefix: rustc_hash::FxHashMap<Box<[u8]>, Vec<u32>>,
     prefix_lengths: Vec<usize>,
 }
 
@@ -2310,7 +2310,7 @@ pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>
             }
         }
     }
-    let mut by_prefix: std::collections::HashMap<Box<[u8]>, Vec<u32>, rustc_hash::FxBuildHasher> = Default::default();
+    let mut by_prefix: rustc_hash::FxHashMap<Box<[u8]>, Vec<u32>> = Default::default();
     for (i, pattern) in patterns.iter().enumerate() {
         let prefix: Box<[u8]> = pattern.text.as_bytes()[..pattern.star_index as usize].into();
         by_prefix.entry(prefix).or_default().push(i as u32);

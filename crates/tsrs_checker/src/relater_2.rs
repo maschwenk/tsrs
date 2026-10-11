@@ -3027,4 +3027,4 @@ impl Relater {
 }
 
 /// The empty `excludedProperties` (tsrs: shared, instead of a set made and dropped per structural comparison).
-static NO_EXCLUDED_PROPERTIES: Set<String> = Set { m: std::collections::HashSet::with_hasher(rustc_hash::FxBuildHasher) };
+static NO_EXCLUDED_PROPERTIES: Set<String> = Set { m: rustc_hash::FxHashSet::with_hasher(rustc_hash::FxBuildHasher) };
