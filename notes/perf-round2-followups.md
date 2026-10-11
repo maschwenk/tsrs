@@ -133,6 +133,11 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Within the flow-walk skip (notes/perf-flow-skip-unnarrowed.md, landed): computing an assertion candidate's effects
+  signature in the skip check instead of peeking at it (overflowed the 512 MB stack on vscode: it starts resolution
+  chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);
+  root names instead of reference paths (a quarter of the skips).
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
@@ -336,6 +341,12 @@ with the switch off, which is why it is not in the default build.
 - Longest-processing-time-first queues and thieves taking from the front (notes/perf-checker-64.md): LPT +3.6% CPU at
   16 checkers and 5-8% more CPU per checker with the static assignment (program order keeps caches warm), README bench
   -2%; front-stealing +4-6% CPU at every count.
+- Assignment and stealing knobs on the 38k-file codebase at 8 checkers (notes/perf-icount-assign.md): the module
+  affinity's mu, gamma and passes away from 1 / 0.5 / 3 (+0.3% to +2.2% exact, static assignment); stealing runs of
+  files instead of single files, picking the victim by module overlap with the thief (+0.6% to +1.0%), and a gate on
+  starting a new victim late (only trims the extra stealing a loaded machine causes): within the noise. One thief per
+  queue at a time cost vscode 2% of check time at 9-12 checkers (1-7% at 4-16 when a thief never gave up its place);
+  the landed limit is checkers/4 at a time from 8 to 15.
 - Memory-traffic work at 32 checkers (notes/perf-memory-traffic-32.md): IPC is equal or higher at 32 checkers than at
   1 (vscode 1.92 -> 1.96) and miss rates are low, so padding, pinning, prefetching and hot/cold splits have nothing to
   win; `ReferenceInstantiations` slot hashes (A2) were within noise (+11 MiB peak).
@@ -385,6 +396,25 @@ with the switch off, which is why it is not in the default build.
   inlined); a 256-bit Bloom filter of the keys of indexed symbol tables (+0.25%: `SymbolMap::search` and `insert`
   both grew); rejecting different-flag pairs before the identity relation in inference's exact matching (+0.03%:
   nearly all pairs are object types with equal flags).
+- Heap allocation churn (notes/perf-heap-churn.md, landed): vscode single-threaded 41.3M -> 22.3M heap allocations,
+  -2.0% to -4.0% instructions on five projects, from returning stored names and lists instead of copies (accessed
+  property names, effective call arguments, path helpers), arena concatenation of symbol declarations, two pools and
+  two `SmallVec`s. Do not redo those sites. Left, with the reason, in the note: `SymbolMap` growth (memory-tuned),
+  `SymbolTable` snapshots (callees may mutate the table), results Go allocates too, `get_text_of_node`'s copy
+  (58 callers). The heap profile's `TSRS_HEAP_PROFILE=count` names the caller's caller of each allocation as built
+  (the note has the fix used); check a site's attribution before trusting it. Measured and not landed there:
+  `somePropertyReducesToNever`'s count map from a per-checker pool, -0.88% mui-docs / -0.83% mikro-orm instructions
+  (branch `perf/property-count-pool`; landed later with notes/perf-icount-alloc.md, -0.78% there with other pools).
+- From notes/perf-icount-alloc.md (exact VM counts, locality mode, a large private monorepo at 8 checkers): the
+  arguments of a pending type alias held as a `Cow` (the alias's own list when unchanged, a pooled buffer when
+  changed), together with pooled lists for template-literal instantiation: +0.20%, and +0.26% with the helpers out
+  of line (not explained). Pools for symbol and signature lists that are copied straight into the arena,
+  `getNamedMembers` into a pooled buffer, and object-literal all-properties tables presized: -0.012%, inside the
+  spread. A pool's push and pop cost about what mimalloc's fast path does. Pooling paid for hash tables and for
+  growth chains (realloc and copy), not for one short-lived Vec.
+  Relater round (notes/perf-icount-relater.md; another large private monorepo, DynamoRIO counts): an exact early exit
+  from the deeply-nested walk (+0.04% single-threaded), `Relation::set` through hashbrown's `entry` (-0.005%, noise),
+  a Bloom filter of names in `some_property_reduces_to_never`'s counts (+0.03%).
 
 ## The lint ratchet
 
