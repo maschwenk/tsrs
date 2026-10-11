@@ -115,6 +115,10 @@ impl Symbol {
         if declarations.is_empty() {
             return;
         }
+        if self.declarations.get().is_empty() {
+            self.set_declarations(declarations);
+            return;
+        }
         let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
         result.extend_from_slice(self.declarations.get());
         result.extend_from_slice(declarations);
