@@ -840,6 +840,8 @@ impl Checker {
     }
 
     // checker.go:26728
+    #[expect(clippy::inline_always, reason = "measured: its only caller is the loop of add_types_to_intersection, and each call paid a full prologue and epilogue (notes/perf-icount-relater.md)")]
+    #[inline(always)]
     pub(crate) fn add_type_to_intersection(&mut self, type_set: &mut orderedSet<P<Type>>, includes: TypeFlags, t: P<Type>) -> TypeFlags {
         let mut includes = includes;
         let mut t = t;
