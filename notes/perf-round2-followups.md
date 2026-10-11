@@ -140,6 +140,13 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Derived equality and ordering on the niche-encoded `TextPos` enum (PR #306;
+  notes/perf-unsigned-positions.md): extra discriminant handling despite a four-byte encoding that already supplies
+  equality and order. The first correctness-clean refactor added 0.086% to 1.002% instructions on all seventeen
+  projects. Direct encoded-key comparisons and cold failure paths remove that work without enlarging the positions.
+  Keep the relation budget signed as in Go: its negative exhausted states otherwise require saturation on every
+  recorded relation. The owner explicitly requested eliminating even instruction increases below the usual gate.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
