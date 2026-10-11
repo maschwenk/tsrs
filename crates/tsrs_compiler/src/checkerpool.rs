@@ -383,6 +383,8 @@ pub(crate) struct poolState {
     pub(crate) group_runs: Mutex<Vec<Vec<(f64, usize)>>>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, thread CPU seconds per checker.
     pub(crate) group_cpu: Mutex<Vec<Vec<f64>>>,
+    // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, instructions per checker (thread_instructions).
+    pub(crate) group_instructions: Mutex<Vec<Vec<u64>>>,
     // TSRS_FILE_TIMES only: (file, checker, seconds, thread CPU seconds) per checked file, in completion order.
     pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64, f64)>>,
     // Cost cache only: (file, thread CPU seconds) per checked file, per checker pass.
@@ -452,6 +454,27 @@ pub(crate) fn thread_cpu_seconds() -> f64 {
 #[cfg(not(unix))]
 pub(crate) fn thread_cpu_seconds() -> f64 {
     0.0
+}
+
+// Instructions retired by the calling thread so far (TSRS_ASSIGNMENT_STATS), on macOS only (0 elsewhere): unlike CPU
+// time they do not depend on the machine's load, so they show each checker's share of the duplicated work.
+#[cfg(target_os = "macos")]
+pub(crate) fn thread_instructions() -> u64 {
+    unsafe extern "C" {
+        // xnu `thread_selfcounts`: with kind 1 it writes the calling thread's instructions and cycles.
+        fn thread_selfcounts(kind: i32, buf: *mut u64, nbytes: usize) -> i32;
+    }
+    let mut counts = [0u64; 2];
+    // SAFETY: the buffer holds the two counters the call writes.
+    if unsafe { thread_selfcounts(1, counts.as_mut_ptr(), std::mem::size_of_val(&counts)) } != 0 {
+        return 0;
+    }
+    counts[0]
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn thread_instructions() -> u64 {
+    0
 }
 
 // TSRS_ASSIGNMENT_STATS=1: record per-checker group timings and, after `--extendedDiagnostics`, print the
@@ -769,6 +792,7 @@ impl checkerPool {
                 group_stolen: Mutex::new(Vec::new()),
                 group_runs: Mutex::new(Vec::new()),
                 group_cpu: Mutex::new(Vec::new()),
+                group_instructions: Mutex::new(Vec::new()),
                 file_times: Mutex::new(Vec::new()),
                 file_cpu: Mutex::new(Vec::new()),
                 recycle,
@@ -848,6 +872,7 @@ impl checkerPool {
         let n = state.checkers.len();
         let times: Vec<Mutex<(f64, usize)>> = if stats { (0..n).map(|_| Mutex::new((0.0, 0))).collect() } else { Vec::new() };
         let cpu: Vec<Mutex<f64>> = if stats { (0..n).map(|_| Mutex::new(0.0)).collect() } else { Vec::new() };
+        let instructions: Vec<std::sync::atomic::AtomicU64> = (0..if stats { n } else { 0 }).map(|_| std::sync::atomic::AtomicU64::new(0)).collect();
         let stolen: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
         let file_times = file_times_path().is_some();
         let cost_cache = checker_cost_cache_path().is_some() && n > 1;
@@ -914,6 +939,7 @@ impl checkerPool {
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
+            let instructions_start = if stats { thread_instructions() } else { 0 };
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
@@ -1001,6 +1027,8 @@ impl checkerPool {
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
+                // Read after the work group joined.
+                instructions[checker_idx].store(thread_instructions() - instructions_start, std::sync::atomic::Ordering::Relaxed);
             }
             // Memory peaks at the end of the type-check pass, while the last checkers still run: one that is done gives
             // back the resident, never used end of its arena chunk.
@@ -1029,6 +1057,7 @@ impl checkerPool {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_stolen.lock().unwrap().push(stolen.into_iter().map(std::sync::atomic::AtomicUsize::into_inner).collect());
+            state.group_instructions.lock().unwrap().push(instructions.into_iter().map(std::sync::atomic::AtomicU64::into_inner).collect());
         }
     }
 }

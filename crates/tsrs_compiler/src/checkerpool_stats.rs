@@ -95,6 +95,10 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
             let counts: Vec<String> = run.iter().map(|n| n.to_string()).collect();
             let _ = writeln!(out, "checker group stolen files: {}", counts.join(" "));
         }
+        for run in state.group_instructions.lock().unwrap().iter() {
+            let counts: Vec<String> = run.iter().map(|&n| format!("{:.2}", n as f64 / 1e9)).collect();
+            let _ = writeln!(out, "checker group instructions (G): {}", counts.join(" "));
+        }
         return out;
     }
     let categories: Vec<Category> = files.iter().map(|&f| category(program, f, &project_dir)).collect();
