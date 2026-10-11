@@ -2663,10 +2663,12 @@ impl Checker {
     }
 
     /// The flags of the constituents of the union or intersection `t`, nested unions' and intersections' included:
-    /// `maybe_type_of_kind` of a large union walks all of them for every kind asked, and they never change.
+    /// `maybe_type_of_kind` of a large union walks all of them for every kind asked, and they never change. Kept
+    /// for 8 or more constituents only.
     #[inline(never)]
     fn constituent_flags(&mut self, t: P<Type>) -> TypeFlags {
-        if let Some(&flags) = self.constituent_flags.get(&t) {
+        let large = t.types().len() >= 8;
+        if large && let Some(&flags) = self.constituent_flags.get(&t) {
             return flags;
         }
         let mut flags = TypeFlags::None;
@@ -2676,7 +2678,9 @@ impl Checker {
                 flags |= self.constituent_flags(c);
             }
         }
-        self.constituent_flags.insert(t, flags);
+        if large {
+            self.constituent_flags.insert(t, flags);
+        }
         flags
     }
 

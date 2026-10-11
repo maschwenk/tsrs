@@ -1136,7 +1136,9 @@ pub struct Checker {
     /// ones included.
     pub(crate) constituent_flags: FxHashMap<P<Type>, TypeFlags>,
     /// `intersection_recursion_ids` (relater_1.rs): the recursion identities of an intersection's constituents.
-    pub(crate) intersection_recursion_ids: FxHashMap<P<Type>, Box<[RecursionId]>>,
+    /// The (start, length) of the identities in `intersection_recursion_id_pool`.
+    pub(crate) intersection_recursion_ids: FxHashMap<P<Type>, (u32, u32)>,
+    pub(crate) intersection_recursion_id_pool: Vec<RecursionId>,
     /// Bumped whenever a type's resolved members are reset (`get_base_types`, `canonicalize_base_type_cycles`).
     pub(crate) members_reset_epoch: u32,
     /// Structured type member resolutions in progress: while any is, a member table may be incomplete.
@@ -1549,6 +1551,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         discriminant_property_types: FxHashMap::default(),
         constituent_flags: FxHashMap::default(),
         intersection_recursion_ids: FxHashMap::default(),
+        intersection_recursion_id_pool: Vec::new(),
         members_reset_epoch: 0,
         members_resolving: 0,
         last_emit_module_format: None,
@@ -2042,6 +2045,7 @@ impl Checker {
             discriminant_property_types: FxHashMap::default(),
             constituent_flags: FxHashMap::default(),
             intersection_recursion_ids: FxHashMap::default(),
+            intersection_recursion_id_pool: Vec::new(),
             members_reset_epoch: 0,
             members_resolving: 0,
             #[cfg(feature = "assignment-stats")]
