@@ -633,65 +633,92 @@ fn same_text(a: &str, b: &str) -> bool {
     a.len() == b.len() && (std::ptr::eq(a.as_ptr(), b.as_ptr()) || a.as_bytes() == b.as_bytes())
 }
 
-/// The hash index of a large table: open addressing with linear probing over a power-of-two array, at most three
-/// quarters full. A slot is 0 when empty, else the entry's position plus one in the low 24 bits and 8 bits of the
-/// key's hash above them, so a probe reads an entry only when those bits match. Lookups in tables of 17 to 64
-/// entries are 40% of all symbol table lookups and a quarter of them miss; a probe here costs a few instructions,
-/// where `hashbrown`'s group probe cost about 60 with its bookkeeping. At most half full: 0.2% fewer instructions
-/// but 0.6% more peak RSS; three quarters is below `hashbrown`'s peak RSS.
+/// The hash index of a large table: open addressing with linear probing over a power-of-two array of slots. A slot
+/// is 0 when empty, else the entry's position plus one in the low bits and 8 bits of the key's hash above them, so a
+/// probe reads an entry only when those bits match. Lookups in tables of 17 to 64 entries are 40% of all symbol
+/// table lookups and a quarter of them miss; a probe here costs a few instructions, where `hashbrown`'s group probe
+/// cost about 60 with its bookkeeping. Slots are 16 bits up to 255 entries and 32 bits
+/// beyond; both are below `hashbrown`'s peak RSS.
 #[derive(Clone)]
-struct PosIndex {
-    slots: Box<[u32]>,
+enum PosIndex {
+    /// Tables of at most 255 entries: 8 position bits, at most half full.
+    Narrow(Box<[u16]>),
+    /// 24 position bits, at most three quarters full.
+    Wide(Box<[u32]>),
 }
 
 impl PosIndex {
-    const POS_BITS: u32 = 24;
-    const POS_MASK: u32 = (1 << Self::POS_BITS) - 1;
+    const NARROW_MAX: usize = 255;
+    const WIDE_MAX: usize = (1 << 24) - 1;
 
     fn with_capacity(n: usize) -> PosIndex {
-        assert!(n < Self::POS_MASK as usize, "symbol table with more than 16M entries");
-        PosIndex { slots: vec![0; (4 * n).div_ceil(3).next_power_of_two().max(32)].into_boxed_slice() }
+        if n <= Self::NARROW_MAX {
+            PosIndex::Narrow(vec![0; (2 * n).next_power_of_two()].into_boxed_slice())
+        } else {
+            assert!(n <= Self::WIDE_MAX, "symbol table with more than 16M entries");
+            PosIndex::Wide(vec![0; (4 * n).div_ceil(3).next_power_of_two()].into_boxed_slice())
+        }
     }
 
-    /// Whether `n` entries keep the array at most three quarters full.
+    fn heap_bytes(&self) -> usize {
+        match self {
+            PosIndex::Narrow(slots) => slots.len() * 2,
+            PosIndex::Wide(slots) => slots.len() * 4,
+        }
+    }
+
+    /// Whether `n` entries fit without growing.
     #[inline]
     fn has_room_for(&self, n: usize) -> bool {
-        4 * n <= 3 * self.slots.len()
-    }
-
-    /// The first slot to probe (the top bits of the hash spread over 64 bits) and the tag bits of a slot.
-    #[inline]
-    fn start_and_tag(&self, hash: u32) -> (usize, u32) {
-        let spread = (hash as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-        ((spread >> 32) as usize & (self.slots.len() - 1), (hash & 0xff) << Self::POS_BITS)
+        match self {
+            PosIndex::Narrow(slots) => n <= Self::NARROW_MAX && 2 * n <= slots.len(),
+            PosIndex::Wide(slots) => 4 * n <= 3 * slots.len(),
+        }
     }
 
     /// Adds position `i` (not yet in the index) of a key with hash `hash`.
+    #[inline]
     fn insert(&mut self, hash: u32, i: usize) {
-        assert!(i < Self::POS_MASK as usize, "symbol table with more than 16M entries");
-        let mask = self.slots.len() - 1;
-        let (mut slot, tag) = self.start_and_tag(hash);
-        while self.slots[slot] != 0 {
-            slot = (slot + 1) & mask;
+        match self {
+            PosIndex::Narrow(slots) => insert_slot(slots, 8, hash, i),
+            PosIndex::Wide(slots) => insert_slot(slots, 24, hash, i),
         }
-        self.slots[slot] = tag | (i as u32 + 1);
     }
 
-    /// The position whose key has hash `hash` and satisfies `matches`.
-    #[inline]
-    fn find(&self, hash: u32, matches: impl Fn(usize) -> bool) -> Option<usize> {
-        let mask = self.slots.len() - 1;
-        let (mut slot, tag) = self.start_and_tag(hash);
-        loop {
-            let v = self.slots[slot];
-            if v == 0 {
-                return None;
-            }
-            if v & !Self::POS_MASK == tag && matches((v & Self::POS_MASK) as usize - 1) {
-                return Some((v & Self::POS_MASK) as usize - 1);
-            }
-            slot = (slot + 1) & mask;
+}
+
+/// The first slot to probe (the top bits of the hash spread over 64 bits) and the tag bits of a slot.
+#[inline]
+fn slot_start_and_tag(len: usize, pos_bits: u32, hash: u32) -> (usize, u32) {
+    let spread = (hash as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+    ((spread >> 32) as usize & (len - 1), (hash & 0xff) << pos_bits)
+}
+
+fn insert_slot<T: Copy + Into<u32> + TryFrom<u32>>(slots: &mut [T], pos_bits: u32, hash: u32, i: usize) {
+    let mask = slots.len() - 1;
+    let (mut slot, tag) = slot_start_and_tag(slots.len(), pos_bits, hash);
+    while slots[slot].into() != 0 {
+        slot = (slot + 1) & mask;
+    }
+    let Ok(v) = T::try_from(tag | (i as u32 + 1)) else { unreachable!("position {i} past the index width") };
+    slots[slot] = v;
+}
+
+#[inline]
+/// The position in `slots` whose key has hash `hash` and satisfies `matches`.
+fn find_slot<T: Copy + Into<u32>>(slots: &[T], pos_bits: u32, hash: u32, matches: impl Fn(usize) -> bool) -> Option<usize> {
+    let mask = slots.len() - 1;
+    let pos_mask = (1u32 << pos_bits) - 1;
+    let (mut slot, tag) = slot_start_and_tag(slots.len(), pos_bits, hash);
+    loop {
+        let v: u32 = slots[slot].into();
+        if v == 0 {
+            return None;
         }
+        if v & !pos_mask == tag && matches((v & pos_mask) as usize - 1) {
+            return Some((v & pos_mask) as usize - 1);
+        }
+        slot = (slot + 1) & mask;
     }
 }
 
@@ -757,7 +784,9 @@ impl SymbolMap {
         let print = KeyPrint::of(name, hash);
         match self.index() {
             None => (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print)),
-            Some(index) => index.find(hash, |i| self.entry_matches(i, name, print)),
+            // One closure per width: a closure called from both instantiations is not inlined.
+            Some(PosIndex::Narrow(slots)) => find_slot(slots, 8, hash, |i| self.entry_matches(i, name, print)),
+            Some(PosIndex::Wide(slots)) => find_slot(slots, 24, hash, |i| self.entry_matches(i, name, print)),
         }
     }
 
@@ -959,7 +988,7 @@ impl SymbolTable {
         if let Some(extra) = m.extra.get() {
             bytes += std::mem::size_of::<SymbolMapExtra>() + extra.odd_keys.capacity() * 24;
             if let Some(index) = &extra.index {
-                bytes += index.slots.len() * 4;
+                bytes += index.heap_bytes();
             }
         }
         (m.entries.len(), m.entries.capacity(), bytes)
@@ -1089,5 +1118,35 @@ mod tests {
             assert!(filter.may_contain(HashedName::new(name)), "{name}");
         }
         assert!(!NameFilter::default().may_contain(HashedName::new("member0")));
+    }
+
+    #[test]
+    fn index_finds_every_key_through_growth_and_deletes() {
+        // Past both index widths (255 entries), presized and grown, with deletes, an odd key and a replaced symbol.
+        for presized in [0, 20, 300] {
+            let table = if presized == 0 { SymbolTable::new() } else { SymbolTable::with_capacity(presized) };
+            let names: Vec<&'static str> = (0..600).map(|i| &*Box::leak(format!("k{i}").into_boxed_str())).collect();
+            let mut expected: Vec<(&'static str, P<Symbol>)> = Vec::new();
+            for (i, &name) in names.iter().enumerate() {
+                let symbol = Symbol::new(SymbolFlags::Property, if i == 7 { "odd" } else { name });
+                table.set(name, symbol);
+                expected.push((name, symbol));
+                if i % 97 == 50 {
+                    let gone = expected.remove(i / 3).0;
+                    table.delete(gone);
+                    assert!(table.lookup(gone).is_none(), "{gone}");
+                }
+                if i % 89 == 3 {
+                    let replaced = Symbol::new(SymbolFlags::Property, expected[i / 2].0);
+                    table.set(expected[i / 2].0, replaced);
+                    expected[i / 2].1 = replaced;
+                }
+                for &(name, symbol) in &expected {
+                    assert!(table.lookup(name) == Some(symbol), "{name} after {i}");
+                }
+                assert!(table.lookup("absent").is_none());
+            }
+            assert_eq!(table.entries(), expected);
+        }
     }
 }
