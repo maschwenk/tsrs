@@ -89,6 +89,12 @@ impl<H: 'static> NameResolver<H> {
         let original_location = location; // needed for did-you-mean error reporting, which gathers candidates starting from the original location
         let name_is_const = name == "const";
         'loop_: while let Some(mut loc) = location {
+            if is_pass_through_scope_kind(loc.kind()) {
+                debug_assert!(loc.locals_container_data().is_none());
+                last_location = Some(loc);
+                location = loc.parent();
+                continue;
+            }
             if name_is_const && ast::is_const_assertion(loc) {
                 // `const` in an `as const` has no symbol, but issues no error because there is no *actual* lookup of the type
                 // (it refers to the constant type of the expression instead)
@@ -628,6 +634,53 @@ pub(crate) fn is_export_default_symbol(symbol: Option<P<Symbol>>) -> bool {
     };
     let declarations = symbol.declarations();
     !declarations.is_empty() && ast::has_syntactic_modifier(declarations[0], ModifierFlags::Default)
+}
+
+/// tsrs-only: kinds of the ancestors a name is most often resolved through, for which `resolve` does nothing but
+/// move to the parent: no locals, no case of its kind switch, never a deferred context or a self-reference
+/// location, not a const assertion.
+#[inline]
+fn is_pass_through_scope_kind(kind: Kind) -> bool {
+    matches!(
+        kind,
+        Kind::CallExpression
+            | Kind::NewExpression
+            | Kind::PropertyAccessExpression
+            | Kind::ElementAccessExpression
+            | Kind::ExpressionStatement
+            | Kind::ReturnStatement
+            | Kind::IfStatement
+            | Kind::VariableDeclaration
+            | Kind::VariableDeclarationList
+            | Kind::VariableStatement
+            | Kind::ObjectLiteralExpression
+            | Kind::PropertyAssignment
+            | Kind::ShorthandPropertyAssignment
+            | Kind::SpreadAssignment
+            | Kind::ArrayLiteralExpression
+            | Kind::BinaryExpression
+            | Kind::ParenthesizedExpression
+            | Kind::ConditionalExpression
+            | Kind::PrefixUnaryExpression
+            | Kind::AwaitExpression
+            | Kind::NonNullExpression
+            | Kind::TemplateExpression
+            | Kind::TemplateSpan
+            | Kind::JsxElement
+            | Kind::JsxSelfClosingElement
+            | Kind::JsxOpeningElement
+            | Kind::JsxAttributes
+            | Kind::JsxAttribute
+            | Kind::JsxExpression
+            | Kind::JsxFragment
+            | Kind::TypeReference
+            | Kind::PropertySignature
+            | Kind::TypeLiteral
+            | Kind::UnionType
+            | Kind::IntersectionType
+            | Kind::ArrayType
+            | Kind::IndexedAccessType
+    )
 }
 
 /// tsrs: name resolution asks this of every ancestor of a reference (131M calls on the 38k-file codebase), and only
