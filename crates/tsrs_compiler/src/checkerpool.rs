@@ -1207,18 +1207,13 @@ impl FileQueue {
 
     fn take(&self, front: bool) -> Option<usize> {
         // The compare-exchange on `range` alone decides who gets a position; nothing else is published through it.
-        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
-        loop {
-            if (r & QUEUE_LOW) >= (r >> 32) {
-                return None;
-            }
-            let new = if front { r + 1 } else { r - (1 << 32) };
-            // As above: the exchange only claims the position.
-            match self.range.compare_exchange_weak(r, new, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
-                Ok(_) => break,
-                Err(current) => r = current,
-            }
-        }
+        // As above: the exchange only claims the position.
+        let r = self
+            .range
+            .try_update(std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed, |r| {
+                ((r & QUEUE_LOW) < (r >> 32)).then(|| if front { r + 1 } else { r - (1 << 32) })
+            })
+            .ok()?;
         let pos = if front { r & QUEUE_LOW } else { (r >> 32) - 1 };
         Some(self.positions[pos as usize] as usize)
     }

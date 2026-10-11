@@ -281,7 +281,7 @@ fn check_field(spec: &FieldSpec, v: &Value, pointer: &str, lexemes: &FxHashMap<S
         return Ok(());
     }
     if let Some(elem) = field_elem(spec.kind) {
-        check_scalar(elem, v, lexemes.get(&pointer).map(String::as_str)).then_some(()).ok_or_else(|| mismatch(v, &pointer, spec.go_type))?;
+        check_scalar(elem, v, lexemes.get(&pointer).map(String::as_str)).ok_or_else(|| mismatch(v, &pointer, spec.go_type))?;
         if let Value::Object(o) = v {
             check_struct(spec.go_type, o, &pointer, lexemes)?;
             check_external_integers(spec.go_type, o, &pointer, lexemes)?;

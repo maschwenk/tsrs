@@ -23,7 +23,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
 
 jobs:
   check-and-test:
@@ -75,9 +74,7 @@ jobs:
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
 
       - name: cargo check
-        run: cargo check --workspace --locked
-        env:
-          RUSTFLAGS: -D warnings
+        run: cargo check --workspace --locked --config 'build.warnings="deny"'
 
       - name: cargo test (fast crates)
         run: >-
@@ -260,9 +257,7 @@ jobs:
         run: rustup target add wasm32-wasip1
 
       - name: cargo check (wasm32-wasip1)
-        run: cargo check -p tsrs_wasm --target wasm32-wasip1 --locked
-        env:
-          RUSTFLAGS: -D warnings
+        run: cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
 
       - name: Build native binaries
         run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner

@@ -3,6 +3,7 @@ name = "tsrs_api_codec"
 description = "Binary AST codec of the TypeScript native API (port of the pinned tsc/internal/api/encoder)"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [lints]

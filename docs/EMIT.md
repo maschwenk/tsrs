@@ -30,7 +30,7 @@ Reference commit: the same as the rest of the port (`ts-ref/tsc` = microsoft/Typ
     mode and with `TSRS_LAZY_MEMBERS=0`, with single- and multi-threaded test programs (compare whole
     `target/test-results` trees);
   - `cargo check --workspace` with 0 errors and 0 warnings, also on the newest available rustc (CI uses
-    rustc 1.99 with `-D warnings`; avoid APIs deprecated there, such as `Atomic::fetch_update`);
+    rustc 1.99 with Cargo's `build.warnings=deny`; avoid APIs deprecated there, such as `Atomic::fetch_update`);
   - from the harness wave onwards, the emit pass counts (`--baselines js`, and later the source-map baselines)
     must not lose a pass. Record them in the progress table (section 12).
 - The private monorepo is read-only and is never named in commits or notes. End-to-end emit tests use the

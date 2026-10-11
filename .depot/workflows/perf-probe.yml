@@ -42,7 +42,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
   PROBE_PROJECTS: ${{ inputs.projects || 'vscode' }}
 
 jobs:

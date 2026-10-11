@@ -51,7 +51,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
 
 jobs:
   # tsrs is measured as released: the PGO build of the `dist` profile, optimized with BOLT, with the same commands as

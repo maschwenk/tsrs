@@ -630,12 +630,12 @@ impl checkerPool {
 
     #[cfg(test)]
     pub(crate) fn checker_ptr(&self, index: usize) -> Option<*const Checker> {
-        self.mu.lock().unwrap().checkers[index].as_ref().map(|c| &**c as *const Checker)
+        self.mu.lock().unwrap().checkers[index].as_ref().map(|c| &raw const **c)
     }
 
     #[cfg(test)]
     pub(crate) fn persistent_ptr(&self) -> Option<*const Checker> {
-        self.mu.lock().unwrap().persistent_checker.as_ref().map(|c| &**c as *const Checker)
+        self.mu.lock().unwrap().persistent_checker.as_ref().map(|c| &raw const **c)
     }
 
     #[cfg(test)]

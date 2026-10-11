@@ -369,7 +369,7 @@ impl Checker {
             let (n, m) = (source.types().len(), target.types().len());
             // A scan touches each target type at most once; the searches cost about log2(m) comparisons per source
             // type, each far more than an identity test.
-            if n * (usize::BITS - m.leading_zeros()) as usize * 8 >= m && self.program.source_files_complete() {
+            if n * m.bit_width() as usize * 8 >= m && self.program.source_files_complete() {
                 return crate::checker_13::is_sorted_subset(source.types(), target.types());
             }
             for &t in source.types() {

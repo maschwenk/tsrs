@@ -1584,10 +1584,7 @@ fn contains_slash(fragment: &str) -> bool {
 
 // string_completions.go:1826
 fn without_start_and_end(s: &str, start: &str, end: &str) -> Option<String> {
-    if s.starts_with(start) && s.ends_with(end) && s.len() >= start.len() + end.len() {
-        return Some(s[start.len()..s.len() - end.len()].to_string());
-    }
-    None
+    s.strip_circumfix(start, end).map(str::to_string)
 }
 
 // string_completions.go:1834

@@ -159,8 +159,8 @@ pub fn is_ambient_module_symbol_name(s: &str) -> bool {
 // Ambient module symbols are either of the form `"modulename"` or `InternalSymbolNamePrefix + "\"modulename\"pattern@nodeId"`;
 // see `getDeclarationName`.
 pub fn try_get_ambient_module_name_from_symbol_name(s: &str) -> Option<&str> {
-    if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
-        return Some(&s[1..s.len() - 1]);
+    if let Some(name) = s.strip_circumfix('"', '"') {
+        return Some(name);
     }
     let pattern_prefix = format!("{}\"", InternalSymbolNamePrefix);
     let rest = s.strip_prefix(pattern_prefix.as_str())?;

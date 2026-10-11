@@ -175,7 +175,7 @@ pub(crate) fn bucket(n: usize) -> u32 {
     if n <= 1 {
         0
     } else {
-        usize::BITS - (n - 1).leading_zeros()
+        (n - 1).bit_width()
     }
 }
 

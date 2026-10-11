@@ -40,7 +40,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
 
 jobs:
   # Pack tsrs exactly as a release would (without publishing), install the tarballs into a project outside the

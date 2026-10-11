@@ -29,7 +29,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
   PROJECTS: ${{ inputs.projects || 'vscode' }}
   REPS: ${{ inputs.reps || '20' }}
   THREADS: ${{ inputs.threads || 'default,4,8,16,all' }}

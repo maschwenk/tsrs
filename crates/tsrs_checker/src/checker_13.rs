@@ -1260,7 +1260,7 @@ fn merge_ascending_runs(c: &mut Checker, types: &mut Vec<P<Type>>, run_starts: &
 /// a small union added to a large one.
 fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type>], dedup: bool, out: &mut impl FnMut(&mut Checker, P<Type>)) {
     let (short, long) = (left.len().min(right.len()), left.len().max(right.len()));
-    if short > 0 && short * (usize::BITS - long.leading_zeros()) as usize * 2 < long {
+    if short > 0 && short * long.bit_width() as usize * 2 < long {
         let left_is_long = left.len() >= right.len();
         let (mut long_run, short_run) = if left_is_long { (left, right) } else { (right, left) };
         for &t in short_run {

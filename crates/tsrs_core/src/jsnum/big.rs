@@ -60,7 +60,7 @@ fn mul(x: &[u32], y: &[u32]) -> Vec<u32> {
 fn bit_len(x: &[u32]) -> usize {
     match x.last() {
         None => 0,
-        Some(&top) => (x.len() - 1) * 32 + (32 - top.leading_zeros() as usize),
+        Some(&top) => (x.len() - 1) * 32 + top.bit_width() as usize,
     }
 }
 

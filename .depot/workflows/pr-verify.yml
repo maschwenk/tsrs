@@ -58,7 +58,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
   # `depot ci run` and pull request runs have no inputs; these fallbacks are the defaults above.
   RUNNER_CPUS: ${{ inputs.cpus || '32' }}
   BASE: ${{ inputs.base || 'main' }}

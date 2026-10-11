@@ -148,7 +148,7 @@ pub fn sort_func<E>(x: &mut [E], mut cmp: impl FnMut(&E, &E) -> i32) {
 }
 
 fn bits_len(n: usize) -> usize {
-    (usize::BITS - n.leading_zeros()) as usize
+    n.bit_width() as usize
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

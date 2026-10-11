@@ -798,15 +798,7 @@ impl Snapshot {
     // snapshot is already disposed (refCount == 0), it returns false without
     // modifying the count. On success the caller must eventually call Deref.
     pub(crate) fn try_ref(&self) -> bool {
-        loop {
-            let rc = self.ref_count.load(Ordering::SeqCst);
-            if rc <= 0 {
-                return false;
-            }
-            if self.ref_count.compare_exchange(rc, rc + 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-                return true;
-            }
-        }
+        self.ref_count.try_update(Ordering::SeqCst, Ordering::SeqCst, |rc| (rc > 0).then(|| rc + 1)).is_ok()
     }
 
     // snapshot.go:755
