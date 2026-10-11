@@ -146,6 +146,9 @@ with the switch off, which is why it is not in the default build.
   projects. Direct encoded-key comparisons and cold failure paths remove that work without enlarging the positions.
   Keep the relation budget signed as in Go: its negative exhausted states otherwise require saturation on every
   recorded relation. The owner explicitly requested eliminating even instruction increases below the usual gate.
+  The subsequent internal-integer audit is also owner-requested domain cleanup, not a speedup claim: unsigned
+  masks and bounded IDs retain their width, emitter indexes avoid narrowing, and genuine signed domains remain
+  signed. Before/after validation and measurements are recorded in the same note.
 
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees

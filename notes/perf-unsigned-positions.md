@@ -82,3 +82,73 @@ Sixteen checkers is the default on this 32-vCPU runner. The largest timed-cell R
 - Regression fixtures, generated code, Node API parity, macOS packaging and arena safety pass.
 - Lint ratchet and source checks pass without baseline increases.
 - WebAssembly differential gates pass; all 13 PR checks are green on the measured source revision.
+
+## Follow-up: verified internal flags, IDs and counts
+
+The owner requested a further audit and selected the verified internal values, leaving Unicode and indentation
+APIs for a separate review. Source revision `a8fa8de5` makes these replacements relative to `6720c98d`:
+
+- Async-context flags, for-await hierarchy flags, formatting rule actions and semantic-token modifiers use `u32`.
+  Their masks and bitwise operations are unchanged, including the full-width complement of formatting actions.
+- Semantic-token type IDs, snippet tab-stop IDs and keyword-completion cache keys use `u32`, preserving their
+  four-byte storage and existing numeric values. The cache structure and serialized data are unchanged.
+- The array-slice and parameter-decorator factory helpers accept `usize`. Each has one caller, passing a
+  collection index; the narrowing `as i32` casts are removed.
+- Incremental nested-emit depth uses `usize`; its completion closure decrements once for each increment.
+  Decorator lexical depth uses `u32`, retaining the compact field; it is decremented only when positive.
+
+Signed indentation differences, Go rune helpers (including their invalid-input behavior), JavaScript `ToInt32`,
+protocol/FFI integers, diagnostic codes and the exhausted relation budget remain signed. Enum representations
+are outside this pass. These are domain corrections requested by the owner, not a claimed speedup.
+
+Before/after layout checks on macOS arm64 using the compiled release libraries are identical:
+
+| type | before, bytes | after, bytes |
+| --- | ---: | ---: |
+| `SnippetElement` | 8 | 8 |
+| `Option<SnippetElement>` | 8 | 8 |
+| Decorator `lexicalEntry` | 56 | 56 |
+| Incremental `Program` | 160 | 160 |
+
+Local validation:
+
+- Workspace check and 91 checks in the affected crates pass; lint ratchet and source checks pass without baseline changes.
+- Both conformance histories retain every previously passing case: 13,458 / 12,779 / 12,779 in reference history;
+  13,458 / 12,778 / 12,778 in default history, with no crashes or timeouts.
+- Fourslash retains 4,066 passes, 63 existing failures and 417 skips.
+- The emit oracle compares 978 async, await, decorator and destructuring cases against pinned Go: 1,497 variants
+  with emitted output match, and 75 variants emit nothing. Before/after reports are identical.
+- All 31 steps across the five incremental fixture sequences match pinned Go and the previous PR binary.
+  The local harness uses a scratch copy adapted for macOS's Bash/sed and canonical temporary paths; the repository
+  harness is unchanged.
+
+### Follow-up measurements
+
+Depot run `zlb2zr9w6l` compares `6720c98d` with `a8fa8de5` on the same 32-vCPU Linux x86-64 runner,
+using the workflow and measurement settings above. All 102 diagnostic and exit-code cells match. Every project's
+instruction delta rounds to 0.000%; the largest absolute delta is 0.000042%, below the documented 0.001%
+repeatability of the counter. The mixed-sign differences are measurement-neutral, not evidence of a speedup.
+
+| project | instructions before | instructions after | delta | RSS 1 thread, MiB: before → after | RSS 16 checkers, MiB: before → after |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| vscode | 89,048,037,150 | 89,048,017,408 | -0.000022% | 1606.87 → 1606.60 | 2183.80 → 2179.99 |
+| xstate-main | 6,037,238,585 | 6,037,238,014 | -0.000009% | 182.75 → 182.81 | 377.79 → 376.39 |
+| webpack | 11,993,633,402 | 11,993,633,079 | -0.000003% | 312.25 → 312.71 | 567.69 → 567.00 |
+| mui-docs | 37,945,173,114 | 37,945,172,488 | -0.000002% | 741.47 → 741.84 | 1651.69 → 1662.90 |
+| Compiler | 1,965,231,643 | 1,965,231,819 | +0.000009% | 59.71 → 60.01 | 144.45 → 146.70 |
+| Compiler-Unions | 3,748,884,054 | 3,748,883,926 | -0.000003% | 63.96 → 63.69 | 150.21 → 146.87 |
+| cal-diy | 32,392,707,114 | 32,392,703,906 | -0.000010% | 775.07 → 774.90 | 1957.63 → 1947.42 |
+| formbricks-web | 42,073,719,636 | 42,073,718,974 | -0.000002% | 1101.93 → 1102.44 | 2049.64 → 2052.12 |
+| supabase-studio | 44,123,504,851 | 44,123,503,556 | -0.000003% | 873.46 → 873.41 | 1768.79 → 1773.12 |
+| t3code-server | 43,392,481,494 | 43,392,494,888 | +0.000031% | 738.43 → 738.56 | 2249.11 → 2244.96 |
+| mikro-orm | 65,890,074,922 | 65,890,087,715 | +0.000019% | 1133.77 → 1132.95 | 2070.90 → 2071.31 |
+| next-packages-next | 18,552,812,429 | 18,552,813,057 | +0.000003% | 445.95 → 445.74 | 720.42 → 721.14 |
+| next-root | 13,659,330,601 | 13,659,329,939 | -0.000005% | 315.36 → 315.39 | 536.05 → 536.05 |
+| storybook | 10,268,921,410 | 10,268,925,714 | +0.000042% | 281.33 → 281.47 | 543.83 → 543.78 |
+| nuxt | 9,331,579,002 | 9,331,577,980 | -0.000011% | 280.39 → 280.00 | 547.61 → 546.79 |
+| playwright | 8,380,239,907 | 8,380,239,435 | -0.000006% | 244.16 → 244.21 | 536.05 → 536.05 |
+| drizzle-orm | 12,640,914,954 | 12,640,914,582 | -0.000003% | 394.55 → 394.60 | 845.27 → 842.89 |
+
+At the default 16 checkers, the median project RSS delta is -0.009% and the median wall delta is +0.464%.
+Single-threaded RSS changes range from -0.415% to +0.510%. These three-repetition wall/RSS measurements and the
+unchanged layouts do not establish a repeatable performance regression; no performance improvement is claimed.
