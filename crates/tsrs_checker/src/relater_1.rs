@@ -1422,7 +1422,7 @@ impl Checker {
         // Only full lookups are worth recording (has_property_of_type does not instantiate).
         let mut found = found.filter(|_| !lazy && !self.lazy_has_prop);
         let resolved_source = self.resolved_property_source(source);
-        for &target_prop in properties.iter() {
+        for (i, &target_prop) in properties.iter().enumerate() {
             // tsrs: the flag test first, the declaration-reading test only for a property that is looked up (both
             // only skip it).
             // TODO: remove this when we support static private identifier fields and find other solutions to get privateNamesAndStaticFields test to pass
@@ -1440,6 +1440,9 @@ impl Checker {
                     self.get_property_of_type(source, target_prop.name())
                 };
                 if let Some(found) = found.as_deref_mut() {
+                    // Only looked-up positions are written; the skipped ones in between (most: optional target
+                    // properties) are filled in bulk.
+                    found.resize(i, None);
                     found.push(Some(source_prop));
                 }
                 // notes/mem-lazy.md L10: a declared member stands in for the target property until the property
@@ -1477,9 +1480,10 @@ impl Checker {
                         }
                     }
                 }
-            } else if let Some(found) = found.as_deref_mut() {
-                found.push(None);
             }
+        }
+        if let Some(found) = found {
+            found.resize(properties.len(), None);
         }
         None
     }
