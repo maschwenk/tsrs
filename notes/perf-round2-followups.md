@@ -354,6 +354,13 @@ is type-checked, CI runs on pull requests, and the workspace is at 0.11.0. The i
   resolved plain object without it (+0.05%); an inline compare of up to 16 bytes instead of `bcmp` in symbol-table key
   matching (C library -2.7G, `SymbolMap::search` +2.7G, total +0.36%); a per-union memo that the apparent-type
   mapping in `getApparentTypeOfContextualType` is the identity (+0.02%).
+  Round 3 (same note; same-binary runs differ by up to 0.04%): `isTypeRelatedTo`'s first checks in a leaf function
+  with the rest out of line (+0.04%: most calls reach the rest); the member-table lookup of the relater's walks also
+  in `getTypeOfConcretePropertyOfContextualType` (+0.6% when the helper was outlined, +0.03% forced inline); the
+  object case of `Type::target` forced inline with the rest out of line (+0.38%: `isGenericTupleType` stopped being
+  inlined); a 256-bit Bloom filter of the keys of indexed symbol tables (+0.25%: `SymbolMap::search` and `insert`
+  both grew); rejecting different-flag pairs before the identity relation in inference's exact matching (+0.03%:
+  nearly all pairs are object types with equal flags).
 
 ## The lint ratchet
 

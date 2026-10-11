@@ -113,6 +113,45 @@ member resolution in progress" for the contextual cache (no gain), an absent-pro
 matching (+0.36%), and a per-union memo that the apparent-type mapping of a contextual type is the identity (no
 gain).
 
+## Round 3 (after #301)
+
+Nine more commits on cb07284f. Clean `--release` builds, cb07284f (main) against the branch, same command and
+machine as above, diagnostics identical:
+
+| | main | branch | change |
+|---|---|---|---|
+| instructions, default mode (2 runs each) | 1.4051-1.4057T | 1.3580-1.3587T | -3.3% |
+| instructions, `--checkerAssignment locality` | 1.3870T | 1.3357T | -3.7% |
+| wall, native, 3 runs each | 30.28-31.07 s | 30.10-30.20 s | -2.4% (medians) |
+| peak RSS | 16.90-16.95 GB | 16.99-17.08 GB | +0.6% |
+| `--maxMemory 6G`: wall / peak RSS (one run) | 73.3 s / 7.65 GB | 73.3 s / 7.68 GB | 0% / +0.3% |
+
+Conformance pass lists (three modes and the gate), `tools/regressions.sh` and `--maxMemory 6G` diagnostics as in the
+first round: unchanged. Two runs of the same binary in static assignment differed by up to 0.04% in this round, so
+changes below that are noise.
+
+- Property lookups without a call: `propertiesRelatedTo` and `getUnmatchedProperty` look up every target property
+  name in the source; for a plain object source with resolved members (no module symbol) the member table answers
+  `getPropertyOfType` alone (a value member, or a miss for a name no augmenting global type has), with the type tests
+  done once per walk (-1.0%). `createUnionOrIntersectionProperty` does the same per constituent with the name hashed
+  once (-0.3%).
+- Large unions and intersections: `maybeTypeOfKind` keeps the OR of a large union's constituent flags, nested ones
+  included (-0.5%); the deeply-nested test keeps the recursion identities of each intersection on the relater's
+  stack (-0.7%) and computes the others inline (-0.45%: the two helpers are forced inline, a plain `#[inline]` was
+  ignored; without it on top of the cache the count is 0.17% higher).
+- `removeSubtypes` keeps each target's key property type per name for the call: the sources of a discriminated
+  union share the name (-0.5%).
+- Smaller: a target property's flags tested before its declaration in `getUnmatchedProperty` (-0.2%); an
+  identifier's length before its text in `isThisIdentifier` (-0.16%); no candidate list for the contextual property
+  types of intersections (-0.09%).
+
+What the reused answers rely on: the member table of a type whose members are resolved (any member reset ends the
+walk's use of it, through `members_reset_epoch`), constituents of unions and intersections (never changed after
+creation), and property types of a target (dropped with the name or a member reset). Each reuse was shadow-checked
+(recomputed and compared, panicking on a difference) on the 38k-file codebase and the conformance suite in three
+modes, with no difference. The peak RSS increase is about the size of the two per-checker maps (constituent flags,
+intersection identities); not broken down further.
+
 ## Found on the way, not pursued
 
 - One checker (`--checkers 1`) on the 38k-file codebase aborted after 2 h 7 min with "the arena address range is
