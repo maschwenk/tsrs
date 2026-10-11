@@ -412,6 +412,9 @@ with the switch off, which is why it is not in the default build.
   `getNamedMembers` into a pooled buffer, and object-literal all-properties tables presized: -0.012%, inside the
   spread. A pool's push and pop cost about what mimalloc's fast path does. Pooling paid for hash tables and for
   growth chains (realloc and copy), not for one short-lived Vec.
+  Relater round (notes/perf-icount-relater.md; another large private monorepo, DynamoRIO counts): an exact early exit
+  from the deeply-nested walk (+0.04% single-threaded), `Relation::set` through hashbrown's `entry` (-0.005%, noise),
+  a Bloom filter of names in `some_property_reduces_to_never`'s counts (+0.03%).
 
 ## The lint ratchet
 
