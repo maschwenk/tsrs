@@ -23,9 +23,9 @@ Prebuilt binaries are available for macOS arm64 and Linux x64/arm64 (glibc). See
 
 ## Less waiting. Less memory.
 
-Type-checking three large projects—MUI docs, Supabase Studio and VS Code—with each compiler's default settings:
+Type-checking three large projects—VS Code, T3 Code and MUI docs—with each compiler's default settings:
 
-[![tsrs versus TypeScript 7: MUI docs, 16,766 files, 14.4× faster and 79% less peak memory; Supabase Studio, 12,550 files, 10.8× faster and 65% less; VS Code, 10,427 files, 13.2× faster and 72% less.](bench/large-projects.svg)](bench/RESULTS.md#large-project-chart-snapshot)
+[![tsrs versus TypeScript 7: VS Code, 10,427 files, 13.2× faster and 72% less peak memory; T3 Code, 2,945 files, 9.9× faster and 65% less; MUI docs, 16,766 files, 14.4× faster and 79% less.](bench/large-projects.svg)](bench/RESULTS.md#large-project-chart-snapshot)
 
 Snapshot from October 11, 2026, on 16 vCPUs. File counts include dependencies and TypeScript libraries.
 [Measurement details](bench/RESULTS.md#large-project-chart-snapshot)

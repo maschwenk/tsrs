@@ -84,23 +84,24 @@ using each project's `wide` results and machine metadata.
 
 | Repository and measured project | Files | Time: TypeScript 7 → tsrs | Peak memory: TypeScript 7 → tsrs | Speedup | Less peak memory |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| [MUI](https://github.com/mui/material-ui), `docs` | 16,766 | 11.95 s → 0.83 s | 7.45 GiB → 1.60 GiB | **14.4×** | **79%** |
-| [Supabase](https://github.com/supabase/supabase), `apps/studio` | 12,550 | 6.72 s → 0.62 s | 4.88 GiB → 1.69 GiB | **10.8×** | **65%** |
 | [VS Code](https://github.com/microsoft/vscode), `src` | 10,427 | 10.92 s → 0.82 s | 7.55 GiB → 2.09 GiB | **13.2×** | **72%** |
+| [T3 Code](https://github.com/pingdotgg/t3code), `apps/server` | 2,945 | 14.63 s → 1.48 s | 6.18 GiB → 2.16 GiB | **9.9×** | **65%** |
+| [MUI](https://github.com/mui/material-ui), `docs` | 16,766 | 11.95 s → 0.83 s | 7.45 GiB → 1.60 GiB | **14.4×** | **79%** |
 
 File counts are tsrs's compiled program files, including dependencies and TypeScript libraries, for the named project
-within each repository. Supabase's TypeScript 7.0.2 run loads 12,546 files; tsrs's pinned 7.1-dev version loads 12,550.
+within each repository. T3 Code's TypeScript 7.0.2 run loads 2,941 files; tsrs's pinned 7.1-dev version loads 2,945.
 Ratios use the unrounded measurements below (TypeScript 7 → tsrs); memory in the chart is bytes divided by 2³⁰.
+All three chart rows share a 0–16 second time scale and a 0–8 GiB memory scale. Lower is better for both measures.
 
 | Project | Wall time (seconds) | Peak RSS (bytes) |
 | --- | ---: | ---: |
-| MUI docs | 11.945 → 0.8295 | 8,003,997,696 → 1,712,949,248 |
-| Supabase Studio | 6.718 → 0.6245 | 5,235,961,856 → 1,817,638,912 |
 | VS Code | 10.917 → 0.8245 | 8,108,687,360 → 2,243,448,832 |
+| T3 Code | 14.632 → 1.4785 | 6,639,325,184 → 2,316,740,608 |
+| MUI docs | 11.945 → 0.8295 | 8,003,997,696 → 1,712,949,248 |
 
 Both compilers use their default thread settings. tsrs follows the pinned TypeScript 7.1-dev commit `b85298b6a81f`,
 so this compares different TypeScript versions. MUI docs has no errors in either compiler; the error counts
-(TypeScript 7.0.2 versus tsrs) are 0 versus 9 on Supabase Studio and 359 versus 371 on VS Code.
+(TypeScript 7.0.2 versus tsrs) are 359 versus 371 on VS Code and 5 versus 6 on T3 Code.
 The reference nightly `typescript@7.1.0-dev.20260930.4`, built from the pinned commit plus one CI-only commit,
 reports the same diagnostics as tsrs. See [the error comparison](README.md#what-is-measured) for how this is checked.
 
