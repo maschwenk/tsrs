@@ -25,7 +25,7 @@ pub struct lexicalEntry {
     pub saved_pending_expressions: RefCell<Option<Vec<P<Node>>>>,
     pub class_this_data: Cell<Option<P<Node>>>,
     pub class_super_data: Cell<Option<P<Node>>>,
-    pub depth: Cell<i32>,
+    pub depth: Cell<u32>,
 }
 
 // esdecorator.go:70
@@ -805,12 +805,15 @@ impl esDecoratorTransformer {
             let mut new_members: Vec<P<Node>> = Vec::with_capacity(nodes.len() + 3);
 
             // Find the existing NamedEvaluation helper block index
-            let existing_named_evaluation_helper_block_index: isize = nodes.iter().position(|m| is_class_named_evaluation_helper_block(ec, *m)).map_or(-1, |i| i as isize);
+            let existing_named_evaluation_helper_block_index = nodes
+                .iter()
+                .position(|m| is_class_named_evaluation_helper_block(ec, *m));
 
             // add the leading `static {}` block
             if let Some(leading_static_block) = leading_static_block {
                 // add the `static {}` block after any existing NamedEvaluation helper block, if one exists.
-                let split = (existing_named_evaluation_helper_block_index + 1) as usize;
+                let split =
+                    existing_named_evaluation_helper_block_index.map_or(0, |index| index + 1);
                 new_members.extend_from_slice(&nodes[..split]);
                 new_members.push(leading_static_block);
                 new_members.extend_from_slice(&nodes[split..]);

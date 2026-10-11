@@ -27,7 +27,7 @@ TOOLCHAIN = re.search(r'^channel = "(.*)"$', open(os.path.join(os.path.dirname(o
 EXCLUDE = ["tsrs_fourslash"]
 
 # rustc lints the ratchet adds on the command line. dead_code cannot be "warn" in [workspace.lints.rust] while a
-# finding remains (`cargo check` runs with -D warnings); the others already warn by default.
+# finding remains (CI sets Cargo's build.warnings=deny); the others already warn by default.
 RUSTC_LINTS = ["unsafe_op_in_unsafe_fn", "dead_code", "unused_imports", "unused_variables", "unused_mut"]
 
 # unsafe_op_in_unsafe_fn reports under its error code, E0133.

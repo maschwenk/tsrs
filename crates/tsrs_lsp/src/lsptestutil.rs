@@ -3,7 +3,7 @@
 
 use std::collections::VecDeque;
 use std::io::{Read, Write};
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -102,7 +102,7 @@ pub type ServerNotificationHandler = Box<dyn Fn(&RequestMessage) + Send + Sync>;
 pub struct LSPClient {
     pub server: Arc<Server>,
     input_writer: Mutex<Box<dyn Writer>>,
-    id: AtomicI32,
+    id: AtomicU32,
     ctx: Context,
     on_server_request: Option<ServerRequestHandler>,
     pub(crate) on_server_notification: Mutex<Option<ServerNotificationHandler>>,
@@ -146,7 +146,7 @@ pub fn new_lsp_client(mut server_opts: ServerOptions, on_server_request: Option<
     let client = Arc::new(LSPClient {
         server: Arc::clone(&server),
         input_writer: Mutex::new(transport.client_out),
-        id: AtomicI32::new(0),
+        id: AtomicU32::new(0),
         ctx: ctx.clone(),
         on_server_request,
         on_server_notification: Mutex::new(None),
@@ -182,7 +182,7 @@ impl LSPClient {
     }
 
     // lspclient.go:128
-    fn next_id(&self) -> i32 {
+    fn next_id(&self) -> u32 {
         self.id.fetch_add(1, Ordering::SeqCst)
     }
 
@@ -263,7 +263,11 @@ impl LSPClient {
     // SendRequest sends a typed request and waits for the response.
     pub fn send_request<Params: Json, Resp: Json>(&self, info: lsproto::RequestInfo<Params, Resp>, params: Params) -> (ResponseMessage, Option<Resp>) {
         let id = self.next_id();
-        let req_id = lsproto::new_id(&lsproto::IntegerOrString { integer: Some(id), ..Default::default() });
+        let id = i32::try_from(id).expect("LSP test request ID exceeds protocol i32");
+        let req_id = lsproto::new_id(&lsproto::IntegerOrString {
+            integer: Some(id),
+            ..Default::default()
+        });
         let req = info.new_request_message(Some(req_id.clone()), params);
 
         let (tx, rx) = std::sync::mpsc::sync_channel(1);

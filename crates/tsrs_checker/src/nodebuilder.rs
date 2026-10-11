@@ -17,11 +17,17 @@ impl NodeBuilder {
     }
 
     // nodebuilder.go:33
-    pub(crate) fn enter_context(&self, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: Option<&'static dyn SymbolTracker>) {
-        let mut verbosity_level = -1;
+    pub(crate) fn enter_context(
+        &self,
+        enclosing_declaration: Option<P<Node>>,
+        flags: Flags,
+        internal_flags: InternalFlags,
+        tracker: Option<&'static dyn SymbolTracker>,
+    ) {
+        let mut verbosity_level = None;
         let mut max_truncation_length = 0;
         if let Some(verbosity) = self.verbosity.get() {
-            verbosity_level = verbosity.level.get();
+            verbosity_level = Some(verbosity.level.get());
             max_truncation_length = verbosity.max_truncation_length.get();
         }
         self.ctx_stack.borrow_mut().push(self.impl_.ctx.get());

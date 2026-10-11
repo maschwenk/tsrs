@@ -145,6 +145,16 @@ with the switch off, which is why it is not in the default build.
   search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone
   does not establish equivalent cost. The note records the isolated cause and the corrected branch's measurements.
 
+- Derived equality and ordering on the niche-encoded `TextPos` enum (PR #306;
+  notes/perf-unsigned-positions.md): extra discriminant handling despite a four-byte encoding that already supplies
+  equality and order. The first correctness-clean refactor added 0.086% to 1.002% instructions on all seventeen
+  projects. Direct encoded-key comparisons and cold failure paths remove that work without enlarging the positions.
+  Keep the relation budget signed as in Go: its negative exhausted states otherwise require saturation on every
+  recorded relation. The owner explicitly requested eliminating even instruction increases below the usual gate.
+  The subsequent internal-integer audit is also owner-requested domain cleanup, not a speedup claim: unsigned
+  masks and bounded IDs retain their width, emitter indexes avoid narrowing, and genuine signed domains remain
+  signed. Before/after validation and measurements are recorded in the same note.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
@@ -161,6 +171,17 @@ with the switch off, which is why it is not in the default build.
   gate). Initially rejected on performance, then both changes were applied at the owner's explicit request on
   2026-10-11 to align with Oxc. These measurements do not establish a speedup; further performance work needs a
   numeric-conversion profile or new evidence of a qualifying whole-project improvement.
+- Scanner arena string construction (notes/perf-scanner-arena-builder.md, branch
+  `codex/scanner-arena-builder`): exact over 14,013 public VS Code files; parse-only heap allocations -16.8% and
+  instructions about -0.10%. Abandoned growth buffers add about 0.7 MB of arena requests without changing chunk
+  capacity or peak RSS. Retained as an independent implementation at the owner's request on 2026-10-11. Repeat
+  only with an exact-sizing or composed design that can move whole-project instructions or peak memory across a
+  landing threshold.
+- Scanner numeric-cache identity avoidance (notes/perf-scanner-numeric-identity.md, branch
+  `codex/scanner-numeric-identity`): exact over 14,013 public VS Code files; parse-only heap allocations -13.5%
+  and instructions about -0.24%, with full-front-end peak RSS unchanged within 0.10%. Retained as an independent
+  implementation at the owner's request on 2026-10-11. Repeat only with a workload or composition that can move
+  whole-project instructions or peak memory across a landing threshold.
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables

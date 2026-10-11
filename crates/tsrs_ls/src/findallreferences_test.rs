@@ -107,7 +107,8 @@ fn test_implementations_worklist_does_not_blow_up() {
 
         // Position of the `m` property in the final `i.m();`.
         let offset = content.rfind("i.m").unwrap() + "i.".len();
-        let (pos, _) = converters.to_lsp_position(&source_file, offset as i32);
+        let offset = u32::try_from(offset).expect("test source fits in a source position");
+        let (pos, _) = converters.to_lsp_position(&source_file, offset.into());
 
         let data = l.provide_symbols_and_entries(&ctx, &lsproto::DocumentUri("file:///repro.ts".to_string()), pos, false /*isRename*/, true /*implementations*/);
         assert!(data.is_some());

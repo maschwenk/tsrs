@@ -46,7 +46,12 @@ impl FileIncludeReason {
         }
     }
 
-    pub(crate) fn new_referenced(kind: fileIncludeKind, file: &'static str, index: i32, synthetic: Option<P<Node>>) -> P<FileIncludeReason> {
+    pub(crate) fn new_referenced(
+        kind: fileIncludeKind,
+        file: &'static str,
+        index: Option<usize>,
+        synthetic: Option<P<Node>>,
+    ) -> P<FileIncludeReason> {
         let mut r = FileIncludeReason::new(kind);
         r.referenced_file = Some(referencedFileData { file, index, synthetic });
         P::new(r)
@@ -56,7 +61,7 @@ impl FileIncludeReason {
 pub(crate) struct referencedFileData {
     // Go `tspath.Path`; shared by every reference from the same file (fileLoader `reason_path`).
     pub(crate) file: &'static str,
-    pub(crate) index: i32,
+    pub(crate) index: Option<usize>,
     pub(crate) synthetic: Option<P<Node>>,
 }
 
@@ -73,14 +78,31 @@ impl referenceFileLocation {
         if let Some(node) = self.node {
             if !ast::node_is_synthesized(node) {
                 let text = self.file.text();
-                let start = tsrs_scanner::skip_trivia(text, node.pos()) as usize;
-                text[start..node.end() as usize].to_string()
+                let start = tsrs_scanner::skip_trivia(
+                    text,
+                    node.pos()
+                        .expect_source("parsed nodes have source positions"),
+                ) as usize;
+                let end = node
+                    .end()
+                    .expect_source("parsed nodes have source positions")
+                    as usize;
+                text[start..end].to_string()
             } else {
                 format!("\"{}\"", node.text())
             }
         } else {
             let r = self.ref_.unwrap();
-            self.file.text()[r.text_range.pos() as usize..r.text_range.end() as usize].to_string()
+            self.file.text()[r
+                .text_range
+                .pos()
+                .expect_source("file references have source positions")
+                as usize
+                ..r.text_range
+                    .end()
+                    .expect_source("file references have source positions")
+                    as usize]
+                .to_string()
         }
     }
 
@@ -144,13 +166,13 @@ pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &Program
             if let Some(synthetic) = ref_.synthetic {
                 specifier = Some(synthetic);
                 is_synthetic = true;
-            } else if (ref_.index as usize) < imports.len() {
-                specifier = Some(imports[ref_.index as usize]);
+            } else if ref_.index.is_some_and(|index| index < imports.len()) {
+                specifier = Some(imports[ref_.index.unwrap()]);
             } else {
-                let mut aug_index = imports.len() as i32;
+                let mut aug_index = imports.len();
                 for &imp in file.module_augmentations.get() {
                     if imp.kind() == Kind::StringLiteral {
-                        if aug_index == ref_.index {
+                        if Some(aug_index) == ref_.index {
                             specifier = Some(imp);
                             break;
                         }
@@ -168,21 +190,30 @@ pub(crate) fn get_referenced_location(r: P<FileIncludeReason>, program: &Program
         fileIncludeKind::ReferenceFile => referenceFileLocation {
             file,
             node: None,
-            ref_: Some(file.referenced_files.get()[ref_.index as usize]),
+            ref_: Some(
+                file.referenced_files.get()
+                    [ref_.index.expect("reference-file reasons have an index")],
+            ),
             package_id: PackageId::default(),
             is_synthetic: false,
         },
         fileIncludeKind::TypeReferenceDirective => referenceFileLocation {
             file,
             node: None,
-            ref_: Some(file.type_reference_directives.get()[ref_.index as usize]),
+            ref_: Some(
+                file.type_reference_directives.get()
+                    [ref_.index.expect("type-reference reasons have an index")],
+            ),
             package_id: PackageId::default(),
             is_synthetic: false,
         },
         fileIncludeKind::LibReferenceDirective => referenceFileLocation {
             file,
             node: None,
-            ref_: Some(file.lib_reference_directives.get()[ref_.index as usize]),
+            ref_: Some(
+                file.lib_reference_directives.get()
+                    [ref_.index.expect("lib-reference reasons have an index")],
+            ),
             package_id: PackageId::default(),
             is_synthetic: false,
         },

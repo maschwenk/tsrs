@@ -70,12 +70,12 @@ pub enum DiagnosticDirectiveErrorKind {
 }
 
 // DiagnosticDirectiveError reports an invalid diagnostic directive in a transform response.
-// host.go:54 (SupplementalIndex is -1 for a directive of the canonical output.)
+// host.go:54 (`None` for a directive of the canonical output.)
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct DiagnosticDirectiveError {
     pub kind: DiagnosticDirectiveErrorKind,
     pub index: usize,
-    pub supplemental_index: i32,
+    pub supplemental_index: Option<usize>,
     pub policy: DiagnosticDirectivePolicy,
 }
 

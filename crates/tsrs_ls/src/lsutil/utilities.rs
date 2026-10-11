@@ -13,7 +13,13 @@ pub fn probably_uses_semicolons(file: P<SourceFile>) -> bool {
     let mut without_semicolon = 0;
     let n_statements_to_observe = 5;
 
-    fn visit(node: P<Node>, file: P<SourceFile>, with_semicolon: &mut i32, without_semicolon: &mut i32, n_statements_to_observe: i32) -> bool {
+    fn visit(
+        node: P<Node>,
+        file: P<SourceFile>,
+        with_semicolon: &mut usize,
+        without_semicolon: &mut usize,
+        n_statements_to_observe: usize,
+    ) -> bool {
         if node.flags().intersects(NodeFlags::Reparsed) {
             return false;
         }
@@ -29,9 +35,19 @@ pub fn probably_uses_semicolons(file: P<SourceFile>) -> bool {
             if last_token.is_some_and(|t| t.kind() == Kind::SemicolonToken) {
                 *with_semicolon += 1;
             } else if let Some(last_token) = last_token.filter(|t| t.kind() != Kind::CommaToken) {
-                let last_token_line =
-                    scanner::get_ecma_line_of_position(file.get(), astnav::get_start_of_node(last_token, file, false /*includeJSDoc*/));
-                let next_token_line = scanner::get_ecma_line_of_position(file.get(), scanner::skip_trivia(file.text(), last_token.end()));
+                let last_token_line = scanner::get_ecma_line_of_position(
+                    file.get(),
+                    astnav::get_start_of_node(last_token, file, false /*includeJSDoc*/),
+                );
+                let next_token_line = scanner::get_ecma_line_of_position(
+                    file.get(),
+                    scanner::skip_trivia(
+                        file.text(),
+                        last_token
+                            .end()
+                            .expect_source("parsed tokens have source positions"),
+                    ),
+                );
                 // Avoid counting missing semicolon in single-line objects:
                 // `function f(p: { x: string /*no semicolon here is insignificant*/ }) {`
                 if last_token_line != next_token_line {

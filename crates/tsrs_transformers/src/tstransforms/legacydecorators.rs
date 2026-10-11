@@ -994,7 +994,7 @@ impl LegacyDecoratorsTransformer {
                 results.extend(decorators.iter().map(|decorator| {
                     let helper = self.factory().new_param_helper(
                         self.visitor().visit_node(decorator.expression()).unwrap(),
-                        i as i32,
+                        i,
                         decorator.expression().unwrap().loc(),
                     );
                     self.emit_context().set_emit_flags(helper, EmitFlags::NoComments);

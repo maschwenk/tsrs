@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tsrs_ast::{self as ast, CheckFlags, JSDeclarationKind, Kind, ModifierFlags, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_binder::{self as binder, NameResolver};
@@ -37,8 +37,8 @@ pub(crate) struct exportExtractor<'a> {
 // extract.go:34
 #[derive(Default)]
 pub(crate) struct extractorStats {
-    pub(crate) exports: AtomicI32,
-    pub(crate) used_checker: AtomicI32,
+    pub(crate) exports: AtomicUsize,
+    pub(crate) used_checker: AtomicUsize,
 }
 
 impl exportExtractor<'_> {

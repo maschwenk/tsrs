@@ -35,16 +35,12 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
         with:
-          node-version: 24
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+          # Public bench dependencies need no auth; Yarn 1 rejects an unset NODE_AUTH_TOKEN in .npmrc.
+          registry-url: ""
 
       - name: Cache key for the bench projects
         id: keys

@@ -45,7 +45,7 @@ pub struct TrackedSymbolArgs {
 pub struct SerializedTypeEntry {
     pub node: Option<P<Node>>, // Go stores the (possibly nil) result of the transform
     pub truncating: bool,
-    pub added_length: i32,
+    pub added_length: usize,
     pub tracked_symbols: Vec<TrackedSymbolArgs>,
 }
 
@@ -80,15 +80,15 @@ pub struct moduleSpecifierResult {
 pub struct NodeBuilderContext {
     pub host: &'static dyn ModuleSpecifierGenerationHost, // Go `Host`
     pub tracker: Cell<Option<&'static dyn SymbolTracker>>, // never None after NodeBuilder::enter_context
-    pub approximate_length: Cell<i32>,
-    pub max_truncation_length: Cell<i32>,
+    pub approximate_length: Cell<usize>,
+    pub max_truncation_length: Cell<usize>,
     pub encountered_error: Cell<bool>,
     pub truncating: Cell<bool>,
     pub reported_diagnostic: Cell<bool>,
     pub flags: Cell<Flags>,
     pub internal_flags: Cell<InternalFlags>,
-    pub depth: Cell<i32>,
-    pub max_expansion_depth: Cell<i32>, // -1 means no expansion, 0+ = verbosity levels
+    pub depth: Cell<usize>,
+    pub max_expansion_depth: Cell<Option<usize>>,
     /// `ExpandSymbolForHover` pushes a nil sentinel, hence `Option`.
     pub type_stack: RefCell<Vec<Option<P<Type>>>>,
     pub can_increase_expansion_depth: Cell<bool>,
@@ -98,7 +98,7 @@ pub struct NodeBuilderContext {
     /// Go assigns whole slices (`t.root.inferTypeParameters`) and restores the saved one.
     pub infer_type_parameters: Cell<&'static [P<Type>]>,
     pub visited_types: RefCell<Set<TypeId>>,
-    pub symbol_depth: RefCell<FxHashMap<CompositeSymbolIdentity, i32>>,
+    pub symbol_depth: RefCell<FxHashMap<CompositeSymbolIdentity, usize>>,
     /// Go saves the slice, sets it to nil, and stores/restores it around `visitAndTransformType`.
     pub tracked_symbols: RefCell<Vec<TrackedSymbolArgs>>,
     pub mapper: MapperCell,
@@ -110,7 +110,7 @@ pub struct NodeBuilderContext {
     // per signature scope state
     pub type_parameter_names: RefCell<CopyOnWriteMap<TypeId, P<Node>>>, // values are Identifier nodes
     pub type_parameter_names_by_text: RefCell<CopyOnWriteSet<String>>,
-    pub type_parameter_names_by_text_next_name_count: RefCell<CopyOnWriteMap<String, i32>>,
+    pub type_parameter_names_by_text_next_name_count: RefCell<CopyOnWriteMap<String, usize>>,
     pub type_parameter_symbol_list: RefCell<CopyOnWriteSet<SymbolId>>,
 }
 
@@ -128,7 +128,7 @@ impl NodeBuilderContext {
             flags: Cell::new(Flags::None),
             internal_flags: Cell::new(InternalFlags::None),
             depth: Cell::new(0),
-            max_expansion_depth: Cell::new(0),
+            max_expansion_depth: Cell::new(Some(0)),
             type_stack: RefCell::default(),
             can_increase_expansion_depth: Cell::new(false),
             expansion_truncated: Cell::new(false),
@@ -238,8 +238,8 @@ impl CheckerSlot {
     }
 }
 
-pub const defaultMaximumTruncationLength: i32 = 160;
-pub const noTruncationMaximumTruncationLength: i32 = 1_000_000;
+pub const defaultMaximumTruncationLength: usize = 160;
+pub const noTruncationMaximumTruncationLength: usize = 1_000_000;
 
 #[derive(Clone, Debug)]
 pub struct sortedSymbolNamePair {
@@ -255,7 +255,7 @@ pub struct SignatureToSignatureDeclarationOptions {
     pub question_token: Option<P<Node>>,
 }
 
-pub const MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH: i32 = 3;
+pub const MAX_REVERSE_MAPPED_NESTING_INSPECTION_DEPTH: usize = 3;
 
 #[repr(i32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
@@ -297,13 +297,13 @@ pub struct recoveryBoundary {
     pub old_tracked_symbols: RefCell<Vec<TrackedSymbolArgs>>,
     pub tracked_symbols: RefCell<Vec<TrackedSymbolArgs>>,
     pub old_encountered_error: bool,
-    pub old_approximate_length: i32,
+    pub old_approximate_length: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub struct originalRecoveryScopeState {
-    pub tracked_symbols_top: i32,
-    pub unreported_errors_top: i32,
+    pub tracked_symbols_top: usize,
+    pub unreported_errors_top: usize,
     pub had_error: bool,
 }
 

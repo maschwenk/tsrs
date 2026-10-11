@@ -58,17 +58,29 @@ impl Checker {
                                             //   type Foo<T extends string, U extends T> = [T, U];
                                             //   type Bar<T> = T extends Foo<infer X, infer X> ? Foo<X, X> : T;
                                             // the instantiated constraint for U is X, so we discard that inference.
-                                            let type_parameters: &'static [P<Type>] = alloc_vec(type_parameters);
-                                            let targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> = (0..type_parameters.len())
-                                                .map(|index| {
-                                                    let f: Box<dyn Fn(&mut Checker) -> P<Type>> = Box::new(move |c: &mut Checker| {
-                                                        c.get_effective_type_argument_at_index(parent, type_parameters, index as i32)
-                                                    });
-                                                    f
-                                                })
-                                                .collect();
-                                            let mapper = new_deferred_type_mapper(type_parameters, targets);
-                                            let constraint = self.instantiate_type(declared_constraint, Some(mapper));
+                                            let type_parameters: &'static [P<Type>] =
+                                                alloc_vec(type_parameters);
+                                            let targets: Vec<Box<dyn Fn(&mut Checker) -> P<Type>>> =
+                                                (0..type_parameters.len())
+                                                    .map(|index| {
+                                                        let f: Box<
+                                                            dyn Fn(&mut Checker) -> P<Type>,
+                                                        > = Box::new(move |c: &mut Checker| {
+                                                            c.get_effective_type_argument_at_index(
+                                                                parent,
+                                                                type_parameters,
+                                                                index,
+                                                            )
+                                                        });
+                                                        f
+                                                    })
+                                                    .collect();
+                                            let mapper =
+                                                new_deferred_type_mapper(type_parameters, targets);
+                                            let constraint = self.instantiate_type(
+                                                declared_constraint,
+                                                Some(mapper),
+                                            );
                                             if constraint != t {
                                                 inferences.push(constraint);
                                             }
@@ -146,12 +158,17 @@ impl Checker {
     }
 
     // checker.go:17536
-    pub(crate) fn get_effective_type_argument_at_index(&mut self, node: P<Node>, type_parameters: &[P<Type>], index: i32) -> P<Type> {
+    pub(crate) fn get_effective_type_argument_at_index(
+        &mut self,
+        node: P<Node>,
+        type_parameters: &[P<Type>],
+        index: usize,
+    ) -> P<Type> {
         let type_arguments = node.type_arguments();
-        if (index as usize) < type_arguments.len() {
-            return self.get_type_from_type_node(type_arguments[index as usize]);
+        if index < type_arguments.len() {
+            return self.get_type_from_type_node(type_arguments[index]);
         }
-        self.get_effective_type_arguments(node, type_parameters)[index as usize]
+        self.get_effective_type_arguments(node, type_parameters)[index]
     }
 
     // checker.go:17544
@@ -299,7 +316,7 @@ impl Checker {
                 this_type.as_type_parameter().constraint.set(Some(t));
                 type_parameters.push(this_type);
                 d.all_type_parameters.set(alloc_vec(type_parameters));
-                d.outer_type_parameter_count.set(outer_type_parameter_count as i32);
+                d.outer_type_parameter_count.set(outer_type_parameter_count);
                 d.resolved_type_arguments.set(Some(d.type_parameters()));
                 d.instantiations.make();
                 d.instantiations.add(t);
@@ -361,7 +378,7 @@ impl keyBuilder {
     #[inline]
     pub(crate) fn hash(&self) -> CacheHashKey {
         match &self.overflow_buffer {
-            None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length as usize]),
+            None => CacheHashKey::hash_128(&self.inline_buffer[..self.inline_length]),
             Some(overflow) => self.hash_spilled(overflow),
         }
     }
@@ -371,7 +388,7 @@ impl keyBuilder {
     #[inline(never)]
     fn hash_spilled(&self, overflow: &[u8]) -> CacheHashKey {
         let mut buf = overflow.to_vec();
-        buf.extend_from_slice(&self.inline_buffer[..self.inline_length as usize]);
+        buf.extend_from_slice(&self.inline_buffer[..self.inline_length]);
         CacheHashKey::hash_128(&buf)
     }
 
@@ -381,7 +398,7 @@ impl keyBuilder {
     #[cold]
     #[inline(never)]
     pub(crate) fn spill(&mut self) {
-        let n = self.inline_length as usize;
+        let n = self.inline_length;
         let inline = self.inline_buffer;
         self.overflow_buffer.get_or_insert_with(Vec::new).extend_from_slice(&inline[..n]);
         self.inline_length = 0;
@@ -390,35 +407,35 @@ impl keyBuilder {
     // checker.go:17727
     #[inline]
     pub(crate) fn write_byte(&mut self, c: u8) {
-        if self.inline_length as usize == self.inline_buffer.len() {
+        if self.inline_length == self.inline_buffer.len() {
             self.spill();
         }
-        self.inline_buffer[self.inline_length as usize] = c;
+        self.inline_buffer[self.inline_length] = c;
         self.inline_length += 1;
     }
 
     // checker.go:17735
     #[inline]
     pub(crate) fn write_string(&mut self, s: &str) {
-        if self.inline_length as usize + s.len() > self.inline_buffer.len() {
+        if self.inline_length + s.len() > self.inline_buffer.len() {
             self.spill();
             if s.len() > self.inline_buffer.len() {
                 self.overflow_buffer.get_or_insert_with(Vec::new).extend_from_slice(s.as_bytes());
                 return;
             }
         }
-        let start = self.inline_length as usize;
+        let start = self.inline_length;
         self.inline_buffer[start..start + s.len()].copy_from_slice(s.as_bytes());
-        self.inline_length += s.len() as i32;
+        self.inline_length += s.len();
     }
 
     // checker.go:17746
     #[inline]
     pub(crate) fn write_uint32(&mut self, v: u32) {
-        if self.inline_length as usize + 4 > self.inline_buffer.len() {
+        if self.inline_length + 4 > self.inline_buffer.len() {
             self.spill();
         }
-        let start = self.inline_length as usize;
+        let start = self.inline_length;
         self.inline_buffer[start..start + 4].copy_from_slice(&v.to_le_bytes());
         self.inline_length += 4;
     }
@@ -426,19 +443,18 @@ impl keyBuilder {
     // checker.go:17754
     #[inline]
     pub(crate) fn write_uint64(&mut self, v: u64) {
-        if self.inline_length as usize + 8 > self.inline_buffer.len() {
+        if self.inline_length + 8 > self.inline_buffer.len() {
             self.spill();
         }
-        let start = self.inline_length as usize;
+        let start = self.inline_length;
         self.inline_buffer[start..start + 8].copy_from_slice(&v.to_le_bytes());
         self.inline_length += 8;
     }
 
     // checker.go:17762
     #[inline]
-    pub(crate) fn write_int(&mut self, value: i32) {
-        // Go `uint64(value)` of a (64-bit) int: sign-extend
-        self.write_uint64(value as i64 as u64);
+    pub(crate) fn write_usize(&mut self, value: usize) {
+        self.write_uint64(value as u64);
     }
 
     // checker.go:17766
@@ -456,7 +472,7 @@ impl keyBuilder {
     // checker.go:17774
     #[inline]
     pub(crate) fn write_types(&mut self, types: &[P<Type>]) {
-        self.write_int(types.len() as i32);
+        self.write_usize(types.len());
         for &t in types {
             self.write_type(t);
         }
@@ -498,7 +514,7 @@ impl keyBuilder {
             b: &mut keyBuilder,
             c: &mut Checker,
             ref_: P<Type>,
-            depth: i32,
+            depth: u32,
             ignore_constraints: bool,
             type_parameters: &mut Vec<P<Type>>,
             constrained: &mut bool,
@@ -516,7 +532,7 @@ impl keyBuilder {
                             }
                         };
                         b.write_byte(b'=');
-                        b.write_int(index as i32);
+                        b.write_usize(index);
                         continue;
                     }
                     *constrained = true;
@@ -658,7 +674,7 @@ pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheH
     b.write_types(types);
     b.write_byte(b'|');
     for s in texts {
-        b.write_int(s.len() as i32);
+        b.write_usize(s.len());
     }
     b.write_byte(b'|');
     for s in texts {
@@ -830,7 +846,11 @@ impl Checker {
                     self.undefined_type,
                     Some(pattern),
                 );
-                let index = pattern.elements().iter().position(|&e| e == declaration).map_or(-1, |i| i as i32);
+                let index = pattern
+                    .elements()
+                    .iter()
+                    .position(|&e| e == declaration)
+                    .expect("binding element belongs to its pattern");
                 if has_dot_dot_dot_token(declaration) {
                     // If the parent is a tuple type, the rest element has a tuple type of the
                     // remaining tuple element types. Otherwise, the rest element has an array type with same
@@ -1442,7 +1462,11 @@ impl Checker {
                                 .resolve_name(Some(declaration), name.text(), SymbolFlags::Type, None /*nameNotFoundMessage*/, true /*isUse*/, false /*excludeGlobals*/)
                                 .is_some())
                     {
-                        let index = parent.parameters().iter().position(|&p| p == declaration).map_or(-1, |i| i as i32);
+                        let index = parent
+                            .parameters()
+                            .iter()
+                            .position(|&p| p == declaration)
+                            .expect("parameter belongs to its declaration");
                         let new_name = format!("arg{}", index);
                         let type_name = tsrs_scanner::declaration_name_to_string(Some(param.name()))
                             + if param.dot_dot_dot_token().is_some() { "[]" } else { "" };
@@ -2047,11 +2071,20 @@ impl Checker {
     // @param target The symbol, type, or signature whose type is being queried
     // @param propertyName The property name that should be used to query the target for its type
     // checker.go:19102
-    pub(crate) fn push_type_resolution(&mut self, target: TypeSystemEntity, property_name: TypeSystemPropertyName) -> bool {
-        let resolution_cycle_start_index = self.find_resolution_cycle_start_index(target, property_name);
-        if resolution_cycle_start_index >= 0 {
+    pub(crate) fn push_type_resolution(
+        &mut self,
+        target: TypeSystemEntity,
+        property_name: TypeSystemPropertyName,
+    ) -> bool {
+        if let Some(resolution_cycle_start_index) =
+            self.find_resolution_cycle_start_index(target, property_name)
+        {
             // A cycle was found
-            for element in self.type_resolutions.iter_mut().skip(resolution_cycle_start_index as usize) {
+            for element in self
+                .type_resolutions
+                .iter_mut()
+                .skip(resolution_cycle_start_index)
+            {
                 (*element).result = false;
             }
             return false;
@@ -2069,22 +2102,24 @@ impl Checker {
     }
 
     // checker.go:19127
-    pub(crate) fn find_resolution_cycle_start_index(&mut self, target: TypeSystemEntity, property_name: TypeSystemPropertyName) -> i32 {
-        let mut i = self.type_resolutions.len() as i32 - 1;
-        while i >= self.resolution_start {
-            let resolution = self.type_resolutions[i as usize];
+    pub(crate) fn find_resolution_cycle_start_index(
+        &mut self,
+        target: TypeSystemEntity,
+        property_name: TypeSystemPropertyName,
+    ) -> Option<usize> {
+        for i in (self.resolution_start..self.type_resolutions.len()).rev() {
+            let resolution = self.type_resolutions[i];
             if self.type_resolution_has_property(&resolution) {
-                return -1;
+                return None;
             }
             if resolution.target == target && resolution.property_name == property_name {
                 // A circular or in-progress resolution: what the caller does next is not final until this
                 // resolution is done (flow memo).
                 self.flow_memo.taint(resolution.serial);
-                return i;
+                return Some(i);
             }
-            i -= 1;
         }
-        -1
+        None
     }
 
     // `r: P<TypeResolution>` -> `r: &TypeResolution` (TypeResolution is a plain value struct stored in
@@ -3221,7 +3256,7 @@ impl Checker {
         let mut first_declaration = self.earliest_declaration(entry);
         for &c in &circular {
             let declaration = self.earliest_declaration(c);
-            if self.compare_nodes(declaration, first_declaration) < 0 {
+            if self.compare_nodes(declaration, first_declaration).is_lt() {
                 first = c;
                 first_declaration = declaration;
             }
@@ -3247,7 +3282,7 @@ impl Checker {
     fn earliest_declaration(&mut self, t: P<Type>) -> Option<P<Node>> {
         let mut earliest = None;
         earliest = t.symbol().unwrap().declarations().iter().fold(earliest, |mut earliest, &d| {
-            if earliest.is_none() || self.compare_nodes(Some(d), earliest) < 0 {
+            if earliest.is_none() || self.compare_nodes(Some(d), earliest) .is_lt() {
                 earliest = Some(d);
             }
 

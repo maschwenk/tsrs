@@ -5,6 +5,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.13.0"
 edition = "2024"
+rust-version = "1.99"
 license = "Apache-2.0"
 
 # The microsoft/TypeScript commit this port follows. Read by crates/tsrs_execute/build.rs (`tsrs --version`), by
@@ -101,6 +102,8 @@ strip = "debuginfo"
 dead_code = "allow"
 non_upper_case_globals = "allow"
 non_camel_case_types = "allow"
+# Rust 1.99: forming raw pointers through intermediate references can strengthen aliasing assumptions accidentally.
+raw_borrows_via_references = "warn"
 
 [workspace.lints.clippy]
 # Clippy's style and complexity groups stay off: the port keeps the shape of the Go code (docs/PORTING.md). The

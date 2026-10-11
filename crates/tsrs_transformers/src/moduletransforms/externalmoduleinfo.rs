@@ -301,7 +301,8 @@ pub(crate) fn create_external_helpers_import_declaration_if_needed(
                 }
             }
             if !helper_names.is_empty() {
-                helper_names.sort_by(|a, b| tsrs_core::stringutil::compare_strings_case_sensitive(a, b).cmp(&0));
+                helper_names
+                    .sort_by(|a, b| tsrs_core::stringutil::compare_strings_case_sensitive(a, b));
                 // Alias the imports if the names are used somewhere in the file.
                 // NOTE: We don't need to care about global import collisions as this is a module.
 

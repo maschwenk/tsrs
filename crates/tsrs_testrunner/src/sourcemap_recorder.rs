@@ -3,7 +3,7 @@
 
 use std::fmt::Write as _;
 use tsrs_core::json::{self, Value};
-use tsrs_core::{compute_ecma_line_starts, stringutil, TextPos};
+use tsrs_core::{compute_ecma_line_starts, stringutil};
 use tsrs_sourcemap::{self as sourcemap, Mapping, RawSourceMap};
 
 use crate::harnessutil::TestFile;
@@ -81,12 +81,12 @@ pub(crate) struct sourceMapSpanWriter<'a> {
     source_map_sources: Vec<String>,
     source_map_names: Vec<String>,
     js_file: TestFile,
-    js_line_map: Vec<TextPos>,
+    js_line_map: Vec<u32>,
     ts_code: String,
-    ts_line_map: Vec<TextPos>,
+    ts_line_map: Vec<u32>,
     spans_on_single_line: Vec<sourceMapSpanWithDecodeErrors>,
-    prev_written_source_pos: i32,
-    next_js_line_to_write: i32,
+    prev_written_source_pos: u32,
+    next_js_line_to_write: usize,
     span_marker_continues: bool,
     source_map_decoder: sourceMapDecoder,
 }
@@ -138,9 +138,29 @@ impl sourceMapSpanWriter<'_> {
     fn get_source_map_span_string(&self, map_entry: &Mapping, get_absent_name_index: bool) -> String {
         let mut map_string = format!("Emitted({}, {})", map_entry.generated_line + 1, map_entry.generated_character + 1);
         if map_entry.is_source_mapping() {
-            let _ = write!(map_string, " Source({}, {}) + SourceIndex({})", map_entry.source_line + 1, map_entry.source_character + 1, map_entry.source_index);
-            if map_entry.name_index >= 0 && (map_entry.name_index as usize) < self.source_map_names.len() {
-                let _ = write!(map_string, " name ({})", self.source_map_names[map_entry.name_index as usize]);
+            let source_line = map_entry
+                .source_line
+                .expect("source mappings have source lines");
+            let source_character = map_entry
+                .source_character
+                .expect("source mappings have source characters");
+            let _ = write!(
+                map_string,
+                " Source({}, {}) + SourceIndex({})",
+                source_line + 1,
+                source_character + 1,
+                map_entry.source_index
+            );
+            if let Some(name_index) = map_entry
+                .name_index
+                .get()
+                .filter(|&index| index < self.source_map_names.len() as u32)
+            {
+                let _ = write!(
+                    map_string,
+                    " name ({})",
+                    self.source_map_names[name_index as usize]
+                );
             } else if map_entry.name_index != sourcemap::MISSING_NAME || get_absent_name_index {
                 let _ = write!(map_string, " nameIndex ({})", map_entry.name_index);
             }
@@ -197,7 +217,12 @@ impl sourceMapSpanWriter<'_> {
             let line = format!("emittedFile:{}", self.js_file.unit_name);
             self.source_map_recorder.write_line(&line);
         }
-        let line = format!("sourceFile:{}", self.source_map_sources[self.spans_on_single_line[0].source_map_span.source_index as usize]);
+        let source_index = self.spans_on_single_line[0]
+            .source_map_span
+            .source_index
+            .get()
+            .expect("source mappings have source indexes") as usize;
+        let line = format!("sourceFile:{}", self.source_map_sources[source_index]);
         self.source_map_recorder.write_line(&line);
         self.source_map_recorder.write_line("-------------------------------------------------------------------");
 
@@ -217,13 +242,17 @@ impl sourceMapSpanWriter<'_> {
         }
 
         // write remaining js lines
-        self.write_js_file_lines(self.js_line_map.len() as i32);
+        self.write_js_file_lines(self.js_line_map.len());
     }
 
-    fn get_text_of_line<'c>(line: i32, line_map: &[TextPos], code: &'c str) -> &'c [u8] {
-        let start_pos = line_map[line as usize];
-        let end_pos: TextPos = if ((line + 1) as usize) < line_map.len() { line_map[line as usize + 1] } else { code.len() as TextPos };
-        let text = &code.as_bytes()[start_pos as usize..end_pos as usize];
+    fn get_text_of_line<'c>(line: usize, line_map: &[u32], code: &'c str) -> &'c [u8] {
+        let start_pos = line_map[line] as usize;
+        let end_pos = if line + 1 < line_map.len() {
+            line_map[line + 1] as usize
+        } else {
+            code.len()
+        };
+        let text = &code.as_bytes()[start_pos..end_pos];
         if line == 0 {
             return remove_byte_order_mark(text);
         }
@@ -231,7 +260,7 @@ impl sourceMapSpanWriter<'_> {
         text
     }
 
-    fn write_js_file_lines(&mut self, end_js_line: i32) {
+    fn write_js_file_lines(&mut self, end_js_line: usize) {
         while self.next_js_line_to_write < end_js_line {
             let text = Self::get_text_of_line(self.next_js_line_to_write, &self.js_line_map, &self.js_file.content);
             self.source_map_recorder.write_string(">>>");
@@ -255,7 +284,7 @@ fn remove_byte_order_mark(text: &[u8]) -> &[u8] {
 
 struct recordedSpanWriter<'w, 'a> {
     marker_ids: Vec<String>,
-    prev_emitted_col: i32,
+    prev_emitted_col: u32,
     w: &'w mut sourceMapSpanWriter<'a>,
 }
 
@@ -286,9 +315,9 @@ impl recordedSpanWriter<'_, '_> {
         }
     }
 
-    fn write_source_map_indent(&mut self, indent_length: i32, indent_prefix: &str) {
+    fn write_source_map_indent(&mut self, indent_length: u32, indent_prefix: &str) {
         self.w.source_map_recorder.write_string(indent_prefix);
-        for _ in 0..indent_length.max(0) {
+        for _ in 0..indent_length {
             self.w.source_map_recorder.write_string(" ");
         }
     }
@@ -297,7 +326,13 @@ impl recordedSpanWriter<'_, '_> {
         self.write_source_map_marker_ex(Some(current_span), index, current_span.source_map_span.generated_character, false /*endContinues*/);
     }
 
-    fn write_source_map_marker_ex(&mut self, _current_span: Option<&sourceMapSpanWithDecodeErrors>, index: usize, end_column: i32, end_continues: bool) {
+    fn write_source_map_marker_ex(
+        &mut self,
+        _current_span: Option<&sourceMapSpanWithDecodeErrors>,
+        index: usize,
+        end_column: u32,
+        end_continues: bool,
+    ) {
         let marker_id = self.get_marker_id(index);
         self.marker_ids.push(marker_id.clone());
         self.write_source_map_indent(self.prev_emitted_col, &marker_id);
@@ -315,8 +350,17 @@ impl recordedSpanWriter<'_, '_> {
         // Convert UTF-16 character offset from the source map to a byte position.
         let source_pos = tsrs_scanner::compute_position_of_line_and_utf16_character(
             &self.w.ts_line_map,
-            current_span.source_map_span.source_line,
-            current_span.source_map_span.source_character,
+            usize::try_from(
+                current_span
+                    .source_map_span
+                    .source_line
+                    .expect("source mappings have source lines"),
+            )
+            .expect("source line exceeds usize"),
+            current_span
+                .source_map_span
+                .source_character
+                .expect("source mappings have source characters"),
             &self.w.ts_code,
             true, /*allowEdits*/
         );
@@ -344,7 +388,9 @@ impl recordedSpanWriter<'_, '_> {
             } else {
                 self.write_source_map_indent(self.prev_emitted_col, "  >");
             }
-            let text = sourceMapSpanWriter::get_text_of_line(i as i32, &ts_code_line_map, &source_text_str).to_vec();
+            let text =
+                sourceMapSpanWriter::get_text_of_line(i, &ts_code_line_map, &source_text_str)
+                    .to_vec();
             self.w.source_map_recorder.write_bytes(&text);
             if i == ts_code_line_map.len() - 1 {
                 self.w.source_map_recorder.write_line("");
@@ -361,7 +407,12 @@ impl recordedSpanWriter<'_, '_> {
 
     fn write_recorded_spans(&mut self) {
         if !self.w.spans_on_single_line.is_empty() {
-            let current_js_line = self.w.spans_on_single_line[0].source_map_span.generated_line;
+            let current_js_line = usize::try_from(
+                self.w.spans_on_single_line[0]
+                    .source_map_span
+                    .generated_line,
+            )
+            .expect("generated line exceeds usize");
 
             // Write js line
             self.w.write_js_file_lines(current_js_line + 1);
@@ -369,11 +420,24 @@ impl recordedSpanWriter<'_, '_> {
             // Emit markers
             self.iterate_spans(Self::write_source_map_marker);
 
-            let js_file_text_len = sourceMapSpanWriter::get_text_of_line(current_js_line + 1, &self.w.js_line_map, &self.w.js_file.content).len() as i32; // TODO: Strada is wrong here, we should be looking at `currentJsLine`, not `currentJsLine+1`
-            if self.prev_emitted_col < js_file_text_len - 1 {
+            let js_file_text_len = u32::try_from(
+                sourceMapSpanWriter::get_text_of_line(
+                    current_js_line + 1,
+                    &self.w.js_line_map,
+                    &self.w.js_file.content,
+                )
+                .len(),
+            )
+            .expect("line length exceeds u32"); // TODO: Strada is wrong here, we should be looking at `currentJsLine`, not `currentJsLine+1`
+            if self.prev_emitted_col < js_file_text_len.saturating_sub(1) {
                 // There is remaining text on this line that will be part of next source span so write marker that continues
                 let n = self.w.spans_on_single_line.len();
-                self.write_source_map_marker_ex(None /*currentSpan*/, n, js_file_text_len - 1 /*endColumn*/, true /*endContinues*/);
+                self.write_source_map_marker_ex(
+                    None, /*currentSpan*/
+                    n,
+                    js_file_text_len.saturating_sub(1), /*endColumn*/
+                    true,                               /*endContinues*/
+                );
             }
 
             // Emit Source text
@@ -429,7 +493,13 @@ pub(crate) fn get_source_map_record(
                 source_map_span_writer.record_source_map_span(decoded_source_mapping);
                 continue;
             }
-            let current_source_file = get_source_file(&source_map_data.input_source_file_names[decoded_source_mapping.source_index as usize]);
+            let source_index = decoded_source_mapping
+                .source_index
+                .get()
+                .expect("source mappings have source indexes")
+                as usize;
+            let current_source_file =
+                get_source_file(&source_map_data.input_source_file_names[source_index]);
             let current_key = current_source_file.as_ref().map(|(k, _)| *k);
             if current_key != prev_source_file {
                 if let Some((_, text)) = &current_source_file {

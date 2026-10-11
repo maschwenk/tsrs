@@ -18,7 +18,7 @@ struct fileSystemWatcherKey {
 }
 
 struct fileSystemWatcherValue {
-    count: i32,
+    count: usize,
     id: WatcherID,
 }
 

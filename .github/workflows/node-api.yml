@@ -15,6 +15,10 @@ on:
     paths:
       - "crates/**"
       - "npm/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".node-version"
       - "tools/node-api/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -24,6 +28,10 @@ on:
     paths:
       - "crates/**"
       - "npm/**"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".node-version"
       - "tools/node-api/**"
       - "Cargo.toml"
       - "Cargo.lock"
@@ -40,7 +48,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
 
 jobs:
   # Pack tsrs exactly as a release would (without publishing), install the tarballs into a project outside the
@@ -56,9 +63,7 @@ jobs:
         include:
           - { target: aarch64-apple-darwin, os: macos-14 }
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
@@ -67,23 +72,12 @@ jobs:
 
       - parallel:
           - name: Set up Node
-            uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-            with:
-              node-version: 24
+            uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
           - name: Set up Rust
             uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
             with:
               toolchain: ${{ steps.rust.outputs.toolchain }}
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
-
-      # This install writes only npm/node_modules, so it can overlap the Rust cache restore and binary build.
-      - name: Install packaging dependencies
-        id: pnpm-dependencies
-        run: pnpm --dir npm install --frozen-lockfile
-        background: true
 
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
@@ -111,10 +105,6 @@ jobs:
 
       - name: Stop build resource monitor
         cancel: resource-monitor
-
-      # `wait-all` always runs, so pnpm failures are reported even if the foreground Rust build failed first.
-      - name: Wait for background setup
-        wait-all:
 
       - name: Pack (no publish)
         run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack

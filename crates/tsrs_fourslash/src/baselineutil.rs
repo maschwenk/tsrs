@@ -90,8 +90,11 @@ pub(crate) fn get_baseline_extension(command: BaselineCommand) -> &'static str {
 
 // baselineutil.go:102
 pub(crate) fn drop_trailing_empty_lines(ss: &[String]) -> &[String] {
-    let last = ss.iter().rposition(|s| !s.is_empty()).map(|i| i as i32).unwrap_or(-1);
-    &ss[..(last + 1) as usize]
+    let end = ss
+        .iter()
+        .rposition(|s| !s.is_empty())
+        .map_or(0, |index| index + 1);
+    &ss[..end]
 }
 
 // baselineutil.go:106
@@ -158,7 +161,7 @@ impl FourslashTest {
         // found in a file with ranges.
         let mut found_marker = false;
         let mut found_additional_location = false;
-        let mut span_to_context_id: FxHashMap<DocumentSpan, i32> = FxHashMap::default();
+        let mut span_to_context_id: FxHashMap<DocumentSpan, usize> = FxHashMap::default();
 
         let mut baseline_entries: Vec<String> = Vec::new();
         let mut add_file_entry = |path: &str, found_marker: &mut bool, found_additional_location: &mut bool, baseline_entries: &mut Vec<String>| {
@@ -333,7 +336,7 @@ impl FourslashTest {
         file_name: &str,
         content: &str,
         spans_in_file: &[DocumentSpan],
-        span_to_context_id: &mut FxHashMap<DocumentSpan, i32>,
+        span_to_context_id: &mut FxHashMap<DocumentSpan, usize>,
         options: &BaselineFourslashLocationsOptions,
     ) -> String {
         let mut details: Vec<BaselineDetail> = Vec::new();
@@ -357,7 +360,7 @@ impl FourslashTest {
                 details.push(BaselineDetail { pos: context_span.start, position_marker: "<|".to_string(), span: Some(si), kind: DetailKind::ContextStart });
 
                 // Check if context span starts after text span
-                if lsproto::compare_positions(context_span.start, span.text_span.start) > 0 {
+                if lsproto::compare_positions(context_span.start, span.text_span.start).is_gt() {
                     // can_determine_context_id_inline = false (unused, see below)
                 }
             }
@@ -420,8 +423,8 @@ impl FourslashTest {
         order.sort_by(|&i1, &i2| {
             let (d1, d2) = (&details[i1], &details[i2]);
             let c = lsproto::compare_positions(d1.pos, d2.pos);
-            if c != 0 || d1.kind == DetailKind::Marker && d2.kind == DetailKind::Marker {
-                return c.cmp(&0);
+            if !c.is_eq() || d1.kind == DetailKind::Marker && d2.kind == DetailKind::Marker {
+                return c;
             }
 
             // /*MARKER*/[| some text |]
@@ -455,9 +458,12 @@ impl FourslashTest {
 
             // <| ... [| ... |]|>
             if d1.kind.is_end() && d2.kind.is_end() {
-                let c = lsproto::compare_positions(d2.get_range(spans_in_file).start, d1.get_range(spans_in_file).start);
-                if c != 0 {
-                    return c.cmp(&0);
+                let c = lsproto::compare_positions(
+                    d2.get_range(spans_in_file).start,
+                    d1.get_range(spans_in_file).start,
+                );
+                if !c.is_eq() {
+                    return c;
                 }
                 return d1.kind.cmp(&d2.kind);
             }
@@ -465,9 +471,12 @@ impl FourslashTest {
             // <|[| ... |] ... |>
             if d1.kind.is_start() && d2.kind.is_start() {
                 // (Go compares d2's range end with itself.)
-                let c = lsproto::compare_positions(d2.get_range(spans_in_file).end, d2.get_range(spans_in_file).end);
-                if c != 0 {
-                    return c.cmp(&0);
+                let c = lsproto::compare_positions(
+                    d2.get_range(spans_in_file).end,
+                    d2.get_range(spans_in_file).end,
+                );
+                if !c.is_eq() {
+                    return c;
                 }
                 return d1.kind.cmp(&d2.kind);
             }
@@ -495,10 +504,11 @@ impl FourslashTest {
                         let mut text = String::new();
                         if let Some(context_id) = span_to_context_id.get(span) {
                             let mut is_after_context_start = false;
-                            let mut text_start_index = index as i32 - 1;
-                            while text_start_index >= 0 {
-                                let text_start_detail = &details[order[text_start_index as usize]];
-                                if text_start_detail.kind == DetailKind::ContextStart && text_start_detail.span == detail.span {
+                            for text_start_index in (0..index).rev() {
+                                let text_start_detail = &details[order[text_start_index]];
+                                if text_start_detail.kind == DetailKind::ContextStart
+                                    && text_start_detail.span == detail.span
+                                {
                                     is_after_context_start = true;
                                     break;
                                 }
@@ -506,7 +516,6 @@ impl FourslashTest {
                                 if text_start_detail.span.is_some() {
                                     break;
                                 }
-                                text_start_index -= 1;
                             }
                             // Skip contextId on span thats surrounded by context span immediately
                             if !is_after_context_start {
@@ -525,7 +534,7 @@ impl FourslashTest {
                     }
                     DetailKind::ContextStart => {
                         if can_determine_context_id_inline {
-                            let n = span_to_context_id.len() as i32;
+                            let n = span_to_context_id.len();
                             span_to_context_id.insert(span.clone(), n);
                         }
                     }
@@ -551,7 +560,7 @@ static LINE_SPLITTER: LazyLock<Regex> = LazyLock::new(|| Regex::new("\r?\n").unw
 
 // baselineutil.go:529
 pub(crate) struct TextWithContext {
-    n_lines_context: i32, // number of context lines to write to baseline
+    n_lines_context: usize, // number of context lines to write to baseline
 
     readable_contents: String, // builds what will be returned to be written to baseline
 
@@ -565,7 +574,7 @@ pub(crate) struct TextWithContext {
 
     // posLineInfo
     pos_info: Option<lsproto::Position>,
-    line_info: i32,
+    line_info: usize,
 }
 
 // baselineutil.go:547-564: textWithContext implements lsconv.Script.
@@ -652,7 +661,11 @@ impl TextWithContext {
     }
 
     fn position_index(&self, p: lsproto::Position) -> usize {
-        self.converters.line_and_character_to_position(self.script(), p) as usize
+        usize::try_from(
+            self.converters
+                .line_and_character_to_position(self.script(), p),
+        )
+        .expect("source position exceeds usize")
     }
 
     // baselineutil.go:589
@@ -664,12 +677,18 @@ impl TextWithContext {
             // Calculate pos to location number of lines
             let mut pos_line_index = self.line_info;
             if self.pos_info != Some(self.pos) {
-                pos_line_index = self.line_starts.compute_index_of_line_start(self.converters.line_and_character_to_position(self.script(), self.pos)) as i32;
+                pos_line_index = self.line_starts.compute_index_of_line_start(
+                    self.converters
+                        .line_and_character_to_position(self.script(), self.pos),
+                );
             }
 
-            let mut location_line_index = self.line_starts.line_starts.len() as i32 - 1;
+            let mut location_line_index = self.line_starts.line_starts.len() - 1;
             if let Some(detail) = detail {
-                location_line_index = self.line_starts.compute_index_of_line_start(self.converters.line_and_character_to_position(self.script(), detail.pos)) as i32;
+                location_line_index = self.line_starts.compute_index_of_line_start(
+                    self.converters
+                        .line_and_character_to_position(self.script(), detail.pos),
+                );
                 self.pos_info = Some(detail.pos);
                 self.line_info = location_line_index;
             }
@@ -682,15 +701,21 @@ impl TextWithContext {
                 n_lines += self.n_lines_context + 1;
             }
             // first nLinesContext and last nLinesContext
-            if location_line_index - pos_line_index > n_lines {
+            if location_line_index > pos_line_index + n_lines {
                 if !self.new_content.is_empty() {
                     let skipped_string =
                         if self.is_lib_file { "--- (line: --) skipped ---\n".to_string() } else { format!("--- (line: {}) skipped ---", pos_line_index + self.n_lines_context + 1) };
 
                     self.readable_contents.push('\n');
                     let start = self.position_index(self.pos);
-                    let end = self.line_starts.line_starts[(pos_line_index + self.n_lines_context) as usize] as usize;
-                    let text = self.new_content.clone() + &self.slice_of_content(Some(start as i32), Some(end as i32)) + &skipped_string;
+                    let end = self.line_starts.line_starts[pos_line_index + self.n_lines_context]
+                        as usize;
+                    let text = self.new_content.clone()
+                        + &self.slice_of_content(
+                            Some(u32::try_from(start).expect("source position exceeds u32")),
+                            Some(u32::try_from(end).expect("source position exceeds u32")),
+                        )
+                        + &skipped_string;
                     self.readable_jsonc_baseline(&text);
 
                     if detail.is_some() {
@@ -704,8 +729,10 @@ impl TextWithContext {
                     } else {
                         let _ = writeln!(self.new_content, "--- (line: {}) skipped ---", location_line_index - self.n_lines_context + 1);
                     }
-                    let start = self.line_starts.line_starts[(location_line_index - self.n_lines_context + 1) as usize];
-                    let end = self.position_index(detail.pos) as i32;
+                    let start = self.line_starts.line_starts
+                        [location_line_index - self.n_lines_context + 1];
+                    let end = u32::try_from(self.position_index(detail.pos))
+                        .expect("source position exceeds u32");
                     let s = self.slice_of_content(Some(start), Some(end));
                     self.new_content.push_str(&s);
                 }
@@ -713,8 +740,23 @@ impl TextWithContext {
             }
         }
         let s = match detail {
-            None => self.slice_of_content(Some(self.position_index(self.pos) as i32), None),
-            Some(detail) => self.slice_of_content(Some(self.position_index(self.pos) as i32), Some(self.position_index(detail.pos) as i32)),
+            None => self.slice_of_content(
+                Some(
+                    u32::try_from(self.position_index(self.pos))
+                        .expect("source position exceeds u32"),
+                ),
+                None,
+            ),
+            Some(detail) => self.slice_of_content(
+                Some(
+                    u32::try_from(self.position_index(self.pos))
+                        .expect("source position exceeds u32"),
+                ),
+                Some(
+                    u32::try_from(self.position_index(detail.pos))
+                        .expect("source position exceeds u32"),
+                ),
+            ),
         };
         self.new_content.push_str(&s);
     }
@@ -731,13 +773,10 @@ impl TextWithContext {
     }
 
     // baselineutil.go:763
-    pub(crate) fn slice_of_content(&self, start: Option<i32>, end: Option<i32>) -> String {
-        let start = match start {
-            Some(s) if s >= 0 => s as usize,
-            _ => 0,
-        };
+    pub(crate) fn slice_of_content(&self, start: Option<u32>, end: Option<u32>) -> String {
+        let start = start.map_or(0, |s| s as usize);
         let end = match end {
-            Some(e) if (e as usize) <= self.content.len() && e >= 0 => e as usize,
+            Some(e) if (e as usize) <= self.content.len() => e as usize,
             _ => self.content.len(),
         };
 

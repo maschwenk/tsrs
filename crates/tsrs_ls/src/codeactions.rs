@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use tsrs_ast::{Diagnostic, SourceFile};
 use tsrs_compiler::Program;
 use tsrs_core::collections::OrderedMap;
@@ -46,18 +48,18 @@ impl CodeAction {
     // codeactions.go:49
     // Compare defines a total ordering for CodeAction values, comparing description
     // then text edits lexicographically. Used with slices.BinarySearchFunc.
-    pub fn compare(&self, b: &CodeAction) -> i32 {
+    pub fn compare(&self, b: &CodeAction) -> Ordering {
         let c = go_compare(&self.description, &b.description);
-        if c != 0 {
+        if c != Ordering::Equal {
             return c;
         }
         let c = go_compare(&self.changes.len(), &b.changes.len());
-        if c != 0 {
+        if c != Ordering::Equal {
             return c;
         }
         if let Some(result) = self.changes.iter().enumerate().find_map(|(i, edit)| {
             let c = edit.compare(&b.changes[i]);
-            if c != 0 {
+            if c != Ordering::Equal {
                 return Some(c);
             }
 
@@ -65,16 +67,12 @@ impl CodeAction {
         }) {
             return result;
         }
-        0
+        Ordering::Equal
     }
 }
 
-fn go_compare<T: Ord + ?Sized>(a: &T, b: &T) -> i32 {
-    match a.cmp(b) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    }
+fn go_compare<T: Ord + ?Sized>(a: &T, b: &T) -> Ordering {
+    a.cmp(b)
 }
 
 // codeactions.go:66
@@ -154,7 +152,7 @@ impl LanguageService {
 
                         let provider_actions = (provider.get_code_actions)(ctx, &fix_context)?;
                         for action in provider_actions {
-                            let i = match seen.binary_search_by(|probe| probe.compare(&action).cmp(&0)) {
+                            let i = match seen.binary_search_by(|probe| probe.compare(&action)) {
                                 Ok(_) => continue,
                                 Err(i) => i,
                             };

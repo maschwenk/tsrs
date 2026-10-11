@@ -8,7 +8,7 @@ use super::superAccessState;
 
 // Facts we track as we traverse the tree
 // forawait.go:12
-type forAwaitHierarchyFacts = i32;
+type forAwaitHierarchyFacts = u32;
 
 const forAwaitHierarchyFactsNone: forAwaitHierarchyFacts = 0;
 

@@ -98,12 +98,20 @@ pub type FlowLabel = FlowNode;
 
 pub struct FlowSwitchClauseData {
     pub switch_statement: P<Node>,
-    pub clause_start: i32, // Start index of case/default clause range
-    pub clause_end: i32,   // End index of case/default clause range
+    pub clause_start: usize, // Start index of case/default clause range
+    pub clause_end: usize,   // End index of case/default clause range
 }
 
-pub fn new_flow_switch_clause_data(switch_statement: P<Node>, clause_start: usize, clause_end: usize) -> P<Node> {
-    let data = FlowSwitchClauseData { switch_statement, clause_start: clause_start as i32, clause_end: clause_end as i32 };
+pub fn new_flow_switch_clause_data(
+    switch_statement: P<Node>,
+    clause_start: usize,
+    clause_end: usize,
+) -> P<Node> {
+    let data = FlowSwitchClauseData {
+        switch_statement,
+        clause_start,
+        clause_end,
+    };
     new_node(Kind::Unknown, data, &NodeFactoryHooks::default())
 }
 

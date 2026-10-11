@@ -139,7 +139,8 @@ fn test_content_mapper_directives_preserve_incremental_globals() {
         let Some(program) = new_content_mapper_program_with_options(
             fake_host(move |_, content| {
                 // The virtual source is unchanged; the directive covers the entire file, including offset zero.
-                let len = content.len() as i32;
+                let len =
+                    u32::try_from(content.len()).expect("test content fits in a source position");
                 Ok(TransformResultFiles {
                     text: content.to_string(),
                     virtual_extension: ".ts".to_string(),
@@ -268,7 +269,8 @@ fn test_content_mapper_invalid_mappings() {
                 Segment { virtual_start: 0, virtual_end: 10, original_start: 0, original_end: 0, kind: Kind::Atom, ..Default::default() },
                 Segment {
                     virtual_start: 5,
-                    virtual_end: TRANSFORMED.len() as i32,
+                    virtual_end: u32::try_from(TRANSFORMED.len())
+                        .expect("test content fits in a source position"),
                     original_start: 0,
                     original_end: 0,
                     kind: Kind::Atom,

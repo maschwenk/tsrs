@@ -61,7 +61,7 @@ const TOKEN_MODIFIERS: [SemanticTokenModifier; 11] = [
 ];
 
 // semantictokens.go:62 (only the values this file produces; the others are positions in TOKEN_TYPES)
-type TokenType = i32;
+type TokenType = u32;
 
 const TOKEN_TYPE_NAMESPACE: TokenType = 0;
 const TOKEN_TYPE_CLASS: TokenType = 1;
@@ -77,7 +77,7 @@ const TOKEN_TYPE_FUNCTION: TokenType = 13;
 const TOKEN_TYPE_METHOD: TokenType = 14; // Previously called "member" in TypeScript
 
 // semantictokens.go:90 (bit i is TOKEN_MODIFIERS[i]; only the bits this file sets are named)
-type TokenModifier = i32;
+type TokenModifier = u32;
 
 const TOKEN_MODIFIER_DECLARATION: TokenModifier = 1 << 0;
 const TOKEN_MODIFIER_READONLY: TokenModifier = 1 << 2;
@@ -145,7 +145,7 @@ impl LanguageService {
             let projection = mapped.script;
             let mut c = program.get_type_checker_for_file(ctx, projection);
             tokens.extend(
-                self.collect_semantic_tokens_in_range(ctx, &mut c, projection, program, mapped.span.pos(), mapped.span.end()).into_iter().filter_map(
+                self.collect_semantic_tokens_in_range(ctx, &mut c, projection, program, mapped.span.pos().expect_source("mapped semantic-token ranges have source positions") , mapped.span.end().expect_source("mapped semantic-token ranges have source positions"), ).into_iter().filter_map(
                     |mut token| {
                         token.file = Some(projection);
                         if seen.insert(token) { Some(token) } else { None }
@@ -166,12 +166,8 @@ impl LanguageService {
     }
 }
 
-fn go_cmp_compare<T: Ord + Copy>(a: T, b: T) -> i32 {
-    match a.cmp(&b) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    }
+fn go_cmp_compare<T: Ord + Copy>(a: T, b: T) -> std::cmp::Ordering {
+    a.cmp(&b)
 }
 
 // semantictokens.go:193
@@ -180,15 +176,18 @@ fn sort_semantic_tokens(tokens: &mut [SemanticToken], converters: &Converters) {
         let (a_range, _) = semantic_token_lsp_range(a, converters);
         let (b_range, _) = semantic_token_lsp_range(b, converters);
         let result = go_cmp_compare(a_range.start.line, b_range.start.line);
-        if result != 0 {
+        if !result.is_eq() {
             return result;
         }
         let result = go_cmp_compare(a_range.start.character, b_range.start.character);
-        if result != 0 {
+        if !result.is_eq() {
             return result;
         }
-        let result = go_cmp_compare(a.file.unwrap().path().as_str(), b.file.unwrap().path().as_str());
-        if result != 0 {
+        let result = go_cmp_compare(
+            a.file.unwrap().path().as_str(),
+            b.file.unwrap().path().as_str(),
+        );
+        if !result.is_eq() {
             return result;
         }
         go_cmp_compare(a.node.pos(), b.node.pos())
@@ -199,7 +198,17 @@ fn sort_semantic_tokens(tokens: &mut [SemanticToken], converters: &Converters) {
 fn semantic_token_lsp_range(token: &SemanticToken, converters: &Converters) -> (lsproto::Range, Fidelity) {
     let file = token.file.unwrap();
     let start = scanner::get_token_pos_of_node(token.node, file, false);
-    converters.to_lsp_range_for_feature(&file, TextRange::new(start, token.node.end()), Feature::SemanticTokens)
+    converters.to_lsp_range_for_feature(
+        &file,
+        TextRange::new(
+            start,
+            token
+                .node
+                .end()
+                .expect_source("semantic-token nodes have source positions"),
+        ),
+        Feature::SemanticTokens,
+    )
 }
 
 // semantictokens.go:215
@@ -213,8 +222,25 @@ struct SemanticToken {
 
 impl LanguageService {
     // semantictokens.go:222
-    fn collect_semantic_tokens(&self, ctx: &Context, c: &mut Checker, file: P<SourceFile>, program: &Program) -> Vec<SemanticToken> {
-        self.collect_semantic_tokens_in_range(ctx, c, file, program, file.as_node().pos(), file.as_node().end())
+    fn collect_semantic_tokens(
+        &self,
+        ctx: &Context,
+        c: &mut Checker,
+        file: P<SourceFile>,
+        program: &Program,
+    ) -> Vec<SemanticToken> {
+        self.collect_semantic_tokens_in_range(
+            ctx,
+            c,
+            file,
+            program,
+            file.as_node()
+                .pos()
+                .expect_source("parsed source files have source positions"),
+            file.as_node()
+                .end()
+                .expect_source("parsed source files have source positions"),
+        )
     }
 
     // semantictokens.go:226
@@ -224,8 +250,8 @@ impl LanguageService {
         c: &mut Checker,
         file: P<SourceFile>,
         program: &Program,
-        span_start: i32,
-        span_end: i32,
+        span_start: u32,
+        span_end: u32,
     ) -> Vec<SemanticToken> {
         let mut v = SemanticTokensVisitor { ctx, c, file, program, span_start, span_end, tokens: Vec::new(), in_jsx_element: false };
 
@@ -247,8 +273,8 @@ struct SemanticTokensVisitor<'a> {
     c: &'a mut Checker,
     file: P<SourceFile>,
     program: &'a Program,
-    span_start: i32,
-    span_end: i32,
+    span_start: u32,
+    span_end: u32,
     tokens: Vec<SemanticToken>,
     in_jsx_element: bool,
 }
@@ -263,8 +289,15 @@ impl SemanticTokensVisitor<'_> {
         if node.flags().intersects(NodeFlags::Reparsed) {
             return false;
         }
-        let node_end = node.end();
-        if node.pos() >= self.span_end || node_end <= self.span_start {
+        let node_end = node
+            .end()
+            .expect_source("semantic-token nodes have source positions");
+        if node
+            .pos()
+            .expect_source("semantic-token nodes have source positions")
+            >= self.span_end
+            || node_end <= self.span_start
+        {
             return false;
         }
 
@@ -306,7 +339,8 @@ impl SemanticTokensVisitor<'_> {
 
         // Check if this is a declaration
         if let Some(parent) = node.parent() {
-            let parent_is_declaration = ast::is_binding_element(parent) || token_from_declaration_mapping(parent.kind()) == token_type;
+            let parent_is_declaration = ast::is_binding_element(parent)
+                || token_from_declaration_mapping(parent.kind()) == Some(token_type);
             if parent_is_declaration && parent.name() == Some(node) {
                 token_modifier |= TOKEN_MODIFIER_DECLARATION;
             }
@@ -388,8 +422,7 @@ fn classify_symbol(symbol: P<Symbol>, meaning: SemanticMeaning) -> Option<TokenT
         if ast::is_binding_element(decl) {
             decl = get_declaration_for_binding_element(decl);
         }
-        let token_type = token_from_declaration_mapping(decl.kind());
-        if token_type >= 0 {
+        if let Some(token_type) = token_from_declaration_mapping(decl.kind()) {
             return Some(token_type);
         }
     }
@@ -398,8 +431,8 @@ fn classify_symbol(symbol: P<Symbol>, meaning: SemanticMeaning) -> Option<TokenT
 }
 
 // semantictokens.go:379
-fn token_from_declaration_mapping(kind: Kind) -> TokenType {
-    match kind {
+fn token_from_declaration_mapping(kind: Kind) -> Option<TokenType> {
+    Some(match kind {
         Kind::VariableDeclaration => TOKEN_TYPE_VARIABLE,
         Kind::Parameter => TOKEN_TYPE_PARAMETER,
         Kind::PropertyDeclaration => TOKEN_TYPE_PROPERTY,
@@ -416,8 +449,8 @@ fn token_from_declaration_mapping(kind: Kind) -> TokenType {
         Kind::TypeAliasDeclaration => TOKEN_TYPE_TYPE,
         Kind::TypeParameter => TOKEN_TYPE_TYPE_PARAMETER,
         Kind::PropertyAssignment | Kind::ShorthandPropertyAssignment => TOKEN_TYPE_PROPERTY,
-        _ => -1,
-    }
+        _ => return None,
+    })
 }
 
 // semantictokens.go:418
@@ -591,7 +624,10 @@ fn encode_semantic_tokens(ctx: &Context, tokens: &[SemanticToken], converters: &
                 start_pos.character,
                 end_pos.line,
                 end_pos.character,
-                token.node.pos()
+                token
+                    .node
+                    .pos()
+                    .expect_source("semantic-token nodes have source positions")
             );
         };
 
@@ -610,7 +646,10 @@ fn encode_semantic_tokens(ctx: &Context, tokens: &[SemanticToken], converters: &
                 prev_char,
                 line,
                 char,
-                token.node.pos()
+                token
+                    .node
+                    .pos()
+                    .expect_source("semantic-token nodes have source positions")
             );
         }
 

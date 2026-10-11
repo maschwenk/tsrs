@@ -79,7 +79,9 @@ fn run_oracle() {
             let file = parse_for_test(name, &text, kind);
             if indent_mode {
                 let mut s = String::new();
-                s.extend(file.ecma_line_map().iter().enumerate().map(|(i, &ls)| format!("{},", get_indentation(ls as i32, file, &options, i % 2 == 0))));
+                s.extend(file.ecma_line_map().iter().enumerate().map(|(i, &ls)| {
+                    format!("{},", get_indentation(ls, file, &options, i % 2 == 0))
+                }));
                 return s;
             }
             serialize(&format_document(&ctx, file))

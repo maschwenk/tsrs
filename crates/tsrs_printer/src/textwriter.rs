@@ -21,10 +21,10 @@ pub struct textWriter {
     builder: String,
     // Go keeps the last written string; only whether its last rune is white space is ever read.
     last_written_is_white_space_like: bool,
-    indent: i32,
+    indent: u32,
     line_start: bool,
-    line_count: i32,
-    line_pos: i32,
+    line_count: u32,
+    line_pos: u32,
     has_trailing_comment_state: bool,
 }
 
@@ -40,7 +40,7 @@ impl textWriter {
 
     fn update_line_count_and_pos_for(&mut self, s: &str) {
         let mut count = 0;
-        let mut last_line_start: TextPos = 0;
+        let mut last_line_start = 0;
 
         compute_ecma_line_starts_seq(s, |line_start| {
             count += 1;
@@ -50,9 +50,9 @@ impl textWriter {
 
         if count > 1 {
             self.line_count += count - 1;
-            let cur_len = self.builder.len() as i32;
-            self.line_pos = cur_len - s.len() as i32 + last_line_start;
-            self.line_start = (self.line_pos - cur_len) == 0;
+            let cur_len = self.builder.len() as u32;
+            self.line_pos = cur_len - s.len() as u32 + last_line_start;
+            self.line_start = self.line_pos == cur_len;
             return;
         }
         self.line_start = false;
@@ -76,7 +76,7 @@ impl textWriter {
         self.set_last_written(&nl);
         self.new_line = nl;
         self.line_count += 1;
-        self.line_pos = self.builder.len() as i32;
+        self.line_pos = self.builder.len() as u32;
         self.line_start = true;
         self.has_trailing_comment_state = false;
     }
@@ -97,25 +97,25 @@ impl EmitTextWriter for textWriter {
     }
 
     fn decrease_indent(&mut self) {
-        self.indent -= 1;
+        self.indent = self.indent.checked_sub(1).expect("indentation underflow");
     }
 
     // GetColumn returns the column position measured in UTF-16 code units
     // for source map compatibility.
     fn get_column(&self) -> UTF16Offset {
         if self.line_start {
-            return self.indent * self.indent_size as i32;
+            return self.indent * self.indent_size as u32;
         }
         // Count UTF-16 code units from the last line start.
         // For ASCII-only output (the common case), this equals the byte count.
         utf16_len(&self.builder[self.line_pos as usize..])
     }
 
-    fn get_indent(&self) -> i32 {
+    fn get_indent(&self) -> u32 {
         self.indent
     }
 
-    fn get_line(&self) -> i32 {
+    fn get_line(&self) -> u32 {
         self.line_count
     }
 
@@ -123,8 +123,8 @@ impl EmitTextWriter for textWriter {
         self.builder.clone()
     }
 
-    fn get_text_pos(&self) -> i32 {
-        self.builder.len() as i32
+    fn get_text_pos(&self) -> u32 {
+        self.builder.len() as u32
     }
 
     fn has_trailing_comment(&self) -> bool {
@@ -229,7 +229,7 @@ pub fn get_default_indent_size() -> usize {
     defaultIndentSize
 }
 
-pub(crate) fn get_indent_string(indent: i32, indent_size: usize) -> String {
+pub(crate) fn get_indent_string(indent: u32, indent_size: usize) -> String {
     if indent == 0 {
         return String::new();
     }

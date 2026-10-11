@@ -12,7 +12,7 @@
 // Cases (`tsrs-test materialize`, fixtures) are `<case>/{root/, case.json}`; case.json has cwd (relative to root),
 // args, or steps [{args, write: {path: text}, remove: [path], chmod: {path: mode}}], optionally generate (see
 // `generate`) and nativeFlag (default "--singleThreaded"). `${ROOT}` in an argument is the slot's absolute path. Each case is copied fresh into a work
-// slot under target/wasm-diff/slots (no symlink in that path, so both sides print the same paths) before each side.
+// slot in a temporary directory outside the repo (resolved to its real path, so both sides print the same paths) before each side.
 // Projects run in place and must not write: the harness checks `git status --short` before and after.
 // Exit 1 on any differ, module-crash or timeout. <out>/summary.json has the counts; <out>/fail/<id>/ the evidence.
 
@@ -222,8 +222,7 @@ function isPanic(r) {
     return r.exitCode === 5 && /panicked at/.test(r.stderr ?? "");
 }
 
-async function runCase(o, moduleObj, spInit, c, slotIndex) {
-    const slot = path.join(repo, "target/wasm-diff/slots", String(slotIndex).padStart(2, "0"));
+async function runCase(o, moduleObj, spInit, c, slot) {
     const memory = o.fs === "memory";
     if (memory && !c.project && hasSymlink(c.root)) return { id: c.id, status: "skipped", reason: "symlink (memory fs)" };
     if (c.spec.skipped) return { id: c.id, status: "skipped", reason: c.spec.skipped };
@@ -291,7 +290,7 @@ async function runCase(o, moduleObj, spInit, c, slotIndex) {
         m.forEach((r, i) => { fs.writeFileSync(path.join(dir, `module.${i}.stdout`), r.stdout ?? ""); fs.writeFileSync(path.join(dir, `module.${i}.stderr`), (r.stderr ?? "") + (r.crash ?? "")); });
         fs.writeFileSync(path.join(dir, "native.written"), sides.native.written.join("\n"));
         fs.writeFileSync(path.join(dir, "module.written"), sides.module.written.join("\n"));
-        fs.writeFileSync(path.join(dir, "repro.sh"), `# ${c.id}: ${status} ${detail}\n# case root: ${c.root ?? c.project}\nrsync -a --delete ${c.root ?? ""}/ ${slot}/ && cd ${path.join(slot, c.spec.cwd ?? ".")}\n${o.native} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")} --singleThreaded\nnode ${path.join(repo, "npm/tsrs-wasm/bin/tsrs-wasm.js")} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")}\n`);
+        fs.writeFileSync(path.join(dir, "repro.sh"), `# ${c.id}: ${status} ${detail}\n# case root: ${c.root ?? c.project}\nmkdir -p ${slot}\nrsync -a --delete ${c.root ?? ""}/ ${slot}/ && cd ${path.join(slot, c.spec.cwd ?? ".")}\n${o.native} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")} --singleThreaded\nnode ${path.join(repo, "npm/tsrs-wasm/bin/tsrs-wasm.js")} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")}\n`);
         if (c.project) cleanSlot(slot);
     }
     return result;
@@ -318,21 +317,27 @@ async function main() {
     const statusBefore = new Map(cases.filter((c) => c.project).map((c) => [c.project, gitStatus(c.project)]));
     const results = [];
     const fingerprints = new Map();
-    for (let rep = 0; rep < o.repeat; rep++) {
-        let next = 0;
-        const jobs = Math.max(1, Math.min(o.jobs, cases.length));
-        await Promise.all(Array.from({ length: jobs }, async (_, slotIndex) => {
-            while (next < cases.length) {
-                const c = cases[next++];
-                const r = await runCase(o, moduleObj, spInit, c, slotIndex);
-                if (rep === 0) results.push(r);
-                else if (r.status !== results.find((x) => x.id === r.id)?.status) r.status !== "same" && results.push({ ...r, id: `${r.id} (repeat ${rep})` });
-                process.stderr.write(r.status === "same" || r.status === "skipped" ? "." : `\n${r.status} ${r.id} ${r.detail ?? ""}\n`);
-            }
-        }));
+    // The native compiler must not see the repo's package.json or node_modules: memoryFiles only copies the slot.
+    const slots = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "tsrs-wasm-diff-")));
+    try {
+        for (let rep = 0; rep < o.repeat; rep++) {
+            let next = 0;
+            const jobs = Math.max(1, Math.min(o.jobs, cases.length));
+            await Promise.all(Array.from({ length: jobs }, async (_, slotIndex) => {
+                const slot = path.join(slots, String(slotIndex).padStart(2, "0"));
+                while (next < cases.length) {
+                    const c = cases[next++];
+                    const r = await runCase(o, moduleObj, spInit, c, slot);
+                    if (rep === 0) results.push(r);
+                    else if (r.status !== results.find((x) => x.id === r.id)?.status) r.status !== "same" && results.push({ ...r, id: `${r.id} (repeat ${rep})` });
+                    process.stderr.write(r.status === "same" || r.status === "skipped" ? "." : `\n${r.status} ${r.id} ${r.detail ?? ""}\n`);
+                }
+            }));
+        }
+    } finally {
+        cleanSlot(slots);
     }
     process.stderr.write("\n");
-    for (let s = 0; s < Math.max(1, o.jobs); s++) cleanSlot(path.join(repo, "target/wasm-diff/slots", String(s).padStart(2, "0")));
     const counts = {};
     for (const r of results) counts[r.status] = (counts[r.status] ?? 0) + 1;
     const stacks = results.map((r) => r.stackBytes).filter((x) => x > 0).sort((a, b) => a - b);

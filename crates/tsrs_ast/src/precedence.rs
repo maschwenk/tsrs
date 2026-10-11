@@ -3,16 +3,15 @@ use tsrs_core::P;
 
 use crate::{is_optional_chain, Kind, Node};
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum OperatorPrecedence {
-    // -1 is lower than all other precedences. Returning it will cause binary expression
-    // parsing to stop.
-    Invalid = -1,
+    // Invalid is lower than all valid precedences. Returning it will cause binary expression parsing to stop.
+    Invalid,
     // Expression:
     //     AssignmentExpression
     //     Expression `,` AssignmentExpression
-    Comma = 0,
+    Comma = 1,
     // NOTE: `Spread` is higher than `Comma` due to how it is parsed in |ElementList|
     // SpreadElement:
     //     `...` AssignmentExpression
@@ -97,7 +96,7 @@ pub fn get_expression_precedence(expression: P<Node>) -> OperatorPrecedence {
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub struct OperatorPrecedenceFlags: i32 {
+    pub struct OperatorPrecedenceFlags: u32 {
         const None = 0;
         const NewWithoutArguments = 1 << 0;
         const OptionalChain = 1 << 1;

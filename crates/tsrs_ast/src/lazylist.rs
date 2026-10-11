@@ -75,8 +75,8 @@ pub struct LazyNodeList {
     /// Set right after the parser creates the owner node (the list is parsed first).
     owner: OwnedCell<Option<P<Node>>>,
     /// `pos` / `end` of the list (its `loc`); the parser resumes at `pos`, the end of the `{` token.
-    pub pos: i32,
-    pub end: i32,
+    pub pos: u32,
+    pub end: u32,
     /// The parser's context flags and enclosing parsing contexts at the list.
     pub context_flags: NodeFlags,
     pub parsing_contexts: u32,
@@ -140,7 +140,13 @@ fn thread_token() -> u64 {
 }
 
 impl LazyNodeList {
-    pub fn new(pos: i32, end: i32, parsing_context: u8, context_flags: NodeFlags, parsing_contexts: u32) -> LazyNodeList {
+    pub fn new(
+        pos: u32,
+        end: u32,
+        parsing_context: u8,
+        context_flags: NodeFlags,
+        parsing_contexts: u32,
+    ) -> LazyNodeList {
         LazyNodeList {
             head: &LAZY_HEAD_DATA,
             state: AtomicU8::new(PENDING),

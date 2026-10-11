@@ -15,12 +15,13 @@ The Go implementation at the commit in `Cargo.toml` (`[workspace.metadata.typesc
 
 ## Build
 
-Requirements: rustup (it installs the Rust version `rust-toolchain.toml` pins), Node.js, pnpm 12.10.1 (for `npm/build.mjs` and the JS tooling) and git.
+Requirements: rustup (it installs the Rust version `rust-toolchain.toml` pins), Node.js 24 (`.node-version`), pnpm 12.10.1 (for `npm/build.mjs` and the JS tooling) and git.
+Run `pnpm install --frozen-lockfile` from the repository root to install the npm workspace tooling.
 
 ```sh
 cargo build --release -p tsrs_cli -p tsrs_testrunner
 ./target/release/tsrs -p path/to/project          # like `tsc` (emits; add --noEmit to only type check)
-cargo check --workspace                           # must be 0 errors, 0 warnings (CI uses -D warnings)
+cargo check --workspace                           # must be 0 errors, 0 warnings (CI sets build.warnings=deny)
 cargo check -p tsrs_wasm --target wasm32-wasip1   # the WebAssembly build still compiles (notes/wasm-build.md)
 tools/lint/ratchet.py                             # no new clippy findings (docs/RUST.md)
 tools/lint/source.py                              # unsafe Send/Sync inventory, comments on weakened atomic orderings

@@ -5,7 +5,7 @@ use tsrs_core::collections::OrderedSet;
 use super::superAccessState;
 
 // async.go:13
-type asyncContextFlags = i32;
+type asyncContextFlags = u32;
 
 const asyncContextNonTopLevel: asyncContextFlags = 1 << 0;
 const asyncContextHasLexicalThis: asyncContextFlags = 1 << 1;

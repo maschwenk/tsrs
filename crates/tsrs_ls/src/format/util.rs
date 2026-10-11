@@ -6,8 +6,16 @@ use crate::astnav;
 
 // util.go:10
 pub(crate) fn range_is_on_one_line(node: TextRange, file: P<SourceFile>) -> bool {
-    let start_line = scanner::get_ecma_line_of_position(file.get(), node.pos());
-    let end_line = scanner::get_ecma_line_of_position(file.get(), node.end());
+    let start_line = scanner::get_ecma_line_of_position(
+        file.get(),
+        node.pos()
+            .expect_source("formatting ranges have source positions"),
+    );
+    let end_line = scanner::get_ecma_line_of_position(
+        file.get(),
+        node.end()
+            .expect_source("formatting ranges have source positions"),
+    );
     start_line == end_line
 }
 
@@ -68,10 +76,10 @@ pub(crate) fn get_close_token_for_open_token(kind: Kind) -> Kind {
 }
 
 // util.go:76
-pub fn get_line_start_position_for_position(position: i32, source_file: P<SourceFile>) -> i32 {
+pub fn get_line_start_position_for_position(position: u32, source_file: P<SourceFile>) -> u32 {
     let line_starts = scanner::get_ecma_line_starts(source_file.get());
     let line = scanner::get_ecma_line_of_position(source_file.get(), position);
-    line_starts[line as usize] as i32
+    line_starts[line]
 }
 
 // util.go:86
@@ -79,9 +87,15 @@ pub fn get_line_start_position_for_position(position: i32, source_file: P<Source
  * Validating `expectedTokenKind` ensures the token was typed in the context we expect (eg: not a comment).
  * @param expectedTokenKind The kind of the last token constituting the desired parent node.
  */
-pub(crate) fn find_immediately_preceding_token_of_kind(end: i32, expected_token_kind: Kind, source_file: P<SourceFile>) -> Option<P<Node>> {
+pub(crate) fn find_immediately_preceding_token_of_kind(
+    end: u32,
+    expected_token_kind: Kind,
+    source_file: P<SourceFile>,
+) -> Option<P<Node>> {
     let preceding_token = astnav::find_preceding_token(source_file, end)?;
-    if preceding_token.kind() != expected_token_kind || preceding_token.end() != end {
+    if preceding_token.kind() != expected_token_kind
+        || preceding_token.end().source_offset() != Some(end)
+    {
         return None;
     }
     Some(preceding_token)

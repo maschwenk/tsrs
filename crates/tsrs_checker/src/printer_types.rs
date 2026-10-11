@@ -85,7 +85,7 @@ bitflags! {
 bitflags! {
     /// Go `nodebuilder.InternalFlags`.
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct InternalFlags: i32 {
+    pub struct InternalFlags: u32 {
         const None = 0;
         const WriteComputedProps = 1 << 0;
         const NoSyntacticPrinter = 1 << 1;
@@ -154,8 +154,8 @@ pub struct SymbolAccessibilityResult {
 /// Go `VerbosityContext`, passed as `Option<P<VerbosityContext>>`; the node builder writes the output fields.
 #[derive(Debug, Default)]
 pub struct VerbosityContext {
-    pub level: Cell<i32>, // 0 = default (no expansion), 1+ = expansion depth
-    pub max_truncation_length: Cell<i32>, // 0 = use default
+    pub level: Cell<usize>, // 0 = default (no expansion), 1+ = expansion depth
+    pub max_truncation_length: Cell<usize>, // 0 = use default
     pub can_increase_verbosity: Cell<bool>, // output: whether increasing Level would reveal more
     pub truncated: Cell<bool>, // output: whether output was truncated
 }

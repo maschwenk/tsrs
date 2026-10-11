@@ -4,7 +4,7 @@ use bitflags::bitflags;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct TokenFlags: i32 {
+    pub struct TokenFlags: u32 {
         const None = 0;
         const PrecedingLineBreak = 1 << 0;
         const PrecedingJSDocComment = 1 << 1;

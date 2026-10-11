@@ -146,8 +146,10 @@ These rules make independently ported call sites agree:
 | `[]T` / `[]*T`                       | `&[T]` / `&[P<T>]`                      | `Vec<…>` when freshly built; `&'static […]` when returning a stored/cached slice |
 | `string`                             | `&str`                                  | `String` when freshly built; `&'static str` when returning stored text |
 | `bool`, enums, flags                 | by value                                | by value |
-| `int` text position / offset         | `i32`                                   | `i32` |
-| `int` count / index / length         | `usize` (`i32` if it can be negative)   | same |
+| `int` text position / byte offset    | `u32`; `TextPos` when synthetic is possible | same |
+| `int` count / index / length         | `usize`                                 | same |
+| negative sentinel (`-1` = absent)    | `Option<T>`; a named enum when negative is a real state | same |
+| three-way comparator                 | arguments as usual                      | `std::cmp::Ordering` |
 | `int32`, `uint32`, `float64`, …      | `i32`, `u32`, `f64`, …                  | same |
 | `func(...)` callback                 | `impl FnMut(...)` (or `&mut dyn FnMut` when recursion/object safety needs it) | — |
 | `(A, B)` multiple results            | —                                       | `(A, B)` |
@@ -155,6 +157,12 @@ These rules make independently ported call sites agree:
 | `error` result                       | —                                       | `Result<T, String>` unless a richer error is needed |
 | `map[K]V`                            | `&FxHashMap<K, V>`                      | `FxHashMap<K, V>` |
 | interface value                      | enum or `&dyn Trait` — see the owning crate | |
+
+Keep signed integers at external boundaries that specify them (diagnostic codes, LSP/JSON-RPC integers, process
+statuses and C APIs), and validate/convert immediately when the internal value is a position, index or count.
+`TextPos::Synthetic` replaces the old `-1` AST-position sentinel; `TextPos::Source(SourcePos)` carries a source byte
+offset. Construct ordinary ranges with `TextRange::new(u32, u32)` and synthetic ranges with
+`TextRange::synthetic()`.
 
 Method receivers: types with a big mutable state machine (`Checker`, `Parser`, `Scanner`,
 `Binder`, `Relater`, `Program` while loading) take `&mut self` and keep plain (non-`Cell`)

@@ -115,11 +115,11 @@ impl EmitTextWriter for trailingSemicolonDeferringWriter {
         self.inner.write_literal(s);
     }
 
-    fn get_text_pos(&self) -> i32 {
+    fn get_text_pos(&self) -> u32 {
         self.inner.get_text_pos()
     }
 
-    fn get_line(&self) -> i32 {
+    fn get_line(&self) -> u32 {
         self.inner.get_line()
     }
 
@@ -127,7 +127,7 @@ impl EmitTextWriter for trailingSemicolonDeferringWriter {
         self.inner.get_column()
     }
 
-    fn get_indent(&self) -> i32 {
+    fn get_indent(&self) -> u32 {
         self.inner.get_indent()
     }
 

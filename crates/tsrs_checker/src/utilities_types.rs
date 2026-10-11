@@ -17,7 +17,7 @@ pub type AssignmentTarget = Node; // BinaryExpression | PrefixUnaryExpression | 
 
 /// orderedSetMapThreshold is the size at which an orderedSet materializes its dedup map.
 /// Below this, contains() scans the values slice.
-pub const orderedSetMapThreshold: i32 = 16;
+pub const orderedSetMapThreshold: usize = 16;
 
 pub struct orderedSet<T: Copy + Eq + std::hash::Hash> {
     pub values_by_key: Option<FxHashSet<T>>,

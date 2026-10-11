@@ -1,5 +1,5 @@
 use std::fmt::Write as _;
-use std::sync::atomic::{AtomicI32, Ordering};
+use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, OnceLock};
 use std::time::Instant;
 
@@ -41,7 +41,7 @@ pub struct Snapshot {
     pub(crate) host: Arc<SnapshotHost>,
     pub(crate) id: u64,
     pub(crate) parent_id: u64,
-    ref_count: AtomicI32,
+    ref_count: AtomicU32,
 
     converters: Arc<Converters>,
 
@@ -109,7 +109,7 @@ impl SnapshotHost {
             host: Arc::clone(self),
             id,
             parent_id: 0,
-            ref_count: AtomicI32::new(1),
+            ref_count: AtomicU32::new(1),
             // Go passes the method value `s.LSPLineMap`; the closure holds the snapshot's file system rather than the
             // snapshot itself (which would form a reference cycle).
             converters: lsconv::new_converters(self.options.position_encoding, move |file_name: &str| {
@@ -786,8 +786,17 @@ impl Snapshot {
     // disposed until a corresponding Deref is called. The snapshot must still
     // be alive (refCount > 0) when ref is called.
     pub(crate) fn ref_(&self) {
-        if self.ref_count.fetch_add(1, Ordering::SeqCst) + 1 <= 1 {
-            panic!("snapshot {}: ref on disposed snapshot, parentId={}", self.id, self.parent_id);
+        if self
+            .ref_count
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                (count > 0).then(|| count.checked_add(1)).flatten()
+            })
+            .is_err()
+        {
+            panic!(
+                "snapshot {}: ref on disposed snapshot, parentId={}",
+                self.id, self.parent_id
+            );
         }
     }
 
@@ -796,26 +805,29 @@ impl Snapshot {
     // snapshot is already disposed (refCount == 0), it returns false without
     // modifying the count. On success the caller must eventually call Deref.
     pub(crate) fn try_ref(&self) -> bool {
-        loop {
-            let rc = self.ref_count.load(Ordering::SeqCst);
-            if rc <= 0 {
-                return false;
-            }
-            if self.ref_count.compare_exchange(rc, rc + 1, Ordering::SeqCst, Ordering::SeqCst).is_ok() {
-                return true;
-            }
-        }
+        self.ref_count
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                (count > 0).then(|| count.checked_add(1)).flatten()
+            })
+            .is_ok()
     }
 
     // snapshot.go:755
     // Deref decrements the snapshot's reference count. When the count reaches
     // zero, the snapshot is disposed and its store-owned resources are released.
     pub fn deref(&self) {
-        let rc = self.ref_count.fetch_sub(1, Ordering::SeqCst) - 1;
-        if rc < 0 {
-            panic!("snapshot {}: ref count below zero, parentId={}", self.id, self.parent_id);
-        }
-        if rc == 0 {
+        let previous = self
+            .ref_count
+            .try_update(Ordering::SeqCst, Ordering::SeqCst, |count| {
+                count.checked_sub(1)
+            })
+            .unwrap_or_else(|_| {
+                panic!(
+                    "snapshot {}: ref count below zero, parentId={}",
+                    self.id, self.parent_id
+                )
+            });
+        if previous == 1 {
             self.dispose();
         }
     }
@@ -855,7 +867,7 @@ impl Snapshot {
     }
 
     #[cfg(test)]
-    pub(crate) fn ref_count(&self) -> i32 {
+    pub(crate) fn ref_count(&self) -> u32 {
         self.ref_count.load(Ordering::SeqCst)
     }
 }

@@ -171,9 +171,9 @@ impl projectLoadingProgress {
     // run is the persistent goroutine that processes all progress events.
     // It owns all mutable state: no external synchronization needed.
     fn run(&self) {
-        let mut loading: OrderedMap<String, i32> = OrderedMap::default();
+        let mut loading: OrderedMap<String, usize> = OrderedMap::default();
         let mut token = String::new(); // current token; empty if no progress active
-        let mut token_id = 0;
+        let mut token_id: usize = 0;
         let mut begun = false; // whether "begin" has been sent for the current token
 
         // Go's *time.Timer: the instant the delay fires; None when no timer is pending (a fired timer delivers

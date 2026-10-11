@@ -82,7 +82,7 @@ pub fn get_package_name_from_types_package_name(mangled_name: &str) -> String {
     mangled_name.to_string()
 }
 
-pub fn compare_pattern_keys(a: &str, b: &str) -> i32 {
+pub fn compare_pattern_keys(a: &str, b: &str) -> std::cmp::Ordering {
     let a_pattern_index = a.find('*');
     let b_pattern_index = b.find('*');
     let base_len_a = match a_pattern_index {
@@ -95,24 +95,24 @@ pub fn compare_pattern_keys(a: &str, b: &str) -> i32 {
     };
 
     if base_len_a > base_len_b {
-        return -1;
+        return std::cmp::Ordering::Less;
     }
     if base_len_b > base_len_a {
-        return 1;
+        return std::cmp::Ordering::Greater;
     }
     if a_pattern_index.is_none() {
-        return 1;
+        return std::cmp::Ordering::Greater;
     }
     if b_pattern_index.is_none() {
-        return -1;
+        return std::cmp::Ordering::Less;
     }
     if a.len() > b.len() {
-        return -1;
+        return std::cmp::Ordering::Less;
     }
     if b.len() > a.len() {
-        return 1;
+        return std::cmp::Ordering::Greater;
     }
-    0
+    std::cmp::Ordering::Equal
 }
 
 // Returns a DiagnosticMessage if we won't include a resolved module due to its extension.

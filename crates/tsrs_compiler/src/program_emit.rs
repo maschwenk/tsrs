@@ -26,7 +26,7 @@ use tsrs_tsoptions::outputpaths::{self, ForceEmitPaths};
 // program.go:1845
 #[derive(Default)]
 pub struct WriteFileData {
-    pub source_map_url_pos: i32,
+    pub source_map_url_pos: Option<u32>,
     // Go `BuildInfo any`: the `*incremental.BuildInfo` being written (tsrs_incremental::BuildInfo).
     pub build_info: Option<std::sync::Arc<dyn std::any::Any + Send + Sync>>,
     pub diagnostics: Vec<P<Diagnostic>>,

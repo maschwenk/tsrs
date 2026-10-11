@@ -124,12 +124,18 @@ impl LanguageService {
         let Some(file) = source_file_for_supplemental_file_index(file, data.supplemental_file_index) else {
             return Err(lsproto::Error::new(format!("supplemental source file index not found: {}", data.supplemental_file_index.unwrap())));
         };
+        let position = u32::try_from(data.position)
+            .map_err(|_| lsproto::Error::new("code lens position must be non-negative"))?;
         // (Go reads `locale.FromContext(ctx)`; only English is ported.)
         let mut locs: Vec<lsproto::Location> = Vec::new();
         let mut lens_title = String::new();
         match data.kind {
             lsproto::CodeLensKind::References => {
-                let symbols_data = self.provide_symbols_and_entries_at_position(ctx, program, file, data.position, false, false).unwrap_or_default();
+                let symbols_data = self
+                    .provide_symbols_and_entries_at_position(
+                        ctx, program, file, position, false, false,
+                    )
+                    .unwrap_or_default();
                 let references_resp = self.provide_references_from_data(
                     ctx,
                     &lsproto::ReferenceParams {
@@ -155,7 +161,11 @@ impl LanguageService {
                 }
             }
             lsproto::CodeLensKind::Implementations => {
-                let symbols_data = self.provide_symbols_and_entries_at_position(ctx, program, file, data.position, false, true).unwrap_or_default();
+                let symbols_data = self
+                    .provide_symbols_and_entries_at_position(
+                        ctx, program, file, position, false, true,
+                    )
+                    .unwrap_or_default();
                 let implementations = self.provide_implementations_from_data(
                     ctx,
                     &lsproto::ImplementationParams { text_document: text_doc, position: code_lens.range.start, ..Default::default() },
@@ -192,15 +202,35 @@ impl LanguageService {
     // codelens.go:175
     fn new_code_lens_for_node(&self, file_uri: &lsproto::DocumentUri, file: P<SourceFile>, node: P<Node>, kind: lsproto::CodeLensKind) -> Option<lsproto::CodeLens> {
         let node_for_range = node.name().unwrap_or(node);
-        let pos = scanner::skip_trivia(file.text(), node_for_range.pos());
-        let (lsp_range, fidelity) = self.converters.to_lsp_range_for_feature(&file, TextRange::new(pos, node.end()), Feature::CodeLens);
+        let pos = scanner::skip_trivia(
+            file.text(),
+            node_for_range
+                .pos()
+                .expect_source("parsed nodes have source positions"),
+        );
+        let (lsp_range, fidelity) = self.converters.to_lsp_range_for_feature(
+            &file,
+            TextRange::new(
+                pos,
+                node.end()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            Feature::CodeLens,
+        );
         if fidelity.is_none() {
             return None;
         }
 
         Some(lsproto::CodeLens {
             range: lsp_range,
-            data: Some(lsproto::CodeLensData { kind, uri: file_uri.clone(), position: pos, supplemental_file_index: supplemental_file_index(file) }),
+            data: Some(lsproto::CodeLensData {
+                kind,
+                uri: file_uri.clone(),
+                position: i32::try_from(pos).expect("code lens position exceeds protocol i32"),
+                supplemental_file_index: supplemental_file_index(file).map(|index| {
+                    i32::try_from(index).expect("supplemental file index exceeds protocol i32")
+                }),
+            }),
             ..Default::default()
         })
     }

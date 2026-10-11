@@ -367,7 +367,7 @@ impl Checker {
             let (n, m) = (source.types().len(), target.types().len());
             // A scan touches each target type at most once; the searches cost about log2(m) comparisons per source
             // type, each far more than an identity test.
-            if n * (usize::BITS - m.leading_zeros()) as usize * 8 >= m && self.program.source_files_complete() {
+            if n * m.bit_width() as usize * 8 >= m && self.program.source_files_complete() {
                 return crate::checker_13::is_sorted_subset(source.types(), target.types());
             }
             if source.types().iter().any(|&t| !contains_type(self, target.types(), t)) {
@@ -893,9 +893,9 @@ impl Relater {
                 if (result == Ternary::True || result == Ternary::Maybe) && record {
                     // If result is definitely true, record all maybe keys as having succeeded. Also, record Ternary.Maybe
                     // results as having succeeded once we reach depth 0, but never record Ternary.Unknown results.
-                    self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, true);
+                    self.reset_maybe_stack(c, maybe_start, propagating_variance_flags, true);
                 } else {
-                    self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, false);
+                    self.reset_maybe_stack(c, maybe_start, propagating_variance_flags, false);
                 }
             }
             // Note: it's intentional that we don't reset in the else case;
@@ -908,14 +908,19 @@ impl Relater {
                 Relation::set(&self.rel(), id, RelationComparisonResult::Failed | propagating_variance_flags);
                 self.relation_count.set(self.relation_count.get() - 1);
             }
-            self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, false);
+            self.reset_maybe_stack(c, maybe_start, propagating_variance_flags, false);
         }
         result
     }
 
     // relater.go:3201
-    pub(crate) fn reset_maybe_stack(&self, _c: &mut Checker, maybe_start: i32, propagating_variance_flags: RelationComparisonResult, mark_all_as_succeeded: bool) {
-        let maybe_start = maybe_start as usize;
+    pub(crate) fn reset_maybe_stack(
+        &self,
+        _c: &mut Checker,
+        maybe_start: usize,
+        propagating_variance_flags: RelationComparisonResult,
+        mark_all_as_succeeded: bool,
+    ) {
         let len = self.maybe_keys.borrow().len();
         if mark_all_as_succeeded {
             for i in maybe_start..len {
@@ -1877,9 +1882,20 @@ impl Relater {
         if modifiers_related {
             let target_constraint = c.get_constraint_type_from_mapped_type(target);
             let source_constraint_uninstantiated = c.get_constraint_type_from_mapped_type(source);
-            let mapper = if c.get_combined_mapped_type_optionality(source) < 0 { c.report_unmeasurable_mapper } else { c.report_unreliable_mapper };
-            let source_constraint = c.instantiate_type(source_constraint_uninstantiated, Some(mapper));
-            let result = self.is_related_to(c, target_constraint, source_constraint, RecursionFlags::Both, report_errors);
+            let mapper = if c.get_combined_mapped_type_optionality(source).is_lt() {
+                c.report_unmeasurable_mapper
+            } else {
+                c.report_unreliable_mapper
+            };
+            let source_constraint =
+                c.instantiate_type(source_constraint_uninstantiated, Some(mapper));
+            let result = self.is_related_to(
+                c,
+                target_constraint,
+                source_constraint,
+                RecursionFlags::Both,
+                report_errors,
+            );
             if result != Ternary::False {
                 let source_type_parameter = c.get_type_parameter_from_mapped_type(source);
                 let target_type_parameter = c.get_type_parameter_from_mapped_type(target);
@@ -1920,7 +1936,7 @@ impl Relater {
         // array allocations. To reduce this overhead, we first compute
         // the number of combinations to ensure we will not surpass our
         // fixed limit before incurring the cost of any allocations:
-        let mut num_combinations: i32 = 1;
+        let mut num_combinations = 1usize;
         for &source_property in &source_properties_filtered {
             num_combinations *= count_types(c.get_non_missing_type_of_symbol(source_property));
             if num_combinations > 25 {
@@ -1939,8 +1955,8 @@ impl Relater {
             excluded_properties.add(source_property.name().to_string());
         }
         // Build the cartesian product
-        let mut discriminant_combinations: Vec<Vec<P<Type>>> = Vec::with_capacity(num_combinations as usize);
-        for i in 0..num_combinations as usize {
+        let mut discriminant_combinations: Vec<Vec<P<Type>>> = Vec::with_capacity(num_combinations);
+        for i in 0..num_combinations {
             let mut combination: Vec<Option<P<Type>>> = vec![None; source_discriminant_types.len()];
             let mut n = i;
             for (j, element) in source_discriminant_types.iter().enumerate().rev() {
@@ -2085,9 +2101,13 @@ impl Relater {
                 let target_end_count = get_end_element_count(target.target_tuple_type(), ElementFlags::NonRest);
                 let mut can_exclude_discriminants = excluded_properties.len() != 0;
                 for source_position in 0..source_arity {
-                    let source_flags = if is_tuple_type(source) { source.target_tuple_type().element_infos.get()[source_position as usize].flags } else { ElementFlags::Rest };
+                    let source_flags = if is_tuple_type(source) {
+                        source.target_tuple_type().element_infos.get()[source_position].flags
+                    } else {
+                        ElementFlags::Rest
+                    };
                     let source_position_from_end = source_arity - 1 - source_position;
-                    let target_position: i32;
+                    let target_position;
                     if target_has_rest_element && source_position >= target_start_count {
                         target_position = target_arity - 1 - source_position_from_end.min(target_end_count);
                     } else {
@@ -2099,11 +2119,11 @@ impl Relater {
                         }
                         target_position = source_position;
                     }
-                    let mut target_flags = ElementFlags::None;
-                    if target_position >= 0 {
-                        target_flags = target.target_tuple_type().element_infos.get()[target_position as usize].flags;
-                    }
-                    if target_flags.intersects(ElementFlags::Variadic) && !source_flags.intersects(ElementFlags::Variadic) {
+                    let target_flags =
+                        target.target_tuple_type().element_infos.get()[target_position].flags;
+                    if target_flags.intersects(ElementFlags::Variadic)
+                        && !source_flags.intersects(ElementFlags::Variadic)
+                    {
                         if report_errors {
                             self.report_error(c, &diagnostics::Source_provides_no_match_for_variadic_element_at_position_0_in_target, &[&target_position]);
                         }
@@ -2990,7 +3010,11 @@ pub(crate) fn add_to_dotted_name(head: &str, tail: &str) -> String {
 
 impl Relater {
     // relater.go:4934
-    pub(crate) fn get_chain_message(&self, _c: &mut Checker, index: i32) -> Option<&'static Message> {
+    pub(crate) fn get_chain_message(
+        &self,
+        _c: &mut Checker,
+        index: usize,
+    ) -> Option<&'static Message> {
         let mut index = index;
         let mut e = self.error_chain.get();
         loop {
@@ -3046,7 +3070,7 @@ pub(crate) fn is_conversion_or_interface_implementation_message(message: &'stati
 }
 
 // relater.go:4976
-pub(crate) fn chain_depth(chain: Option<P<ErrorChain>>) -> i32 {
+pub(crate) fn chain_depth(chain: Option<P<ErrorChain>>) -> usize {
     let mut chain = chain;
     let mut depth = 0;
     while let Some(c) = chain {

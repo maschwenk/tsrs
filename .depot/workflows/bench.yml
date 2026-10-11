@@ -51,7 +51,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
 
 jobs:
   # tsrs is measured as released: the PGO build of the `dist` profile, optimized with BOLT, with the same commands as
@@ -83,7 +82,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Set up pnpm
         run: bash .github/scripts/setup-pnpm.sh
@@ -292,7 +291,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Set up pnpm
         run: bash .github/scripts/setup-pnpm.sh
@@ -395,7 +394,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Set up pnpm
         run: bash .github/scripts/setup-pnpm.sh

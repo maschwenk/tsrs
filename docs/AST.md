@@ -48,6 +48,12 @@ Nodes are always handled as `P<Node>`. A Go function that takes a typed data poi
 (`*ast.BinaryExpression`) takes `P<Node>` in Rust. `Node` can only be created by `NodeFactory`, so
 `node.as_p() -> P<Node>` turns any `&Node` back into its arena pointer.
 
+`TextRange` is 8 bytes and stores two `TextPos` values. A `TextPos` is either `Synthetic` or
+`Source(SourcePos)`; source positions and offsets are `u32` UTF-8 byte offsets. Use `source_offset()` when absence is
+valid and `expect_source(reason)` when the Go invariant requires a parsed/source position. Collection indexes and
+counts are `usize`; an absent index is `Option<usize>`, never `-1`. These choices preserve the pinned layouts:
+`TextRange` 8 bytes, `Node` 24 bytes, and `NodeList` 16 bytes with compressed pointers.
+
 Methods on `Node` (all `&self`), hand-written in `ast.rs` unless noted:
 
 - `pos()`, `end()`, `loc()`, `set_loc(TextRange)`, `flags()`, `set_flags(NodeFlags)`, `parent()`,
@@ -219,7 +225,7 @@ private `text`, `parse_options`); everything the parser/binder/program set later
 diagnostics lists and `bind_diagnostics`) with a same-named getter. Slices are
 `Cell<&'static [T]>`; `set_diagnostics(&[P<Diagnostic>])` etc. copy into the arena. Other methods:
 `text()`, `file_name() -> &str`, `path() -> &Path`, `parse_options() -> &SourceFileParseOptions`,
-`ecma_line_map() -> &'static [TextPos]`, `get_position_map()`, `has_identifier(&str)`, `is_js()`,
+`ecma_line_map() -> &'static [u32]`, `get_position_map()`, `has_identifier(&str)`, `is_js()`,
 `bind_once(impl FnOnce())`, `is_bound()`, `set_jsdoc_cache(map)`, `set_has_lazy_jsdoc(bool)`,
 `symbol()`, `locals()`. Lazy JSDoc: the parser registers `set_parse_jsdoc_for_node(fn(&'static SourceFile, P<Node>) -> Vec<P<Node>>)`.
 A content-mapped file carries its mapper state in `content_mapper_info`, set once by the file loader
@@ -318,7 +324,7 @@ antecedents (labels) share `link`; read them with `antecedent()` / `antecedents(
 
 `Kind` (enum, `#[repr(i16)]`, `Kind::FirstKeyword`-style associated consts for range markers,
 `Kind::from_i16`, `Kind::Count`), `NodeFlags`, `ModifierFlags`, `SymbolFlags`, `CheckFlags`,
-`TokenFlags` (i32), `FunctionFlags` (+ `get_function_flags(Option<P<Node>>)`), `FlowFlags` are
+`TokenFlags` (`u32`), `FunctionFlags` (+ `get_function_flags(Option<P<Node>>)`), `FlowFlags` are
 bitflags/enums per PORTING.md (`XxxFlags::None` is the empty set). `NodeId(pub u64)`, `SymbolId(pub u64)`.
 `get_resolution_mode_override(attributes: Option<P<Node>>, grammar_error_on_node) -> Option<ResolutionMode>` (Go's
 `(*ImportAttributesNode).GetResolutionModeOverride`, also `ImportAttributes::get_resolution_mode_override`).

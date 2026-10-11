@@ -26,7 +26,6 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
   REPS: ${{ inputs.reps || '7' }}
   BINS: ${{ inputs.bins || 'A,R,Rv,Rx,RB,RBH' }}
 
@@ -35,9 +34,7 @@ jobs:
     runs-on: depot-ubuntu-24.04-32
     timeout-minutes: 180
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Runner hardware (32 vCPU x86_64)
         run: |
@@ -49,7 +46,7 @@ jobs:
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Set up pnpm
         run: bash .github/scripts/setup-pnpm.sh

@@ -502,7 +502,7 @@ fn get_checker_associations_in_order(
         edge_count += adjacent_files[i].len() as i64;
     }
 
-    let mut associations: Vec<i64> = vec![-1; file_weights.len()];
+    let mut associations: Vec<Option<usize>> = vec![None; file_weights.len()];
     let mut checker_weights: Vec<i64> = vec![0; checker_count];
     let checker_count_i = checker_count as i64;
     let average_checker_weight = (total_weight + checker_count_i - 1) / checker_count_i;
@@ -520,15 +520,14 @@ fn get_checker_associations_in_order(
 
         neighbor_counts.iter_mut().for_each(|c| *c = 0);
         for &adjacent_file in &adjacent_files[file_index] {
-            let checker_index = associations[adjacent_file];
-            if checker_index >= 0 {
-                neighbor_counts[checker_index as usize] += 1;
+            if let Some(checker_index) = associations[adjacent_file] {
+                neighbor_counts[checker_index] += 1;
             }
         }
 
         // tsrs-only: the locality assignment also counts the modules a group shares with each checker (affinity.rs).
         let module_affinities = affinity.as_deref_mut().map(|a| a.affinities(file_index));
-        let mut best_checker: i64 = -1;
+        let mut best_checker = None;
         let mut best_score = f64::NEG_INFINITY;
         for (checker_index, &checker_weight) in checker_weights.iter().enumerate() {
             if checker_weight + file_weights[file_index] > max_checker_weight {
@@ -541,29 +540,31 @@ fn get_checker_associations_in_order(
             let penalty = alpha * (new_penalty - old_penalty);
             let score = neighbor_counts[checker_index] as f64 - penalty + module_affinities.map_or(0.0, |a| a[checker_index]);
             if score > best_score
-                || score == best_score && (best_checker < 0 || checker_weight < checker_weights[best_checker as usize])
+                || score == best_score
+                    && best_checker.is_none_or(|best| checker_weight < checker_weights[best])
             {
-                best_checker = checker_index as i64;
+                best_checker = Some(checker_index);
                 best_score = score;
             }
         }
-        if best_checker < 0 {
-            best_checker = 0;
+        if best_checker .is_none() {
+            best_checker = Some( 0) ;
             best_checker = checker_weights[1..].iter().enumerate().fold(best_checker, |mut best_checker, (checker_index, &checker_weight)| {
-                if checker_weight < checker_weights[best_checker as usize] {
-                    best_checker = checker_index as i64 + 1;
+                if checker_weight < checker_weights[best_checker .unwrap()] {
+                    best_checker = Some( checker_index  + 1) ;
                 }
 
                 best_checker
             });
         }
-        associations[file_index] = best_checker;
-        checker_weights[best_checker as usize] += file_weights[file_index];
+        let best_checker = best_checker.unwrap();
+        associations[file_index] = Some(best_checker);
+        checker_weights[best_checker] += file_weights[file_index];
         if let Some(affinity) = affinity.as_deref_mut() {
-            affinity.place(file_index, best_checker as usize);
+            affinity.place(file_index, best_checker);
         }
     }
-    associations.into_iter().map(|a| a as usize).collect()
+    associations.into_iter().map(Option::unwrap).collect()
 }
 
 // getCheckerAssociationOrder places source files before declarations and orders each group by
@@ -1140,7 +1141,12 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
             }
             let lengths: Vec<u64> = pieces
                 .iter()
-                .map(|r| file.statements.nodes()[r.clone()].iter().map(|s| (s.end() - s.pos()).max(1) as u64).sum())
+                .map(|r| {
+                    file.statements.nodes()[r.clone()]
+                        .iter()
+                        .map(|s| u64::from(s.loc().len().unwrap_or(0).max(1)))
+                        .sum()
+                })
                 .collect();
             let length: u64 = lengths.iter().sum();
             let piece_weights: Vec<u64> = lengths.iter().map(|&l| (w * l / length.max(1)).max(1)).collect();
@@ -1207,18 +1213,17 @@ impl FileQueue {
 
     fn take(&self, front: bool) -> Option<usize> {
         // The compare-exchange on `range` alone decides who gets a position; nothing else is published through it.
-        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
-        loop {
-            if (r & QUEUE_LOW) >= (r >> 32) {
-                return None;
-            }
-            let new = if front { r + 1 } else { r - (1 << 32) };
-            // As above: the exchange only claims the position.
-            match self.range.compare_exchange_weak(r, new, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
-                Ok(_) => break,
-                Err(current) => r = current,
-            }
-        }
+        // As above: the exchange only claims the position.
+        let r = self
+            .range
+            .try_update(
+                std::sync::atomic::Ordering::Relaxed,
+                std::sync::atomic::Ordering::Relaxed,
+                |r| {
+                    ((r & QUEUE_LOW) < (r >> 32)).then(|| if front { r + 1 } else { r - (1 << 32) })
+                },
+            )
+            .ok()?;
         let pos = if front { r & QUEUE_LOW } else { (r >> 32) - 1 };
         Some(self.positions[pos as usize] as usize)
     }

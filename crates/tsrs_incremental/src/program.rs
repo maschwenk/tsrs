@@ -27,7 +27,7 @@ pub enum SignatureUpdateKind {
 
 #[derive(Default)]
 struct nestedEmitState {
-    depth: i32,
+    depth: usize,
     start: Option<Instant>,
     time: Duration,
 }

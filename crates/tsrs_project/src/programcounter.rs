@@ -3,10 +3,10 @@ use std::sync::Mutex;
 use rustc_hash::FxHashMap;
 use tsrs_compiler::Program;
 
-// Programs are keyed by address (Go `map[*compiler.Program]int32`).
+// Programs are keyed by address.
 #[derive(Default)]
 pub(crate) struct programCounter {
-    mu: Mutex<FxHashMap<usize, i32>>,
+    mu: Mutex<FxHashMap<usize, usize>>,
 }
 
 fn key(program: &'static Program) -> usize {
@@ -27,10 +27,9 @@ impl programCounter {
         let Some(&count) = refs.get(&key(program)) else {
             return false;
         };
-        let count = count - 1;
-        if count < 0 {
-            panic!("program reference count went below zero");
-        }
+        let count = count
+            .checked_sub(1)
+            .expect("program reference count went below zero");
         if count == 0 {
             refs.remove(&key(program));
             return true;

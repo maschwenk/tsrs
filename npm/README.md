@@ -61,11 +61,11 @@ commit, update `[workspace.metadata.typescript]`.
 
 ## Building packages locally
 
-Use pnpm 12.10.1, pinned in `npm/package.json`, for the build tooling, packing and publishing.
+Use pnpm 12.10.1, pinned in the root `package.json`, for the build tooling, packing and publishing.
 
 ```sh
 cargo build --release -p tsrs_cli
-pnpm --dir npm install --frozen-lockfile     # build-only compiler for the JS API
+pnpm install --frozen-lockfile     # build-only compiler for the JS API
 node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 # -> npm/dist/ts-rs-darwin-arm64-<version>.tgz, npm/dist/tsrs-<version>.tgz, npm/dist/packages.json
 ```
@@ -94,7 +94,7 @@ After bumping `[workspace.metadata.typescript]`, check out that commit as `ts-re
 `node npm/sdk/sync-upstream.mjs --check` fails if the copy drifted.
 
 ```sh
-pnpm --dir npm install --frozen-lockfile                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
+pnpm install --frozen-lockfile                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
 node npm/build.mjs --sdk-only              # npm/tsrs/src -> npm/tsrs/dist (also part of every package build)
 cd npm/tsrs && TSRS_BINARY=/path/to/server node --conditions @typescript/source --test 'test/**/*.test.ts'
 node npm/sdk/smoke-consumer.mjs            # after build.mjs --pack: offline install into a temp consumer, typecheck, sync+async compile

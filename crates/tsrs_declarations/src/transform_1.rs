@@ -142,14 +142,32 @@ impl DeclarationTransformer {
                 // public param: string
                 let trailing_pos = scanner::skip_trivia_ex(
                     text,
-                    previous_sibling.end() + 1,
-                    Some(&scanner::SkipTriviaOptions { stop_at_comments: true, ..Default::default() }),
+                    previous_sibling
+                        .end()
+                        .expect_source("parsed nodes have source positions")
+                        .checked_add(1)
+                        .expect("source position overflow"),
+                    Some(&scanner::SkipTriviaOptions {
+                        stop_at_comments: true,
+                        ..Default::default()
+                    }),
                 );
                 comment_ranges.extend(scanner::get_trailing_comment_ranges(text, trailing_pos));
-                comment_ranges.extend(scanner::get_leading_comment_ranges(text, node.pos()));
+                comment_ranges.extend(scanner::get_leading_comment_ranges(
+                    text,
+                    node.pos()
+                        .expect_source("parsed nodes have source positions"),
+                ));
             } else {
-                let trailing_pos =
-                    scanner::skip_trivia_ex(text, node.pos(), Some(&scanner::SkipTriviaOptions { stop_at_comments: true, ..Default::default() }));
+                let trailing_pos = scanner::skip_trivia_ex(
+                    text,
+                    node.pos()
+                        .expect_source("parsed nodes have source positions"),
+                    Some(&scanner::SkipTriviaOptions {
+                        stop_at_comments: true,
+                        ..Default::default()
+                    }),
+                );
                 comment_ranges.extend(scanner::get_trailing_comment_ranges(text, trailing_pos));
             }
 
@@ -170,7 +188,12 @@ impl DeclarationTransformer {
         if node.kind() == Kind::JsxText {
             return Vec::new();
         }
-        scanner::get_leading_comment_ranges(source_file.text(), node.pos()).collect()
+        scanner::get_leading_comment_ranges(
+            source_file.text(),
+            node.pos()
+                .expect_source("parsed nodes have source positions"),
+        )
+        .collect()
     }
 }
 
@@ -484,7 +507,7 @@ impl DeclarationTransformer {
             );
 
             Some(P::new(FileReference {
-                text_range: tsrs_core::TextRange::new(-1, -1),
+                text_range: tsrs_core::TextRange::synthetic(),
                 file_name,
                 resolution_mode: ref_.resolution_mode,
                 preserve: ref_.preserve,
@@ -502,7 +525,7 @@ impl DeclarationTransformer {
                 return None;
             }
             Some(P::new(FileReference {
-                text_range: tsrs_core::TextRange::new(-1, -1),
+                text_range: tsrs_core::TextRange::synthetic(),
                 file_name: ref_.file_name.clone(),
                 resolution_mode: ref_.resolution_mode,
                 preserve: ref_.preserve,
@@ -520,7 +543,7 @@ impl DeclarationTransformer {
                 return None;
             }
             Some(P::new(FileReference {
-                text_range: tsrs_core::TextRange::new(-1, -1),
+                text_range: tsrs_core::TextRange::synthetic(),
                 file_name: ref_.file_name.clone(),
                 resolution_mode: ref_.resolution_mode,
                 preserve: ref_.preserve,

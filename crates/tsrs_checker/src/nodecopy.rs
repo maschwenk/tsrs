@@ -56,7 +56,7 @@ impl NodeBuilderImpl {
             // type references so canIncreaseExpansionDepth is set even though
             // typeToTypeNode (and shouldExpandType) were never called.
             let ctx = self.ctx();
-            if ctx.max_expansion_depth.get() >= 0 && !ctx.can_increase_expansion_depth.get() {
+            if ctx.max_expansion_depth.get().is_some() && !ctx.can_increase_expansion_depth.get() {
                 self.walk_node_for_expandability(c, Some(node));
             }
             return r;
@@ -105,9 +105,13 @@ impl recoveryBoundary {
 
     // nodecopy.go:122
     pub(crate) fn start_recovery_scope(&self) -> originalRecoveryScopeState {
-        let tracked_symbols_top = self.ctx.tracked_symbols.borrow().len() as i32;
-        let unreported_errors_top = self.deferred_reports.borrow().len() as i32;
-        originalRecoveryScopeState { tracked_symbols_top, unreported_errors_top, had_error: self.had_error.get() }
+        let tracked_symbols_top = self.ctx.tracked_symbols.borrow().len();
+        let unreported_errors_top = self.deferred_reports.borrow().len();
+        originalRecoveryScopeState {
+            tracked_symbols_top,
+            unreported_errors_top,
+            had_error: self.had_error.get(),
+        }
     }
 
     // nodecopy.go:128
@@ -249,7 +253,10 @@ impl NodeBuilderImpl {
             return None;
         }
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + (existing.end() - existing.pos()));
+        // Synthetic nodes have both positions set to -1 in Go, so their length is zero.
+        let existing_length = existing.loc().len().unwrap_or(0) as usize;
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + existing_length);
         transformed
     }
 
@@ -335,8 +342,12 @@ pub(crate) fn get_existing_node_tree_visitor(c: &mut Checker, b: P<NodeBuilderIm
             if non_local_node.get() {
                 if let Some(r) = res {
                     // Remove position data from node lists originating in other files
-                    let r = if Some(r) == nodes { nodes.unwrap().clone_list(&b.f) } else { r };
-                    r.loc.set(new_text_range(-1, -1));
+                    let r = if Some(r) == nodes {
+                        nodes.unwrap().clone_list(&b.f)
+                    } else {
+                        r
+                    };
+                    r.loc.set(TextRange::synthetic());
                     res = Some(r);
                 }
             }

@@ -4,6 +4,13 @@ use std::fmt;
 use super::big;
 use crate::alloc_str;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum BigIntSign {
+    Negative,
+    Zero,
+    Positive,
+}
+
 // PseudoBigInt represents a JS-like bigint. The zero state of the struct represents the value 0.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct PseudoBigInt {
@@ -27,28 +34,27 @@ impl PseudoBigInt {
         self.base10_value.to_string()
     }
 
-    pub fn sign(self) -> i32 {
+    pub fn sign(self) -> BigIntSign {
         if self.base10_value.is_empty() {
-            return 0;
+            return BigIntSign::Zero;
         }
         if self.negative {
-            return -1;
+            return BigIntSign::Negative;
         }
-        1
+        BigIntSign::Positive
     }
 
-    pub fn compare(self, other: PseudoBigInt) -> i32 {
-        let c = self.sign().cmp(&other.sign()) as i32;
-        if c != 0 {
+    pub fn compare(self, other: PseudoBigInt) -> Ordering {
+        let c = self.sign().cmp(&other.sign());
+        if c != Ordering::Equal {
             return c;
         }
         let mut c = self.base10_value.len().cmp(&other.base10_value.len());
         if c == Ordering::Equal {
             c = self.base10_value.cmp(other.base10_value);
         }
-        let mut c = c as i32;
         if self.negative {
-            c = -c;
+            c = c.reverse();
         }
         c
     }

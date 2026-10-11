@@ -111,11 +111,11 @@ fn get_wildcard_directory_from_spec(spec: &str, use_case_sensitive_file_names: b
         // Find the last directory separator before the wildcard
         if let Some(last_sep_before_wildcard) = spec[..first_wildcard].rfind(tspath::DIRECTORY_SEPARATOR as char) {
             let path = &spec[..last_sep_before_wildcard];
-            let last_directory_separator_index = spec.rfind(tspath::DIRECTORY_SEPARATOR as char).map_or(-1, |i| i as i64);
-
             // Determine if this should be watched recursively:
             // recursive if the wildcard appears in a directory segment (not just the final file segment)
-            let recursive = (first_wildcard as i64) < last_directory_separator_index;
+            let recursive = spec
+                .rfind(tspath::DIRECTORY_SEPARATOR as char)
+                .is_some_and(|last_separator| first_wildcard < last_separator);
 
             return Some(WildcardDirectoryMatch {
                 key: to_canonical_key(path, use_case_sensitive_file_names),
