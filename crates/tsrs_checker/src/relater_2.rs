@@ -1003,7 +1003,7 @@ impl Relater {
                 && !c.is_generic_object_type(target)
                 && source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection)
             {
-                result &= self.properties_related_to(c, source, target, report_errors, &Set::new() /*excludedProperties*/, false /*optionalsOnly*/, IntersectionState::None);
+                result &= self.properties_related_to(c, source, target, report_errors, &NO_EXCLUDED_PROPERTIES, false /*optionalsOnly*/, IntersectionState::None);
                 if result != Ternary::False && is_object_literal_type(source) && source.object_flags().intersects(ObjectFlags::FreshLiteral) {
                     result &= self.index_signatures_related_to(c, source, target, false /*sourceIsPrimitive*/, report_errors, IntersectionState::None);
                 }
@@ -1015,7 +1015,7 @@ impl Relater {
             //   }
             //
             } else if result != Ternary::False && c.is_non_generic_object_type(target) && !c.is_array_or_tuple_type(target) && self.is_source_intersection_needing_extra_check(c, source, target) {
-                result &= self.properties_related_to(c, source, target, report_errors, &Set::new() /*excludedProperties*/, true /*optionalsOnly*/, intersection_state);
+                result &= self.properties_related_to(c, source, target, report_errors, &NO_EXCLUDED_PROPERTIES, true /*optionalsOnly*/, intersection_state);
             }
         }
         if result != Ternary::False {
@@ -1727,7 +1727,7 @@ impl Relater {
             if source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) && target.flags().intersects(TypeFlags::Object) {
                 // Report structural errors only if we haven't reported any errors yet
                 let report_structural_errors = report_errors && self.error_chain.get() == save_error_state.error_chain && !source_is_primitive;
-                result = self.properties_related_to(c, source, target, report_structural_errors, &Set::new() /*excludedProperties*/, false /*optionalsOnly*/, intersection_state);
+                result = self.properties_related_to(c, source, target, report_structural_errors, &NO_EXCLUDED_PROPERTIES, false /*optionalsOnly*/, intersection_state);
                 if result != Ternary::False {
                     result &= self.signatures_related_to(c, source, target, SignatureKind::Call, report_structural_errors, intersection_state);
                     if result != Ternary::False {
@@ -3024,3 +3024,6 @@ impl Relater {
         // Only reports to the tracer, which is not ported.
     }
 }
+
+/// The empty `excludedProperties` (tsrs: shared, instead of a set made and dropped per structural comparison).
+static NO_EXCLUDED_PROPERTIES: Set<String> = Set { m: std::collections::HashSet::with_hasher(rustc_hash::FxBuildHasher) };
