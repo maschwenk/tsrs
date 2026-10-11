@@ -2,8 +2,6 @@
 # checkouts; the workflow's PROJECTS lists the same projects.
 $schema: https://raw.githubusercontent.com/CodSpeedHQ/codspeed/refs/heads/main/schemas/codspeed.schema.json
 benchmarks:
-  - name: xstate-main-direct
-    exec: target/release/tsrs -p bench/.work/solutions/xstate-main --noEmit --incremental false --singleThreaded --pretty false
   - name: Compiler-Unions
     exec: bench/codspeed-check.sh bench/.work/suite/cases/solutions/Compiler-Unions/tsconfig.json
   - name: xstate-main

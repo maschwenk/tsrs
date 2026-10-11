@@ -8,7 +8,7 @@ name: CodSpeed
 
 on:
   push:
-    branches: [main, ci/codspeed]
+    branches: [main]
   pull_request:
     branches: [main]
   # CodSpeed dispatches this to backfill main.
