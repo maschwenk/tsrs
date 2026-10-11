@@ -1,5 +1,20 @@
 # Status
 
+## 2026-10-11: GNU/musl packaging (unreleased)
+
+The next native npm release uses explicit Linux package names: `@ts-rs/linux-x64-gnu`,
+`@ts-rs/linux-arm64-gnu`, `@ts-rs/linux-x64-musl` and `@ts-rs/linux-arm64-musl`, alongside
+`@ts-rs/darwin-arm64`, `tsrs` and `@ts-rs/wasm`. The launcher detects libc and selects the matching optional
+dependency. Earlier releases keep their unsuffixed GNU packages; direct platform dependencies need a name
+change when upgrading. Versions still come from the workspace and the JS API remains executable-based.
+
+GNU/macOS optimization is unchanged. Musl uses statically linked standard dist builds with pinned Zig 0.13.0
+and cargo-zigbuild 0.23.4. Release jobs gate both musl architectures with conformance and fourslash and run
+the assembled native packages' CLI, sync/async API and declarations on both glibc and Alpine. The four new
+package names need creation and npm trusted-publisher setup before publication (npm/README.md).
+Musl's optional shared-graph fault diagnostics print the fault message without a C backtrace, since musl
+does not provide the execinfo functions; signal handling is unchanged.
+
 ## 2026-10-10: 0.13.0 release
 
 Walker Boyle's checker optimizations (#299): faster union construction and membership, caching of long union

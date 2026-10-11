@@ -9,10 +9,11 @@
 //
 //   node tools/node-api/consumer.mjs --dist <dir> [--keep]
 
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { installConsumer } from "../../npm/sdk/install-consumer.mjs";
 
 const args = process.argv.slice(2);
 const dist = path.resolve(args[args.indexOf("--dist") + 1] ?? "");
@@ -21,11 +22,11 @@ if (!args.includes("--dist") || !fs.existsSync(path.join(dist, "packages.json"))
     console.error("usage: consumer.mjs --dist <dir with packages.json from npm/build.mjs --pack> [--keep]");
     process.exit(2);
 }
-const tarballs = JSON.parse(fs.readFileSync(path.join(dist, "packages.json"), "utf8")).packages.map(p => path.resolve(dist, p.tarball));
 const win = process.platform === "win32";
 const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "tsrs-node-api-consumer-")));
 const env = { ...process.env };
 delete env.TSRS_EMIT; // emit must follow compiler options alone
+delete env.TSRS_BINARY; // Binary selection must go through the installed optional dependency.
 let failures = 0;
 function check(cond, what) {
     console.log(`${cond ? "ok  " : "FAIL"} ${what}`);
@@ -41,7 +42,7 @@ const write = (rel, text) => {
 
 try {
     write("package.json", JSON.stringify({ name: "consumer", private: true, type: "module" }));
-    execFileSync("pnpm", ["add", "--offline", ...tarballs], { cwd: dir, stdio: "inherit", env, shell: win });
+    installConsumer(dist, dir, env);
     const pkgDir = path.join(dir, "node_modules", "tsrs");
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf8"));
     for (const sub of ["./unstable/sync", "./unstable/async"]) check(pkg.exports?.[sub] !== undefined, `package exports ${sub}`);

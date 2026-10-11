@@ -93,7 +93,7 @@ impl Drop for contentMapperCloser {
 
 #[cfg(unix)]
 pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
-    let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as libc::time_t).unwrap_or(0);
+    let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs() as _).unwrap_or(0);
     // SAFETY: `libc::tm` is C integers (and, on some platforms, a nullable `char *`), for which all zeros is valid.
     let mut tm: libc::tm = unsafe { std::mem::zeroed() };
     // SAFETY: both pointers are to live locals; localtime_r reads `secs` and writes only into `tm`.
