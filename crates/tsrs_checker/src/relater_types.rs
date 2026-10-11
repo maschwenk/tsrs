@@ -189,16 +189,16 @@ pub struct ErrorChain {
     pub args: Vec<String>,
 }
 
-/// An entry of a relater's source or target stack: the type, and the recursion identity of its recursion identity
-/// target once a deeply-nested test has computed it (`is_deeply_nested_on_stack`; 0 before).
-pub struct RelaterStackEntry {
+/// An entry of a relater's or an inference walk's source or target stack: the type, and the recursion identity of its
+/// recursion identity target once a deeply-nested test has computed it (`is_deeply_nested_on_stack`; 0 before).
+pub struct RecursionStackEntry {
     pub t: P<Type>,
     pub(crate) identity_key: Cell<u64>,
 }
 
-impl RelaterStackEntry {
-    pub(crate) fn new(t: P<Type>) -> RelaterStackEntry {
-        RelaterStackEntry { t, identity_key: Cell::new(0) }
+impl RecursionStackEntry {
+    pub(crate) fn new(t: P<Type>) -> RecursionStackEntry {
+        RecursionStackEntry { t, identity_key: Cell::new(0) }
     }
 }
 
@@ -212,8 +212,8 @@ pub struct Relater {
     pub related_info: RefCell<Vec<P<Diagnostic>>>,
     pub maybe_keys: RefCell<Vec<RelationKey>>,
     pub maybe_keys_set: RefCell<Set<RelationKey>>,
-    pub source_stack: RefCell<Vec<RelaterStackEntry>>,
-    pub target_stack: RefCell<Vec<RelaterStackEntry>>,
+    pub source_stack: RefCell<Vec<RecursionStackEntry>>,
+    pub target_stack: RefCell<Vec<RecursionStackEntry>>,
     pub maybe_count: Cell<i32>,
     pub source_depth: Cell<i32>,
     pub target_depth: Cell<i32>,

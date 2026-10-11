@@ -825,14 +825,14 @@ impl Relater {
         self.maybe_stack_push(id);
         let save_expanding_flags = self.expanding_flags.get();
         if recursion_flags.intersects(RecursionFlags::Source) {
-            self.source_stack.borrow_mut().push(RelaterStackEntry::new(source));
+            self.source_stack.borrow_mut().push(RecursionStackEntry::new(source));
             // isDeeplyNestedType never reaches this relater, so the stack borrow is not held across a re-entry.
             if !self.expanding_flags.get().intersects(ExpandingFlags::Source) && c.is_deeply_nested_on_stack(source, &self.source_stack.borrow(), 3) {
                 self.expanding_flags.set(self.expanding_flags.get() | ExpandingFlags::Source);
             }
         }
         if recursion_flags.intersects(RecursionFlags::Target) {
-            self.target_stack.borrow_mut().push(RelaterStackEntry::new(target));
+            self.target_stack.borrow_mut().push(RecursionStackEntry::new(target));
             if !self.expanding_flags.get().intersects(ExpandingFlags::Target) && c.is_deeply_nested_on_stack(target, &self.target_stack.borrow(), 3) {
                 self.expanding_flags.set(self.expanding_flags.get() | ExpandingFlags::Target);
             }

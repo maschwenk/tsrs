@@ -1135,17 +1135,17 @@ impl Checker {
 }
 
 impl Checker {
-    /// `is_deeply_nested_type` over a relater stack, keeping each entry's recursion identity once a walk has computed
-    /// it: the walks repeat on every push, and an entry's identity never changes once computed (its recursion
+    /// `is_deeply_nested_type` over a relater or inference stack, keeping each entry's recursion identity once a walk
+    /// has computed it: the walks repeat on every push, and an entry's identity never changes once computed (its recursion
     /// identity target is fixed by the type's structure and its mapped type's modifiers type, which is computed once).
     /// The first walk to reach an entry computes it exactly as `has_matching_recursion_identity` would, so anything
     /// that computation resolves is resolved at the same point.
     #[inline]
-    pub(crate) fn is_deeply_nested_on_stack(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+    pub(crate) fn is_deeply_nested_on_stack(&mut self, t: P<Type>, stack: &[RecursionStackEntry], max_depth: i32) -> bool {
         stack.len() as i32 >= max_depth && self.is_deeply_nested_on_stack_walk(t, stack, max_depth)
     }
 
-    fn is_deeply_nested_on_stack_walk(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+    fn is_deeply_nested_on_stack_walk(&mut self, t: P<Type>, stack: &[RecursionStackEntry], max_depth: i32) -> bool {
         let result = self.is_deeply_nested_on_stack_walk_kept(t, stack, max_depth);
         if self.deep_nested_shadow {
             let types: Vec<P<Type>> = stack.iter().map(|e| e.t).collect();
@@ -1163,7 +1163,7 @@ impl Checker {
         result
     }
 
-    fn is_deeply_nested_on_stack_walk_kept(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+    fn is_deeply_nested_on_stack_walk_kept(&mut self, t: P<Type>, stack: &[RecursionStackEntry], max_depth: i32) -> bool {
         let target = get_recursion_identity_target(self, t);
         let top = stack.last().filter(|e| e.t == t && e.identity_key.get() == 0);
         if target.flags().intersects(TypeFlags::Intersection) {
@@ -1218,7 +1218,7 @@ impl Checker {
 }
 
 const RECURSION_KEY_TAG: u64 = 7 << 48;
-/// A `RelaterStackEntry` identity key for an entry whose recursion identity target is an intersection (the target
+/// A `RecursionStackEntry` identity key for an entry whose recursion identity target is an intersection (the target
 /// packed in the low bits): such an entry matches an identity of one of its constituents.
 const RECURSION_KEY_INTERSECTION: u64 = 4 << 48;
 

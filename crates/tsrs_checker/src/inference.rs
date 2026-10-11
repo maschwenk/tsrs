@@ -357,13 +357,13 @@ impl Checker {
         // We stop inferring and report a circularity if we encounter duplicate recursion identities on both
         // the source side and the target side.
         let save_expanding_flags = n.expanding_flags.get();
-        n.source_stack.borrow_mut().push(source);
-        n.target_stack.borrow_mut().push(target);
+        n.source_stack.borrow_mut().push(RecursionStackEntry::new(source));
+        n.target_stack.borrow_mut().push(RecursionStackEntry::new(target));
         // The stack borrows are shared and isDeeplyNestedType never re-enters inference on this state.
-        if self.is_deeply_nested_type(source, &n.source_stack.borrow(), 2) {
+        if self.is_deeply_nested_on_stack(source, &n.source_stack.borrow(), 2) {
             n.expanding_flags.set(n.expanding_flags.get() | ExpandingFlags::Source);
         }
-        if self.is_deeply_nested_type(target, &n.target_stack.borrow(), 2) {
+        if self.is_deeply_nested_on_stack(target, &n.target_stack.borrow(), 2) {
             n.expanding_flags.set(n.expanding_flags.get() | ExpandingFlags::Target);
         }
         if n.expanding_flags.get() != ExpandingFlags::Both {

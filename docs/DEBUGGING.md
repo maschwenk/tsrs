@@ -358,8 +358,8 @@ notes/perf-heavy-files-infer-memo.md).
 
 ## The relater stacks' recursion identities and their shadow mode: `TSRS_DEEP_NESTED`
 
-Each entry of a relater's source and target stacks keeps its recursion identity once a deeply-nested test has
-computed it (`RelaterStackEntry`, `is_deeply_nested_on_stack` in `crates/tsrs_checker/src/relater_1.rs`); the first
+Each entry of a relater's or an inference walk's source and target stacks keeps its recursion identity once a deeply-nested test has
+computed it (`RecursionStackEntry`, `is_deeply_nested_on_stack` in `crates/tsrs_checker/src/relater_1.rs`); the first
 walk to reach an entry computes it as `hasMatchingRecursionIdentity` would.
 
 | variable | values | effect |

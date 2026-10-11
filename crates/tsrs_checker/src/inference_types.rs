@@ -21,8 +21,8 @@ pub struct InferenceState {
     pub expanding_flags: Cell<ExpandingFlags>,
     pub propagation_type: Cell<Option<P<Type>>>,
     pub visited: GoMap<InferenceKey, InferencePriority>,
-    pub source_stack: RefCell<Vec<P<Type>>>,
-    pub target_stack: RefCell<Vec<P<Type>>>,
+    pub source_stack: RefCell<Vec<RecursionStackEntry>>,
+    pub target_stack: RefCell<Vec<RecursionStackEntry>>,
     pub next: Cell<Option<P<InferenceState>>>,
     /// The walk called `clear_cached_inferences` (the inference memo, infermemo.rs).
     pub cleared_inferences: Cell<bool>,
