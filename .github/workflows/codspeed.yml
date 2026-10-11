@@ -1,7 +1,7 @@
 # CodSpeed (https://codspeed.io): bench/codspeed.yml type-checks a few bench projects single-threaded under CodSpeed's
 # CPU simulation, which counts instructions and simulated cache misses in one run, so the result does not depend on the
 # machine. Runs on GitHub-hosted runners (free for public repositories); CodSpeed comments on pull requests with the
-# change against main. The wall-time benchmark stays on Depot (.depot/workflows/bench.yml). bench/README.md "CodSpeed".
+# change against main. The wall-time benchmark stays on Depot (.depot/workflows/bench.yml).
 # Security: read-only GITHUB_TOKEN plus an OIDC token for the CodSpeed upload, no secrets.
 
 name: CodSpeed

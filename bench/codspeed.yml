@@ -1,4 +1,4 @@
-# CodSpeed benchmarks (.github/workflows/codspeed.yml, bench/README.md "CodSpeed"). Paths are the bench/run.py
+# CodSpeed benchmarks (.github/workflows/codspeed.yml). Paths are the bench/run.py
 # checkouts; the workflow's PROJECTS lists the same projects.
 $schema: https://raw.githubusercontent.com/CodSpeedHQ/codspeed/refs/heads/main/schemas/codspeed.schema.json
 benchmarks:

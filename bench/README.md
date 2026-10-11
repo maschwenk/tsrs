@@ -187,17 +187,6 @@ The same untimed run records the process's peak RSS (`ru_maxrss` via `wait4`). W
 the small projects move by a few hundred KiB), so peak memory is flagged when it rises by more than 1% and more than
 2 MiB. Results store it as `projects.<name>.single.tsrs.max_rss_bytes`.
 
-## CodSpeed
-
-`.github/workflows/codspeed.yml` runs `bench/codspeed.yml` on every push to `main` and every pull request, on a
-GitHub-hosted runner, and [CodSpeed](https://codspeed.io/maschwenk/tsrs) comments on the pull request with the change
-against `main`. Each benchmark is one single-threaded type check (`bench/codspeed-check.sh`, the flags of the
-instruction count above) of a bench project, run once under CodSpeed's CPU simulation: Valgrind counts the
-instructions and simulates the caches, and CodSpeed turns both into a time, so the number does not depend on the
-runner. The binary is the plain `release` build (no PGO), with symbols for CodSpeed's flame graphs. The simulation is
-slow, so the list keeps to projects that check in about 1 s or less natively: Compiler-Unions, xstate-main, webpack
-and drizzle-orm. Wall time against tsgo and bun stays on Depot (next section).
-
 ## CI
 
 The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this
