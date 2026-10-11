@@ -429,12 +429,10 @@ struct SymbolMapEntry(u64);
 
 const _: () = assert!(std::mem::size_of::<SymbolMapEntry>() == 8);
 
-/// The key fingerprint stored in an entry (above the address bits): length capped at 63, 12 hash bits.
+/// The key fingerprint stored in an entry (above the address bits): length capped at 63, then 12 hash bits above it.
+/// One word, so testing an entry is one shift and one compare.
 #[derive(Clone, Copy, PartialEq, Eq)]
-struct KeyPrint {
-    len: u64,
-    hash: u64,
-}
+struct KeyPrint(u64);
 
 impl KeyPrint {
     #[inline]
@@ -449,7 +447,7 @@ impl KeyPrint {
 
     #[inline]
     fn of(name: &str, hash: u32) -> KeyPrint {
-        KeyPrint { len: Self::len_bits(name), hash: Self::hash_bits(hash) }
+        KeyPrint(Self::len_bits(name) | Self::hash_bits(hash) << (SymbolMapEntry::HASH_SHIFT - SymbolMapEntry::LEN_SHIFT))
     }
 }
 
@@ -469,7 +467,7 @@ impl SymbolMapEntry {
 
     #[inline]
     fn new(symbol: P<Symbol>, print: KeyPrint) -> SymbolMapEntry {
-        SymbolMapEntry(Self::addr_bits(symbol) | print.len << Self::LEN_SHIFT | print.hash << Self::HASH_SHIFT)
+        SymbolMapEntry(Self::addr_bits(symbol) | print.0 << Self::LEN_SHIFT)
     }
 
     #[inline]
@@ -489,13 +487,10 @@ impl SymbolMapEntry {
     }
 
     #[inline]
-    fn len_bits(self) -> u64 {
-        (self.0 >> Self::LEN_SHIFT) & Self::LEN_MASK
-    }
-
-    #[inline]
     fn print(self) -> KeyPrint {
-        KeyPrint { len: self.len_bits(), hash: self.0 >> Self::HASH_SHIFT }
+        // The length and hash bits are the top bits of the word.
+        const { assert!(SymbolMapEntry::HASH_SHIFT + SymbolMapEntry::HASH_BITS == 64) };
+        KeyPrint(self.0 >> Self::LEN_SHIFT)
     }
 }
 
