@@ -353,5 +353,9 @@ jobs:
               echo "$name@$VERSION already published"
               continue
             fi
+            if [ "$DRY_RUN" != true ] && [ "$name" = tsrs ]; then
+              # npm publish can finish before package metadata and tarballs are available.
+              node .github/scripts/wait-for-npm-packages.mjs npm/dist/tsrs/package.json
+            fi
             pnpm publish "$tarball" "${flags[@]}"
           done < "$RUNNER_TEMP/publish.txt"

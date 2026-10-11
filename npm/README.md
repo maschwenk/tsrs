@@ -150,7 +150,9 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
 4. assembles and packs the native packages with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact,
    and publishes the platform packages, then the main package, then `@ts-rs/wasm`, with
    `--access public --tag latest` using npm trusted publishing (skipping any already on the registry, so a failed
-   run can be re-run). Releases publish directly, without a staged approval step.
+   run can be re-run). Before publishing the main package, waits up to 10 minutes for every optional dependency's
+   exact version metadata and tarball to be available on npm, including platform packages skipped on a re-run.
+   Dry runs skip this check. Releases publish directly, without a staged approval step.
 
 The conformance and fourslash gates run on the GNU Linux release binaries (`bolt.sh`). The macOS binary gets only the
 smoke tests; `ci.yml` (Linux) gates the source, and the WebAssembly differential gate (`tools/wasm/gate.sh`) runs only
