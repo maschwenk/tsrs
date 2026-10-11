@@ -361,8 +361,21 @@ impl Checker {
 
         let start = tsrs_scanner::get_token_pos_of_node(start_node, source_file, false /*includeJSDoc*/);
 
-        let diagnostic = ast::new_diagnostic(Some(source_file), new_text_range(start, end_node.end()), &diagnostics::Unreachable_code_detected, &[]);
-        self.add_error_or_suggestion(self.compiler_options.allow_unreachable_code == Tristate::False, diagnostic);
+        let diagnostic = ast::new_diagnostic(
+            Some(source_file),
+            new_text_range(
+                start,
+                end_node
+                    .end()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            &diagnostics::Unreachable_code_detected,
+            &[],
+        );
+        self.add_error_or_suggestion(
+            self.compiler_options.allow_unreachable_code == Tristate::False,
+            diagnostic,
+        );
 
         true
     }
@@ -996,10 +1009,16 @@ impl Checker {
                 if data.type_name.end() != type_arguments.pos() {
                     // If there was a token between the type name and the type arguments, check if it was a DotToken
                     let source_file = ast::get_source_file_of_node(node).unwrap();
-                    if tsrs_scanner::scan_token_at_position(source_file, data.type_name.end()) == Kind::DotToken {
+                    let type_name_end = data
+                        .type_name
+                        .end()
+                        .expect_source("parsed nodes have source positions");
+                    if tsrs_scanner::scan_token_at_position(source_file, type_name_end)
+                        == Kind::DotToken
+                    {
                         self.grammar_error_at_pos(
                             node,
-                            tsrs_scanner::skip_trivia(source_file.text(), data.type_name.end()),
+                            tsrs_scanner::skip_trivia(source_file.text(), type_name_end),
                             1,
                             &diagnostics::JSDoc_types_can_only_be_used_inside_documentation_comments,
                             &[],
@@ -1138,15 +1157,30 @@ impl Checker {
             return;
         };
         let parameter_name = node.as_type_predicate_node().parameter_name;
-        if type_predicate.kind.get() != TypePredicateKind::This && type_predicate.kind.get() != TypePredicateKind::AssertsThis {
-            if type_predicate.parameter_index.get() >= 0 {
-                if signature_has_rest_parameter(signature) && type_predicate.parameter_index.get() as usize == signature.parameters.get().len() - 1 {
-                    self.error(Some(parameter_name), &diagnostics::A_type_predicate_cannot_reference_a_rest_parameter, &[]);
+        if type_predicate.kind.get() != TypePredicateKind::This
+            && type_predicate.kind.get() != TypePredicateKind::AssertsThis
+        {
+            if let Some(parameter_index) = type_predicate.parameter_index.get() {
+                if signature_has_rest_parameter(signature)
+                    && parameter_index == signature.parameters.get().len() - 1
+                {
+                    self.error(
+                        Some(parameter_name),
+                        &diagnostics::A_type_predicate_cannot_reference_a_rest_parameter,
+                        &[],
+                    );
                 } else {
                     if let Some(predicate_type) = type_predicate.t.get() {
                         let mut diags: Vec<P<Diagnostic>> = Vec::new();
-                        let parameter_type = self.get_type_of_symbol(signature.parameters.get()[type_predicate.parameter_index.get() as usize]);
-                        if !self.check_type_assignable_to_ex(predicate_type, parameter_type, node.type_node(), None /*headMessage*/, &mut diags) {
+                        let parameter_type =
+                            self.get_type_of_symbol(signature.parameters.get()[parameter_index]);
+                        if !self.check_type_assignable_to_ex(
+                            predicate_type,
+                            parameter_type,
+                            node.type_node(),
+                            None, /*headMessage*/
+                            &mut diags,
+                        ) {
                             self.add_diagnostic(ast::new_diagnostic_chain(diags[0], &diagnostics::A_type_predicate_s_type_must_be_assignable_to_its_parameter_s_type, &[]));
                         }
                     }
@@ -1224,18 +1258,22 @@ impl Checker {
     }
 
     // checker.go:3190
-    pub(crate) fn check_object_type_for_duplicate_declarations(&mut self, node: P<Node>, check_private_names: bool) {
-        let mut instance_names: FxHashMap<String, i32> = FxHashMap::default();
-        let mut static_names: FxHashMap<String, i32> = FxHashMap::default();
-        let mut private_names: FxHashMap<String, i32> = FxHashMap::default();
+    pub(crate) fn check_object_type_for_duplicate_declarations(
+        &mut self,
+        node: P<Node>,
+        check_private_names: bool,
+    ) {
+        let mut instance_names: FxHashMap<String, u8> = FxHashMap::default();
+        let mut static_names: FxHashMap<String, u8> = FxHashMap::default();
+        let mut private_names: FxHashMap<String, u8> = FxHashMap::default();
         let node_in_ambient_context = node.flags().intersects(NodeFlags::Ambient);
         fn check_property_or_accessor(
             c: &mut Checker,
             node: P<Node>,
-            instance_names: &mut FxHashMap<String, i32>,
-            static_names: &mut FxHashMap<String, i32>,
+            instance_names: &mut FxHashMap<String, u8>,
+            static_names: &mut FxHashMap<String, u8>,
             symbol: P<Symbol>,
-            kind: i32,
+            kind: u8,
             is_static: bool,
         ) {
             if symbol.declarations().len() > 1 {
@@ -2394,8 +2432,15 @@ impl Checker {
         self.check_expression(node.expression().unwrap());
         let source_file = ast::get_source_file_of_node(node).unwrap();
         if !self.has_parse_diagnostics(source_file) {
-            let start = tsrs_scanner::skip_trivia(source_file.text(), node.pos());
-            let end = node.statement().pos();
+            let start = tsrs_scanner::skip_trivia(
+                source_file.text(),
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
+            let end = node
+                .statement()
+                .pos()
+                .expect_source("parsed nodes have source positions");
             self.grammar_error_at_pos(
                 source_file.as_node(),
                 start,
@@ -2474,7 +2519,15 @@ impl Checker {
         let throw_expr = node.expression().unwrap();
         if !self.check_grammar_statement_in_ambient_context(node) {
             if ast::is_identifier(throw_expr) && throw_expr.text().is_empty() {
-                self.grammar_error_at_pos(node, throw_expr.pos(), 0 /*length*/, &diagnostics::Line_break_not_permitted_here, &[]);
+                self.grammar_error_at_pos(
+                    node,
+                    throw_expr
+                        .pos()
+                        .expect_source("parsed nodes have source positions"),
+                    0, /*length*/
+                    &diagnostics::Line_break_not_permitted_here,
+                    &[],
+                );
             }
         }
         self.check_expression(throw_expr);

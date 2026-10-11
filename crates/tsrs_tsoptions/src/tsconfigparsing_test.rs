@@ -1083,8 +1083,20 @@ fn test_parse_json_source_file_config_file_content_reports_invalid_extended_conf
     let expected_parse_error_messages = [":", ",", ",", "}"];
     let expected_parse_error_positions = [7, 10, 14, 18];
     assert_eq!(expected_parse_error_messages.len(), parse_errors.len());
-    assert_eq!(parse_errors.iter().map(|d| d.message_args()[0].clone()).collect::<Vec<_>>(), expected_parse_error_messages);
-    assert_eq!(parse_errors.iter().map(|d| d.pos()).collect::<Vec<_>>(), expected_parse_error_positions);
+    assert_eq!(
+        parse_errors
+            .iter()
+            .map(|d| d.message_args()[0].clone())
+            .collect::<Vec<_>>(),
+        expected_parse_error_messages
+    );
+    assert_eq!(
+        parse_errors
+            .iter()
+            .map(|d| d.pos().unwrap())
+            .collect::<Vec<_>>(),
+        expected_parse_error_positions
+    );
     for diagnostic in &parse_errors {
         assert_eq!(diagnostic.file().unwrap().file_name(), "/project/bad.json");
     }
@@ -1117,7 +1129,7 @@ fn test_parse_json_source_file_config_file_content_with_empty_extended_config() 
 
 fn line_and_character(diagnostic: P<Diagnostic>) -> (usize, usize) {
     let text = diagnostic.file().unwrap().text();
-    let before = &text[..diagnostic.pos() as usize];
+    let before = &text[..diagnostic.pos().unwrap() as usize];
     let line = before.matches('\n').count();
     let line_start = before.rfind('\n').map_or(0, |i| i + 1);
     (line, before[line_start..].encode_utf16().count())
@@ -1276,7 +1288,11 @@ fn test_content_mapper_option_diagnostic_location() {
             OptionPathSegment { property: "name".to_string(), ..Default::default() },
         ],
     );
-    assert_eq!(&file.unwrap().text()[loc.pos() as usize..loc.end() as usize], "1");
+    assert_eq!(
+        &file.unwrap().text()[loc.pos().expect_source("test location") as usize
+            ..loc.end().expect_source("test location") as usize],
+        "1"
+    );
 }
 
 // tsconfigparsing_test.go:1219
@@ -1440,8 +1456,14 @@ fn test_content_mappers_validation() {
 
             // With the jsonSourceFile API the diagnostic is located at the offending tsconfig syntax.
             if api_name == "jsonSourceFile api" {
-                assert!(diagnostic.file().is_some(), "{test_name}: expected diagnostic {expected_code} to have a source file");
-                assert!(diagnostic.len() > 0, "{test_name}: expected diagnostic {expected_code} to have a non-empty location");
+                assert!(
+                    diagnostic.file().is_some(),
+                    "{test_name}: expected diagnostic {expected_code} to have a source file"
+                );
+                assert!(
+                    diagnostic.len().is_some_and(|length| length > 0),
+                    "{test_name}: expected diagnostic {expected_code} to have a non-empty location"
+                );
             }
         }
     }

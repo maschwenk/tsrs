@@ -4923,9 +4923,9 @@ impl Json for TextEdit {
 }
 
 impl TextEdit {
-    pub fn compare(&self, other: &TextEdit) -> i32 {
+    pub fn compare(&self, other: &TextEdit) -> std::cmp::Ordering {
         let c = self.range.compare(&other.range);
-        if c != 0 {
+        if c != std::cmp::Ordering::Equal {
             return c;
         }
         cmp_compare(&self.new_text, &other.new_text)
@@ -8704,9 +8704,9 @@ impl Json for Range {
 }
 
 impl Range {
-    pub fn compare(&self, other: &Range) -> i32 {
+    pub fn compare(&self, other: &Range) -> std::cmp::Ordering {
         let c = self.start.compare(&other.start);
-        if c != 0 {
+        if c != std::cmp::Ordering::Equal {
             return c;
         }
         self.end.compare(&other.end)
@@ -9148,9 +9148,9 @@ impl Json for Position {
 }
 
 impl Position {
-    pub fn compare(&self, other: &Position) -> i32 {
+    pub fn compare(&self, other: &Position) -> std::cmp::Ordering {
         let c = cmp_compare(&self.line, &other.line);
-        if c != 0 {
+        if c != std::cmp::Ordering::Equal {
             return c;
         }
         cmp_compare(&self.character, &other.character)
@@ -24921,7 +24921,7 @@ impl Json for TextDocumentContentChangePartialOrWholeDocument {
         let mut o = Self::default();
         match json_object_has_key(v, &["range"]) {
             // range
-            0 => {
+            Some(0) => {
                 o.partial = arm_buffered(v)?;
                 return Ok(o);
             }
@@ -24958,12 +24958,12 @@ impl Json for TextEditOrInsertReplaceEdit {
         let mut o = Self::default();
         match json_object_has_key(v, &["insert", "range"]) {
             // insert
-            0 => {
+            Some(0) => {
                 o.insert_replace_edit = arm_buffered(v)?;
                 return Ok(o);
             }
             // range
-            1 => {
+            Some(1) => {
                 o.text_edit = arm_buffered(v)?;
                 return Ok(o);
             }
@@ -25009,12 +25009,12 @@ impl Json for MarkupContentOrStringOrMarkedStringWithLanguageOrMarkedStrings {
             b'{' => {
                 match json_object_has_key(v, &["kind", "language"]) {
                     // kind
-                    0 => {
+                    Some(0) => {
                         o.markup_content = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // language
-                    1 => {
+                    Some(1) => {
                         o.marked_string_with_language = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -25091,7 +25091,7 @@ impl Json for LocationOrLocationUriOnly {
         let mut o = Self::default();
         match json_object_has_key(v, &["range"]) {
             // range
-            0 => {
+            Some(0) => {
                 o.location = arm_buffered(v)?;
                 return Ok(o);
             }
@@ -25178,12 +25178,12 @@ impl Json for TextEditOrAnnotatedTextEditOrSnippetTextEdit {
         let mut o = Self::default();
         match json_object_has_key(v, &["snippet", "annotationId"]) {
             // snippet
-            0 => {
+            Some(0) => {
                 o.snippet_text_edit = arm_buffered(v)?;
                 return Ok(o);
             }
             // annotationId
-            1 => {
+            Some(1) => {
                 o.annotated_text_edit = arm_buffered(v)?;
                 return Ok(o);
             }
@@ -25345,7 +25345,7 @@ impl Json for BooleanOrDeclarationOptionsOrDeclarationRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.declaration_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -25434,7 +25434,7 @@ impl Json for BooleanOrTypeDefinitionOptionsOrTypeDefinitionRegistrationOptions 
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.type_definition_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -25485,7 +25485,7 @@ impl Json for BooleanOrImplementationOptionsOrImplementationRegistrationOptions 
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.implementation_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -25688,7 +25688,7 @@ impl Json for BooleanOrDocumentColorOptionsOrDocumentColorRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.document_color_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -25891,7 +25891,7 @@ impl Json for BooleanOrFoldingRangeOptionsOrFoldingRangeRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.folding_range_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -25942,7 +25942,7 @@ impl Json for BooleanOrSelectionRangeOptionsOrSelectionRangeRegistrationOptions 
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.selection_range_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -25993,7 +25993,7 @@ impl Json for BooleanOrCallHierarchyOptionsOrCallHierarchyRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.call_hierarchy_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -26044,7 +26044,7 @@ impl Json for BooleanOrLinkedEditingRangeOptionsOrLinkedEditingRangeRegistration
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.linked_editing_range_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -26084,7 +26084,7 @@ impl Json for SemanticTokensOptionsOrRegistrationOptions {
         let mut o = Self::default();
         match json_object_has_key(v, &["documentSelector"]) {
             // documentSelector
-            0 => {
+            Some(0) => {
                 o.registration_options = arm_buffered(v)?;
                 return Ok(o);
             }
@@ -26132,7 +26132,7 @@ impl Json for BooleanOrMonikerOptionsOrMonikerRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.moniker_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -26183,7 +26183,7 @@ impl Json for BooleanOrTypeHierarchyOptionsOrTypeHierarchyRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.type_hierarchy_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -26234,7 +26234,7 @@ impl Json for BooleanOrInlineValueOptionsOrInlineValueRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.inline_value_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -26285,7 +26285,7 @@ impl Json for BooleanOrInlayHintOptionsOrInlayHintRegistrationOptions {
             b'{' => {
                 match json_object_has_key(v, &["documentSelector"]) {
                     // documentSelector
-                    0 => {
+                    Some(0) => {
                         o.inlay_hint_registration_options = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -26325,7 +26325,7 @@ impl Json for DiagnosticOptionsOrRegistrationOptions {
         let mut o = Self::default();
         match json_object_has_key(v, &["documentSelector"]) {
             // documentSelector
-            0 => {
+            Some(0) => {
                 o.registration_options = arm_buffered(v)?;
                 return Ok(o);
             }
@@ -26438,12 +26438,12 @@ impl Json for RangeOrEditRangeWithInsertReplace {
         let mut o = Self::default();
         match json_object_has_key(v, &["start", "insert"]) {
             // start
-            0 => {
+            Some(0) => {
                 o.range = arm_buffered(v)?;
                 return Ok(o);
             }
             // insert
-            1 => {
+            Some(1) => {
                 o.edit_range_with_insert_replace = arm_buffered(v)?;
                 return Ok(o);
             }
@@ -27051,12 +27051,12 @@ impl Json for SemanticTokensOrSemanticTokensDeltaOrNull {
             b'{' => {
                 match json_object_has_key(v, &["data", "edits"]) {
                     // data
-                    0 => {
+                    Some(0) => {
                         o.semantic_tokens = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // edits
-                    1 => {
+                    Some(1) => {
                         o.semantic_tokens_delta = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -27808,17 +27808,17 @@ impl Json for RangeOrPrepareRenamePlaceholderOrPrepareRenameDefaultBehaviorOrNul
             b'{' => {
                 match json_object_has_key(v, &["start", "range", "defaultBehavior"]) {
                     // start
-                    0 => {
+                    Some(0) => {
                         o.range = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // range
-                    1 => {
+                    Some(1) => {
                         o.prepare_rename_placeholder = arm_buffered(v)?;
                         return Ok(o);
                     }
                     // defaultBehavior
-                    2 => {
+                    Some(2) => {
                         o.prepare_rename_default_behavior = arm_buffered(v)?;
                         return Ok(o);
                     }
@@ -28117,12 +28117,12 @@ impl Json for InlineValueTextOrVariableLookupOrEvaluatableExpression {
         let mut o = Self::default();
         match json_object_has_key(v, &["text", "caseSensitiveLookup"]) {
             // text
-            0 => {
+            Some(0) => {
                 o.text = arm_buffered(v)?;
                 return Ok(o);
             }
             // caseSensitiveLookup
-            1 => {
+            Some(1) => {
                 o.variable_lookup = arm_buffered(v)?;
                 return Ok(o);
             }

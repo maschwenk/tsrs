@@ -1,4 +1,5 @@
 use std::cell::{Cell, RefCell};
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 use tsrs_ast::{self as ast, Kind, ModifierList, Node, NodeFlags, NodeList, NodeVisitor, NodeVisitorHooks, SourceFile};
@@ -23,33 +24,50 @@ fn scan_navigation_token(s: &mut Scanner, containing_node: P<Node>) -> Kind {
 }
 
 // tokens.go:24
-pub fn get_touching_property_name(source_file: P<SourceFile>, position: i32) -> P<Node> {
-    get_token_at_position_worker(source_file, position, false /*allowPositionInLeadingTrivia*/, Some(|node: P<Node>| {
-        ast::is_property_name_literal(node) || ast::is_keyword_kind(node.kind()) || ast::is_private_identifier(node)
-    }))
+pub fn get_touching_property_name(source_file: P<SourceFile>, position: u32) -> P<Node> {
+    get_token_at_position_worker(
+        source_file,
+        position,
+        false, /*allowPositionInLeadingTrivia*/
+        Some(|node: P<Node>| {
+            ast::is_property_name_literal(node)
+                || ast::is_keyword_kind(node.kind())
+                || ast::is_private_identifier(node)
+        }),
+    )
 }
 
 // tokens.go:30
-pub fn get_touching_token(source_file: P<SourceFile>, position: i32) -> P<Node> {
-    get_token_at_position_worker(source_file, position, false /*allowPositionInLeadingTrivia*/, None)
+pub fn get_touching_token(source_file: P<SourceFile>, position: u32) -> P<Node> {
+    get_token_at_position_worker(
+        source_file,
+        position,
+        false, /*allowPositionInLeadingTrivia*/
+        None,
+    )
 }
 
 // tokens.go:34
-pub fn get_token_at_position(source_file: P<SourceFile>, position: i32) -> P<Node> {
-    get_token_at_position_worker(source_file, position, true /*allowPositionInLeadingTrivia*/, None)
+pub fn get_token_at_position(source_file: P<SourceFile>, position: u32) -> P<Node> {
+    get_token_at_position_worker(
+        source_file,
+        position,
+        true, /*allowPositionInLeadingTrivia*/
+        None,
+    )
 }
 
 struct TokenAtPositionState {
     next: Cell<Option<P<Node>>>,
     prev_subtree: Cell<Option<P<Node>>>,
-    left: Cell<i32>,
+    left: Cell<u32>,
     node_after_left: Cell<Option<P<Node>>>,
 }
 
 // tokens.go:38
 pub(crate) fn get_token_at_position_worker(
     source_file: P<SourceFile>,
-    position: i32,
+    position: u32,
     allow_position_in_leading_trivia: bool,
     include_preceding_token_at_end_position: Option<fn(P<Node>) -> bool>,
 ) -> P<Node> {
@@ -82,7 +100,9 @@ pub(crate) fn get_token_at_position_worker(
     let get_included_preceding_token = move |subtree: P<Node>| -> Option<P<Node>> {
         let child = find_preceding_token_ex(source_file, position, Some(subtree), false /*excludeJSDoc*/);
         if let Some(child) = child {
-            if child.end() == position && include_preceding_token_at_end_position.unwrap()(child) {
+            if child.end().source_offset() == Some(position)
+                && include_preceding_token_at_end_position.unwrap()(child)
+            {
                 return Some(child);
             }
         }
@@ -91,15 +111,18 @@ pub(crate) fn get_token_at_position_worker(
 
     let test_node = {
         let st = Rc::clone(&st);
-        Rc::new(move |node: P<Node>| -> i32 {
+        Rc::new(move |node: P<Node>| -> Ordering {
+            let node_end = node
+                .end()
+                .expect_source("parsed nodes have source positions");
             if node.kind() != Kind::EndOfFile
-                && node.end() == position
+                && node_end == position
                 && include_preceding_token_at_end_position.is_some()
                 && !node.flags().intersects(NodeFlags::Reparsed)
             {
                 if let Some(prev_subtree) = st.prev_subtree.get() {
                     if get_included_preceding_token(prev_subtree).is_some() {
-                        return 0;
+                        return Ordering::Equal;
                     }
                 }
                 st.prev_subtree.set(Some(node));
@@ -108,18 +131,18 @@ pub(crate) fn get_token_at_position_worker(
             // A node "contains" the position if position < end, except nodes at the file end
             // treat end as inclusive (there's nowhere else to look). This applies to the EOF
             // token itself, and to JSDoc nodes reaching EOF (e.g. unterminated JSDoc comments).
-            if node.end() < position
-                || node.end() == position
+            if node_end < position
+                || node_end == position
                     && node.kind() != Kind::EndOfFile
                     && (!ast::is_jsdoc_kind(node.kind()) || node.end() != source_file.end_of_file_token.end())
             {
-                return -1;
+                return Ordering::Less;
             }
             let node_pos = get_position(node, source_file, allow_position_in_leading_trivia);
             if node_pos > position {
-                return 1;
+                return Ordering::Greater;
             }
-            0
+            Ordering::Equal
         })
     };
 
@@ -129,35 +152,40 @@ pub(crate) fn get_token_at_position_worker(
     let visit_node: VisitNodeFn = {
         let st = Rc::clone(&st);
         let test_node = Rc::clone(&test_node);
-        Rc::new(move |node: Option<P<Node>>, _: &mut NodeVisitor| -> Option<P<Node>> {
-            // We can't abort visiting children, so once a match is found, we set `next`
-            // and do nothing on subsequent visits.
-            let node = node?;
-            if node.flags().intersects(NodeFlags::Reparsed) {
-                return None;
-            }
-            if st.node_after_left.get().is_none() {
-                st.node_after_left.set(Some(node));
-            }
-            if st.next.get().is_none() {
-                let result = test_node(node);
-                match result {
-                    -1 => {
-                        if !ast::is_jsdoc_kind(node.kind()) {
-                            // We can't move the left boundary into or beyond JSDoc,
-                            // because we may end up returning the token after this JSDoc,
-                            // constructing it with the scanner, and we need to include
-                            // all its leading trivia in its position.
-                            st.left.set(node.end());
-                        }
-                        st.node_after_left.set(None);
-                    }
-                    0 => st.next.set(Some(node)),
-                    _ => {}
+        Rc::new(
+            move |node: Option<P<Node>>, _: &mut NodeVisitor| -> Option<P<Node>> {
+                // We can't abort visiting children, so once a match is found, we set `next`
+                // and do nothing on subsequent visits.
+                let node = node?;
+                if node.flags().intersects(NodeFlags::Reparsed) {
+                    return None;
                 }
-            }
-            Some(node)
-        })
+                if st.node_after_left.get().is_none() {
+                    st.node_after_left.set(Some(node));
+                }
+                if st.next.get().is_none() {
+                    let result = test_node(node);
+                    match result {
+                        Ordering::Less => {
+                            if !ast::is_jsdoc_kind(node.kind()) {
+                                // We can't move the left boundary into or beyond JSDoc,
+                                // because we may end up returning the token after this JSDoc,
+                                // constructing it with the scanner, and we need to include
+                                // all its leading trivia in its position.
+                                st.left.set(
+                                    node.end()
+                                        .expect_source("parsed nodes have source positions"),
+                                );
+                            }
+                            st.node_after_left.set(None);
+                        }
+                        Ordering::Equal => st.next.set(Some(node)),
+                        _ => {}
+                    }
+                }
+                Some(node)
+            },
+        )
     };
 
     let visit_node_list: VisitNodesFn = {
@@ -178,59 +206,75 @@ pub(crate) fn get_token_at_position_worker(
                 }
             }
             if st.next.get().is_none() {
-                if list.end() == position && include_preceding_token_at_end_position.is_some() {
-                    st.left.set(list.end());
-                    st.node_after_left.set(None);
-                    for &v in list.nodes().iter().rev() {
-                        if !v.flags().intersects(NodeFlags::Reparsed) {
-                            st.prev_subtree.set(Some(v));
-                            break;
-                        }
-                    }
-                } else if list.end() <= position {
-                    st.left.set(list.end());
-                    st.node_after_left.set(None);
-                } else if list.pos() <= position {
-                    let all_nodes: &'static [P<Node>] = list.nodes();
-                    let (mut index, mut match_) = binary_search_unique_func(all_nodes, |middle, node| {
-                        if node.flags().intersects(NodeFlags::Reparsed) {
-                            return 0;
-                        }
-                        let cmp = test_node(*node);
-                        if cmp < 0 {
-                            st.left.set(node.end());
-                            st.node_after_left.set(None);
-                            for &n in &all_nodes[middle + 1..] {
-                                if !n.flags().intersects(NodeFlags::Reparsed) {
-                                    st.node_after_left.set(Some(n));
-                                    break;
-                                }
+                    let list_end = list
+                        .end()
+                        .expect_source("parsed lists have source positions");
+                    if list_end == position && include_preceding_token_at_end_position.is_some() {
+                        st.left.set(list_end);
+                        st.node_after_left.set(None);
+                        for &v in list.nodes().iter().rev() {
+                            if !v.flags().intersects(NodeFlags::Reparsed) {
+                                st.prev_subtree.set(Some(v));
+                                break;
                             }
                         }
-                        cmp
-                    });
-                    let mut nodes: Vec<P<Node>> = all_nodes.to_vec();
-                    if match_ && nodes[index].flags().intersects(NodeFlags::Reparsed) {
-                        // filter and search again
-                        nodes.retain(|node| !node.flags().intersects(NodeFlags::Reparsed));
-                        let nodes_ref = &nodes;
-                        (index, match_) = binary_search_unique_func(nodes_ref, |middle, node| {
-                            let cmp = test_node(*node);
-                            if cmp < 0 {
-                                st.left.set(node.end());
-                                if middle + 1 < nodes_ref.len() {
-                                    st.node_after_left.set(Some(nodes_ref[middle + 1]));
-                                } else {
+                    } else if list_end <= position {
+                        st.left.set(list_end);
+                        st.node_after_left.set(None);
+                    } else if list
+                        .pos()
+                        .expect_source("parsed lists have source positions")
+                        <= position
+                    {
+                        let all_nodes: &'static [P<Node>] = list.nodes();
+                        let (mut index, mut match_) =
+                            binary_search_unique_func(all_nodes, |middle, node| {
+                                if node.flags().intersects(NodeFlags::Reparsed) {
+                                    return Ordering::Equal;
+                                }
+                                let cmp = test_node(*node);
+                                if cmp.is_lt() {
+                                    st.left.set(
+                                        node.end()
+                                            .expect_source("parsed nodes have source positions"),
+                                    );
                                     st.node_after_left.set(None);
+                                    for &n in &all_nodes[middle + 1..] {
+                                        if !n.flags().intersects(NodeFlags::Reparsed) {
+                                            st.node_after_left.set(Some(n));
+                                            break;
+                                        }
+                                    }
                                 }
-                            }
-                            cmp
-                        });
+                                cmp
+                            });
+                        let mut nodes: Vec<P<Node>> = all_nodes.to_vec();
+                        if match_ && nodes[index].flags().intersects(NodeFlags::Reparsed) {
+                            // filter and search again
+                            nodes.retain(|node| !node.flags().intersects(NodeFlags::Reparsed));
+                            let nodes_ref = &nodes;
+                            (index, match_) =
+                                binary_search_unique_func(nodes_ref, |middle, node| {
+                                    let cmp = test_node(*node);
+                                    if cmp.is_lt() {
+                                        st.left.set(
+                                            node.end().expect_source(
+                                                "parsed nodes have source positions",
+                                            ),
+                                        );
+                                        if middle + 1 < nodes_ref.len() {
+                                            st.node_after_left.set(Some(nodes_ref[middle + 1]));
+                                        } else {
+                                            st.node_after_left.set(None);
+                                        }
+                                    }
+                                    cmp
+                                });
+                        }
+                        if match_ {
+                            st.next.set(Some(nodes[index]));
+                        }
                     }
-                    if match_ {
-                        st.next.set(Some(nodes[index]));
-                    }
-                }
             }
             node_list
         })
@@ -259,7 +303,9 @@ pub(crate) fn get_token_at_position_worker(
             }
             let mut left = st.left.get();
             let mut scanner = scanner::get_scanner_for_source_file(source_file, left);
-            let mut end = current.end();
+            let mut end = current
+                .end()
+                .expect_source("parsed nodes have source positions");
             // We should only scan up to the start of the next node in the AST after the node ending at position `left`.
             // It is necessary to enforce this invariant in cases where `position` occurs in between two node/tokens,
             // such that we would not find a token in the loop below before we reach the next node.
@@ -275,7 +321,9 @@ pub(crate) fn get_token_at_position_worker(
             // The position of marker '$' falls in between the asterisk token and the identifier token, but is not
             // part of the leading trivia for `identifier`.
             if let Some(node_after_left) = st.node_after_left.get() {
-                end = node_after_left.pos();
+                end = node_after_left
+                    .pos()
+                    .expect_source("parsed nodes have source positions");
             }
             while left < end {
                 let token = scan_navigation_token(&mut scanner, current);
@@ -309,16 +357,26 @@ pub(crate) fn get_token_at_position_worker(
             return current;
         };
         current = next;
-        st.left.set(current.pos());
+        st.left.set(
+            current
+                .pos()
+                .expect_source("parsed nodes have source positions"),
+        );
         st.node_after_left.set(None);
         st.next.set(None);
     }
 }
 
 // tokens.go:276
-fn get_position(node: P<Node>, source_file: P<SourceFile>, allow_position_in_leading_trivia: bool) -> i32 {
+fn get_position(
+    node: P<Node>,
+    source_file: P<SourceFile>,
+    allow_position_in_leading_trivia: bool,
+) -> u32 {
     if allow_position_in_leading_trivia {
-        return node.pos();
+        return node
+            .pos()
+            .expect_source("parsed nodes have source positions");
     }
     scanner::get_token_pos_of_node(node, source_file, true /*includeJSDoc*/)
 }
@@ -381,27 +439,28 @@ pub fn visit_each_child_and_jsdoc(
 }
 
 // tokens.go:330
-const COMPARISON_LESS_THAN: i32 = -1;
-const COMPARISON_EQUAL_TO: i32 = 0;
-const COMPARISON_GREATER_THAN: i32 = 1;
-
 // tokens.go:339
 // Finds the leftmost token satisfying `position < token.End()`.
 // If the leftmost token satisfying `position < token.End()` is invalid, or if position
 // is in the trivia of that leftmost token,
 // we will find the rightmost valid token with `token.End() <= position`.
-pub fn find_preceding_token(source_file: P<SourceFile>, position: i32) -> Option<P<Node>> {
+pub fn find_preceding_token(source_file: P<SourceFile>, position: u32) -> Option<P<Node>> {
     find_preceding_token_ex(source_file, position, None, false)
 }
 
 // tokens.go:343
 pub fn find_preceding_token_ex(
     source_file: P<SourceFile>,
-    position: i32,
+    position: u32,
     start_node: Option<P<Node>>,
     exclude_jsdoc: bool,
 ) -> Option<P<Node>> {
-    fn find(source_file: P<SourceFile>, position: i32, exclude_jsdoc: bool, n: P<Node>) -> Option<P<Node>> {
+    fn find(
+        source_file: P<SourceFile>,
+        position: u32,
+        exclude_jsdoc: bool,
+        n: P<Node>,
+    ) -> Option<P<Node>> {
         if ast::is_non_whitespace_token(n) && n.kind() != Kind::EndOfFile {
             return Some(n);
         }
@@ -425,7 +484,11 @@ pub fn find_preceding_token_ex(
                     // We cannot abort visiting children, so once the desired child is found, we do nothing.
                     return node;
                 }
-                if position < nd.end() && prev_child.get().is_none_or(|p| p.end() <= position) {
+                if position < nd.end().expect_source("parsed nodes have source positions")
+                    && prev_child.get().is_none_or(|p| {
+                        p.end().expect_source("parsed nodes have source positions") <= position
+                    })
+                {
                     found_child.set(Some(nd));
                 } else {
                     prev_child.set(Some(nd));
@@ -445,32 +508,37 @@ pub fn find_preceding_token_ex(
                         let (index, match_) = binary_search_unique_func(nodes, |middle, _| {
                             // synthetic jsdoc nodes should have jsdocNode.End() <= n.Pos()
                             if nodes[middle].flags().intersects(NodeFlags::Reparsed) {
-                                return COMPARISON_LESS_THAN;
+                                return Ordering::Less;
                             }
-                            if position < nodes[middle].end() {
-                                if middle == 0 || position >= nodes[middle - 1].end() {
-                                    return COMPARISON_EQUAL_TO;
+                            if position
+                                < nodes[middle]
+                                    .end()
+                                    .expect_source("parsed nodes have source positions")
+                            {
+                                if middle == 0
+                                    || position
+                                        >= nodes[middle - 1]
+                                            .end()
+                                            .expect_source("parsed nodes have source positions")
+                                {
+                                    return Ordering::Equal;
                                 }
-                                return COMPARISON_GREATER_THAN;
+                                return Ordering::Greater;
                             }
-                            COMPARISON_LESS_THAN
+                            Ordering::Less
                         });
 
                         if match_ {
                             found_child.set(Some(nodes[index]));
                         }
 
-                        let valid_lookup_index: i64 = if match_ { index as i64 - 1 } else { nodes.len() as i64 - 1 };
-                        let mut i = valid_lookup_index;
-                        while i >= 0 {
-                            let node = nodes[i as usize];
-                            i -= 1;
-                            if node.flags().intersects(NodeFlags::Reparsed) {
-                                continue;
-                            }
-                            if prev_child.get().is_none() {
-                                prev_child.set(Some(node));
-                            }
+                        let preceding = if match_ { &nodes[..index] } else { nodes };
+                        if let Some(&node) = preceding
+                            .iter()
+                            .rev()
+                            .find(|node| !node.flags().intersects(NodeFlags::Reparsed))
+                        {
+                            prev_child.set(Some(node));
                         }
                     }
                 }
@@ -489,7 +557,11 @@ pub fn find_preceding_token_ex(
             let look_in_previous_child = start >= position || // cursor in the leading trivia or preceding tokens
                 !is_valid_preceding_node(found_child, source_file);
             if look_in_previous_child {
-                if position >= found_child.pos() {
+                if position
+                    >= found_child
+                        .pos()
+                        .expect_source("parsed nodes have source positions")
+                {
                     // Find jsdoc preceding the foundChild.
                     let mut js_doc: Option<P<Node>> = None;
                     let node_jsdoc = n.jsdoc(Some(source_file.get()));
@@ -500,16 +572,41 @@ pub fn find_preceding_token_ex(
                         }
                     }
                     if let Some(js_doc) = js_doc {
-                        if !exclude_jsdoc && position < js_doc.end() {
+                        let jsdoc_end = js_doc
+                            .end()
+                            .expect_source("parsed nodes have source positions");
+                        if !exclude_jsdoc && position < jsdoc_end {
                             return find(source_file, position, exclude_jsdoc, js_doc);
                         } else {
-                            return find_rightmost_valid_token(js_doc.end(), source_file, n, position, exclude_jsdoc);
+                            return find_rightmost_valid_token(
+                                jsdoc_end,
+                                source_file,
+                                n,
+                                Some(position),
+                                exclude_jsdoc,
+                            );
                         }
                     }
-                    return find_rightmost_valid_token(found_child.pos(), source_file, n, -1 /*position*/, exclude_jsdoc);
+                    return find_rightmost_valid_token(
+                        found_child
+                            .pos()
+                            .expect_source("parsed nodes have source positions"),
+                        source_file,
+                        n,
+                        None,
+                        exclude_jsdoc,
+                    );
                 } else {
                     // Answer is in tokens between two visited children.
-                    return find_rightmost_valid_token(found_child.pos(), source_file, n, position, exclude_jsdoc);
+                    return find_rightmost_valid_token(
+                        found_child
+                            .pos()
+                            .expect_source("parsed nodes have source positions"),
+                        source_file,
+                        n,
+                        Some(position),
+                        exclude_jsdoc,
+                    );
                 }
             } else {
                 // position is in [foundChild.getStart(), foundChild.End): recur.
@@ -519,10 +616,11 @@ pub fn find_preceding_token_ex(
 
         // We have two cases here: either the position is at the end of the file,
         // or the desired token is in the unvisited trailing tokens of the current node.
-        if position >= n.end() {
-            find_rightmost_valid_token(n.end(), source_file, n, -1 /*position*/, exclude_jsdoc)
+        let end = n.end().expect_source("parsed nodes have source positions");
+        if position >= end {
+            find_rightmost_valid_token(end, source_file, n, None, exclude_jsdoc)
         } else {
-            find_rightmost_valid_token(n.end(), source_file, n, position, exclude_jsdoc)
+            find_rightmost_valid_token(end, source_file, n, Some(position), exclude_jsdoc)
         }
     }
 
@@ -545,12 +643,15 @@ fn is_valid_preceding_node(node: P<Node>, source_file: P<SourceFile>) -> bool {
         return !node.jsdoc(Some(source_file.get())).is_empty();
     }
     let start = get_start_of_node(node, source_file, false /*includeJSDoc*/);
-    let width = node.end() - start;
+    let width = node
+        .end()
+        .expect_source("parsed nodes have source positions")
+        - start;
     !(ast::is_whitespace_only_jsx_text(node) || width == 0)
 }
 
 // tokens.go:474
-pub fn get_start_of_node(node: P<Node>, file: P<SourceFile>, include_jsdoc: bool) -> i32 {
+pub fn get_start_of_node(node: P<Node>, file: P<SourceFile>, include_jsdoc: bool) -> u32 {
     scanner::get_token_pos_of_node(node, file, include_jsdoc)
 }
 
@@ -558,27 +659,38 @@ pub fn get_start_of_node(node: P<Node>, file: P<SourceFile>, include_jsdoc: bool
 // Looks for rightmost valid token in the range [startPos, endPos).
 // If position is >= 0, looks for rightmost valid token that precedes or touches that position.
 fn find_rightmost_valid_token(
-    end_pos: i32,
+    end_pos: u32,
     source_file: P<SourceFile>,
     containing_node: P<Node>,
-    mut position: i32,
+    position: Option<u32>,
     exclude_jsdoc: bool,
 ) -> Option<P<Node>> {
-    if position == -1 {
-        position = containing_node.end();
-    }
-    fn should_visit_node(node: P<Node>, end_pos: i32, position: i32, source_file: P<SourceFile>, exclude_jsdoc: bool) -> bool {
+    let position = position.unwrap_or_else(|| {
+        containing_node
+            .end()
+            .expect_source("parsed nodes have source positions")
+    });
+    fn should_visit_node(
+        node: P<Node>,
+        end_pos: u32,
+        position: u32,
+        source_file: P<SourceFile>,
+        exclude_jsdoc: bool,
+    ) -> bool {
         // Node is synthetic or out of the desired range: don't visit it.
         !(node.flags().intersects(NodeFlags::Reparsed)
-            || node.end() > end_pos
+            || node
+                .end()
+                .expect_source("parsed nodes have source positions")
+                > end_pos
             || get_start_of_node(node, source_file, !exclude_jsdoc /*includeJSDoc*/) >= position)
     }
     fn find(
         n: Option<P<Node>>,
-        mut end_pos: i32,
+        mut end_pos: u32,
         source_file: P<SourceFile>,
         containing_node: P<Node>,
-        position: i32,
+        position: u32,
         exclude_jsdoc: bool,
     ) -> Option<P<Node>> {
         let n = n?;
@@ -622,30 +734,41 @@ fn find_rightmost_valid_token(
                         has_children.set(true);
                         let nodes = list.nodes();
                         let (index, _) = binary_search_unique_func(nodes, |_, node| {
-                            if node.end() > end_pos {
-                                return COMPARISON_GREATER_THAN;
+                            if node
+                                .end()
+                                .expect_source("parsed nodes have source positions")
+                                > end_pos
+                            {
+                                return Ordering::Greater;
                             }
-                            COMPARISON_LESS_THAN
+                            Ordering::Less
                         });
-                        let mut valid_index: i64 = -1;
-                        let mut i = index as i64 - 1;
-                        while i >= 0 {
-                            let node = nodes[i as usize];
-                            i -= 1;
-                            if !should_visit_node(node, end_pos, position, source_file, exclude_jsdoc) {
+                        let mut valid_index = None;
+                        for i in (0..index).rev() {
+                            let node = nodes[i];
+                            if !should_visit_node(
+                                node,
+                                end_pos,
+                                position,
+                                source_file,
+                                exclude_jsdoc,
+                            ) {
                                 continue;
                             }
                             if is_valid_preceding_node(node, source_file) {
-                                valid_index = i + 1;
+                                valid_index = Some(i);
                                 rightmost_valid_node.set(Some(node));
                                 break;
                             }
                         }
-                        let mut i = valid_index + 1;
-                        while i < index as i64 {
-                            let node = nodes[i as usize];
-                            i += 1;
-                            if !should_visit_node(node, end_pos, position, source_file, exclude_jsdoc) {
+                        for &node in &nodes[valid_index.map_or(0, |i| i + 1)..index] {
+                            if !should_visit_node(
+                                node,
+                                end_pos,
+                                position,
+                                source_file,
+                                exclude_jsdoc,
+                            ) {
                                 continue;
                             }
                             rightmost_visited_nodes.borrow_mut().push(node);
@@ -666,18 +789,21 @@ fn find_rightmost_valid_token(
         if !should_skip_child(n) {
             // JSDoc nodes don't include trivia tokens as children.
             let mut start_pos = match rightmost_valid_node.get() {
-                Some(r) => r.end(),
-                None => n.pos(),
+                Some(r) => r.end().expect_source("parsed nodes have source positions"),
+                None => n.pos().expect_source("parsed nodes have source positions"),
             };
             let mut scanner = scanner::get_scanner_for_source_file(source_file, start_pos);
             let mut tokens: Vec<P<Node>> = Vec::new();
             let visited: Vec<P<Node>> = rightmost_visited_nodes.borrow().clone();
             for visited_node in visited {
                 // Trailing tokens that occur before this node.
-                while start_pos < visited_node.pos().min(position) {
+                let visited_pos = visited_node
+                    .pos()
+                    .expect_source("parsed nodes have source positions");
+                while start_pos < visited_pos.min(position) {
                     let token = scan_navigation_token(&mut scanner, n);
                     let token_start = scanner.token_start();
-                    if token_start >= visited_node.pos().min(position) {
+                    if token_start >= visited_pos.min(position) {
                         break;
                     }
                     let token_full_start = scanner.token_full_start();
@@ -687,7 +813,9 @@ fn find_rightmost_valid_token(
                     tokens.push(source_file.get_or_create_token(token, token_full_start, token_end, n, flags));
                     scanner.scan();
                 }
-                start_pos = visited_node.end();
+                start_pos = visited_node
+                    .end()
+                    .expect_source("parsed nodes have source positions");
                 scanner.reset_pos(start_pos);
                 scanner.scan();
             }
@@ -723,7 +851,7 @@ fn find_rightmost_valid_token(
         }
         // Case 1: recur on rightmostValidNode.
         if let Some(r) = rightmost_valid_node.get() {
-            end_pos = r.end();
+            end_pos = r.end().expect_source("parsed nodes have source positions");
         }
         find(rightmost_valid_node.get(), end_pos, source_file, containing_node, position, exclude_jsdoc)
     }
@@ -734,7 +862,13 @@ fn find_rightmost_valid_token(
 // tokens.go:622
 pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceFile>) -> Option<P<Node>> {
     fn find(n: P<Node>, previous_token: P<Node>, file: P<SourceFile>) -> Option<P<Node>> {
-        if ast::is_token_kind(n.kind()) && n.pos() == previous_token.end() {
+        let previous_pos = previous_token
+            .pos()
+            .expect_source("parsed nodes have source positions");
+        let previous_end = previous_token
+            .end()
+            .expect_source("parsed nodes have source positions");
+        if ast::is_token_kind(n.kind()) && n.pos().source_offset() == Some(previous_end) {
             // this is token that starts at the end of previous token - return it
             return Some(n);
         }
@@ -744,7 +878,12 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
             let found_node = Rc::clone(&found_node);
             Rc::new(move |node: Option<P<Node>>, _: &mut NodeVisitor| {
                 if let Some(nd) = node {
-                    if !nd.flags().intersects(NodeFlags::Reparsed) && nd.pos() <= previous_token.end() && nd.end() > previous_token.end() {
+                    if !nd.flags().intersects(NodeFlags::Reparsed)
+                        && nd.pos().expect_source("parsed nodes have source positions")
+                            <= previous_end
+                        && nd.end().expect_source("parsed nodes have source positions")
+                            > previous_end
+                    {
                         found_node.set(Some(nd));
                     }
                 }
@@ -759,15 +898,23 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
                         let nodes = list.nodes();
                         let (index, match_) = binary_search_unique_func(nodes, |_, node| {
                             if node.flags().intersects(NodeFlags::Reparsed) {
-                                return COMPARISON_LESS_THAN;
+                                return Ordering::Less;
                             }
-                            if node.pos() > previous_token.end() {
-                                return COMPARISON_GREATER_THAN;
+                            if node
+                                .pos()
+                                .expect_source("parsed nodes have source positions")
+                                > previous_end
+                            {
+                                return Ordering::Greater;
                             }
-                            if node.end() <= previous_token.pos() {
-                                return COMPARISON_LESS_THAN;
+                            if node
+                                .end()
+                                .expect_source("parsed nodes have source positions")
+                                <= previous_pos
+                            {
+                                return Ordering::Less;
                             }
-                            COMPARISON_EQUAL_TO
+                            Ordering::Equal
                         });
                         if match_ {
                             found_node.set(Some(nodes[index]));
@@ -787,9 +934,11 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
         if let Some(found_node) = found_node.get() {
             return find(found_node, previous_token, file);
         }
-        let start_pos = previous_token.end();
+        let start_pos = previous_end;
         // Case 2: look for the next token directly.
-        if start_pos >= n.pos() && start_pos < n.end() {
+        if start_pos >= n.pos().expect_source("parsed nodes have source positions")
+            && start_pos < n.end().expect_source("parsed nodes have source positions")
+        {
             let scanner = scanner::get_scanner_for_source_file(file, start_pos);
             let token = scanner.token();
             let token_full_start = scanner.token_full_start();
@@ -798,10 +947,18 @@ pub fn find_next_token(previous_token: P<Node>, parent: P<Node>, file: P<SourceF
             // Use tokenFullStart (which includes leading trivia) to match TS's
             // findNextToken behavior where `n.pos === previousToken.end` is checked
             // (TS's pos includes trivia, same as Go's Pos()/tokenFullStart).
-            if token_full_start == previous_token.end() {
-                return Some(file.get_or_create_token(token, token_full_start, token_end, n, flags));
+            if token_full_start == previous_end {
+                return Some(file.get_or_create_token(
+                    token,
+                    token_full_start,
+                    token_end,
+                    n,
+                    flags,
+                ));
             }
-            panic!("Expected to find next token at {}, got token {:?} at {}", previous_token.end(), token, token_full_start);
+            panic!(
+                "Expected to find next token at {previous_end}, got token {token:?} at {token_full_start}"
+            );
         }
         // Case 3: no answer.
         None
@@ -865,8 +1022,14 @@ fn should_skip_child(node: P<Node>) -> bool {
 // tokens.go:739
 // FindChildOfKind searches for a child node or token of the specified kind within a containing node.
 // This function scans through both AST nodes and intervening tokens to find the first match.
-pub fn find_child_of_kind(containing_node: P<Node>, kind: Kind, source_file: P<SourceFile>) -> Option<P<Node>> {
-    let mut last_node_pos = containing_node.pos();
+pub fn find_child_of_kind(
+    containing_node: P<Node>,
+    kind: Kind,
+    source_file: P<SourceFile>,
+) -> Option<P<Node>> {
+    let mut last_node_pos = containing_node
+        .pos()
+        .expect_source("parsed nodes have source positions");
     let mut scan = scanner::get_scanner_for_source_file(source_file, last_node_pos);
 
     let mut found_child: Option<P<Node>> = None;
@@ -876,7 +1039,11 @@ pub fn find_child_of_kind(containing_node: P<Node>, kind: Kind, source_file: P<S
         }
         // Look for child in preceding tokens.
         let mut start_pos = last_node_pos;
-        while start_pos < node.pos() {
+        while start_pos
+            < node
+                .pos()
+                .expect_source("parsed nodes have source positions")
+        {
             let token_kind = scan.token();
             let token_end = scan.token_end();
             if token_kind == kind {
@@ -894,7 +1061,9 @@ pub fn find_child_of_kind(containing_node: P<Node>, kind: Kind, source_file: P<S
             return true;
         }
 
-        last_node_pos = node.end();
+        last_node_pos = node
+            .end()
+            .expect_source("parsed nodes have source positions");
         scan.reset_pos(last_node_pos);
         false
     };
@@ -907,7 +1076,11 @@ pub fn find_child_of_kind(containing_node: P<Node>, kind: Kind, source_file: P<S
 
     // Look for child in trailing tokens.
     let mut start_pos = last_node_pos;
-    while start_pos < containing_node.end() {
+    while start_pos
+        < containing_node
+            .end()
+            .expect_source("parsed nodes have source positions")
+    {
         let token_kind = scan.token();
         let token_end = scan.token_end();
         if token_kind == kind {

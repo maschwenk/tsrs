@@ -3,7 +3,6 @@
 
 use super::*;
 use printer::{EmitFlags, PrivateIdentifierKind};
-use tsrs_core::TextRange;
 
 impl classFieldsTransformer {
     // classfields.go:1889
@@ -427,14 +426,18 @@ impl classFieldsTransformer {
             let mut members_array: Vec<P<Node>> = Vec::with_capacity(nodes.len() + 2);
 
             // Find and preserve classThis assignment block and named evaluation helper block at the top
-            let class_this_idx = nodes.iter().position(|&n| is_class_this_assignment_block(self.emit_context(), n)).map_or(-1, |i| i as isize);
-            let named_eval_idx = nodes.iter().position(|&n| is_class_named_evaluation_helper_block(self.emit_context(), n)).map_or(-1, |i| i as isize);
+            let class_this_idx = nodes
+                .iter()
+                .position(|&n| is_class_this_assignment_block(self.emit_context(), n));
+            let named_eval_idx = nodes
+                .iter()
+                .position(|&n| is_class_named_evaluation_helper_block(self.emit_context(), n));
 
-            if class_this_idx >= 0 {
-                members_array.push(nodes[class_this_idx as usize]);
+            if let Some(class_this_idx) = class_this_idx {
+                members_array.push(nodes[class_this_idx]);
             }
-            if named_eval_idx >= 0 {
-                members_array.push(nodes[named_eval_idx as usize]);
+            if let Some(named_eval_idx) = named_eval_idx {
+                members_array.push(nodes[named_eval_idx]);
             }
             if let Some(synthetic_constructor) = synthetic_constructor {
                 members_array.push(synthetic_constructor);
@@ -444,7 +447,7 @@ impl classFieldsTransformer {
             }
 
             for (i, &member) in nodes.iter().enumerate() {
-                if i as isize != class_this_idx && i as isize != named_eval_idx {
+                if Some(i) != class_this_idx && Some(i) != named_eval_idx {
                     members_array.push(member);
                 }
             }
@@ -697,13 +700,21 @@ impl classFieldsTransformer {
                 //
                 //  super(...arguments);
                 //
-                let super_call = self.factory().new_expression_statement(self.factory().new_call_expression(
-                    self.factory().new_keyword_expression(Kind::SuperKeyword),
-                    None, /*typeArguments*/
-                    None, /*questionDotToken*/
-                    self.factory().new_node_list(vec![self.factory().new_spread_element(self.factory().new_identifier("arguments"))]),
-                    NodeFlags::None,
-                ));
+                let super_call =
+                    self.factory()
+                        .new_expression_statement(
+                            self.factory().new_call_expression(
+                                self.factory().new_keyword_expression(Kind::SuperKeyword),
+                                None, /*typeArguments*/
+                                None, /*questionDotToken*/
+                                self.factory().new_node_list(vec![
+                                    self.factory().new_spread_element(
+                                        self.factory().new_identifier("arguments"),
+                                    ),
+                                ]),
+                                NodeFlags::None,
+                            ),
+                        );
                 statements.push(super_call);
             }
             statements.extend_from_slice(&initializer_statements);
@@ -726,7 +737,9 @@ impl classFieldsTransformer {
         if let Some(body) = constructor.and_then(|c| c.body()) {
             statement_list.loc.set(body.as_block().statements.loc.get());
         } else {
-            statement_list.loc.set(TextRange::new(container.member_list().unwrap().loc.get().pos(), container.member_list().unwrap().loc.get().end()));
+            statement_list
+                .loc
+                .set(container.member_list().unwrap().loc.get());
         }
 
         let block = self.factory().new_block(statement_list, multi_line);

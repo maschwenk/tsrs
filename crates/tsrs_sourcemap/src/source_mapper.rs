@@ -19,18 +19,16 @@ pub trait Host {
 // Similar to `Mapping`, but position-based.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct MappedPosition {
-    pub(crate) generated_position: i32,
-    pub(crate) source_position: i32,
-    pub(crate) source_index: SourceIndex,
-    pub(crate) name_index: NameIndex,
+    pub(crate) generated_position: Option<u32>,
+    pub(crate) source_position: Option<u32>,
+    pub(crate) source_index: Option<u32>,
+    pub(crate) name_index: Option<u32>,
 }
-
-pub(crate) const MISSING_POSITION: i32 = -1;
 
 impl MappedPosition {
     // source_mapper.go:34
     pub(crate) fn is_source_mapped_position(&self) -> bool {
-        self.source_index != MISSING_SOURCE && self.source_position != MISSING_POSITION
+        self.source_index.is_some() && self.source_position.is_some()
     }
 }
 
@@ -43,11 +41,11 @@ pub struct DocumentPositionMapper {
     use_case_sensitive_file_names: bool,
 
     source_file_absolute_paths: Vec<String>,
-    source_to_source_index_map: FxHashMap<String, SourceIndex>,
+    source_to_source_index_map: FxHashMap<String, u32>,
     generated_absolute_file_path: String,
 
     generated_mappings: Vec<MappedPosition>,
-    source_mappings: FxHashMap<SourceIndex, Vec<SourceMappedPosition>>,
+    source_mappings: FxHashMap<u32, Vec<SourceMappedPosition>>,
 }
 
 // source_mapper.go:52
@@ -64,48 +62,55 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
     let use_case_sensitive_file_names = host.use_case_sensitive_file_names();
     let mut source_to_source_index_map = FxHashMap::with_capacity_and_hasher(source_file_absolute_paths.len(), Default::default());
     for (i, source) in source_file_absolute_paths.iter().enumerate() {
-        source_to_source_index_map.insert(tspath::get_canonical_file_name(source, use_case_sensitive_file_names), i as SourceIndex);
+        source_to_source_index_map.insert(
+            tspath::get_canonical_file_name(source, use_case_sensitive_file_names),
+            i as u32,
+        );
     }
 
     let mut decoded_mappings: Vec<MappedPosition> = Vec::new();
-    let mut source_mappings: FxHashMap<SourceIndex, Vec<SourceMappedPosition>> = FxHashMap::default();
+    let mut source_mappings: FxHashMap<u32, Vec<SourceMappedPosition>> = FxHashMap::default();
 
     // getDecodedMappings()
     let mut decoder = decode_mappings(&source_map.mappings);
     for mapping in decoder.values() {
         // processMapping()
-        let mut generated_position = -1;
+        let mut generated_position = None;
         let line_info = host.get_ecma_line_info(&generated_absolute_file_path);
         if let Some(line_info) = &line_info {
-            generated_position = tsrs_scanner::compute_position_of_line_and_utf16_character(
+            generated_position = Some(tsrs_scanner::compute_position_of_line_and_utf16_character(
                 &line_info.line_starts,
-                mapping.generated_line,
+                mapping.generated_line as usize,
                 mapping.generated_character,
                 &line_info.text,
                 true, /*allowEdits*/
-            );
+            ));
         }
 
-        let mut source_position = -1;
-        if mapping.is_source_mapping() {
-            let line_info = host.get_ecma_line_info(&source_file_absolute_paths[mapping.source_index as usize]);
+        let mut source_position = None;
+        let source_index = mapping.source_index.get();
+        if let (Some(source_index), Some(source_line), Some(source_character)) =
+            (source_index, mapping.source_line, mapping.source_character)
+        {
+            let line_info =
+                host.get_ecma_line_info(&source_file_absolute_paths[source_index as usize]);
             if let Some(line_info) = &line_info {
                 let pos = tsrs_scanner::compute_position_of_line_and_utf16_character(
                     &line_info.line_starts,
-                    mapping.source_line,
-                    mapping.source_character,
+                    source_line as usize,
+                    source_character,
                     &line_info.text,
                     true, /*allowEdits*/
                 );
-                source_position = pos;
+                source_position = Some(pos);
             }
         }
 
         decoded_mappings.push(MappedPosition {
             generated_position,
-            source_index: mapping.source_index,
+            source_index,
             source_position,
-            name_index: mapping.name_index,
+            name_index: mapping.name_index.get(),
         });
     }
     if decoder.error().is_some() {
@@ -117,11 +122,11 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
         if !mapping.is_source_mapped_position() {
             continue;
         }
-        let source_index = mapping.source_index;
+        let source_index = mapping.source_index.unwrap();
         let list = source_mappings.entry(source_index).or_default();
         list.push(SourceMappedPosition {
             generated_position: mapping.generated_position,
-            source_index,
+            source_index: Some(source_index),
             source_position: mapping.source_position,
             name_index: mapping.name_index,
         });
@@ -129,8 +134,11 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
     #[expect(clippy::iter_over_hash_type, reason = "sorts each list on its own")]
     for list in source_mappings.values_mut() {
         goslices::sort_func(list, |a, b| {
-            assert!(a.source_index == b.source_index, "All source mappings should have the same source index");
-            a.source_position - b.source_position
+            assert!(
+                a.source_index == b.source_index,
+                "All source mappings should have the same source index"
+            );
+            a.source_position.cmp(&b.source_position)
         });
         *list = tsrs_core::deduplicate_sorted(list, |a, b| {
             a.generated_position == b.generated_position && a.source_index == b.source_index && a.source_position == b.source_position
@@ -139,7 +147,9 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
 
     // getGeneratedMappings()
     let mut generated_mappings = decoded_mappings;
-    goslices::sort_func(&mut generated_mappings, |a, b| a.generated_position - b.generated_position);
+    goslices::sort_func(&mut generated_mappings, |a, b| {
+        a.generated_position.cmp(&b.generated_position)
+    });
     let generated_mappings = tsrs_core::deduplicate_sorted(&generated_mappings, |a, b| {
         a.generated_position == b.generated_position && a.source_index == b.source_index && a.source_position == b.source_position
     });
@@ -158,7 +168,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
 #[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct DocumentPosition {
     pub file_name: String,
-    pub pos: i32,
+    pub pos: u32,
 }
 
 // Go's methods accept a nil receiver and return nil; callers holding an Option<DocumentPositionMapper> take that path
@@ -170,7 +180,10 @@ impl DocumentPositionMapper {
             return None;
         }
 
-        let (target_index, _) = goslices::binary_search_func(&self.generated_mappings, &loc.pos, |m, pos| m.generated_position - pos);
+        let (target_index, _) =
+            goslices::binary_search_func(&self.generated_mappings, &loc.pos, |m, pos| {
+                m.generated_position.cmp(&Some(*pos))
+            });
 
         if target_index >= self.generated_mappings.len() {
             return None;
@@ -183,33 +196,43 @@ impl DocumentPositionMapper {
 
         // Closest position
         Some(DocumentPosition {
-            file_name: self.source_file_absolute_paths[mapping.source_index as usize].clone(),
-            pos: mapping.source_position,
+            file_name: self.source_file_absolute_paths[mapping.source_index? as usize].clone(),
+            pos: mapping.source_position?,
         })
     }
 
     // source_mapper.go:197
     pub fn get_generated_position(&self, loc: &DocumentPosition) -> Option<DocumentPosition> {
-        let &source_index = self
-            .source_to_source_index_map
-            .get(&tspath::get_canonical_file_name(&loc.file_name, self.use_case_sensitive_file_names))?;
-        if source_index < 0 || source_index as usize >= self.source_mappings.len() {
-            return None;
-        }
-        let source_mappings: &[SourceMappedPosition] = self.source_mappings.get(&source_index).map(|v| v.as_slice()).unwrap_or(&[]);
-        let (target_index, _) = goslices::binary_search_func(source_mappings, &loc.pos, |m, pos| m.source_position - pos);
+        let &source_index =
+            self.source_to_source_index_map
+                .get(&tspath::get_canonical_file_name(
+                    &loc.file_name,
+                    self.use_case_sensitive_file_names,
+                ))?;
+        let source_mappings: &[SourceMappedPosition] = self
+            .source_mappings
+            .get(&source_index)
+            .map(|v| v.as_slice())
+            .unwrap_or(&[]);
+        let (target_index, _) =
+            goslices::binary_search_func(source_mappings, &loc.pos, |m, pos| {
+                m.source_position.cmp(&Some(*pos))
+            });
 
         if target_index >= source_mappings.len() {
             return None;
         }
 
         let mapping = &source_mappings[target_index];
-        if mapping.source_index != source_index {
+        if mapping.source_index != Some(source_index) {
             return None;
         }
 
         // Closest position
-        Some(DocumentPosition { file_name: self.generated_absolute_file_path.clone(), pos: mapping.generated_position })
+        Some(DocumentPosition {
+            file_name: self.generated_absolute_file_path.clone(),
+            pos: mapping.generated_position?,
+        })
     }
 }
 
@@ -332,11 +355,7 @@ fn base64_std_decode_string(s: &str) -> Option<Vec<u8>> {
             let d = if i >= 4 - padding {
                 0
             } else {
-                let d = base64_format_decode(c);
-                if d < 0 {
-                    return None;
-                }
-                d as u32
+                u32::from(base64_format_decode(c)?)
             };
             v = (v << 6) | d;
         }

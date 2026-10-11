@@ -7,7 +7,7 @@ use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{self as checker, Checker, ElementFlags, Flags, Signature, Type, TypeFlags, TypePredicate};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil;
-use tsrs_core::{TextPos, TextRange, P};
+use tsrs_core::{P, TextRange};
 use tsrs_lsproto as lsproto;
 use tsrs_printer as printer;
 use tsrs_scanner as scanner;
@@ -68,7 +68,7 @@ struct InlayHintState<'a> {
 impl InlayHintState<'_> {
     // inlay_hints.go:72
     fn visit(&mut self, node: P<Node>) -> bool {
-        if node.end() - node.pos() == 0 || node.flags().intersects(ast::NodeFlags::Reparsed) {
+        if node.end() == node.pos() || node.flags().intersects(ast::NodeFlags::Reparsed) {
             return false;
         }
 
@@ -160,7 +160,7 @@ impl InlayHintState<'_> {
 
         let signature = self.checker.get_resolved_signature_exported(expr);
 
-        let mut signature_param_pos = 0;
+        let mut signature_param_pos: usize = 0;
         for &original_arg in args {
             let arg = ast::skip_parentheses(original_arg);
             if should_show_literal_parameter_name_hints_only(self.preferences) && !is_hintable_literal(arg) {
@@ -178,8 +178,12 @@ impl InlayHintState<'_> {
                     if fixed_length == 0 {
                         continue;
                     }
-                    let first_optional_index = element_flags.iter().position(|f| !f.intersects(ElementFlags::Required)).map_or(-1, |i| i as i32);
-                    let required_args = if first_optional_index < 0 { fixed_length } else { first_optional_index };
+                    let required_args = element_flags
+                        .iter()
+                        .position(|f| !f.intersects(ElementFlags::Required))
+                        .unwrap_or_else(|| {
+                            usize::try_from(fixed_length).expect("tuple fixed length is negative")
+                        });
                     if required_args > 0 {
                         spread_args = required_args;
                     }
@@ -221,7 +225,12 @@ impl InlayHintState<'_> {
         }
 
         if let Some(enum_value) = self.checker.get_constant_value(member) {
-            self.add_enum_member_value_hints(&checker::evaluator::any_to_string(enum_value), member.end());
+            self.add_enum_member_value_hints(
+                &checker::evaluator::any_to_string(enum_value),
+                member
+                    .end()
+                    .expect_source("enum members have source positions"),
+            );
         }
     }
 
@@ -260,7 +269,11 @@ impl InlayHintState<'_> {
         {
             return;
         }
-        self.add_type_hints(hint_parts, name.end());
+        self.add_type_hints(
+            hint_parts,
+            name.end()
+                .expect_source("declaration names have source positions"),
+        );
     }
 
     // inlay_hints.go:264
@@ -290,8 +303,14 @@ impl InlayHintState<'_> {
             return;
         };
         let pos = match node.question_token() {
-            Some(question_token) => question_token.end(),
-            None => node.name().unwrap().end(),
+            Some(question_token) => question_token
+                .end()
+                .expect_source("parameter tokens have source positions"),
+            None => node
+                .name()
+                .unwrap()
+                .end()
+                .expect_source("parameter names have source positions"),
         };
         self.add_type_hints(type_hints, pos);
     }
@@ -331,8 +350,12 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:344
-    fn add_type_hints(&mut self, mut hint: lsproto::StringOrInlayHintLabelParts, position: i32) {
-        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position as TextPos, Feature::InlayHints);
+    fn add_type_hints(&mut self, mut hint: lsproto::StringOrInlayHintLabelParts, position: u32) {
+        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(
+            &self.file,
+            position.into(),
+            Feature::InlayHints,
+        );
         if fidelity.is_none() {
             return;
         }
@@ -353,8 +376,12 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:362
-    fn add_enum_member_value_hints(&mut self, text: &str, position: i32) {
-        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position as TextPos, Feature::InlayHints);
+    fn add_enum_member_value_hints(&mut self, text: &str, position: u32) {
+        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(
+            &self.file,
+            position.into(),
+            Feature::InlayHints,
+        );
         if fidelity.is_none() {
             return;
         }
@@ -367,8 +394,18 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:376
-    fn add_parameter_hints(&mut self, text: &str, parameter: P<Node>, position: i32, is_first_variadic_argument: bool) {
-        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(&self.file, position as TextPos, Feature::InlayHints);
+    fn add_parameter_hints(
+        &mut self,
+        text: &str,
+        parameter: P<Node>,
+        position: u32,
+        is_first_variadic_argument: bool,
+    ) {
+        let (lsp_position, fidelity) = self.converters.to_lsp_position_for_feature(
+            &self.file,
+            position.into(),
+            Feature::InlayHints,
+        );
         if fidelity.is_none() {
             return;
         }
@@ -831,7 +868,9 @@ impl InlayHintState<'_> {
     fn get_node_display_part(&self, text: &str, node: P<Node>) -> lsproto::InlayHintLabelPart {
         let file = ast::get_source_file_of_node(node).unwrap();
         let pos = astnav::get_start_of_node(node, file, false /*includeJSDoc*/);
-        let end = node.end();
+        let end = node
+            .end()
+            .expect_source("inlay-hint targets have source positions");
         let mut part = part(text);
         // The location is an optional go-to target for the name. Only attach it when the name maps back to a
         // single concrete span in the original text; an approximate or synthesized mapping would point the
@@ -879,20 +918,24 @@ struct ParameterInfo {
 
 impl InlayHintState<'_> {
     // inlay_hints.go:836
-    fn get_parameter_identifier_info_at_position(&mut self, signature: P<Signature>, pos: i32) -> Option<ParameterInfo> {
+    fn get_parameter_identifier_info_at_position(
+        &mut self,
+        signature: P<Signature>,
+        pos: usize,
+    ) -> Option<ParameterInfo> {
         let parameters = signature.parameters();
-        let param_count = parameters.len() as i32 - if signature.has_rest_parameter() { 1 } else { 0 };
+        let param_count = parameters.len() - usize::from(signature.has_rest_parameter());
         if pos < param_count {
-            let param = parameters[pos as usize];
+            let param = parameters[pos];
             let param_id = get_parameter_declaration_identifier(param)?;
             return Some(ParameterInfo { parameter: param_id, name: param_id.text().to_string(), is_rest_parameter: false });
         }
 
         let mut rest_parameter: Option<P<Symbol>> = None;
         let mut rest_id: Option<P<Node>> = None;
-        if (param_count as usize) < parameters.len() {
-            rest_parameter = Some(parameters[param_count as usize]);
-            rest_id = get_parameter_declaration_identifier(parameters[param_count as usize]);
+        if param_count < parameters.len() {
+            rest_parameter = Some(parameters[param_count]);
+            rest_id = get_parameter_declaration_identifier(parameters[param_count]);
         }
         let rest_id = rest_id?;
         let rest_parameter = rest_parameter.unwrap();
@@ -906,8 +949,8 @@ impl InlayHintState<'_> {
                 associated_names.push(labeled_element);
             }
             let index = pos - param_count;
-            if (index as usize) < associated_names.len() {
-                if let Some(associated_name) = associated_names[index as usize] {
+            if index < associated_names.len() {
+                if let Some(associated_name) = associated_names[index] {
                     let name = associated_name.name().unwrap();
                     assert!(ast::is_identifier(name));
                     let is_rest_tuple_element = if ast::is_named_tuple_member(associated_name) {
@@ -965,7 +1008,16 @@ impl InlayHintState<'_> {
         let ranges = get_leading_comment_ranges_of_node(node, self.file).unwrap();
         let file_text = self.file.text();
         for r in ranges {
-            let comment_text = file_text[r.text_range.pos() as usize..r.text_range.end() as usize].trim_matches(|r: char| go_is_space(r) || r == '/' || r == '*');
+            let comment_text = file_text[r
+                .text_range
+                .pos()
+                .expect_source("comment ranges have source positions")
+                as usize
+                ..r.text_range
+                    .end()
+                    .expect_source("comment ranges have source positions")
+                    as usize]
+                .trim_matches(|r: char| go_is_space(r) || r == '/' || r == '*');
             if comment_text == name {
                 return true;
             }
@@ -975,11 +1027,18 @@ impl InlayHintState<'_> {
     }
 
     // inlay_hints.go:937
-    fn get_type_annotation_position(&self, decl: P<Node>) -> i32 {
-        if let Some(close_paren_token) = astnav::find_child_of_kind(decl, Kind::CloseParenToken, self.file) {
-            return close_paren_token.end();
+    fn get_type_annotation_position(&self, decl: P<Node>) -> u32 {
+        if let Some(close_paren_token) =
+            astnav::find_child_of_kind(decl, Kind::CloseParenToken, self.file)
+        {
+            return close_paren_token
+                .end()
+                .expect_source("parameter lists have source positions");
         }
-        decl.parameter_list().unwrap().end()
+        decl.parameter_list()
+            .unwrap()
+            .end()
+            .expect_source("parameter lists have source positions")
     }
 }
 

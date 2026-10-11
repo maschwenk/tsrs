@@ -36,19 +36,32 @@ impl LanguageService {
     // It is an implementation detail of sourceFileRangeToLSPLocation; LS features should not call it directly,
     // because it does not preserve a content-mapper projection or apply span-map feature filtering.
     // source_map.go:38
-    pub(crate) fn get_mapped_location(&self, file_name: &str, file_range: TextRange) -> (lsproto::Location, Fidelity) {
-        let Some(start_pos) = self.try_get_source_position(file_name, file_range.pos() as TextPos) else {
+    pub(crate) fn get_mapped_location(
+        &self,
+        file_name: &str,
+        file_range: TextRange,
+    ) -> (lsproto::Location, Fidelity) {
+        let Some(start_pos) = self.try_get_source_position(file_name, file_range.pos()) else {
             // Go passes the nil *script to the converters, which dereference it.
             let script = self.get_script(file_name).expect("nil script");
             let (lsp_range, fidelity) = self.create_lsp_range_from_range(file_range, &script);
             return (lsproto::Location { uri: lsconv::file_name_to_document_uri(file_name), range: lsp_range }, fidelity);
         };
-        let mut end_pos = self.try_get_source_position(file_name, file_range.end() as TextPos);
-        if end_pos.as_ref().is_none_or(|e| e.file_name != start_pos.file_name || e.pos < start_pos.pos) {
+        let mut end_pos = self.try_get_source_position(file_name, file_range.end());
+        if end_pos
+            .as_ref()
+            .is_none_or(|e| e.file_name != start_pos.file_name || e.pos < start_pos.pos)
+        {
             // When end doesn't map, maps to a different source file (e.g. in a .d.ts with a
             // multi-source source map from --outFile compilation), or maps to a position before
             // start (non-monotonic source map mappings), approximate the end position.
-            end_pos = Some(DocumentPosition { file_name: start_pos.file_name.clone(), pos: start_pos.pos + file_range.len() });
+            end_pos = Some(DocumentPosition {
+                file_name: start_pos.file_name.clone(),
+                pos: start_pos.pos
+                    + file_range
+                        .len()
+                        .expect("mapped source ranges have source positions"),
+            });
         }
         let end_pos = end_pos.unwrap();
         let new_range = TextRange::new(start_pos.pos, end_pos.pos);
@@ -116,9 +129,17 @@ impl LanguageService {
             return None;
         }
 
+        let position = position.source_offset()?;
         let position_mapper = self.get_document_position_mapper(file_name);
-        let document_pos = position_mapper.as_ref()?.get_source_position(&DocumentPosition { file_name: file_name.to_string(), pos: position })?;
-        if let Some(new_pos) = self.try_get_source_position_worker(&document_pos.file_name, document_pos.pos as TextPos) {
+        let document_pos = position_mapper
+            .as_ref()?
+            .get_source_position(&DocumentPosition {
+                file_name: file_name.to_string(),
+                pos: position,
+            })?;
+        if let Some(new_pos) =
+            self.try_get_source_position_worker(&document_pos.file_name, document_pos.pos.into())
+        {
             return Some(new_pos);
         }
         Some(document_pos)
@@ -151,10 +172,22 @@ impl LanguageService {
             return None;
         }
 
-        let declaration_file_name = outputpaths::get_output_declaration_file_name_worker(file_name, &program.options(), program);
+        let position = position.source_offset()?;
+        let declaration_file_name = outputpaths::get_output_declaration_file_name_worker(
+            file_name,
+            &program.options(),
+            program,
+        );
         let position_mapper = self.get_document_position_mapper(&declaration_file_name);
-        let document_pos = position_mapper.as_ref()?.get_generated_position(&DocumentPosition { file_name: file_name.to_string(), pos: position })?;
-        if let Some(new_pos) = self.try_get_generated_position_worker(&document_pos.file_name, document_pos.pos as TextPos) {
+        let document_pos = position_mapper
+            .as_ref()?
+            .get_generated_position(&DocumentPosition {
+                file_name: file_name.to_string(),
+                pos: position,
+            })?;
+        if let Some(new_pos) =
+            self.try_get_generated_position_worker(&document_pos.file_name, document_pos.pos.into())
+        {
             return Some(new_pos);
         }
         Some(document_pos)

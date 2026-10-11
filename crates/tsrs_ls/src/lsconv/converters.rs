@@ -410,11 +410,28 @@ fn virtual_position_to_original(script: &dyn Script, position: TextPos, feature:
     let Some(span_map) = script.span_map() else {
         return (AnyScript::Script(script), position, Fidelity::Exact);
     };
+    let Some(position) = position.source_offset() else {
+        return (
+            AnyScript::Original(OriginalTextScript {
+                file_name: script.original_file_name(),
+                text: script.original_text(),
+            }),
+            TextPos::source(0),
+            Fidelity::None,
+        );
+    };
     let (mapped, fidelity) = match feature {
         None => span_map.virtual_to_original_position(position),
         Some(feature) => span_map.virtual_to_original_position_for_feature(position, feature),
     };
-    (AnyScript::Original(OriginalTextScript { file_name: script.original_file_name(), text: script.original_text() }), mapped, fidelity)
+    (
+        AnyScript::Original(OriginalTextScript {
+            file_name: script.original_file_name(),
+            text: script.original_text(),
+        }),
+        TextPos::source(mapped),
+        fidelity,
+    )
 }
 
 // converters.go:290
@@ -536,50 +553,59 @@ fn url_path_escape(s: &str) -> String {
 
 impl Converters {
     // converters.go:366
-    pub(crate) fn line_and_character_to_position(&self, script: &dyn Script, line_and_character: lsproto::Position) -> TextPos {
+    pub(crate) fn line_and_character_to_position(
+        &self,
+        script: &dyn Script,
+        line_and_character: lsproto::Position,
+    ) -> u32 {
         // UTF-8/16 0-indexed line and character to UTF-8 offset
         debug::assert(script.span_map().is_none(), &[&"raw coordinate conversion requires a non-content-mapped script"]);
 
         let line_map = (self.get_line_map)(script.file_name()).expect("nil line map");
 
-        let line = line_and_character.line as TextPos;
-        let char = line_and_character.character as TextPos;
+        let line = line_and_character.line as usize;
+        let character = line_and_character.character;
 
-        let text_len = script.text().len() as TextPos;
+        let text_len =
+            u32::try_from(script.text().len()).expect("source text exceeds u32 positions");
 
         // Clamp line to valid range.
-        if line as usize >= line_map.line_starts.len() {
+        if line >= line_map.line_starts.len() {
             return text_len;
         }
 
-        let start = line_map.line_starts[line as usize];
+        let start = line_map.line_starts[line];
 
         // Determine the end of this line (start of next line, or end of text).
-        let line_end = if (line as usize) + 1 < line_map.line_starts.len() { line_map.line_starts[line as usize + 1] } else { text_len };
+        let line_end = if line + 1 < line_map.line_starts.len() {
+            line_map.line_starts[line + 1]
+        } else {
+            text_len
+        };
 
         if line_map.ascii_only || self.position_encoding == lsproto::PositionEncodingKind::UTF8 {
-            return start.max(start.wrapping_add(char).min(line_end));
+            return start.saturating_add(character).min(line_end);
         }
 
         // Scan from line start counting UTF-16 code units to find the byte position.
         // Uses DecodeRuneInString (not range + RuneLen) so that invalid UTF-8 bytes
         // advance by their actual size (1) rather than RuneLen(RuneError) == 3.
         // This matches the approach in scanner.ComputePositionOfLineAndUTF16Character.
-        let mut utf16_char: TextPos = 0;
+        let mut utf16_character = 0_u32;
         let mut pos = start as usize;
         let end = line_end as usize;
         let text = script.text().as_bytes();
         while pos < end {
             let (r, size) = stringutil::decode_rune(&text[pos..]);
-            let u16_len = utf16_rune_len(r);
-            if utf16_char + u16_len > char {
+            let utf16_len = utf16_rune_len(r).expect("decoded rune has a UTF-16 length");
+            if utf16_character + utf16_len > character {
                 break;
             }
-            utf16_char += u16_len;
+            utf16_character += utf16_len;
             pos += size;
         }
 
-        pos as TextPos
+        u32::try_from(pos).expect("source position exceeds u32")
     }
 
     // converters.go:417
@@ -587,7 +613,9 @@ impl Converters {
         // UTF-8 offset to UTF-8/16 0-indexed line and character
         debug::assert(script.span_map().is_none(), &[&"raw coordinate conversion requires a non-content-mapped script"]);
 
-        let position = 0.max(position.min(script.text().len() as TextPos));
+        let text_len =
+            u32::try_from(script.text().len()).expect("source text exceeds u32 positions");
+        let position = position.source_offset().unwrap_or(0).min(text_len);
 
         let line_map = (self.get_line_map)(script.file_name()).expect("nil line map");
 
@@ -602,7 +630,7 @@ impl Converters {
 
         let start = line_map.line_starts[line];
 
-        let mut character: TextPos = 0;
+        let mut character = 0_u32;
         if line_map.ascii_only || self.position_encoding == lsproto::PositionEncodingKind::UTF8 {
             character = position - start;
         } else {
@@ -610,23 +638,26 @@ impl Converters {
             let mut s = &script.text().as_bytes()[start as usize..position as usize];
             while !s.is_empty() {
                 let (r, size) = stringutil::decode_rune(s);
-                character += utf16_rune_len(r);
+                character += utf16_rune_len(r).expect("decoded rune has a UTF-16 length");
                 s = &s[size..];
             }
         }
 
-        lsproto::Position { line: line as u32, character: character as u32 }
+        lsproto::Position {
+            line: line as u32,
+            character,
+        }
     }
 }
 
 // Go unicode/utf16 `RuneLen`.
-fn utf16_rune_len(r: stringutil::Rune) -> TextPos {
+fn utf16_rune_len(r: stringutil::Rune) -> Option<u32> {
     if (0..0xd800).contains(&r) || (0xe000..0x10000).contains(&r) {
-        1
+        Some(1)
     } else if (0x10000..=0x10ffff).contains(&r) {
-        2
+        Some(2)
     } else {
-        -1
+        None
     }
 }
 
@@ -705,7 +736,11 @@ fn diagnostic_to_lsp(_ctx: &Context, converters: &Converters, diagnostic: P<Diag
         related_information.reserve(diagnostic.related_information().len());
         for &related in diagnostic.related_information() {
             let related_file = related.file().expect("related information without a file");
-            let (script, loc) = diagnostic_script_and_range(related_file, related.loc(), related.source());
+            let (script, loc) = diagnostic_script_and_range(
+                related_file,
+                related.loc().unwrap_or_else(|| new_text_range(0, 0)),
+                related.source(),
+            );
             let (mut related_range, fidelity) = converters.to_lsp_range(&script, loc);
             if fidelity.is_none() {
                 // Related diagnostic information cannot omit its location. Use an explicit file-level
@@ -733,7 +768,11 @@ fn diagnostic_to_lsp(_ctx: &Context, converters: &Converters, diagnostic: P<Diag
     // For diagnostics without a file (e.g., program diagnostics), use a zero range
     let mut lsp_range = lsproto::Range::default();
     if let Some(file) = diagnostic.file() {
-        let (script, loc) = diagnostic_script_and_range(file, diagnostic.loc(), diagnostic.source());
+        let (script, loc) = diagnostic_script_and_range(
+            file,
+            diagnostic.loc().unwrap_or_else(|| new_text_range(0, 0)),
+            diagnostic.source(),
+        );
         let fidelity;
         (lsp_range, fidelity) = converters.to_lsp_range(&script, loc);
         if fidelity.is_none() {

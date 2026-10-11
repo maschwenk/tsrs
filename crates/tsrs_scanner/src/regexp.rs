@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::cmp::Ordering;
 use std::fmt::Display;
 
 use rustc_hash::FxHashSet;
@@ -15,7 +16,7 @@ use crate::unicodeproperties::{
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub(crate) struct RegularExpressionFlags: i32 {
+    pub(crate) struct RegularExpressionFlags: u32 {
         const None = 0;
         const HasIndices = 1 << 0; // d
         const Global = 1 << 1; // g
@@ -58,7 +59,12 @@ fn reg_exp_flag_to_first_available_language_version(flag: RegularExpressionFlags
 }
 
 impl Scanner {
-    pub(crate) fn check_regular_expression_flag_availability(&mut self, flag: RegularExpressionFlags, pos: i32, size: i32) {
+    pub(crate) fn check_regular_expression_flag_availability(
+        &mut self,
+        flag: RegularExpressionFlags,
+        pos: u32,
+        size: u32,
+    ) {
         if let Some(available_from) = reg_exp_flag_to_first_available_language_version(flag) {
             if self.language_version() < available_from {
                 let name = available_from.string().to_lowercase();
@@ -75,14 +81,14 @@ enum ClassSetExpressionType {
 }
 
 struct GroupNameReference {
-    pos: i32,
-    end: i32,
+    pos: u32,
+    end: u32,
     name: &'static str,
 }
 
 struct DecimalEscapeValue {
-    pos: i32,
-    end: i32,
+    pos: u32,
+    end: u32,
     value: i64,
 }
 
@@ -90,7 +96,7 @@ struct DecimalEscapeValue {
 /// scanner for the duration of the parse (see `Scanner::re_scan_slash_token`).
 pub(crate) struct RegExpParser {
     scanner: Scanner,
-    end: i32,
+    end: u32,
     any_unicode_mode: bool,
     unicode_sets_mode: bool,
     annex_b: bool,
@@ -101,7 +107,7 @@ pub(crate) struct RegExpParser {
     // See scanClassSetExpression.
     may_contain_strings: bool,
     // The number of all (named and unnamed) capturing groups defined in the regex.
-    number_of_capturing_groups: i32,
+    number_of_capturing_groups: u32,
     // All named capturing groups defined in the regex.
     group_specifiers: FxHashSet<&'static str>,
     // Go map insertion order, for deterministic spelling suggestions.
@@ -117,10 +123,10 @@ pub(crate) struct RegExpParser {
     // scanSourceCharacter call when Corsa has to split a non-BMP rune into
     // UTF-16 surrogate code units in non-unicode mode. Strada did not need
     // this bookkeeping because its source text was already indexed as UTF-16.
-    pending_low_surrogate: i32,
+    pending_low_surrogate: Option<u32>,
 }
 
-fn compare_decimal_strings(a: &str, b: &str) -> i32 {
+fn compare_decimal_strings(a: &str, b: &str) -> Ordering {
     let mut a = a.trim_start_matches('0');
     let mut b = b.trim_start_matches('0');
     if a.is_empty() {
@@ -131,15 +137,11 @@ fn compare_decimal_strings(a: &str, b: &str) -> i32 {
     }
     if a.len() != b.len() {
         if a.len() < b.len() {
-            return -1;
+            return Ordering::Less;
         }
-        return 1;
+        return Ordering::Greater;
     }
-    match a.cmp(b) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    }
+    a.cmp(b)
 }
 
 fn add_unique(set: &mut Vec<&'static str>, name: &'static str) {
@@ -151,7 +153,7 @@ fn add_unique(set: &mut Vec<&'static str>, name: &'static str) {
 impl RegExpParser {
     pub(crate) fn new(
         scanner: Scanner,
-        end: i32,
+        end: u32,
         any_unicode_mode: bool,
         unicode_sets_mode: bool,
         annex_b: bool,
@@ -172,7 +174,7 @@ impl RegExpParser {
             group_name_references: Vec::new(),
             decimal_escapes: Vec::new(),
             named_capturing_groups: Vec::new(),
-            pending_low_surrogate: 0,
+            pending_low_surrogate: None,
         }
     }
 
@@ -181,26 +183,31 @@ impl RegExpParser {
     }
 
     #[inline]
-    fn pos(&self) -> i32 {
+    fn pos(&self) -> u32 {
         self.scanner.state.pos
     }
 
     #[inline]
-    fn inc_pos(&mut self, n: i32) {
+    fn inc_pos(&mut self, n: u32) {
         self.scanner.state.pos += n;
     }
 
     #[inline]
-    fn char(&self) -> i32 {
+    fn dec_pos(&mut self, n: u32) {
+        self.scanner.state.pos -= n;
+    }
+
+    #[inline]
+    fn char(&self) -> Option<u8> {
         self.scanner.char()
     }
 
     #[inline]
-    fn char_at(&self, pos: i32) -> i32 {
+    fn char_at(&self, pos: u32) -> Option<u8> {
         self.scanner.char_at(pos - self.pos())
     }
 
-    fn error(&mut self, msg: &'static Message, pos: i32, length: i32, args: &[&dyn Display]) {
+    fn error(&mut self, msg: &'static Message, pos: u32, length: u32, args: &[&dyn Display]) {
         self.scanner.error_at(msg, pos, length, args);
     }
 
@@ -210,7 +217,7 @@ impl RegExpParser {
     }
 
     #[inline]
-    fn text_byte(&self, i: i32) -> u8 {
+    fn text_byte(&self, i: u32) -> u8 {
         self.scanner.text.as_bytes()[i as usize]
     }
 
@@ -231,7 +238,7 @@ impl RegExpParser {
             for name in alternative_names {
                 add_unique(&mut disjunction_names, name);
             }
-            if self.char() != '|' as i32 {
+            if self.char() != Some(b'|') {
                 break;
             }
             self.inc_pos(1);
@@ -286,7 +293,7 @@ impl RegExpParser {
         let mut is_previous_term_quantifiable = false;
         while self.pos() < self.end {
             let start = self.pos();
-            let ch = self.char();
+            let ch = self.char().expect("position is before regexp end");
             match ch {
                 0x5E | 0x24 /* ^ $ */ => {
                     self.inc_pos(1);
@@ -295,7 +302,7 @@ impl RegExpParser {
                 0x5C /* \ */ => {
                     self.inc_pos(1);
                     match self.char() {
-                        0x62 | 0x42 /* b B */ => {
+                        Some(0x62 | 0x42) /* b B */ => {
                             self.inc_pos(1);
                             is_previous_term_quantifiable = false;
                         }
@@ -307,25 +314,25 @@ impl RegExpParser {
                 }
                 0x28 /* ( */ => {
                     self.inc_pos(1);
-                    if self.char() == '?' as i32 {
+                    if self.char() == Some(b'?') {
                         self.inc_pos(1);
                         match self.char() {
-                            0x3D | 0x21 /* = ! */ => {
+                            Some(0x3D | 0x21) /* = ! */ => {
                                 self.inc_pos(1);
                                 // In Annex B, `(?=Disjunction)` and `(?!Disjunction)` are quantifiable
                                 is_previous_term_quantifiable = !self.any_unicode_mode_or_non_annex_b;
                             }
-                            0x3C /* < */ => {
+                            Some(0x3C) /* < */ => {
                                 let group_name_start = self.pos();
                                 self.inc_pos(1);
                                 match self.char() {
-                                    0x3D | 0x21 /* = ! */ => {
+                                    Some(0x3D | 0x21) /* = ! */ => {
                                         self.inc_pos(1);
                                         is_previous_term_quantifiable = false;
                                     }
                                     _ => {
                                         self.scan_group_name(false /*isReference*/);
-                                        self.scan_expected_char('>' as i32);
+                                        self.scan_expected_char(b'>');
                                         if self.scanner.language_version() < ScriptTarget::ES2018 {
                                             self.error(
                                                 &diagnostics::Named_capturing_groups_are_only_available_when_targeting_ES2018_or_later,
@@ -342,7 +349,7 @@ impl RegExpParser {
                             _ => {
                                 let flags_start = self.pos();
                                 let set_flags = self.scan_pattern_modifiers(RegularExpressionFlags::None);
-                                if self.char() == '-' as i32 {
+                                if self.char() == Some(b'-') {
                                     self.inc_pos(1);
                                     self.scan_pattern_modifiers(set_flags);
                                     if self.pos() == flags_start + 1 {
@@ -364,7 +371,7 @@ impl RegExpParser {
                                         &[&name],
                                     );
                                 }
-                                self.scan_expected_char(':' as i32);
+                                self.scan_expected_char(b':');
                                 is_previous_term_quantifiable = true;
                             }
                         }
@@ -373,10 +380,10 @@ impl RegExpParser {
                         is_previous_term_quantifiable = true;
                     }
                     self.scan_disjunction(true /*isInGroup*/);
-                    self.scan_expected_char(')' as i32);
+                    self.scan_expected_char(b')');
                 }
                 0x7B | 0x2A | 0x2B | 0x3F /* { * + ? */ => {
-                    if ch == '{' as i32 {
+                    if ch == b'{' {
                         self.inc_pos(1);
                         let digits_start = self.pos();
                         self.scan_digits();
@@ -385,12 +392,12 @@ impl RegExpParser {
                             is_previous_term_quantifiable = true;
                             continue;
                         }
-                        if self.char() == ',' as i32 {
+                        if self.char() == Some(b',') {
                             self.inc_pos(1);
                             self.scan_digits();
                             let max_str = self.scanner.state.token_value;
                             if min_str.is_empty() {
-                                if !max_str.is_empty() || self.char() == '}' as i32 {
+                                if !max_str.is_empty() || self.char() == Some(b'}') {
                                     self.error(&diagnostics::Incomplete_quantifier_Digit_expected, digits_start, 0, &[]);
                                 } else {
                                     let s = rune_string(ch);
@@ -399,7 +406,9 @@ impl RegExpParser {
                                     continue;
                                 }
                             } else if !max_str.is_empty() {
-                                if compare_decimal_strings(min_str, max_str) > 0 && (self.any_unicode_mode_or_non_annex_b || self.char() == '}' as i32) {
+                                if compare_decimal_strings(min_str, max_str).is_gt()
+                                    && (self.any_unicode_mode_or_non_annex_b || self.char() == Some(b'}'))
+                                {
                                     self.error(&diagnostics::Numbers_out_of_order_in_quantifier, digits_start, self.pos() - digits_start, &[]);
                                 }
                             }
@@ -411,10 +420,10 @@ impl RegExpParser {
                             is_previous_term_quantifiable = true;
                             continue;
                         }
-                        if self.char() != '}' as i32 {
+                        if self.char() != Some(b'}') {
                             if self.any_unicode_mode_or_non_annex_b {
                                 self.error(&diagnostics::X_0_expected, self.pos(), 0, &[&"}"]);
-                                self.inc_pos(-1);
+                                self.dec_pos(1);
                             } else {
                                 is_previous_term_quantifiable = true;
                                 continue;
@@ -422,7 +431,7 @@ impl RegExpParser {
                         }
                     }
                     self.inc_pos(1);
-                    if self.char() == '?' as i32 {
+                    if self.char() == Some(b'?') {
                         // Non-greedy
                         self.inc_pos(1);
                     }
@@ -441,16 +450,16 @@ impl RegExpParser {
                         self.scan_class_set_expression();
                     } else {
                         self.scan_class_ranges();
-                        self.pending_low_surrogate = 0;
+                        self.pending_low_surrogate = None;
                     }
-                    self.scan_expected_char(']' as i32);
+                    self.scan_expected_char(b']');
                     is_previous_term_quantifiable = true;
                 }
                 0x29 | 0x5D | 0x7D /* ) ] } */ => {
-                    if ch == ')' as i32 && is_in_group {
+                    if ch == b')' && is_in_group {
                         return;
                     }
-                    if self.any_unicode_mode_or_non_annex_b || ch == ')' as i32 {
+                    if self.any_unicode_mode_or_non_annex_b || ch == b')' {
                         let s = rune_string(ch);
                         self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
                     }
@@ -472,7 +481,7 @@ impl RegExpParser {
         let mut curr_flags = curr_flags;
         while self.pos() < self.end {
             let (ch, size) = decode_rune(&self.text().as_bytes()[self.pos() as usize..]);
-            let size = size as i32;
+            let size = size as u32;
             if ch == RUNE_ERROR || !is_identifier_part(ch) {
                 break;
             }
@@ -504,12 +513,12 @@ impl RegExpParser {
     fn scan_atom_escape(&mut self) {
         assert!(self.pos() > 0 && self.text_byte(self.pos() - 1) == b'\\');
         let ch = self.char();
-        if ch == 'k' as i32 {
+        if ch == Some(b'k') {
             self.inc_pos(1);
-            if self.char() == '<' as i32 {
+            if self.char() == Some(b'<') {
                 self.inc_pos(1);
                 self.scan_group_name(true /*isReference*/);
-                self.scan_expected_char('>' as i32);
+                self.scan_expected_char(b'>');
             } else if self.any_unicode_mode_or_non_annex_b || self.named_capture_groups {
                 self.error(
                     &diagnostics::X_k_must_be_followed_by_a_capturing_group_name_enclosed_in_angle_brackets,
@@ -520,7 +529,7 @@ impl RegExpParser {
             }
             return;
         }
-        if ch == 'q' as i32 && self.unicode_sets_mode {
+        if ch == Some(b'q') && self.unicode_sets_mode {
             self.inc_pos(1);
             self.error(&diagnostics::X_q_is_only_available_inside_character_class, self.pos() - 2, 2, &[]);
             return;
@@ -536,7 +545,7 @@ impl RegExpParser {
     fn scan_decimal_escape(&mut self) -> bool {
         assert!(self.pos() > 0 && self.text_byte(self.pos() - 1) == b'\\');
         let ch = self.char();
-        if ch >= '1' as i32 && ch <= '9' as i32 {
+        if ch.is_some_and(|ch| ch.is_ascii_digit() && ch != b'0') {
             let start = self.pos();
             self.scan_digits();
             let val = self.scanner.state.token_value.parse::<i64>().unwrap_or(i64::MAX);
@@ -558,33 +567,33 @@ impl RegExpParser {
     //	| [~AnyUnicodeMode] (any other non-identifier characters)
     fn scan_character_escape(&mut self, atom_escape: bool) -> Cow<'static, str> {
         assert!(self.pos() > 0 && self.text_byte(self.pos() - 1) == b'\\');
-        let mut ch = self.char();
+        let ch = self.char();
         match ch {
-            -1 => {
+            None => {
                 self.error(&diagnostics::Undetermined_character_escape, self.pos() - 1, 1, &[]);
                 Cow::Borrowed("\\")
             }
-            0x63 /* c */ => {
+            Some(0x63) /* c */ => {
                 self.inc_pos(1);
-                ch = self.char();
-                if stringutil::is_ascii_letter(ch) {
+                let ch = self.char();
+                if let Some(ch) = ch.filter(|&ch| stringutil::is_ascii_letter(ch)) {
                     self.inc_pos(1);
                     return Cow::Owned(rune_string(ch & 0x1f));
                 }
                 if self.any_unicode_mode_or_non_annex_b {
                     self.error(&diagnostics::X_c_must_be_followed_by_an_ASCII_letter, self.pos() - 2, 2, &[]);
                 } else if atom_escape {
-                    self.inc_pos(-1);
+                    self.dec_pos(1);
                     return Cow::Borrowed("\\");
                 }
-                Cow::Owned(rune_string(ch))
+                Cow::Owned(ch.map(rune_string).unwrap_or_else(|| rune_string(RUNE_ERROR)))
             }
-            0x5E | 0x24 | 0x2F | 0x5C | 0x2E | 0x2A | 0x2B | 0x3F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x7C => {
+            Some(ch @ (0x5E | 0x24 | 0x2F | 0x5C | 0x2E | 0x2A | 0x2B | 0x3F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x7C)) => {
                 self.inc_pos(1);
                 Cow::Owned(rune_string(ch))
             }
             _ => {
-                self.inc_pos(-1); // back up to include the backslash for scanEscapeSequence
+                self.dec_pos(1); // back up to include the backslash for scanEscapeSequence
                 let mut flags = EscapeSequenceScanningFlags::RegularExpression;
                 if self.annex_b {
                     flags |= EscapeSequenceScanningFlags::AnnexB;
@@ -652,15 +661,15 @@ impl RegExpParser {
         false
     }
 
-    fn is_class_content_exit(&self, ch: i32) -> bool {
-        ch == ']' as i32 || self.pos() >= self.end
+    fn is_class_content_exit(&self, ch: Option<u8>) -> bool {
+        ch == Some(b']') || self.pos() >= self.end
     }
 
     // ClassRanges ::= '^'? (ClassAtom ('-' ClassAtom)?)*
     fn scan_class_ranges(&mut self) {
         assert!(self.pos() > 0 && self.text_byte(self.pos() - 1) == b'[');
-        self.pending_low_surrogate = 0;
-        if self.char() == '^' as i32 {
+        self.pending_low_surrogate = None;
+        if self.char() == Some(b'^') {
             self.inc_pos(1);
         }
         while self.pos() < self.end {
@@ -670,7 +679,7 @@ impl RegExpParser {
             }
             let min_start = self.pos();
             let min_character = self.scan_class_atom();
-            if self.char() == '-' as i32 {
+            if self.char() == Some(b'-') {
                 self.inc_pos(1);
                 ch = self.char();
                 if self.is_class_content_exit(ch) {
@@ -725,7 +734,7 @@ impl RegExpParser {
     fn scan_class_set_expression(&mut self) {
         assert!(self.pos() > 0 && self.text_byte(self.pos() - 1) == b'[');
         let mut is_character_complement = false;
-        if self.char() == '^' as i32 {
+        if self.char() == Some(b'^') {
             self.inc_pos(1);
             is_character_complement = true;
         }
@@ -750,8 +759,8 @@ impl RegExpParser {
             }
         }
         match self.char() {
-            0x2D /* - */ => {
-                if self.pos() + 1 < self.end && self.char_at(self.pos() + 1) == '-' as i32 {
+            Some(0x2D) /* - */ => {
+                if self.pos() + 1 < self.end && self.char_at(self.pos() + 1) == Some(b'-') {
                     if is_character_complement && self.may_contain_strings {
                         self.error(
                             &diagnostics::Anything_that_would_possibly_match_more_than_a_single_character_is_invalid_inside_a_negated_character_class,
@@ -766,8 +775,8 @@ impl RegExpParser {
                     return;
                 }
             }
-            0x26 /* & */ => {
-                if self.pos() + 1 < self.end && self.char_at(self.pos() + 1) == '&' as i32 {
+            Some(0x26) /* & */ => {
+                if self.pos() + 1 < self.end && self.char_at(self.pos() + 1) == Some(b'&') {
                     self.scan_class_set_sub_expression(ClassSetExpressionType::ClassIntersection);
                     if is_character_complement && self.may_contain_strings {
                         self.error(
@@ -796,14 +805,14 @@ impl RegExpParser {
         }
         while self.pos() < self.end {
             ch = self.char();
-            if ch == '-' as i32 {
+            if ch == Some(b'-') {
                 self.inc_pos(1);
                 ch = self.char();
                 if self.is_class_content_exit(ch) {
                     self.may_contain_strings = !is_character_complement && expression_may_contain_strings;
                     return;
                 }
-                if ch == '-' as i32 {
+                if ch == Some(b'-') {
                     self.inc_pos(1);
                     self.error(
                         &diagnostics::Operators_must_not_be_mixed_within_a_character_class_Wrap_it_in_a_nested_class_instead,
@@ -849,8 +858,8 @@ impl RegExpParser {
                         }
                     }
                 }
-            } else if ch == '&' as i32 {
-                if self.pos() + 1 < self.end && self.char_at(self.pos() + 1) == '&' as i32 {
+            } else if ch == Some(b'&') {
+                if self.pos() + 1 < self.end && self.char_at(self.pos() + 1) == Some(b'&') {
                     start = self.pos();
                     self.inc_pos(2);
                     self.error(
@@ -859,9 +868,14 @@ impl RegExpParser {
                         2,
                         &[],
                     );
-                    if self.char() == '&' as i32 {
-                        let s = rune_string(ch);
-                        self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
+                    if self.char() == Some(b'&') {
+                        let s = rune_string(ch.expect("class content is not at end"));
+                        self.error(
+                            &diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash,
+                            self.pos(),
+                            1,
+                            &[&s],
+                        );
                         self.inc_pos(1);
                     }
                     operand = Cow::Borrowed(&self.text()[start as usize..self.pos() as usize]);
@@ -912,9 +926,9 @@ impl RegExpParser {
                 break;
             }
             match ch {
-                0x2D /* - */ => {
+                Some(0x2D) /* - */ => {
                     self.inc_pos(1);
-                    if self.char() == '-' as i32 {
+                    if self.char() == Some(b'-') {
                         self.inc_pos(1);
                         if expression_type != ClassSetExpressionType::ClassSubtraction {
                             self.error(
@@ -933,9 +947,9 @@ impl RegExpParser {
                         );
                     }
                 }
-                0x26 /* & */ => {
+                Some(0x26) /* & */ => {
                     self.inc_pos(1);
-                    if self.char() == '&' as i32 {
+                    if self.char() == Some(b'&') {
                         self.inc_pos(1);
                         if expression_type != ClassSetExpressionType::ClassIntersection {
                             self.error(
@@ -945,13 +959,13 @@ impl RegExpParser {
                                 &[],
                             );
                         }
-                        if self.char() == '&' as i32 {
-                            let s = rune_string(ch);
+                        if self.char() == Some(b'&') {
+                            let s = rune_string(ch.expect("class content is not at end"));
                             self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
                             self.inc_pos(1);
                         }
                     } else {
-                        let s = rune_string(ch);
+                        let s = rune_string(ch.expect("class content is not at end"));
                         self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos() - 1, 1, &[&s]);
                     }
                 }
@@ -986,29 +1000,29 @@ impl RegExpParser {
     fn scan_class_set_operand(&mut self) -> Cow<'static, str> {
         self.may_contain_strings = false;
         match self.char() {
-            0x5B /* [ */ => {
+            Some(0x5B) /* [ */ => {
                 self.inc_pos(1);
                 self.scan_class_set_expression();
-                self.scan_expected_char(']' as i32);
+                self.scan_expected_char(b']');
                 Cow::Borrowed("")
             }
-            0x5C /* \ */ => {
+            Some(0x5C) /* \ */ => {
                 self.inc_pos(1);
                 if self.scan_character_class_escape() {
                     return Cow::Borrowed("");
-                } else if self.char() == 'q' as i32 {
+                } else if self.char() == Some(b'q') {
                     self.inc_pos(1);
-                    if self.char() == '{' as i32 {
+                    if self.char() == Some(b'{') {
                         self.inc_pos(1);
                         self.scan_class_string_disjunction_contents();
-                        self.scan_expected_char('}' as i32);
+                        self.scan_expected_char(b'}');
                         return Cow::Borrowed("");
                     } else {
                         self.error(&diagnostics::X_q_must_be_followed_by_string_alternatives_enclosed_in_braces, self.pos() - 2, 2, &[]);
                         return Cow::Borrowed("q");
                     }
                 }
-                self.inc_pos(-1);
+                self.dec_pos(1);
                 self.scan_class_set_character()
             }
             _ => self.scan_class_set_character(),
@@ -1020,7 +1034,7 @@ impl RegExpParser {
         assert!(self.pos() > 0 && self.text_byte(self.pos() - 1) == b'{');
         let mut character_count = 0;
         while self.pos() < self.end {
-            let ch = self.char();
+            let ch = self.char().expect("position is before regexp end");
             match ch {
                 0x7D /* } */ => {
                     if character_count != 1 {
@@ -1049,15 +1063,15 @@ impl RegExpParser {
     //	| '\' (CharacterEscape | ClassSetReservedPunctuator | 'b')
     fn scan_class_set_character(&mut self) -> Cow<'static, str> {
         let ch = self.char();
-        if ch == '\\' as i32 {
+        if ch == Some(b'\\') {
             self.inc_pos(1);
             let inner_ch = self.char();
             match inner_ch {
-                0x62 /* b */ => {
+                Some(0x62) /* b */ => {
                     self.inc_pos(1);
                     return Cow::Borrowed("\u{8}");
                 }
-                0x26 | 0x2D | 0x21 | 0x23 | 0x25 | 0x2C | 0x3A | 0x3B | 0x3C | 0x3D | 0x3E | 0x40 | 0x60 | 0x7E => {
+                Some(inner_ch @ (0x26 | 0x2D | 0x21 | 0x23 | 0x25 | 0x2C | 0x3A | 0x3B | 0x3C | 0x3D | 0x3E | 0x40 | 0x60 | 0x7E)) => {
                     self.inc_pos(1);
                     return Cow::Owned(rune_string(inner_ch));
                 }
@@ -1065,7 +1079,10 @@ impl RegExpParser {
             }
         } else if self.pos() + 1 < self.end && ch == self.char_at(self.pos() + 1) {
             match ch {
-                0x26 | 0x21 | 0x23 | 0x25 | 0x2A | 0x2B | 0x2C | 0x2E | 0x3A | 0x3B | 0x3C | 0x3D | 0x3E | 0x3F | 0x40 | 0x60 | 0x7E => {
+                Some(
+                    0x26 | 0x21 | 0x23 | 0x25 | 0x2A | 0x2B | 0x2C | 0x2E | 0x3A | 0x3B | 0x3C
+                    | 0x3D | 0x3E | 0x3F | 0x40 | 0x60 | 0x7E,
+                ) => {
                     self.error(
                         &diagnostics::A_character_class_must_not_contain_a_reserved_double_punctuator_Did_you_mean_to_escape_it_with_backslash,
                         self.pos(),
@@ -1079,7 +1096,7 @@ impl RegExpParser {
             }
         }
         match ch {
-            0x2F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x2D | 0x7C => {
+            Some(ch @ (0x2F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x2D | 0x7C)) => {
                 let s = rune_string(ch);
                 self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
                 self.inc_pos(1);
@@ -1102,9 +1119,9 @@ impl RegExpParser {
     //	| CharacterClassEscape
     //	| CharacterEscape
     fn scan_class_atom(&mut self) -> Cow<'static, str> {
-        if self.char() == '\\' as i32 {
+        if self.char() == Some(b'\\') {
             self.inc_pos(1);
-            let ch = self.char();
+            let ch = self.char().expect("position is before regexp end");
             match ch {
                 0x62 /* b */ => {
                     self.inc_pos(1);
@@ -1112,7 +1129,7 @@ impl RegExpParser {
                 }
                 0x2D /* - */ => {
                     self.inc_pos(1);
-                    Cow::Owned(rune_string(ch))
+                    Cow::Owned(rune_string(b'-'))
                 }
                 _ => {
                     if self.scan_character_class_escape() {
@@ -1136,20 +1153,20 @@ impl RegExpParser {
         let start = self.pos() - 1;
         let ch = self.char();
         match ch {
-            0x64 | 0x44 | 0x73 | 0x53 | 0x77 | 0x57 /* d D s S w W */ => {
+            Some(0x64 | 0x44 | 0x73 | 0x53 | 0x77 | 0x57) /* d D s S w W */ => {
                 self.inc_pos(1);
                 true
             }
-            0x50 | 0x70 /* P p */ => {
-                if ch == 'P' as i32 {
+            Some(ch @ (0x50 | 0x70)) /* P p */ => {
+                if ch == b'P' {
                     is_character_complement = true;
                 }
                 self.inc_pos(1);
-                if self.char() == '{' as i32 {
+                if self.char() == Some(b'{') {
                     self.inc_pos(1);
                     let property_name_or_value_start = self.pos();
                     let property_name_or_value = self.scan_word_characters();
-                    if self.char() == '=' as i32 {
+                    if self.char() == Some(b'=') {
                         let property_name = non_binary_unicode_properties(property_name_or_value).unwrap_or("");
                         if self.pos() == property_name_or_value_start {
                             self.error(&diagnostics::Expected_a_Unicode_property_name, self.pos(), 0, &[]);
@@ -1233,7 +1250,7 @@ impl RegExpParser {
                             );
                         }
                     }
-                    self.scan_expected_char('}' as i32);
+                    self.scan_expected_char(b'}');
                     if !self.any_unicode_mode {
                         self.error(
                             &diagnostics::Unicode_property_value_expressions_are_only_available_when_the_Unicode_u_flag_or_the_Unicode_Sets_v_flag_is_set,
@@ -1251,7 +1268,7 @@ impl RegExpParser {
                         &[&s],
                     );
                 } else {
-                    self.inc_pos(-1);
+                    self.dec_pos(1);
                     return false;
                 }
                 true
@@ -1283,8 +1300,8 @@ impl RegExpParser {
     fn scan_word_characters(&mut self) -> &'static str {
         let start = self.pos();
         while self.pos() < self.end {
-            let ch = self.char();
-            if !is_word_character(ch) {
+            let ch = self.char().expect("position is before regexp end");
+            if !is_word_character(i32::from(ch)) {
                 break;
             }
             self.inc_pos(1);
@@ -1298,13 +1315,11 @@ impl RegExpParser {
         }
         let text = self.text();
         if !self.any_unicode_mode {
-            if self.pending_low_surrogate != 0 {
+            if let Some(low) = self.pending_low_surrogate.take() {
                 // Second of two surrogate code units for the same non-BMP character.
                 // Now advance past the full UTF-8 sequence (the high surrogate call did not advance).
                 let (_, size) = decode_rune(&text.as_bytes()[self.pos() as usize..]);
-                self.inc_pos(size as i32);
-                let low = self.pending_low_surrogate;
-                self.pending_low_surrogate = 0;
+                self.inc_pos(size as u32);
                 return Cow::Owned(stringutil::encode_js_string_rune(low));
             }
             let (ch, size) = decode_rune(&text.as_bytes()[self.pos() as usize..]);
@@ -1322,11 +1337,11 @@ impl RegExpParser {
                 // Non-BMP character: emit the high surrogate first WITHOUT advancing.
                 // The low surrogate will be emitted on the next call, which also advances.
                 let (high, low) = stringutil::code_point_to_surrogate_pair(ch);
-                self.pending_low_surrogate = low;
+                self.pending_low_surrogate = Some(low as u32);
                 return Cow::Owned(stringutil::encode_js_string_rune(high));
             }
-            self.inc_pos(size as i32);
-            return Cow::Borrowed(&text[(self.pos() - size as i32) as usize..self.pos() as usize]);
+            self.inc_pos(size as u32);
+            return Cow::Borrowed(&text[(self.pos() - size as u32) as usize..self.pos() as usize]);
         }
         let (ch, size) = decode_rune(&text.as_bytes()[self.pos() as usize..]);
         if size == 0 {
@@ -1334,15 +1349,15 @@ impl RegExpParser {
         }
         if ch == RUNE_ERROR {
             // Invalid UTF-8; consume the byte to avoid infinite loops.
-            self.inc_pos(size as i32);
+            self.inc_pos(size as u32);
             return Cow::Borrowed("");
         }
-        self.inc_pos(size as i32);
-        Cow::Borrowed(&text[(self.pos() - size as i32) as usize..self.pos() as usize])
+        self.inc_pos(size as u32);
+        Cow::Borrowed(&text[(self.pos() - size as u32) as usize..self.pos() as usize])
     }
 
-    fn scan_expected_char(&mut self, ch: i32) {
-        if self.char() == ch {
+    fn scan_expected_char(&mut self, ch: u8) {
+        if self.char() == Some(ch) {
             self.inc_pos(1);
         } else {
             let s = rune_string(ch);
@@ -1352,7 +1367,7 @@ impl RegExpParser {
 
     fn scan_digits(&mut self) {
         let start = self.pos();
-        while self.pos() < self.end && stringutil::is_digit(self.char()) {
+        while self.pos() < self.end && self.char().is_some_and(stringutil::is_digit) {
             self.inc_pos(1);
         }
         self.scanner.state.token_value = &self.text()[start as usize..self.pos() as usize];

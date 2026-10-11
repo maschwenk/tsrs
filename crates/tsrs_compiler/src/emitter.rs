@@ -80,7 +80,7 @@ pub(crate) fn source_file_may_be_emitted(source_file: P<SourceFile>, host: &Prog
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
                 current_directory: host.get_current_directory().to_string(),
             },
-        ) == 0
+        ) == std::cmp::Ordering::Equal
         {
             return false;
         }
@@ -190,7 +190,9 @@ mod emit {
     }
 
     // `Send`: the pending print may run on the thread that writes the files (program_emit.rs).
-    type MapSourcePosition = Box<dyn Fn(printer::SourceMapSource, i32) -> Option<(printer::SourceMapSource, i32)> + Send>;
+    type MapSourcePosition = Box<
+        dyn Fn(printer::SourceMapSource, u32) -> Option<(printer::SourceMapSource, u32)> + Send,
+    >;
 
     impl emitter<'_> {
         // emitter.go:46 `emit` is `transform` followed by `print`. This part runs the transformers (and so needs the
@@ -226,9 +228,23 @@ mod emit {
 
         fn print_pending(&mut self, mut pending: pendingPrint, writer: &mut (dyn EmitTextWriter + 'static)) {
             // create a printer to print the nodes
-            let map_source_position = pending.map_source_position.take().map(|handler| -> Box<dyn Fn(printer::SourceMapSource, i32) -> Option<(printer::SourceMapSource, i32)>> { handler });
-            let print_handlers = PrintHandlers { map_source_position, ..Default::default() };
-            let printer = printer::new_printer(pending.printer_options, print_handlers, Some(pending.emit_context));
+            let map_source_position = pending.map_source_position.take().map(
+                |handler| -> Box<
+                    dyn Fn(
+                        printer::SourceMapSource,
+                        u32,
+                    ) -> Option<(printer::SourceMapSource, u32)>,
+                > { handler },
+            );
+            let print_handlers = PrintHandlers {
+                map_source_position,
+                ..Default::default()
+            };
+            let printer = printer::new_printer(
+                pending.printer_options,
+                print_handlers,
+                Some(pending.emit_context),
+            );
             let options = self.host.options();
             let map_options = pending.map_options.as_ref().unwrap_or(&options);
             self.print_source_file(&pending.file_path, &pending.source_map_file_path, pending.source_file, printer, map_options, pending.should_emit_source_maps, writer);
@@ -363,16 +379,18 @@ mod emit {
             if let Some(span_map) = content_mapped_source.span_map().filter(|_| emit_declaration_map) {
                 let original_source: &'static declarationMapSource = new_declaration_map_source(content_mapped_source);
                 let content_mapped_file_name = content_mapped_source.get().file_name();
-                map_source_position = Some(Box::new(move |source: printer::SourceMapSource, pos: i32| {
-                    if source.file_name() != content_mapped_file_name {
-                        return Some((source, pos));
-                    }
-                    let (mapped, ok) = span_map.virtual_to_original_position_exact(pos);
-                    if !ok {
-                        return None;
-                    }
-                    Some((original_source, mapped))
-                }));
+                map_source_position = Some(Box::new(
+                    move |source: printer::SourceMapSource, pos: u32| {
+                        if source.file_name() != content_mapped_file_name {
+                            return Some((source, pos));
+                        }
+                        let (mapped, ok) = span_map.virtual_to_original_position_exact(pos);
+                        if !ok {
+                            return None;
+                        }
+                        Some((original_source, mapped))
+                    },
+                ));
             }
 
             let declaration_map_options = CompilerOptions {
@@ -413,7 +431,7 @@ mod emit {
             printer_.write(source_file.as_node(), Some(source_file), writer, source_map_generator.as_mut());
             self.times.add(EmitPhase::Print, print_start);
 
-            let mut source_map_url_pos: i32 = -1;
+            let mut source_map_url_pos = None;
             if let Some(source_map_generator) = &mut source_map_generator {
                 let source_map_start = std::time::Instant::now();
                 if map_options.source_map.is_true() || map_options.inline_source_map.is_true() {
@@ -430,7 +448,7 @@ mod emit {
                     if !writer.is_at_start_of_line() {
                         writer.raw_write(if options.new_line == NewLineKind::CRLF { "\r\n" } else { "\n" });
                     }
-                    source_map_url_pos = writer.get_text_pos();
+                    source_map_url_pos = Some(writer.get_text_pos());
                     writer.write_comment("//# sourceMappingURL=");
                     writer.write_comment(&source_mapping_url);
                 }
@@ -573,7 +591,7 @@ mod emit {
     pub(crate) struct declarationMapSource {
         pub(crate) file_name: String,
         pub(crate) text: &'static str,
-        pub(crate) line_map: Vec<tsrs_core::TextPos>,
+        pub(crate) line_map: Vec<u32>,
     }
 
     // emitter.go:301
@@ -592,7 +610,7 @@ mod emit {
             self.text
         }
         // emitter.go:312
-        fn ecma_line_map(&self) -> &[tsrs_core::TextPos] {
+        fn ecma_line_map(&self) -> &[u32] {
             &self.line_map
         }
     }

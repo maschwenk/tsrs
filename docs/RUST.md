@@ -124,6 +124,10 @@ leave it off too), the cast lints (the port has about 1,000 `as usize`), `print_
    `const _: () = assert!(std::mem::size_of::<T>() == N);` next to it. A change that edits `N` states the old and new
    size and the census result (`notes/mem-census.md`). (oxc generates these for every AST type; ty pins `Type` at 16
    bytes; rust-analyzer pins `TypeRef`.)
+4. **Integers express their domain.** Source byte positions and offsets are `u32`, collection indexes/counts are
+   `usize`, and bit sets use unsigned storage. An absent value is `Option`, directional or otherwise genuinely
+   negative state is a named enum, and comparators return `Ordering`. Signed protocol/FFI integers stay signed only
+   at the boundary and are validated before entering these internal domains.
 4. **Return what is stored; allocate once.** Where Go returns a stored slice or string, Rust returns `&'static [T]`
    or `&'static str`, not a fresh `Vec` or `String` (`notes/cpu-checker.md` changes 6 to 8 found such copies by profiling:
    304.9 G -> 296.3 G instructions; `notes/fix-perf-memory.md` found per-call copies of names and lists). When a hot path changes, check it with

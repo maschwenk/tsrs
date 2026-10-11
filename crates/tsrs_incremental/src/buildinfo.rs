@@ -15,8 +15,8 @@ use tsrs_tsoptions::{self as tsoptions, CompilerOptionsValue, ParsedCommandLine}
 
 use crate::snapshot::{get_pending_emit_kind_with_options, EmitSignature, FileEmitKind, FileInfo};
 
-pub type BuildInfoFileId = i32;
-pub type BuildInfoFileIdListId = i32;
+pub type BuildInfoFileId = u32;
+pub type BuildInfoFileIdListId = u32;
 
 // buildInfoRoot is
 // - for incremental program buildinfo
@@ -48,11 +48,18 @@ impl BuildInfoRoot {
 
     // buildInfo.go:48
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfoRoot, String> {
-        if let Some(start_and_end) = as_int_tuple::<2>(data) {
-            return Ok(BuildInfoRoot { start: start_and_end[0], end: start_and_end[1], ..Default::default() });
+        if let Some(start_and_end) = as_uint_tuple::<2>(data) {
+            return Ok(BuildInfoRoot {
+                start: start_and_end[0],
+                end: start_and_end[1],
+                ..Default::default()
+            });
         }
-        if let Some(start) = as_int(data) {
-            return Ok(BuildInfoRoot { start, ..Default::default() });
+        if let Some(start) = as_uint(data) {
+            return Ok(BuildInfoRoot {
+                start,
+                ..Default::default()
+            });
         }
         if let Value::String(name) = data {
             return Ok(BuildInfoRoot { non_incremental: name.clone(), ..Default::default() });
@@ -217,8 +224,12 @@ impl BuildInfoReferenceMapEntry {
 
     // buildInfo.go:190
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfoReferenceMapEntry, String> {
-        let v = as_int_tuple::<2>(data).ok_or_else(|| format!("invalid BuildInfoReferenceMapEntry: {}", show(data)))?;
-        Ok(BuildInfoReferenceMapEntry { file_id: v[0], file_id_list_id: v[1] })
+        let v = as_uint_tuple::<2>(data)
+            .ok_or_else(|| format!("invalid BuildInfoReferenceMapEntry: {}", show(data)))?;
+        Ok(BuildInfoReferenceMapEntry {
+            file_id: v[0],
+            file_id_list_id: v[1],
+        })
     }
 }
 
@@ -227,8 +238,8 @@ pub struct BuildInfoDiagnostic {
     // BuildInfoFileId if it is for a File thats other than its stored for
     pub file: BuildInfoFileId,
     pub no_file: bool,
-    pub pos: i32,
-    pub end: i32,
+    pub pos: u32,
+    pub end: u32,
     pub code: i32,
     pub category: Category,
     pub source: String,
@@ -269,10 +280,10 @@ impl Default for BuildInfoDiagnostic {
 impl BuildInfoDiagnostic {
     pub fn marshal_json(&self) -> Value {
         let mut o = Obj::default();
-        o.int("file", self.file);
+        o.uint("file", self.file);
         o.bool("noFile", self.no_file);
-        o.int("pos", self.pos);
-        o.int("end", self.end);
+        o.uint("pos", self.pos);
+        o.uint("end", self.end);
         o.int("code", self.code);
         o.int("category", category_to_i32(self.category));
         o.str("source", &self.source);
@@ -299,10 +310,10 @@ impl BuildInfoDiagnostic {
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfoDiagnostic, String> {
         let o = as_object(data)?;
         Ok(BuildInfoDiagnostic {
-            file: get_int(o, "file")?,
+            file: get_uint(o, "file")?,
             no_file: get_bool(o, "noFile")?,
-            pos: get_int(o, "pos")?,
-            end: get_int(o, "end")?,
+            pos: get_uint(o, "pos")?,
+            end: get_uint(o, "end")?,
             code: get_int(o, "code")?,
             category: category_from_i32(get_int(o, "category")?),
             source: get_string(o, "source")?,
@@ -377,7 +388,8 @@ impl BuildInfoDiagnosticsOfFile {
         if file_id_and_diagnostics.len() != 2 {
             return Err(format!("invalid BuildInfoDiagnosticsOfFile: expected 2 elements, got {}", file_id_and_diagnostics.len()));
         }
-        let file_id = as_int(&file_id_and_diagnostics[0]).ok_or_else(|| "invalid fileId in BuildInfoDiagnosticsOfFile".to_string())?;
+        let file_id = as_uint(&file_id_and_diagnostics[0])
+            .ok_or_else(|| "invalid fileId in BuildInfoDiagnosticsOfFile".to_string())?;
         let diagnostics = match &file_id_and_diagnostics[1] {
             Value::Null => Vec::new(),
             Value::Array(items) => items.iter().map(BuildInfoDiagnostic::unmarshal_json).collect::<Result<_, _>>()?,
@@ -407,8 +419,11 @@ impl BuildInfoSemanticDiagnostic {
 
     // buildInfo.go:278
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfoSemanticDiagnostic, String> {
-        if let Some(file_id) = as_int(data) {
-            return Ok(BuildInfoSemanticDiagnostic { file_id, diagnostics: None });
+        if let Some(file_id) = as_uint(data) {
+            return Ok(BuildInfoSemanticDiagnostic {
+                file_id,
+                diagnostics: None,
+            });
         }
         let diagnostics = BuildInfoDiagnosticsOfFile::unmarshal_json(data).map_err(|_| format!("invalid BuildInfoSemanticDiagnostic: {}", show(data)))?;
         Ok(BuildInfoSemanticDiagnostic { file_id: 0, diagnostics: Some(diagnostics) })
@@ -433,19 +448,32 @@ impl BuildInfoFilePendingEmit {
         if self.emit_kind == FileEmitKind::Dts {
             return Value::Array(vec![num(self.file_id)]);
         }
-        Value::Array(vec![num(self.file_id), num(self.emit_kind.bits() as i32)])
+        Value::Array(vec![num(self.file_id), num(self.emit_kind.bits())])
     }
 
     // buildInfo.go:316
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfoFilePendingEmit, String> {
-        if let Some(file_id) = as_int(data) {
-            return Ok(BuildInfoFilePendingEmit { file_id, emit_kind: FileEmitKind::None });
+        if let Some(file_id) = as_uint(data) {
+            return Ok(BuildInfoFilePendingEmit {
+                file_id,
+                emit_kind: FileEmitKind::None,
+            });
         }
-        let int_tuple = as_int_list(data).filter(|t| !t.is_empty()).ok_or_else(|| format!("invalid BuildInfoFilePendingEmit: {}", show(data)))?;
+        let int_tuple = as_uint_list(data)
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| format!("invalid BuildInfoFilePendingEmit: {}", show(data)))?;
         match int_tuple.len() {
-            1 => Ok(BuildInfoFilePendingEmit { file_id: int_tuple[0], emit_kind: FileEmitKind::Dts }),
-            2 => Ok(BuildInfoFilePendingEmit { file_id: int_tuple[0], emit_kind: FileEmitKind::from_bits_retain(int_tuple[1] as u32) }),
-            n => Err(format!("invalid BuildInfoFilePendingEmit: expected 1 or 2 integers, got {n}")),
+            1 => Ok(BuildInfoFilePendingEmit {
+                file_id: int_tuple[0],
+                emit_kind: FileEmitKind::Dts,
+            }),
+            2 => Ok(BuildInfoFilePendingEmit {
+                file_id: int_tuple[0],
+                emit_kind: FileEmitKind::from_bits_retain(int_tuple[1]),
+            }),
+            n => Err(format!(
+                "invalid BuildInfoFilePendingEmit: expected 1 or 2 integers, got {n}"
+            )),
         }
     }
 }
@@ -498,8 +526,11 @@ impl BuildInfoEmitSignature {
 
     // buildInfo.go:395
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfoEmitSignature, String> {
-        if let Some(file_id) = as_int(data) {
-            return Ok(BuildInfoEmitSignature { file_id, ..Default::default() });
+        if let Some(file_id) = as_uint(data) {
+            return Ok(BuildInfoEmitSignature {
+                file_id,
+                ..Default::default()
+            });
         }
         let Value::Array(file_id_and_signature) = data else {
             return Err(format!("invalid BuildInfoEmitSignature: {}", show(data)));
@@ -507,10 +538,8 @@ impl BuildInfoEmitSignature {
         if file_id_and_signature.len() != 2 {
             return Err(format!("invalid BuildInfoEmitSignature: expected 2 elements, got {}", file_id_and_signature.len()));
         }
-        let Value::Number(id) = &file_id_and_signature[0] else {
-            return Err("invalid fileId in BuildInfoEmitSignature: expected float64".to_string());
-        };
-        let file_id = *id as BuildInfoFileId;
+        let file_id = as_uint(&file_id_and_signature[0])
+            .ok_or_else(|| "invalid fileId in BuildInfoEmitSignature".to_string())?;
         let mut signature = String::new();
         let mut differs_only_in_dts_map = false;
         let mut differs_in_options = false;
@@ -551,8 +580,12 @@ impl BuildInfoResolvedRoot {
 
     // buildInfo.go:457
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfoResolvedRoot, String> {
-        let v = as_int_tuple::<2>(data).ok_or_else(|| format!("invalid BuildInfoResolvedRoot: {}", show(data)))?;
-        Ok(BuildInfoResolvedRoot { resolved: v[0], root: v[1] })
+        let v = as_uint_tuple::<2>(data)
+            .ok_or_else(|| format!("invalid BuildInfoResolvedRoot: {}", show(data)))?;
+        Ok(BuildInfoResolvedRoot {
+            resolved: v[0],
+            root: v[1],
+        })
     }
 }
 
@@ -636,17 +669,37 @@ impl BuildInfo {
             file_names: get_string_array(o, "fileNames")?,
             file_infos: get_array(o, "fileInfos", BuildInfoFileInfo::unmarshal_json)?,
             file_infos_non_nil: matches!(o.get("fileInfos"), Some(Value::Array(_))),
-            file_ids_list: get_array(o, "fileIdsList", |v| as_int_list(v).ok_or_else(|| "invalid fileIdsList".to_string()))?,
+            file_ids_list: get_array(o, "fileIdsList", |v| {
+                as_uint_list(v).ok_or_else(|| "invalid fileIdsList".to_string())
+            })?,
             options: match o.get("options") {
                 None | Some(Value::Null) => None,
                 Some(Value::Object(m)) => Some(m.clone()),
                 Some(_) => return Err("invalid options".to_string()),
             },
-            referenced_map: get_array(o, "referencedMap", BuildInfoReferenceMapEntry::unmarshal_json)?,
-            semantic_diagnostics_per_file: get_array(o, "semanticDiagnosticsPerFile", BuildInfoSemanticDiagnostic::unmarshal_json)?,
-            emit_diagnostics_per_file: get_array(o, "emitDiagnosticsPerFile", BuildInfoDiagnosticsOfFile::unmarshal_json)?,
-            change_file_set: get_array(o, "changeFileSet", |v| as_int(v).ok_or_else(|| "invalid changeFileSet".to_string()))?,
-            affected_files_pending_emit: get_array(o, "affectedFilesPendingEmit", BuildInfoFilePendingEmit::unmarshal_json)?,
+            referenced_map: get_array(
+                o,
+                "referencedMap",
+                BuildInfoReferenceMapEntry::unmarshal_json,
+            )?,
+            semantic_diagnostics_per_file: get_array(
+                o,
+                "semanticDiagnosticsPerFile",
+                BuildInfoSemanticDiagnostic::unmarshal_json,
+            )?,
+            emit_diagnostics_per_file: get_array(
+                o,
+                "emitDiagnosticsPerFile",
+                BuildInfoDiagnosticsOfFile::unmarshal_json,
+            )?,
+            change_file_set: get_array(o, "changeFileSet", |v| {
+                as_uint(v).ok_or_else(|| "invalid changeFileSet".to_string())
+            })?,
+            affected_files_pending_emit: get_array(
+                o,
+                "affectedFilesPendingEmit",
+                BuildInfoFilePendingEmit::unmarshal_json,
+            )?,
             latest_changed_dts_file: get_string(o, "latestChangedDtsFile")?,
             emit_signatures: get_array(o, "emitSignatures", BuildInfoEmitSignature::unmarshal_json)?,
             resolved_root: get_array(o, "resolvedRoot", BuildInfoResolvedRoot::unmarshal_json)?,
@@ -723,7 +776,7 @@ impl BuildInfo {
 
     // buildInfo.go:527
     pub fn file_name(&self, file_id: BuildInfoFileId) -> &str {
-        if file_id < 1 || file_id as usize > self.file_names.len() {
+        if file_id == 0 || file_id as usize > self.file_names.len() {
             return "";
         }
         &self.file_names[file_id as usize - 1]
@@ -731,7 +784,7 @@ impl BuildInfo {
 
     // buildInfo.go:534
     pub fn file_info(&self, file_id: BuildInfoFileId) -> Option<&BuildInfoFileInfo> {
-        if file_id < 1 || file_id as usize > self.file_infos.len() {
+        if file_id == 0 || file_id as usize > self.file_infos.len() {
             return None;
         }
         Some(&self.file_infos[file_id as usize - 1])
@@ -961,6 +1014,11 @@ impl Obj {
             self.set(key, num(v));
         }
     }
+    fn uint(&mut self, key: &str, v: u32) {
+        if v != 0 {
+            self.set(key, Value::Number(v as f64));
+        }
+    }
     fn list<T>(&mut self, key: &str, items: &[T], f: impl Fn(&T) -> Value) {
         if !items.is_empty() {
             self.set(key, Value::Array(items.iter().map(f).collect()));
@@ -979,8 +1037,8 @@ impl Obj {
     }
 }
 
-fn num(v: i32) -> Value {
-    Value::Number(v as f64)
+fn num(v: impl Into<f64>) -> Value {
+    Value::Number(v.into())
 }
 
 fn strings(v: &[String]) -> Value {
@@ -998,20 +1056,29 @@ fn as_int(v: &Value) -> Option<i32> {
     }
 }
 
-fn as_int_list(v: &Value) -> Option<Vec<i32>> {
+fn as_uint(v: &Value) -> Option<u32> {
     match v {
-        Value::Array(items) => items.iter().map(as_int).collect(),
+        Value::Number(n) if n.fract() == 0.0 && *n >= 0.0 && *n <= u32::MAX as f64 => {
+            Some(*n as u32)
+        }
+        _ => None,
+    }
+}
+
+fn as_uint_list(v: &Value) -> Option<Vec<u32>> {
+    match v {
+        Value::Array(items) => items.iter().map(as_uint).collect(),
         Value::Null => Some(Vec::new()),
         _ => None,
     }
 }
 
-fn as_int_tuple<const N: usize>(v: &Value) -> Option<[i32; N]> {
+fn as_uint_tuple<const N: usize>(v: &Value) -> Option<[u32; N]> {
     // Go unmarshals a JSON array into a [N]int by position: missing elements stay zero, extra ones are dropped.
     let Value::Array(items) = v else { return None };
     let mut out = [0; N];
     for (i, item) in items.iter().enumerate() {
-        let n = as_int(item)?;
+        let n = as_uint(item)?;
         if i < N {
             out[i] = n;
         }
@@ -1049,7 +1116,21 @@ fn get_int(o: &OrderedMap<String, Value>, key: &str) -> Result<i32, String> {
     }
 }
 
-fn get_array<T>(o: &OrderedMap<String, Value>, key: &str, f: impl Fn(&Value) -> Result<T, String>) -> Result<Vec<T>, String> {
+fn get_uint(o: &OrderedMap<String, Value>, key: &str) -> Result<u32, String> {
+    match o.get(key) {
+        None | Some(Value::Null) => Ok(0),
+        Some(Value::Number(n)) if n.fract() == 0.0 && *n >= 0.0 && *n <= u32::MAX as f64 => {
+            Ok(*n as u32)
+        }
+        Some(v) => Err(format!("invalid {key}: {}", show(v))),
+    }
+}
+
+fn get_array<T>(
+    o: &OrderedMap<String, Value>,
+    key: &str,
+    f: impl Fn(&Value) -> Result<T, String>,
+) -> Result<Vec<T>, String> {
     match o.get(key) {
         None | Some(Value::Null) => Ok(Vec::new()),
         Some(Value::Array(items)) => items.iter().map(f).collect(),

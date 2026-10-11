@@ -95,7 +95,17 @@ impl Checker {
         let error_type = if st.has_some_applicable_signature { st.non_applicable_type } else { Some(expr_type) };
         if let Some(error_type) = error_type {
             let source_file = ast::get_source_file_of_node(node).unwrap();
-            let loc = TextRange::new(tsrs_scanner::skip_trivia(source_file.text(), type_arguments.pos()), type_arguments.end());
+            let loc = TextRange::new(
+                tsrs_scanner::skip_trivia(
+                    source_file.text(),
+                    type_arguments
+                        .pos()
+                        .expect_source("parsed node lists have source positions"),
+                ),
+                type_arguments
+                    .end()
+                    .expect_source("parsed node lists have source positions"),
+            );
             let type_string = self.type_to_string_exported(error_type);
             self.add_diagnostic(ast::new_diagnostic(Some(source_file), loc, &diagnostics::Type_0_has_no_signatures_for_which_the_type_argument_list_is_applicable, &[&type_string]));
         }
@@ -1978,8 +1988,23 @@ impl Checker {
             }
             if self.should_check_erasable_syntax(node) {
                 let source_file = ast::get_source_file_of_node(node).unwrap();
-                let loc = TextRange::new(tsrs_scanner::skip_trivia(source_file.text(), node.pos()), node.expression().unwrap().pos());
-                self.add_diagnostic(ast::new_diagnostic(Some(source_file), loc, &diagnostics::This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled, &[]));
+                let loc = TextRange::new(
+                    tsrs_scanner::skip_trivia(
+                        source_file.text(),
+                        node.pos()
+                            .expect_source("parsed nodes have source positions"),
+                    ),
+                    node.expression()
+                        .unwrap()
+                        .pos()
+                        .expect_source("parsed nodes have source positions"),
+                );
+                self.add_diagnostic(ast::new_diagnostic(
+                    Some(source_file),
+                    loc,
+                    &diagnostics::This_syntax_is_not_allowed_when_erasableSyntaxOnly_is_enabled,
+                    &[],
+                ));
             }
         }
         let type_node = node.type_node().unwrap();
@@ -2289,12 +2314,16 @@ impl Checker {
             Kind::CommaToken => {
                 if !self.compiler_options.allow_unreachable_code.is_true() && self.is_side_effect_free(left) && !self.is_indirect_call(left.parent().unwrap()) {
                     let sf = ast::get_source_file_of_node(left).unwrap();
-                    let start = tsrs_scanner::skip_trivia(sf.text(), left.pos());
+                    let start = tsrs_scanner::skip_trivia(
+                        sf.text(),
+                        left.pos()
+                            .expect_source("parsed nodes have source positions"),
+                    );
                     let is_in_diag2657 = sf.diagnostics().iter().any(|d| {
                         if d.code() != diagnostics::JSX_expressions_must_have_one_parent_element.code() {
                             return false;
                         }
-                        d.loc().contains(start)
+                        d.loc().is_some_and(|loc| loc.contains(start.into()))
                     });
                     if !is_in_diag2657 {
                         self.error(Some(left), &diagnostics::Left_side_of_comma_operator_is_unused_and_has_no_side_effects, &[]);
@@ -2351,17 +2380,31 @@ impl Checker {
             return self.check_non_null_type(source_type, node);
         }
         for i in 0..properties.nodes().len() {
-            self.check_object_literal_destructuring_property_assignment(node, source_type, i as i32, Some(properties), right_is_this);
+            self.check_object_literal_destructuring_property_assignment(
+                node,
+                source_type,
+                i,
+                Some(properties),
+                right_is_this,
+            );
         }
         source_type
     }
 
     // Note: If property cannot be a SpreadAssignment, then allProperties does not need to be provided
     // checker.go:12800
-    pub(crate) fn check_object_literal_destructuring_property_assignment(&mut self, node: P<Node>, object_literal_type: P<Type>, property_index: i32, all_properties: Option<P<NodeList>>, right_is_this: bool) -> Option<P<Type>> {
+    pub(crate) fn check_object_literal_destructuring_property_assignment(
+        &mut self,
+        node: P<Node>,
+        object_literal_type: P<Type>,
+        property_index: usize,
+        all_properties: Option<P<NodeList>>,
+        right_is_this: bool,
+    ) -> Option<P<Type>> {
         let properties = node.properties();
-        let property = properties[property_index as usize];
-        if ast::is_property_assignment(property) || ast::is_shorthand_property_assignment(property) {
+        let property = properties[property_index];
+        if ast::is_property_assignment(property) || ast::is_shorthand_property_assignment(property)
+        {
             let name = property.name();
 
             if let Some(name) = name {
@@ -2429,15 +2472,28 @@ impl Checker {
                 }
                 t = in_bounds_type.unwrap();
             }
-            self.check_array_literal_destructuring_element_assignment(node, source_type, i as i32, t, check_mode);
+            self.check_array_literal_destructuring_element_assignment(
+                node,
+                source_type,
+                i,
+                t,
+                check_mode,
+            );
         }
         source_type
     }
 
     // checker.go:12871
-    pub(crate) fn check_array_literal_destructuring_element_assignment(&mut self, node: P<Node>, source_type: P<Type>, element_index: i32, element_type: P<Type>, check_mode: CheckMode) -> Option<P<Type>> {
+    pub(crate) fn check_array_literal_destructuring_element_assignment(
+        &mut self,
+        node: P<Node>,
+        source_type: P<Type>,
+        element_index: usize,
+        element_type: P<Type>,
+        check_mode: CheckMode,
+    ) -> Option<P<Type>> {
         let elements = node.element_list();
-        let element = elements.nodes()[element_index as usize];
+        let element = elements.nodes()[element_index];
         if !ast::is_omitted_expression(element) {
             if !ast::is_spread_element(element) {
                 let index_type = self.get_number_literal_type(Number(element_index as f64));
@@ -2456,8 +2512,12 @@ impl Checker {
                 }
                 return Some(self.check_destructuring_assignment(element, element_type, check_mode, false));
             }
-            if (element_index as usize) < elements.nodes().len() - 1 {
-                self.error(Some(element), &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
+            if element_index < elements.nodes().len() - 1 {
+                self.error(
+                    Some(element),
+                    &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern,
+                    &[],
+                );
             } else {
                 let rest_expression = element.expression().unwrap();
                 if ast::is_binary_expression(rest_expression) && rest_expression.as_binary_expression().operator_token.kind() == Kind::EqualsToken {
@@ -2465,7 +2525,17 @@ impl Checker {
                 } else {
                     self.check_grammar_for_disallowed_trailing_comma(Some(elements), &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma);
                     let t = if every_type(self, source_type, |_, t| is_tuple_type(t)) {
-                        self.map_type(source_type, |c, t| Some(c.slice_tuple_type(t, element_index, 0))).unwrap()
+                        self.map_type(source_type, |c, t| {
+                            Some(
+                                c.slice_tuple_type(
+                                    t,
+                                    usize::try_from(element_index)
+                                        .expect("array element index is nonnegative"),
+                                    0,
+                                ),
+                            )
+                        })
+                        .unwrap()
                     } else {
                         self.create_array_type(element_type)
                     };

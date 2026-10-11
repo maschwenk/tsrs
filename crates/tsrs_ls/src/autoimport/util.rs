@@ -212,7 +212,7 @@ pub(crate) fn add_project_reference_output_mappings(program: &'static Program, r
 pub(crate) struct checkerPool {
     program: &'static dyn checker::Program,
     checker: Option<Box<Checker>>,
-    created: i32,
+    created: usize,
 }
 
 pub(crate) fn create_checker_pool(program: &'static dyn checker::Program) -> checkerPool {
@@ -228,7 +228,7 @@ impl checkerPool {
         self.checker.as_mut().unwrap()
     }
 
-    pub(crate) fn created_count(&self) -> i32 {
+    pub(crate) fn created_count(&self) -> usize {
         self.created
     }
 }

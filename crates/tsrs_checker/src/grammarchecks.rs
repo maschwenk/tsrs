@@ -14,7 +14,11 @@ impl Checker {
     pub(crate) fn grammar_error_on_first_token(&mut self, node: P<Node>, message: &'static Message, args: &[&dyn Display]) -> bool {
         let source_file = ast::get_source_file_of_node(node).unwrap();
         if !self.has_parse_diagnostics(source_file) {
-            let span = scanner::get_range_of_token_at_position(source_file, node.pos());
+            let span = scanner::get_range_of_token_at_position(
+                source_file,
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
             self.add_diagnostic(ast::new_diagnostic(Some(source_file), span, message, args));
             return true;
         }
@@ -22,10 +26,27 @@ impl Checker {
     }
 
     // grammarchecks.go:29
-    pub(crate) fn grammar_error_at_pos(&mut self, node_for_source_file: P<Node>, start: i32, length: i32, message: &'static Message, args: &[&dyn Display]) -> bool {
+    pub(crate) fn grammar_error_at_pos(
+        &mut self,
+        node_for_source_file: P<Node>,
+        start: u32,
+        length: u32,
+        message: &'static Message,
+        args: &[&dyn Display],
+    ) -> bool {
         let source_file = ast::get_source_file_of_node(node_for_source_file).unwrap();
         if !self.has_parse_diagnostics(source_file) {
-            self.add_diagnostic(ast::new_diagnostic(Some(source_file), TextRange::new(start, start + length), message, args));
+            self.add_diagnostic(ast::new_diagnostic(
+                Some(source_file),
+                TextRange::new(
+                    start,
+                    start
+                        .checked_add(length)
+                        .expect("diagnostic range overflow"),
+                ),
+                message,
+                args,
+            ));
             return true;
         }
         false
@@ -69,12 +90,19 @@ fn on_reg_exp_scanner_errors(c: &mut Checker, s: &mut Scanner, source_file: P<So
     for e in s.take_errors() {
         let (message, start, length) = (e.message, e.start, e.length);
         let args: Vec<&dyn Display> = e.args.iter().map(|a| a as &dyn Display).collect();
-        if message.category() == diagnostics::Category::Message && last_error.is_some_and(|le| start == le.pos() && length == le.len()) {
+        if message.category() == diagnostics::Category::Message
+            && last_error.is_some_and(|le| Some(start) == le.pos() && Some(length) == le.len())
+        {
             // For providing spelling suggestions.
             let err = ast::new_diagnostic(None, TextRange::new(start, start + length), message, &args);
             last_error.unwrap().add_related_info(err);
-        } else if last_error.is_none_or(|le| start != le.pos()) {
-            let d = ast::new_diagnostic(Some(source_file), TextRange::new(start, start + length), message, &args);
+        } else if last_error.is_none_or(|le| Some(start) != le.pos()) {
+            let d = ast::new_diagnostic(
+                Some(source_file),
+                TextRange::new(start, start + length),
+                message,
+                &args,
+            );
             *last_error = Some(c.add_diagnostic(d));
         }
     }
@@ -94,7 +122,10 @@ impl Checker {
             s.set_language_variant(source_file.language_variant());
             s.set_on_error(true);
             s.set_text(source_file.text());
-            s.reset_token_state(node.pos());
+            s.reset_token_state(
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
             s.scan();
             on_reg_exp_scanner_errors(self, &mut s, source_file, &mut last_error);
             let token_is_regular_expression_literal = s.re_scan_slash_token(true) == Kind::RegularExpressionLiteral;
@@ -696,7 +727,16 @@ impl Checker {
     pub(crate) fn check_grammar_for_disallowed_trailing_comma(&mut self, list: Option<P<NodeList>>, diag: &'static Message) -> bool {
         if let Some(list) = list {
             if list.has_trailing_comma() {
-                return self.grammar_error_at_pos(list.nodes()[0], list.end() - ",".len() as i32, ",".len() as i32, diag, &[]);
+                return self.grammar_error_at_pos(
+                    list.nodes()[0],
+                    list.end()
+                        .expect_source("parsed node lists have source positions")
+                        .checked_sub(",".len() as u32)
+                        .expect("trailing comma starts before the list"),
+                    ",".len() as u32,
+                    diag,
+                    &[],
+                );
             }
         }
         false
@@ -706,9 +746,24 @@ impl Checker {
     pub(crate) fn check_grammar_type_parameter_list(&mut self, type_parameters: Option<P<NodeList>>, file: P<SourceFile>) -> bool {
         if let Some(type_parameters) = type_parameters {
             if type_parameters.nodes().is_empty() {
-                let start = type_parameters.pos() - "<".len() as i32;
-                let end = scanner::skip_trivia(file.text(), type_parameters.end()) + ">".len() as i32;
-                return self.grammar_error_at_pos(file.as_node(), start, end - start, &diagnostics::Type_parameter_list_cannot_be_empty, &[]);
+                let start = type_parameters
+                    .pos()
+                    .expect_source("parsed node lists have source positions")
+                    .checked_sub("<".len() as u32)
+                    .expect("type parameter list starts after its opening token");
+                let end = scanner::skip_trivia(
+                    file.text(),
+                    type_parameters
+                        .end()
+                        .expect_source("parsed node lists have source positions"),
+                ) + ">".len() as u32;
+                return self.grammar_error_at_pos(
+                    file.as_node(),
+                    start,
+                    end - start,
+                    &diagnostics::Type_parameter_list_cannot_be_empty,
+                    &[],
+                );
             }
         }
         false
@@ -828,8 +883,19 @@ impl Checker {
         }
 
         let equals_greater_than_token = arrow_func.equals_greater_than_token.unwrap();
-        let arrow_full_text = &file.text()[equals_greater_than_token.pos() as usize..equals_greater_than_token.end() as usize];
-        arrow_full_text.chars().any(stringutil::is_line_break) && self.grammar_error_on_node(equals_greater_than_token, &diagnostics::Line_terminator_not_permitted_before_arrow, &[])
+        let arrow_full_text = &file.text()[equals_greater_than_token
+            .pos()
+            .expect_source("parsed tokens have source positions")
+            as usize
+            ..equals_greater_than_token
+                .end()
+                .expect_source("parsed tokens have source positions") as usize];
+        arrow_full_text.chars().any(stringutil::is_line_break)
+            && self.grammar_error_on_node(
+                equals_greater_than_token,
+                &diagnostics::Line_terminator_not_permitted_before_arrow,
+                &[],
+            )
     }
 
     // grammarchecks.go:796
@@ -888,9 +954,24 @@ impl Checker {
         if let Some(type_arguments) = type_arguments {
             if type_arguments.nodes().is_empty() {
                 let source_file = ast::get_source_file_of_node(node).unwrap();
-                let start = type_arguments.pos() - "<".len() as i32;
-                let end = scanner::skip_trivia(source_file.text(), type_arguments.end()) + ">".len() as i32;
-                return self.grammar_error_at_pos(source_file.as_node(), start, end - start, &diagnostics::Type_argument_list_cannot_be_empty, &[]);
+                let start = type_arguments
+                    .pos()
+                    .expect_source("parsed node lists have source positions")
+                    .checked_sub("<".len() as u32)
+                    .expect("type argument list starts after its opening token");
+                let end = scanner::skip_trivia(
+                    source_file.text(),
+                    type_arguments
+                        .end()
+                        .expect_source("parsed node lists have source positions"),
+                ) + ">".len() as u32;
+                return self.grammar_error_at_pos(
+                    source_file.as_node(),
+                    start,
+                    end - start,
+                    &diagnostics::Type_argument_list_cannot_be_empty,
+                    &[],
+                );
             }
         }
         false
@@ -920,7 +1001,15 @@ impl Checker {
         if types.nodes().is_empty() {
             let list_type = scanner::token_to_string(heritage_clause.token);
             // TODO(danielr): why not error on the token?
-            return self.grammar_error_at_pos(node, types.pos(), 0, &diagnostics::X_0_list_cannot_be_empty, &[&list_type]);
+            return self.grammar_error_at_pos(
+                node,
+                types
+                    .pos()
+                    .expect_source("parsed node lists have source positions"),
+                0,
+                &diagnostics::X_0_list_cannot_be_empty,
+                &[&list_type],
+            );
         }
 
         for &node in types.nodes() {
@@ -1361,7 +1450,17 @@ impl Checker {
         let parent_kind = accessor.parent().unwrap().kind();
         if !accessor.flags().intersects(NodeFlags::Ambient) && parent_kind != Kind::TypeLiteral && parent_kind != Kind::InterfaceDeclaration {
             if body.is_none() && !ast::has_syntactic_modifier(accessor, ModifierFlags::Abstract) {
-                return self.grammar_error_at_pos(accessor, accessor.end() - 1, ";".len() as i32, &diagnostics::X_0_expected, &[&"{"]);
+                return self.grammar_error_at_pos(
+                    accessor,
+                    accessor
+                        .end()
+                        .expect_source("parsed nodes have source positions")
+                        .checked_sub(1)
+                        .expect("accessor ends after its terminator"),
+                    ";".len() as u32,
+                    &diagnostics::X_0_expected,
+                    &[&"{"],
+                );
             }
         }
         if let Some(body) = body {
@@ -1518,7 +1617,16 @@ impl Checker {
                     return true;
                 }
                 if node.body().is_none() {
-                    return self.grammar_error_at_pos(node, node.end() - 1, ";".len() as i32, &diagnostics::X_0_expected, &[&"{"]);
+                    return self.grammar_error_at_pos(
+                        node,
+                        node.end()
+                            .expect_source("parsed nodes have source positions")
+                            .checked_sub(1)
+                            .expect("method ends after its terminator"),
+                        ";".len() as u32,
+                        &diagnostics::X_0_expected,
+                        &[&"{"],
+                    );
                 }
             }
             if self.check_grammar_for_generator(node) {
@@ -1624,7 +1732,17 @@ impl Checker {
         if binding_element.dot_dot_dot_token().is_some() {
             if let Some(initializer) = binding_element.initializer() {
                 // Error on equals token which immediately precedes the initializer
-                return self.grammar_error_at_pos(node, initializer.pos() - 1, 1, &diagnostics::A_rest_element_cannot_have_an_initializer, &[]);
+                return self.grammar_error_at_pos(
+                    node,
+                    initializer
+                        .pos()
+                        .expect_source("parsed nodes have source positions")
+                        .checked_sub(1)
+                        .expect("initializer starts after its equals token"),
+                    1,
+                    &diagnostics::A_rest_element_cannot_have_an_initializer,
+                    &[],
+                );
             }
         }
 
@@ -1735,7 +1853,20 @@ impl Checker {
         }
 
         if declarations.nodes().is_empty() {
-            return self.grammar_error_at_pos(declaration_list, declarations.pos(), declarations.end() - declarations.pos(), &diagnostics::Variable_declaration_list_cannot_be_empty, &[]);
+            let start = declarations
+                .pos()
+                .expect_source("parsed node lists have source positions");
+            let end = declarations
+                .end()
+                .expect_source("parsed node lists have source positions");
+            return self.grammar_error_at_pos(
+                declaration_list,
+                start,
+                end.checked_sub(start)
+                    .expect("declaration list ends after it starts"),
+                &diagnostics::Variable_declaration_list_cannot_be_empty,
+                &[],
+            );
         }
 
         let block_scope_flags = declaration_list.flags() & NodeFlags::BlockScoped;
@@ -1804,7 +1935,11 @@ impl Checker {
                     let mut span = TextRange::new(0, 0);
                     let mut span_calculated = false;
                     if !ast::is_effective_external_module(source_file, &self.compiler_options) {
-                        span = scanner::get_range_of_token_at_position(source_file, node.pos());
+                        span = scanner::get_range_of_token_at_position(
+                            source_file,
+                            node.pos()
+                                .expect_source("parsed nodes have source positions"),
+                        );
                         span_calculated = true;
                         let message = if is_await_expression(node) {
                             &diagnostics::X_await_expressions_are_only_allowed_at_the_top_level_of_a_file_when_that_file_is_a_module_but_this_file_has_no_imports_or_exports_Consider_adding_an_empty_export_to_make_this_file_a_module
@@ -1822,7 +1957,11 @@ impl Checker {
                             let source_file_meta_data = self.program.get_source_file_meta_data(source_file.path());
                             if source_file_meta_data.implied_node_format == ModuleKind::CommonJS {
                                 if !span_calculated {
-                                    span = scanner::get_range_of_token_at_position(source_file, node.pos());
+                                    span = scanner::get_range_of_token_at_position(
+                                        source_file,
+                                        node.pos()
+                                            .expect_source("parsed nodes have source positions"),
+                                    );
                                 }
                                 self.add_diagnostic(ast::new_diagnostic(Some(source_file), span, &diagnostics::The_current_file_is_a_CommonJS_module_and_cannot_use_await_at_the_top_level, &[]));
                                 has_error = true;
@@ -1838,7 +1977,11 @@ impl Checker {
                     }
                     if fallthrough_default {
                         if !span_calculated {
-                            span = scanner::get_range_of_token_at_position(source_file, node.pos());
+                            span = scanner::get_range_of_token_at_position(
+                                source_file,
+                                node.pos()
+                                    .expect_source("parsed nodes have source positions"),
+                            );
                         }
                         let message = if is_await_expression(node) {
                             &diagnostics::Top_level_await_expressions_are_only_allowed_when_the_module_option_is_set_to_es2022_esnext_system_node16_node18_node20_nodenext_or_preserve_and_the_target_option_is_set_to_es2017_or_higher
@@ -1853,7 +1996,11 @@ impl Checker {
                 // use of 'await' in non-async function
                 let source_file = ast::get_source_file_of_node(node).unwrap();
                 if !self.has_parse_diagnostics(source_file) {
-                    let span = scanner::get_range_of_token_at_position(source_file, node.pos());
+                    let span = scanner::get_range_of_token_at_position(
+                        source_file,
+                        node.pos()
+                            .expect_source("parsed nodes have source positions"),
+                    );
                     let message = if is_await_expression(node) {
                         &diagnostics::X_await_expressions_are_only_allowed_within_async_functions_and_at_the_top_levels_of_modules
                     } else {
@@ -1947,7 +2094,14 @@ impl Checker {
                     let is_callee = is_call_expression(parent) && parent.expression() == Some(node);
                     if name_text == "defer" {
                         if !is_callee {
-                            return self.grammar_error_at_pos(node, node.end(), 0, &diagnostics::X_0_expected, &[&"("]);
+                            return self.grammar_error_at_pos(
+                                node,
+                                node.end()
+                                    .expect_source("parsed nodes have source positions"),
+                                0,
+                                &diagnostics::X_0_expected,
+                                &[&"("],
+                            );
                         }
                     } else {
                         if is_callee {
@@ -1967,12 +2121,29 @@ impl Checker {
     pub(crate) fn check_grammar_constructor_type_parameters(&mut self, node: P<Node>) -> bool {
         let range_ = node.as_constructor_declaration().function_like_base.type_parameters.get();
         if let Some(range_) = range_ {
+            let end = range_
+                .end()
+                .expect_source("parsed node lists have source positions");
             let pos = if range_.pos() == range_.end() {
-                range_.pos()
+                range_
+                    .pos()
+                    .expect_source("parsed node lists have source positions")
             } else {
-                scanner::skip_trivia(ast::get_source_file_of_node(node).unwrap().text(), range_.pos())
+                scanner::skip_trivia(
+                    ast::get_source_file_of_node(node).unwrap().text(),
+                    range_
+                        .pos()
+                        .expect_source("parsed node lists have source positions"),
+                )
             };
-            return self.grammar_error_at_pos(node, pos, range_.end() - pos, &diagnostics::Type_parameters_cannot_appear_on_a_constructor_declaration, &[]);
+            return self.grammar_error_at_pos(
+                node,
+                pos,
+                end.checked_sub(pos)
+                    .expect("type parameter list ends after it starts"),
+                &diagnostics::Type_parameters_cannot_appear_on_a_constructor_declaration,
+                &[],
+            );
         }
 
         false

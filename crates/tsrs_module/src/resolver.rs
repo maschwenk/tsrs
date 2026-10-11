@@ -3,7 +3,10 @@ use std::fmt;
 use tsrs_ast::Diagnostic;
 use tsrs_core::collections::{new_set_with_size_hint, OrderedMap, Set};
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::{CompilerOptions, ModuleKind, ModuleResolutionKind, Pattern, ResolutionMode, TextRange, Tristate, P};
+use tsrs_core::{
+    CompilerOptions, ModuleKind, ModuleResolutionKind, P, Pattern, PatternKind, ResolutionMode,
+    TextRange, Tristate,
+};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 
@@ -917,7 +920,7 @@ impl<'r> ResolutionState<'r> {
                 expanding_keys.push(key);
             }
         }
-        expanding_keys.sort_by(|a, b| compare_pattern_keys(a, b).cmp(&0));
+        expanding_keys.sort_by(|a, b| compare_pattern_keys(a, b));
 
         for potential_target in expanding_keys {
             if self.features.intersects(NodeResolutionFeatures::ExportsPatternTrailers) && matches_pattern_with_trailer(potential_target, module_name) {
@@ -1426,7 +1429,7 @@ impl<'r> ResolutionState<'r> {
             use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(),
             current_directory: self.current_directory().to_string(),
         };
-        if tspath::compare_paths(file_name, &resolved_file_name, &compare_paths_options) == 0 {
+        if tspath::compare_paths(file_name, &resolved_file_name, &compare_paths_options).is_eq() {
             // If the fileName and realpath are differing only in casing, prefer fileName
             // so that we can issue correct errors for casing under forceConsistentCasingInFileNames
             return (String::new(), file_name.to_string());
@@ -1897,8 +1900,11 @@ impl<'r> ResolutionState<'r> {
             if tspath::compare_paths(
                 candidate,
                 info.package_directory,
-                &ComparePathsOptions { use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(), current_directory: String::new() },
-            ) == 0
+                &ComparePathsOptions {
+                    use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(),
+                    current_directory: String::new(),
+                },
+            ) == std::cmp::Ordering::Equal
             {
                 if let Some(file) = self.get_package_file(ext, package_info) {
                     package_file = file;
@@ -2277,7 +2283,7 @@ pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>
     for path in &paths {
         let pattern = tsrs_core::try_parse_pattern(path);
         if pattern.is_valid() {
-            if pattern.star_index == -1 {
+            if pattern.kind == PatternKind::Exact {
                 num_matchables += 1;
             } else {
                 num_patterns += 1;
@@ -2297,7 +2303,7 @@ pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>
     for path in paths {
         let pattern = tsrs_core::try_parse_pattern(path);
         if pattern.is_valid() {
-            if pattern.star_index == -1 {
+            if pattern.kind == PatternKind::Exact {
                 matchable_string_set.add(path.clone());
             } else {
                 patterns.push(pattern);
@@ -2309,7 +2315,10 @@ pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>
 
 pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pattern {
     if patterns.matchable_string_set.m.contains(candidate) {
-        return Pattern { text: candidate.to_string(), star_index: -1 };
+        return Pattern {
+            text: candidate.to_string(),
+            kind: PatternKind::Exact,
+        };
     }
     if patterns.patterns.is_empty() {
         return Pattern::default();
@@ -2530,7 +2539,14 @@ impl DefaultResolver {
 
             let compare_paths_options = ComparePathsOptions { use_case_sensitive_file_names: self.host.fs().use_case_sensitive_file_names(), ..Default::default() };
             for file in &other_files {
-                if main_resolution.is_resolved() && tspath::compare_paths(file, &main_resolution.as_ref().unwrap().path, &compare_paths_options) == 0 {
+                if main_resolution.is_resolved()
+                    && tspath::compare_paths(
+                        file,
+                        &main_resolution.as_ref().unwrap().path,
+                        &compare_paths_options,
+                    )
+                    .is_eq()
+                {
                     continue;
                 }
 

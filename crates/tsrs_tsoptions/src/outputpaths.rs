@@ -148,7 +148,7 @@ pub fn get_output_paths_for(source_file: P<SourceFile>, options: &CompilerOption
                 current_directory: host.get_current_directory().to_string(),
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
             },
-        ) == 0;
+        ) == std::cmp::Ordering::Equal;
     let mut paths = OutputPaths::default();
     if source_file.content_mapper().is_empty()
         && (force.js || options.emit_declaration_only != tsrs_core::Tristate::True)
@@ -200,7 +200,7 @@ pub fn get_output_js_file_name(input_file_name: &str, options: &CompilerOptions,
                 current_directory: host.get_current_directory().to_string(),
                 use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
             },
-        ) != 0
+        ) != std::cmp::Ordering::Equal
     {
         return output_file_name;
     }

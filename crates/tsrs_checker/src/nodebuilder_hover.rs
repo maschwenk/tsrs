@@ -7,7 +7,7 @@ use rustc_hash::FxHashMap;
 // nodebuilder_hover.go:16
 // isExpanding returns whether the node builder context is operating in hover-expansion mode.
 pub(crate) fn is_expanding(ctx: P<NodeBuilderContext>) -> bool {
-    ctx.max_expansion_depth.get() != -1
+    ctx.max_expansion_depth.get().is_some()
 }
 
 impl NodeBuilderImpl {
@@ -44,12 +44,13 @@ impl NodeBuilderImpl {
     pub(crate) fn expand_enum_decl(&self, c: &mut Checker, symbol: P<Symbol>) -> P<Node> {
         let name = symbol_name(symbol);
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + 9 + name.len() as i32);
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + 9 + name.len());
         let type_of_symbol = c.get_type_of_symbol(symbol);
         let member_props: Vec<P<Symbol>> = c.get_properties_of_type(type_of_symbol).iter().copied().filter(|p| p.flags().intersects(SymbolFlags::EnumMember)).collect();
         let mut members: Vec<P<Node>> = Vec::new();
         for (i, &p) in member_props.iter().enumerate() {
-            if self.check_truncation_length_if_expanding(c) && (i as i32) + 3 < member_props.len() as i32 - 1 {
+            if self.check_truncation_length_if_expanding(c) && i + 3 < member_props.len() - 1 {
                 self.ctx().expansion_truncated.set(true);
                 members.push(self.f.new_enum_member(self.f.new_string_literal(alloc_str(&format!(" ... {} more ... ", member_props.len() - i - 1)), TokenFlags::None), None));
                 let last = member_props[member_props.len() - 1];
@@ -66,7 +67,8 @@ impl NodeBuilderImpl {
                 initializer = self.enum_member_initializer(c, p);
             }
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + 4 + p.name().len() as i32);
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + 4 + p.name().len());
             if initializer.is_some() {
                 ctx.approximate_length.set(ctx.approximate_length.get() + 5); // " = " + value estimate
             }
@@ -102,9 +104,15 @@ impl NodeBuilderImpl {
     pub(crate) fn expand_class_decl(&self, c: &mut Checker, symbol: P<Symbol>) -> P<Node> {
         let name = symbol_name(symbol);
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + 9 + name.len() as i32);
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + 9 + name.len());
 
-        let class_like_declarations: Vec<P<Node>> = symbol.declarations().iter().copied().filter(|d| is_class_like(*d)).collect();
+        let class_like_declarations: Vec<P<Node>> = symbol
+            .declarations()
+            .iter()
+            .copied()
+            .filter(|d| is_class_like(*d))
+            .collect();
         let original_decl = class_like_declarations.first().copied();
         let old_enclosing = ctx.enclosing_declaration.get();
         if let Some(original_decl) = original_decl {
@@ -239,7 +247,8 @@ impl NodeBuilderImpl {
     pub(crate) fn expand_interface_decl(&self, c: &mut Checker, symbol: P<Symbol>) -> P<Node> {
         let name = symbol_name(symbol);
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + 14 + name.len() as i32);
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + 14 + name.len());
 
         let interface_type = c.get_declared_type_of_class_or_interface(symbol);
         let interface_declarations: Vec<P<Node>> = symbol.declarations().iter().copied().filter(|d| is_interface_declaration(*d)).collect();
@@ -314,7 +323,7 @@ impl NodeBuilderImpl {
         let properties: Vec<P<Symbol>> = properties.iter().copied().filter(|p| !p.flags().intersects(SymbolFlags::Prototype)).collect();
         let mut elements: Vec<P<Node>> = elements.to_vec();
         for (i, &p) in properties.iter().enumerate() {
-            if self.check_truncation_length_if_expanding(c) && ((i as i32) + 3 < properties.len() as i32 - 1) {
+            if self.check_truncation_length_if_expanding(c) && i + 3 < properties.len() - 1 {
                 self.ctx().expansion_truncated.set(true);
                 let text = format!("... {} more ...", properties.len() - i - 1);
                 elements.push(self.f.new_property_signature_declaration(None, self.f.new_identifier(alloc_str(&text)), None, None, None));
@@ -421,7 +430,8 @@ impl NodeBuilderImpl {
             let type_of_symbol = c.get_type_of_symbol(resolved);
             let t = c.get_widened_type(type_of_symbol);
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + name.len() as i32 + 5);
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + name.len() + 5);
             let ident = self.f.new_identifier(alloc_str(name));
             let type_node = self.serialize_type_for_declaration(c, None, Some(t), Some(resolved), true);
             self.f.new_variable_statement(
@@ -469,7 +479,7 @@ impl NodeBuilderImpl {
             let i = next;
             next += 1;
             let m = members[i];
-            if self.check_truncation_length_if_expanding(c) && (i as i32) + 3 < members.len() as i32 - 1 {
+            if self.check_truncation_length_if_expanding(c) && i + 3 < members.len() - 1 {
                 self.ctx().expansion_truncated.set(true);
                 let text = format!("... ({} more) ...", members.len() - i - 1);
                 body_stmts.push(HoverStatement { node: self.f.new_expression_statement(self.f.new_identifier(alloc_str(&text))), is_local: false });
@@ -490,7 +500,8 @@ impl NodeBuilderImpl {
                         let type_of_target = c.get_type_of_symbol(target);
                         let local_type = c.get_widened_type(type_of_target);
                         let ctx = self.ctx();
-                        ctx.approximate_length.set(ctx.approximate_length.get() + target.name().len() as i32 + 5);
+                        ctx.approximate_length
+                            .set(ctx.approximate_length.get() + target.name().len() + 5);
                         let ident = self.f.new_identifier(target.name());
                         let type_node = self.serialize_type_for_declaration(c, None, Some(local_type), Some(target), true);
                         let local_stmt = self.f.new_variable_statement(
@@ -501,7 +512,8 @@ impl NodeBuilderImpl {
                     }
                     let target_name = target.name();
                     let ctx = self.ctx();
-                    ctx.approximate_length.set(ctx.approximate_length.get() + 16 + m.name().len() as i32);
+                    ctx.approximate_length
+                        .set(ctx.approximate_length.get() + 16 + m.name().len());
                     let mut property_name: Option<P<Node>> = None;
                     if m.name() != target_name {
                         property_name = Some(self.f.new_identifier(target_name));
@@ -604,8 +616,14 @@ impl NodeBuilderImpl {
         let type_node = self.type_to_type_node(c, Some(alias_type));
         restore_flags(c);
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + 8 + name.len() as i32);
-        self.f.new_type_alias_declaration(None, self.f.new_identifier(alloc_str(name)), Some(self.f.new_node_list(type_param_decls)), type_node)
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + 8 + name.len());
+        self.f.new_type_alias_declaration(
+            None,
+            self.f.new_identifier(alloc_str(name)),
+            Some(self.f.new_node_list(type_param_decls)),
+            type_node,
+        )
     }
 
     // nodebuilder_hover.go:571

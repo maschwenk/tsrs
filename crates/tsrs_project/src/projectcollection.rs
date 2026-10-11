@@ -46,7 +46,7 @@ pub struct ProjectCollection {
 pub struct APIState {
     // openProjects is the ref-counted set of projects to keep open for API
     // clients, keyed by config file path.
-    pub(crate) open_projects: FxHashMap<Path, i32>,
+    pub(crate) open_projects: FxHashMap<Path, usize>,
     // openFiles is the ref-counted set of files to keep open for API clients,
     // keyed by file path. Files with no configured project are loaded into the
     // inferred project.
@@ -69,7 +69,7 @@ impl APIState {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub(crate) struct apiOpenedFile {
     pub(crate) file_name: String,
-    pub(crate) ref_count: i32,
+    pub(crate) ref_count: usize,
 }
 
 pub(crate) fn new_project_collection(to_path: ToPath, open_files: Set<Path>) -> ProjectCollection {

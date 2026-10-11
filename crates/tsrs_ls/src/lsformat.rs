@@ -43,7 +43,16 @@ impl LanguageService {
         let edits = if file.content_mapper().is_empty() {
             self.to_ls_proto_text_edits(file, &self.get_formatting_edits_for_document(ctx, file, &format_opts))
         } else {
-            self.get_formatting_edits_for_mapped_range(ctx, file, &format_opts, TextRange::new(0, file.original_text().len() as i32))
+            self.get_formatting_edits_for_mapped_range(
+                ctx,
+                file,
+                &format_opts,
+                TextRange::new(
+                    0,
+                    u32::try_from(file.original_text().len())
+                        .expect("source text exceeds u32 positions"),
+                ),
+            )
         };
         Ok(lsproto::TextEditsOrNull { text_edits: Some(edits) })
     }
@@ -70,8 +79,14 @@ impl LanguageService {
                 if segment.kind != spanmap::Kind::Verbatim || !segment.features.intersects(Feature::Formatting) {
                     continue;
                 }
-                let original_start = original_range.pos().max(segment.original_start);
-                let original_end = original_range.end().min(segment.original_end);
+                let original_start = original_range
+                    .pos()
+                    .expect_source("formatting ranges have source positions")
+                    .max(segment.original_start);
+                let original_end = original_range
+                    .end()
+                    .expect_source("formatting ranges have source positions")
+                    .min(segment.original_end);
                 if original_start >= original_end {
                     continue;
                 }
@@ -86,11 +101,34 @@ impl LanguageService {
         let mut edits: Vec<lsproto::TextEdit> = Vec::new();
         for candidate in non_overlapping_formatting_ranges(&candidates) {
             let virtual_range = TextRange::new(
-                candidate.segment.virtual_start + candidate.original_range.pos() - candidate.segment.original_start,
-                candidate.segment.virtual_start + candidate.original_range.end() - candidate.segment.original_start,
+                candidate.segment.virtual_start
+                    + candidate
+                        .original_range
+                        .pos()
+                        .expect_source("formatting ranges have source positions")
+                    - candidate.segment.original_start,
+                candidate.segment.virtual_start
+                    + candidate
+                        .original_range
+                        .end()
+                        .expect_source("formatting ranges have source positions")
+                    - candidate.segment.original_start,
             );
-            for change in self.get_formatting_edits_for_range(ctx, candidate.projection, options, virtual_range) {
-                if change.pos() < virtual_range.pos() || change.end() > virtual_range.end() {
+            for change in self.get_formatting_edits_for_range(
+                ctx,
+                candidate.projection,
+                options,
+                virtual_range,
+            ) {
+                if change.pos()
+                    < virtual_range
+                        .pos()
+                        .expect_source("formatting ranges have source positions")
+                    || change.end()
+                        > virtual_range
+                            .end()
+                            .expect_source("formatting ranges have source positions")
+                {
                     continue;
                 }
                 let (lsp_range, fidelity) = self.converters.to_lsp_range_for_feature(
@@ -105,7 +143,9 @@ impl LanguageService {
             }
         }
         // Go `slices.SortStableFunc` (CompareRanges, then the text).
-        edits.sort_by(|a, b| lsproto::compare_ranges(a.range, b.range).cmp(&0).then_with(|| a.new_text.cmp(&b.new_text)));
+        edits.sort_by(|a, b| {
+            lsproto::compare_ranges(a.range, b.range).then_with(|| a.new_text.cmp(&b.new_text))
+        });
         edits
     }
 }
@@ -148,7 +188,7 @@ fn non_overlapping_formatting_ranges(candidates: &[MappedFormattingRange]) -> Ve
         if let Some(last) = result.last() {
             candidate.original_range = candidate.original_range.with_pos(candidate.original_range.pos().max(last.original_range.end()));
         }
-        if candidate.original_range.len() > 0 {
+        if candidate.original_range.len().is_some_and(|len| len > 0) {
             result.push(candidate);
         }
     }
@@ -207,9 +247,26 @@ impl LanguageService {
     }
 
     // format.go:210 (Go's ctx carries the settings: format::FormatContext)
-    fn get_formatting_edits_for_range(&self, _ctx: &Context, file: P<SourceFile>, options: &FormatCodeSettings, r: TextRange) -> Vec<TextChange> {
-        let ctx = format::with_format_code_settings(&format::FormatContext::default(), options.clone(), &options.new_line_character);
-        format::format_selection(&ctx, file, r.pos(), r.end())
+    fn get_formatting_edits_for_range(
+        &self,
+        _ctx: &Context,
+        file: P<SourceFile>,
+        options: &FormatCodeSettings,
+        r: TextRange,
+    ) -> Vec<TextChange> {
+        let ctx = format::with_format_code_settings(
+            &format::FormatContext::default(),
+            options.clone(),
+            &options.new_line_character,
+        );
+        format::format_selection(
+            &ctx,
+            file,
+            r.pos()
+                .expect_source("formatting ranges have source positions"),
+            r.end()
+                .expect_source("formatting ranges have source positions"),
+        )
     }
 
     // format.go:220
@@ -219,8 +276,19 @@ impl LanguageService {
     }
 
     // format.go:229
-    fn get_formatting_edits_after_keystroke(&self, _ctx: &Context, file: P<SourceFile>, options: &FormatCodeSettings, position: i32, key: &str) -> Vec<TextChange> {
-        let ctx = format::with_format_code_settings(&format::FormatContext::default(), options.clone(), &options.new_line_character);
+    fn get_formatting_edits_after_keystroke(
+        &self,
+        _ctx: &Context,
+        file: P<SourceFile>,
+        options: &FormatCodeSettings,
+        position: u32,
+        key: &str,
+    ) -> Vec<TextChange> {
+        let ctx = format::with_format_code_settings(
+            &format::FormatContext::default(),
+            options.clone(),
+            &options.new_line_character,
+        );
 
         let token_at_position = astnav::get_token_at_position(file, position);
         if is_in_comment(file, position, token_at_position).is_none() {
@@ -243,7 +311,7 @@ impl LanguageService {
 // format.go:257
 pub(crate) fn get_range_of_enclosing_comment(
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
     preceding_token: Option<P<Node>>,
     mut token_at_position: P<Node>,
 ) -> Option<CommentRange> {
@@ -251,14 +319,27 @@ pub(crate) fn get_range_of_enclosing_comment(
     if let Some(jsdoc) = jsdoc {
         token_at_position = jsdoc.parent().unwrap();
     }
-    let token_start = astnav::get_start_of_node(token_at_position, file, false /*includeJSDoc*/);
-    if token_start <= position && position < token_at_position.end() {
+    let token_start =
+        astnav::get_start_of_node(token_at_position, file, false /*includeJSDoc*/);
+    if token_start <= position
+        && position
+            < token_at_position
+                .end()
+                .expect_source("parsed tokens have source positions")
+    {
         return None;
     }
 
     // Between two consecutive tokens, all comments are either trailing on the former
     // or leading on the latter (and none are in both lists).
-    let trailing_ranges_of_previous_token = preceding_token.map(|t| scanner::get_trailing_comment_ranges(file.text(), t.end()));
+    let trailing_ranges_of_previous_token = preceding_token.map(|token| {
+        scanner::get_trailing_comment_ranges(
+            file.text(),
+            token
+                .end()
+                .expect_source("parsed tokens have source positions"),
+        )
+    });
     let leading_ranges_of_next_token = get_leading_comment_ranges_of_node(token_at_position, file);
     let comment_ranges = trailing_ranges_of_previous_token.into_iter().flatten().chain(leading_ranges_of_next_token.into_iter().flatten());
     for comment_range in comment_ranges {
@@ -275,8 +356,10 @@ pub(crate) fn get_range_of_enclosing_comment(
         //
         // However, unterminated multi-line comments lack a `/`, end at the end of the file, and *do* contain their end.
         //
-        if comment_range.text_range.contains_exclusive(position)
-            || position == comment_range.end() && (comment_range.kind == Kind::SingleLineCommentTrivia || position == file.text().len() as i32)
+        if comment_range.text_range.contains_exclusive(position.into())
+            || position == comment_range.end()
+                && (comment_range.kind == Kind::SingleLineCommentTrivia
+                    || position as usize == file.text().len())
         {
             return Some(comment_range);
         }

@@ -92,7 +92,8 @@ fn is_synthesized_content_mapped_diagnostic(diag: P<Diagnostic>) -> bool {
     if !diag.source().is_empty() {
         return false;
     }
-    let (_, fidelity) = span_map.virtual_to_original_span(diag.loc());
+    let Some(loc) = diag.loc() else { return false };
+    let (_, fidelity) = span_map.virtual_to_original_span(loc);
     fidelity == Fidelity::None
 }
 

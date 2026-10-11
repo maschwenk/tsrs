@@ -4,32 +4,43 @@
 //! search compares decides which symbols get ids first. Rust's `sort_by` / `binary_search_by` return the
 //! same results for a total order but compare different pairs.
 
+use std::cmp::Ordering;
+
 /// Go `slices.BinarySearchFunc`.
 #[inline]
-pub fn binary_search_func<E, T: ?Sized>(x: &[E], target: &T, mut cmp: impl FnMut(&E, &T) -> i32) -> (usize, bool) {
+pub fn binary_search_func<E, T: ?Sized>(
+    x: &[E],
+    target: &T,
+    mut cmp: impl FnMut(&E, &T) -> Ordering,
+) -> (usize, bool) {
     let n = x.len();
     let (mut i, mut j) = (0usize, n);
     while i < j {
         let h = (i + j) >> 1;
-        if cmp(&x[h], target) < 0 {
+        if cmp(&x[h], target) == Ordering::Less {
             i = h + 1;
         } else {
             j = h;
         }
     }
-    (i, i < n && cmp(&x[i], target) == 0)
+    (i, i < n && cmp(&x[i], target) == Ordering::Equal)
 }
 
 /// Go `slices.SortStableFunc`.
-pub fn sort_stable_func<E>(data: &mut [E], mut cmp: impl FnMut(&E, &E) -> i32) {
+pub fn sort_stable_func<E>(data: &mut [E], mut cmp: impl FnMut(&E, &E) -> Ordering) {
     let n = data.len();
     stable_cmp_func(data, n, &mut cmp);
 }
 
-fn insertion_sort_cmp_func<E>(data: &mut [E], a: usize, b: usize, cmp: &mut impl FnMut(&E, &E) -> i32) {
+fn insertion_sort_cmp_func<E>(
+    data: &mut [E],
+    a: usize,
+    b: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) {
     for i in a + 1..b {
         let mut j = i;
-        while j > a && cmp(&data[j], &data[j - 1]) < 0 {
+        while j > a && cmp(&data[j], &data[j - 1]) == Ordering::Less {
             data.swap(j, j - 1);
             j -= 1;
         }
@@ -42,7 +53,7 @@ fn swap_range_cmp_func<E>(data: &mut [E], a: usize, b: usize, n: usize) {
     }
 }
 
-fn stable_cmp_func<E>(data: &mut [E], n: usize, cmp: &mut impl FnMut(&E, &E) -> i32) {
+fn stable_cmp_func<E>(data: &mut [E], n: usize, cmp: &mut impl FnMut(&E, &E) -> Ordering) {
     let mut block_size = 20;
     let (mut a, mut b) = (0, block_size);
     while b <= n {
@@ -67,12 +78,18 @@ fn stable_cmp_func<E>(data: &mut [E], n: usize, cmp: &mut impl FnMut(&E, &E) -> 
     }
 }
 
-fn sym_merge_cmp_func<E>(data: &mut [E], a: usize, m: usize, b: usize, cmp: &mut impl FnMut(&E, &E) -> i32) {
+fn sym_merge_cmp_func<E>(
+    data: &mut [E],
+    a: usize,
+    m: usize,
+    b: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) {
     if m - a == 1 {
         let (mut i, mut j) = (m, b);
         while i < j {
             let h = (i + j) >> 1;
-            if cmp(&data[h], &data[a]) < 0 {
+            if cmp(&data[h], &data[a]) == Ordering::Less {
                 i = h + 1;
             } else {
                 j = h;
@@ -89,7 +106,7 @@ fn sym_merge_cmp_func<E>(data: &mut [E], a: usize, m: usize, b: usize, cmp: &mut
         let (mut i, mut j) = (a, m);
         while i < j {
             let h = (i + j) >> 1;
-            if !(cmp(&data[m], &data[h]) < 0) {
+            if !(cmp(&data[m], &data[h]) == Ordering::Less) {
                 i = h + 1;
             } else {
                 j = h;
@@ -108,7 +125,7 @@ fn sym_merge_cmp_func<E>(data: &mut [E], a: usize, m: usize, b: usize, cmp: &mut
     let p = n - 1;
     while start < r {
         let c = (start + r) >> 1;
-        if !(cmp(&data[p - c], &data[c]) < 0) {
+        if !(cmp(&data[p - c], &data[c]) == Ordering::Less) {
             start = c + 1;
         } else {
             r = c;
@@ -142,7 +159,7 @@ fn rotate_cmp_func<E>(data: &mut [E], a: usize, m: usize, b: usize) {
 }
 
 /// Go `slices.SortFunc` (pdqsort; not stable, and the order of equal elements is Go's).
-pub fn sort_func<E>(x: &mut [E], mut cmp: impl FnMut(&E, &E) -> i32) {
+pub fn sort_func<E>(x: &mut [E], mut cmp: impl FnMut(&E, &E) -> Ordering) {
     let n = x.len();
     pdqsort_cmp_func(x, 0, n, bits_len(n), &mut cmp);
 }
@@ -173,17 +190,23 @@ fn next_power_of_two(length: usize) -> usize {
     1 << bits_len(length)
 }
 
-fn sift_down_cmp_func<E>(data: &mut [E], lo: usize, hi: usize, first: usize, cmp: &mut impl FnMut(&E, &E) -> i32) {
+fn sift_down_cmp_func<E>(
+    data: &mut [E],
+    lo: usize,
+    hi: usize,
+    first: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) {
     let mut root = lo;
     loop {
         let mut child = 2 * root + 1;
         if child >= hi {
             break;
         }
-        if child + 1 < hi && cmp(&data[first + child], &data[first + child + 1]) < 0 {
+        if child + 1 < hi && cmp(&data[first + child], &data[first + child + 1]) == Ordering::Less {
             child += 1;
         }
-        if !(cmp(&data[first + root], &data[first + child]) < 0) {
+        if !(cmp(&data[first + root], &data[first + child]) == Ordering::Less) {
             return;
         }
         data.swap(first + root, first + child);
@@ -191,26 +214,33 @@ fn sift_down_cmp_func<E>(data: &mut [E], lo: usize, hi: usize, first: usize, cmp
     }
 }
 
-fn heap_sort_cmp_func<E>(data: &mut [E], a: usize, b: usize, cmp: &mut impl FnMut(&E, &E) -> i32) {
+fn heap_sort_cmp_func<E>(
+    data: &mut [E],
+    a: usize,
+    b: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) {
     let first = a;
     let lo = 0;
     let hi = b - a;
 
-    let mut i = (hi as isize - 1) / 2;
-    while i >= 0 {
-        sift_down_cmp_func(data, i as usize, hi, first, cmp);
-        i -= 1;
+    for i in (0..=(hi - 1) / 2).rev() {
+        sift_down_cmp_func(data, i, hi, first, cmp);
     }
 
-    let mut i = hi as isize - 1;
-    while i >= 0 {
-        data.swap(first, first + i as usize);
-        sift_down_cmp_func(data, lo, i as usize, first, cmp);
-        i -= 1;
+    for i in (0..hi).rev() {
+        data.swap(first, first + i);
+        sift_down_cmp_func(data, lo, i, first, cmp);
     }
 }
 
-fn pdqsort_cmp_func<E>(data: &mut [E], mut a: usize, mut b: usize, mut limit: usize, cmp: &mut impl FnMut(&E, &E) -> i32) {
+fn pdqsort_cmp_func<E>(
+    data: &mut [E],
+    mut a: usize,
+    mut b: usize,
+    mut limit: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) {
     const MAX_INSERTION: usize = 12;
 
     let mut was_balanced = true;
@@ -247,7 +277,7 @@ fn pdqsort_cmp_func<E>(data: &mut [E], mut a: usize, mut b: usize, mut limit: us
             }
         }
 
-        if a > 0 && !(cmp(&data[a - 1], &data[pivot]) < 0) {
+        if a > 0 && !(cmp(&data[a - 1], &data[pivot]) == Ordering::Less) {
             let mid = partition_equal_cmp_func(data, a, b, pivot, cmp);
             a = mid;
             continue;
@@ -270,14 +300,20 @@ fn pdqsort_cmp_func<E>(data: &mut [E], mut a: usize, mut b: usize, mut limit: us
     }
 }
 
-fn partition_cmp_func<E>(data: &mut [E], a: usize, b: usize, pivot: usize, cmp: &mut impl FnMut(&E, &E) -> i32) -> (usize, bool) {
+fn partition_cmp_func<E>(
+    data: &mut [E],
+    a: usize,
+    b: usize,
+    pivot: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) -> (usize, bool) {
     data.swap(a, pivot);
     let (mut i, mut j) = (a as isize + 1, b as isize - 1);
 
-    while i <= j && cmp(&data[i as usize], &data[a]) < 0 {
+    while i <= j && cmp(&data[i as usize], &data[a]) == Ordering::Less {
         i += 1;
     }
-    while i <= j && !(cmp(&data[j as usize], &data[a]) < 0) {
+    while i <= j && !(cmp(&data[j as usize], &data[a]) == Ordering::Less) {
         j -= 1;
     }
     if i > j {
@@ -289,10 +325,10 @@ fn partition_cmp_func<E>(data: &mut [E], a: usize, b: usize, pivot: usize, cmp: 
     j -= 1;
 
     loop {
-        while i <= j && cmp(&data[i as usize], &data[a]) < 0 {
+        while i <= j && cmp(&data[i as usize], &data[a]) == Ordering::Less {
             i += 1;
         }
-        while i <= j && !(cmp(&data[j as usize], &data[a]) < 0) {
+        while i <= j && !(cmp(&data[j as usize], &data[a]) == Ordering::Less) {
             j -= 1;
         }
         if i > j {
@@ -306,15 +342,21 @@ fn partition_cmp_func<E>(data: &mut [E], a: usize, b: usize, pivot: usize, cmp: 
     (j as usize, false)
 }
 
-fn partition_equal_cmp_func<E>(data: &mut [E], a: usize, b: usize, pivot: usize, cmp: &mut impl FnMut(&E, &E) -> i32) -> usize {
+fn partition_equal_cmp_func<E>(
+    data: &mut [E],
+    a: usize,
+    b: usize,
+    pivot: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) -> usize {
     data.swap(a, pivot);
     let (mut i, mut j) = (a as isize + 1, b as isize - 1);
 
     loop {
-        while i <= j && !(cmp(&data[a], &data[i as usize]) < 0) {
+        while i <= j && !(cmp(&data[a], &data[i as usize]) == Ordering::Less) {
             i += 1;
         }
-        while i <= j && cmp(&data[a], &data[j as usize]) < 0 {
+        while i <= j && cmp(&data[a], &data[j as usize]) == Ordering::Less {
             j -= 1;
         }
         if i > j {
@@ -327,12 +369,17 @@ fn partition_equal_cmp_func<E>(data: &mut [E], a: usize, b: usize, pivot: usize,
     i as usize
 }
 
-fn partial_insertion_sort_cmp_func<E>(data: &mut [E], a: usize, b: usize, cmp: &mut impl FnMut(&E, &E) -> i32) -> bool {
+fn partial_insertion_sort_cmp_func<E>(
+    data: &mut [E],
+    a: usize,
+    b: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) -> bool {
     const MAX_STEPS: usize = 5;
     const SHORTEST_SHIFTING: usize = 50;
     let mut i = a + 1;
     for _ in 0..MAX_STEPS {
-        while i < b && !(cmp(&data[i], &data[i - 1]) < 0) {
+        while i < b && !(cmp(&data[i], &data[i - 1]) == Ordering::Less) {
             i += 1;
         }
 
@@ -350,7 +397,7 @@ fn partial_insertion_sort_cmp_func<E>(data: &mut [E], a: usize, b: usize, cmp: &
         if i - a >= 2 {
             let mut j = i - 1;
             while j >= 1 {
-                if !(cmp(&data[j], &data[j - 1]) < 0) {
+                if !(cmp(&data[j], &data[j - 1]) == Ordering::Less) {
                     break;
                 }
                 data.swap(j, j - 1);
@@ -360,7 +407,7 @@ fn partial_insertion_sort_cmp_func<E>(data: &mut [E], a: usize, b: usize, cmp: &
         if b - i >= 2 {
             let mut j = i + 1;
             while j < b {
-                if !(cmp(&data[j], &data[j - 1]) < 0) {
+                if !(cmp(&data[j], &data[j - 1]) == Ordering::Less) {
                     break;
                 }
                 data.swap(j, j - 1);
@@ -389,7 +436,12 @@ fn break_patterns_cmp_func<E>(data: &mut [E], a: usize, b: usize) {
     }
 }
 
-fn choose_pivot_cmp_func<E>(data: &mut [E], a: usize, b: usize, cmp: &mut impl FnMut(&E, &E) -> i32) -> (usize, SortedHint) {
+fn choose_pivot_cmp_func<E>(
+    data: &mut [E],
+    a: usize,
+    b: usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) -> (usize, SortedHint) {
     const SHORTEST_NINTHER: usize = 50;
     const MAX_SWAPS: usize = 4 * 3;
 
@@ -416,15 +468,28 @@ fn choose_pivot_cmp_func<E>(data: &mut [E], a: usize, b: usize, cmp: &mut impl F
     }
 }
 
-fn order2_cmp_func<E>(data: &[E], a: usize, b: usize, swaps: &mut usize, cmp: &mut impl FnMut(&E, &E) -> i32) -> (usize, usize) {
-    if cmp(&data[b], &data[a]) < 0 {
+fn order2_cmp_func<E>(
+    data: &[E],
+    a: usize,
+    b: usize,
+    swaps: &mut usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) -> (usize, usize) {
+    if cmp(&data[b], &data[a]) == Ordering::Less {
         *swaps += 1;
         return (b, a);
     }
     (a, b)
 }
 
-fn median_cmp_func<E>(data: &[E], a: usize, b: usize, c: usize, swaps: &mut usize, cmp: &mut impl FnMut(&E, &E) -> i32) -> usize {
+fn median_cmp_func<E>(
+    data: &[E],
+    a: usize,
+    b: usize,
+    c: usize,
+    swaps: &mut usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) -> usize {
     let (a, b) = order2_cmp_func(data, a, b, swaps, cmp);
     let (b, c) = order2_cmp_func(data, b, c, swaps, cmp);
     let (_a, b) = order2_cmp_func(data, a, b, swaps, cmp);
@@ -432,7 +497,12 @@ fn median_cmp_func<E>(data: &[E], a: usize, b: usize, c: usize, swaps: &mut usiz
     b
 }
 
-fn median_adjacent_cmp_func<E>(data: &[E], a: usize, swaps: &mut usize, cmp: &mut impl FnMut(&E, &E) -> i32) -> usize {
+fn median_adjacent_cmp_func<E>(
+    data: &[E],
+    a: usize,
+    swaps: &mut usize,
+    cmp: &mut impl FnMut(&E, &E) -> Ordering,
+) -> usize {
     median_cmp_func(data, a - 1, a, a + 1, swaps, cmp)
 }
 
@@ -462,7 +532,7 @@ mod tests {
                 .collect();
             let mut expected = v.clone();
             expected.sort_by_key(|e| e.0);
-            sort_stable_func(&mut v, |a, b| a.0 as i32 - b.0 as i32);
+            sort_stable_func(&mut v, |a, b| a.0.cmp(&b.0));
             assert_eq!(v, expected, "n = {n}");
         }
     }
@@ -490,7 +560,7 @@ mod tests {
                     ((seed >> 61) as i32, i)
                 })
                 .collect();
-            sort_func(&mut v, |a, b| a.0 - b.0);
+            sort_func(&mut v, |a, b| a.0.cmp(&b.0));
             assert!(v.windows(2).all(|w| w[0].0 <= w[1].0));
             let mut h = 1469598103934665603u64;
             for e in &v {
@@ -503,9 +573,9 @@ mod tests {
     #[test]
     fn binary_search_finds_insertion_point() {
         let v = [1, 3, 5, 7];
-        assert_eq!(binary_search_func(&v, &5, |a, b| a - b), (2, true));
-        assert_eq!(binary_search_func(&v, &4, |a, b| a - b), (2, false));
-        assert_eq!(binary_search_func(&v, &9, |a, b| a - b), (4, false));
-        assert_eq!(binary_search_func(&[] as &[i32], &1, |a, b| a - b), (0, false));
+        assert_eq!(binary_search_func(&v, &5, Ord::cmp), (2, true));
+        assert_eq!(binary_search_func(&v, &4, Ord::cmp), (2, false));
+        assert_eq!(binary_search_func(&v, &9, Ord::cmp), (4, false));
+        assert_eq!(binary_search_func(&[] as &[i32], &1, Ord::cmp), (0, false));
     }
 }

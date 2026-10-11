@@ -157,7 +157,9 @@ pub fn compile_files_with_host_emit(
         let mut diag = new_compiler_diagnostic(tsrs_diagnostics::new_ad_hoc_message(&message), &[]);
         diag = diag.add_related_info(new_compiler_diagnostic(tsrs_diagnostics::new_ad_hoc_message("The excess diagnostics are:"), &[]));
         for &d in longer_errors {
-            let matched = shorter_errors.iter().any(|&d2| tsrs_ast::compare_diagnostics(d, d2) == 0);
+            let matched = shorter_errors
+                .iter()
+                .any(|&d2| tsrs_ast::compare_diagnostics(d, d2).is_eq());
             if !matched {
                 diag = diag.add_related_info(d);
             }

@@ -244,11 +244,11 @@ pub(crate) fn test_alternative(alternative: &[VersionComparator], version: &Vers
 pub(crate) fn test_comparator(comparator: &VersionComparator, version: &Version) -> bool {
     let cmp = version.compare(&comparator.operand);
     match comparator.operator {
-        ComparatorOperator::RangeLessThan => cmp < 0,
-        ComparatorOperator::RangeLessThanEqual => cmp <= 0,
-        ComparatorOperator::RangeEqual => cmp == 0,
-        ComparatorOperator::RangeGreaterThanEqual => cmp >= 0,
-        ComparatorOperator::RangeGreaterThan => cmp > 0,
+        ComparatorOperator::RangeLessThan => cmp == std::cmp::Ordering::Less,
+        ComparatorOperator::RangeLessThanEqual => cmp != std::cmp::Ordering::Greater,
+        ComparatorOperator::RangeEqual => cmp == std::cmp::Ordering::Equal,
+        ComparatorOperator::RangeGreaterThanEqual => cmp != std::cmp::Ordering::Less,
+        ComparatorOperator::RangeGreaterThan => cmp == std::cmp::Ordering::Greater,
     }
 }
 

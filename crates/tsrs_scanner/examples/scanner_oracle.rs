@@ -118,7 +118,17 @@ fn pass(sb: &mut String, text: &'static str, variant: LanguageVariant, mode: i32
         }
     }
     for d in s.comment_directives() {
-        let _ = writeln!(sb, "D {} {} {}", d.kind as i32, d.loc.pos(), d.loc.end());
+        let _ = writeln!(
+            sb,
+            "D {} {} {}",
+            d.kind as i32,
+            d.loc
+                .pos()
+                .expect_source("comment directives have source positions"),
+            d.loc
+                .end()
+                .expect_source("comment directives have source positions")
+        );
     }
 }
 

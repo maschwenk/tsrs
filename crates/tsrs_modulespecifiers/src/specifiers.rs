@@ -204,7 +204,9 @@ pub(crate) fn get_all_module_paths_worker(
     }
 
     let use_case_sensitive_file_names = info.use_case_sensitive_file_names;
-    let compare_paths = |a: &ModulePath, b: &ModulePath| compare_paths_by_redirect(a, b, use_case_sensitive_file_names).cmp(&0);
+    let compare_paths = |a: &ModulePath, b: &ModulePath| {
+        compare_paths_by_redirect(a, b, use_case_sensitive_file_names)
+    };
 
     // Sort by paths closest to importing file Name directory
     let mut sorted_paths: Vec<ModulePath> = Vec::with_capacity(paths.len());
@@ -652,7 +654,9 @@ pub(crate) fn process_ending(
 
     let js_priority = index_of_ending(allowed_endings, ModuleSpecifierEnding::JsExtension);
     let ts_priority = index_of_ending(allowed_endings, ModuleSpecifierEnding::TsExtension);
-    if tspath::file_extension_is_one_of(file_name, &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS]) && ts_priority != -1 && ts_priority < js_priority {
+    if tspath::file_extension_is_one_of(file_name, &[tspath::EXTENSION_MTS, tspath::EXTENSION_CTS])
+        && matches!((ts_priority, js_priority), (Some(ts), Some(js)) if ts < js)
+    {
         return file_name.to_string();
     }
     if tspath::file_extension_is_one_of(file_name, &[tspath::EXTENSION_DMTS, tspath::EXTENSION_DCTS]) {
@@ -692,14 +696,11 @@ pub(crate) fn process_ending(
             // For now, we don't know if this import is going to be type-only, which means we don't
             // know if a .d.ts extension is valid, so use no extension or a .js extension
             if tspath::is_declaration_file_name(file_name) {
-                let mut extensionless_priority: i32 = -1;
-                for (i, e) in allowed_endings.iter().enumerate() {
-                    if *e == ModuleSpecifierEnding::Minimal || *e == ModuleSpecifierEnding::Index {
-                        extensionless_priority = i as i32;
-                        break;
-                    }
-                }
-                if extensionless_priority != -1 && extensionless_priority < js_priority {
+                let extensionless_priority = allowed_endings.iter().position(|e| {
+                    *e == ModuleSpecifierEnding::Minimal || *e == ModuleSpecifierEnding::Index
+                });
+                if matches!((extensionless_priority, js_priority), (Some(extensionless), Some(js)) if extensionless < js)
+                {
                     return no_extension.to_string();
                 }
                 return format!("{}{}", no_extension, get_js_extension_for_file(file_name, options));
@@ -799,9 +800,11 @@ pub(crate) fn try_get_module_name_as_node_module(
                 module_file_name = module_file_to_try;
             }
             // try with next level of directory
-            package_root_index = index_after(&path_obj.file_name, "/", (package_root_index + 1) as usize);
-            if package_root_index == -1 {
-                module_specifier = process_ending(&module_file_name, &allowed_endings, options, Some(host));
+            package_root_index = package_root_index
+                .and_then(|index| index_after(&path_obj.file_name, "/", index + 1));
+            if package_root_index.is_none() {
+                module_specifier =
+                    process_ending(&module_file_name, &allowed_endings, options, Some(host));
                 break;
             }
         }
@@ -814,17 +817,24 @@ pub(crate) fn try_get_module_name_as_node_module(
     let global_typings_cache_location = host.get_global_typings_cache_location();
     // Get a path that's relative to node_modules or the importing file's path
     // if node_modules folder is in this folder or any of its parent folders, no need to keep it.
-    let path_to_top_level_node_modules = &module_specifier[0..parts.top_level_node_modules_index as usize];
+    let path_to_top_level_node_modules = &module_specifier[0..parts.top_level_node_modules_index];
 
-    if !stringutil::has_prefix(&info.source_directory, path_to_top_level_node_modules, case_sensitive)
-        || !global_typings_cache_location.is_empty()
-            && stringutil::has_prefix(&global_typings_cache_location, path_to_top_level_node_modules, case_sensitive)
+    if !stringutil::has_prefix(
+        &info.source_directory,
+        path_to_top_level_node_modules,
+        case_sensitive,
+    ) || !global_typings_cache_location.is_empty()
+        && stringutil::has_prefix(
+            &global_typings_cache_location,
+            path_to_top_level_node_modules,
+            case_sensitive,
+        )
     {
         return String::new();
     }
 
     // If the module was found in @types, get the actual Node package name
-    let node_modules_directory_name = &module_specifier[(parts.top_level_package_name_index + 1) as usize..];
+    let node_modules_directory_name = &module_specifier[parts.top_level_package_name_index + 1..];
     tsrs_module::get_package_name_from_types_package_name(node_modules_directory_name)
 }
 
@@ -838,19 +848,25 @@ pub(crate) fn try_directory_with_package_json(
     options: &CompilerOptions,
     allowed_endings: &[ModuleSpecifierEnding],
 ) -> pkgJsonDirAttemptResult {
-    let mut root_idx = parts.package_root_index;
-    if root_idx == -1 {
-        root_idx = path_obj.file_name.len() as i32; // TODO: possible strada bug? -1 in js slice removes characters from the end, in go it panics - js behavior seems unwanted here?
-    }
-    let package_root_path = path_obj.file_name[0..root_idx as usize].to_string();
+    let root_idx = parts.package_root_index.unwrap_or(path_obj.file_name.len());
+    let package_root_path = path_obj.file_name[0..root_idx].to_string();
     let package_json_path = tspath::combine_paths(&package_root_path, &["package.json"]);
     let mut module_file_to_try = path_obj.file_name.clone();
     let mut maybe_blocked_by_types_versions = false;
     let Some(package_json) = host.get_package_json_info(&package_json_path) else {
         // No package.json exists; an index.js will still resolve as the package name
-        let file_name = &module_file_to_try[(parts.package_root_index + 1) as usize..];
-        if file_name == "index.d.ts" || file_name == "index.js" || file_name == "index.ts" || file_name == "index.tsx" {
-            return pkgJsonDirAttemptResult { module_file_to_try, package_root_path, ..Default::default() };
+        let file_name =
+            &module_file_to_try[parts.package_root_index.map_or(0, |index| index + 1)..];
+        if file_name == "index.d.ts"
+            || file_name == "index.js"
+            || file_name == "index.ts"
+            || file_name == "index.tsx"
+        {
+            return pkgJsonDirAttemptResult {
+                module_file_to_try,
+                package_root_path,
+                ..Default::default()
+            };
         } else {
             return pkgJsonDirAttemptResult { module_file_to_try, ..Default::default() };
         }
@@ -866,8 +882,10 @@ pub(crate) fn try_directory_with_package_json(
         // The package name that we found in node_modules could be different from the package
         // name in the package.json content via url/filepath dependency specifiers. We need to
         // use the actual directory name, so don't look at `packageJsonContent.name` here.
-        let node_modules_directory_name = &package_root_path[(parts.top_level_package_name_index + 1) as usize..];
-        let package_name = tsrs_module::get_package_name_from_types_package_name(node_modules_directory_name);
+        let node_modules_directory_name =
+            &package_root_path[parts.top_level_package_name_index + 1..];
+        let package_name =
+            tsrs_module::get_package_name_from_types_package_name(node_modules_directory_name);
 
         // Determine resolution mode for package.json exports condition matching.
         // TypeScript's tryDirectoryWithPackageJson uses the importing file's mode (moduleSpecifiers.ts:1257),
@@ -948,7 +966,12 @@ pub(crate) fn try_directory_with_package_json(
             use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
             current_directory: host.get_current_directory().to_string(),
         };
-        if tspath::compare_paths(tspath::remove_file_extension(&main_export_file), tspath::remove_file_extension(&module_file_to_try), &compare_opt) == 0 {
+        if tspath::compare_paths(
+            tspath::remove_file_extension(&main_export_file),
+            tspath::remove_file_extension(&module_file_to_try),
+            &compare_opt,
+        ) == std::cmp::Ordering::Equal
+        {
             // ^ An arbitrary removal of file extension for this comparison is almost certainly wrong
             return pkgJsonDirAttemptResult { package_root_path, module_file_to_try, ..Default::default() };
         } else if package_json_content.is_none()
@@ -959,8 +982,9 @@ pub(crate) fn try_directory_with_package_json(
                     &tspath::get_directory_path(&module_file_to_try),
                     tspath::remove_trailing_directory_separator(&main_export_file),
                     &compare_opt,
-                ) == 0
-                && tspath::remove_file_extension(&tspath::get_base_file_name(&module_file_to_try)) == "index"
+                ) == std::cmp::Ordering::Equal
+                && tspath::remove_file_extension(&tspath::get_base_file_name(&module_file_to_try))
+                    == "index"
         {
             // if mainExportFile is a directory, which contains moduleFileToTry, we just try index file
             // example mainExportFile: `pkg/lib` and moduleFileToTry: `pkg/lib/index`, we can use packageRootPath
@@ -1250,10 +1274,23 @@ pub(crate) fn try_get_module_name_from_exports_or_imports(
 
             match mode {
                 MatchingMode::Exact => {
-                    if !extension_swapped_target.is_empty() && tspath::compare_paths(&extension_swapped_target, &path_or_pattern, &compare_opts) == 0
-                        || tspath::compare_paths(target_file_path, &path_or_pattern, &compare_opts) == 0
-                        || !output_file.is_empty() && tspath::compare_paths(&output_file, &path_or_pattern, &compare_opts) == 0
-                        || !declaration_file.is_empty() && tspath::compare_paths(&declaration_file, &path_or_pattern, &compare_opts) == 0
+                    if !extension_swapped_target.is_empty()
+                        && tspath::compare_paths(
+                            &extension_swapped_target,
+                            &path_or_pattern,
+                            &compare_opts,
+                        ) == std::cmp::Ordering::Equal
+                        || tspath::compare_paths(target_file_path, &path_or_pattern, &compare_opts)
+                            == std::cmp::Ordering::Equal
+                        || !output_file.is_empty()
+                            && tspath::compare_paths(&output_file, &path_or_pattern, &compare_opts)
+                                == std::cmp::Ordering::Equal
+                        || !declaration_file.is_empty()
+                            && tspath::compare_paths(
+                                &declaration_file,
+                                &path_or_pattern,
+                                &compare_opts,
+                            ) == std::cmp::Ordering::Equal
                     {
                         return package_name.to_string();
                     }

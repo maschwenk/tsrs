@@ -48,13 +48,13 @@ impl componentWriter {
 
     // component.go:43
     fn write_mapped(&mut self, text: &str, original_start: usize, original_end: usize, kind: Kind) {
-        let virtual_start = self.virtual_.len() as i32;
+        let virtual_start = self.virtual_.len() as u32;
         self.virtual_.push_str(text);
         self.segments.push(Segment {
             virtual_start,
-            virtual_end: self.virtual_.len() as i32,
-            original_start: original_start as i32,
-            original_end: original_end as i32,
+            virtual_end: self.virtual_.len() as u32,
+            original_start: original_start as u32,
+            original_end: original_end as u32,
             kind,
             features: Feature::All,
         });
@@ -62,13 +62,13 @@ impl componentWriter {
 
     // component.go:55
     fn write_anchored(&mut self, text: &str, original_position: usize, features: Feature) {
-        let virtual_start = self.virtual_.len() as i32;
+        let virtual_start = self.virtual_.len() as u32;
         self.virtual_.push_str(text);
         self.segments.push(Segment {
             virtual_start,
-            virtual_end: self.virtual_.len() as i32,
-            original_start: original_position as i32,
-            original_end: original_position as i32,
+            virtual_end: self.virtual_.len() as u32,
+            original_start: original_position as u32,
+            original_end: original_position as u32,
             kind: Kind::Atom,
             features,
         });

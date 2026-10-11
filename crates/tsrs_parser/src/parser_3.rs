@@ -472,10 +472,31 @@ impl Parser {
         false
     }
 
-    pub(crate) fn parse_simple_arrow_function_expression(&mut self, pos: i32, identifier: P<Node>, allow_return_type_in_arrow_function: bool, jsdoc: JsdocScannerInfo, async_modifier: Option<P<ModifierList>>) -> P<Node> {
-        assert!(self.token == Kind::EqualsGreaterThanToken, "parseSimpleArrowFunctionExpression should only have been called if we had a =>");
-        let node = self.factory.new_parameter_declaration(None /*modifiers*/, None /*dotDotDotToken*/, identifier, None /*questionToken*/, None /*typeNode*/, None /*initializer*/);
-        let parameter = self.finish_node(node, identifier.pos());
+    pub(crate) fn parse_simple_arrow_function_expression(
+        &mut self,
+        pos: u32,
+        identifier: P<Node>,
+        allow_return_type_in_arrow_function: bool,
+        jsdoc: JsdocScannerInfo,
+        async_modifier: Option<P<ModifierList>>,
+    ) -> P<Node> {
+        assert!(
+            self.token == Kind::EqualsGreaterThanToken,
+            "parseSimpleArrowFunctionExpression should only have been called if we had a =>"
+        );
+        let node = self.factory.new_parameter_declaration(
+            None, /*modifiers*/
+            None, /*dotDotDotToken*/
+            identifier, None, /*questionToken*/
+            None, /*typeNode*/
+            None, /*initializer*/
+        );
+        let parameter = self.finish_node(
+            node,
+            identifier
+                .pos()
+                .expect_source("parsed nodes have source positions"),
+        );
         let parameters = self.new_node_list(parameter.loc(), &[parameter]);
         let equals_greater_than_token = self.parse_expected_token(Kind::EqualsGreaterThanToken);
         let body = self.parse_arrow_function_expression_body(async_modifier.is_some() /*isAsync*/, allow_return_type_in_arrow_function);
@@ -485,7 +506,12 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_conditional_expression_rest(&mut self, left_operand: P<Node>, pos: i32, allow_return_type_in_arrow_function: bool) -> P<Node> {
+    pub(crate) fn parse_conditional_expression_rest(
+        &mut self,
+        left_operand: P<Node>,
+        pos: u32,
+        allow_return_type_in_arrow_function: bool,
+    ) -> P<Node> {
         // Note: we are passed in an expression which was produced from parseBinaryExpressionOrHigher.
         let Some(question_token) = self.parse_optional_token(Kind::QuestionToken) else {
             return left_operand;
@@ -512,7 +538,12 @@ impl Parser {
         self.parse_binary_expression_rest(precedence, left_operand, pos)
     }
 
-    pub(crate) fn parse_binary_expression_rest(&mut self, precedence: OperatorPrecedence, left_operand: P<Node>, pos: i32) -> P<Node> {
+    pub(crate) fn parse_binary_expression_rest(
+        &mut self,
+        precedence: OperatorPrecedence,
+        left_operand: P<Node>,
+        pos: u32,
+    ) -> P<Node> {
         let mut left_operand = left_operand;
         let mut last_operand = left_operand;
         loop {
@@ -590,18 +621,39 @@ impl Parser {
 
     pub(crate) fn make_satisfies_expression(&mut self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
         let node = self.factory.new_satisfies_expression(expression, type_node);
-        let node = self.finish_node(node, expression.pos());
+        let node = self.finish_node(
+            node,
+            expression
+                .pos()
+                .expect_source("parsed nodes have source positions"),
+        );
         self.check_js_syntax(node)
     }
 
     pub(crate) fn make_as_expression(&mut self, left: P<Node>, right: P<Node>) -> P<Node> {
         let node = self.factory.new_as_expression(left, right);
-        let node = self.finish_node(node, left.pos());
+        let node = self.finish_node(
+            node,
+            left.pos()
+                .expect_source("parsed nodes have source positions"),
+        );
         self.check_js_syntax(node)
     }
 
-    pub(crate) fn make_binary_expression(&mut self, left: P<Node>, operator_token: P<Node>, right: P<Node>, pos: i32) -> P<Node> {
-        let node = self.factory.new_binary_expression(None /*modifiers*/, left, None /*typeNode*/, operator_token, right);
+    pub(crate) fn make_binary_expression(
+        &mut self,
+        left: P<Node>,
+        operator_token: P<Node>,
+        right: P<Node>,
+        pos: u32,
+    ) -> P<Node> {
+        let node = self.factory.new_binary_expression(
+            None, /*modifiers*/
+            left,
+            None, /*typeNode*/
+            operator_token,
+            right,
+        );
         self.finish_node(node, pos)
     }
 
@@ -632,8 +684,15 @@ impl Parser {
         let unary_operator = self.token;
         let simple_unary_expression = self.parse_simple_unary_expression();
         if self.token == Kind::AsteriskAsteriskToken {
-            let pos = scanner::skip_trivia(self.source_text, simple_unary_expression.pos());
-            let end = simple_unary_expression.end();
+            let pos = scanner::skip_trivia(
+                self.source_text,
+                simple_unary_expression
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
+            let end = simple_unary_expression
+                .end()
+                .expect_source("parsed nodes have source positions");
             if simple_unary_expression.kind() == Kind::TypeAssertionExpression {
                 self.parse_error_at(pos, end, &diagnostics::A_type_assertion_expression_is_not_allowed_in_the_left_hand_side_of_an_exponentiation_expression_Consider_enclosing_the_expression_in_parentheses, &[]);
             } else {
@@ -662,7 +721,12 @@ impl Parser {
             return self.finish_node(node, pos);
         } else if self.language_variant == LanguageVariant::JSX && self.token == Kind::LessThanToken && self.look_ahead(Parser::next_token_is_identifier_or_keyword_or_greater_than) {
             // JSXElement is part of primaryExpression
-            return self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, None /*openingTag*/, false /*mustBeUnary*/);
+            return self.parse_jsx_element_or_self_closing_element_or_fragment(
+                true,  /* inExpressionContext */
+                None,  /* topInvalidNodePosition */
+                None,  /* openingTag */
+                false, /* mustBeUnary */
+            );
         }
         let expression = self.parse_left_hand_side_expression_or_higher();
         if (self.token == Kind::PlusPlusToken || self.token == Kind::MinusMinusToken) && !self.has_preceding_line_break() {
@@ -674,7 +738,13 @@ impl Parser {
         expression
     }
 
-    pub(crate) fn parse_jsx_element_or_self_closing_element_or_fragment(&mut self, in_expression_context: bool, top_invalid_node_position: i32, opening_tag: Option<P<Node>>, must_be_unary: bool) -> P<Node> {
+    pub(crate) fn parse_jsx_element_or_self_closing_element_or_fragment(
+        &mut self,
+        in_expression_context: bool,
+        top_invalid_node_position: Option<u32>,
+        opening_tag: Option<P<Node>>,
+        must_be_unary: bool,
+    ) -> P<Node> {
         let pos = self.node_pos();
         let opening = self.parse_jsx_opening_or_self_closing_element_or_opening_fragment(in_expression_context);
         let mut result: P<Node>;
@@ -692,13 +762,27 @@ impl Parser {
                     // restructure (<div>(...<span>...</div>)) --> (<div>(...<span>...</>)</div>)
                     // (no need to error; the parent will error)
                     let last_child_data = last_child.as_jsx_element();
-                    let end = last_child_data.children.end();
+                    let end = last_child_data
+                        .children
+                        .end()
+                        .expect_source("parsed lists have source positions");
                     let missing = self.new_identifier("");
                     let missing_identifier = self.finish_node_with_end(missing, end, end);
                     let closing = self.factory.new_jsx_closing_element(missing_identifier);
                     let new_closing_element = self.finish_node_with_end(closing, end, end);
-                    let element = self.factory.new_jsx_element(last_child_data.opening_element, last_child_data.children, new_closing_element);
-                    let new_last = self.finish_node_with_end(element, last_child_data.opening_element.pos(), end);
+                    let element = self.factory.new_jsx_element(
+                        last_child_data.opening_element,
+                        last_child_data.children,
+                        new_closing_element,
+                    );
+                    let new_last = self.finish_node_with_end(
+                        element,
+                        last_child_data
+                            .opening_element
+                            .pos()
+                            .expect_source("parsed nodes have source positions"),
+                        end,
+                    );
                     // force reset parent pointers from discarded parse result
                     last_child_data.opening_element.set_parent(Some(new_last));
                     for c in last_child_data.children.nodes() {
@@ -707,7 +791,17 @@ impl Parser {
                     new_closing_element.set_parent(Some(new_last));
                     let mut nodes = children.nodes()[0..children.nodes().len() - 1].to_vec();
                     nodes.push(new_last);
-                    children = self.new_node_list(TextRange::new(children.pos(), new_last.end()), &nodes);
+                    children = self.new_node_list(
+                        TextRange::new(
+                            children
+                                .pos()
+                                .expect_source("parsed lists have source positions"),
+                            new_last
+                                .end()
+                                .expect_source("parsed nodes have source positions"),
+                        ),
+                        &nodes,
+                    );
                     closing_element = last_child_data.closing_element;
                 } else {
                     closing_element = self.parse_jsx_closing_element(opening, in_expression_context);
@@ -749,15 +843,37 @@ impl Parser {
         // If we are in a unary context, we can't do this recovery; the binary expression we return here is not
         // a valid UnaryExpression and will cause problems later.
         if !must_be_unary && in_expression_context && self.token == Kind::LessThanToken {
-            let mut top_bad_pos = top_invalid_node_position;
-            if top_bad_pos < 0 {
-                top_bad_pos = result.pos();
-            }
-            let invalid_element = self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, top_bad_pos, None, false);
+            let top_bad_pos = top_invalid_node_position.unwrap_or_else(|| {
+                result
+                    .pos()
+                    .expect_source("parsed nodes have source positions")
+            });
+            let invalid_element = self.parse_jsx_element_or_self_closing_element_or_fragment(
+                true,
+                Some(top_bad_pos),
+                None,
+                false,
+            );
             let operator_token = self.factory.new_token(Kind::CommaToken);
-            operator_token.set_loc(TextRange::new(invalid_element.pos(), invalid_element.pos()));
-            self.parse_error_at(scanner::skip_trivia(self.source_text, top_bad_pos), invalid_element.end(), &diagnostics::JSX_expressions_must_have_one_parent_element, &[]);
-            let binary = self.factory.new_binary_expression(None /*modifiers*/, result, None /*typeNode*/, operator_token, invalid_element);
+            let invalid_pos = invalid_element
+                .pos()
+                .expect_source("parsed nodes have source positions");
+            operator_token.set_loc(TextRange::new(invalid_pos, invalid_pos));
+            self.parse_error_at(
+                scanner::skip_trivia(self.source_text, top_bad_pos),
+                invalid_element
+                    .end()
+                    .expect_source("parsed nodes have source positions"),
+                &diagnostics::JSX_expressions_must_have_one_parent_element,
+                &[],
+            );
+            let binary = self.factory.new_binary_expression(
+                None, /*modifiers*/
+                result,
+                None, /*typeNode*/
+                operator_token,
+                invalid_element,
+            );
             result = self.finish_node(binary, pos);
         }
         result
@@ -766,7 +882,7 @@ impl Parser {
     pub(crate) fn parse_jsx_children(&mut self, opening_tag: P<Node>) -> P<NodeList> {
         let pos = self.node_pos();
         let save_parsing_contexts = self.parsing_contexts;
-        self.parsing_contexts |= 1 << (ParsingContext::JsxChildren as i32);
+        self.parsing_contexts |= 1 << (ParsingContext::JsxChildren as u32);
         let start = self.node_stack.len();
         loop {
             let current_token = self.scanner.re_scan_jsx_token(true /*allowMultilineJsxText*/);
@@ -800,16 +916,42 @@ impl Parser {
                     // We want the error span to cover only 'Foo.Bar' in < Foo.Bar >
                     // or to cover only 'Foo' in < Foo >
                     let tag = opening_tag.tag_name();
-                    let start = std::cmp::min(scanner::skip_trivia(self.source_text, tag.pos()), tag.end());
-                    let text = scanner::get_text_of_node_from_source_text(self.source_text, opening_tag.tag_name(), false /*includeTrivia*/);
-                    self.parse_error_at(start, tag.end(), &diagnostics::JSX_element_0_has_no_corresponding_closing_tag, &[&text]);
+                    let tag_end = tag
+                        .end()
+                        .expect_source("parsed nodes have source positions");
+                    let start = std::cmp::min(
+                        scanner::skip_trivia(
+                            self.source_text,
+                            tag.pos()
+                                .expect_source("parsed nodes have source positions"),
+                        ),
+                        tag_end,
+                    );
+                    let text = scanner::get_text_of_node_from_source_text(
+                        self.source_text,
+                        opening_tag.tag_name(),
+                        false, /*includeTrivia*/
+                    );
+                    self.parse_error_at(
+                        start,
+                        tag_end,
+                        &diagnostics::JSX_element_0_has_no_corresponding_closing_tag,
+                        &[&text],
+                    );
                 }
                 None
             }
             Kind::LessThanSlashToken | Kind::ConflictMarkerTrivia => None,
             Kind::JsxText | Kind::JsxTextAllWhiteSpaces => Some(self.parse_jsx_text()),
             Kind::OpenBraceToken => self.parse_jsx_expression(false /*inExpressionContext*/),
-            Kind::LessThanToken => Some(self.parse_jsx_element_or_self_closing_element_or_fragment(false /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, Some(opening_tag), false)),
+            Kind::LessThanToken => {
+                Some(self.parse_jsx_element_or_self_closing_element_or_fragment(
+                    false,
+                    None,
+                    Some(opening_tag),
+                    false,
+                ))
+            }
             _ => panic!("Unhandled case in parseJsxChild"),
         }
     }
@@ -1007,7 +1149,9 @@ impl Parser {
             if self.token == Kind::LessThanToken {
                 // An attribute value must be a single JsxAttributeValue, so don't allow the sibling-element
                 // recovery to wrap it in a synthetic binary expression.
-                return Some(self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, None /*openingTag*/, true /*mustBeUnary*/));
+                return Some(self.parse_jsx_element_or_self_closing_element_or_fragment(
+                    true, None, None, true,
+                ));
             }
             self.parse_error_at_current_token(&diagnostics::X_or_JSX_element_expected, &[]);
         }
@@ -1040,7 +1184,9 @@ impl Parser {
                 // Just like in parseUpdateExpression, we need to avoid parsing type assertions when
                 // in JSX and we see an expression like "+ <foo> bar".
                 if self.language_variant == LanguageVariant::JSX {
-                    return self.parse_jsx_element_or_self_closing_element_or_fragment(true /*inExpressionContext*/, -1 /*topInvalidNodePosition*/, None /*openingTag*/, true /*mustBeUnary*/);
+                    return self.parse_jsx_element_or_self_closing_element_or_fragment(
+                        true, None, None, true,
+                    );
                 }
                 // // This is modified UnaryExpression grammar in TypeScript
                 // //  UnaryExpression (modified):
@@ -1325,7 +1471,12 @@ impl Parser {
         self.parse_member_expression_rest(pos, expression, true /*allowOptionalChain*/)
     }
 
-    pub(crate) fn parse_member_expression_rest(&mut self, pos: i32, expression: P<Node>, allow_optional_chain: bool) -> P<Node> {
+    pub(crate) fn parse_member_expression_rest(
+        &mut self,
+        pos: u32,
+        expression: P<Node>,
+        allow_optional_chain: bool,
+    ) -> P<Node> {
         let mut expression = expression;
         loop {
             let mut question_dot_token: Option<P<Node>> = None;
@@ -1381,20 +1532,52 @@ impl Parser {
 
     pub(crate) fn next_token_is_identifier_or_keyword_or_open_bracket_or_template(&mut self) -> bool {
         self.next_token();
-        token_is_identifier_or_keyword(self.token) || self.token == Kind::OpenBracketToken || self.is_template_start_of_tagged_template()
+        token_is_identifier_or_keyword(self.token)
+            || self.token == Kind::OpenBracketToken
+            || self.is_template_start_of_tagged_template()
     }
 
-    pub(crate) fn parse_property_access_expression_rest(&mut self, pos: i32, expression: P<Node>, question_dot_token: Option<P<Node>>) -> P<Node> {
-        let name = self.parse_right_side_of_dot(true /*allowIdentifierNames*/, true /*allowPrivateIdentifiers*/, true /*allowUnicodeEscapeSequenceInIdentifierName*/);
-        let is_optional_chain = question_dot_token.is_some() || self.try_reparse_optional_chain(expression);
-        let property_access = self.factory.new_property_access_expression(expression, question_dot_token, name, if is_optional_chain { NodeFlags::OptionalChain } else { NodeFlags::None });
+    pub(crate) fn parse_property_access_expression_rest(
+        &mut self,
+        pos: u32,
+        expression: P<Node>,
+        question_dot_token: Option<P<Node>>,
+    ) -> P<Node> {
+        let name = self.parse_right_side_of_dot(
+            true, /*allowIdentifierNames*/
+            true, /*allowPrivateIdentifiers*/
+            true, /*allowUnicodeEscapeSequenceInIdentifierName*/
+        );
+        let is_optional_chain =
+            question_dot_token.is_some() || self.try_reparse_optional_chain(expression);
+        let property_access = self.factory.new_property_access_expression(
+            expression,
+            question_dot_token,
+            name,
+            if is_optional_chain {
+                NodeFlags::OptionalChain
+            } else {
+                NodeFlags::None
+            },
+        );
         if is_optional_chain && ast::is_private_identifier(name) {
             let loc = self.skip_range_trivia(name.loc());
             self.parse_error_at_range(loc, &diagnostics::An_optional_chain_cannot_contain_private_identifiers, &[]);
         }
         if ast::is_expression_with_type_arguments(expression) {
             if let Some(type_arguments) = expression.type_argument_list() {
-                let loc = TextRange::new(type_arguments.pos() - 1, scanner::skip_trivia(self.source_text, type_arguments.end()) + 1);
+                let loc = TextRange::new(
+                    type_arguments
+                        .pos()
+                        .expect_source("parsed lists have source positions")
+                        - 1,
+                    scanner::skip_trivia(
+                        self.source_text,
+                        type_arguments
+                            .end()
+                            .expect_source("parsed lists have source positions"),
+                    ) + 1,
+                );
                 self.parse_error_at_range(loc, &diagnostics::An_instantiation_expression_cannot_be_followed_by_a_property_access, &[]);
             }
         }
@@ -1429,7 +1612,12 @@ impl Parser {
         false
     }
 
-    pub(crate) fn parse_element_access_expression_rest(&mut self, pos: i32, expression: P<Node>, question_dot_token: Option<P<Node>>) -> P<Node> {
+    pub(crate) fn parse_element_access_expression_rest(
+        &mut self,
+        pos: u32,
+        expression: P<Node>,
+        question_dot_token: Option<P<Node>>,
+    ) -> P<Node> {
         let mut argument_expression = self.create_missing_identifier();
         if self.token == Kind::CloseBracketToken {
             let node_pos = self.node_pos();
@@ -1443,7 +1631,7 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-    pub(crate) fn parse_call_expression_rest(&mut self, pos: i32, expression: P<Node>) -> P<Node> {
+    pub(crate) fn parse_call_expression_rest(&mut self, pos: u32, expression: P<Node>) -> P<Node> {
         let mut expression = expression;
         loop {
             expression = self.parse_member_expression_rest(pos, expression, true /*allowOptionalChain*/);
@@ -1515,7 +1703,13 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-    pub(crate) fn parse_tagged_template_rest(&mut self, pos: i32, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub(crate) fn parse_tagged_template_rest(
+        &mut self,
+        pos: u32,
+        tag: P<Node>,
+        question_dot_token: Option<P<Node>>,
+        type_arguments: Option<P<NodeList>>,
+    ) -> P<Node> {
         let template: P<Node>;
         if self.token == Kind::NoSubstitutionTemplateLiteral {
             self.re_scan_template_token(true /*isTaggedTemplate*/);
@@ -1909,12 +2103,12 @@ impl Parser {
         list
     }
 
-    pub(crate) fn finish_node(&mut self, node: P<Node>, pos: i32) -> P<Node> {
+    pub(crate) fn finish_node(&mut self, node: P<Node>, pos: u32) -> P<Node> {
         let end = self.node_pos();
         self.finish_node_with_end(node, pos, end)
     }
 
-    pub(crate) fn finish_node_with_end(&mut self, node: P<Node>, pos: i32, end: i32) -> P<Node> {
+    pub(crate) fn finish_node_with_end(&mut self, node: P<Node>, pos: u32, end: u32) -> P<Node> {
         node.set_loc(TextRange::new(pos, end));
         node.set_flags(node.flags() | self.context_flags);
         if self.has_parse_error {
@@ -2459,7 +2653,17 @@ impl Parser {
     }
 
     pub(crate) fn skip_range_trivia(&self, text_range: TextRange) -> TextRange {
-        TextRange::new(scanner::skip_trivia(self.source_text, text_range.pos()), text_range.end())
+        TextRange::new(
+            scanner::skip_trivia(
+                self.source_text,
+                text_range
+                    .pos()
+                    .expect_source("parsed ranges have source positions"),
+            ),
+            text_range
+                .end()
+                .expect_source("parsed ranges have source positions"),
+        )
     }
 
     pub(crate) fn process_pragmas_into_fields(&mut self, context: P<ast::SourceFile>) {
@@ -2482,7 +2686,17 @@ impl Parser {
                     } else if let Some(types) = types {
                         let mut parsed = tsrs_core::ResolutionMode::default();
                         if let Some(resolution_mode) = resolution_mode {
-                            parsed = self.parse_resolution_mode(&resolution_mode.value, resolution_mode.text_range.pos(), resolution_mode.text_range.end());
+                            parsed = self.parse_resolution_mode(
+                                &resolution_mode.value,
+                                resolution_mode
+                                    .text_range
+                                    .pos()
+                                    .expect_source("pragma ranges have source positions"),
+                                resolution_mode
+                                    .text_range
+                                    .end()
+                                    .expect_source("pragma ranges have source positions"),
+                            );
                         }
                         type_reference_directives.push(P::new(ast::FileReference {
                             text_range: types.text_range,
@@ -2524,12 +2738,23 @@ impl Parser {
             }
         }
         context.check_js_directive.set(check_js_directive);
-        context.referenced_files.set(tsrs_core::alloc_vec(referenced_files));
-        context.type_reference_directives.set(tsrs_core::alloc_vec(type_reference_directives));
-        context.lib_reference_directives.set(tsrs_core::alloc_vec(lib_reference_directives));
+        context
+            .referenced_files
+            .set(tsrs_core::alloc_vec(referenced_files));
+        context
+            .type_reference_directives
+            .set(tsrs_core::alloc_vec(type_reference_directives));
+        context
+            .lib_reference_directives
+            .set(tsrs_core::alloc_vec(lib_reference_directives));
     }
 
-    pub(crate) fn parse_resolution_mode(&mut self, mode: &str, pos: i32, end: i32) -> tsrs_core::ResolutionMode {
+    pub(crate) fn parse_resolution_mode(
+        &mut self,
+        mode: &str,
+        pos: u32,
+        end: u32,
+    ) -> tsrs_core::ResolutionMode {
         let mut resolution_kind = tsrs_core::ResolutionMode::default();
         if mode == "import" {
             resolution_kind = tsrs_core::ModuleKind::ESNext;
@@ -2543,9 +2768,23 @@ impl Parser {
         resolution_kind
     }
 
-    pub(crate) fn js_error_at_range(&mut self, loc: TextRange, message: &'static Message, args: &[&dyn Display]) {
-        let range = TextRange::new(scanner::skip_trivia(self.source_text, loc.pos()), loc.end());
-        self.js_diagnostics.push(ast::new_diagnostic(None, range, message, args));
+    pub(crate) fn js_error_at_range(
+        &mut self,
+        loc: TextRange,
+        message: &'static Message,
+        args: &[&dyn Display],
+    ) {
+        let range = TextRange::new(
+            scanner::skip_trivia(
+                self.source_text,
+                loc.pos()
+                    .expect_source("parsed ranges have source positions"),
+            ),
+            loc.end()
+                .expect_source("parsed ranges have source positions"),
+        );
+        self.js_diagnostics
+            .push(ast::new_diagnostic(None, range, message, args));
     }
 
     pub(crate) fn check_js_decorator_syntax(&mut self, node: P<Node>) {
@@ -2562,36 +2801,56 @@ impl Parser {
                 }
             }
         } else if ast::can_have_decorators(node) {
-            let decorator_index = find_index(modifiers, |m| ast::is_decorator(m));
-            if decorator_index >= 0 {
+            if let Some(decorator_index) = find_index(modifiers, |m| ast::is_decorator(m)) {
                 if ast::is_class_declaration(node) {
-                    let export_index = find_index(modifiers, is_export_modifier);
-                    if export_index >= 0 {
-                        let default_index = find_index(modifiers, |m| m.kind() == Kind::DefaultKeyword);
-                        if decorator_index > export_index && default_index >= 0 && decorator_index < default_index {
+                    if let Some(export_index) = find_index(modifiers, is_export_modifier) {
+                        let default_index =
+                            find_index(modifiers, |m| m.kind() == Kind::DefaultKeyword);
+                        if decorator_index > export_index
+                            && default_index
+                                .is_some_and(|default_index| decorator_index < default_index)
+                        {
                             // Decorator between `export` and `default`
-                            self.js_error_at_range(modifiers[decorator_index as usize].loc(), &diagnostics::Decorators_are_not_valid_here, &[]);
+                            self.js_error_at_range(
+                                modifiers[decorator_index].loc(),
+                                &diagnostics::Decorators_are_not_valid_here,
+                                &[],
+                            );
                         } else if decorator_index < export_index {
                             // Find a trailing decorator after the export keyword
-                            let mut trailing_decorator_index: i32 = -1;
-                            for i in export_index as usize..modifiers.len() {
-                                if ast::is_decorator(modifiers[i]) {
-                                    trailing_decorator_index = i as i32;
-                                    break;
-                                }
-                            }
-                            if trailing_decorator_index >= 0 {
-                                let trailing = modifiers[trailing_decorator_index as usize];
+                            let trailing_decorator_index = modifiers[export_index..]
+                                .iter()
+                                .position(|&modifier| ast::is_decorator(modifier))
+                                .map(|index| index + export_index);
+                            if let Some(trailing_decorator_index) = trailing_decorator_index {
+                                let trailing = modifiers[trailing_decorator_index];
                                 let diag = ast::new_diagnostic(
                                     None,
-                                    TextRange::new(scanner::skip_trivia(self.source_text, trailing.loc().pos()), trailing.loc().end()),
+                                    TextRange::new(
+                                        scanner::skip_trivia(
+                                            self.source_text,
+                                            trailing.loc().pos().expect_source("parsed nodes have source positions"),
+                                        ),
+                                        trailing.loc().end().expect_source("parsed nodes have source positions"),
+                                    ),
                                     &diagnostics::Decorators_may_not_appear_after_export_or_export_default_if_they_also_appear_before_export,
                                     &[],
                                 );
-                                let decorator = modifiers[decorator_index as usize];
+                                let decorator = modifiers[decorator_index];
                                 diag.add_related_info(ast::new_diagnostic(
                                     None,
-                                    TextRange::new(scanner::skip_trivia(self.source_text, decorator.loc().pos()), decorator.loc().end()),
+                                    TextRange::new(
+                                        scanner::skip_trivia(
+                                            self.source_text,
+                                            decorator.loc().pos().expect_source(
+                                                "parsed nodes have source positions",
+                                            ),
+                                        ),
+                                        decorator
+                                            .loc()
+                                            .end()
+                                            .expect_source("parsed nodes have source positions"),
+                                    ),
                                     &diagnostics::Decorator_used_before_export_here,
                                     &[],
                                 ));
@@ -2825,7 +3084,10 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                 args.insert(
                     arg_name.clone(),
                     ast::PragmaArgument {
-                        text_range: TextRange::new(comment_range.pos() + pos as i32 + 1, comment_range.pos() + pos as i32 + 1 + value.len() as i32),
+                        text_range: TextRange::new(
+                            comment_range.pos() + pos as u32 + 1,
+                            comment_range.pos() + pos as u32 + 1 + value.len() as u32,
+                        ),
                         name: arg_name.clone(),
                         value: value.to_string(),
                     },
@@ -2848,11 +3110,10 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
         let mut pos: usize = 2;
         let mut pragmas = Vec::new();
         loop {
-            let found = skip_to(text, pos, "@");
-            if found < 0 {
+            let Some(found) = skip_to(text, pos, "@") else {
                 break;
-            }
-            pos = found as usize;
+            };
+            pos = found;
             // Mirrors the /@(\S+)(\s+(?:\S.*)?)?$/gm pragma regex used by TypeScript: the '@'
             // must be immediately followed by a non-whitespace pragma name, and the remainder
             // of the line is consumed as that pragma's arguments. As a consequence, only the
@@ -2875,7 +3136,10 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                     args.insert(
                         "factory".to_string(),
                         ast::PragmaArgument {
-                            text_range: TextRange::new(comment_range.pos() + start as i32, comment_range.pos() + arg_end as i32),
+                            text_range: TextRange::new(
+                                comment_range.pos() + start as u32,
+                                comment_range.pos() + arg_end as u32,
+                            ),
                             name: "factory".to_string(),
                             value: text[start..arg_end].to_string(),
                         },
@@ -2912,15 +3176,15 @@ fn skip_non_blanks(text: &str, pos: usize) -> usize {
     pos
 }
 
-fn skip_to(text: &str, pos: usize, s: &str) -> i32 {
+fn skip_to(text: &str, pos: usize, s: &str) -> Option<usize> {
     if pos >= text.len() {
-        return -1;
+        return None;
     }
     let haystack = &text.as_bytes()[pos..];
     let needle = s.as_bytes();
     match haystack.windows(needle.len()).position(|w| w == needle) {
-        None => -1,
-        Some(i) => (pos + i) as i32,
+        None => None,
+        Some(i) => Some(pos + i),
     }
 }
 
@@ -2967,9 +3231,6 @@ fn extract_quoted_string(text: &str, pos: usize) -> Option<&str> {
 }
 
 // core.FindIndex
-fn find_index(nodes: &[P<Node>], mut f: impl FnMut(P<Node>) -> bool) -> i32 {
-    match nodes.iter().position(|&n| f(n)) {
-        Some(i) => i as i32,
-        None => -1,
-    }
+fn find_index(nodes: &[P<Node>], mut f: impl FnMut(P<Node>) -> bool) -> Option<usize> {
+    nodes.iter().position(|&n| f(n))
 }

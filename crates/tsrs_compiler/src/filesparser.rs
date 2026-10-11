@@ -247,7 +247,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
             let include_reason = FileIncludeReason::new_referenced(
                 fileIncludeKind::LibReferenceDirective,
                 loader.tasks[t].reason_path(),
-                index as i32,
+                Some(index),
                 None,
             );
             if let Some(name) = tsoptions::get_lib_file_name(&lib.file_name) {
@@ -345,7 +345,7 @@ pub(crate) struct resolvedRef {
 pub(crate) struct parseTaskData {
     // map of tasks by file casing
     pub(crate) tasks: TasksByCasing,
-    lowest_depth: i32,
+    lowest_depth: Option<u32>,
     started_sub_tasks: bool,
     package_id: PackageId,
 }
@@ -382,7 +382,27 @@ struct queuedTask {
     task: TaskId,
     loaded: bool,
     data: DataId,
-    depth: i32,
+    depth: u32,
+}
+
+#[derive(Clone, Copy)]
+enum NodeModulesDepthLimit {
+    BelowRoot,
+    Depth(u32),
+}
+
+impl NodeModulesDepthLimit {
+    fn from_option(value: i64) -> Self {
+        if value < 0 {
+            Self::BelowRoot
+        } else {
+            Self::Depth(u32::try_from(value).unwrap_or(u32::MAX))
+        }
+    }
+
+    fn includes(self, depth: u32) -> bool {
+        matches!(self, Self::Depth(limit) if depth <= limit)
+    }
 }
 
 // Go queues one closure per task on a work group and runs them concurrently. Here the queue is
@@ -393,7 +413,7 @@ pub(crate) struct filesParser {
     pub(crate) task_data_by_path: FxHashMap<Path, DataId>,
     pub(crate) datas: Vec<parseTaskData>,
     queue: Vec<queuedTask>,
-    max_depth: i32,
+    max_depth: NodeModulesDepthLimit,
     single_threaded: bool,
     // Files parsed ahead of the round that loads them, by path (see `prefetch`).
     speculative: FxHashMap<Path, speculativeParse>,
@@ -517,12 +537,12 @@ impl<'a> speculation<'a> {
 }
 
 impl filesParser {
-    pub(crate) fn new(single_threaded: bool, max_depth: i32) -> filesParser {
+    pub(crate) fn new(single_threaded: bool, max_depth: i64) -> filesParser {
         filesParser {
             task_data_by_path: FxHashMap::default(),
             datas: Vec::new(),
             queue: Vec::new(),
-            max_depth,
+            max_depth: NodeModulesDepthLimit::from_option(max_depth),
             single_threaded,
             speculative: FxHashMap::default(),
             speculated: false,
@@ -562,7 +582,7 @@ impl filesParser {
         }
     }
 
-    fn start(loader: &mut fileLoader, tasks: &[TaskId], depth: i32) {
+    fn start(loader: &mut fileLoader, tasks: &[TaskId], depth: u32) {
         for &task in tasks {
             // A sub task created from a prefetched resolution already carries this path.
             if loader.tasks[task].path.as_str().is_empty() {
@@ -578,7 +598,12 @@ impl filesParser {
                 None => {
                     let mut tasks = TasksByCasing::default();
                     tasks.insert(Arc::clone(&loader.tasks[task].normalized_file_path), task);
-                    w.datas.push(parseTaskData { tasks, lowest_depth: i32::MAX, started_sub_tasks: false, package_id: PackageId::default() });
+                    w.datas.push(parseTaskData {
+                        tasks,
+                        lowest_depth: None,
+                        started_sub_tasks: false,
+                        package_id: PackageId::default(),
+                    });
                     let id = w.datas.len() - 1;
                     w.task_data_by_path.insert(loader.tasks[task].path.clone(), id);
                     (id, false)
@@ -609,16 +634,25 @@ impl filesParser {
             loader.files_parser.datas[data].package_id = loader.tasks[task].package_id;
         }
 
-        let current_depth = if loader.tasks[task].increase_depth { depth + 1 } else { depth };
-        if current_depth < loader.files_parser.datas[data].lowest_depth {
+        let current_depth = if loader.tasks[task].increase_depth {
+            depth + 1
+        } else {
+            depth
+        };
+        if loader.files_parser.datas[data]
+            .lowest_depth
+            .is_none_or(|lowest_depth| current_depth < lowest_depth)
+        {
             // If we're seeing this task at a lower depth than before,
             // reprocess its subtasks to ensure they are loaded.
-            loader.files_parser.datas[data].lowest_depth = current_depth;
+            loader.files_parser.datas[data].lowest_depth = Some(current_depth);
             start_subtasks = true;
             loader.files_parser.datas[data].started_sub_tasks = true;
         }
 
-        if loader.tasks[task].elide_on_depth && current_depth > loader.files_parser.max_depth {
+        if loader.tasks[task].elide_on_depth
+            && !loader.files_parser.max_depth.includes(current_depth)
+        {
             return;
         }
 
@@ -639,7 +673,9 @@ impl filesParser {
                 loader.tasks[task_by_file_name].started_sub_tasks = true;
                 // `start` reads the sub tasks themselves, never this task's list; it is lent out and put back.
                 let sub_tasks = std::mem::take(&mut loader.tasks[task_by_file_name].sub_tasks);
-                let lowest_depth = loader.files_parser.datas[data].lowest_depth;
+                let lowest_depth = loader.files_parser.datas[data]
+                    .lowest_depth
+                    .expect("started task data has a depth");
                 Self::start(loader, &sub_tasks, lowest_depth);
                 loader.tasks[task_by_file_name].sub_tasks = sub_tasks;
             }
@@ -657,8 +693,12 @@ impl filesParser {
         let mut to_parse: Vec<TaskId> = Vec::new();
         for item in round {
             let task = &loader.tasks[item.task];
-            let current_depth = if task.increase_depth { item.depth + 1 } else { item.depth };
-            if task.elide_on_depth && current_depth > loader.files_parser.max_depth {
+            let current_depth = if task.increase_depth {
+                item.depth + 1
+            } else {
+                item.depth
+            };
+            if task.elide_on_depth && !loader.files_parser.max_depth.includes(current_depth) {
                 continue;
             }
             let data = &loader.files_parser.datas[item.data];
@@ -835,8 +875,8 @@ impl filesParser {
     }
 
     pub(crate) fn get_processed_files(loader: &mut fileLoader) -> processedFiles {
-        let total_file_count = loader.total_file_count as usize;
-        let lib_file_count = loader.lib_file_count as usize;
+        let total_file_count = loader.total_file_count;
+        let lib_file_count = loader.lib_file_count;
 
         let mut missing_files: Vec<String> = Vec::new();
         let mut duplicate_source_files: Vec<DuplicateSourceFile> = Vec::new();
@@ -958,7 +998,10 @@ impl filesParser {
                     if let Some(specifier) = loaded.import_helpers_import_specifier {
                         import_helpers_import_specifiers.insert(path.clone(), specifier);
                     }
-                    if loader.files_parser.datas[data].lowest_depth > 0 {
+                    if loader.files_parser.datas[data]
+                        .lowest_depth
+                        .is_some_and(|depth| depth > 0)
+                    {
                         source_files_found_searching_node_modules.insert(path);
                     }
                 }
@@ -1073,8 +1116,12 @@ impl filesParser {
                                 },
                             );
                             files_by_path.insert(loader.tasks[task].path.clone(), package_id_file);
-                            if loader.files_parser.datas[data].lowest_depth > 0 {
-                                source_files_found_searching_node_modules.insert(loader.tasks[task].path.clone());
+                            if loader.files_parser.datas[data]
+                                .lowest_depth
+                                .is_some_and(|depth| depth > 0)
+                            {
+                                source_files_found_searching_node_modules
+                                    .insert(loader.tasks[task].path.clone());
                             }
                             continue;
                         } else if let Some(file) = file {

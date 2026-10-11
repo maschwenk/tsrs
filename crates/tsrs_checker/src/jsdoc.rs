@@ -23,7 +23,7 @@ impl Checker {
 
         let is_js = ast::is_in_js_file(node);
         let mut parameters: collections::Set<String> = collections::Set::default();
-        let mut excluded_parameters: collections::Set<i32> = collections::Set::default();
+        let mut excluded_parameters: collections::Set<usize> = collections::Set::default();
 
         for (i, &param) in node.parameters().iter().enumerate() {
             let name = param.as_parameter_declaration().name();
@@ -31,13 +31,14 @@ impl Checker {
                 parameters.add(name.text().to_string());
             }
             if ast::is_binding_pattern(name) {
-                excluded_parameters.add(i as i32);
+                excluded_parameters.add(i);
             }
         }
         if self.contains_arguments_reference(node) {
             if is_js {
-                let last_jsdoc_param_index = jsdoc_parameters.len() as i32 - 1;
-                let last_jsdoc_param = jsdoc_parameters[last_jsdoc_param_index as usize].as_jsdoc_parameter_or_property_tag();
+                let last_jsdoc_param_index = jsdoc_parameters.len() - 1;
+                let last_jsdoc_param =
+                    jsdoc_parameters[last_jsdoc_param_index].as_jsdoc_parameter_or_property_tag();
                 if !ast::is_identifier(last_jsdoc_param.name()) {
                     return;
                 }
@@ -66,7 +67,9 @@ impl Checker {
                 let name = tag.as_jsdoc_parameter_or_property_tag().name();
                 let is_name_first = tag.as_jsdoc_parameter_or_property_tag().is_name_first;
 
-                if excluded_parameters.has(&(index as i32)) || (ast::is_identifier(name) && parameters.has(&name.text().to_string())) {
+                if excluded_parameters.has(&index)
+                    || (ast::is_identifier(name) && parameters.has(&name.text().to_string()))
+                {
                     continue;
                 }
 

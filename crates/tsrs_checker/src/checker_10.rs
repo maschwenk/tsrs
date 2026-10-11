@@ -34,12 +34,19 @@ impl Checker {
     }
 
     // checker.go:19627
-    pub(crate) fn get_constructors_for_type_arguments(&mut self, t: P<Type>, type_argument_nodes: &[P<Node>], _location: P<Node>) -> Vec<P<Signature>> {
-        let type_arg_count = type_argument_nodes.len() as i32;
+    pub(crate) fn get_constructors_for_type_arguments(
+        &mut self,
+        t: P<Type>,
+        type_argument_nodes: &[P<Node>],
+        _location: P<Node>,
+    ) -> Vec<P<Signature>> {
+        let type_arg_count = type_argument_nodes.len();
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         let mut result = Vec::new();
         for &sig in signatures {
-            if type_arg_count >= self.get_min_type_argument_count(sig.type_parameters.get()) && type_arg_count <= sig.type_parameters.get().len() as i32 {
+            if type_arg_count >= self.get_min_type_argument_count(sig.type_parameters.get())
+                && type_arg_count <= sig.type_parameters.get().len()
+            {
                 result.push(sig);
             }
         }
@@ -725,7 +732,7 @@ impl Checker {
                 || is_rest_parameter(param)
                 || iife.is_some() && parameters.len() > iife.unwrap().arguments().len() && type_node.is_none();
             if !is_optional_parameter {
-                min_argument_count = parameters.len() as i32;
+                min_argument_count = parameters.len();
             }
         }
         // If only one accessor includes a this-type annotation, the other behaves as if it had the same type annotation
@@ -972,8 +979,16 @@ impl Checker {
     // checker.go:20420
     pub(crate) fn get_parameter_type_of_full_signature(&mut self, node: P<Node>, parameter: P<Node>) -> Option<P<Type>> {
         if let Some(signature) = self.get_signature_of_full_signature_type(node) {
-            let pos = node.parameters().iter().position(|p| *p == parameter).map_or(-1, |i| i as i32);
-            if parameter.as_parameter_declaration().dot_dot_dot_token().is_some() {
+            let pos = node
+                .parameters()
+                .iter()
+                .position(|p| *p == parameter)
+                .expect("parameter belongs to its signature");
+            if parameter
+                .as_parameter_declaration()
+                .dot_dot_dot_token()
+                .is_some()
+            {
                 return Some(self.get_rest_type_at_position(signature, pos, false /*readonly*/));
             } else {
                 return Some(self.get_type_at_position(signature, pos));
@@ -1534,7 +1549,12 @@ impl Checker {
             }
             let true_type = self.check_if_expression_refines_parameter(fn_, expr, param, init_type);
             if let Some(true_type) = true_type {
-                return Some(self.new_type_predicate(TypePredicateKind::Identifier, param.name().unwrap().text(), i as i32, Some(true_type)));
+                return Some(self.new_type_predicate(
+                    TypePredicateKind::Identifier,
+                    param.name().unwrap().text(),
+                    Some(i),
+                    Some(true_type),
+                ));
             }
         }
         None
@@ -1707,7 +1727,7 @@ impl Checker {
         if symbol.flags().intersects(SymbolFlags::Function | SymbolFlags::Method) {
             let signatures = self.get_signatures_of_symbol(Some(symbol));
             d.set_signatures(alloc_vec(signatures));
-            d.set_call_signature_count(d.signatures().len() as i32);
+            d.set_call_signature_count(d.signatures().len());
         }
         // And likewise for construct signatures for classes
         if symbol.flags().intersects(SymbolFlags::Class) {
@@ -1912,12 +1932,15 @@ impl Checker {
         let base_type_node = get_base_type_node_of_class(class_type);
         let is_java_script = declaration.is_some_and(|d| ast::is_in_js_file(d));
         let type_arguments = self.get_type_arguments_from_node(base_type_node.unwrap());
-        let type_arg_count = type_arguments.len() as i32;
+        let type_arg_count = type_arguments.len();
         let mut result = Vec::new();
         for &base_sig in base_signatures {
-            let min_type_argument_count = self.get_min_type_argument_count(base_sig.type_parameters.get());
-            let type_param_count = base_sig.type_parameters.get().len() as i32;
-            if is_java_script || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count {
+            let min_type_argument_count =
+                self.get_min_type_argument_count(base_sig.type_parameters.get());
+            let type_param_count = base_sig.type_parameters.get().len();
+            if is_java_script
+                || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count
+            {
                 let sig = if type_param_count != 0 {
                     let filled = self.fill_missing_type_arguments(&type_arguments, base_sig.type_parameters.get(), min_type_argument_count, is_java_script);
                     self.create_signature_instantiation(base_sig, &filled)
@@ -2501,7 +2524,8 @@ impl Checker {
                 if result.is_empty()
                     || self.find_matching_signature(&result, signature, false /*partialMatch*/, false /*ignoreThisTypes*/, true /*ignoreReturnTypes*/).is_none()
                 {
-                    let union_signatures = self.find_matching_signatures(signature_lists, signature, i as i32);
+                    let union_signatures =
+                        self.find_matching_signatures(signature_lists, signature, i);
                     if !union_signatures.is_empty() {
                         let mut s = signature;
                         // Union the result types when more than one signature matches
@@ -2709,7 +2733,12 @@ impl Checker {
                         .map(|&s| {
                             let clone = self.clone_signature(s);
                             let return_type = self.get_return_type_of_signature(s);
-                            clone.resolved_return_type.set(Some(self.include_mixin_type(return_type, types, &mixin_flags, i as i32)));
+                            clone.resolved_return_type.set(Some(self.include_mixin_type(
+                                return_type,
+                                types,
+                                &mixin_flags,
+                                i,
+                            )));
                             clone
                         })
                         .collect();
@@ -2770,34 +2799,43 @@ impl Checker {
     }
 
     // checker.go:21706
-    pub(crate) fn find_mixins(&mut self, types: &[P<Type>]) -> (Vec<bool>, i32) {
-        let mut mixin_flags: Vec<bool> = types.iter().map(|t| self.is_mixin_constructor_type(*t)).collect();
+    pub(crate) fn find_mixins(&mut self, types: &[P<Type>]) -> (Vec<bool>, usize) {
+        let mut mixin_flags: Vec<bool> = types
+            .iter()
+            .map(|t| self.is_mixin_constructor_type(*t))
+            .collect();
         let mut constructor_type_count = 0;
         let mut mixin_count = 0;
-        let mut first_mixin_index: i32 = -1;
+        let mut first_mixin_index = None;
         for (i, &t) in types.iter().enumerate() {
             if !self.get_signatures_of_type(t, SignatureKind::Construct).is_empty() {
                 constructor_type_count += 1;
             }
             if mixin_flags[i] {
-                if first_mixin_index < 0 {
-                    first_mixin_index = i as i32;
+                if first_mixin_index.is_none() {
+                    first_mixin_index = Some(i);
                 }
                 mixin_count += 1;
             }
         }
         if constructor_type_count > 0 && constructor_type_count == mixin_count {
-            mixin_flags[first_mixin_index as usize] = false;
+            mixin_flags[first_mixin_index.expect("constructor mixins are non-empty")] = false;
             mixin_count -= 1;
         }
         (mixin_flags, mixin_count)
     }
 
     // checker.go:21728
-    pub(crate) fn include_mixin_type(&mut self, t: P<Type>, types: &[P<Type>], mixin_flags: &[bool], index: i32) -> P<Type> {
+    pub(crate) fn include_mixin_type(
+        &mut self,
+        t: P<Type>,
+        types: &[P<Type>],
+        mixin_flags: &[bool],
+        index: usize,
+    ) -> P<Type> {
         let mut mixed_types: Vec<P<Type>> = Vec::new();
         for i in 0..types.len() {
-            if i as i32 == index {
+            if i == index {
                 mixed_types.push(t);
             } else if mixin_flags[i] {
                 let sig = self.get_signatures_of_type(types[i], SignatureKind::Construct)[0];

@@ -80,11 +80,16 @@ pub fn get_text_of_node_from_source_text(source_text: &str, node: P<Node>, inclu
     if ast::node_is_missing(Some(node)) {
         return String::new();
     }
-    let mut pos = node.pos();
+    let mut pos = node
+        .pos()
+        .expect_source("parsed nodes have source positions");
     if !include_trivia {
         pos = skip_trivia(source_text, pos);
     }
-    let mut text = source_text[pos as usize..node.end() as usize].to_string();
+    let end = node
+        .end()
+        .expect_source("parsed nodes have source positions");
+    let mut text = source_text[pos as usize..end as usize].to_string();
     if is_jsdoc_type_expression_or_child(node) {
         text = normalize_jsdoc_type_source_text(&text);
     }

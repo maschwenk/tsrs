@@ -71,7 +71,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         document_uri: &lsproto::DocumentUri,
-        position: i32,
+        position: u32,
         program: &'static Program,
         source_file: P<SourceFile>,
         files_to_search: &[lsproto::DocumentUri],
@@ -171,7 +171,7 @@ impl LanguageService {
     fn get_semantic_document_highlights(
         &self,
         ctx: &Context,
-        position: i32,
+        position: u32,
         node: P<Node>,
         program: &'static Program,
         source_files: &[P<SourceFile>],
@@ -353,21 +353,32 @@ impl LanguageService {
                 let mut should_combine = true;
 
                 // Avoid recalculating getStart() by iterating backwards.
-                let mut if_token_start = scanner::get_token_pos_of_node(if_keyword, source_file, false);
-                if if_token_start < 0 {
-                    if_token_start = if_keyword.pos();
-                }
+                let if_token_start = scanner::get_token_pos_of_node(if_keyword, source_file, false);
                 let text = source_file.text().as_bytes();
-                let mut j = if_token_start - 1;
-                while j >= else_keyword.end() {
+                let else_end = else_keyword
+                    .end()
+                    .expect_source("parsed keywords have source positions");
+                let mut j = if_token_start;
+                while j > else_end {
+                    j -= 1;
                     if !stringutil::is_white_space_single_line(text[j as usize]) {
                         should_combine = false;
                         break;
                     }
-                    j -= 1;
                 }
                 if should_combine {
-                    let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(scanner::skip_trivia(source_file.text(), else_keyword.pos()), if_keyword.end(), source_file);
+                    let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(
+                        scanner::skip_trivia(
+                            source_file.text(),
+                            else_keyword
+                                .pos()
+                                .expect_source("parsed keywords have source positions"),
+                        ),
+                        if_keyword
+                            .end()
+                            .expect_source("parsed keywords have source positions"),
+                        source_file,
+                    );
                     if !fidelity.is_none() {
                         highlights.push(lsproto::DocumentHighlight { range: lsp_range, kind: Some(kind) });
                     }

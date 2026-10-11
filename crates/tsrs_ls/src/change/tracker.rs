@@ -5,7 +5,7 @@ use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeList, SourceFile};
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::stringutil;
-use tsrs_core::{CompilerOptions, TextPos, TextRange, P};
+use tsrs_core::{CompilerOptions, P, TextRange};
 use tsrs_lsproto as lsproto;
 use tsrs_printer::{self as printer, EmitContext};
 use tsrs_scanner as scanner;
@@ -290,7 +290,7 @@ impl Tracker {
 
     // tracker.go:231
     // insertTextAt inserts text at an offset in sourceFile.
-    pub(crate) fn insert_text_at(&mut self, source_file: P<SourceFile>, pos: TextPos, text: &str) {
+    pub(crate) fn insert_text_at(&mut self, source_file: P<SourceFile>, pos: u32, text: &str) {
         self.replace_text_range_with_text(source_file, TextRange::new(pos, pos), text);
     }
 
@@ -301,12 +301,24 @@ impl Tracker {
     }
 
     // tracker.go:240
-    pub fn insert_node_at(&mut self, source_file: P<SourceFile>, pos: TextPos, new_node: P<Node>, options: NodeOptions) {
+    pub fn insert_node_at(
+        &mut self,
+        source_file: P<SourceFile>,
+        pos: u32,
+        new_node: P<Node>,
+        options: NodeOptions,
+    ) {
         self.replace_range(source_file, TextRange::new(pos, pos), new_node, options);
     }
 
     // tracker.go:244
-    pub fn insert_nodes_at(&mut self, source_file: P<SourceFile>, pos: TextPos, new_nodes: Vec<P<Node>>, options: NodeOptions) {
+    pub fn insert_nodes_at(
+        &mut self,
+        source_file: P<SourceFile>,
+        pos: u32,
+        new_nodes: Vec<P<Node>>,
+        options: NodeOptions,
+    ) {
         self.replace_range_with_nodes(source_file, TextRange::new(pos, pos), new_nodes, options);
     }
 
@@ -367,7 +379,17 @@ impl Tracker {
         let Some(end_node) = end_node else {
             return false;
         };
-        self.insert_node_at(source_file, end_node.end(), type_node, NodeOptions { prefix: ": ".to_string(), ..Default::default() });
+        self.insert_node_at(
+            source_file,
+            end_node
+                .end()
+                .expect_source("parsed nodes have source positions"),
+            type_node,
+            NodeOptions {
+                prefix: ": ".to_string(),
+                ..Default::default()
+            },
+        );
         true
     }
 
@@ -386,7 +408,13 @@ impl Tracker {
         let last_param = params[params.len() - 1];
         let start_pos = astnav::get_start_of_node(first_param, source_file, false);
         self.insert_text_at(source_file, start_pos, "(");
-        self.insert_text_at(source_file, last_param.end(), ")");
+        self.insert_text_at(
+            source_file,
+            last_param
+                .end()
+                .expect_source("parsed parameters have source positions"),
+            ")",
+        );
     }
 
     // tracker.go:320
@@ -469,32 +497,44 @@ impl Tracker {
                 continue;
             }
 
-            let mut last_non_deleted_index: i32 = -1;
-            let mut i = list.nodes().len() as i32 - 2;
-            while i >= 0 {
-                if !deleted_nodes_in_lists.get(&list.nodes()[i as usize]).copied().unwrap_or(false) {
-                    last_non_deleted_index = i;
-                    break;
-                }
-                i -= 1;
-            }
+            let last_non_deleted_index = (0..list.nodes().len() - 1).rev().find(|&index| {
+                !deleted_nodes_in_lists
+                    .get(&list.nodes()[index])
+                    .copied()
+                    .unwrap_or(false)
+            });
 
-            if last_non_deleted_index != -1 {
-                let start = list.nodes()[last_non_deleted_index as usize].end();
-                let end = self.start_position_to_delete_node_in_list(source_file, list.nodes()[last_non_deleted_index as usize + 1]);
+            if let Some(last_non_deleted_index) = last_non_deleted_index {
+                let start = list.nodes()[last_non_deleted_index]
+                    .end()
+                    .expect_source("parsed nodes have source positions");
+                let end = self.start_position_to_delete_node_in_list(
+                    source_file,
+                    list.nodes()[last_non_deleted_index + 1],
+                );
                 self.replace_text_range_with_text(source_file, TextRange::new(start, end), "");
             }
         }
     }
 
     // tracker.go:397
-    fn end_pos_for_insert_node_after(&mut self, source_file: P<SourceFile>, after: P<Node>, new_node: P<Node>) -> TextPos {
-        if need_semicolon_between(after, new_node) && source_file.text().as_bytes()[after.end() as usize - 1] != b';' {
+    fn end_pos_for_insert_node_after(
+        &mut self,
+        source_file: P<SourceFile>,
+        after: P<Node>,
+        new_node: P<Node>,
+    ) -> u32 {
+        let after_end = after
+            .end()
+            .expect_source("parsed nodes have source positions");
+        if need_semicolon_between(after, new_node)
+            && source_file.text().as_bytes()[after_end as usize - 1] != b';'
+        {
             // check if previous statement ends with semicolon
             // if not - insert semicolon to preserve the code from changing the meaning due to ASI
-            let end_pos = after.end();
+            let end_pos = after_end;
             let semicolon = self.new_token(Kind::SemicolonToken);
-            semicolon.set_loc(TextRange::new(after.end(), after.end()));
+            semicolon.set_loc(TextRange::new(after_end, after_end));
             semicolon.set_parent(after.parent());
             self.replace_range(source_file, TextRange::new(end_pos, end_pos), semicolon, NodeOptions::default());
         }
@@ -516,11 +556,13 @@ impl Tracker {
         let Some(index) = containing_list.nodes().iter().position(|&n| n == after) else {
             return;
         };
-        let end = after.end();
+        let end = after
+            .end()
+            .expect_source("parsed nodes have source positions");
         if index != containing_list.nodes().len() - 1 {
             // any element except the last one
             // use next sibling as an anchor
-            let next_token = astnav::get_token_at_position(source_file, after.end());
+            let next_token = astnav::get_token_at_position(source_file, end);
             if is_separator(after, Some(next_token)) {
                 // for list
                 // a, b, c
@@ -541,13 +583,34 @@ impl Tracker {
                 let next_node = containing_list.nodes()[index + 1];
                 let start_pos = scanner::skip_trivia_ex(
                     source_file.text(),
-                    next_node.pos(),
-                    Some(&scanner::SkipTriviaOptions { stop_after_line_break: false, stop_at_comments: true, ..Default::default() }),
+                    next_node
+                        .pos()
+                        .expect_source("parsed nodes have source positions"),
+                    Some(&scanner::SkipTriviaOptions {
+                        stop_after_line_break: false,
+                        stop_at_comments: true,
+                        ..Default::default()
+                    }),
                 );
 
                 // write separator and leading trivia of the next element as suffix
-                let suffix = format!("{}{}", scanner::token_to_string(next_token.kind()), &source_file.text()[next_token.end() as usize..start_pos as usize]);
-                self.insert_nodes_at(source_file, start_pos, vec![new_node], NodeOptions { suffix, ..Default::default() });
+                let suffix = format!(
+                    "{}{}",
+                    scanner::token_to_string(next_token.kind()),
+                    &source_file.text()[next_token
+                        .end()
+                        .expect_source("parsed tokens have source positions")
+                        as usize..start_pos as usize],
+                );
+                self.insert_nodes_at(
+                    source_file,
+                    start_pos,
+                    vec![new_node],
+                    NodeOptions {
+                        suffix,
+                        ..Default::default()
+                    },
+                );
             }
             return;
         }
@@ -567,8 +630,17 @@ impl Tracker {
         let mut separator = Kind::CommaToken; // SyntaxKind.CommaToken | SyntaxKind.SemicolonToken
         if containing_list.nodes().len() != 1 {
             // otherwise, if list has more than one element, pick separator from the list
-            let token_before_insert_position = astnav::find_preceding_token(source_file, after.pos());
-            separator = if is_separator(after, token_before_insert_position) { token_before_insert_position.unwrap().kind() } else { Kind::CommaToken };
+            let token_before_insert_position = astnav::find_preceding_token(
+                source_file,
+                after
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
+            separator = if is_separator(after, token_before_insert_position) {
+                token_before_insert_position.unwrap().kind()
+            } else {
+                Kind::CommaToken
+            };
             // determine if list is multiline by checking lines of after element and element that precedes it.
             let after_minus_one_start_line_position = format::get_line_start_position_for_position(
                 astnav::get_start_of_node(containing_list.nodes()[index - 1], source_file, false),
@@ -576,8 +648,20 @@ impl Tracker {
             );
             multiline_list = after_minus_one_start_line_position != after_start_line_position;
         }
-        if has_comments_before_line_break(source_file.text(), after.end())
-            || !positions_are_on_same_line(containing_list.pos(), containing_list.end(), source_file)
+        if has_comments_before_line_break(source_file.text(), end)
+            || !positions_are_on_same_line(
+                containing_list
+                    .loc
+                    .get()
+                    .pos()
+                    .expect_source("parsed lists have source positions"),
+                containing_list
+                    .loc
+                    .get()
+                    .end()
+                    .expect_source("parsed lists have source positions"),
+                source_file,
+            )
         {
             // in this case we'll always treat containing list as multiline
             multiline_list = true;
@@ -586,7 +670,10 @@ impl Tracker {
             // insert separator immediately following the 'after' node to preserve comments in trailing trivia
             let separator_token = self.new_token(separator);
             let separator_string = scanner::token_to_string(separator);
-            separator_token.set_loc(TextRange::new(end, end + separator_string.len() as i32));
+            separator_token.set_loc(TextRange::new(
+                end,
+                end + u32::try_from(separator_string.len()).expect("separator length exceeds u32"),
+            ));
             separator_token.set_parent(after.parent());
             let end_pos = end;
             self.replace_range(source_file, TextRange::new(end_pos, end_pos), separator_token, NodeOptions::default());
@@ -690,18 +777,31 @@ impl Tracker {
     }
 
     // tracker.go:586
-    fn insert_node_at_start_worker(&mut self, source_file: P<SourceFile>, node: P<Node>, new_element: P<Node>) {
-        let mut indentation = self.try_compute_indentation_from_existing_members(source_file, node);
-        if indentation < 0 {
-            indentation = self.try_compute_indentation_for_new_member(source_file, node);
-        }
+    fn insert_node_at_start_worker(
+        &mut self,
+        source_file: P<SourceFile>,
+        node: P<Node>,
+        new_element: P<Node>,
+    ) {
+        let indentation = self
+            .try_compute_indentation_from_existing_members(source_file, node)
+            .unwrap_or_else(|| self.try_compute_indentation_for_new_member(source_file, node));
 
         let Some(members) = get_members_or_properties(node) else {
             return;
         };
 
         let options = self.get_insert_node_at_start_insert_options(source_file, node, indentation);
-        self.insert_node_at(source_file, members.pos(), new_element, options);
+        self.insert_node_at(
+            source_file,
+            members
+                .loc
+                .get()
+                .pos()
+                .expect_source("parsed member lists have source positions"),
+            new_element,
+            options,
+        );
     }
 
     // tracker.go:600
@@ -718,16 +818,21 @@ impl Tracker {
         if indent_size <= 0 {
             indent_size = 4;
         }
-        find_indentation_column(source_file.text(), line_start, node_start, tab_size).max(0) + indent_size
+        find_indentation_column(source_file.text(), line_start, node_start, tab_size).unwrap_or(0)
+            + indent_size
     }
 
     // tracker.go:616
-    fn try_compute_indentation_from_existing_members(&self, source_file: P<SourceFile>, node: P<Node>) -> i32 {
+    fn try_compute_indentation_from_existing_members(
+        &self,
+        source_file: P<SourceFile>,
+        node: P<Node>,
+    ) -> Option<i32> {
         let Some(members) = get_members_or_properties(node) else {
-            return -1;
+            return None;
         };
 
-        let mut indentation = -1;
+        let mut indentation = None;
         let text = source_file.text();
         let mut tab_size = self.format_settings.tab_size;
         let mut last = node;
@@ -737,26 +842,28 @@ impl Tracker {
         }
 
         for &member in members.nodes() {
-            if printer::range_start_positions_are_on_same_line(last.loc(), member.loc(), source_file) {
-                return -1;
+            if printer::range_start_positions_are_on_same_line(
+                last.loc(),
+                member.loc(),
+                source_file,
+            ) {
+                return None;
             }
 
             let member_start = astnav::get_start_of_node(member, source_file, false);
-            let line_start = format::get_line_start_position_for_position(member_start, source_file);
-            let column = find_indentation_column(text, line_start, member_start, tab_size);
-            if column < 0 {
-                return -1;
-            }
+            let line_start =
+                format::get_line_start_position_for_position(member_start, source_file);
+            let column = find_indentation_column(text, line_start, member_start, tab_size)?;
 
-            if indentation >= 0 {
+            if let Some(indentation) = indentation {
                 if indentation != column {
-                    return -1;
+                    return None;
                 }
                 last = member;
                 continue;
             }
 
-            indentation = column;
+            indentation = Some(column);
             last = member;
         }
 
@@ -871,15 +978,25 @@ impl Tracker {
 
             let members = get_members_or_properties(node);
             let is_empty = members.is_none_or(|m| m.nodes().is_empty());
-            let is_single_line = positions_are_on_same_line(open_brace.end(), close_brace.end(), source_file);
+            let open_brace_end = open_brace
+                .end()
+                .expect_source("parsed tokens have source positions");
+            let close_brace_end = close_brace
+                .end()
+                .expect_source("parsed tokens have source positions");
+            let is_single_line =
+                positions_are_on_same_line(open_brace_end, close_brace_end, source_file);
 
-            if is_empty && is_single_line && open_brace.end() != close_brace.end() - 1 {
-                self.delete_range(source_file, TextRange::new(open_brace.end(), close_brace.end() - 1));
+            if is_empty && is_single_line && open_brace_end != close_brace_end - 1 {
+                self.delete_range(
+                    source_file,
+                    TextRange::new(open_brace_end, close_brace_end - 1),
+                );
             }
 
             if is_single_line {
                 let nl = self.new_line.clone();
-                self.insert_text_at(source_file, close_brace.end() - 1, &nl);
+                self.insert_text_at(source_file, close_brace_end - 1, &nl);
             }
         }
     }
@@ -910,7 +1027,12 @@ pub(crate) fn is_separator(node: P<Node>, candidate: Option<P<Node>>) -> bool {
 }
 
 // tracker.go:803
-fn find_indentation_column(text: &str, line_start: i32, member_start: i32, tab_size: i32) -> i32 {
+fn find_indentation_column(
+    text: &str,
+    line_start: u32,
+    member_start: u32,
+    tab_size: i32,
+) -> Option<i32> {
     let mut column = 0;
 
     let bytes = text.as_bytes();
@@ -919,17 +1041,17 @@ fn find_indentation_column(text: &str, line_start: i32, member_start: i32, tab_s
         let ch = bytes[i as usize] as i32;
 
         if stringutil::is_line_break(ch) {
-            return -1;
+            return None;
         }
         if stringutil::is_white_space_single_line(ch) {
             column = advance_indentation_column(column, ch, tab_size);
             i += 1;
             continue;
         }
-        return column;
+        return Some(column);
     }
 
-    column
+    Some(column)
 }
 
 // tracker.go:822

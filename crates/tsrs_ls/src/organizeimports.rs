@@ -1,7 +1,8 @@
+use rustc_hash::FxHashMap;
+use std::cmp::Ordering;
+use std::fmt::Write as _;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::fmt::Write as _;
-use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeFactoryHooks, SourceFile};
 use tsrs_checker::Checker;
 use tsrs_compiler::Program;
@@ -124,8 +125,11 @@ struct organizeImportsComparerSettings {
 impl organizeImportsComparerSettings {
     // Go calls the (possibly nil) func value directly; a nil comparer is only reachable when detection found
     // nothing, where Go would panic on the call too.
-    fn module_specifier_comparer(&self) -> &dyn Fn(&str, &str) -> i32 {
-        &**self.module_specifier_comparer.as_ref().expect("nil moduleSpecifierComparer")
+    fn module_specifier_comparer(&self) -> &dyn Fn(&str, &str) -> Ordering {
+        &**self
+            .module_specifier_comparer
+            .as_ref()
+            .expect("nil moduleSpecifierComparer")
     }
 }
 
@@ -159,7 +163,7 @@ fn organize_imports_worker(
         if should_sort {
             goslices::sort_func(&mut grouped, |a, b| {
                 if a.is_empty() || b.is_empty() {
-                    return 0;
+                    return Ordering::Equal;
                 }
                 lsutil::compare_module_specifiers(a[0].module_specifier(), b[0].module_specifier(), comparer.module_specifier_comparer())
             });
@@ -433,13 +437,12 @@ pub(crate) fn group_by_newline_contiguous(source_file: P<SourceFile>, decls: &[P
 
 // organizeimports.go:409
 fn is_new_group(source_file: P<SourceFile>, decl: P<Node>, s: &mut scanner::Scanner) -> bool {
-    let full_start = decl.pos();
-    if full_start < 0 {
+    let Some(full_start) = decl.pos().source_offset() else {
         return false;
-    }
+    };
 
     let text = source_file.text();
-    let text_len = text.len() as i32;
+    let text_len = u32::try_from(text.len()).expect("source text length exceeds u32");
 
     if full_start >= text_len {
         return false;
@@ -470,7 +473,7 @@ fn is_new_group(source_file: P<SourceFile>, decl: P<Node>, s: &mut scanner::Scan
 // organizeimports.go:445
 fn coalesce_imports_worker(
     import_decls: &[P<Node>],
-    comparer: &dyn Fn(&str, &str) -> i32,
+    comparer: &dyn Fn(&str, &str) -> Ordering,
     specifier_comparer: &NodeComparer,
     source_file: Option<P<SourceFile>>,
     change_tracker: &mut change::Tracker,
@@ -854,7 +857,7 @@ fn organize_exports_worker(
 fn coalesce_exports_worker(
     export_group: &[P<Node>],
     specifier_comparer: &NodeComparer,
-    module_specifier_comparer: &dyn Fn(&str, &str) -> i32,
+    module_specifier_comparer: &dyn Fn(&str, &str) -> Ordering,
     source_file: Option<P<SourceFile>>,
     change_tracker: &mut change::Tracker,
 ) -> Vec<P<Node>> {
@@ -876,10 +879,10 @@ fn coalesce_exports_worker(
 
     goslices::sort_stable_func(&mut module_specifier_order, |a, b| {
         if a.is_empty() && !b.is_empty() {
-            return 1;
+            return Ordering::Greater;
         }
         if !a.is_empty() && b.is_empty() {
-            return -1;
+            return Ordering::Less;
         }
         module_specifier_comparer(a, b)
     });

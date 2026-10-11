@@ -6,10 +6,8 @@ use super::*;
 // Tries to find the sourceMappingURL comment at the end of a file.
 pub fn try_get_source_mapping_url(line_info: Option<&ECMALineInfo>) -> String {
     if let Some(line_info) = line_info {
-        let mut index = line_info.line_count() as isize - 1;
-        while index >= 0 {
-            let line = line_info.line_text(index as usize);
-            index -= 1;
+        for index in (0..line_info.line_count()).rev() {
+            let line = line_info.line_text(index);
             // Go unicode.IsSpace = the Unicode White_Space property = char::is_whitespace.
             let line = line.trim_start_matches(char::is_whitespace);
             let line = line.trim_end_matches(|c: char| stringutil::is_line_break(c));

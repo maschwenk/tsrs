@@ -9,7 +9,7 @@ struct refCountCacheEntry<V> {
 
 struct refCountCacheEntryState<V> {
     value: Option<V>,
-    ref_count: i32,
+    ref_count: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -72,7 +72,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
     pub fn acquire_existing(&self, identity: &K) -> Option<V> {
         let entry = self.entries.load(identity)?;
         let mut st = entry.mu.lock().unwrap();
-        if st.ref_count <= 0 && !self.options.disable_deletion {
+        if st.ref_count == 0 && !self.options.disable_deletion {
             return None;
         }
         st.ref_count += 1;
@@ -114,7 +114,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
             panic!("cache entry not found");
         };
         let mut st = entry.mu.lock().unwrap();
-        if st.ref_count <= 0 && !self.options.disable_deletion {
+        if st.ref_count == 0 && !self.options.disable_deletion {
             // Entry was deleted while we were acquiring the lock
             let value = st.value.clone();
             if let (Some(on_revive), Some(value)) = (&self.on_revive, &value) {
@@ -137,8 +137,8 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
             return;
         };
         let mut st = entry.mu.lock().unwrap();
-        st.ref_count -= 1;
-        if st.ref_count <= 0 && !self.options.disable_deletion {
+        st.ref_count = st.ref_count.saturating_sub(1);
+        if st.ref_count == 0 && !self.options.disable_deletion {
             self.entries.delete(identity);
             if let (Some(on_evict), Some(value)) = (&self.on_evict, &st.value) {
                 on_evict(value);
@@ -161,7 +161,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
             if loaded {
                 drop(guard);
                 let mut existing_guard = existing.mu.lock().unwrap();
-                if existing_guard.ref_count <= 0 && !self.options.disable_deletion {
+                if existing_guard.ref_count == 0 && !self.options.disable_deletion {
                     // Existing entry was deleted while we were acquiring the lock
                     continue;
                 }

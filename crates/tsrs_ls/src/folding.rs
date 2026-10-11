@@ -15,14 +15,6 @@ use crate::languageservice::LanguageService;
 use crate::spanmap::{Feature, Fidelity};
 use crate::utilities::is_in_comment;
 
-fn go_cmp_compare(a: u32, b: u32) -> i32 {
-    match a.cmp(&b) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    }
-}
-
 impl LanguageService {
     // folding.go:22
     pub fn provide_folding_range(&self, ctx: &Context, document_uri: &lsproto::DocumentUri) -> Result<lsproto::FoldingRangeResponse, lsproto::Error> {
@@ -39,19 +31,19 @@ impl LanguageService {
             res.extend(ranges);
         }
         goslices::sort_stable_func(&mut res, |a, b| {
-            let c = go_cmp_compare(a.start_line, b.start_line);
-            if c != 0 {
+            let c = a.start_line.cmp(&b.start_line);
+            if c != std::cmp::Ordering::Equal {
                 return c;
             }
-            let c = go_cmp_compare(a.start_character.unwrap(), b.start_character.unwrap());
-            if c != 0 {
+            let c = a.start_character.unwrap().cmp(&b.start_character.unwrap());
+            if c != std::cmp::Ordering::Equal {
                 return c;
             }
-            let c = go_cmp_compare(a.end_line, b.end_line);
-            if c != 0 {
+            let c = a.end_line.cmp(&b.end_line);
+            if c != std::cmp::Ordering::Equal {
                 return c;
             }
-            go_cmp_compare(a.end_character.unwrap(), b.end_character.unwrap())
+            a.end_character.unwrap().cmp(&b.end_character.unwrap())
         });
         let mut seen: FxHashSet<FoldingRangeKey> = FxHashSet::default();
         res.retain(|folding_range| seen.insert(key_for_folding_range(folding_range)));
@@ -159,7 +151,9 @@ impl LanguageService {
                         source_file,
                         false, /*includeJSDoc*/
                     ),
-                    statements[last_import].end(),
+                    statements[last_import]
+                        .end()
+                        .expect_source("parsed imports have source positions"),
                     folding_range_kind,
                     source_file,
                     self,
@@ -178,14 +172,13 @@ impl LanguageService {
     // folding.go:160
     fn add_region_outlining_spans(&self, ctx: &Context, source_file: P<SourceFile>) -> Vec<lsproto::FoldingRange> {
         struct RegionStart {
-            position: i32,
+            position: u32,
             collapsed_text: Option<String>,
         }
         let mut regions: Vec<RegionStart> = Vec::with_capacity(40);
         let mut out = Vec::with_capacity(40);
         let line_starts = scanner::get_ecma_line_starts(&*source_file);
         for &current_line_start in line_starts {
-            let current_line_start = current_line_start as i32;
             let line_end = get_line_end_of_position(source_file, current_line_start);
             let line_text = &source_file.text()[current_line_start as usize..line_end as usize];
             let result = parse_region_delimiter(line_text);
@@ -198,7 +191,13 @@ impl LanguageService {
 
             if result.is_start {
                 let mut region = RegionStart {
-                    position: go_strings_index(&source_file.text()[current_line_start as usize..line_end as usize], "//") + current_line_start,
+                    position: current_line_start
+                        + u32::try_from(
+                            source_file.text()[current_line_start as usize..line_end as usize]
+                                .find("//")
+                                .expect("a region delimiter is a comment"),
+                        )
+                        .expect("region offset exceeds u32"),
                     collapsed_text: None,
                 };
                 if supports_collapsed_text(ctx) {
@@ -223,12 +222,14 @@ impl LanguageService {
     }
 }
 
-fn go_strings_index(s: &str, substr: &str) -> i32 {
-    s.find(substr).map_or(-1, |i| i as i32)
-}
-
 // folding.go:203
-fn visit_node(ctx: &Context, n: P<Node>, depth_remaining: i32, source_file: P<SourceFile>, l: &LanguageService) -> Vec<lsproto::FoldingRange> {
+fn visit_node(
+    ctx: &Context,
+    n: P<Node>,
+    depth_remaining: usize,
+    source_file: P<SourceFile>,
+    l: &LanguageService,
+) -> Vec<lsproto::FoldingRange> {
     let mut depth_remaining = depth_remaining;
     if n.flags().intersects(NodeFlags::Reparsed) || depth_remaining == 0 || ctx.err().is_some() {
         return Vec::new();
@@ -251,11 +252,29 @@ fn visit_node(ctx: &Context, n: P<Node>, depth_remaining: i32, source_file: P<So
     }
     if ast::is_block(n) {
         let statements = n.as_block().statements;
-        folding_range.extend(add_outlining_for_leading_comments_for_pos(ctx, statements.end(), source_file, l));
+        folding_range.extend(add_outlining_for_leading_comments_for_pos(
+            ctx,
+            statements
+                .loc
+                .get()
+                .end()
+                .expect_source("parsed statement lists have source positions"),
+            source_file,
+            l,
+        ));
     }
     if ast::is_module_block(n) {
         let statements = n.as_module_block().statements;
-        folding_range.extend(add_outlining_for_leading_comments_for_pos(ctx, statements.end(), source_file, l));
+        folding_range.extend(add_outlining_for_leading_comments_for_pos(
+            ctx,
+            statements
+                .loc
+                .get()
+                .end()
+                .expect_source("parsed statement lists have source positions"),
+            source_file,
+            l,
+        ));
     }
     if ast::is_class_like(n) || ast::is_interface_declaration(n) {
         let members = if ast::is_class_declaration(n) {
@@ -265,7 +284,16 @@ fn visit_node(ctx: &Context, n: P<Node>, depth_remaining: i32, source_file: P<So
         } else {
             n.as_interface_declaration().members
         };
-        folding_range.extend(add_outlining_for_leading_comments_for_pos(ctx, members.end(), source_file, l));
+        folding_range.extend(add_outlining_for_leading_comments_for_pos(
+            ctx,
+            members
+                .loc
+                .get()
+                .end()
+                .expect_source("parsed member lists have source positions"),
+            source_file,
+            l,
+        ));
     }
 
     if let Some(span) = get_outlining_span_for_node(ctx, n, source_file, l) {
@@ -305,29 +333,55 @@ fn add_outlining_for_leading_comments_for_node(ctx: &Context, n: P<Node>, source
     if ast::is_jsx_text(n) {
         return Vec::new();
     }
-    add_outlining_for_leading_comments_for_pos(ctx, n.pos(), source_file, l)
+    add_outlining_for_leading_comments_for_pos(
+        ctx,
+        n.pos().expect_source("parsed nodes have source positions"),
+        source_file,
+        l,
+    )
 }
 
 // folding.go:302
-fn add_outlining_for_leading_comments_for_pos(ctx: &Context, pos: i32, source_file: P<SourceFile>, l: &LanguageService) -> Vec<lsproto::FoldingRange> {
+fn add_outlining_for_leading_comments_for_pos(
+    ctx: &Context,
+    pos: u32,
+    source_file: P<SourceFile>,
+    l: &LanguageService,
+) -> Vec<lsproto::FoldingRange> {
     let mut folding_range = Vec::with_capacity(40);
-    let mut first_single_line_comment_start = -1;
-    let mut last_single_line_comment_end = -1;
-    let mut single_line_comment_count = 0;
+    let mut first_single_line_comment_start = None;
+    let mut last_single_line_comment_end = None;
+    let mut single_line_comment_count = 0_usize;
     let folding_range_kind_comment = lsproto::FoldingRangeKind::Comment;
 
-    let combine_and_add_multiple_single_line_comments = |single_line_comment_count: i32, first: i32, last: i32| -> Option<lsproto::FoldingRange> {
+    let combine_and_add_multiple_single_line_comments = |single_line_comment_count: usize,
+                                                         first: Option<u32>,
+                                                         last: Option<u32>|
+     -> Option<lsproto::FoldingRange> {
         // Only outline spans of two or more consecutive single line comments
         if single_line_comment_count > 1 {
-            return create_folding_range_from_bounds(ctx, first, last, folding_range_kind_comment, source_file, l);
+            return create_folding_range_from_bounds(
+                ctx,
+                first.expect("a comment group has a first position"),
+                last.expect("a comment group has a last position"),
+                folding_range_kind_comment,
+                source_file,
+                l,
+            );
         }
         None
     };
 
     let source_text = source_file.text();
     for comment in scanner::get_leading_comment_ranges(source_text, pos) {
-        let comment_pos = comment.text_range.pos();
-        let comment_end = comment.text_range.end();
+        let comment_pos = comment
+            .text_range
+            .pos()
+            .expect_source("comment ranges have source positions");
+        let comment_end = comment
+            .text_range
+            .end()
+            .expect_source("comment ranges have source positions");
 
         if ctx.err().is_some() {
             return Vec::new();
@@ -349,9 +403,9 @@ fn add_outlining_for_leading_comments_for_pos(ctx: &Context, pos: i32, source_fi
                 // For single line comments, combine consecutive ones (2 or more) into
                 // a single span from the start of the first till the end of the last
                 if single_line_comment_count == 0 {
-                    first_single_line_comment_start = comment_pos;
+                    first_single_line_comment_start = Some(comment_pos);
                 }
-                last_single_line_comment_end = comment_end;
+                last_single_line_comment_end = Some(comment_end);
                 single_line_comment_count += 1;
             }
             Kind::MultiLineCommentTrivia => {
@@ -522,10 +576,15 @@ fn span_for_import_export_elements(ctx: &Context, node: P<Node>, source_file: P<
 // folding.go:485
 fn span_for_parenthesized_expression(ctx: &Context, node: P<Node>, source_file: P<SourceFile>, l: &LanguageService) -> Option<lsproto::FoldingRange> {
     let start = astnav::get_start_of_node(node, source_file, false /*includeJSDoc*/);
-    if printer::positions_are_on_same_line(start, node.end(), source_file) {
+    if printer::positions_are_on_same_line(start.into(), node.end(), source_file) {
         return None;
     }
-    let (text_range, fidelity) = l.create_folding_range_from_bounds(start, node.end(), source_file);
+    let (text_range, fidelity) = l.create_folding_range_from_bounds(
+        start,
+        node.end()
+            .expect_source("parsed nodes have source positions"),
+        source_file,
+    );
     if fidelity.is_none() {
         return None;
     }
@@ -555,7 +614,13 @@ fn span_for_arrow_function(ctx: &Context, node: P<Node>, source_file: P<SourceFi
     if ast::is_block(body) || ast::is_parenthesized_expression(body) || printer::positions_are_on_same_line(body.pos(), body.end(), source_file) {
         return None;
     }
-    let (text_range, fidelity) = l.create_folding_range_from_bounds(body.pos(), body.end(), source_file);
+    let (text_range, fidelity) = l.create_folding_range_from_bounds(
+        body.pos()
+            .expect_source("parsed nodes have source positions"),
+        body.end()
+            .expect_source("parsed nodes have source positions"),
+        source_file,
+    );
     if fidelity.is_none() {
         return None;
     }
@@ -570,7 +635,8 @@ fn span_for_template_literal(ctx: &Context, node: P<Node>, source_file: P<Source
     create_folding_range_from_bounds(
         ctx,
         astnav::get_start_of_node(node, source_file, false /*includeJSDoc*/),
-        node.end(),
+        node.end()
+            .expect_source("parsed nodes have source positions"),
         lsproto::FoldingRangeKind(""),
         source_file,
         l,
@@ -582,8 +648,15 @@ fn span_for_jsx_element(ctx: &Context, node: P<Node>, source_file: P<SourceFile>
     if node.kind() == Kind::JsxElement {
         let jsx_element = node.as_jsx_element();
         let (text_range, fidelity) = l.create_folding_range_from_bounds(
-            astnav::get_start_of_node(jsx_element.opening_element, source_file, false /*includeJSDoc*/),
-            jsx_element.closing_element.end(),
+            astnav::get_start_of_node(
+                jsx_element.opening_element,
+                source_file,
+                false, /*includeJSDoc*/
+            ),
+            jsx_element
+                .closing_element
+                .end()
+                .expect_source("parsed JSX elements have source positions"),
             source_file,
         );
         if fidelity.is_none() {
@@ -596,8 +669,15 @@ fn span_for_jsx_element(ctx: &Context, node: P<Node>, source_file: P<SourceFile>
     // JsxFragment
     let jsx_fragment = node.as_jsx_fragment();
     let (text_range, fidelity) = l.create_folding_range_from_bounds(
-        astnav::get_start_of_node(jsx_fragment.opening_fragment, source_file, false /*includeJSDoc*/),
-        jsx_fragment.closing_fragment.end(),
+        astnav::get_start_of_node(
+            jsx_fragment.opening_fragment,
+            source_file,
+            false, /*includeJSDoc*/
+        ),
+        jsx_fragment
+            .closing_fragment
+            .end()
+            .expect_source("parsed JSX fragments have source positions"),
         source_file,
     );
     if fidelity.is_none() {
@@ -619,7 +699,8 @@ fn span_for_jsx_attributes(ctx: &Context, node: P<Node>, source_file: P<SourceFi
     create_folding_range_from_bounds(
         ctx,
         astnav::get_start_of_node(node, source_file, false /*includeJSDoc*/),
-        node.end(),
+        node.end()
+            .expect_source("parsed nodes have source positions"),
         lsproto::FoldingRangeKind(""),
         source_file,
         l,
@@ -629,7 +710,19 @@ fn span_for_jsx_attributes(ctx: &Context, node: P<Node>, source_file: P<SourceFi
 // folding.go:562
 fn span_for_node_array(ctx: &Context, statements: P<ast::NodeList>, source_file: P<SourceFile>, l: &LanguageService) -> Option<lsproto::FoldingRange> {
     if !statements.nodes().is_empty() {
-        let (text_range, fidelity) = l.create_folding_range_from_bounds(statements.pos(), statements.end(), source_file);
+        let (text_range, fidelity) = l.create_folding_range_from_bounds(
+            statements
+                .loc
+                .get()
+                .pos()
+                .expect_source("parsed statement lists have source positions"),
+            statements
+                .loc
+                .get()
+                .end()
+                .expect_source("parsed statement lists have source positions"),
+            source_file,
+        );
         if fidelity.is_none() {
             return None;
         }
@@ -659,9 +752,23 @@ fn range_between_tokens(
     l: &LanguageService,
 ) -> Option<lsproto::FoldingRange> {
     let (text_range, fidelity) = if use_full_start {
-        l.create_folding_range_from_bounds(open_token.pos(), close_token.end(), source_file)
+        l.create_folding_range_from_bounds(
+            open_token
+                .pos()
+                .expect_source("parsed tokens have source positions"),
+            close_token
+                .end()
+                .expect_source("parsed tokens have source positions"),
+            source_file,
+        )
     } else {
-        l.create_folding_range_from_bounds(astnav::get_start_of_node(open_token, source_file, false /*includeJSDoc*/), close_token.end(), source_file)
+        l.create_folding_range_from_bounds(
+            astnav::get_start_of_node(open_token, source_file, false /*includeJSDoc*/),
+            close_token
+                .end()
+                .expect_source("parsed tokens have source positions"),
+            source_file,
+        )
     };
     if fidelity.is_none() {
         return None;
@@ -694,8 +801,8 @@ fn create_folding_range(ctx: &Context, text_range: lsproto::Range, folding_range
 // folding.go:622
 fn create_folding_range_from_bounds(
     ctx: &Context,
-    pos: i32,
-    end: i32,
+    pos: u32,
+    end: u32,
     folding_range_kind: lsproto::FoldingRangeKind,
     source_file: P<SourceFile>,
     l: &LanguageService,
@@ -709,8 +816,17 @@ fn create_folding_range_from_bounds(
 
 impl LanguageService {
     // folding.go:630
-    fn create_folding_range_from_bounds(&self, start: i32, end: i32, source_file: P<SourceFile>) -> (lsproto::Range, Fidelity) {
-        self.converters.to_lsp_range_for_feature(&source_file, TextRange::new(start, end), Feature::FoldingRanges)
+    fn create_folding_range_from_bounds(
+        &self,
+        start: u32,
+        end: u32,
+        source_file: P<SourceFile>,
+    ) -> (lsproto::Range, Fidelity) {
+        self.converters.to_lsp_range_for_feature(
+            &source_file,
+            TextRange::new(start, end),
+            Feature::FoldingRanges,
+        )
     }
 }
 

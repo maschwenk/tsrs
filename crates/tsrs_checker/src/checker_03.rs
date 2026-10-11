@@ -213,7 +213,7 @@ impl Checker {
     // checker.go:4501
     pub(crate) fn are_type_parameters_identical(&mut self, declarations: &[P<Node>], target_parameters: &[P<Type>], mut get_type_parameter_declarations: impl FnMut(&mut Checker, P<Node>) -> Vec<P<Node>>) -> bool {
         let max_type_argument_count = target_parameters.len();
-        let min_type_argument_count = self.get_min_type_argument_count(target_parameters) as usize;
+        let min_type_argument_count = self.get_min_type_argument_count(target_parameters);
         for &declaration in declarations {
             // If this declaration has too few or too many type parameters, we report an error
             let source_parameters = get_type_parameter_declarations(self, declaration);
@@ -886,7 +886,14 @@ impl Checker {
     }
 
     // checker.go:5051
-    pub(crate) fn is_property_initialized_in_static_blocks(&mut self, prop_name: P<Node>, prop_type: P<Type>, static_blocks: &[P<Node>], start_pos: i32, end_pos: i32) -> bool {
+    pub(crate) fn is_property_initialized_in_static_blocks(
+        &mut self,
+        prop_name: P<Node>,
+        prop_type: P<Type>,
+        static_blocks: &[P<Node>],
+        start_pos: TextPos,
+        end_pos: TextPos,
+    ) -> bool {
         for &static_block in static_blocks {
             // static block must be within the provided range as they are evaluated in document order (unlike constructors)
             if static_block.pos() >= start_pos && static_block.pos() <= end_pos {

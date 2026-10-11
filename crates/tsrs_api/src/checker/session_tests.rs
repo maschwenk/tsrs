@@ -477,7 +477,8 @@ fn type_flags_and_tuple_targets_match_pinned_go() {
         if kind != "alias" {
             pos -= 1;
         }
-        let mut node = Some(tsrs_astnav::get_touching_property_name(sf, pos as i32));
+        let pos = u32::try_from(pos).expect("test source fits in a source position");
+        let mut node = Some(tsrs_astnav::get_touching_property_name(sf, pos));
         while let Some(n) = node {
             if kind == "alias" && n.parent().is_some_and(|p| p.kind() == tsrs_ast::Kind::TypeAliasDeclaration) {
                 break;

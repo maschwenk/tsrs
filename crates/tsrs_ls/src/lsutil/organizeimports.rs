@@ -11,16 +11,12 @@ use tsrs_core::{binary_search_unique_func, bool_to_tristate, compare_booleans, t
 
 use super::*;
 
-pub type StringComparer = Rc<dyn Fn(&str, &str) -> i32>;
-pub type NodeComparer = Rc<dyn Fn(P<Node>, P<Node>) -> i32>;
+pub type StringComparer = Rc<dyn Fn(&str, &str) -> Ordering>;
+pub type NodeComparer = Rc<dyn Fn(P<Node>, P<Node>) -> Ordering>;
 
 // Go `cmp.Compare` / `strings.Compare`.
-fn go_cmp<T: Ord + Copy>(a: T, b: T) -> i32 {
-    match a.cmp(&b) {
-        Ordering::Less => -1,
-        Ordering::Equal => 0,
-        Ordering::Greater => 1,
-    }
+fn go_cmp<T: Ord + Copy>(a: T, b: T) -> Ordering {
+    a.cmp(&b)
 }
 
 // organizeimports.go:18
@@ -93,15 +89,15 @@ fn get_organize_imports_unicode_string_comparer(ignore_case: bool, preferences: 
 }
 
 // organizeimports.go:99
-fn compare_organize_imports_natural_strings(a: &str, b: &str, case_sensitive: bool) -> i32 {
+fn compare_organize_imports_natural_strings(a: &str, b: &str, case_sensitive: bool) -> Ordering {
     let cmp = compare_strings_numeric(&natural_collation_key(a), &natural_collation_key(b));
-    if cmp != 0 {
+    if !cmp.is_eq() {
         return cmp;
     }
 
     if case_sensitive {
         let cmp = compare_organize_imports_case_upper_first(a, b);
-        if cmp != 0 {
+        if !cmp.is_eq() {
             return cmp;
         }
     }
@@ -117,22 +113,30 @@ fn compare_organize_imports_unicode_strings(
     case_first: OrganizeImportsCaseFirst,
     numeric: bool,
     accents: bool,
-) -> i32 {
-    let cmp = compare_organize_imports_unicode_keys(&natural_collation_key(a), &natural_collation_key(b), numeric);
-    if cmp != 0 {
+) -> Ordering {
+    let cmp = compare_organize_imports_unicode_keys(
+        &natural_collation_key(a),
+        &natural_collation_key(b),
+        numeric,
+    );
+    if !cmp.is_eq() {
         return cmp;
     }
 
     if accents {
-        let cmp = compare_organize_imports_unicode_keys(&go_strings_to_lower(a), &go_strings_to_lower(b), numeric);
-        if cmp != 0 {
+        let cmp = compare_organize_imports_unicode_keys(
+            &go_strings_to_lower(a),
+            &go_strings_to_lower(b),
+            numeric,
+        );
+        if !cmp.is_eq() {
             return cmp;
         }
     }
 
     if !ignore_case {
         let cmp = compare_organize_imports_case(a, b, case_first);
-        if cmp != 0 {
+        if !cmp.is_eq() {
             return cmp;
         }
     }
@@ -151,7 +155,7 @@ fn remove_diacritics(s: &str) -> String {
 }
 
 // organizeimports.go:146
-fn compare_organize_imports_unicode_keys(a: &str, b: &str, numeric: bool) -> i32 {
+fn compare_organize_imports_unicode_keys(a: &str, b: &str, numeric: bool) -> Ordering {
     if numeric {
         return compare_strings_numeric(a, b);
     }
@@ -159,7 +163,7 @@ fn compare_organize_imports_unicode_keys(a: &str, b: &str, numeric: bool) -> i32
 }
 
 // organizeimports.go:153
-fn compare_strings_numeric(a: &str, b: &str) -> i32 {
+fn compare_strings_numeric(a: &str, b: &str) -> Ordering {
     let mut a = a.as_bytes();
     let mut b = b.as_bytes();
     while !a.is_empty() && !b.is_empty() {
@@ -168,7 +172,7 @@ fn compare_strings_numeric(a: &str, b: &str) -> i32 {
             let b_run_end = ascii_digit_run_end(b);
 
             let cmp = compare_numeric_text(&a[..a_run_end], &b[..b_run_end]);
-            if cmp != 0 {
+            if !cmp.is_eq() {
                 return cmp;
             }
 
@@ -205,7 +209,7 @@ fn ascii_digit_run_end(s: &[u8]) -> usize {
 }
 
 // organizeimports.go:193
-fn compare_numeric_text(a: &[u8], b: &[u8]) -> i32 {
+fn compare_numeric_text(a: &[u8], b: &[u8]) -> Ordering {
     let mut a_digits: &[u8] = &a[a.iter().position(|&c| c != b'0').unwrap_or(a.len())..];
     let mut b_digits: &[u8] = &b[b.iter().position(|&c| c != b'0').unwrap_or(b.len())..];
     if a_digits.is_empty() {
@@ -219,19 +223,23 @@ fn compare_numeric_text(a: &[u8], b: &[u8]) -> i32 {
         return go_cmp(a_digits.len(), b_digits.len());
     }
     let cmp = go_cmp(a_digits, b_digits);
-    if cmp != 0 {
+    if !cmp.is_eq() {
         return cmp;
     }
     go_cmp(a, b)
 }
 
 // organizeimports.go:212
-fn compare_organize_imports_case_upper_first(a: &str, b: &str) -> i32 {
+fn compare_organize_imports_case_upper_first(a: &str, b: &str) -> Ordering {
     compare_organize_imports_case(a, b, OrganizeImportsCaseFirst::Upper)
 }
 
 // organizeimports.go:216
-fn compare_organize_imports_case(a: &str, b: &str, case_first: OrganizeImportsCaseFirst) -> i32 {
+fn compare_organize_imports_case(
+    a: &str,
+    b: &str,
+    case_first: OrganizeImportsCaseFirst,
+) -> Ordering {
     let a_runes: Vec<char> = a.chars().collect();
     let b_runes: Vec<char> = b.chars().collect();
     let min_len = a_runes.len().min(b_runes.len());
@@ -243,21 +251,21 @@ fn compare_organize_imports_case(a: &str, b: &str, case_first: OrganizeImportsCa
             match case_first {
                 OrganizeImportsCaseFirst::Upper => {
                     if a_upper {
-                        return -1;
+                        return Ordering::Less;
                     }
-                    return 1;
+                    return Ordering::Greater;
                 }
                 OrganizeImportsCaseFirst::Lower => {
                     if !a_upper {
-                        return -1;
+                        return Ordering::Less;
                     }
-                    return 1;
+                    return Ordering::Greater;
                 }
                 _ => {
                     if a_upper {
-                        return 1;
+                        return Ordering::Greater;
                     }
-                    return -1;
+                    return Ordering::Less;
                 }
             }
         }
@@ -330,22 +338,29 @@ pub fn get_external_module_name(specifier: Option<P<Node>>) -> &'static str {
 
 // organizeimports.go:307
 // CompareModuleSpecifiers compares two module specifiers using the given comparer.
-pub fn compare_module_specifiers(m1: Option<P<Node>>, m2: Option<P<Node>>, comparer: &dyn Fn(&str, &str) -> i32) -> i32 {
+pub fn compare_module_specifiers(
+    m1: Option<P<Node>>,
+    m2: Option<P<Node>>,
+    comparer: &dyn Fn(&str, &str) -> Ordering,
+) -> Ordering {
     let name1 = get_external_module_name(m1);
     let name2 = get_external_module_name(m2);
     let cmp = compare_booleans(name1.is_empty(), name2.is_empty());
-    if cmp != 0 {
+    if !cmp.is_eq() {
         return cmp;
     }
-    let cmp = compare_booleans(tspath::is_external_module_name_relative(name1), tspath::is_external_module_name_relative(name2));
-    if cmp != 0 {
+    let cmp = compare_booleans(
+        tspath::is_external_module_name_relative(name1),
+        tspath::is_external_module_name_relative(name2),
+    );
+    if !cmp.is_eq() {
         return cmp;
     }
     comparer(name1, name2)
 }
 
 // organizeimports.go:319
-fn compare_import_kind(s1: P<Node>, s2: P<Node>) -> i32 {
+fn compare_import_kind(s1: P<Node>, s2: P<Node>) -> Ordering {
     go_cmp(get_import_kind_order(s1), get_import_kind_order(s2))
 }
 
@@ -358,17 +373,17 @@ fn compare_import_kind(s1: P<Node>, s2: P<Node>) -> i32 {
 // 5. Named imports
 // 6. ImportEqualsDeclarations
 // 7. Require variable statements
-const IMPORT_KIND_ORDER_SIDE_EFFECT: i32 = 0;
-const IMPORT_KIND_ORDER_TYPE_ONLY: i32 = 1;
-const IMPORT_KIND_ORDER_NAMESPACE: i32 = 2;
-const IMPORT_KIND_ORDER_DEFAULT: i32 = 3;
-const IMPORT_KIND_ORDER_NAMED: i32 = 4;
-const IMPORT_KIND_ORDER_IMPORT_EQUALS: i32 = 5;
-const IMPORT_KIND_ORDER_REQUIRE: i32 = 6;
-const IMPORT_KIND_ORDER_UNKNOWN: i32 = 7;
+const IMPORT_KIND_ORDER_SIDE_EFFECT: u8 = 0;
+const IMPORT_KIND_ORDER_TYPE_ONLY: u8 = 1;
+const IMPORT_KIND_ORDER_NAMESPACE: u8 = 2;
+const IMPORT_KIND_ORDER_DEFAULT: u8 = 3;
+const IMPORT_KIND_ORDER_NAMED: u8 = 4;
+const IMPORT_KIND_ORDER_IMPORT_EQUALS: u8 = 5;
+const IMPORT_KIND_ORDER_REQUIRE: u8 = 6;
+const IMPORT_KIND_ORDER_UNKNOWN: u8 = 7;
 
 // organizeimports.go:342
-fn get_import_kind_order(s1: P<Node>) -> i32 {
+fn get_import_kind_order(s1: P<Node>) -> u8 {
     match s1.kind() {
         Kind::ImportDeclaration => {
             let import_decl = s1.as_import_declaration();
@@ -395,9 +410,17 @@ fn get_import_kind_order(s1: P<Node>) -> i32 {
 
 // organizeimports.go:370
 // CompareImportsOrRequireStatements compares two import or require statements.
-pub fn compare_imports_or_require_statements(s1: P<Node>, s2: P<Node>, comparer: &dyn Fn(&str, &str) -> i32) -> i32 {
-    let cmp = compare_module_specifiers(get_module_specifier_expression(s1), get_module_specifier_expression(s2), comparer);
-    if cmp != 0 {
+pub fn compare_imports_or_require_statements(
+    s1: P<Node>,
+    s2: P<Node>,
+    comparer: &dyn Fn(&str, &str) -> Ordering,
+) -> Ordering {
+    let cmp = compare_module_specifiers(
+        get_module_specifier_expression(s1),
+        get_module_specifier_expression(s2),
+        comparer,
+    );
+    if !cmp.is_eq() {
         return cmp;
     }
     compare_import_kind(s1, s2)
@@ -407,9 +430,9 @@ pub fn compare_imports_or_require_statements(s1: P<Node>, s2: P<Node>, comparer:
 fn compare_import_or_export_specifiers(
     s1: P<Node>,
     s2: P<Node>,
-    comparer: &dyn Fn(&str, &str) -> i32,
+    comparer: &dyn Fn(&str, &str) -> Ordering,
     preferences: &UserPreferences,
-) -> i32 {
+) -> Ordering {
     let type_order = preferences.organize_imports_type_order;
 
     let s1_name = s1.name().unwrap().text();
@@ -418,7 +441,7 @@ fn compare_import_or_export_specifiers(
     match type_order {
         OrganizeImportsTypeOrder::First => {
             let cmp = compare_booleans(s2.is_type_only(), s1.is_type_only());
-            if cmp != 0 {
+            if !cmp.is_eq() {
                 return cmp;
             }
             comparer(s1_name, s2_name)
@@ -427,7 +450,7 @@ fn compare_import_or_export_specifiers(
         _ => {
             // OrganizeImportsTypeOrderLast
             let cmp = compare_booleans(s1.is_type_only(), s2.is_type_only());
-            if cmp != 0 {
+            if !cmp.is_eq() {
                 return cmp;
             }
             comparer(s1_name, s2_name)
@@ -454,13 +477,21 @@ pub fn get_named_import_specifier_comparer(preferences: &UserPreferences, compar
 
 // organizeimports.go:414
 // GetImportSpecifierInsertionIndex returns the index at which to insert a new import specifier.
-pub fn get_import_specifier_insertion_index(sorted_imports: &[P<Node>], new_import: P<Node>, comparer: &dyn Fn(P<Node>, P<Node>) -> i32) -> usize {
+pub fn get_import_specifier_insertion_index(
+    sorted_imports: &[P<Node>],
+    new_import: P<Node>,
+    comparer: &dyn Fn(P<Node>, P<Node>) -> Ordering,
+) -> usize {
     binary_search_unique_func(sorted_imports, |_, &value| comparer(value, new_import)).0
 }
 
 // organizeimports.go:421
 // GetImportDeclarationInsertIndex returns the index at which to insert a new import declaration.
-pub fn get_import_declaration_insert_index(sorted_imports: &[P<Node>], new_import: P<Node>, comparer: &dyn Fn(P<Node>, P<Node>) -> i32) -> usize {
+pub fn get_import_declaration_insert_index(
+    sorted_imports: &[P<Node>],
+    new_import: P<Node>,
+    comparer: &dyn Fn(P<Node>, P<Node>) -> Ordering,
+) -> usize {
     binary_search_unique_func(sorted_imports, |_, &value| comparer(value, new_import)).0
 }
 
@@ -688,10 +719,10 @@ fn detect_case_sensitivity_by_sort(original_groups: &[Vec<String>], comparers_to
 }
 
 // organizeimports.go:651
-fn measure_sortedness<T>(arr: &[T], comparer: impl Fn(&T, &T) -> i32) -> usize {
+fn measure_sortedness<T>(arr: &[T], comparer: impl Fn(&T, &T) -> Ordering) -> usize {
     let mut i = 0;
     for j in 0..arr.len().saturating_sub(1) {
-        if comparer(&arr[j], &arr[j + 1]) > 0 {
+        if comparer(&arr[j], &arr[j + 1]).is_gt() {
             i += 1;
         }
     }

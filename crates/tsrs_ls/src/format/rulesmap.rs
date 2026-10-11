@@ -34,8 +34,8 @@ fn get_rule_bucket_index(row: Kind, column: Kind) -> usize {
 }
 
 // rulesmap.go:40
-const MASK_BIT_SIZE: i32 = 5;
-const MASK: i32 = 0b11111; // MaskBitSize bits
+const MASK_BIT_SIZE: u32 = 5;
+const MASK: u32 = 0b11111; // MaskBitSize bits
 const MAP_ROW_LENGTH: usize = Kind::LastToken as usize + 1;
 
 // rulesmap.go:49
@@ -72,7 +72,7 @@ fn build_rules_map() -> Vec<Vec<&'static RuleImpl>> {
     // Map from bucket index to array of rules
     let mut m: Vec<Vec<&'static RuleImpl>> = vec![Vec::new(); MAP_ROW_LENGTH * MAP_ROW_LENGTH];
     // This array is used only during construction of the rulesbucket in the map
-    let mut rules_bucket_construction_state_list: Vec<i32> = vec![0; m.len()];
+    let mut rules_bucket_construction_state_list: Vec<u32> = vec![0; m.len()];
     for rule in &rules {
         let specific_rule = rule.left_token_range.is_specific && rule.right_token_range.is_specific;
 
@@ -88,7 +88,7 @@ fn build_rules_map() -> Vec<Vec<&'static RuleImpl>> {
 
 // rulesmap.go:87
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-pub struct RulesPosition(pub i32);
+pub struct RulesPosition(pub u32);
 
 impl RulesPosition {
     pub const StopRulesSpecific: RulesPosition = RulesPosition(0);
@@ -120,7 +120,7 @@ fn add_rule(
     rules: &mut Vec<&'static RuleImpl>,
     rule: &'static RuleImpl,
     specific_tokens: bool,
-    construction_state: &mut [i32],
+    construction_state: &mut [u32],
     rules_bucket_index: usize,
 ) {
     let position = if rule.action() & RuleAction::StopAction != RuleAction::None {
@@ -140,8 +140,8 @@ fn add_rule(
 }
 
 // rulesmap.go:143
-fn get_rule_insertion_index(mut index_bitmap: i32, mask_position: RulesPosition) -> usize {
-    let mut index = 0;
+fn get_rule_insertion_index(mut index_bitmap: u32, mask_position: RulesPosition) -> usize {
+    let mut index: u32 = 0;
     let mut pos = 0;
     while pos <= mask_position.0 {
         index += index_bitmap & MASK;
@@ -152,7 +152,7 @@ fn get_rule_insertion_index(mut index_bitmap: i32, mask_position: RulesPosition)
 }
 
 // rulesmap.go:152
-fn increase_insertion_index(index_bitmap: i32, mask_position: RulesPosition) -> i32 {
+fn increase_insertion_index(index_bitmap: u32, mask_position: RulesPosition) -> u32 {
     let value = ((index_bitmap >> mask_position.0) & MASK) + 1;
     assert!((value & MASK) == value, "Adding more rules into the sub-bucket than allowed. Maximum allowed is 32 rules.");
     (index_bitmap & !(MASK << mask_position.0)) | (value << mask_position.0)

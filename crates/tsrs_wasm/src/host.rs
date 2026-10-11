@@ -36,6 +36,26 @@ pub enum HostError {
 }
 
 #[cfg(target_family = "wasm")]
+enum HostCallResult {
+    Data(usize),
+    NotFound,
+    Error(usize),
+}
+
+#[cfg(target_family = "wasm")]
+impl HostCallResult {
+    fn from_wire(value: i32) -> Self {
+        match value {
+            -1 => Self::NotFound,
+            0.. => Self::Data(value as usize),
+            _ => Self::Error(
+                usize::try_from(-2_i64 - i64::from(value)).expect("host error length is invalid"),
+            ),
+        }
+    }
+}
+
+#[cfg(target_family = "wasm")]
 #[link(wasm_import_module = "tsrs_host")]
 unsafe extern "C" {
     fn fs(op: u32, ptr: *const u8, len: usize) -> i32;
@@ -46,18 +66,20 @@ unsafe extern "C" {
 #[cfg(target_family = "wasm")]
 pub fn call(op: u32, arg: &[u8]) -> Result<Vec<u8>, HostError> {
     // SAFETY: the host reads `arg.len()` bytes at `arg.as_ptr()` during the call and keeps no reference to them.
-    let r = unsafe { fs(op, arg.as_ptr(), arg.len()) };
-    if r == -1 {
-        return Err(HostError::NotFound);
-    }
-    let n = if r >= 0 { r as usize } else { (-2 - r) as usize };
+    let status = HostCallResult::from_wire(unsafe { fs(op, arg.as_ptr(), arg.len()) });
+    let n = match status {
+        HostCallResult::Data(length) | HostCallResult::Error(length) => length,
+        HostCallResult::NotFound => return Err(HostError::NotFound),
+    };
     let mut out = vec![0u8; n];
     // SAFETY: the host staged exactly `n` bytes for this call; `fs_take` copies them into `out`, which has `n` bytes.
     unsafe { fs_take(out.as_mut_ptr()) };
-    if r >= 0 {
-        Ok(out)
-    } else {
-        Err(HostError::Other(tsrs_core::utf8::from_utf8_lossy(&out).into_owned()))
+    match status {
+        HostCallResult::Data(_) => Ok(out),
+        HostCallResult::Error(_) => Err(HostError::Other(
+            tsrs_core::utf8::from_utf8_lossy(&out).into_owned(),
+        )),
+        HostCallResult::NotFound => unreachable!(),
     }
 }
 

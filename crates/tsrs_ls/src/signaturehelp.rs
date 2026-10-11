@@ -67,7 +67,13 @@ impl LanguageService {
             if !projection.fidelity.is_single_segment() {
                 continue;
             }
-            let items = self.get_signature_help_items(ctx, projection.position as i32, program, projection.script, context);
+            let items = self.get_signature_help_items(
+                ctx,
+                projection.position,
+                program,
+                projection.script,
+                context,
+            );
             if let Some(items) = items {
                 return Ok(lsproto::SignatureHelpOrNull { signature_help: Some(items) });
             }
@@ -79,7 +85,7 @@ impl LanguageService {
     pub fn get_signature_help_items(
         &self,
         ctx: &Context,
-        position: i32,
+        position: u32,
         program: &'static Program,
         source_file: P<SourceFile>,
         context: Option<&lsproto::SignatureHelpContext>,
@@ -376,7 +382,7 @@ impl LanguageService {
                 if item.len() > 1 {
                     let mut count = 0;
                     for j in item {
-                        if j.is_variadic || j.parameters.len() as i32 >= argument_info.argument_count {
+                        if j.is_variadic || j.parameters.len() >= argument_info.argument_count {
                             selected_item_index = item_seen + count;
                             break;
                         }
@@ -435,24 +441,33 @@ impl LanguageService {
     // computeActiveParameter calculates the active parameter index for a signature,
     // handling variadic signatures and null support appropriately.
     // signaturehelp.go:419
-    fn compute_active_parameter(&self, sig: &signatureInformation, argument_index: i32, supports_null: bool) -> Option<lsproto::UintegerOrNull> {
-        let param_count = sig.parameters.len() as i32;
+    fn compute_active_parameter(
+        &self,
+        sig: &signatureInformation,
+        argument_index: usize,
+        supports_null: bool,
+    ) -> Option<lsproto::UintegerOrNull> {
+        let param_count = sig.parameters.len();
         if param_count == 0 {
             // No parameters, return nil (omit the field)
             return None;
         }
 
-        let mut active_param = argument_index as u32;
+        let mut active_param = u32::try_from(argument_index).expect("argument index exceeds u32");
 
         if sig.is_variadic {
-            let first_rest = sig.parameters.iter().position(|p| p.is_rest).map_or(-1, |i| i as i32);
-            if -1 < first_rest && first_rest < param_count - 1 {
+            let first_rest = sig.parameters.iter().position(|p| p.is_rest);
+            if first_rest.is_some_and(|first_rest| first_rest < param_count - 1) {
                 // Middle rest parameter - we can't accurately highlight, so indicate "no active parameter"
                 if supports_null {
                     return Some(lsproto::UintegerOrNull::default()); // null means "no parameter is active"
                 }
                 // Client doesn't support null, use out-of-range index (defaults to 0 per LSP spec)
-                return Some(lsproto::UintegerOrNull { uinteger: Some(param_count as u32) });
+                return Some(lsproto::UintegerOrNull {
+                    uinteger: Some(
+                        u32::try_from(param_count).expect("parameter count exceeds u32"),
+                    ),
+                });
             }
             // Clamp to last parameter for trailing rest parameters
             if active_param > (param_count - 1) as u32 {
@@ -885,8 +900,14 @@ fn is_syntactic_owner(starting_token: P<Node>, node: P<Node>, source_file: P<Sou
 }
 
 // signaturehelp.go:843
-fn contains_preceding_token(starting_token: P<Node>, source_file: P<SourceFile>, container: P<Node>) -> bool {
-    let pos = starting_token.pos();
+fn contains_preceding_token(
+    starting_token: P<Node>,
+    source_file: P<SourceFile>,
+    container: P<Node>,
+) -> bool {
+    let pos = starting_token
+        .pos()
+        .expect_source("parsed tokens have source positions");
     // There's a possibility that `startingToken.parent` contains only `startingToken` and
     // missing nodes, none of which are valid to be returned by `findPrecedingToken`. In that
     // case, the preceding token we want is actually higher up the tree—almost definitely the
@@ -904,7 +925,13 @@ fn contains_preceding_token(starting_token: P<Node>, source_file: P<SourceFile>,
 }
 
 // signaturehelp.go:861
-fn get_containing_argument_info(node: P<Node>, source_file: P<SourceFile>, checker: &mut Checker, is_manually_invoked: bool, position: i32) -> Option<argumentListInfo> {
+fn get_containing_argument_info(
+    node: P<Node>,
+    source_file: P<SourceFile>,
+    checker: &mut Checker,
+    is_manually_invoked: bool,
+    position: u32,
+) -> Option<argumentListInfo> {
     let mut first_argument_info: Option<argumentListInfo> = None;
     let mut n = node;
     while !ast::is_source_file(n) && (is_manually_invoked || !ast::is_block(n)) {
@@ -929,14 +956,14 @@ fn get_containing_argument_info(node: P<Node>, source_file: P<SourceFile>, check
             // If the position is at the end boundary of an argument list, keep the
             // innermost call. This covers cases like foo(bar("x"|)) where the cursor is
             // still inside the inner invocation, just before its closing paren.
-            if argument_info.arguments_span.end() == position {
+            if argument_info.arguments_span.end() == position.into() {
                 return Some(argument_info);
             }
 
             // If any call's span contains the position, return it.
             // We walk from inner to outer, so this naturally prefers the innermost call
             // when multiple calls contain the position.
-            if argument_info.arguments_span.contains(position) {
+            if argument_info.arguments_span.contains(position.into()) {
                 return Some(argument_info);
             }
         }
@@ -950,7 +977,12 @@ fn get_containing_argument_info(node: P<Node>, source_file: P<SourceFile>, check
 }
 
 // signaturehelp.go:904
-fn get_immediately_containing_argument_or_contextual_parameter_info(node: P<Node>, position: i32, source_file: P<SourceFile>, checker: &mut Checker) -> Option<argumentListInfo> {
+fn get_immediately_containing_argument_or_contextual_parameter_info(
+    node: P<Node>,
+    position: u32,
+    source_file: P<SourceFile>,
+    checker: &mut Checker,
+) -> Option<argumentListInfo> {
     let result = try_get_parameter_info(node, source_file, checker);
     if result.is_none() {
         return get_immediately_containing_argument_info(node, position, source_file, checker);
@@ -964,15 +996,20 @@ pub(crate) struct argumentListInfo {
     pub(crate) is_type_parameter_list: bool,
     pub(crate) invocation: invocation,
     pub(crate) arguments_span: TextRange,
-    pub(crate) argument_index: i32,
+    pub(crate) argument_index: usize,
     // argumentCount is the *apparent* number of arguments.
-    pub(crate) argument_count: i32,
+    pub(crate) argument_count: usize,
 }
 
 // Returns relevant information for the argument list and the current argument if we are
 // in the argument of an invocation; returns undefined otherwise.
 // signaturehelp.go:923
-pub(crate) fn get_immediately_containing_argument_info(node: P<Node>, position: i32, source_file: P<SourceFile>, c: &mut Checker) -> Option<argumentListInfo> {
+pub(crate) fn get_immediately_containing_argument_info(
+    node: P<Node>,
+    position: u32,
+    source_file: P<SourceFile>,
+    c: &mut Checker,
+) -> Option<argumentListInfo> {
     let parent = node.parent().unwrap();
     if ast::is_call_or_new_expression(parent) {
         // There are 3 cases to handle:
@@ -1034,22 +1071,50 @@ pub(crate) fn get_immediately_containing_argument_info(node: P<Node>, position: 
             return None;
         }
 
-        let span_index = ast::index_of_node(template_span.parent().unwrap().as_template_expression().template_spans.nodes(), template_span);
-        let argument_index = get_argument_index_for_template_piece(span_index, node, position, source_file);
+        let span_index = ast::index_of_node(
+            template_span
+                .parent()
+                .unwrap()
+                .as_template_expression()
+                .template_spans
+                .nodes(),
+            template_span,
+        )?;
+        let argument_index =
+            get_argument_index_for_template_piece(span_index, node, position, source_file);
 
-        return Some(get_argument_list_info_for_template(tag_expression, argument_index, source_file));
+        return Some(get_argument_list_info_for_template(
+            tag_expression,
+            argument_index,
+            source_file,
+        ));
     } else if ast::is_jsx_opening_like_element(parent) {
         // Provide a signature help for JSX opening element or JSX self-closing element.
         // This is not guarantee that JSX tag-name is resolved into stateless function component. (that is done in "getSignatureHelpItems")
         // i.e
         //      export function MainButton(props: ButtonProps, context: any): JSX.Element { ... }
         //      <MainButton /*signatureHelp*/
-        let attribute_span_start = parent.attributes().unwrap().loc().pos();
-        let attribute_span_end = scanner::skip_trivia(source_file.text(), parent.attributes().unwrap().end());
+        let attribute_span_start = parent
+            .attributes()
+            .unwrap()
+            .loc()
+            .pos()
+            .expect_source("parsed JSX attributes have source positions");
+        let attribute_span_end = scanner::skip_trivia(
+            source_file.text(),
+            parent
+                .attributes()
+                .unwrap()
+                .end()
+                .expect_source("parsed JSX attributes have source positions"),
+        );
         return Some(argumentListInfo {
             is_type_parameter_list: false,
-            invocation: invocation { call_invocation: Some(callInvocation { node: parent }), ..Default::default() },
-            arguments_span: TextRange::new(attribute_span_start, attribute_span_end - attribute_span_start),
+            invocation: invocation {
+                call_invocation: Some(callInvocation { node: parent }),
+                ..Default::default()
+            },
+            arguments_span: TextRange::new(attribute_span_start, attribute_span_end),
             argument_index: 0,
             argument_count: 1,
         });
@@ -1057,9 +1122,9 @@ pub(crate) fn get_immediately_containing_argument_info(node: P<Node>, position: 
         let type_arg_info = get_possible_type_arguments_info(Some(node), source_file);
         if let Some(type_arg_info) = type_arg_info {
             let called = type_arg_info.called;
-            let n_type_arguments = type_arg_info.n_type_arguments as i32;
+            let n_type_arguments = type_arg_info.n_type_arguments;
             let invoc = typeArgsInvocation { called };
-            let argument_range = TextRange::new(called.loc().pos(), node.end());
+            let argument_range = TextRange::from_text_pos(called.loc().pos(), node.end());
             return Some(argumentListInfo {
                 is_type_parameter_list: true,
                 invocation: invocation { type_args_invocation: Some(invoc), ..Default::default() },
@@ -1075,7 +1140,12 @@ pub(crate) fn get_immediately_containing_argument_info(node: P<Node>, position: 
 // spanIndex is either the index for a given template span.
 // This does not give appropriate results for a NoSubstitutionTemplateLiteral
 // signaturehelp.go:1029
-fn get_argument_index_for_template_piece(span_index: i32, node: P<Node>, position: i32, source_file: P<SourceFile>) -> i32 {
+fn get_argument_index_for_template_piece(
+    span_index: usize,
+    node: P<Node>,
+    position: u32,
+    source_file: P<SourceFile>,
+) -> usize {
     // Because the TemplateStringsArray is the first argument, we have to offset each substitution expression by 1.
     // There are three cases we can encounter:
     //      1. We are precisely in the template literal (argIndex = 0).
@@ -1087,7 +1157,14 @@ fn get_argument_index_for_template_piece(span_index: i32, node: P<Node>, positio
     // Example: f  `# abcd $#{#  1 + 1#  }# efghi ${ #"#hello"#  }  #  `
     //              ^       ^ ^       ^   ^          ^ ^      ^     ^
     // Case:        1       1 3       2   1          3 2      2     1
-    assert!(position >= node.loc().pos(), "Assumed 'position' could not occur before node.");
+    assert!(
+        position
+            >= node
+                .loc()
+                .pos()
+                .expect_source("parsed template nodes have source positions"),
+        "Assumed 'position' could not occur before node."
+    );
     if ast::is_template_literal_token(node) {
         if is_inside_template_literal(node, position, source_file) {
             return 0;
@@ -1115,13 +1192,13 @@ fn get_adjusted_node(node: P<Node>) -> Option<P<Node>> {
 // signaturehelp.go:1067
 struct contextualSignatureLocationInfo {
     contextual_type: P<Type>,
-    argument_index: i32,
-    argument_count: i32,
+    argument_index: usize,
+    argument_count: usize,
     arguments_span: TextRange,
 }
 
 // signaturehelp.go:1074
-fn get_spread_element_count(node: P<Node>, c: &mut Checker) -> i32 {
+fn get_spread_element_count(node: P<Node>, c: &mut Checker) -> usize {
     let spread_type = c.get_type_at_location(node.expression().unwrap());
     if checker::is_tuple_type_exported(spread_type) {
         let tuple_type = spread_type.target().unwrap().as_tuple_type();
@@ -1133,25 +1210,47 @@ fn get_spread_element_count(node: P<Node>, c: &mut Checker) -> i32 {
 
         let first_optional_index = element_flags.iter().position(|f| !f.intersects(ElementFlags::Required));
         let Some(first_optional_index) = first_optional_index else {
-            return fixed_length;
+            return usize::try_from(fixed_length).expect("tuple fixed length is nonnegative");
         };
-        return first_optional_index as i32;
+        return first_optional_index;
     }
     0
 }
 
 // signaturehelp.go:1098
-fn get_argument_index(node: P<Node>, arguments: Option<P<NodeList>>, source_file: P<SourceFile>, c: &mut Checker) -> i32 {
-    get_argument_index_or_count(&get_token_from_node_list(arguments, node.parent(), source_file), Some(node), c)
+fn get_argument_index(
+    node: P<Node>,
+    arguments: Option<P<NodeList>>,
+    source_file: P<SourceFile>,
+    c: &mut Checker,
+) -> usize {
+    get_argument_index_or_count(
+        &get_token_from_node_list(arguments, node.parent(), source_file),
+        Some(node),
+        c,
+    )
 }
 
 // signaturehelp.go:1102
-fn get_argument_count(node: P<Node>, arguments: Option<P<NodeList>>, source_file: P<SourceFile>, c: &mut Checker) -> i32 {
-    get_argument_index_or_count(&get_token_from_node_list(arguments, node.parent(), source_file), None, c)
+fn get_argument_count(
+    node: P<Node>,
+    arguments: Option<P<NodeList>>,
+    source_file: P<SourceFile>,
+    c: &mut Checker,
+) -> usize {
+    get_argument_index_or_count(
+        &get_token_from_node_list(arguments, node.parent(), source_file),
+        None,
+        c,
+    )
 }
 
 // signaturehelp.go:1106
-fn get_argument_index_or_count(arguments: &[P<Node>], node: Option<P<Node>>, c: &mut Checker) -> i32 {
+fn get_argument_index_or_count(
+    arguments: &[P<Node>],
+    node: Option<P<Node>>,
+    c: &mut Checker,
+) -> usize {
     let mut argument_index = 0;
     let mut skip_comma = false;
     for &arg in arguments {
@@ -1196,8 +1295,8 @@ fn get_argument_index_or_count(arguments: &[P<Node>], node: Option<P<Node>>, c: 
 // signaturehelp.go:1148
 struct argumentOrParameterListInfo {
     list: Option<P<NodeList>>,
-    argument_index: i32,
-    argument_count: i32,
+    argument_index: usize,
+    argument_count: usize,
     arguments_span: TextRange,
 }
 
@@ -1227,15 +1326,28 @@ fn get_applicable_span_for_arguments(argument_list: Option<P<NodeList>>, node: O
             // For example, foo(    )
             //                  |  |
             // The span should include positions inside the parentheses.
-            let span_start = node.end();
-            let mut span_end = scanner::skip_trivia(source_file.text(), node.end());
+            let span_start = node
+                .end()
+                .expect_source("parsed nodes have source positions");
+            let mut span_end = scanner::skip_trivia(source_file.text(), span_start);
             span_end = ensure_minimum_span_size(span_start, span_end);
             return TextRange::new(span_start, span_end);
         }
     }
     let argument_list = argument_list.unwrap();
-    let applicable_span_start = argument_list.pos();
-    let mut applicable_span_end = scanner::skip_trivia(source_file.text(), argument_list.end());
+    let applicable_span_start = argument_list
+        .loc
+        .get()
+        .pos()
+        .expect_source("parsed argument lists have source positions");
+    let mut applicable_span_end = scanner::skip_trivia(
+        source_file.text(),
+        argument_list
+            .loc
+            .get()
+            .end()
+            .expect_source("parsed argument lists have source positions"),
+    );
 
     // If the argument list is empty (Pos == End), extend the span to include at least
     // one position. This handles foo(|) where the cursor is right after the opening paren.
@@ -1248,7 +1360,7 @@ fn get_applicable_span_for_arguments(argument_list: Option<P<NodeList>>, node: O
 // TextRange.Contains uses a half-open interval, so an empty span would not contain
 // the cursor immediately after typing an opening paren in a call like foo(bar(|)).
 // signaturehelp.go:1204
-fn ensure_minimum_span_size(start: i32, end: i32) -> i32 {
+fn ensure_minimum_span_size(start: u32, end: u32) -> u32 {
     if end <= start {
         return start + 1;
     }
@@ -1258,7 +1370,7 @@ fn ensure_minimum_span_size(start: i32, end: i32) -> i32 {
 // signaturehelp.go:1211
 struct argumentOrParameterListAndIndex {
     list: Option<P<NodeList>>,
-    argument_index: i32,
+    argument_index: usize,
 }
 
 // signaturehelp.go:1216
@@ -1367,7 +1479,12 @@ fn get_contextual_signature_location_info(node: P<Node>, source_file: P<SourceFi
                 let argument_index = count_binary_expression_parameters(parent) - 1;
                 let argument_count = count_binary_expression_parameters(highest_binary);
                 if let Some(contextual_type) = contextual_type {
-                    return Some(contextualSignatureLocationInfo { contextual_type, argument_index, argument_count, arguments_span: TextRange::new(parent.pos(), parent.end()) });
+                    return Some(contextualSignatureLocationInfo {
+                        contextual_type,
+                        argument_index,
+                        argument_count,
+                        arguments_span: TextRange::from_text_pos(parent.pos(), parent.end()),
+                    });
                 }
                 return None;
             }
@@ -1387,7 +1504,7 @@ fn get_highest_binary(b: P<Node>) -> P<Node> {
 }
 
 // signaturehelp.go:1368
-fn count_binary_expression_parameters(b: P<Node>) -> i32 {
+fn count_binary_expression_parameters(b: P<Node>) -> usize {
     let left = b.as_binary_expression().left;
     if ast::is_binary_expression(left) {
         return count_binary_expression_parameters(left) + 1;
@@ -1400,14 +1517,30 @@ fn get_token_from_node_list(node_list: Option<P<NodeList>>, node_list_parent: Op
     let (Some(node_list), Some(node_list_parent)) = (node_list, node_list_parent) else {
         return Vec::new();
     };
-    let mut left = node_list.pos();
+    let mut left = node_list
+        .loc
+        .get()
+        .pos()
+        .expect_source("parsed node lists have source positions");
     let mut node_list_index = 0;
     let mut tokens = Vec::new();
     let nodes = node_list.nodes();
-    while left < node_list.end() {
-        if nodes.len() > node_list_index && left == nodes[node_list_index].pos() {
+    let node_list_end = node_list
+        .loc
+        .get()
+        .end()
+        .expect_source("parsed node lists have source positions");
+    while left < node_list_end {
+        if nodes.len() > node_list_index
+            && left
+                == nodes[node_list_index]
+                    .pos()
+                    .expect_source("parsed nodes have source positions")
+        {
             tokens.push(nodes[node_list_index]);
-            left = nodes[node_list_index].end();
+            left = nodes[node_list_index]
+                .end()
+                .expect_source("parsed nodes have source positions");
             node_list_index += 1;
         } else {
             let scanner = scanner::get_scanner_for_source_file(source_file, left);
@@ -1422,12 +1555,21 @@ fn get_token_from_node_list(node_list: Option<P<NodeList>>, node_list_parent: Op
 }
 
 // signaturehelp.go:1399
-fn get_argument_list_info_for_template(tag_expression: P<Node>, argument_index: i32, source_file: P<SourceFile>) -> argumentListInfo {
+fn get_argument_list_info_for_template(
+    tag_expression: P<Node>,
+    argument_index: usize,
+    source_file: P<SourceFile>,
+) -> argumentListInfo {
     // argumentCount is either 1 or (numSpans + 1) to account for the template strings array argument.
     let template = tag_expression.as_tagged_template_expression().template;
     let mut argument_count = 1;
     if !is_no_substitution_template_literal(template) {
-        argument_count = template.as_template_expression().template_spans.nodes().len() as i32 + 1;
+        argument_count = template
+            .as_template_expression()
+            .template_spans
+            .nodes()
+            .len()
+            + 1;
     }
     if argument_index != 0 {
         assert!(argument_index < argument_count);
@@ -1445,7 +1587,9 @@ fn get_argument_list_info_for_template(tag_expression: P<Node>, argument_index: 
 fn get_applicable_range_for_tagged_template(tagged_template: P<Node>, source_file: P<SourceFile>) -> TextRange {
     let template = tagged_template.as_tagged_template_expression().template;
     let applicable_span_start = scanner::get_token_pos_of_node(template, source_file, false);
-    let mut applicable_span_end = template.end();
+    let mut applicable_span_end = template
+        .end()
+        .expect_source("parsed templates have source positions");
 
     // We need to adjust the end position for the case where the template does not have a tail.
     // Otherwise, we will not show signature help past the expression.
@@ -1458,10 +1602,11 @@ fn get_applicable_range_for_tagged_template(tagged_template: P<Node>, source_fil
     if template.kind() == Kind::TemplateExpression {
         let template_spans = template.as_template_expression().template_spans;
         let last_span = template_spans.nodes()[template_spans.nodes().len() - 1];
-        if last_span.as_template_span().literal.end() - last_span.as_template_span().literal.pos() == 0 {
+        if last_span.as_template_span().literal.end() == last_span.as_template_span().literal.pos()
+        {
             applicable_span_end = scanner::skip_trivia(source_file.text(), applicable_span_end);
         }
     }
 
-    TextRange::new(applicable_span_start, applicable_span_end - applicable_span_start)
+    TextRange::new(applicable_span_start, applicable_span_end)
 }

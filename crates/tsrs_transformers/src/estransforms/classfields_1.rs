@@ -3,12 +3,13 @@
 
 use super::*;
 use printer::{EmitFlags, PrivateIdentifierKind};
+use tsrs_core::TextPos;
 
 bitflags::bitflags! {
     // classfields.go:18
     // classFacts tracks various facts about a class being transformed.
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub(crate) struct classFacts: i32 {
+    pub(crate) struct classFacts: u32 {
         const None = 0;
         const ClassWasDecorated = 1 << 0;
         const NeedsClassConstructorReference = 1 << 1;
@@ -1108,8 +1109,15 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:1027
-    pub(crate) fn create_private_identifier_access_helper(&self, info: P<privateIdentifierInfo>, receiver: P<Node>) -> P<Node> {
-        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+    pub(crate) fn create_private_identifier_access_helper(
+        &self,
+        info: P<privateIdentifierInfo>,
+        receiver: P<Node>,
+    ) -> P<Node> {
+        self.emit_context().set_comment_range(
+            receiver,
+            tsrs_core::TextRange::from_text_pos(TextPos::Synthetic, receiver.end()),
+        );
 
         match info.kind {
             PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_get_helper(receiver, info.brand_check_identifier.unwrap(), info.kind, info.getter_name.get()),
@@ -1717,7 +1725,10 @@ impl classFieldsTransformer {
             );
         }
 
-        self.emit_context().set_comment_range(receiver, tsrs_core::TextRange::new(-1, receiver.end()));
+        self.emit_context().set_comment_range(
+            receiver,
+            tsrs_core::TextRange::from_text_pos(TextPos::Synthetic, receiver.end()),
+        );
 
         match info.kind {
             PrivateIdentifierKind::Accessor => self.factory().new_class_private_field_set_helper(receiver, info.brand_check_identifier.unwrap(), right, info.kind, info.setter_name.get()),

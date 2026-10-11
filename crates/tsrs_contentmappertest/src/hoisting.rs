@@ -54,13 +54,13 @@ fn transform_hoisting(content: &str) -> Result<(String, Value), ipc::Error> {
     let mut segments = Vec::new();
 
     let mut write_mapped = |virtual_: &mut String, original_start: usize, original_end: usize| {
-        let virtual_start = virtual_.len() as i32;
+        let virtual_start = virtual_.len() as u32;
         virtual_.push_str(&content[original_start..original_end]);
         segments.push(Segment {
             virtual_start,
-            virtual_end: virtual_.len() as i32,
-            original_start: original_start as i32,
-            original_end: original_end as i32,
+            virtual_end: virtual_.len() as u32,
+            original_start: original_start as u32,
+            original_end: original_end as u32,
             kind: Kind::Verbatim,
             features: Feature::All,
         });

@@ -487,7 +487,15 @@ pub(crate) fn node_is_in_decorator_context(mut node: Option<P<Node>>) -> bool {
 // rulecontext.go:461
 pub(crate) fn is_start_of_variable_declaration_list(context: &FormattingContext) -> bool {
     context.current_token_parent().kind() == Kind::VariableDeclarationList
-        && scanner::get_token_pos_of_node(context.current_token_parent(), context.source_file, false) == context.current_token_span.loc.pos()
+        && scanner::get_token_pos_of_node(
+            context.current_token_parent(),
+            context.source_file,
+            false,
+        ) == context
+            .current_token_span
+            .loc
+            .pos()
+            .expect_source("formatter token spans have source positions")
 }
 
 // rulecontext.go:466
@@ -583,7 +591,11 @@ pub(crate) fn is_statement_condition_context(context: &FormattingContext) -> boo
 // rulecontext.go:553
 pub(crate) fn is_semicolon_deletion_context(context: &FormattingContext) -> bool {
     let mut next_token_kind = context.next_token_span.kind;
-    let mut next_token_start = context.next_token_span.loc.pos();
+    let mut next_token_start = context
+        .next_token_span
+        .loc
+        .pos()
+        .expect_source("formatter token spans have source positions");
     if ast::is_trivia(next_token_kind) {
         let next_real_token = if context.next_token_parent == context.current_token_parent {
             // !!! TODO: very different from strada, but strada's logic here is wonky - find the first ancestor without a parent? that's just the source file.
@@ -599,7 +611,14 @@ pub(crate) fn is_semicolon_deletion_context(context: &FormattingContext) -> bool
         next_token_start = scanner::get_token_pos_of_node(next_real_token, context.source_file, false);
     }
 
-    let start_line = scanner::get_ecma_line_of_position(context.source_file.get(), context.current_token_span.loc.pos());
+    let start_line = scanner::get_ecma_line_of_position(
+        context.source_file.get(),
+        context
+            .current_token_span
+            .loc
+            .pos()
+            .expect_source("formatter token spans have source positions"),
+    );
     let end_line = scanner::get_ecma_line_of_position(context.source_file.get(), next_token_start);
     if start_line == end_line {
         return next_token_kind == Kind::CloseBraceToken || next_token_kind == Kind::EndOfFile;
@@ -647,7 +666,15 @@ pub(crate) fn is_semicolon_deletion_context(context: &FormattingContext) -> bool
 
 // rulecontext.go:621
 pub(crate) fn is_semicolon_insertion_context(context: &FormattingContext) -> bool {
-    lsutil::position_is_asi_candidate(context.current_token_span.loc.end(), context.current_token_parent(), context.source_file)
+    lsutil::position_is_asi_candidate(
+        context
+            .current_token_span
+            .loc
+            .end()
+            .expect_source("formatter token spans have source positions"),
+        context.current_token_parent(),
+        context.source_file,
+    )
 }
 
 // rulecontext.go:625

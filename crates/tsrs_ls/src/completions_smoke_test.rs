@@ -145,8 +145,11 @@ fn normalize(result: &Value) -> String {
     let mut result = result.clone();
     if let Value::Object(m) = &mut result {
         if let Some(Value::Array(items)) = m.get("items") {
-            let mut parsed: Vec<lsproto::CompletionItem> = items.iter().map(|i| lsproto::CompletionItem::from_json(i).unwrap()).collect();
-            parsed.sort_by(|a, b| compare_completion_entries(a, b).cmp(&0));
+            let mut parsed: Vec<lsproto::CompletionItem> = items
+                .iter()
+                .map(|i| lsproto::CompletionItem::from_json(i).unwrap())
+                .collect();
+            parsed.sort_by(compare_completion_entries);
             let sorted: Vec<Value> = parsed.iter().map(|i| i.to_json()).collect();
             m.insert("items".to_string(), Value::Array(sorted));
         }

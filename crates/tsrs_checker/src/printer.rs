@@ -1191,7 +1191,7 @@ impl Checker {
 
         if !candidate_chains.is_empty() {
             // pick first, shortest
-            candidate_chains.sort_by(|a, b| self.compare_symbol_chains(a, b).cmp(&0));
+            candidate_chains.sort_by(|a, b| self.compare_symbol_chains(a, b));
             return candidate_chains.swap_remove(0);
         }
 
@@ -1204,21 +1204,25 @@ impl Checker {
     }
 
     // symbolaccessibility.go:595
-    pub(crate) fn compare_symbol_chains_worker(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 {
-        let chain_len = a.len() as i32 - b.len() as i32;
-        if chain_len != 0 {
+    pub(crate) fn compare_symbol_chains_worker(
+        &mut self,
+        a: &[P<Symbol>],
+        b: &[P<Symbol>],
+    ) -> std::cmp::Ordering {
+        let chain_len = a.len().cmp(&b.len());
+        if chain_len != std::cmp::Ordering::Equal {
             return chain_len;
         }
 
         let mut idx = 0;
         while idx < a.len() {
             let comparison = self.compare_symbols(Some(a[idx]), Some(b[idx]));
-            if comparison != 0 {
+            if comparison != std::cmp::Ordering::Equal {
                 return comparison;
             }
             idx += 1;
         }
-        0
+        std::cmp::Ordering::Equal
     }
 }
 

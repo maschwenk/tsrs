@@ -3,7 +3,7 @@ use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, ContextFlags, Type, TypeExt as _};
 use tsrs_compiler::Program;
 use tsrs_core::context::Context;
-use tsrs_core::{TextPos, TextRange, P};
+use tsrs_core::{P, TextRange};
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
 
@@ -50,7 +50,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         file: P<SourceFile>,
-        text_pos: TextPos,
+        text_pos: u32,
         client_supports_link: bool,
     ) -> lsproto::DefinitionResponse {
         let pos = text_pos;
@@ -86,7 +86,15 @@ impl LanguageService {
         if node.kind() == Kind::CaseKeyword || node.kind() == Kind::DefaultKeyword && ast::is_default_clause(node.parent().unwrap()) {
             if let Some(stmt) = ast::find_ancestor(node.parent(), ast::is_switch_statement) {
                 let file = ast::get_source_file_of_node(stmt).unwrap();
-                return self.create_location_from_file_and_range(file, scanner::get_range_of_token_at_position(file, stmt.pos()), Feature::Definition);
+                return self.create_location_from_file_and_range(
+                    file,
+                    scanner::get_range_of_token_at_position(
+                        file,
+                        stmt.pos()
+                            .expect_source("parsed switch statements have source positions"),
+                    ),
+                    Feature::Definition,
+                );
             }
         }
 
@@ -142,7 +150,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         file: P<SourceFile>,
-        text_pos: TextPos,
+        text_pos: u32,
         client_supports_link: bool,
     ) -> lsproto::TypeDefinitionResponse {
         let pos = text_pos;
@@ -278,12 +286,25 @@ impl LanguageService {
         for &decl in declarations {
             let file = ast::get_source_file_of_node(decl).unwrap();
             let name = ast::get_name_of_declaration(decl).unwrap_or(decl);
-            let name_range = if name.kind() == Kind::EmptyStatement { TextRange::new(name.pos(), name.pos()) } else { create_range_from_node(name, file) };
-            if location_ranges.insert(FileRange { file, file_range: name_range }) {
+            let name_range = if name.kind() == Kind::EmptyStatement {
+                let pos = name
+                    .pos()
+                    .expect_source("parsed empty statements have source positions");
+                TextRange::new(pos, pos)
+            } else {
+                create_range_from_node(name, file)
+            };
+            if location_ranges.insert(FileRange {
+                file,
+                file_range: name_range,
+            }) {
                 let context_node = get_context_node(Some(decl)).unwrap_or(decl);
                 let mut context_range = to_context_range(Some(name_range), file, Some(context_node)).unwrap_or(name_range);
                 if !name_range.contained_by(context_range) {
-                    context_range = TextRange::new(name_range.pos().min(context_range.pos()), name_range.end().max(context_range.end()));
+                    context_range = TextRange::from_text_pos(
+                        name_range.pos().min(context_range.pos()),
+                        name_range.end().max(context_range.end()),
+                    );
                 }
                 let (target_selection_loc, selection_fidelity) = self.source_file_range_to_lsp_location_for_feature(file, name_range, feature);
                 if !selection_fidelity.is_single_segment() {
@@ -311,7 +332,8 @@ impl LanguageService {
 
 // definition.go:281
 pub(crate) fn lsp_range_contains(outer: lsproto::Range, inner: lsproto::Range) -> bool {
-    lsproto::compare_positions(outer.start, inner.start) <= 0 && lsproto::compare_positions(inner.end, outer.end) <= 0
+    lsproto::compare_positions(outer.start, inner.start).is_le()
+        && lsproto::compare_positions(inner.end, outer.end).is_le()
 }
 
 // definition.go:286

@@ -837,7 +837,11 @@ impl Checker {
             let default_type_node = node.as_type_parameter_declaration().default_type;
             if let Some(default_type_node) = default_type_node {
                 seen_default = true;
-                self.check_type_parameters_not_referenced(default_type_node, type_parameter_declarations, i as i32);
+                self.check_type_parameters_not_referenced(
+                    default_type_node,
+                    type_parameter_declarations,
+                    i,
+                );
             } else if seen_default {
                 self.error(Some(node), &diagnostics::Required_type_parameters_may_not_follow_optional_type_parameters, &[]);
             }
@@ -851,13 +855,23 @@ impl Checker {
 
     // Check that type parameter defaults only reference previously declared type parameters */
     // checker.go:7194
-    pub(crate) fn check_type_parameters_not_referenced(&mut self, root: P<Node>, type_parameters: &[P<Node>], index: i32) {
-        fn visit(c: &mut Checker, node: P<Node>, type_parameters: &[P<Node>], index: i32) -> bool {
+    pub(crate) fn check_type_parameters_not_referenced(
+        &mut self,
+        root: P<Node>,
+        type_parameters: &[P<Node>],
+        index: usize,
+    ) {
+        fn visit(
+            c: &mut Checker,
+            node: P<Node>,
+            type_parameters: &[P<Node>],
+            index: usize,
+        ) -> bool {
             if is_type_reference_node(node) {
                 let t = c.get_type_from_type_reference(node);
                 if t.flags().intersects(TypeFlags::TypeParameter) {
-                    for i in index as usize..type_parameters.len() {
-                        if t.symbol() == c.get_symbol_of_declaration(type_parameters[i]) {
+                    for &type_parameter in &type_parameters[index..] {
+                        if t.symbol() == c.get_symbol_of_declaration(type_parameter) {
                             c.error(Some(node), &diagnostics::Type_parameter_defaults_can_only_reference_previously_declared_type_parameters, &[]);
                         }
                     }
@@ -1231,7 +1245,7 @@ impl Checker {
                     // entire parameter does not have type annotation, suggest adding an annotation
                     diagnostic.add_related_info(new_diagnostic(
                         get_source_file_of_node(wrapping_declaration),
-                        TextRange::new(wrapping_declaration.end(), wrapping_declaration.end()),
+                        TextRange::from_text_pos(wrapping_declaration.end(), wrapping_declaration.end()),
                         &diagnostics::We_can_only_write_a_type_for_0_by_adding_a_type_for_the_entire_parameter_here,
                         &[&tsrs_scanner::declaration_name_to_string(node.property_name())],
                     ));
@@ -2520,7 +2534,7 @@ impl Checker {
             // through resolution of the containing function call. By resetting the resolution stack we'll
             // retry the symbol type resolution with the resolvingSignature marker in place to suppress
             // the contextual type circularity.
-            self.resolution_start = self.type_resolutions.len() as i32;
+            self.resolution_start = self.type_resolutions.len();
         }
         links.resolved_signature.set(Some(self.resolving_signature));
         let mut result = self.resolve_signature(node, candidates_out_array, check_mode);
@@ -2622,7 +2636,12 @@ impl Checker {
         // TS 1.0 Spec: 4.12
         // In an untyped function call no TypeArgs are permitted, Args can be any argument list, no contextual
         // types are provided for the argument expressions, and the result is always of type Any.
-        if self.is_untyped_function_call(func_type, apparent_type, call_signatures.len() as i32, num_construct_signatures as i32) {
+        if self.is_untyped_function_call(
+            func_type,
+            apparent_type,
+            call_signatures.len(),
+            num_construct_signatures,
+        ) {
             // The unknownType indicates that an error already occurred (and was reported).  No
             // need to report another error in this case.
             if !self.is_error_type(func_type) && node.type_argument_list().is_some() {
@@ -2641,8 +2660,17 @@ impl Checker {
                 let mut related_information: Option<P<Diagnostic>> = None;
                 if node.arguments().len() == 1 {
                     let text = get_source_file_of_node(node).unwrap().text();
-                    let options = tsrs_scanner::SkipTriviaOptions { stop_after_line_break: true, ..Default::default() };
-                    let pos = tsrs_scanner::skip_trivia_ex(text, expression.end(), Some(&options));
+                    let options = tsrs_scanner::SkipTriviaOptions {
+                        stop_after_line_break: true,
+                        ..Default::default()
+                    };
+                    let pos = tsrs_scanner::skip_trivia_ex(
+                        text,
+                        expression
+                            .end()
+                            .expect_source("parsed nodes have source positions"),
+                        Some(&options),
+                    );
                     if stringutil::is_line_break(text.as_bytes()[(pos - 1) as usize]) {
                         related_information = Some(create_diagnostic_for_node(Some(expression), &diagnostics::Are_you_missing_a_semicolon, &[]));
                     }

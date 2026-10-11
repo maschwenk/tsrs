@@ -65,6 +65,22 @@ impl fmt::Display for Path {
 pub const DIRECTORY_SEPARATOR: u8 = b'/';
 const URL_SCHEME_SEPARATOR: &str = "://";
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum EncodedRootLength {
+    Relative,
+    Disk(usize),
+    Url(usize),
+}
+
+impl EncodedRootLength {
+    pub fn len(self) -> usize {
+        match self {
+            Self::Relative => 0,
+            Self::Disk(length) | Self::Url(length) => length,
+        }
+    }
+}
+
 // Path Tests
 
 // Determines whether a byte corresponds to `/` or `\`.
@@ -74,19 +90,18 @@ fn is_any_directory_separator(char: u8) -> bool {
 
 // Determines whether a path starts with a URL scheme (e.g. starts with `http://`, `ftp://`, `file://`, etc.).
 pub fn is_url(path: &str) -> bool {
-    get_encoded_root_length(path) < 0
+    matches!(get_encoded_root_length(path), EncodedRootLength::Url(_))
 }
 
 // Determines whether a path is an absolute disk path (e.g. starts with `/`, or a dos path
 // like `c:`, `c:\` or `c:/`).
 pub fn is_rooted_disk_path(path: &str) -> bool {
-    get_encoded_root_length(path) > 0
+    matches!(get_encoded_root_length(path), EncodedRootLength::Disk(_))
 }
 
 // Determines whether a path consists only of a path root.
 pub fn is_disk_path_root(path: &str) -> bool {
-    let root_length = get_encoded_root_length(path);
-    root_length > 0 && root_length as usize == path.len()
+    matches!(get_encoded_root_length(path), EncodedRootLength::Disk(root_length) if root_length == path.len())
 }
 
 // IsDynamicFileName returns true if the file name represents a dynamic/virtual file
@@ -97,7 +112,7 @@ pub fn is_dynamic_file_name(file_name: &str) -> bool {
 
 // Determines whether a path starts with an absolute path component (i.e. `/`, `c:/`, `file://`, etc.).
 pub fn path_is_absolute(path: &str) -> bool {
-    get_encoded_root_length(path) != 0
+    get_encoded_root_length(path) != EncodedRootLength::Relative
 }
 
 pub fn has_trailing_directory_separator(path: &str) -> bool {
@@ -159,60 +174,60 @@ pub fn is_volume_character(char: u8) -> bool {
     char.is_ascii_lowercase() || char.is_ascii_uppercase()
 }
 
-fn get_file_url_volume_separator_end(url: &str, start: usize) -> i32 {
+fn get_file_url_volume_separator_end(url: &str, start: usize) -> Option<usize> {
     let url = url.as_bytes();
     if url.len() <= start {
-        return -1;
+        return None;
     }
     let ch0 = url[start];
     if ch0 == b':' {
-        return (start + 1) as i32;
+        return Some(start + 1);
     }
     if ch0 == b'%' && url.len() > start + 2 && url[start + 1] == b'3' {
         let ch2 = url[start + 2];
         if ch2 == b'a' || ch2 == b'A' {
-            return (start + 3) as i32;
+            return Some(start + 3);
         }
     }
-    -1
+    None
 }
 
-pub fn get_encoded_root_length(path: &str) -> i32 {
+pub fn get_encoded_root_length(path: &str) -> EncodedRootLength {
     let bytes = path.as_bytes();
     let ln = bytes.len();
     if ln == 0 {
-        return 0;
+        return EncodedRootLength::Relative;
     }
     let ch0 = bytes[0];
 
     // POSIX or UNC
     if ch0 == b'/' || ch0 == b'\\' {
         if ln == 1 || bytes[1] != ch0 {
-            return 1; // POSIX: "/" (or non-normalized "\")
+            return EncodedRootLength::Disk(1); // POSIX: "/" (or non-normalized "\")
         }
 
         let offset = 2;
         let Some(p1) = memchr::memchr(ch0, &bytes[offset..]) else {
-            return ln as i32; // UNC: "//server" or "\\server"
+            return EncodedRootLength::Disk(ln); // UNC: "//server" or "\\server"
         };
 
-        return (p1 + offset + 1) as i32; // UNC: "//server/" or "\\server\"
+        return EncodedRootLength::Disk(p1 + offset + 1); // UNC: "//server/" or "\\server\"
     }
 
     // DOS
     if is_volume_character(ch0) && ln > 1 && bytes[1] == b':' {
         if ln == 2 {
-            return 2; // DOS: "c:" (but not "c:d")
+            return EncodedRootLength::Disk(2); // DOS: "c:" (but not "c:d")
         }
         let ch2 = bytes[2];
         if ch2 == b'/' || ch2 == b'\\' {
-            return 3; // DOS: "c:/" or "c:\"
+            return EncodedRootLength::Disk(3); // DOS: "c:/" or "c:\"
         }
     }
 
     // Untitled paths (e.g., "^/untitled/ts-nul-authority/Untitled-1")
     if ch0 == b'^' && ln > 1 && bytes[1] == b'/' {
-        return 2; // Untitled: "^/"
+        return EncodedRootLength::Disk(2); // Untitled: "^/"
     }
 
     // URL
@@ -227,42 +242,40 @@ pub fn get_encoded_root_length(path: &str) -> i32 {
             // special case interpreted as "the machine from which the URL is being interpreted".
             let scheme = &path[..scheme_end];
             let authority = &path[authority_start..authority_end];
-            if scheme == "file" && (authority.is_empty() || authority == "localhost") && (ln > authority_end + 2) && is_volume_character(bytes[authority_end + 1]) {
-                let volume_separator_end = get_file_url_volume_separator_end(path, authority_end + 2);
-                if volume_separator_end != -1 {
-                    if volume_separator_end as usize == ln {
+            if scheme == "file"
+                && (authority.is_empty() || authority == "localhost")
+                && (ln > authority_end + 2)
+                && is_volume_character(bytes[authority_end + 1])
+            {
+                let volume_separator_end =
+                    get_file_url_volume_separator_end(path, authority_end + 2);
+                if let Some(volume_separator_end) = volume_separator_end {
+                    if volume_separator_end == ln {
                         // URL: "file:///c:", "file://localhost/c:", "file:///c$3a", "file://localhost/c%3a"
                         // but not "file:///c:d" or "file:///c%3ad"
-                        return !volume_separator_end;
+                        return EncodedRootLength::Url(volume_separator_end);
                     }
-                    if bytes[volume_separator_end as usize] == b'/' {
+                    if bytes[volume_separator_end] == b'/' {
                         // URL: "file:///c:/", "file://localhost/c:/", "file:///c%3a/", "file://localhost/c%3a/"
-                        return !(volume_separator_end + 1);
+                        return EncodedRootLength::Url(volume_separator_end + 1);
                     }
                 }
             }
-            return !((authority_end + 1) as i32); // URL: "file://server/", "http://server/"
+            return EncodedRootLength::Url(authority_end + 1); // URL: "file://server/", "http://server/"
         }
-        return !(ln as i32); // URL: "file://server", "http://server"
+        return EncodedRootLength::Url(ln); // URL: "file://server", "http://server"
     }
 
     // relative
-    0
+    EncodedRootLength::Relative
 }
 
 pub fn get_root_length(path: &str) -> usize {
-    let root_length = get_encoded_root_length(path);
-    if root_length < 0 {
-        return (!root_length) as usize;
-    }
-    root_length as usize
+    get_encoded_root_length(path).len()
 }
 
-fn last_index_byte(s: &str, b: u8) -> i32 {
-    match memchr::memrchr(b, s.as_bytes()) {
-        Some(i) => i as i32,
-        None => -1,
-    }
+fn last_index_byte(s: &str, b: u8) -> Option<usize> {
+    memchr::memrchr(b, s.as_bytes())
 }
 
 pub fn get_directory_path(path: &str) -> String {
@@ -277,7 +290,9 @@ pub fn get_directory_path(path: &str) -> String {
     // return the leading portion of the path up to the last (non-terminal) directory separator
     // but not including any trailing directory separator.
     let path = remove_trailing_directory_separator(&path);
-    path[..(root_length as i32).max(last_index_byte(path, b'/')) as usize].to_string()
+    let directory_end =
+        last_index_byte(path, b'/').map_or(root_length, |index| root_length.max(index));
+    path[..directory_end].to_string()
 }
 
 impl Path {
@@ -495,7 +510,9 @@ pub fn get_normalized_absolute_path(file_name: &str, current_directory: &str) ->
             } else if !changed {
                 if normalized_up_to >= 1 {
                     let last = last_index_byte(&file_name[..normalized_up_to - 1], b'/');
-                    normalized = file_name[..(root_length as i32).max(last) as usize].to_string();
+                    normalized = file_name
+                        [..last.map_or(root_length, |index| root_length.max(index))]
+                        .to_string();
                 } else {
                     normalized = file_name[..normalized_up_to].to_string();
                 }
@@ -503,8 +520,8 @@ pub fn get_normalized_absolute_path(file_name: &str, current_directory: &str) ->
                 seen_non_dot_dot_segment = seen_non_dot_dot(&normalized);
             } else {
                 let last_slash = last_index_byte(&normalized, b'/');
-                if last_slash != -1 {
-                    normalized.truncate(root_length.max(last_slash as usize));
+                if let Some(last_slash) = last_slash {
+                    normalized.truncate(root_length.max(last_slash));
                 } else {
                     normalized = root.to_string();
                 }
@@ -877,7 +894,10 @@ pub fn get_base_file_name(path: &str) -> String {
     // return the trailing portion of the path starting after the last (non-terminal) directory
     // separator but not including any trailing directory separator.
     let path = remove_trailing_directory_separator(&path);
-    path[(get_root_length(path) as i32).max(last_index_byte(path, DIRECTORY_SEPARATOR) + 1) as usize..].to_string()
+    let root_length = get_root_length(path);
+    let base_start = last_index_byte(path, DIRECTORY_SEPARATOR)
+        .map_or(root_length, |index| root_length.max(index + 1));
+    path[base_start..].to_string()
 }
 
 // Gets the file extension for a path.
@@ -992,7 +1012,7 @@ pub struct ComparePathsOptions {
 }
 
 impl ComparePathsOptions {
-    pub fn get_comparer(&self) -> fn(&str, &str) -> i32 {
+    pub fn get_comparer(&self) -> fn(&str, &str) -> Ordering {
         stringutil::get_string_comparer(!self.use_case_sensitive_file_names)
     }
 
@@ -1001,26 +1021,18 @@ impl ComparePathsOptions {
     }
 }
 
-fn cmp_to_i32(o: Ordering) -> i32 {
-    match o {
-        Ordering::Less => -1,
-        Ordering::Equal => 0,
-        Ordering::Greater => 1,
-    }
-}
-
-pub fn compare_paths(a: &str, b: &str, options: &ComparePathsOptions) -> i32 {
+pub fn compare_paths(a: &str, b: &str, options: &ComparePathsOptions) -> Ordering {
     let a = combine_paths(&options.current_directory, &[a]);
     let b = combine_paths(&options.current_directory, &[b]);
 
     if a == b {
-        return 0;
+        return Ordering::Equal;
     }
     if a.is_empty() {
-        return -1;
+        return Ordering::Less;
     }
     if b.is_empty() {
-        return 1;
+        return Ordering::Greater;
     }
 
     // NOTE: Performance optimization - shortcut if the root segments differ as there would be no
@@ -1028,7 +1040,7 @@ pub fn compare_paths(a: &str, b: &str, options: &ComparePathsOptions) -> i32 {
     let a_root = &a[..get_root_length(&a)];
     let b_root = &b[..get_root_length(&b)];
     let result = stringutil::compare_strings_case_insensitive(a_root, b_root);
-    if result != 0 {
+    if result != Ordering::Equal {
         return result;
     }
 
@@ -1047,19 +1059,33 @@ pub fn compare_paths(a: &str, b: &str, options: &ComparePathsOptions) -> i32 {
     let shared_length = a_components.len().min(b_components.len());
     for i in 1..shared_length {
         let result = options.get_comparer()(&a_components[i], &b_components[i]);
-        if result != 0 {
+        if result != Ordering::Equal {
             return result;
         }
     }
-    cmp_to_i32(a_components.len().cmp(&b_components.len()))
+    a_components.len().cmp(&b_components.len())
 }
 
-pub fn compare_paths_case_sensitive(a: &str, b: &str, current_directory: &str) -> i32 {
-    compare_paths(a, b, &ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: current_directory.to_string() })
+pub fn compare_paths_case_sensitive(a: &str, b: &str, current_directory: &str) -> Ordering {
+    compare_paths(
+        a,
+        b,
+        &ComparePathsOptions {
+            use_case_sensitive_file_names: true,
+            current_directory: current_directory.to_string(),
+        },
+    )
 }
 
-pub fn compare_paths_case_insensitive(a: &str, b: &str, current_directory: &str) -> i32 {
-    compare_paths(a, b, &ComparePathsOptions { use_case_sensitive_file_names: false, current_directory: current_directory.to_string() })
+pub fn compare_paths_case_insensitive(a: &str, b: &str, current_directory: &str) -> Ordering {
+    compare_paths(
+        a,
+        b,
+        &ComparePathsOptions {
+            use_case_sensitive_file_names: false,
+            current_directory: current_directory.to_string(),
+        },
+    )
 }
 
 pub fn contains_path(parent: &str, child: &str, options: &ComparePathsOptions) -> bool {
@@ -1277,8 +1303,10 @@ pub fn starts_with_directory(file_name: &str, directory_name: &str, use_case_sen
     canonical_file_name.starts_with(&format!("{canonical_directory_name}/")) || canonical_file_name.starts_with(&format!("{canonical_directory_name}\\"))
 }
 
-pub fn compare_number_of_directory_separators(path1: &str, path2: &str) -> i32 {
-    cmp_to_i32(memchr::memchr_iter(b'/', path1.as_bytes()).count().cmp(&memchr::memchr_iter(b'/', path2.as_bytes()).count()))
+pub fn compare_number_of_directory_separators(path1: &str, path2: &str) -> Ordering {
+    memchr::memchr_iter(b'/', path1.as_bytes())
+        .count()
+        .cmp(&memchr::memchr_iter(b'/', path2.as_bytes()).count())
 }
 
 #[cfg(test)]

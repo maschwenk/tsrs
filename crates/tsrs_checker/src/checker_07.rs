@@ -1081,7 +1081,7 @@ impl Checker {
     }
 
     // checker.go:13880
-    pub(crate) fn is_const_type_variable(&mut self, t: Option<P<Type>>, depth: i32) -> bool {
+    pub(crate) fn is_const_type_variable(&mut self, t: Option<P<Type>>, depth: u32) -> bool {
         let Some(t) = t else {
             return false;
         };
@@ -1321,9 +1321,19 @@ impl Checker {
                                 && every_type(self, rest_type, |_, t| is_tuple_type(t))
                                 && !fn_.parameters().iter().any(|&p| self.is_some_symbol_assigned(p))
                             {
-                                let narrowed_type = self.get_flow_type_of_reference_ex(fn_, rest_type, rest_type, None /*flowContainer*/, get_flow_node_of_node(location));
-                                let index = fn_.parameters().iter().position(|&p| p == declaration).map_or(-1, |i| i as i32)
-                                    - if ast::get_this_parameter(fn_).is_some() { 1 } else { 0 };
+                                let narrowed_type = self.get_flow_type_of_reference_ex(
+                                    fn_,
+                                    rest_type,
+                                    rest_type,
+                                    None, /*flowContainer*/
+                                    get_flow_node_of_node(location),
+                                );
+                                let index = fn_
+                                    .parameters()
+                                    .iter()
+                                    .position(|&p| p == declaration)
+                                    .expect("parameter belongs to its declaration")
+                                    - usize::from(ast::get_this_parameter(fn_).is_some());
                                 let index_type = self.get_number_literal_type(Number(index as f64));
                                 t = self.get_indexed_access_type(narrowed_type, index_type);
                             }
@@ -1865,10 +1875,10 @@ impl Checker {
             let leading_message = create_diagnostic_for_node(Some(adjusted_node), &diagnostics::X_0_was_also_declared_here, &[&symbol_name]);
             let follow_on_message = create_diagnostic_for_node(Some(adjusted_node), &diagnostics::X_and_here, &[]);
             if err.related_information().len() >= 5
-                || err
-                    .related_information()
-                    .iter()
-                    .any(|&d| ast::compare_diagnostics(d, follow_on_message) == 0 || ast::compare_diagnostics(d, leading_message) == 0)
+                || err.related_information().iter().any(|&d| {
+                    ast::compare_diagnostics(d, follow_on_message) == std::cmp::Ordering::Equal
+                        || ast::compare_diagnostics(d, leading_message) == std::cmp::Ordering::Equal
+                })
             {
                 continue;
             }

@@ -2104,7 +2104,9 @@ impl Program {
             let current_globals = file_checker.get_global_diagnostics();
             if current_globals.len() > previous_globals.len() {
                 for diagnostic in current_globals {
-                    let found = previous_globals.binary_search_by(|d| compare_diagnostics(*d, diagnostic).cmp(&0)).is_ok();
+                    let found = previous_globals
+                        .binary_search_by(|d| compare_diagnostics(*d, diagnostic))
+                        .is_ok();
                     if !found {
                         diags.push(diagnostic);
                     }
@@ -2161,7 +2163,13 @@ impl Program {
         // Build map of directives by line number
         let mut directives_by_line: FxHashMap<usize, ast::CommentDirective> = FxHashMap::default();
         for directive in comment_directives.iter() {
-            let line = tsrs_scanner::get_ecma_line_of_position(&*source_file, directive.loc.pos());
+            let line = tsrs_scanner::get_ecma_line_of_position(
+                &*source_file,
+                directive
+                    .loc
+                    .pos()
+                    .expect_source("comment directives have source positions"),
+            );
             directives_by_line.insert(line as usize, *directive);
         }
         let line_starts = tsrs_scanner::get_ecma_line_starts(&*source_file);
@@ -2173,20 +2181,25 @@ impl Program {
                 filtered.push(diagnostic);
                 continue;
             }
-            let mut line = tsrs_scanner::compute_line_of_position(&line_starts, diagnostic.pos()) as i64 - 1;
-            while line >= 0 {
+            let Some(diagnostic_pos) = diagnostic.pos() else {
+                filtered.push(diagnostic);
+                continue;
+            };
+            let mut line =
+                tsrs_scanner::compute_line_of_position(&line_starts, diagnostic_pos).checked_sub(1);
+            while let Some(current_line) = line {
                 // If line contains a @ts-ignore or @ts-expect-error directive, ignore this diagnostic and change
                 // the directive kind to @ts-ignore to indicate it was used.
-                if let Some(directive) = directives_by_line.get_mut(&(line as usize)) {
+                if let Some(directive) = directives_by_line.get_mut(&current_line) {
                     ignore_diagnostic = true;
                     directive.kind = CommentDirectiveKind::Ignore;
                     break;
                 }
                 // Stop searching backwards when we encounter a line that isn't blank or a comment.
-                if !is_comment_or_blank_line(text, line_starts[line as usize] as usize) {
+                if !is_comment_or_blank_line(text, line_starts[current_line] as usize) {
                     break;
                 }
-                line -= 1;
+                line = current_line.checked_sub(1);
             }
             if !ignore_diagnostic {
                 filtered.push(diagnostic);
@@ -2789,7 +2802,10 @@ fn filter_and_sort_diagnostics(diags: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
             if !diag.reports_unnecessary() || !diag.source().is_empty() {
                 return true;
             }
-            let (_, fidelity) = span_map.virtual_to_original_span(diag.loc());
+            let Some(loc) = diag.loc() else {
+                return true;
+            };
+            let (_, fidelity) = span_map.virtual_to_original_span(loc);
             fidelity != tsrs_spanmap::Fidelity::None
         })
         .collect();
@@ -2807,8 +2823,13 @@ fn apply_content_mapper_diagnostic_directives(source_file: P<SourceFile>, diags:
         if diag.file() != Some(source_file) || !diag.source().is_empty() {
             return false;
         }
+        let Some(pos) = diag.pos() else {
+            return false;
+        };
         for (i, directive) in directives.iter().enumerate() {
-            if diag.pos() >= directive.virtual_range.pos() && diag.pos() < directive.virtual_range.end() {
+            if Some(pos) >= directive.virtual_range.source_pos()
+                && Some(pos) < directive.virtual_range.source_end()
+            {
                 used[i] = true;
                 return true;
             }
@@ -2891,7 +2912,7 @@ fn is_comment_or_blank_line(text: &str, pos: usize) -> bool {
 pub fn sort_and_deduplicate_diagnostics(diagnostics: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
     let mut diagnostics = diagnostics.to_vec();
     // Go's slices.SortFunc is not stable; equal diagnostics are merged below, so stability does not matter.
-    diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+    diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b));
     compact_and_merge_related_infos(diagnostics)
 }
 
@@ -2920,7 +2941,7 @@ fn compact_and_merge_related_infos(diagnostics: Vec<P<Diagnostic>>) -> Vec<P<Dia
                 related_infos.extend_from_slice(r);
             }
             if any {
-                related_infos.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+                related_infos.sort_by(|a, b| compare_diagnostics(*a, *b));
                 related_infos.dedup_by(|a, b| equal_diagnostics(*a, *b));
                 d = d.clone_diagnostic().set_related_info(&related_infos);
             }

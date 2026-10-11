@@ -14,13 +14,21 @@ pub fn get_last_child(node: P<Node>, source_file: P<SourceFile>) -> Option<P<Nod
         return None;
     }
     let token_start_pos = match last_child_node {
-        Some(c) => c.end(),
-        None => node.pos(),
+        Some(c) => c
+            .end()
+            .expect_source("parsed children have source positions"),
+        None => node
+            .pos()
+            .expect_source("parsed nodes have source positions"),
     };
     let mut last_token: Option<P<Node>> = None;
     let mut scanner = scanner::get_scanner_for_source_file(source_file, token_start_pos);
     let mut start_pos = token_start_pos;
-    while start_pos < node.end() {
+    while start_pos
+        < node
+            .end()
+            .expect_source("parsed nodes have source positions")
+    {
         let token_kind = scanner.token();
         let token_full_start = scanner.token_full_start();
         let token_end = scanner.token_end();
@@ -103,12 +111,24 @@ pub fn get_first_token(node: P<Node>, source_file: P<SourceFile>) -> Option<P<No
     });
 
     let token_end_position = match first_child {
-        Some(c) => c.pos(),
-        None => node.end(),
+        Some(c) => c
+            .pos()
+            .expect_source("parsed children have source positions"),
+        None => node
+            .end()
+            .expect_source("parsed nodes have source positions"),
     };
-    let scanner = scanner::get_scanner_for_source_file(source_file, node.pos());
+    let scanner = scanner::get_scanner_for_source_file(
+        source_file,
+        node.pos()
+            .expect_source("parsed nodes have source positions"),
+    );
     let mut first_token: Option<P<Node>> = None;
-    if node.pos() < token_end_position {
+    if node
+        .pos()
+        .expect_source("parsed nodes have source positions")
+        < token_end_position
+    {
         let token_kind = scanner.token();
         let token_full_start = scanner.token_full_start();
         let token_end = scanner.token_end();

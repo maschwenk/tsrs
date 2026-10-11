@@ -910,7 +910,11 @@ impl Checker {
     }
 
     // checker.go:29084
-    pub(crate) fn has_signature_with_arity_greater_than(&mut self, symbol: P<Symbol>, arity: i32) -> bool {
+    pub(crate) fn has_signature_with_arity_greater_than(
+        &mut self,
+        symbol: P<Symbol>,
+        arity: usize,
+    ) -> bool {
         for signature in self.get_signatures_of_symbol(Some(symbol)) {
             if self.get_parameter_count(signature) > arity {
                 return true;
@@ -1329,14 +1333,14 @@ pub fn get_mapped_type_modifiers(t: P<Type>) -> MappedTypeModifiers {
 }
 
 // checker.go:29496
-pub(crate) fn get_mapped_type_optionality(t: P<Type>) -> i32 {
+pub(crate) fn get_mapped_type_optionality(t: P<Type>) -> std::cmp::Ordering {
     let modifiers = get_mapped_type_modifiers(t);
     if modifiers.intersects(MappedTypeModifiers::ExcludeOptional) {
-        return -1;
+        return std::cmp::Ordering::Less;
     } else if modifiers.intersects(MappedTypeModifiers::IncludeOptional) {
-        return 1;
+        return std::cmp::Ordering::Greater;
     }
-    0
+    std::cmp::Ordering::Equal
 }
 
 impl Checker {
@@ -1344,10 +1348,13 @@ impl Checker {
     // modify optionality, recursively consult the optionality of the type being mapped over to see if it strips or adds optionality.
     // For intersections, return -1 or 1 when all constituents strip or add optionality, otherwise return 0.
     // checker.go:29510
-    pub(crate) fn get_combined_mapped_type_optionality(&mut self, t: P<Type>) -> i32 {
+    pub(crate) fn get_combined_mapped_type_optionality(
+        &mut self,
+        t: P<Type>,
+    ) -> std::cmp::Ordering {
         if t.object_flags().intersects(ObjectFlags::Mapped) {
             let optionality = get_mapped_type_optionality(t);
-            if optionality != 0 {
+            if optionality != std::cmp::Ordering::Equal {
                 return optionality;
             }
             let modifiers_type = self.get_modifiers_type_from_mapped_type(t);
@@ -1357,12 +1364,12 @@ impl Checker {
             let optionality = self.get_combined_mapped_type_optionality(t.types()[0]);
             for &t in &t.types()[1..] {
                 if self.get_combined_mapped_type_optionality(t) != optionality {
-                    return 0;
+                    return std::cmp::Ordering::Equal;
                 }
             }
             return optionality;
         }
-        0
+        std::cmp::Ordering::Equal
     }
 }
 
@@ -1467,13 +1474,18 @@ impl Checker {
     }
 
     // checker.go:29623
-    pub(crate) fn get_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
-        let union_index = find_index(types, |t| t.flags().intersects(TypeFlags::Never | TypeFlags::Union));
-        if union_index >= 0 {
+    pub(crate) fn get_template_literal_type(
+        &mut self,
+        texts: &[&str],
+        types: &[P<Type>],
+    ) -> P<Type> {
+        let union_index = find_index(types, |t| {
+            t.flags().intersects(TypeFlags::Never | TypeFlags::Union)
+        });
+        if let Some(union_index) = union_index {
             if !self.check_cross_product_union(types, Self::too_complex_key(&(texts, types))) {
                 return self.error_type;
             }
-            let union_index = union_index as usize;
             return self
                 .map_type(types[union_index], |c, t| Some(c.get_template_literal_type(texts, &replace_element(types, union_index, t))))
                 .unwrap();
@@ -1585,7 +1597,9 @@ fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[
         } else {
             return false;
         }
-        if state.text_length + state.sb.len() > maxTemplateLiteralTypeLength as usize || state.new_types.len() > maxTemplateLiteralTypeSpans as usize {
+        if state.text_length + state.sb.len() > maxTemplateLiteralTypeLength
+            || state.new_types.len() > maxTemplateLiteralTypeSpans
+        {
             state.too_large = true;
             return false;
         }
@@ -1665,11 +1679,13 @@ impl Checker {
             }
             recycle_mapper(mapper);
         }
-        let mut is_optional = get_mapped_type_optionality(object_type) > 0;
+        let mut is_optional = get_mapped_type_optionality(object_type).is_gt();
         if !is_optional {
             if self.is_generic_type(object_type) {
                 let modifiers_type = self.get_modifiers_type_from_mapped_type(object_type);
-                is_optional = self.get_combined_mapped_type_optionality(modifiers_type) > 0;
+                is_optional = self
+                    .get_combined_mapped_type_optionality(modifiers_type)
+                    .is_gt();
             } else {
                 is_optional = self.could_access_optional_property(object_type, index);
             }
@@ -1729,9 +1745,11 @@ impl Checker {
         }
         // Cached contextual types are obtained with no ContextFlags, so we can only consult them for
         // requests with no ContextFlags.
-        let index = self.find_contextual_node(node, context_flags == ContextFlags::None /*includeCaches*/);
-        if index >= 0 {
-            return self.contextual_infos[index as usize].t;
+        if let Some(index) = self.find_contextual_node(
+            node,
+            context_flags == ContextFlags::None, /*includeCaches*/
+        ) {
+            return self.contextual_infos[index].t;
         }
         let parent = node.parent().unwrap();
         match parent.kind() {
@@ -1752,15 +1770,22 @@ impl Checker {
             Kind::SpreadAssignment => self.get_contextual_type(parent.parent().unwrap(), context_flags),
             Kind::ArrayLiteralExpression => {
                 let t = self.get_apparent_type_of_contextual_type(parent, context_flags);
-                let element_index = index_of_node(parent.elements(), node);
-                if element_index < 0 {
-                    return None;
-                }
+                let element_index = index_of_node(parent.elements(), node)?;
                 let (first_spread_index, last_spread_index) = self.get_spread_indices(parent);
-                self.get_contextual_type_for_element_expression(t, element_index, parent.elements().len() as i32, first_spread_index, last_spread_index)
+                self.get_contextual_type_for_element_expression(
+                    t,
+                    element_index,
+                    Some(parent.elements().len()),
+                    first_spread_index,
+                    last_spread_index,
+                )
             }
-            Kind::ConditionalExpression => self.get_contextual_type_for_conditional_operand(node, context_flags),
-            Kind::TemplateSpan => self.get_contextual_type_for_substitution_expression(parent.parent().unwrap(), node),
+            Kind::ConditionalExpression => {
+                self.get_contextual_type_for_conditional_operand(node, context_flags)
+            }
+            Kind::TemplateSpan => {
+                self.get_contextual_type_for_substitution_expression(parent.parent().unwrap(), node)
+            }
             Kind::ParenthesizedExpression => self.get_contextual_type(parent, context_flags),
             Kind::NonNullExpression => self.get_contextual_type(parent, context_flags),
             Kind::SatisfiesExpression => Some(self.get_type_from_type_node(parent.type_node().unwrap())),
@@ -1829,17 +1854,24 @@ impl Checker {
         let iife = get_immediately_invoked_function_expression(fn_);
         if let Some(iife) = iife {
             let args = self.get_effective_call_arguments(iife);
-            let index_of_parameter = fn_.parameters().iter().position(|&p| p == parameter).map_or(-1, |i| i as i32);
+            let index_of_parameter = fn_.parameters().iter().position(|&p| p == parameter)?;
             if has_dot_dot_dot_token(parameter) {
                 let any_type = self.any_type;
-                return Some(self.get_spread_argument_type(&args, index_of_parameter, args.len() as i32, any_type, None /*context*/, CheckMode::Normal));
+                return Some(self.get_spread_argument_type(
+                    &args,
+                    index_of_parameter,
+                    args.len(),
+                    any_type,
+                    None, /*context*/
+                    CheckMode::Normal,
+                ));
             }
             let links = self.signature_links.get(iife);
             let cached = links.resolved_signature.get();
             links.resolved_signature.set(Some(self.any_signature));
             let t: Option<P<Type>>;
-            if index_of_parameter < args.len() as i32 {
-                let arg_type = self.check_expression(args[index_of_parameter as usize]);
+            if index_of_parameter < args.len() {
+                let arg_type = self.check_expression(args[index_of_parameter]);
                 t = Some(self.get_widened_literal_type(arg_type));
             } else if parameter.initializer().is_some() {
                 t = None;
@@ -1851,8 +1883,13 @@ impl Checker {
         }
         let contextual_signature = self.get_contextual_signature(fn_);
         if let Some(contextual_signature) = contextual_signature {
-            let index = fn_.parameters().iter().position(|&p| p == parameter).map_or(-1, |i| i as i32) - if_else(get_this_parameter(fn_).is_some(), 1, 0);
-            if has_dot_dot_dot_token(parameter) && last_or_nil(fn_.parameters()) == Some(parameter) {
+            let index = fn_
+                .parameters()
+                .iter()
+                .position(|&p| p == parameter)?
+                .checked_sub(usize::from(get_this_parameter(fn_).is_some()))?;
+            if has_dot_dot_dot_token(parameter) && last_or_nil(fn_.parameters()) == Some(parameter)
+            {
                 return Some(self.get_rest_type_at_position(contextual_signature, index, false));
             }
             return self.try_get_type_at_position(contextual_signature, index);
@@ -1866,10 +1903,18 @@ impl Checker {
     }
 
     // checker.go:29989
-    pub(crate) fn get_spread_argument_type(&mut self, args: &[P<Node>], index: i32, arg_count: i32, rest_type: P<Type>, context: Option<P<InferenceContext>>, check_mode: CheckMode) -> P<Type> {
+    pub(crate) fn get_spread_argument_type(
+        &mut self,
+        args: &[P<Node>],
+        index: usize,
+        arg_count: usize,
+        rest_type: P<Type>,
+        context: Option<P<InferenceContext>>,
+        check_mode: CheckMode,
+    ) -> P<Type> {
         let in_const_context = self.is_const_type_variable(Some(rest_type), 0);
         if arg_count > 0 && index >= arg_count - 1 {
-            let mut arg = args[(arg_count - 1) as usize];
+            let mut arg = args[arg_count - 1];
             if is_spread_argument(arg) {
                 // We are inferring from a spread expression in the last argument position, i.e. both the parameter
                 // and the argument are ...x forms.
@@ -1892,7 +1937,7 @@ impl Checker {
         let mut types: Vec<P<Type>> = Vec::new();
         let mut infos: Vec<TupleElementInfo> = Vec::new();
         for i in index..arg_count {
-            let arg = args[i as usize];
+            let arg = args[i];
             let t: P<Type>;
             let mut info = TupleElementInfo::default();
             if is_spread_argument(arg) {
@@ -1911,7 +1956,13 @@ impl Checker {
                 }
             } else {
                 let contextual_type = if is_tuple_type(rest_type) {
-                    match self.get_contextual_type_for_element_expression(Some(rest_type), i - index, arg_count - index, -1, -1) {
+                    match self.get_contextual_type_for_element_expression(
+                        Some(rest_type),
+                        i - index,
+                        Some(arg_count - index),
+                        None,
+                        None,
+                    ) {
                         Some(t) => t,
                         None => self.unknown_type,
                     }
@@ -1977,7 +2028,13 @@ impl Checker {
             let Some(index) = index else {
                 return None;
             };
-            return self.get_contextual_type_for_element_expression(Some(parent_type), index as i32, -1, -1, -1);
+            return self.get_contextual_type_for_element_expression(
+                Some(parent_type),
+                index,
+                None,
+                None,
+                None,
+            );
         }
         let name_type = self.get_literal_type_from_property_name(name);
         if is_type_usable_as_property_name(name_type) {
@@ -2162,11 +2219,15 @@ impl Checker {
         let Some(arg_index) = arg_index else {
             return None;
         };
-        self.get_contextual_type_for_argument_at_index(call_target, arg_index as i32)
+        self.get_contextual_type_for_argument_at_index(call_target, arg_index)
     }
 
     // checker.go:30261
-    pub fn get_contextual_type_for_argument_at_index(&mut self, call_target: P<Node>, arg_index: i32) -> Option<P<Type>> {
+    pub fn get_contextual_type_for_argument_at_index(
+        &mut self,
+        call_target: P<Node>,
+        arg_index: usize,
+    ) -> Option<P<Type>> {
         if is_import_call(call_target) {
             return if arg_index == 0 {
                 Some(self.string_type)
@@ -2188,11 +2249,18 @@ impl Checker {
         if is_jsx_opening_like_element(call_target) && arg_index == 0 {
             return self.get_effective_first_argument_for_jsx_signature(signature, call_target);
         }
-        let rest_index = signature.parameters.get().len() as i32 - 1;
+        let rest_index = signature.parameters.get().len().saturating_sub(1);
         if signature_has_rest_parameter(signature) && arg_index >= rest_index {
-            let rest_type = self.get_type_of_symbol(signature.parameters.get()[rest_index as usize]);
-            let index_type = self.get_number_literal_type(jsnum::Number((arg_index - rest_index) as f64));
-            return Some(self.get_indexed_access_type_ex(rest_type, index_type, AccessFlags::Contextual, None, AliasArg::None));
+            let rest_type = self.get_type_of_symbol(signature.parameters.get()[rest_index]);
+            let index_type =
+                self.get_number_literal_type(jsnum::Number((arg_index - rest_index) as f64));
+            return Some(self.get_indexed_access_type_ex(
+                rest_type,
+                index_type,
+                AccessFlags::Contextual,
+                None,
+                AliasArg::None,
+            ));
         }
         Some(self.get_type_at_position(signature, arg_index))
     }
@@ -2399,7 +2467,14 @@ impl Checker {
 
     // t Option<P<Type>>: Go checks t == nil (getContextualType passes getApparentTypeOfContextualType's result)
     // checker.go:30461
-    pub(crate) fn get_contextual_type_for_element_expression(&mut self, t: Option<P<Type>>, index: i32, length: i32, first_spread_index: i32, last_spread_index: i32) -> Option<P<Type>> {
+    pub(crate) fn get_contextual_type_for_element_expression(
+        &mut self,
+        t: Option<P<Type>>,
+        index: usize,
+        length: Option<usize>,
+        first_spread_index: Option<usize>,
+        last_spread_index: Option<usize>,
+    ) -> Option<P<Type>> {
         let t = t?;
         self.map_type_ex(
             t,
@@ -2408,41 +2483,57 @@ impl Checker {
                     let tuple = t.target_tuple_type();
                     // If index is before any spread element and within the fixed part of the contextual tuple type, return
                     // the type of the contextual tuple element.
-                    if (first_spread_index < 0 || index < first_spread_index) && index < tuple.fixed_length.get() {
-                        let type_argument = c.get_type_arguments(t)[index as usize];
-                        return Some(c.remove_missing_type(type_argument, tuple.element_infos.get()[index as usize].flags.intersects(ElementFlags::Optional)));
+                    if first_spread_index.is_none_or(|first| index < first)
+                        && index < tuple.fixed_length.get()
+                    {
+                        let type_argument = c.get_type_arguments(t)[index];
+                        return Some(
+                            c.remove_missing_type(
+                                type_argument,
+                                tuple.element_infos.get()[index]
+                                    .flags
+                                    .intersects(ElementFlags::Optional),
+                            ),
+                        );
                     }
                     // When the length is known and the index is after all spread elements we compute the offset from the element
                     // to the end and the number of ending fixed elements in the contextual tuple type.
-                    let mut offset = 0;
-                    if length >= 0 && (last_spread_index < 0 || index > last_spread_index) {
-                        offset = length - index;
-                    }
-                    let mut fixed_end_length = 0;
-                    if offset > 0 && tuple.combined_flags.get().intersects(ElementFlags::Variable) {
-                        fixed_end_length = get_end_element_count(tuple, ElementFlags::Fixed);
-                    }
+                    let offset = length
+                        .filter(|_| last_spread_index.is_none_or(|last| index > last))
+                        .and_then(|length| length.checked_sub(index))
+                        .filter(|&offset| offset > 0);
+                    let fixed_end_length = if offset.is_some()
+                        && tuple
+                            .combined_flags
+                            .get()
+                            .intersects(ElementFlags::Variable)
+                    {
+                        get_end_element_count(tuple, ElementFlags::Fixed)
+                    } else {
+                        0
+                    };
                     // If the offset is within the ending fixed part of the contextual tuple type, return the type of the contextual
                     // tuple element.
-                    if offset > 0 && offset <= fixed_end_length {
+                    if offset.is_some_and(|offset| offset <= fixed_end_length) {
                         let arity = c.get_type_reference_arity(t);
-                        return Some(c.get_type_arguments(t)[(arity - offset) as usize]);
+                        return Some(c.get_type_arguments(t)[arity - offset.unwrap()]);
                     }
                     // Return a union of the possible contextual element types with no subtype reduction.
                     let mut tuple_index = tuple.fixed_length.get();
-                    if first_spread_index >= 0 {
+                    if let Some(first_spread_index) = first_spread_index {
                         tuple_index = tuple_index.min(first_spread_index);
                     }
                     let mut end_skip_count = fixed_end_length;
-                    if length >= 0 && last_spread_index >= 0 {
+                    if let (Some(length), Some(last_spread_index)) = (length, last_spread_index) {
                         end_skip_count = fixed_end_length.min(length - last_spread_index);
                     }
                     return c.get_element_type_of_slice_of_tuple_type(t, tuple_index, end_skip_count, false /*writing*/, true /*noReductions*/);
                 }
                 // If element index is known and a contextual property with that name exists, return it. Otherwise return the
                 // iterated or element type of the contextual type.
-                if first_spread_index < 0 || index < first_spread_index {
-                    let prop_type = c.get_type_of_property_of_contextual_type(t, &index.to_string());
+                if first_spread_index.is_none_or(|first| index < first) {
+                    let prop_type =
+                        c.get_type_of_property_of_contextual_type(t, &index.to_string());
                     if prop_type.is_some() {
                         return prop_type;
                     }

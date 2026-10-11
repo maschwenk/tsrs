@@ -305,7 +305,7 @@ impl TypeMapper {
                             clear_cached_inferences(n.inferences.get());
                             inference.is_fixed.set(true);
                         }
-                        return c.get_inferred_type(n, i as i32);
+                        return c.get_inferred_type(n, i);
                     }
                 }
                 t
@@ -458,10 +458,20 @@ impl Checker {
     /// Maps forward-references to later types parameters to the empty object type.
     /// This is used during inference when instantiating type parameter defaults.
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn new_backreference_mapper(&mut self, context: P<InferenceContext>, index: i32) -> P<TypeMapper> {
-        let forward_inferences = &context.inferences.get()[index as usize..];
-        let type_parameters: Vec<P<Type>> = forward_inferences.iter().map(|i| i.type_parameter.get().unwrap()).collect();
-        new_array_to_single_type_mapper(tsrs_core::alloc_slice_recycled(&type_parameters), self.unknown_type)
+    pub(crate) fn new_backreference_mapper(
+        &mut self,
+        context: P<InferenceContext>,
+        index: usize,
+    ) -> P<TypeMapper> {
+        let forward_inferences = &context.inferences.get()[index..];
+        let type_parameters: Vec<P<Type>> = forward_inferences
+            .iter()
+            .map(|i| i.type_parameter.get().unwrap())
+            .collect();
+        new_array_to_single_type_mapper(
+            tsrs_core::alloc_slice_recycled(&type_parameters),
+            self.unknown_type,
+        )
     }
 
 }

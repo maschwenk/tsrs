@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct GeneratedIdentifierFlags: i32 {
+    pub struct GeneratedIdentifierFlags: u32 {
         // Kind
 
         const None = 0; // Not automatically generated.

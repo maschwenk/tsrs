@@ -20,12 +20,15 @@ use std::fmt;
 use std::ops::{Deref, DerefMut};
 
 #[cfg(any(debug_assertions, feature = "checked-cells"))]
-use std::sync::atomic::{AtomicIsize, Ordering};
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[cfg(any(debug_assertions, feature = "checked-cells"))]
+const EXCLUSIVE_BORROW: usize = usize::MAX;
 
 pub struct FrozenCell<T> {
     value: UnsafeCell<T>,
     #[cfg(any(debug_assertions, feature = "checked-cells"))]
-    state: AtomicIsize, // > 0: shared borrows, -1: exclusive borrow
+    state: AtomicUsize, // 1..EXCLUSIVE_BORROW: shared borrow count; EXCLUSIVE_BORROW: exclusive borrow
 }
 
 // SAFETY: shared access is read-only except through `borrow_mut`, whose callers follow the ownership
@@ -40,7 +43,7 @@ impl<T> FrozenCell<T> {
         FrozenCell {
             value: UnsafeCell::new(value),
             #[cfg(any(debug_assertions, feature = "checked-cells"))]
-            state: AtomicIsize::new(0),
+            state: AtomicUsize::new(0),
         }
     }
 
@@ -48,10 +51,25 @@ impl<T> FrozenCell<T> {
     pub fn borrow(&self) -> FrozenRef<'_, T> {
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         {
-            let prev = self.state.fetch_add(1, Ordering::Acquire);
-            if prev < 0 {
-                self.state.fetch_sub(1, Ordering::Release);
-                panic!("FrozenCell already mutably borrowed");
+            let mut state = self.state.load(Ordering::Acquire);
+            loop {
+                if state == EXCLUSIVE_BORROW {
+                    panic!("FrozenCell already mutably borrowed");
+                }
+                assert!(
+                    state < EXCLUSIVE_BORROW - 1,
+                    "FrozenCell shared borrow count overflow"
+                );
+                state = match self.state.compare_exchange_weak(
+                    state,
+                    state + 1,
+                    Ordering::Acquire,
+                    // A failed comparison only supplies the next borrow-state value to retry.
+                    Ordering::Relaxed,
+                ) {
+                    Ok(_) => break,
+                    Err(current) => current,
+                };
             }
         }
         FrozenRef {
@@ -67,7 +85,12 @@ impl<T> FrozenCell<T> {
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         {
             crate::ptr::shared_check::assert_not_shared(self, "FrozenCell");
-            if self.state.compare_exchange(0, -1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            if self
+                .state
+                // Failure only reports that another borrow is active; it does not expose the value.
+                .compare_exchange(0, EXCLUSIVE_BORROW, Ordering::Acquire, Ordering::Relaxed)
+                .is_err()
+            {
                 panic!("FrozenCell already borrowed");
             }
         }
@@ -86,7 +109,12 @@ impl<T> FrozenCell<T> {
     pub fn borrow_mut_locked(&self) -> FrozenRefMut<'_, T> {
         #[cfg(any(debug_assertions, feature = "checked-cells"))]
         {
-            if self.state.compare_exchange(0, -1, Ordering::Acquire, Ordering::Relaxed).is_err() {
+            if self
+                .state
+                // Failure only reports that another borrow is active; it does not expose the value.
+                .compare_exchange(0, EXCLUSIVE_BORROW, Ordering::Acquire, Ordering::Relaxed)
+                .is_err()
+            {
                 panic!("FrozenCell already borrowed");
             }
         }
@@ -131,7 +159,7 @@ impl<T: fmt::Debug> fmt::Debug for FrozenCell<T> {
 pub struct FrozenRef<'a, T> {
     value: &'a T,
     #[cfg(any(debug_assertions, feature = "checked-cells"))]
-    state: &'a AtomicIsize,
+    state: &'a AtomicUsize,
 }
 
 impl<T> Deref for FrozenRef<'_, T> {
@@ -153,7 +181,7 @@ impl<T> Drop for FrozenRef<'_, T> {
 pub struct FrozenRefMut<'a, T> {
     value: &'a mut T,
     #[cfg(any(debug_assertions, feature = "checked-cells"))]
-    state: &'a AtomicIsize,
+    state: &'a AtomicUsize,
 }
 
 impl<T> Deref for FrozenRefMut<'_, T> {

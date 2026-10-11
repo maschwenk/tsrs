@@ -22,6 +22,12 @@ pub(crate) fn token_is_identifier_or_keyword_or_greater_than(token: Kind) -> boo
 
 pub fn get_jsdoc_comment_ranges(_f: &mut NodeFactory, comment_ranges: &[CommentRange], node: P<Node>, text: &'static str) -> Vec<CommentRange> {
     let mut comment_ranges = comment_ranges.to_vec();
+    let node_pos = node
+        .pos()
+        .expect_source("parsed nodes have source positions");
+    let node_end = node
+        .end()
+        .expect_source("parsed nodes have source positions");
     match node.kind() {
         Kind::Parameter
         | Kind::TypeParameter
@@ -30,15 +36,15 @@ pub fn get_jsdoc_comment_ranges(_f: &mut NodeFactory, comment_ranges: &[CommentR
         | Kind::ParenthesizedExpression
         | Kind::VariableDeclaration
         | Kind::ExportSpecifier => {
-            for comment_range in scanner::get_trailing_comment_ranges(text, node.pos()) {
+            for comment_range in scanner::get_trailing_comment_ranges(text, node_pos) {
                 comment_ranges.push(comment_range);
             }
-            for comment_range in scanner::get_leading_comment_ranges(text, node.pos()) {
+            for comment_range in scanner::get_leading_comment_ranges(text, node_pos) {
                 comment_ranges.push(comment_range);
             }
         }
         _ => {
-            for comment_range in scanner::get_leading_comment_ranges(text, node.pos()) {
+            for comment_range in scanner::get_leading_comment_ranges(text, node_pos) {
                 comment_ranges.push(comment_range);
             }
         }
@@ -48,7 +54,7 @@ pub fn get_jsdoc_comment_ranges(_f: &mut NodeFactory, comment_ranges: &[CommentR
     comment_ranges.retain(|comment| {
         let comment_start = comment.pos();
         let comment_len = comment.end() - comment_start;
-        !(comment.end() > node.end()
+        !(comment.end() > node_end
             || comment_len < 4
             || bytes[(comment_start + 1) as usize] != b'*'
             || bytes[(comment_start + 2) as usize] != b'*'

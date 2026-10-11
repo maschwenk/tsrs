@@ -51,7 +51,8 @@ impl Session {
         let program = sd.get_program(&ProjectID(p.str("project")?.to_string()))?;
         let target = resolve_source_file(program, &p.document("file")?)?;
         let decoded = decode(p.str("data")?)?;
-        let position = p.u64("position")? as i32;
+        let position = u32::try_from(p.u64("position")?)
+            .map_err(|_| ApiError::invalid_request("position exceeds uint32"))?;
         let pos = target.get_position_map().utf16_to_utf8(position);
         let format_options = sd.snapshot.user_preferences().format_code_settings.clone();
         let new_line = format_options.new_line_character.clone();
@@ -59,11 +60,32 @@ impl Session {
             let _scope = decoded.region().enter();
             let node = decoded.root();
             let factory = tsrs_ast::new_node_factory(Default::default());
-            let (text, node_with_pos) = tsrs_printer::print_and_position_node(&factory, node, None, &new_line, format_options.indent_size, None);
-            let synthetic = tsrs_printer::create_synthetic_source_file(&factory, node_with_pos, &text, target.parse_options().clone());
-            let at_line_start = tsrs_ls::format::get_line_start_position_for_position(pos, target) == pos;
-            let initial = tsrs_ls::format::get_indentation(pos, target, &format_options, at_line_start);
-            let delta = if format_options.indent_size != 0 && tsrs_ls::format::should_indent_child_node(&format_options, node, None, None, false) {
+            let (text, node_with_pos) = tsrs_printer::print_and_position_node(
+                &factory,
+                node,
+                None,
+                &new_line,
+                usize::try_from(format_options.indent_size).expect("indent size is negative"),
+                None,
+            );
+            let synthetic = tsrs_printer::create_synthetic_source_file(
+                &factory,
+                node_with_pos,
+                &text,
+                target.parse_options().clone(),
+            );
+            let at_line_start =
+                tsrs_ls::format::get_line_start_position_for_position(pos, target) == pos;
+            let initial =
+                tsrs_ls::format::get_indentation(pos, target, &format_options, at_line_start);
+            let delta = if format_options.indent_size != 0
+                && tsrs_ls::format::should_indent_child_node(
+                    &format_options,
+                    node,
+                    None,
+                    None,
+                    false,
+                ) {
                 format_options.indent_size
             } else {
                 0

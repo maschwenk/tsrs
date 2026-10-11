@@ -10,9 +10,16 @@ use tsrs_ls as ls;
 pub use super::util_gen::*;
 
 // util.go:18
-pub fn insert_replace_text_edit(new_text: &str, edit_range: lsproto::Range) -> Option<lsproto::TextEditOrInsertReplaceEdit> {
+pub fn insert_replace_text_edit(
+    new_text: &str,
+    edit_range: lsproto::Range,
+) -> Option<lsproto::TextEditOrInsertReplaceEdit> {
     Some(lsproto::TextEditOrInsertReplaceEdit {
-        insert_replace_edit: Some(lsproto::InsertReplaceEdit { new_text: new_text.to_string(), insert: edit_range, replace: edit_range }),
+        insert_replace_edit: Some(lsproto::InsertReplaceEdit {
+            new_text: new_text.to_string(),
+            insert: edit_range,
+            replace: edit_range,
+        }),
         ..Default::default()
     })
 }
@@ -38,8 +45,8 @@ pub fn sort_completion_items(items: &[Any]) -> Vec<Any> {
         let a_sort_text = go::or_else(a_sort_text, default_sort_text.clone());
         let b_sort_text = go::or_else(b_sort_text, default_sort_text);
         let by_sort_text = compare_strings(&a_sort_text, &b_sort_text);
-        if by_sort_text != 0 {
-            return by_sort_text.cmp(&0);
+        if !by_sort_text.is_eq() {
+            return by_sort_text;
         }
         let a_label = match a {
             Any::CompletionItem(a) => a.label.clone(),
@@ -51,7 +58,7 @@ pub fn sort_completion_items(items: &[Any]) -> Vec<Any> {
             Any::String(b) => b.clone(),
             _ => panic!("unexpected completion item type: {}", b.type_name()),
         };
-        compare_strings(&a_label, &b_label).cmp(&0)
+        compare_strings(&a_label, &b_label)
     });
     items
 }
@@ -59,8 +66,15 @@ pub fn sort_completion_items(items: &[Any]) -> Vec<Any> {
 // util.go:1410
 pub fn completion_globals_plus(items: &[Any], no_lib: bool) -> Vec<Any> {
     let all: Vec<Any> = if no_lib {
-        [items, &[Any::CompletionItem(COMPLETION_GLOBAL_THIS_ITEM.clone().unwrap()), Any::CompletionItem(COMPLETION_UNDEFINED_VAR_ITEM.clone().unwrap())], &COMPLETION_GLOBAL_KEYWORDS[..]]
-            .concat()
+        [
+            items,
+            &[
+                Any::CompletionItem(COMPLETION_GLOBAL_THIS_ITEM.clone().unwrap()),
+                Any::CompletionItem(COMPLETION_UNDEFINED_VAR_ITEM.clone().unwrap()),
+            ],
+            &COMPLETION_GLOBAL_KEYWORDS[..],
+        ]
+        .concat()
     } else {
         [items, &COMPLETION_GLOBALS[..]].concat()
     };
@@ -69,7 +83,17 @@ pub fn completion_globals_plus(items: &[Any], no_lib: bool) -> Vec<Any> {
 
 // util.go:1424
 pub fn completion_global_types_plus(items: &[Any]) -> Vec<Any> {
-    sort_completion_items(&[&COMPLETION_GLOBAL_TYPE_DECLS[..], &[Any::CompletionItem(COMPLETION_GLOBAL_THIS_ITEM.clone().unwrap())], &COMPLETION_TYPE_KEYWORDS[..], items].concat())
+    sort_completion_items(
+        &[
+            &COMPLETION_GLOBAL_TYPE_DECLS[..],
+            &[Any::CompletionItem(
+                COMPLETION_GLOBAL_THIS_ITEM.clone().unwrap(),
+            )],
+            &COMPLETION_TYPE_KEYWORDS[..],
+            items,
+        ]
+        .concat(),
+    )
 }
 
 // util.go:1435
@@ -117,7 +141,10 @@ pub fn get_in_js_keywords(keywords: &[Any]) -> Vec<Any> {
 pub fn completion_globals_in_js_plus(items: &[Any], no_lib: bool) -> Vec<Any> {
     let mut all = [
         items,
-        &[Any::CompletionItem(COMPLETION_GLOBAL_THIS_ITEM.clone().unwrap()), Any::CompletionItem(COMPLETION_UNDEFINED_VAR_ITEM.clone().unwrap())],
+        &[
+            Any::CompletionItem(COMPLETION_GLOBAL_THIS_ITEM.clone().unwrap()),
+            Any::CompletionItem(COMPLETION_UNDEFINED_VAR_ITEM.clone().unwrap()),
+        ],
         &COMPLETION_GLOBAL_IN_JS_KEYWORDS[..],
     ]
     .concat();

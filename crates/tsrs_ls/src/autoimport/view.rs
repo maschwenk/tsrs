@@ -258,7 +258,8 @@ impl View {
         }
 
         let mut fixes: Vec<FixAndExport> = Vec::new();
-        let compare_fixes = |a: &FixAndExport, b: &FixAndExport| -> i32 { self.compare_fixes_for_ranking(&a.fix, &b.fix) };
+        let compare_fixes =
+            |a: &FixAndExport, b: &FixAndExport| self.compare_fixes_for_ranking(&a.fix, &b.fix);
 
         for exps in grouped.values() {
             let mut fixes_for_group: Vec<FixAndExport> = Vec::with_capacity(exps.len());

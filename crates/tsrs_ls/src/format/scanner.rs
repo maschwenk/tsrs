@@ -12,8 +12,11 @@ pub struct TextRangeWithKind {
 }
 
 // scanner.go:17
-pub fn new_text_range_with_kind(pos: i32, end: i32, kind: Kind) -> TextRangeWithKind {
-    TextRangeWithKind { loc: TextRange::new(pos, end), kind }
+pub fn new_text_range_with_kind(pos: u32, end: u32, kind: Kind) -> TextRangeWithKind {
+    TextRangeWithKind {
+        loc: TextRange::new(pos, end),
+        kind,
+    }
 }
 
 // scanner.go:24
@@ -27,9 +30,9 @@ pub(crate) struct TokenInfo {
 // scanner.go:30
 pub(crate) struct FormattingScanner {
     s: Scanner,
-    start_pos: i32,
-    end_pos: i32,
-    saved_pos: i32,
+    start_pos: u32,
+    end_pos: u32,
+    saved_pos: u32,
     has_last_token_info: bool,
     last_token_info: TokenInfo,
     last_scan_action: ScanAction,
@@ -42,8 +45,8 @@ pub(crate) struct FormattingScanner {
 pub(crate) fn new_formatting_scanner(
     text: &'static str,
     language_variant: LanguageVariant,
-    start_pos: i32,
-    end_pos: i32,
+    start_pos: u32,
+    end_pos: u32,
     worker: &mut FormatSpanWorker,
 ) -> Vec<TextChange> {
     let mut scan = Scanner::new();
@@ -355,7 +358,10 @@ impl FormattingScanner {
 
     // scanner.go:337
     pub(crate) fn skip_to_end_of(&mut self, r: TextRange) {
-        self.s.reset_token_state(r.end());
+        self.s.reset_token_state(
+            r.end()
+                .expect_source("formatting ranges have source positions"),
+        );
         self.saved_pos = self.s.token_full_start();
         self.last_scan_action = ScanAction::Scan;
         self.has_last_token_info = false;
@@ -366,7 +372,10 @@ impl FormattingScanner {
 
     // scanner.go:347
     pub(crate) fn skip_to_start_of(&mut self, r: TextRange) {
-        self.s.reset_token_state(r.pos());
+        self.s.reset_token_state(
+            r.pos()
+                .expect_source("formatting ranges have source positions"),
+        );
         self.saved_pos = self.s.token_full_start();
         self.last_scan_action = ScanAction::Scan;
         self.has_last_token_info = false;
@@ -386,9 +395,14 @@ impl FormattingScanner {
     }
 
     // scanner.go:365
-    pub(crate) fn get_token_full_start(&self) -> i32 {
+    pub(crate) fn get_token_full_start(&self) -> u32 {
         if self.has_last_token_info {
-            return self.last_token_info.token.loc.pos();
+            return self
+                .last_token_info
+                .token
+                .loc
+                .pos()
+                .expect_source("formatting tokens have source positions");
         }
         self.s.token_full_start()
     }

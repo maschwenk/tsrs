@@ -27,7 +27,7 @@ impl LanguageService {
         source_file = positions[0].script;
         let position = positions[0].position;
 
-        let Some(token) = astnav::find_preceding_token(source_file, position as i32) else {
+        let Some(token) = astnav::find_preceding_token(source_file, position) else {
             return Ok(lsproto::VSOnAutoInsertResponse::default());
         };
 

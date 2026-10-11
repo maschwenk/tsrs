@@ -339,11 +339,11 @@ impl NodeList {
         self.loc.get()
     }
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.loc.get().pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.loc.get().end()
     }
 
@@ -351,7 +351,7 @@ impl NodeList {
         let Some(last) = self.nodes().last() else {
             return false;
         };
-        last.end() < self.end()
+        last.has_trailing_comma_marker() || last.end() < self.end()
     }
 
     pub fn clone_list(&self, f: &NodeFactory) -> P<NodeList> {
@@ -395,11 +395,11 @@ impl ModifierList {
         self.list.loc.get()
     }
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.list.pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.list.end()
     }
     #[inline]
@@ -461,8 +461,9 @@ pub fn census_layouts() {
 }
 
 /// A node's kind, data tag and parent in one word: the parent in the low 45 bits (`P::pack`), the kind in the next 9 bits, the data
-/// tag in the 8 above and then the rare bit (the data struct is followed by its rare tail, `NodeRareTail`). Only the
-/// parent changes after creation.
+/// tag in the 8 above, the rare bit (the data struct is followed by its rare tail, `NodeRareTail`) and the
+/// trailing-comma bit. The latter replaces the old `-2` synthetic-position sentinel. Only the parent and
+/// trailing-comma bits change after creation.
 #[derive(Clone, Copy)]
 struct NodeHeaderWord(u64);
 
@@ -473,6 +474,7 @@ impl NodeHeaderWord {
     const KIND_BITS: u32 = 9;
     const TAG_SHIFT: u32 = Self::KIND_SHIFT + Self::KIND_BITS;
     const RARE_BIT: u64 = 1 << (Self::TAG_SHIFT + 8);
+    const TRAILING_COMMA_BIT: u64 = 1 << 63;
 
     #[inline]
     fn new(kind: Kind, data_tag: NodeDataTag) -> NodeHeaderWord {
@@ -497,6 +499,16 @@ impl NodeHeaderWord {
     }
 
     #[inline]
+    fn with_trailing_comma(self) -> NodeHeaderWord {
+        NodeHeaderWord(self.0 | Self::TRAILING_COMMA_BIT)
+    }
+
+    #[inline]
+    fn has_trailing_comma(self) -> bool {
+        self.0 & Self::TRAILING_COMMA_BIT != 0
+    }
+
+    #[inline]
     fn data_tag(self) -> NodeDataTag {
         // SAFETY: the bits were stored from a `NodeDataTag` (repr(u8)).
         unsafe { std::mem::transmute::<u8, NodeDataTag>((self.0 >> Self::TAG_SHIFT) as u8) }
@@ -515,7 +527,7 @@ impl NodeHeaderWord {
 }
 
 const _: () = assert!((Kind::Count as u64) < 1 << NodeHeaderWord::KIND_BITS);
-const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 8 < 64);
+const _: () = assert!(NodeHeaderWord::TAG_SHIFT + 9 == 63);
 
 /// One arena allocation per node: the header, then the data struct. `repr(C)` puts the header at offset 0 and
 /// the data at `offset_of!(NodeAlloc<T>, data)` (24 for every data struct: none is aligned to more than 8).
@@ -593,11 +605,11 @@ impl Node {
         self.as_p()
     }
     #[inline]
-    pub fn pos(&self) -> i32 {
+    pub fn pos(&self) -> TextPos {
         self.loc.get().pos()
     }
     #[inline]
-    pub fn end(&self) -> i32 {
+    pub fn end(&self) -> TextPos {
         self.loc.get().end()
     }
     #[inline]
@@ -626,6 +638,16 @@ impl Node {
     #[inline]
     pub fn set_parent(&self, parent: Option<P<Node>>) {
         self.header.set(self.header.get().with_parent(parent))
+    }
+
+    #[inline]
+    pub fn has_trailing_comma_marker(&self) -> bool {
+        self.header.get().has_trailing_comma()
+    }
+
+    #[inline]
+    pub fn mark_trailing_comma(&self) {
+        self.header.set(self.header.get().with_trailing_comma())
     }
 
     /// Go `IterChildren`: the children in `for_each_child` order.
@@ -1737,7 +1759,7 @@ pub struct SourceFile {
     pub(crate) has_lazy_jsdoc: OwnedCell<bool>,
     identifiers: OnceLock<Set<&'static str>>,
     // ast.go:2517 nameTableOnce/nameTable (Go map, random order; insertion order here)
-    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, i32>>,
+    name_table: OnceLock<tsrs_core::collections::OrderedMap<&'static str, NameTableEntry>>,
     pub reparsed_clones: OwnedCell<&'static [P<Node>]>,
     // tsrs-only: the member lists of this declaration file that are parsed and bound on first use (`lazylist`).
     pub lazy_lists: OwnedCell<&'static [P<crate::lazylist::LazyNodeList>]>,
@@ -1768,7 +1790,7 @@ pub struct SourceFile {
     check_leaf: AtomicBool,
 
     // Fields set by ECMALineMap
-    ecma_line_map: OnceLock<&'static [TextPos]>,
+    ecma_line_map: OnceLock<&'static [u32]>,
 
     // Fields for UTF-8 to UTF-16 position mapping
     position_map: OnceLock<P<PositionMap>>,
@@ -1780,6 +1802,12 @@ pub struct SourceFile {
     declaration_map: OnceLock<FxHashMap<String, Vec<P<Node>>>>,
 }
 
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub enum NameTableEntry {
+    Unique(u32),
+    Multiple,
+}
+
 impl NodeFactory {
     pub fn new_source_file(
         &self,
@@ -1788,7 +1816,8 @@ impl NodeFactory {
         statements: P<NodeList>,
         end_of_file_token: P<Node>,
     ) -> P<Node> {
-        if tsrs_core::tspath::get_encoded_root_length(&opts.file_name) == 0
+        if tsrs_core::tspath::get_encoded_root_length(&opts.file_name)
+            == tsrs_core::tspath::EncodedRootLength::Relative
             || opts.file_name != tsrs_core::tspath::normalize_path(&opts.file_name)
         {
             panic!("fileName should be normalized and absolute: {:?}", opts.file_name);
@@ -2020,26 +2049,39 @@ impl SourceFile {
     }
 
     // GetNameTable returns a map of all names in the file to their positions.
-    // If the name appears more than once, the value is -1.
+    // If the name appears more than once, the value is `Multiple`.
     // ast.go:2857
-    pub fn get_name_table(&self) -> &tsrs_core::collections::OrderedMap<&'static str, i32> {
+    pub fn get_name_table(
+        &self,
+    ) -> &tsrs_core::collections::OrderedMap<&'static str, NameTableEntry> {
         if let Some(t) = self.name_table.get() {
             return t;
         }
         let _region = self.owner_region();
         self.name_table.get_or_init(|| {
-            let mut name_table: tsrs_core::collections::OrderedMap<&'static str, i32> = Default::default();
+            let mut name_table: tsrs_core::collections::OrderedMap<&'static str, NameTableEntry> =
+                Default::default();
             let file: &'static SourceFile = self.as_node().as_source_file();
-            fn walk(node: P<Node>, file: &'static SourceFile, name_table: &mut tsrs_core::collections::OrderedMap<&'static str, i32>) -> bool {
+            fn walk(
+                node: P<Node>,
+                file: &'static SourceFile,
+                name_table: &mut tsrs_core::collections::OrderedMap<&'static str, NameTableEntry>,
+            ) -> bool {
                 if is_identifier(node) && !is_tag_name(node) && !node.text().is_empty()
                     || is_string_or_numeric_literal_like(node) && literal_is_name(node)
                     || is_private_identifier(node)
                 {
                     let text = node.text();
                     if name_table.contains_key(text) {
-                        name_table.insert(text, -1);
+                        name_table.insert(text, NameTableEntry::Multiple);
                     } else {
-                        name_table.insert(text, node.pos());
+                        name_table.insert(
+                            text,
+                            NameTableEntry::Unique(
+                                node.pos()
+                                    .expect_source("parsed names have source positions"),
+                            ),
+                        );
                     }
                 }
 
@@ -2199,7 +2241,7 @@ impl SourceFile {
         tsrs_core::count_ecma_line_starts(self.text)
     }
 
-    pub fn ecma_line_map(&self) -> &'static [TextPos] {
+    pub fn ecma_line_map(&self) -> &'static [u32] {
         if let Some(&m) = self.ecma_line_map.get() {
             return m;
         }
@@ -2386,7 +2428,14 @@ pub struct TokenCacheKey {
 
 impl SourceFile {
     // ast.go:2909
-    pub fn get_or_create_token(&self, kind: Kind, pos: i32, end: i32, parent: P<Node>, flags: TokenFlags) -> P<Node> {
+    pub fn get_or_create_token(
+        &self,
+        kind: Kind,
+        pos: u32,
+        end: u32,
+        parent: P<Node>,
+        flags: TokenFlags,
+    ) -> P<Node> {
         let _region = self.owner_region();
         let mut token_cache = self.token_cache.lock().unwrap();
         let loc = TextRange::new(pos, end);
@@ -2546,7 +2595,7 @@ impl SourceFile {
 // `kind` should be a token kind.
 // Go keeps one lazily created factory per file (`tokenFactory`); a NodeFactory handle is not `Sync`, and a factory
 // carries no state that tokens observe, so each call uses a fresh default factory.
-fn create_token(kind: Kind, file: &SourceFile, pos: i32, end: i32, flags: TokenFlags) -> P<Node> {
+fn create_token(kind: Kind, file: &SourceFile, pos: u32, end: u32, flags: TokenFlags) -> P<Node> {
     let token_factory = NodeFactory::default();
     let text: &'static str = &file.text[pos as usize..end as usize];
     match kind {
@@ -2567,14 +2616,14 @@ fn create_token(kind: Kind, file: &SourceFile, pos: i32, end: i32, flags: TokenF
 
 pub trait SourceFileLike {
     fn text(&self) -> &str;
-    fn ecma_line_map(&self) -> &[TextPos];
+    fn ecma_line_map(&self) -> &[u32];
 }
 
 impl SourceFileLike for SourceFile {
     fn text(&self) -> &str {
         self.text
     }
-    fn ecma_line_map(&self) -> &[TextPos] {
+    fn ecma_line_map(&self) -> &[u32] {
         SourceFile::ecma_line_map(self)
     }
 }
@@ -2588,18 +2637,32 @@ pub struct CommentRange {
 
 impl CommentRange {
     #[inline]
-    pub fn pos(&self) -> i32 {
-        self.text_range.pos()
+    pub fn pos(&self) -> u32 {
+        self.text_range
+            .pos()
+            .expect_source("comments have source positions")
     }
     #[inline]
-    pub fn end(&self) -> i32 {
-        self.text_range.end()
+    pub fn end(&self) -> u32 {
+        self.text_range
+            .end()
+            .expect_source("comments have source positions")
     }
 }
 
 impl NodeFactory {
-    pub fn new_comment_range(&self, kind: Kind, pos: i32, end: i32, has_trailing_new_line: bool) -> CommentRange {
-        CommentRange { text_range: TextRange::new(pos, end), kind, has_trailing_new_line }
+    pub fn new_comment_range(
+        &self,
+        kind: Kind,
+        pos: u32,
+        end: u32,
+        has_trailing_new_line: bool,
+    ) -> CommentRange {
+        CommentRange {
+            text_range: TextRange::new(pos, end),
+            kind,
+            has_trailing_new_line,
+        }
     }
 }
 
@@ -2613,12 +2676,16 @@ pub struct FileReference {
 
 impl FileReference {
     #[inline]
-    pub fn pos(&self) -> i32 {
-        self.text_range.pos()
+    pub fn pos(&self) -> u32 {
+        self.text_range
+            .pos()
+            .expect_source("file references have source positions")
     }
     #[inline]
-    pub fn end(&self) -> i32 {
-        self.text_range.end()
+    pub fn end(&self) -> u32 {
+        self.text_range
+            .end()
+            .expect_source("file references have source positions")
     }
 }
 
@@ -2736,7 +2803,7 @@ mod tests {
         assert!(bin.declaration_data().is_some());
         assert!(a.has_flow_node_data());
         assert!(plus.declaration_data().is_none());
-        assert_eq!(a.loc(), TextRange::new(-1, -1));
+        assert_eq!(a.loc(), TextRange::synthetic());
 
         // Stopping early propagates true.
         let mut seen = 0;

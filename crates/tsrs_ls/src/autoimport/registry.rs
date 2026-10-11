@@ -1630,8 +1630,8 @@ struct perPackageExtractionResult {
     entrypoints: Vec<Arc<ResolvedEntrypoint>>,
     exports: FxHashMap<Path, Vec<Arc<Export>>>,
     ambient_modules: FxHashMap<String, Vec<String>>,
-    stats_exports: i32,
-    stats_used_checker: i32,
+    stats_exports: usize,
+    stats_used_checker: usize,
     skipped_entrypoints: usize,
     is_symlinked: bool,
     failed_ambient_module_lookup_sources: FxHashMap<Path, Arc<Mutex<failedAmbientModuleLookupSource>>>,
@@ -1649,8 +1649,8 @@ struct packageExtractionResult {
     workspace_packages: Set<String>,
     possible_failed_ambient_module_lookup_sources: Arc<SyncMap<Path, Arc<Mutex<failedAmbientModuleLookupSource>>>>,
     possible_failed_ambient_module_lookup_targets: Set<String>,
-    stats_exports: i32,
-    stats_used_checker: i32,
+    stats_exports: usize,
+    stats_used_checker: usize,
     skipped_entrypoints_count: usize,
 }
 

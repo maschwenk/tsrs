@@ -24,8 +24,8 @@ pub(crate) fn initialize_result(source: &str) -> InitializeResult {
 // protocol.go:27
 pub(crate) fn identity_mapped_output(content: &str) -> Result<MappedOutput, ipc::Error> {
     let mappings = marshal_span_map(&[Segment {
-        virtual_end: content.len() as i32,
-        original_end: content.len() as i32,
+        virtual_end: content.len() as u32,
+        original_end: content.len() as u32,
         kind: Kind::Verbatim,
         features: Feature::All,
         ..Default::default()

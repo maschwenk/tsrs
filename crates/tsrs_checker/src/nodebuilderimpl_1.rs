@@ -92,7 +92,7 @@ impl NodeBuilderImpl {
     // When expanding, we need to mark the output as truncated so we know not to offer further expansion.
     // nodebuilderimpl.go:164
     pub(crate) fn check_truncation_length_if_expanding(&self, c: &mut Checker) -> bool {
-        if self.ctx().max_expansion_depth.get() >= 0 && self.check_truncation_length(c) {
+        if self.ctx().max_expansion_depth.get().is_some() && self.check_truncation_length(c) {
             self.ctx().expansion_truncated.set(true);
             return true;
         }
@@ -129,8 +129,7 @@ impl NodeBuilderImpl {
     pub(crate) fn is_type_on_stack(&self, _c: &mut Checker, t: P<Type>) -> bool {
         let ctx = self.ctx();
         let type_stack = ctx.type_stack.borrow();
-        let n = type_stack.len() as i32 - 1;
-        for i in 0..n.max(0) as usize {
+        for i in 0..type_stack.len().saturating_sub(1) {
             if type_stack[i] == Some(t) {
                 return true;
             }
@@ -146,16 +145,16 @@ impl NodeBuilderImpl {
     // is not expandable, or the type is cyclic.
     // nodebuilderimpl.go:212
     pub(crate) fn should_expand_type(&self, c: &mut Checker, t: P<Type>, is_alias: bool) -> bool {
-        if self.ctx().max_expansion_depth.get() < 0 {
+        let Some(max_expansion_depth) = self.ctx().max_expansion_depth.get() else {
             return false;
-        }
+        };
         if !self.is_expandable_type(c, t, is_alias) {
             return false;
         }
         if self.is_type_on_stack(c, t) {
             return false;
         }
-        if self.ctx().depth.get() < self.ctx().max_expansion_depth.get() {
+        if self.ctx().depth.get() < max_expansion_depth {
             return true;
         }
         self.ctx().can_increase_expansion_depth.set(true);
@@ -166,7 +165,10 @@ impl NodeBuilderImpl {
     // meaning type-node reuse should be skipped so typeToTypeNode can expand named types.
     // nodebuilderimpl.go:231
     pub(crate) fn is_actively_expanding(&self, _c: &mut Checker) -> bool {
-        self.ctx().max_expansion_depth.get() > 0 && self.ctx().depth.get() < self.ctx().max_expansion_depth.get()
+        self.ctx()
+            .max_expansion_depth
+            .get()
+            .is_some_and(|max_depth| max_depth > 0 && self.ctx().depth.get() < max_depth)
     }
 
     // checkTypeExpandability probes whether a type (or its type arguments) could be expanded,
@@ -175,7 +177,10 @@ impl NodeBuilderImpl {
     // of reference types (e.g., Apple inside Promise<Apple>).
     // nodebuilderimpl.go:239
     pub(crate) fn check_type_expandability(&self, c: &mut Checker, t: Option<P<Type>>) {
-        if self.ctx().max_expansion_depth.get() < 0 || t.is_none() || self.ctx().can_increase_expansion_depth.get() {
+        if self.ctx().max_expansion_depth.get().is_none()
+            || t.is_none()
+            || self.ctx().can_increase_expansion_depth.get()
+        {
             return;
         }
         let t = t.unwrap();
@@ -518,7 +523,7 @@ impl NodeBuilderImpl {
             return true;
         }
         let type_parameters = target.unwrap().as_interface_type().type_parameters();
-        existing.type_arguments().len() as i32 >= c.get_min_type_argument_count(type_parameters)
+        existing.type_arguments().len() >= c.get_min_type_argument_count(type_parameters)
     }
 
     // nodebuilderimpl.go:548
@@ -598,13 +603,18 @@ impl NodeBuilderImpl {
         if expects_identifier && chain.len() != 1 && !ctx.encountered_error.get() && ctx.flags.get().intersects(Flags::AllowQualifiedNameInPlaceOfIdentifier) {
             ctx.encountered_error.set(true);
         }
-        self.create_entity_name_from_symbol_chain(c, &chain, chain.len() as i32 - 1)
+        self.create_entity_name_from_symbol_chain(c, &chain, chain.len() - 1)
     }
 
     // nodebuilderimpl.go:614
-    pub(crate) fn create_entity_name_from_symbol_chain(&self, c: &mut Checker, chain: &[P<Symbol>], index: i32) -> P<Node> {
+    pub(crate) fn create_entity_name_from_symbol_chain(
+        &self,
+        c: &mut Checker,
+        chain: &[P<Symbol>],
+        index: usize,
+    ) -> P<Node> {
         // typeParameterNodes := b.lookupTypeParameterNodes(chain, index)
-        let symbol = chain[index as usize];
+        let symbol = chain[index];
 
         if index == 0 {
             self.ctx().flags.set(self.ctx().flags.get() | Flags::InInitialEntityName);
@@ -648,7 +658,13 @@ impl NodeBuilderImpl {
             // module is root, must use `ImportTypeNode`
             let mut non_root_parts: Option<P<Node>> = None;
             if chain.len() > 1 {
-                non_root_parts = Some(self.create_access_from_symbol_chain(c, &chain, chain.len() as i32 - 1, 1, type_arguments));
+                non_root_parts = Some(self.create_access_from_symbol_chain(
+                    c,
+                    &chain,
+                    chain.len() - 1,
+                    1,
+                    type_arguments,
+                ));
             }
             let mut type_parameter_nodes = type_arguments;
             if type_parameter_nodes.is_none() {
@@ -702,7 +718,8 @@ impl NodeBuilderImpl {
             let attributes = self.create_import_attributes_for_module_specifier(c, specifier_result, import_mode_override);
             let lit = self.f.new_literal_type_node(self.new_string_literal(c, specifier_result.specifier));
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + specifier_result.specifier.len() as i32 + 10); // specifier + import("")
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + specifier_result.specifier.len() + 10); // specifier + import("")
             if non_root_parts.is_none() || is_entity_name(non_root_parts.unwrap()) {
                 if non_root_parts.is_some() {
                     // !!! TODO: smuggle type arguments out
@@ -715,10 +732,20 @@ impl NodeBuilderImpl {
             let split_node = get_topmost_indexed_access_type(non_root_parts.unwrap());
             let split = split_node.as_indexed_access_type_node();
             let qualifier = split.object_type.as_type_reference_node().type_name;
-            return Some(self.f.new_indexed_access_type_node(self.f.new_import_type_node(is_type_of, lit, attributes, Some(qualifier), type_parameter_nodes), split.index_type));
+            return Some(self.f.new_indexed_access_type_node(
+                self.f.new_import_type_node(
+                    is_type_of,
+                    lit,
+                    attributes,
+                    Some(qualifier),
+                    type_parameter_nodes,
+                ),
+                split.index_type,
+            ));
         }
 
-        let entity_name = self.create_access_from_symbol_chain(c, &chain, chain.len() as i32 - 1, 0, type_arguments);
+        let entity_name =
+            self.create_access_from_symbol_chain(c, &chain, chain.len() - 1, 0, type_arguments);
         if is_indexed_access_type_node(entity_name) {
             return Some(entity_name); // Indexed accesses can never be `typeof`
         }
@@ -747,15 +774,22 @@ pub(crate) fn get_topmost_indexed_access_type(node: P<Node>) -> P<Node> {
 
 impl NodeBuilderImpl {
     // nodebuilderimpl.go:752
-    pub(crate) fn create_access_from_symbol_chain(&self, c: &mut Checker, chain: &[P<Symbol>], index: i32, stopper: i32, override_type_arguments: Option<P<NodeList>>) -> P<Node> {
+    pub(crate) fn create_access_from_symbol_chain(
+        &self,
+        c: &mut Checker,
+        chain: &[P<Symbol>],
+        index: usize,
+        stopper: usize,
+        override_type_arguments: Option<P<NodeList>>,
+    ) -> P<Node> {
         let mut type_parameter_nodes = override_type_arguments;
-        if index != chain.len() as i32 - 1 {
+        if index != chain.len() - 1 {
             type_parameter_nodes = self.lookup_type_parameter_nodes(c, chain, index);
         }
-        let symbol = chain[index as usize];
+        let symbol = chain[index];
         let mut parent: Option<P<Symbol>> = None;
         if index > 0 {
-            parent = Some(chain[index as usize - 1]);
+            parent = Some(chain[index - 1]);
         }
 
         let mut symbol_name = String::new();
@@ -763,7 +797,8 @@ impl NodeBuilderImpl {
             let ctx = self.ctx();
             ctx.flags.set(ctx.flags.get() | Flags::InInitialEntityName);
             symbol_name = self.get_name_of_symbol_as_written(c, symbol);
-            ctx.approximate_length.set(ctx.approximate_length.get() + symbol_name.len() as i32 + 1);
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + symbol_name.len() + 1);
             ctx.flags.set(ctx.flags.get() ^ Flags::InInitialEntityName);
         } else {
             // lookup a ref to symbol within parent to handle export aliases
@@ -816,9 +851,14 @@ impl NodeBuilderImpl {
             symbol_name = self.get_name_of_symbol_as_written(c, symbol);
         }
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + symbol_name.len() as i32 + 1);
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + symbol_name.len() + 1);
 
-        if !self.ctx().flags.get().intersects(Flags::ForbidIndexedAccessSymbolReferences)
+        if !self
+            .ctx()
+            .flags
+            .get()
+            .intersects(Flags::ForbidIndexedAccessSymbolReferences)
             && parent.is_some()
             && c.get_members_of_symbol(parent.unwrap()).is_some()
             && c.get_members_of_symbol(parent.unwrap()).unwrap().lookup(symbol.name()).is_some()
@@ -858,13 +898,19 @@ impl NodeBuilderImpl {
     // nodebuilderimpl.go:853
     pub(crate) fn symbol_to_expression_worker(&self, c: &mut Checker, symbol: P<Symbol>, mask: SymbolFlags) -> P<Node> {
         let chain = self.lookup_symbol_chain_worker(c, symbol, mask, false);
-        self.create_expression_from_symbol_chain(c, &chain, chain.len() as i32 - 1)
+        self.create_expression_from_symbol_chain(c, &chain, chain.len() - 1)
     }
 
     // nodebuilderimpl.go:858
-    pub(crate) fn create_expression_from_symbol_chain(&self, c: &mut Checker, chain: &[P<Symbol>], index: i32) -> P<Node> {
-        let type_parameter_nodes = self.lookup_expression_chain_type_argument_nodes(c, chain, index);
-        let symbol = chain[index as usize];
+    pub(crate) fn create_expression_from_symbol_chain(
+        &self,
+        c: &mut Checker,
+        chain: &[P<Symbol>],
+        index: usize,
+    ) -> P<Node> {
+        let type_parameter_nodes =
+            self.lookup_expression_chain_type_argument_nodes(c, chain, index);
+        let symbol = chain[index];
 
         if index == 0 {
             self.ctx().flags.set(self.ctx().flags.get() | Flags::InInitialEntityName);
@@ -877,7 +923,8 @@ impl NodeBuilderImpl {
         if starts_with_single_or_double_quote(&symbol_name) && symbol.declarations().iter().any(|&d| has_non_global_augmentation_external_module_symbol(d)) {
             let specifier_result = self.get_specifier_for_module_symbol(c, symbol, RESOLUTION_MODE_NONE);
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + 2 + specifier_result.specifier.len() as i32);
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + 2 + specifier_result.specifier.len());
             return self.new_string_literal(c, specifier_result.specifier);
         }
 
@@ -885,7 +932,8 @@ impl NodeBuilderImpl {
             let identifier = self.new_identifier(c, &symbol_name, Some(symbol));
             self.e.add_emit_flags(identifier, EmitFlags::NoAsciiEscaping);
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + 1 + symbol_name.len() as i32);
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + 1 + symbol_name.len());
             if index > 0 {
                 let result = self.f.new_property_access_expression(self.create_expression_from_symbol_chain(c, chain, index - 1), None, identifier, NodeFlags::None);
                 self.e.add_emit_flags(result, EmitFlags::NoIndentation);
@@ -902,18 +950,28 @@ impl NodeBuilderImpl {
         if starts_with_single_or_double_quote(&symbol_name) && !symbol.flags().intersects(SymbolFlags::EnumMember) {
             let literal_text = tsrs_core::stringutil::unquote_string(&symbol_name);
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + literal_text.len() as i32 + 2);
-            expression = Some(self.new_string_literal_ex(c, &literal_text, symbol_name.as_bytes()[0] == b'\''));
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + literal_text.len() + 2);
+            expression = Some(self.new_string_literal_ex(
+                c,
+                &literal_text,
+                symbol_name.as_bytes()[0] == b'\'',
+            ));
         } else if jsnum::from_string(&symbol_name).string() == symbol_name {
             // TODO: the follwing in strada would assert if the number is negative, but no such assertion exists here
             // Moreover, what's even guaranteeing the name *isn't* -1 here anyway? Needs double-checking.
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + symbol_name.len() as i32);
-            expression = Some(self.f.new_numeric_literal(self.f.alloc_text(&symbol_name), TokenFlags::None));
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + symbol_name.len());
+            expression = Some(
+                self.f
+                    .new_numeric_literal(self.f.alloc_text(&symbol_name), TokenFlags::None),
+            );
         }
         if expression.is_none() {
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + symbol_name.len() as i32);
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + symbol_name.len());
             let e = self.new_identifier(c, &symbol_name, Some(symbol));
             self.e.add_emit_flags(e, EmitFlags::NoAsciiEscaping);
             expression = Some(e);
@@ -1066,17 +1124,33 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1036
-    pub(crate) fn lookup_type_parameter_nodes(&self, c: &mut Checker, chain: &[P<Symbol>], index: i32) -> Option<P<NodeList>> {
-        assert!(0 <= index && (index as usize) < chain.len());
-        let symbol = chain[index as usize];
+    pub(crate) fn lookup_type_parameter_nodes(
+        &self,
+        c: &mut Checker,
+        chain: &[P<Symbol>],
+        index: usize,
+    ) -> Option<P<NodeList>> {
+        assert!(index < chain.len());
+        let symbol = chain[index];
         let symbol_id = get_symbol_id(symbol);
         if self.ctx().type_parameter_symbol_list.borrow().has(&symbol_id) {
             return None;
         }
-        self.ctx().type_parameter_symbol_list.borrow_mut().add(symbol_id);
+        self.ctx()
+            .type_parameter_symbol_list
+            .borrow_mut()
+            .add(symbol_id);
 
-        if self.ctx().flags.get().intersects(Flags::WriteTypeParametersInQualifiedName) && index < chain.len() as i32 - 1 {
-            if let Some(type_argument_nodes) = self.lookup_instantiated_type_argument_nodes(c, chain, index) {
+        if self
+            .ctx()
+            .flags
+            .get()
+            .intersects(Flags::WriteTypeParametersInQualifiedName)
+            && index < chain.len() - 1
+        {
+            if let Some(type_argument_nodes) =
+                self.lookup_instantiated_type_argument_nodes(c, chain, index)
+            {
                 return Some(type_argument_nodes);
             } else {
                 let type_parameter_nodes = self.type_parameters_to_type_parameter_declarations(c, symbol);
@@ -1142,7 +1216,7 @@ impl NodeBuilderImpl {
                         sortedSymbolNamePair { sym: symbol, name: String::new() }
                     })
                     .collect();
-                parent_specifiers.sort_by(|a, b| self.sort_by_best_name(c, a, b).cmp(&0));
+                parent_specifiers.sort_by(|a, b| self.sort_by_best_name(c, a, b));
                 for pair in &parent_specifiers {
                     let parent = pair.sym;
                     let parent_chain = self.get_symbol_chain(c, parent, get_qualified_left_meaning(meaning), false, yield_module_symbol);
@@ -1193,21 +1267,27 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1153
-    pub(crate) fn sort_by_best_name(&self, c: &mut Checker, a: &sortedSymbolNamePair, b: &sortedSymbolNamePair) -> i32 {
+    pub(crate) fn sort_by_best_name(
+        &self,
+        c: &mut Checker,
+        a: &sortedSymbolNamePair,
+        b: &sortedSymbolNamePair,
+    ) -> std::cmp::Ordering {
         let specifier_a = &a.name;
         let specifier_b = &b.name;
         if !specifier_a.is_empty() && !specifier_b.is_empty() {
             let is_b_relative = tsrs_core::tspath::path_is_relative(specifier_b);
             if tsrs_core::tspath::path_is_relative(specifier_a) == is_b_relative {
                 // Both relative or both non-relative, sort by number of parts
-                return modulespecifiers::count_path_components(specifier_a) - modulespecifiers::count_path_components(specifier_b);
+                return modulespecifiers::count_path_components(specifier_a)
+                    .cmp(&modulespecifiers::count_path_components(specifier_b));
             }
             if is_b_relative {
                 // A is non-relative, B is relative: prefer A
-                return -1;
+                return std::cmp::Ordering::Less;
             }
             // A is relative, B is non-relative: prefer B
-            return 1;
+            return std::cmp::Ordering::Greater;
         }
         c.compare_symbols(Some(a.sym), Some(b.sym)) // must sort symbols for stable ordering
     }
@@ -1408,7 +1488,9 @@ impl NodeBuilderImpl {
             let resolution_mode = if import_mode_override == RESOLUTION_MODE_ESM { "import" } else { "require" };
             attributes.push(self.f.new_import_attribute(Some(self.new_string_literal(c, "resolution-mode")), self.new_string_literal(c, resolution_mode)));
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + "resolution-mode".len() as i32 + resolution_mode.len() as i32 + 6); // `"resolution-mode": "value"`
+            ctx.approximate_length.set(
+                ctx.approximate_length.get() + "resolution-mode".len() + resolution_mode.len() + 6,
+            ); // `"resolution-mode": "value"`
         }
         for property in properties {
             let name = property.name();
@@ -1427,14 +1509,20 @@ impl NodeBuilderImpl {
             };
             attributes.push(self.f.new_import_attribute(Some(name_node), self.new_string_literal(c, &value)));
             let ctx = self.ctx();
-            ctx.approximate_length.set(ctx.approximate_length.get() + name.len() as i32 + value.len() as i32 + 4); // `name: "value"`
+            ctx.approximate_length
+                .set(ctx.approximate_length.get() + name.len() + value.len() + 4); // `name: "value"`
         }
         if attributes.is_empty() {
             return None;
         }
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + 16 + 2 * (attributes.len() as i32 - 1)); // `, { with: { , ... , } }`
-        Some(self.f.new_import_attributes(Kind::WithKeyword, self.f.new_node_list(attributes), false))
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + 16 + 2 * (attributes.len() - 1)); // `, { with: { , ... , } }`
+        Some(self.f.new_import_attributes(
+            Kind::WithKeyword,
+            self.f.new_node_list(attributes),
+            false,
+        ))
     }
 
     // nodebuilderimpl.go:1401
@@ -1484,7 +1572,7 @@ impl NodeBuilderImpl {
         {
             let original = range_;
             range_ = range_.clone_node(&self.f); // if `range` is synthesized or originates in another file, copy it so it definitely has synthetic positions
-            range_.set_loc(TextRange::new(-1, -1));
+            range_.set_loc(TextRange::synthetic());
             let symbol = self.id_to_symbol.borrow().get(&original).copied();
             if let Some(symbol) = symbol {
                 self.id_to_symbol.borrow_mut().insert(range_, symbol);
@@ -1511,7 +1599,7 @@ impl NodeBuilderImpl {
             range_.set_loc(location.loc());
             return Some(range_);
         } else {
-            range_.set_loc(TextRange::new(-1, -1));
+            range_.set_loc(TextRange::synthetic());
         }
         Some(range_)
     }
@@ -1831,7 +1919,8 @@ impl NodeBuilderImpl {
 
         let parameter_node = self.f.new_parameter_declaration(modifiers, dot_dot_dot_token, name.unwrap(), question_token, Some(parameter_type_node), None /*initializer*/);
         let ctx = self.ctx();
-        ctx.approximate_length.set(ctx.approximate_length.get() + parameter_symbol.name().len() as i32 + 3);
+        ctx.approximate_length
+            .set(ctx.approximate_length.get() + parameter_symbol.name().len() + 3);
         parameter_node
     }
 

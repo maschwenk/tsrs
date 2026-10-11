@@ -185,7 +185,10 @@ impl Identifier {
             return self.stored_text();
         }
         let len = ((word >> LEN_SHIFT) & LEN_MAX) as usize;
-        let end = self.node().end() as usize;
+        let end = self
+            .node()
+            .end()
+            .expect_source("source identifiers have source positions") as usize;
         debug_assert!(end <= source_text(Self::text_index(word)).len() && len <= end);
         // SAFETY: `new_source_identifier` checked that `end - len..end` is the token's text inside the registered
         // text (so in bounds and on char boundaries), and `Node::set_loc` keeps the end from changing (the range of a
@@ -275,8 +278,15 @@ impl NodeFactory {
     /// `new_identifier` for a token of the text registered as `text_index`, spanning `loc`: when `text` is the
     /// slice of that text that ends at `loc.end()`, the identifier keeps only its length. Sets the range, which can
     /// then not change its end.
-    pub fn new_source_identifier(&self, text: &'static str, text_index: u32, loc: TextRange) -> P<Node> {
-        let end = loc.end() as usize;
+    pub fn new_source_identifier(
+        &self,
+        text: &'static str,
+        text_index: u32,
+        loc: TextRange,
+    ) -> P<Node> {
+        let end = loc
+            .end()
+            .expect_source("source identifiers have source positions") as usize;
         let from_source = text_index != NO_SOURCE_TEXT && text.len() as u64 <= LEN_MAX && {
             let file = source_text(text_index);
             end <= file.len() && text.len() <= end && std::ptr::eq(file.as_ptr().wrapping_add(end - text.len()), text.as_ptr())
@@ -300,6 +310,11 @@ impl NodeFactory {
 #[cold]
 pub(crate) fn check_source_identifier_loc(node: &Node, loc: TextRange) {
     if node.as_identifier().is_source_text() {
-        panic!("the range end of identifier {:?} cannot change ({} -> {})", node.as_identifier().text(), node.end(), loc.end());
+        panic!(
+            "the range end of identifier {:?} cannot change ({:?} -> {:?})",
+            node.as_identifier().text(),
+            node.end(),
+            loc.end()
+        );
     }
 }

@@ -25,7 +25,7 @@ use crate::includeprocessor::fileIncludeData;
 // maxContentMapperFailures is the number of transform failures a single content mapper may accumulate
 // before it is disabled for the rest of the program.
 // fileloader.go:34
-const MAX_CONTENT_MAPPER_FAILURES: i32 = 5;
+const MAX_CONTENT_MAPPER_FAILURES: usize = 5;
 
 pub(crate) struct libResolution {
     pub(crate) library_name: String,
@@ -58,8 +58,8 @@ pub(crate) struct fileLoader {
     pub(crate) root_tasks: Vec<TaskId>,
     pub(crate) tasks: Vec<parseTask>,
 
-    pub(crate) total_file_count: i32,
-    pub(crate) lib_file_count: i32,
+    pub(crate) total_file_count: usize,
+    pub(crate) lib_file_count: usize,
 
     pub(crate) factory: NodeFactory,
 
@@ -78,7 +78,7 @@ pub(crate) struct fileLoader {
 // mappers' addresses (references into the command line's `content_mappers()`).
 #[derive(Default)]
 pub(crate) struct contentMapperBookkeeping {
-    content_mapper_failures: FxHashMap<usize, i32>,
+    content_mapper_failures: FxHashMap<usize, usize>,
     content_mapper_init_failed: FxHashSet<usize>,
     pub(crate) content_mapper_diagnostics: Vec<P<Diagnostic>>,
 }
@@ -173,10 +173,11 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
     let content_mapper_extensions = opts.config.content_mapper_extensions();
     let supported_extensions = tsoptions::get_supported_extensions(Some(&compiler_options), &content_mapper_extensions);
     let supported_extensions_with_json_if_resolve_json_module =
-        tsoptions::get_supported_extensions_with_json_if_resolve_json_module(Some(&compiler_options), &supported_extensions);
-    // Go `int`. It is only compared with node_modules depths (small non-negative counts), so saturating to i32 keeps
-    // every comparison's result.
-    let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0).clamp(i32::MIN as i64, i32::MAX as i64) as i32;
+        tsoptions::get_supported_extensions_with_json_if_resolve_json_module(
+            Some(&compiler_options),
+            &supported_extensions,
+        );
+    let max_node_module_js_depth = compiler_options.max_node_module_js_depth.unwrap_or(0);
     let host = Arc::clone(&opts.host);
     let project_references = add_project_reference_tasks(&opts.program_config(), &host, single_threaded);
     // The mapper (with its resolution hosts) is leaked for the program to own (`SharedProgramData`). If loading
@@ -609,11 +610,11 @@ fn content_mapper_transform_diagnostic(file: P<SourceFile>, label: &str, err: &c
                             &[],
                         ),
                     };
-                    if directive_error.supplemental_index >= 0 {
+                    if let Some(supplemental_index) = directive_error.supplemental_index {
                         detail = ast::new_diagnostic_chain(
                             detail,
                             &diagnostics::The_invalid_diagnostic_directive_is_in_supplemental_output_0_returned_by_the_content_mapper,
-                            &[&directive_error.supplemental_index],
+                            &[&supplemental_index],
                         );
                     }
                     return content_mapper_transform_diagnostic_with_detail(file, label, detail);
@@ -1064,12 +1065,30 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
             let mut prepared = None;
             if let Ok((resolved, _)) = &resolution {
                 if resolved.is_resolved() {
-                    let (should_add_file, is_js_file_from_node_modules) =
-                        resolved_import_sub_task(project_references, ctx.host, &options_for_file, file, module_name, import_index as i32, resolved);
+                    let (should_add_file, is_js_file_from_node_modules) = resolved_import_sub_task(
+                        project_references,
+                        ctx.host,
+                        &options_for_file,
+                        file,
+                        module_name,
+                        Some(import_index),
+                        resolved,
+                    );
                     if should_add_file {
-                        let reason_path = *reason_path.get_or_insert_with(|| tsrs_core::alloc_str(file.path().as_str()));
-                        let include_reason = FileIncludeReason::new_referenced(fileIncludeKind::Import, reason_path, import_index as i32, None);
-                        prepared = Some(prepare_sub_task(ctx, resolved, include_reason, is_js_file_from_node_modules));
+                        let reason_path = *reason_path
+                            .get_or_insert_with(|| tsrs_core::alloc_str(file.path().as_str()));
+                        let include_reason = FileIncludeReason::new_referenced(
+                            fileIncludeKind::Import,
+                            reason_path,
+                            Some(import_index),
+                            None,
+                        );
+                        prepared = Some(prepare_sub_task(
+                            ctx,
+                            resolved,
+                            include_reason,
+                            is_js_file_from_node_modules,
+                        ));
                     }
                 }
             }
@@ -1125,7 +1144,7 @@ impl fileLoader {
             FileIncludeReason::new_referenced(
             fileIncludeKind::ReferenceFile,
             tsrs_core::alloc_str(self.to_path(containing_file).as_str()),
-            index as i32,
+            Some(index),
             None,
         );
 
@@ -1177,9 +1196,19 @@ impl fileLoader {
                 Some(prefetched) => prefetched.next().expect("prefetched type reference resolution"),
                 None => self.resolver.resolve_type_reference_directive(&ref_.file_name, &file_name, resolution_mode, redirect),
             };
-            type_resolutions_in_file.insert(ModeAwareCacheKey { name: alloc_str(&ref_.file_name), mode: resolution_mode }, resolved);
-            let include_reason =
-                FileIncludeReason::new_referenced(fileIncludeKind::TypeReferenceDirective, task_path, index as i32, None);
+            type_resolutions_in_file.insert(
+                ModeAwareCacheKey {
+                    name: alloc_str(&ref_.file_name),
+                    mode: resolution_mode,
+                },
+                resolved,
+            );
+            let include_reason = FileIncludeReason::new_referenced(
+                fileIncludeKind::TypeReferenceDirective,
+                task_path,
+                Some(index),
+                None,
+            );
             type_resolutions_trace.extend(trace);
 
             if resolved.is_resolved() {
@@ -1234,7 +1263,7 @@ impl fileLoader {
             }
         }
 
-        let imports_start = module_names.len() as i32;
+        let imports_start = module_names.len();
 
         module_names.extend_from_slice(imports);
         for &imp in file.module_augmentations.get() {
@@ -1283,7 +1312,9 @@ impl fileLoader {
 
             for (index, &entry) in module_names.iter().enumerate() {
                 let prefetched_resolution = match prefetched.as_mut() {
-                    Some(prefetched) if index as i32 >= imports_start => prefetched[index - imports_start as usize].take(),
+                    Some(prefetched) if index >= imports_start => {
+                        prefetched[index - imports_start].take()
+                    }
                     _ => None,
                 };
                 let module_name = entry.text();
@@ -1315,7 +1346,7 @@ impl fileLoader {
                 }
 
                 let resolved_file_name = resolved_module.resolved_file_name;
-                let import_index = index as i32 - imports_start;
+                let import_index = index.checked_sub(imports_start);
                 let Some(prepared) = prepared else {
                     // Not prefetched (`--traceResolution`, a single file, or a synthetic import).
                     let (should_add_file, is_js_file_from_node_modules) =
@@ -1325,7 +1356,11 @@ impl fileLoader {
                             fileIncludeKind::Import,
                             self.tasks[t].reason_path(),
                             import_index,
-                            if import_index < 0 { Some(entry) } else { None },
+                            if import_index.is_none() {
+                                Some(entry)
+                            } else {
+                                None
+                            },
                         );
                         self.add_sub_task_normalized(
                             t,
@@ -1468,7 +1503,7 @@ pub(crate) fn resolved_import_sub_task(
     options_for_file: &CompilerOptions,
     file: P<SourceFile>,
     module_name: &str,
-    import_index: i32,
+    import_index: Option<usize>,
     resolved_module: &ResolvedModule,
 ) -> (bool, bool) {
     let imports = file.imports();
@@ -1495,9 +1530,11 @@ pub(crate) fn resolved_import_sub_task(
         && module::get_resolution_diagnostic(options_for_file, resolved_module, file).is_none()
         && !options_for_file.no_resolve.is_true()
         && !(is_js_file && !options_for_file.get_allow_js())
-        && (import_index < 0
-            || ((import_index as usize) < imports.len()
-                && (ast::is_in_js_file(imports[import_index as usize]) || !imports[import_index as usize].flags().intersects(NodeFlags::JSDoc))));
+        && import_index.is_none_or(|import_index| {
+            import_index < imports.len()
+                && (ast::is_in_js_file(imports[import_index])
+                    || !imports[import_index].flags().intersects(NodeFlags::JSDoc))
+        });
     (should_add_file, is_js_file_from_node_modules)
 }
 

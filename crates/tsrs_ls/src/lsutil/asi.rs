@@ -6,9 +6,9 @@ use super::*;
 use crate::astnav;
 
 // asi.go:9
-pub fn position_is_asi_candidate(pos: i32, context: P<Node>, file: P<SourceFile>) -> bool {
+pub fn position_is_asi_candidate(pos: u32, context: P<Node>, file: P<SourceFile>) -> bool {
     let context_ancestor = ast::find_ancestor_or_quit(context, |ancestor| {
-        if ancestor.end() != pos {
+        if ancestor.end().source_offset() != Some(pos) {
             return FindAncestorResult::Quit;
         }
 
@@ -104,7 +104,14 @@ pub fn node_is_asi_candidate(node: P<Node>, file: P<SourceFile>) -> bool {
         return true;
     };
 
-    let start_line = scanner::get_ecma_line_of_position(file.get(), node.end());
-    let end_line = scanner::get_ecma_line_of_position(file.get(), astnav::get_start_of_node(next_token, file, false /*includeJSDoc*/));
+    let start_line = scanner::get_ecma_line_of_position(
+        file.get(),
+        node.end()
+            .expect_source("parsed nodes have source positions"),
+    );
+    let end_line = scanner::get_ecma_line_of_position(
+        file.get(),
+        astnav::get_start_of_node(next_token, file, false /*includeJSDoc*/),
+    );
     start_line != end_line
 }

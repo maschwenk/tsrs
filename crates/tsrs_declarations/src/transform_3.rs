@@ -291,10 +291,15 @@ impl DeclarationTransformer {
 
     // transform.go:2620
     pub(crate) fn transform_jsdoc_nullable_type(&self, input: P<Node>) -> P<Node> {
-        let replacement = self.factory().new_union_type_node(self.factory().new_node_list(vec![
-            self.visit_fn(Some(input.as_jsdoc_nullable_type().type_)).unwrap(),
-            self.factory().new_literal_type_node(self.factory().new_keyword_expression(Kind::NullKeyword)),
-        ]));
+        let replacement = self
+            .factory()
+            .new_union_type_node(self.factory().new_node_list(vec![
+                self.visit_fn(Some(input.as_jsdoc_nullable_type().type_))
+                    .unwrap(),
+                self.factory().new_literal_type_node(
+                    self.factory().new_keyword_expression(Kind::NullKeyword),
+                ),
+            ]));
         self.emit_context().set_original(replacement, input);
         replacement
     }
@@ -313,9 +318,13 @@ impl DeclarationTransformer {
 
     // transform.go:2639
     pub(crate) fn transform_jsdoc_optional_type(&self, input: P<Node>) -> P<Node> {
-        let replacement = self.factory().new_union_type_node(
-            self.factory().new_node_list(vec![self.visit_fn(Some(input.as_jsdoc_optional_type().type_)).unwrap(), self.factory().new_keyword_type_node(Kind::UndefinedKeyword)]),
-        );
+        let replacement = self
+            .factory()
+            .new_union_type_node(self.factory().new_node_list(vec![
+                self.visit_fn(Some(input.as_jsdoc_optional_type().type_))
+                    .unwrap(),
+                self.factory().new_keyword_type_node(Kind::UndefinedKeyword),
+            ]));
         self.emit_context().set_original(replacement, input);
         replacement
     }

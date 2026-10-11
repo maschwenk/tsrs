@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::any::Any;
 use std::io::{Read, Write};
 use std::panic::AssertUnwindSafe;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex, OnceLock, RwLock, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -62,7 +62,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         stderr: Mutex::new(opts.err),
         logger: Arc::new(new_logger(Weak::clone(weak))),
         init_started: AtomicBool::new(false),
-        client_seq: AtomicI32::new(0),
+        client_seq: AtomicU64::new(0),
         request_queue: new_dynamic_queue(),
         outgoing_queue: new_dynamic_queue(),
         pending_client_requests: Mutex::new(FxHashMap::default()),
@@ -82,7 +82,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         watchers: Mutex::new(FxHashSet::default()),
         content_mapper_registration_mu: Mutex::new(false),
         builtin_watcher: OnceLock::new(),
-        last_request_time_ms: AtomicI64::new(0),
+        last_request_time_ms: AtomicU64::new(0),
         init_complete: Context::background().with_cancel(),
         session: OnceLock::new(),
         compiler_options_for_inferred_projects: Mutex::new(None),
@@ -213,7 +213,7 @@ pub struct Server {
 
     pub(crate) logger: Arc<logger>,
     pub(crate) init_started: AtomicBool,
-    client_seq: AtomicI32,
+    client_seq: AtomicU64,
     request_queue: dynamicQueue<Arc<RequestMessage>>,
     pub(crate) outgoing_queue: dynamicQueue<Message>,
     pending_client_requests: Mutex<FxHashMap<ID, pendingClientRequest>>,
@@ -251,7 +251,7 @@ pub struct Server {
     // (Set once, in handleInitialized.)
     builtin_watcher: OnceLock<Arc<lspwatcher::Watcher>>,
 
-    last_request_time_ms: AtomicI64,
+    last_request_time_ms: AtomicU64,
 
     // initComplete is closed when handleInitialized completes.
     // Used by tests to wait for full initialization. (A context canceled when it is "closed".)
@@ -2756,8 +2756,11 @@ impl<F: FnOnce()> Drop for deferCall<F> {
     }
 }
 
-fn unix_millis_now() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+fn unix_millis_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 // locale.Parse: English only (docs/LSP.md); any tag parses and is kept as text.

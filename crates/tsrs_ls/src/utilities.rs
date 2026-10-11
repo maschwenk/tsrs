@@ -37,11 +37,18 @@ fn quote_replacer_replace(s: &str) -> String {
 }
 
 // utilities.go:28
-pub fn is_in_string(source_file: P<SourceFile>, position: i32, previous_token: Option<P<Node>>) -> bool {
+pub fn is_in_string(
+    source_file: P<SourceFile>,
+    position: u32,
+    previous_token: Option<P<Node>>,
+) -> bool {
     if let Some(previous_token) = previous_token {
         if ast::is_string_text_containing_node(previous_token) {
-            let start = astnav::get_start_of_node(previous_token, source_file, false /*includeJSDoc*/);
-            let end = previous_token.end();
+            let start =
+                astnav::get_start_of_node(previous_token, source_file, false /*includeJSDoc*/);
+            let end = previous_token
+                .end()
+                .expect_source("parsed tokens have source positions");
 
             // To be "in" one of these literals, the position has to be:
             //   1. entirely within the token text.
@@ -118,12 +125,25 @@ pub(crate) fn is_export_specifier_alias(reference_location: P<Node>, export_spec
 }
 
 // utilities.go:95
-pub(crate) fn is_in_comment(file: P<SourceFile>, position: i32, token_at_position: P<Node>) -> Option<CommentRange> {
-    get_range_of_enclosing_comment(file, position, astnav::find_preceding_token(file, position), token_at_position)
+pub(crate) fn is_in_comment(
+    file: P<SourceFile>,
+    position: u32,
+    token_at_position: P<Node>,
+) -> Option<CommentRange> {
+    get_range_of_enclosing_comment(
+        file,
+        position,
+        astnav::find_preceding_token(file, position),
+        token_at_position,
+    )
 }
 
 // utilities.go:99
-pub(crate) fn position_belongs_to_node(candidate: P<Node>, position: i32, file: P<SourceFile>) -> bool {
+pub(crate) fn position_belongs_to_node(
+    candidate: P<Node>,
+    position: u32,
+    file: P<SourceFile>,
+) -> bool {
     lsutil::position_belongs_to_node(candidate, position, file)
 }
 
@@ -155,10 +175,16 @@ pub(crate) fn get_possible_type_arguments_info(token_in: Option<P<Node>>, source
         match t.kind() {
             Kind::LessThanToken => {
                 // Found the beginning of the generic argument expression
-                let mut tok = astnav::find_preceding_token(source_file, t.pos());
+                let mut tok = astnav::find_preceding_token(
+                    source_file,
+                    t.pos().expect_source("parsed tokens have source positions"),
+                );
                 if let Some(q) = tok {
                     if q.kind() == Kind::QuestionDotToken {
-                        tok = astnav::find_preceding_token(source_file, q.pos());
+                        tok = astnav::find_preceding_token(
+                            source_file,
+                            q.pos().expect_source("parsed tokens have source positions"),
+                        );
                     }
                 }
                 let Some(ident) = tok else { return None };
@@ -219,7 +245,10 @@ pub(crate) fn get_possible_type_arguments_info(token_in: Option<P<Node>>, source
                 }
             }
         }
-        token = astnav::find_preceding_token(source_file, t.pos());
+        token = astnav::find_preceding_token(
+            source_file,
+            t.pos().expect_source("parsed tokens have source positions"),
+        );
     }
     None
 }
@@ -341,8 +370,17 @@ pub(crate) fn is_in_right_side_of_internal_import_equals_declaration(mut node: P
 
 impl LanguageService {
     // utilities.go:285
-    pub(crate) fn create_lsp_range_from_node(&self, node: P<Node>, file: P<SourceFile>) -> (lsproto::Range, Fidelity) {
-        self.create_lsp_range_from_bounds(scanner::get_token_pos_of_node(node, file, false /*includeJSDoc*/), node.end(), file)
+    pub(crate) fn create_lsp_range_from_node(
+        &self,
+        node: P<Node>,
+        file: P<SourceFile>,
+    ) -> (lsproto::Range, Fidelity) {
+        self.create_lsp_range_from_bounds(
+            scanner::get_token_pos_of_node(node, file, false /*includeJSDoc*/),
+            node.end()
+                .expect_source("parsed nodes have source positions"),
+            file,
+        )
     }
 
     // utilities.go:289
@@ -353,13 +391,23 @@ impl LanguageService {
 
 // utilities.go:293
 pub(crate) fn create_range_from_node(node: P<Node>, file: P<SourceFile>) -> TextRange {
-    TextRange::new(scanner::get_token_pos_of_node(node, file, false /*includeJSDoc*/), node.end())
+    TextRange::new(
+        scanner::get_token_pos_of_node(node, file, false /*includeJSDoc*/),
+        node.end()
+            .expect_source("parsed nodes have source positions"),
+    )
 }
 
 impl LanguageService {
     // utilities.go:297
-    pub(crate) fn create_lsp_range_from_bounds(&self, start: i32, end: i32, file: P<SourceFile>) -> (lsproto::Range, Fidelity) {
-        self.converters.to_lsp_range(&file, TextRange::new(start, end))
+    pub(crate) fn create_lsp_range_from_bounds(
+        &self,
+        start: u32,
+        end: u32,
+        file: P<SourceFile>,
+    ) -> (lsproto::Range, Fidelity) {
+        self.converters
+            .to_lsp_range(&file, TextRange::new(start, end))
     }
 
     // utilities.go:301
@@ -368,8 +416,13 @@ impl LanguageService {
     }
 
     // utilities.go:305
-    pub(crate) fn create_lsp_position(&self, position: i32, file: P<SourceFile>) -> (lsproto::Position, Fidelity) {
-        self.converters.to_lsp_position(&file, position as TextPos)
+    pub(crate) fn create_lsp_position(
+        &self,
+        position: u32,
+        file: P<SourceFile>,
+    ) -> (lsproto::Position, Fidelity) {
+        self.converters
+            .to_lsp_position(&file, TextPos::source(position))
     }
 }
 
@@ -498,8 +551,13 @@ pub(crate) fn is_label_of_labeled_statement(node: P<Node>) -> bool {
 }
 
 // utilities.go:432
-pub(crate) fn find_reference_in_position(refs: &[P<FileReference>], pos: i32) -> Option<P<FileReference>> {
-    refs.iter().copied().find(|r| r.text_range.contains_inclusive(pos))
+pub(crate) fn find_reference_in_position(
+    refs: &[P<FileReference>],
+    pos: u32,
+) -> Option<P<FileReference>> {
+    refs.iter()
+        .copied()
+        .find(|r| r.text_range.contains_inclusive(pos.into()))
 }
 
 // utilities.go:436
@@ -1266,7 +1324,11 @@ pub fn range_contains_range(r1: TextRange, r2: TextRange) -> bool {
 }
 
 // utilities.go:1109
-pub(crate) fn start_end_contains_range(start: i32, end: i32, text_range: TextRange) -> bool {
+pub(crate) fn start_end_contains_range(
+    start: TextPos,
+    end: TextPos,
+    text_range: TextRange,
+) -> bool {
     start <= text_range.pos() && end >= text_range.end()
 }
 
@@ -1306,10 +1368,17 @@ pub(crate) fn is_tagged_template_expression(node: P<Node>) -> bool {
 }
 
 // utilities.go:1146
-pub(crate) fn is_inside_template_literal(node: P<Node>, position: i32, source_file: P<SourceFile>) -> bool {
+pub(crate) fn is_inside_template_literal(
+    node: P<Node>,
+    position: u32,
+    source_file: P<SourceFile>,
+) -> bool {
+    let end = node
+        .end()
+        .expect_source("parsed template literals have source positions");
     ast::is_template_literal_kind(node.kind())
-        && (scanner::get_token_pos_of_node(node, source_file, false) < position && position < node.end()
-            || (ast::is_unterminated_literal(node) && position == node.end()))
+        && (scanner::get_token_pos_of_node(node, source_file, false) < position && position < end
+            || (ast::is_unterminated_literal(node) && position == end))
 }
 
 // Pseudo-literals
@@ -1334,9 +1403,12 @@ pub(crate) fn find_preceding_matching_token(token: P<Node>, matching_token_kind:
         return None; // if the token text doesn't appear in the file, there can't be a match - super fast bail
     };
     // we can only use the textual result directly if we didn't have to count any close tokens within the range
-    let close_index = text.rfind(close_token_text).map(|i| i as i64).unwrap_or(-1);
-    if close_index < best_guess_index as i64 {
-        let node_at_guess = astnav::find_preceding_token(source_file, best_guess_index as i32 + 1);
+    let close_index = text.rfind(close_token_text);
+    if close_index.is_none_or(|close_index| close_index < best_guess_index) {
+        let node_at_guess = astnav::find_preceding_token(
+            source_file,
+            u32::try_from(best_guess_index + 1).expect("source position exceeds u32"),
+        );
         if let Some(node_at_guess) = node_at_guess {
             if node_at_guess.kind() == matching_token_kind {
                 return Some(node_at_guess);
@@ -1347,7 +1419,12 @@ pub(crate) fn find_preceding_matching_token(token: P<Node>, matching_token_kind:
     let mut remaining_matching_tokens = 0;
     let mut token = token;
     loop {
-        let preceding = astnav::find_preceding_token(source_file, token.pos())?;
+        let preceding = astnav::find_preceding_token(
+            source_file,
+            token
+                .pos()
+                .expect_source("parsed tokens have source positions"),
+        )?;
         token = preceding;
         if token.kind() == matching_token_kind {
             if remaining_matching_tokens == 0 {
@@ -1385,7 +1462,11 @@ pub(crate) fn get_leading_comment_ranges_of_node(node: P<Node>, file: P<SourceFi
     if node.kind() == Kind::JsxText {
         return None;
     }
-    Some(scanner::get_leading_comment_ranges(file.text(), node.pos()))
+    Some(scanner::get_leading_comment_ranges(
+        file.text(),
+        node.pos()
+            .expect_source("parsed nodes have source positions"),
+    ))
 }
 
 // Equivalent to Strada's `node.getChildren()` for non-JSDoc nodes.
@@ -1404,10 +1485,16 @@ pub(crate) fn get_children_from_non_jsdoc_node(node: P<Node>, source_file: P<Sou
     }
 
     let mut children: Vec<P<Node>> = Vec::new();
-    let mut pos = node.pos();
+    let mut pos = node
+        .pos()
+        .expect_source("parsed nodes have source positions");
     for child in child_nodes {
         let mut scanner = scanner::get_scanner_for_source_file(source_file, pos);
-        while pos < child.pos() {
+        while pos
+            < child
+                .pos()
+                .expect_source("parsed nodes have source positions")
+        {
             let token = scanner.token();
             let token_full_start = scanner.token_full_start();
             let token_end = scanner.token_end();
@@ -1416,10 +1503,16 @@ pub(crate) fn get_children_from_non_jsdoc_node(node: P<Node>, source_file: P<Sou
             scanner.scan();
         }
         children.push(child);
-        pos = child.end();
+        pos = child
+            .end()
+            .expect_source("parsed nodes have source positions");
     }
     let mut scanner = scanner::get_scanner_for_source_file(source_file, pos);
-    while pos < node.end() {
+    while pos
+        < node
+            .end()
+            .expect_source("parsed nodes have source positions")
+    {
         let token = scanner.token();
         let token_full_start = scanner.token_full_start();
         let token_end = scanner.token_end();
@@ -1493,8 +1586,14 @@ pub(crate) fn to_context_range(text_range: Option<TextRange>, context_file: P<So
 }
 
 // utilities.go:1310
-pub(crate) fn get_reference_at_position(source_file: P<SourceFile>, position: i32, program: &Program) -> Option<RefInfo> {
-    if let Some(reference_path) = find_reference_in_position(source_file.referenced_files(), position) {
+pub(crate) fn get_reference_at_position(
+    source_file: P<SourceFile>,
+    position: u32,
+    program: &Program,
+) -> Option<RefInfo> {
+    if let Some(reference_path) =
+        find_reference_in_position(source_file.referenced_files(), position)
+    {
         if let Some(file) = program.get_source_file_from_reference(source_file, reference_path) {
             return Some(RefInfo { reference: Some(reference_path), file_name: file.file_name().to_string(), file: Some(file) });
         }

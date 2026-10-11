@@ -66,7 +66,7 @@ pub(crate) fn report(c: &Checker, input: &[P<Type>], kept: &[P<Type>], verdict: 
 
 /// One trace line for a cross product of `types` that `check_cross_product_union` sized at `size`: each union is
 /// described by its length, fingerprints and first two members, any other type by `describe`.
-pub(crate) fn report_cross_product(c: &Checker, types: &[P<Type>], size: i32) {
+pub(crate) fn report_cross_product(c: &Checker, types: &[P<Type>], size: usize) {
     // The limit of `check_cross_product_union`.
     let verdict = if size >= 100_000 { "too complex (TS2590)" } else { "allowed" };
     let mut line = format!("tsrs cross product: checker {} at {} while checking {} | size {size}, {verdict}", c.id, location(c.current_node), checking_file(c));
@@ -182,7 +182,12 @@ fn describe_symbol(symbol: P<Symbol>, out: &mut String) {
     if let Some(&declaration) = symbol.declarations().first() {
         if let Some(file) = ast::get_source_file_of_node(declaration) {
             let name = file.file_name();
-            let _ = write!(out, "@{}:{}", name.rsplit('/').next().unwrap_or(name), declaration.pos());
+            let _ = write!(
+                out,
+                "@{}:{:?}",
+                name.rsplit('/').next().unwrap_or(name),
+                declaration.pos()
+            );
         }
     }
 }

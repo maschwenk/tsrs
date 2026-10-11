@@ -182,12 +182,12 @@ pub fn unmarshal_discriminated_arm<T: Json>(v: &Value, union_go_type: &str, disc
 }
 
 // Go `cmp.Compare`.
-pub fn cmp_compare<T: PartialOrd>(a: &T, b: &T) -> i32 {
+pub fn cmp_compare<T: PartialOrd>(a: &T, b: &T) -> std::cmp::Ordering {
     if a < b {
-        -1
+        std::cmp::Ordering::Less
     } else if a > b {
-        1
+        std::cmp::Ordering::Greater
     } else {
-        0
+        std::cmp::Ordering::Equal
     }
 }

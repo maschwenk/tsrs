@@ -13,7 +13,7 @@ use crate::references::collect_external_module_references;
 use crate::types::ParseFlags;
 use crate::utilities::{get_language_variant, is_keyword_or_punctuation, token_is_identifier_or_keyword};
 
-#[repr(i32)]
+#[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum ParsingContext {
     SourceElements,          // Elements in source file
@@ -77,7 +77,7 @@ impl ParsingContext {
 }
 
 /// Bit set of `1 << ParsingContext`.
-pub type ParsingContexts = i32;
+pub type ParsingContexts = u32;
 
 pub struct JSDocInfo {
     pub(crate) parent: P<Node>,
@@ -117,7 +117,7 @@ pub struct Parser {
     pub(crate) identifier_count: usize,
     // `register_source_text` index of `source_text` (`NO_SOURCE_TEXT`: identifiers store their text)
     pub(crate) source_text_index: u32,
-    pub(crate) not_parenthesized_arrow: FxHashSet<i32>,
+    pub(crate) not_parenthesized_arrow: FxHashSet<u32>,
     pub(crate) jsdoc_infos: Vec<JSDocInfo>,
     pub(crate) possible_await_spans: Vec<usize>,
     pub(crate) jsdoc_comments_space: Vec<&'static str>,
@@ -335,11 +335,17 @@ impl Parser {
 }
 
 pub(crate) fn get_error_span_for_node(source_text: &str, node: P<Node>) -> TextRange {
-    let mut pos = node.pos();
+    let mut pos = node
+        .pos()
+        .expect_source("parsed nodes have source positions");
     if !ast::node_is_missing(Some(node)) {
         pos = scanner::skip_trivia(source_text, pos);
     }
-    new_text_range(pos, node.end())
+    new_text_range(
+        pos,
+        node.end()
+            .expect_source("parsed nodes have source positions"),
+    )
 }
 
 impl Parser {
@@ -467,7 +473,13 @@ impl Parser {
         self.scanner.set_language_variant(self.language_variant);
     }
 
-    pub(crate) fn scan_error(&mut self, message: &'static Message, pos: i32, length: i32, args: &[&dyn Display]) {
+    pub(crate) fn scan_error(
+        &mut self,
+        message: &'static Message,
+        pos: u32,
+        length: u32,
+        args: &[&dyn Display],
+    ) {
         self.parse_error_at_range(new_text_range(pos, pos + length), message, args);
     }
 
@@ -489,7 +501,13 @@ impl Parser {
         }
     }
 
-    pub(crate) fn parse_error_at(&mut self, pos: i32, end: i32, message: &'static Message, args: &[&dyn Display]) -> Option<P<Diagnostic>> {
+    pub(crate) fn parse_error_at(
+        &mut self,
+        pos: u32,
+        end: u32,
+        message: &'static Message,
+        args: &[&dyn Display],
+    ) -> Option<P<Diagnostic>> {
         self.parse_error_at_range(new_text_range(pos, end), message, args)
     }
 
@@ -501,7 +519,9 @@ impl Parser {
     pub(crate) fn parse_error_at_range(&mut self, loc: TextRange, message: &'static Message, args: &[&dyn Display]) -> Option<P<Diagnostic>> {
         // Don't report another error if it would just be at the same location as the last error
         let mut result = None;
-        if self.diagnostics.is_empty() || self.diagnostics[self.diagnostics.len() - 1].pos() != loc.pos() {
+        if self.diagnostics.is_empty()
+            || self.diagnostics[self.diagnostics.len() - 1].pos() != loc.source_pos()
+        {
             let diagnostic = ast::new_diagnostic(None, loc, message, args);
             self.diagnostics.push(diagnostic);
             result = Some(diagnostic);
@@ -606,7 +626,7 @@ impl Parser {
         self.token
     }
 
-    pub(crate) fn node_pos(&self) -> i32 {
+    pub(crate) fn node_pos(&self) -> u32 {
         self.scanner.token_full_start()
     }
 
@@ -697,8 +717,11 @@ impl Parser {
         if !self.is_java_script() {
             result.set_has_lazy_jsdoc(true);
         }
-        self.reparsed_clones.sort_by(|a, b| ast::compare_node_positions(*a, *b).cmp(&0));
-        result.reparsed_clones.set(alloc_slice(&self.reparsed_clones));
+        self.reparsed_clones
+            .sort_by(|a, b| ast::compare_node_positions(*a, *b));
+        result
+            .reparsed_clones
+            .set(alloc_slice(&self.reparsed_clones));
         ast::set_external_module_indicator(&result, self.opts.external_module_indicator_options);
     }
 
@@ -750,9 +773,23 @@ impl Parser {
             statements.extend_from_slice(&source_statements[after_await_statement..next_await_statement]);
 
             // append all diagnostics associated with the copied range
-            let diagnostic_start = saved_parse_diagnostics.iter().position(|diagnostic| diagnostic.pos() >= prev_statement.pos());
+            let prev_statement_pos = Some(
+                prev_statement
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
+            let next_statement_pos = Some(
+                next_statement
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
+            let diagnostic_start = saved_parse_diagnostics
+                .iter()
+                .position(|diagnostic| diagnostic.pos() >= prev_statement_pos);
             let diagnostic_end = match diagnostic_start {
-                Some(start) => saved_parse_diagnostics[start..].iter().position(|diagnostic| diagnostic.pos() >= next_statement.pos()),
+                Some(start) => saved_parse_diagnostics[start..]
+                    .iter()
+                    .position(|diagnostic| diagnostic.pos() >= next_statement_pos),
                 None => None,
             };
             if let Some(start) = diagnostic_start {
@@ -766,7 +803,11 @@ impl Parser {
             let mut state = self.mark();
             // reparse all statements between start and pos. We skip existing diagnostics for the same range and allow the parser to generate new ones.
             self.context_flags |= NodeFlags::AwaitContext;
-            self.scanner.reset_pos(next_statement.pos());
+            self.scanner.reset_pos(
+                next_statement
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
             self.next_token();
 
             after_await_statement = self.possible_await_spans[i + 1];
@@ -807,7 +848,14 @@ impl Parser {
             statements.extend_from_slice(&source_statements[after_await_statement..]);
 
             // append all diagnostics associated with the copied range
-            let diagnostic_start = saved_parse_diagnostics.iter().position(|diagnostic| diagnostic.pos() >= prev_statement.pos());
+            let prev_statement_pos = Some(
+                prev_statement
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
+            let diagnostic_start = saved_parse_diagnostics
+                .iter()
+                .position(|diagnostic| diagnostic.pos() >= prev_statement_pos);
             if let Some(start) = diagnostic_start {
                 self.diagnostics.extend_from_slice(&saved_parse_diagnostics[start..]);
             }
@@ -835,7 +883,7 @@ impl Parser {
     /// `parseListIndex` with the elements left on `node_stack` above the returned start index.
     pub(crate) fn parse_list_index_on_stack(&mut self, kind: ParsingContext, mut parse_element: impl FnMut(&mut Parser, usize) -> P<Node>) -> usize {
         let save_parsing_contexts = self.parsing_contexts;
-        self.parsing_contexts |= 1 << kind as i32;
+        self.parsing_contexts |= 1 << kind as u32;
         let mut outer_reparse_list = std::mem::take(&mut self.reparse_list);
         let start = self.node_stack.len();
         while !self.is_list_terminator(kind) {
@@ -890,8 +938,9 @@ impl Parser {
         let after = self.lazy_watch();
         if !clean_start
             || list.nodes().is_empty()
-            || list.end() - list.pos() > LAZY_LIST_MAX_TEXT
-            || (after.0, after.1, after.2, after.3, after.5) != (before.0, before.1, before.2, before.3, before.5)
+            || list.loc().len().is_some_and(|len| len > LAZY_LIST_MAX_TEXT)
+            || (after.0, after.1, after.2, after.3, after.5)
+                != (before.0, before.1, before.2, before.3, before.5)
             || self.has_parse_error
             || !tsrs_core::arena_rewindable(&cp)
             || lazy_list_blocked(list.nodes())
@@ -899,10 +948,18 @@ impl Parser {
             return list;
         }
         let loc = list.loc();
-        debug_assert_eq!(loc.pos(), pos);
+        debug_assert_eq!(loc.source_pos(), Some(pos));
         self.lazy_lists.truncate(before.4);
         tsrs_core::arena_rewind(cp);
-        let record = P::new(tsrs_ast::lazylist::LazyNodeList::new(loc.pos(), loc.end(), kind as u8, context_flags, parsing_contexts as u32));
+        let record = P::new(tsrs_ast::lazylist::LazyNodeList::new(
+            loc.pos()
+                .expect_source("parsed lists have source positions"),
+            loc.end()
+                .expect_source("parsed lists have source positions"),
+            kind as u8,
+            context_flags,
+            parsing_contexts,
+        ));
         self.lazy_lists.push(record);
         self.factory.new_lazy_node_list(loc, record.get())
     }
@@ -950,7 +1007,7 @@ impl Parser {
     ) -> Option<P<NodeList>> {
         let pos = self.node_pos();
         let save_parsing_contexts = self.parsing_contexts;
-        self.parsing_contexts |= 1 << kind as i32;
+        self.parsing_contexts |= 1 << kind as u32;
         let start = self.node_stack.len();
         loop {
             if self.is_list_element(kind, false /*inErrorRecovery*/) {
@@ -1054,8 +1111,10 @@ impl Parser {
         // a SourceFile, or JSDocComment when lazily parsing JSDoc.
         assert!(self.parsing_contexts != 0, "Missing parsing context");
         for kind in ParsingContext::ALL {
-            if self.parsing_contexts & (1 << kind as i32) != 0 {
-                if self.is_list_element(kind, true /*inErrorRecovery*/) || self.is_list_terminator(kind) {
+            if self.parsing_contexts & (1 << kind as u32) != 0 {
+                if self.is_list_element(kind, true /*inErrorRecovery*/)
+                    || self.is_list_terminator(kind)
+                {
                     return true;
                 }
             }
@@ -1319,7 +1378,13 @@ impl Parser {
         false
     }
 
-    pub(crate) fn parse_expected_matching_brackets(&mut self, open_kind: Kind, close_kind: Kind, open_parsed: bool, open_position: i32) {
+    pub(crate) fn parse_expected_matching_brackets(
+        &mut self,
+        open_kind: Kind,
+        close_kind: Kind,
+        open_parsed: bool,
+        open_position: u32,
+    ) {
         if self.token == close_kind {
             self.next_token();
             return;
@@ -1533,7 +1598,12 @@ impl Parser {
         }
     }
 
-    pub(crate) fn parse_declaration_worker(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_declaration_worker(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         match self.token {
             Kind::VarKeyword | Kind::LetKeyword | Kind::ConstKeyword | Kind::UsingKeyword => {
                 return self.parse_variable_statement(pos, jsdoc, modifiers);
@@ -1954,8 +2024,14 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_variable_statement(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
-        let declaration_list = self.parse_variable_declaration_list(false /*inForStatementInitializer*/);
+    pub(crate) fn parse_variable_statement(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
+        let declaration_list =
+            self.parse_variable_declaration_list(false /*inForStatementInitializer*/);
         self.parse_semicolon();
         let result = self.factory.new_variable_statement(modifiers, declaration_list);
         let result = self.finish_node(result, pos);
@@ -2130,7 +2206,12 @@ impl Parser {
         None
     }
 
-    pub(crate) fn parse_function_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_function_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         self.parse_expected(Kind::FunctionKeyword);
         let asterisk_token = self.parse_optional_token(Kind::AsteriskToken);
         // We don't parse the name here in await context, instead we will report a grammar error in the checker.
@@ -2160,7 +2241,12 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_class_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_class_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         self.parse_class_declaration_or_expression(pos, jsdoc, modifiers, Kind::ClassDeclaration)
     }
 
@@ -2172,7 +2258,7 @@ impl Parser {
 
     pub(crate) fn parse_class_declaration_or_expression(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
         kind: Kind,
@@ -2184,9 +2270,16 @@ impl Parser {
         let name = self.parse_name_of_class_declaration_or_expression();
         let type_parameters = self.parse_type_parameters();
         if modifiers.is_some()
-            && self.parsing_contexts & (1 << ParsingContext::SourceElements as i32) != 0
-            && self.parsing_contexts & ((1 << ParsingContext::BlockStatements as i32) | (1 << ParsingContext::SwitchClauseStatements as i32)) == 0
-            && modifiers.unwrap().nodes().iter().any(|m| is_export_modifier(*m))
+            && self.parsing_contexts & (1 << ParsingContext::SourceElements as u32) != 0
+            && self.parsing_contexts
+                & ((1 << ParsingContext::BlockStatements as u32)
+                    | (1 << ParsingContext::SwitchClauseStatements as u32))
+                == 0
+            && modifiers
+                .unwrap()
+                .nodes()
+                .iter()
+                .any(|m| is_export_modifier(*m))
         {
             self.set_context_flags(NodeFlags::AwaitContext, true /*value*/);
         }
@@ -2317,8 +2410,16 @@ impl Parser {
         }
         let property_access = node.as_property_access_expression();
         let left = self.convert_entity_name_expression_to_entity_name(property_access.expression());
-        let result = self.factory.new_qualified_name(left, property_access.name());
-        self.finish_node_with_end(result, node.pos(), node.end())
+        let result = self
+            .factory
+            .new_qualified_name(left, property_access.name());
+        self.finish_node_with_end(
+            result,
+            node.pos()
+                .expect_source("parsed nodes have source positions"),
+            node.end()
+                .expect_source("parsed nodes have source positions"),
+        )
     }
 
     pub(crate) fn parse_expression_with_type_arguments(&mut self) -> P<Node> {
@@ -2395,7 +2496,12 @@ impl Parser {
         panic!("Should not have attempted to parse class member declaration.");
     }
 
-    pub(crate) fn parse_class_static_block_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_class_static_block_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         self.parse_expected_token(Kind::StaticKeyword);
         let body = self.parse_class_static_block_body();
         let result = self.factory.new_class_static_block_declaration(modifiers, body);
@@ -2413,7 +2519,12 @@ impl Parser {
         body
     }
 
-    pub(crate) fn try_parse_constructor_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> Option<P<Node>> {
+    pub(crate) fn try_parse_constructor_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> Option<P<Node>> {
         let state = self.mark();
         if self.token == Kind::ConstructorKeyword
             || self.token == Kind::StringLiteral && self.scanner.token_value() == "constructor" && self.look_ahead(Parser::next_token_is_open_paren)
@@ -2437,7 +2548,12 @@ impl Parser {
         self.next_token() == Kind::OpenParenToken
     }
 
-    pub(crate) fn parse_property_or_method_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_property_or_method_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         let asterisk_token = self.parse_optional_token(Kind::AsteriskToken);
         let name = self.parse_property_name();
         // Note: this is not legal as per the grammar.  But we allow it in the parser and
@@ -2451,7 +2567,7 @@ impl Parser {
 
     pub(crate) fn parse_method_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
         asterisk_token: Option<P<Node>>,
@@ -2480,7 +2596,7 @@ pub(crate) fn modifier_list_has_async(modifiers: Option<P<ModifierList>>) -> boo
 impl Parser {
     pub(crate) fn parse_property_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
         name: P<Node>,
@@ -2550,11 +2666,23 @@ impl Parser {
             self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(Kind::SemicolonToken)]);
             return;
         }
-        let pos = scanner::skip_trivia(self.source_text, node.pos());
+        let pos = scanner::skip_trivia(
+            self.source_text,
+            node.pos()
+                .expect_source("parsed nodes have source positions"),
+        );
+        let end = node
+            .end()
+            .expect_source("parsed nodes have source positions");
         // Some known keywords are likely signs of syntax being used improperly.
         match expression_text {
             "const" | "let" | "var" => {
-                self.parse_error_at(pos, node.end(), &diagnostics::Variable_declaration_not_allowed_at_this_location, &[]);
+                self.parse_error_at(
+                    pos,
+                    end,
+                    &diagnostics::Variable_declaration_not_allowed_at_this_location,
+                    &[],
+                );
                 return;
             }
             "declare" => {
@@ -2588,7 +2716,12 @@ impl Parser {
             suggestion = get_space_suggestion(expression_text);
         }
         if !suggestion.is_empty() {
-            self.parse_error_at(pos, node.end(), &diagnostics::Unknown_keyword_or_identifier_Did_you_mean_0, &[&suggestion]);
+            self.parse_error_at(
+                pos,
+                end,
+                &diagnostics::Unknown_keyword_or_identifier_Did_you_mean_0,
+                &[&suggestion],
+            );
             return;
         }
         // Unknown tokens are handled with their own errors in the scanner
@@ -2596,7 +2729,12 @@ impl Parser {
             return;
         }
         // Otherwise, we know this some kind of unknown word, not just a missing expected semicolon.
-        self.parse_error_at(pos, node.end(), &diagnostics::Unexpected_keyword_or_identifier, &[]);
+        self.parse_error_at(
+            pos,
+            end,
+            &diagnostics::Unexpected_keyword_or_identifier,
+            &[],
+        );
     }
 }
 
@@ -2619,7 +2757,12 @@ impl Parser {
         }
     }
 
-    pub(crate) fn parse_interface_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_interface_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         self.parse_expected(Kind::InterfaceKeyword);
         let name = self.parse_identifier();
         let type_parameters = self.parse_type_parameters();
@@ -2633,7 +2776,12 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_type_alias_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_type_alias_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         self.parse_expected(Kind::TypeKeyword);
         if self.has_preceding_line_break() {
             self.parse_error_at_current_token(&diagnostics::Line_break_not_permitted_here, &[]);
@@ -2673,7 +2821,12 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_enum_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_enum_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         let save_has_await_identifier = self.statement_has_await_identifier;
         self.parse_expected(Kind::EnumKeyword);
         let name = self.parse_identifier();
@@ -2695,7 +2848,12 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_module_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_module_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         let mut keyword = Kind::ModuleKeyword;
         if self.token == Kind::GlobalKeyword {
             // global augmentation
@@ -2711,7 +2869,12 @@ impl Parser {
         self.parse_module_or_namespace_declaration(pos, jsdoc, modifiers, false /*nested*/, keyword)
     }
 
-    pub(crate) fn parse_ambient_external_module_declaration(&mut self, pos: i32, jsdoc: JsdocScannerInfo, modifiers: Option<P<ModifierList>>) -> P<Node> {
+    pub(crate) fn parse_ambient_external_module_declaration(
+        &mut self,
+        pos: u32,
+        jsdoc: JsdocScannerInfo,
+        modifiers: Option<P<ModifierList>>,
+    ) -> P<Node> {
         let name: P<Node>;
         let mut keyword = Kind::ModuleKeyword;
         let save_has_await_identifier = self.statement_has_await_identifier;
@@ -2755,7 +2918,7 @@ impl Parser {
 
     pub(crate) fn parse_module_or_namespace_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
         nested: bool,
@@ -2785,7 +2948,7 @@ impl Parser {
 
     pub(crate) fn parse_import_declaration_or_import_equals_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -2858,7 +3021,7 @@ impl Parser {
 
     pub(crate) fn parse_import_equals_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
         identifier: P<Node>,
@@ -2906,7 +3069,7 @@ impl Parser {
     pub(crate) fn try_parse_import_clause(
         &mut self,
         identifier: Option<P<Node>>,
-        pos: i32,
+        pos: u32,
         phase_modifier: Kind,
         skip_jsdoc_leading_asterisks: bool,
     ) -> Option<P<Node>> {
@@ -2924,7 +3087,7 @@ impl Parser {
     pub(crate) fn parse_import_clause(
         &mut self,
         identifier: Option<P<Node>>,
-        pos: i32,
+        pos: u32,
         phase_modifier: Kind,
         skip_jsdoc_leading_asterisks: bool,
     ) -> P<Node> {
@@ -2964,7 +3127,7 @@ const _: () = assert!(ParsingContext::ClassMembers as u8 == tsrs_ast::lazylist::
 /// while every checker that needs it waits (the generated OpenAPI `operations` / `components` interfaces of
 /// supabase-studio, 65-437 KB each, are needed by most checkers). Keeping them eager costs at most 0.5% of peak on the
 /// bench projects (notes/mem-lazy-dts-members.md).
-const LAZY_LIST_MAX_TEXT: i32 = 64 << 10;
+const LAZY_LIST_MAX_TEXT: u32 = 64 << 10;
 
 static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
@@ -2994,7 +3157,10 @@ fn reparse_lazy_list(record: &tsrs_ast::lazylist::LazyNodeList, file: P<SourceFi
         p.parse_list(ParsingContext::TypeMembers, Parser::parse_type_member)
     };
     assert!(
-        p.diagnostics.is_empty() && list.pos() == record.pos && list.end() == record.end && p.token == Kind::CloseBraceToken,
+        p.diagnostics.is_empty()
+            && list.pos().source_offset() == Some(record.pos)
+            && list.end().source_offset() == Some(record.end)
+            && p.token == Kind::CloseBraceToken,
         "lazy member list of {} at {} parsed differently",
         file.file_name(),
         record.pos

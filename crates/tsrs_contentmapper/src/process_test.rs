@@ -132,13 +132,15 @@ fn test_process_spawner_runs_header_mapper() {
     let result = host.transform(mapper, Request { file_name: "/project/a.hdr", content }).unwrap();
     assert_eq!(result.text, format!("{HEADER}{content}"));
     assert_eq!(result.virtual_extension, ".ts");
+    let header_len = u32::try_from(HEADER.len()).expect("test header fits in a source position");
+    let content_len = u32::try_from(content.len()).expect("test content fits in a source position");
     assert_eq!(
         result.mappings.unwrap().segments(),
         vec![Segment {
-            virtual_start: HEADER.len() as i32,
-            virtual_end: (HEADER.len() + content.len()) as i32,
+            virtual_start: header_len,
+            virtual_end: header_len + content_len,
             original_start: 0,
-            original_end: content.len() as i32,
+            original_end: content_len,
             kind: Kind::Verbatim,
             features: Feature::All,
         }]
@@ -152,8 +154,13 @@ fn test_process_spawner_runs_header_mapper() {
     let diagnostic = result.diagnostics[0];
     assert_eq!(diagnostic.source(), "header");
     assert_eq!(diagnostic.code(), 7);
-    assert_eq!(diagnostic.pos(), content.find("//!mapper-error").unwrap() as i32);
-    assert_eq!(diagnostic.end(), diagnostic.pos() + "//!mapper-error".len() as i32);
+    let expected_start = u32::try_from(content.find("//!mapper-error").unwrap())
+        .expect("test diagnostic offset fits in a source position");
+    let expected_end = expected_start
+        + u32::try_from("//!mapper-error".len())
+            .expect("test diagnostic length fits in a source position");
+    assert_eq!(diagnostic.pos(), Some(expected_start));
+    assert_eq!(diagnostic.end(), Some(expected_end));
 
     host.close().unwrap();
 }

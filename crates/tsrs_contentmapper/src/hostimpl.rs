@@ -1,8 +1,11 @@
 use std::borrow::Cow;
 use std::fmt;
 use std::io::{self, Write};
-use std::sync::atomic::{AtomicI64, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, Once, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::{
+    Arc, Mutex, MutexGuard, Once, OnceLock, PoisonError, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    Weak,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -11,7 +14,7 @@ use tsrs_ast as ast;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::json::{self, Value};
 use tsrs_core::stringutil::equal_fold;
-use tsrs_core::{alloc_str, goslices, tspath, CompilerOptions, Locale, TextPos, TextRange, P};
+use tsrs_core::{CompilerOptions, Locale, P, TextRange, alloc_str, goslices, tspath};
 use tsrs_diagnostics::Category;
 use tsrs_ipc::jsonrpc::{self, ResponseError, ID};
 use tsrs_ipc::{self as ipc, Closer, Conn, Handler, Message, Protocol, ReadWriteCloser};
@@ -702,7 +705,7 @@ struct mapperConn {
     position_encoding: PositionEncoding,
     diagnostic_source: String,
     // refs is the number of active Acquire calls retaining this identity.
-    refs: i64,
+    refs: usize,
 }
 
 // hostimpl.go:260
@@ -710,21 +713,24 @@ struct mapperConn {
 struct operationTiming {
     count: AtomicU64,
     // Nanoseconds (Go's time.Duration).
-    duration: AtomicI64,
+    duration: AtomicU64,
 }
 
 impl operationTiming {
     // hostimpl.go:265
     fn record(&self, start: Instant) {
         self.count.fetch_add(1, Ordering::SeqCst);
-        self.duration.fetch_add(i64::try_from(start.elapsed().as_nanos()).unwrap_or(i64::MAX), Ordering::SeqCst);
+        self.duration.fetch_add(
+            u64::try_from(start.elapsed().as_nanos()).unwrap_or(u64::MAX),
+            Ordering::SeqCst,
+        );
     }
 
     // hostimpl.go:270
     fn snapshot(&self) -> OperationTiming {
         OperationTiming {
             count: self.count.load(Ordering::SeqCst),
-            duration: Duration::from_nanos(u64::try_from(self.duration.load(Ordering::SeqCst)).unwrap_or(0)),
+            duration: Duration::from_nanos(self.duration.load(Ordering::SeqCst)),
         }
     }
 }
@@ -1224,7 +1230,7 @@ impl Host for host {
             key: key.clone(),
             mappers: spec.mappers.clone(),
             entries,
-            refs: AtomicI64::new(1),
+            refs: AtomicUsize::new(1),
             once: Once::new(),
         });
         project_leases.insert(key, Arc::clone(&lease));
@@ -1457,7 +1463,13 @@ impl host {
         mapper_timing.finish_request(&mapper_timing.transform, start);
         let raw = match raw {
             Ok(raw) => raw,
-            Err(err) => return Err(new_transform_error(TransformErrorKind::Request, Some(Error::Ipc(err))).into()),
+            Err(err) => {
+                return Err(new_transform_error(
+                    TransformErrorKind::Request,
+                    Some(Error::Ipc(err)),
+                )
+                .into());
+            }
         };
         match decode_transform_result(raw, request.content, &position_encoding, &diagnostic_source) {
             Ok(decoded) => Ok(decoded),
@@ -1515,7 +1527,10 @@ impl host {
                     let Some(entry) = conns.get_mut(identity) else {
                         continue;
                     };
-                    entry.refs -= 1;
+                    entry.refs = entry
+                        .refs
+                        .checked_sub(1)
+                        .expect("content mapper connection reference count below zero");
                     if entry.refs == 0 {
                         if let Some(closer) = conns.shift_remove(identity).and_then(|entry| entry.closer) {
                             closers.push(closer);
@@ -1537,7 +1552,7 @@ struct projectLease {
     mappers: Vec<&'static Mapper>,
     // Go's map[*Mapper]string, keyed by the mapper's address.
     entries: OrderedMap<usize, String>,
-    refs: AtomicI64,
+    refs: AtomicUsize,
     once: Once,
 }
 
@@ -1567,11 +1582,15 @@ impl projectLease {
             let mut released_identities = Vec::new();
             {
                 let mut state = lock(&self.host.mu);
-                let refs = self.refs.fetch_sub(1, Ordering::SeqCst) - 1;
-                if refs < 0 {
-                    drop(state);
-                    panic!("content mapper project reference count below zero");
-                }
+                let refs = self
+                    .refs
+                    .try_update(Ordering::SeqCst, Ordering::SeqCst, |refs| {
+                        refs.checked_sub(1)
+                    })
+                    .unwrap_or_else(|_| {
+                        panic!("content mapper project reference count below zero")
+                    })
+                    - 1;
                 if refs != 0 {
                     return Ok(());
                 }
@@ -1850,7 +1869,7 @@ fn decode_transform_result(
             Ok((mapped, _)) => result.supplemental.push(mapped),
             Err(mut err) => {
                 if let Error::DiagnosticDirective(directive_error) = &mut err {
-                    directive_error.supplemental_index = supplemental_index as i32;
+                    directive_error.supplemental_index = Some(supplemental_index);
                 }
                 return Err(err);
             }
@@ -1937,7 +1956,13 @@ fn normalize_diagnostic_directives(
     let mut result = vec![ast::MappedDiagnosticDirective::default(); directives.len()];
     for (i, directive) in directives.iter().enumerate() {
         let directive_error = |kind: DiagnosticDirectiveErrorKind| -> Error {
-            DiagnosticDirectiveError { kind, index: i, supplemental_index: -1, ..Default::default() }.into()
+            DiagnosticDirectiveError {
+                kind,
+                index: i,
+                supplemental_index: None,
+                ..Default::default()
+            }
+            .into()
         };
         let mut normalized = ast::MappedDiagnosticDirective { source, ..Default::default() };
         match directive.policy {
@@ -1961,7 +1986,7 @@ fn normalize_diagnostic_directives(
                 return Err(DiagnosticDirectiveError {
                     kind: DiagnosticDirectiveErrorKind::InvalidPolicy,
                     index: i,
-                    supplemental_index: -1,
+                    supplemental_index: None,
                     policy,
                 }
                 .into());
@@ -1994,14 +2019,17 @@ fn normalize_diagnostic_directives(
         result[i] = normalized;
     }
     // Go's indexedDirective, sorted with Go's (unstable) slices.SortFunc so that equal starts keep Go's order.
-    let mut sorted: Vec<(ast::MappedDiagnosticDirective, usize)> = result.iter().copied().zip(0..).collect();
-    goslices::sort_func(&mut sorted, |a, b| a.0.virtual_range.pos().cmp(&b.0.virtual_range.pos()) as i32);
+    let mut sorted: Vec<(ast::MappedDiagnosticDirective, usize)> =
+        result.iter().copied().zip(0..).collect();
+    goslices::sort_func(&mut sorted, |a, b| {
+        a.0.virtual_range.pos().cmp(&b.0.virtual_range.pos())
+    });
     for i in 1..sorted.len() {
         if sorted[i].0.virtual_range.pos() < sorted[i - 1].0.virtual_range.end() {
             return Err(DiagnosticDirectiveError {
                 kind: DiagnosticDirectiveErrorKind::Overlap,
                 index: sorted[i].1,
-                supplemental_index: -1,
+                supplemental_index: None,
                 ..Default::default()
             }
             .into());
@@ -2049,7 +2077,10 @@ fn new_position_normalizer<'a>(text: &'a str, encoding: &PositionEncoding) -> Re
         normalizer.length = text.len() as i64;
     } else if *encoding == PositionEncoding::UTF16 {
         let position_map = ast::compute_position_map(text);
-        normalizer.length = i64::from(position_map.utf8_to_utf16(text.len() as i32));
+        normalizer.length = i64::from(
+            position_map
+                .utf8_to_utf16(u32::try_from(text.len()).expect("source length exceeds u32")),
+        );
         normalizer.position_map = Some(position_map);
     } else {
         return Err(format!("unsupported position encoding {}", quote(&encoding.0)));
@@ -2059,23 +2090,25 @@ fn new_position_normalizer<'a>(text: &'a str, encoding: &PositionEncoding) -> Re
 
 impl positionNormalizer<'_> {
     // hostimpl.go:1337
-    fn normalize_text_pos(&self, position: TextPos) -> Result<TextPos, String> {
+    fn normalize_text_pos(&self, position: u32) -> Result<u32, String> {
         self.normalize(i64::from(position))
     }
 
     // hostimpl.go:1342 (Go returns an int; a position that passes the length check fits a TextPos.)
-    fn normalize(&self, position: i64) -> Result<TextPos, String> {
+    fn normalize(&self, position: i64) -> Result<u32, String> {
         if position < 0 {
             return Err(format!("position {position} is negative"));
         }
         if position > self.length {
             return Err(format!("position {position} exceeds {} length {}", self.encoding, self.length));
         }
+        let normalized_position =
+            u32::try_from(position).expect("validated source position exceeds u32");
         let byte_position = match &self.position_map {
             // PositionEncodingUTF16
-            Some(position_map) => position_map.utf16_to_utf8(position as i32),
+            Some(position_map) => position_map.utf16_to_utf8(normalized_position),
             // PositionEncodingUTF8
-            None => position as i32,
+            None => normalized_position,
         };
         // utf8.RuneStart
         if (byte_position as usize) < self.text.len() && self.text.as_bytes()[byte_position as usize] & 0xC0 == 0x80 {

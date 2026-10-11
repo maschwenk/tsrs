@@ -78,7 +78,13 @@ fn decoded_tree_shape() {
     assert_eq!(import.module_specifier.text(), "bar");
     assert_eq!(sf.end_of_file_token.kind(), Kind::EndOfFile);
     // Positions are the wire (UTF-16) positions, as in Go's decoder.
-    assert_eq!((stmts[1].pos(), stmts[1].end()), (26, 82));
+    assert_eq!(
+        (
+            stmts[1].pos().source_offset(),
+            stmts[1].end().source_offset()
+        ),
+        (Some(26), Some(82))
+    );
 }
 
 #[test]
@@ -153,7 +159,7 @@ fn decode_rejects_malformed_input_without_panicking() {
 /// Go `DecodeNodes` followed by `EncodeNode(node, nil)` (`EncodeSourceFile` for a SourceFile root), run by the
 /// pinned sources (gen/goprobe.sh, tests/golden/reencode), against the same in Rust, byte for byte. Covers the
 /// server's SourceFile encodings and every client-encoded print input, incl. synthesized trees whose wire
-/// positions are 0xFFFFFFFF (Go decodes them to int 4294967295, Rust to -1; both write 0xFFFFFFFF back).
+/// positions are 0xFFFFFFFF (Go decodes them to int 4294967295, Rust to `TextPos::Synthetic`; both write 0xFFFFFFFF back).
 #[test]
 fn decode_reencode_matches_pinned_go() {
     let dir = crate_dir().join("tests/golden/reencode");

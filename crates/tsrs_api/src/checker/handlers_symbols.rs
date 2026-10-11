@@ -228,7 +228,7 @@ pub(crate) fn get_references_to_symbol_in_file(host: &dyn CheckerHost, p: &Param
 /// `slices.SortFunc(symbols, checker.CompareSymbols)`.
 fn sort_by_checker(s: &mut Setup, symbols: &mut [P<Symbol>]) {
     let c = s.c();
-    symbols.sort_by(|a, b| c.compare_symbols_exported(Some(*a), Some(*b)).cmp(&0));
+    symbols.sort_by(|a, b| c.compare_symbols_exported(Some(*a), Some(*b)));
 }
 
 // --- Symbol property handlers that Go serves without a checker (resolveSymbolReference) ---

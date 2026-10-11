@@ -1508,7 +1508,14 @@ impl Checker {
     // checker.go:16626
     pub(crate) fn try_resolve_alias(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
         let links = self.alias_symbol_links.get(symbol);
-        if links.alias_target.get().is_some() || self.find_resolution_cycle_start_index(symbol.into(), TypeSystemPropertyName::AliasTarget) < 0 {
+        if links.alias_target.get().is_some()
+            || self
+                .find_resolution_cycle_start_index(
+                    symbol.into(),
+                    TypeSystemPropertyName::AliasTarget,
+                )
+                .is_none()
+        {
             return Some(self.resolve_alias(symbol));
         }
         None

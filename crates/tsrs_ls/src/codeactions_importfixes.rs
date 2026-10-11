@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tsrs_ast::{self as ast, Diagnostic, Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::Checker;
 use tsrs_core::context::Context;
-use tsrs_core::{tspath, CompilerOptions, JsxEmit, TextRange, P};
+use tsrs_core::{CompilerOptions, JsxEmit, P, tspath};
 use tsrs_diagnostics as diagnostics;
 use tsrs_lsproto as lsproto;
 use tsrs_scanner as scanner;
@@ -65,7 +65,15 @@ struct fixInfo {
 fn get_import_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> Result<Vec<CodeAction>, lsproto::Error> {
     let mut ch = fix_context.program.get_type_checker(ctx);
 
-    let info = get_fix_infos(&mut ch, fix_context, fix_context.error_code, fix_context.span.pos())?;
+    let info = get_fix_infos(
+        &mut ch,
+        fix_context,
+        fix_context.error_code,
+        fix_context
+            .span
+            .pos()
+            .expect_source("code-fix spans have source positions"),
+    )?;
     if info.is_empty() {
         return Ok(Vec::new());
     }
@@ -147,9 +155,12 @@ fn add_import_from_diagnostic(
     diag: P<Diagnostic>,
     fix_context: &CodeFixContext,
 ) -> Result<(), lsproto::Error> {
+    let Some(diag_loc) = diag.loc() else {
+        return Ok(());
+    };
     let diag_fix_context = CodeFixContext {
         source_file: fix_context.source_file,
-        span: TextRange::new(diag.pos(), diag.end()),
+        span: diag_loc,
         error_code: diag.code(),
         program: fix_context.program,
         ls: fix_context.ls,
@@ -157,7 +168,12 @@ fn add_import_from_diagnostic(
         params: None,
     };
 
-    let infos = get_fix_infos(ch, &diag_fix_context, diag.code(), diag.pos())?;
+    let infos = get_fix_infos(
+        ch,
+        &diag_fix_context,
+        diag.code(),
+        diag.pos().expect("diagnostic location was checked above"),
+    )?;
     if !infos.is_empty() {
         import_adder.add_import_fix(&infos[0].fix);
     }
@@ -165,7 +181,12 @@ fn add_import_from_diagnostic(
 }
 
 // codeactions_importfixes.go:169
-fn get_fix_infos(ch: &mut Checker, fix_context: &CodeFixContext, error_code: i32, pos: i32) -> Result<Vec<fixInfo>, lsproto::Error> {
+fn get_fix_infos(
+    ch: &mut Checker,
+    fix_context: &CodeFixContext,
+    error_code: i32,
+    pos: u32,
+) -> Result<Vec<fixInfo>, lsproto::Error> {
     // Can't compute import fixes for dynamic/untitled files since they don't have real file paths
     if tspath::is_dynamic_file_name(fix_context.source_file.file_name()) {
         return Ok(Vec::new());
@@ -289,8 +310,10 @@ fn get_fixes_info_for_non_umd_import(fix_context: &CodeFixContext, symbol_token:
     let mut all_info: Vec<fixInfo> = Vec::new();
 
     // Compute usage position for JSDoc import type fixes
-    let (usage_position, fidelity) =
-        fix_context.ls.converters.to_lsp_position(&fix_context.source_file, scanner::get_token_pos_of_node(symbol_token, fix_context.source_file, false));
+    let (usage_position, fidelity) = fix_context.ls.converters.to_lsp_position(
+        &fix_context.source_file,
+        scanner::get_token_pos_of_node(symbol_token, fix_context.source_file, false).into(),
+    );
     if !fidelity.is_exact() {
         return Vec::new();
     }
@@ -427,7 +450,7 @@ fn sort_fix_info(fixes: Vec<fixInfo>, view: &View) -> Vec<fixInfo> {
     tsrs_core::goslices::sort_func(&mut sorted, |a, b| {
         // JSX namespace fixes should come last
         let cmp = tsrs_core::compare_booleans(a.is_jsx_namespace_fix, b.is_jsx_namespace_fix);
-        if cmp != 0 {
+        if !cmp.is_eq() {
             return cmp;
         }
         view.compare_fixes_for_sorting(&a.fix, &b.fix)

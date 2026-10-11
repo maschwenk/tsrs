@@ -75,8 +75,12 @@ impl Printer {
             Some(token) => token,
             None => {
                 let token = self.emit_context.factory.new_token(Kind::DotToken);
-                token.set_loc(TextRange::new(n.expression().end(), n.name().pos()));
-                self.emit_context.add_emit_flags(token, EmitFlags::NoSourceMap);
+                token.set_loc(TextRange::from_text_pos(
+                    n.expression().end(),
+                    n.name().pos(),
+                ));
+                self.emit_context
+                    .add_emit_flags(token, EmitFlags::NoSourceMap);
                 token
             }
         };
@@ -107,7 +111,15 @@ impl Printer {
         let n = node.as_element_access_expression();
         self.emit_expression(n.expression(), if is_optional_chain(node) { OperatorPrecedence::OptionalChain } else { OperatorPrecedence::Member });
         self.emit_token_node(n.question_dot_token());
-        self.emit_token(Kind::OpenBracketToken, greatest_end(-1, &[&n.expression(), &n.question_dot_token()]), WriteKind::Punctuation, node);
+        self.emit_token(
+            Kind::OpenBracketToken,
+            greatest_end(
+                TextPos::Synthetic,
+                &[&n.expression(), &n.question_dot_token()],
+            ),
+            WriteKind::Punctuation,
+            node,
+        );
         self.emit_expression(n.argument_expression(), OperatorPrecedence::Comma);
         self.emit_token(Kind::CloseBracketToken, n.argument_expression().end(), WriteKind::Punctuation, node);
         self.exit_node(node, state);
@@ -659,7 +671,11 @@ impl Printer {
         };
         let mut has_leading_comment_ranges = false;
         let mut has_new_line_comment = false;
-        for comment in scanner::get_leading_comment_ranges(current_source_file.text(), node.pos()) {
+        for comment in scanner::get_leading_comment_ranges(
+            current_source_file.text(),
+            node.pos()
+                .expect_source("parsed nodes have source positions"),
+        ) {
             has_leading_comment_ranges = true;
             if self.comment_will_emit_new_line(comment) {
                 has_new_line_comment = true;
@@ -682,7 +698,12 @@ impl Printer {
         if is_partially_emitted_expression(node) {
             let pee = node.as_partially_emitted_expression();
             if node.pos() != pee.expression().pos() {
-                for comment in scanner::get_trailing_comment_ranges(current_source_file.text(), pee.expression().pos()) {
+                for comment in scanner::get_trailing_comment_ranges(
+                    current_source_file.text(),
+                    pee.expression()
+                        .pos()
+                        .expect_source("parsed nodes have source positions"),
+                ) {
                     if self.comment_will_emit_new_line(comment) {
                         return true;
                     }
@@ -1008,7 +1029,12 @@ impl Printer {
         self.exit_node(node, state);
     }
 
-    pub(crate) fn emit_while_clause(&mut self, node: P<Node>, expression: P<Node>, start_pos: i32) {
+    pub(crate) fn emit_while_clause(
+        &mut self,
+        node: P<Node>,
+        expression: P<Node>,
+        start_pos: TextPos,
+    ) {
         let pos = self.emit_token(Kind::WhileKeyword, start_pos, WriteKind::Keyword, node);
         self.write_space();
         self.emit_token(Kind::OpenParenToken, pos, WriteKind::Punctuation, node);
@@ -1895,7 +1921,14 @@ impl Printer {
         let n = node.as_jsx_expression();
         if n.expression().is_some() || !self.comments_disabled && !node_is_synthesized(node) && self.has_comments_at_position(node.pos()) {
             // preserve empty expressions if they contain comments!
-            let indented = self.current_source_file().is_some() && !node_is_synthesized(node) && get_lines_between_positions(self.current_source_file().unwrap(), node.pos(), node.end()) != 0;
+            let indented = self.current_source_file().is_some()
+                && !node_is_synthesized(node)
+                && !get_lines_between_positions(
+                    self.current_source_file().unwrap(),
+                    node.pos(),
+                    node.end(),
+                )
+                .is_same();
             self.increase_indent_if(indented);
             let end = self.emit_token(Kind::OpenBraceToken, node.pos(), WriteKind::Punctuation, node);
             self.emit_token_node(n.dot_dot_dot_token());
@@ -1963,7 +1996,11 @@ impl Printer {
 //
 
 impl Printer {
-    pub(crate) fn emit_case_or_default_clause_statements(&mut self, node: P<Node>, colon_pos: i32) {
+    pub(crate) fn emit_case_or_default_clause_statements(
+        &mut self,
+        node: P<Node>,
+        colon_pos: TextPos,
+    ) {
         let statements = node.as_case_or_default_clause().statements();
         let emit_as_single_statement = statements.nodes().len() == 1
             // treat synthesized nodes as located on the same line for emit purposes
@@ -2164,7 +2201,7 @@ impl Printer {
         let should_skip = self.options.no_emit_helpers || source_file.is_some_and(|f| self.emit_context.has_recorded_external_helpers(f));
         let mut helpers = self.emit_context.get_emit_helpers(node);
         if !helpers.is_empty() {
-            helpers.sort_by(|a, b| compare_emit_helpers(*a, *b).cmp(&0));
+            helpers.sort_by(|a, b| compare_emit_helpers(*a, *b));
             for helper in helpers {
                 if !helper.scoped {
                     // Skip the helper if it can be skipped and the noEmitHelpers compiler
@@ -2221,7 +2258,14 @@ impl Printer {
         }
 
         // !!! Emit triple-slash directives
-        self.emit_list_range(Printer::emit_statement, Some(node), Some(file.statements), ListFormat::MultiLine, index as i32, -1 /*count*/);
+        self.emit_list_range(
+            Printer::emit_statement,
+            Some(node),
+            Some(file.statements),
+            ListFormat::MultiLine,
+            index,
+            None,
+        );
         self.pop_name_generation_scope(Some(node));
         self.emit_detached_comments_after_statement_list(node, file.statements.loc(), state);
         self.set_current_source_file(saved_current_source_file);

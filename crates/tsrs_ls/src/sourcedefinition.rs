@@ -39,7 +39,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         file: P<SourceFile>,
-        text_pos: TextPos,
+        text_pos: u32,
     ) -> Result<lsproto::DefinitionResponse, lsproto::Error> {
         let caps = lsproto::get_client_capabilities(ctx);
         let client_supports_link = caps.text_document.definition.link_support;
@@ -54,8 +54,22 @@ impl LanguageService {
             let (declarations, ref_) = resolver.resolve_triple_slash_reference(file, pos, program);
             if !declarations.is_empty() {
                 let ref_ = ref_.unwrap();
-                let (origin_selection_range, _) = self.create_lsp_range_from_bounds(ref_.text_range.pos(), ref_.text_range.end(), file);
-                return Ok(self.create_definition_locations(origin_selection_range, client_supports_link, &declarations, None /*reference*/, Feature::Definition));
+                let (origin_selection_range, _) = self.create_lsp_range_from_bounds(
+                    ref_.text_range
+                        .pos()
+                        .expect_source("triple-slash references have source positions"),
+                    ref_.text_range
+                        .end()
+                        .expect_source("triple-slash references have source positions"),
+                    file,
+                );
+                return Ok(self.create_definition_locations(
+                    origin_selection_range,
+                    client_supports_link,
+                    &declarations,
+                    None, /*reference*/
+                    Feature::Definition,
+                ));
             }
             return Ok(lsproto::LocationOrLocationsOrDefinitionLinksOrNull::default());
         }
@@ -295,7 +309,12 @@ impl SourceDefResolver<'_> {
     // For path references to .d.ts files or type references, it uses the NoDts
     // resolver to find the corresponding implementation file.
     // sourcedefinition.go:259
-    fn resolve_triple_slash_reference(&self, file: P<SourceFile>, pos: i32, program: &'static Program) -> (Vec<P<Node>>, Option<P<FileReference>>) {
+    fn resolve_triple_slash_reference(
+        &self,
+        file: P<SourceFile>,
+        pos: u32,
+        program: &'static Program,
+    ) -> (Vec<P<Node>>, Option<P<FileReference>>) {
         let Some(ref_) = get_reference_at_position(file, pos, program) else {
             return (Vec::new(), None);
         };
@@ -429,17 +448,23 @@ impl SourceDefResolver<'_> {
 
         // Ensure the file only contains one /node_modules/ segment. If there's more
         // than one, the package name extraction may be incorrect, so bail out.
-        if dts_file_name.rfind("/node_modules/").map(|i| i as i32).unwrap_or(-1) != parts.top_level_node_modules_index {
+        if dts_file_name.rfind("/node_modules/") != Some(parts.top_level_node_modules_index) {
             return String::new();
         }
 
-        let package_name_path_part = &dts_file_name[(parts.top_level_package_name_index + 1) as usize..parts.package_root_index as usize];
-        let package_name = module::get_package_name_from_types_package_name(&module::unmangle_scoped_package_name(package_name_path_part));
+        let Some(package_root_index) = parts.package_root_index else {
+            return String::new();
+        };
+        let package_name_path_part =
+            &dts_file_name[parts.top_level_package_name_index + 1..package_root_index];
+        let package_name = module::get_package_name_from_types_package_name(
+            &module::unmangle_scoped_package_name(package_name_path_part),
+        );
         if package_name.is_empty() {
             return String::new();
         }
 
-        let path_to_file_in_package = &dts_file_name[(parts.package_root_index + 1) as usize..];
+        let path_to_file_in_package = &dts_file_name[package_root_index + 1..];
 
         // Try resolving as a package subpath first (e.g. "pkg/dist/utils"), then
         // fall back to the bare package name (e.g. "pkg"). This covers both main
@@ -656,12 +681,18 @@ fn find_declaration_nodes_by_name(source_file: P<SourceFile>, names: &[String]) 
 
     struct Candidate {
         node: P<Node>,
-        depth: i32,
+        depth: usize,
     }
     let mut candidates: Vec<Candidate> = Vec::new();
-    let mut min_depth = i32::MAX;
+    let mut min_depth: Option<usize> = None;
 
-    fn visit(node: P<Node>, wanted: &FxHashSet<String>, want_default: bool, candidates: &mut Vec<Candidate>, min_depth: &mut i32) -> bool {
+    fn visit(
+        node: P<Node>,
+        wanted: &FxHashSet<String>,
+        want_default: bool,
+        candidates: &mut Vec<Candidate>,
+        min_depth: &mut Option<usize>,
+    ) -> bool {
         let mut matched = false;
         if let Some(name) = ast::get_name_of_declaration(node) {
             let text = ast::get_text_of_property_name(name);
@@ -678,8 +709,8 @@ fn find_declaration_nodes_by_name(source_file: P<SourceFile>, names: &[String]) 
         if matched {
             let depth = get_container_depth(node);
             candidates.push(Candidate { node, depth });
-            if depth < *min_depth {
-                *min_depth = depth;
+            if min_depth.is_none_or(|minimum| depth < minimum) {
+                *min_depth = Some(depth);
             }
         }
         node.for_each_child(&mut |child| visit(child, wanted, want_default, candidates, min_depth))
@@ -687,14 +718,18 @@ fn find_declaration_nodes_by_name(source_file: P<SourceFile>, names: &[String]) 
     source_file.as_node().for_each_child(&mut |child| visit(child, &wanted, want_default, &mut candidates, &mut min_depth));
 
     // Only keep declarations at the shallowest depth, like getTopMostDeclarationNamesInFile.
-    let declarations: Vec<P<Node>> = candidates.iter().filter(|c| c.depth == min_depth).map(|c| c.node).collect();
+    let declarations: Vec<P<Node>> = candidates
+        .iter()
+        .filter(|c| Some(c.depth) == min_depth)
+        .map(|c| c.node)
+        .collect();
     unique_declaration_nodes(&declarations)
 }
 
 // getContainerDepth counts the number of container nodes above a declaration,
 // matching the behavior of getDepth in getTopMostDeclarationNamesInFile.
 // sourcedefinition.go:634
-fn get_container_depth(node: P<Node>) -> i32 {
+fn get_container_depth(node: P<Node>) -> usize {
     let mut depth = 0;
     let mut current = Some(node);
     while let Some(cur) = current {
@@ -792,7 +827,7 @@ fn unique_declaration_nodes(nodes: &[P<Node>]) -> Vec<P<Node>> {
 }
 
 // sourcedefinition.go:727
-fn find_closest_declaration_node(source_file: P<SourceFile>, pos: i32) -> P<Node> {
+fn find_closest_declaration_node(source_file: P<SourceFile>, pos: u32) -> P<Node> {
     let node = astnav::get_touching_property_name(source_file, pos);
     let mut current = Some(node);
     while let Some(cur) = current {

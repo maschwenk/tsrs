@@ -27,7 +27,7 @@ const SYMBOL_FORMAT_FLAGS: SymbolFormatFlags = SymbolFormatFlags::WriteTypeParam
     .union(SymbolFormatFlags::UseAliasDefinedOutsideCurrentScope);
 const TYPE_FORMAT_FLAGS: TypeFormatFlags = TypeFormatFlags::UseAliasDefinedOutsideCurrentScope.union(TypeFormatFlags::UseInstantiationExpressions);
 
-fn new_verbosity_context(level: i32, max_truncation_length: i32) -> P<VerbosityContext> {
+fn new_verbosity_context(level: usize, max_truncation_length: usize) -> P<VerbosityContext> {
     P::new(VerbosityContext {
         level: Cell::new(level),
         max_truncation_length: Cell::new(max_truncation_length),
@@ -42,10 +42,10 @@ impl LanguageService {
         let caps = lsproto::get_client_capabilities(ctx);
         let content_format = lsproto::preferred_markup_kind(&caps.text_document.hover.content_format);
 
-        let mut verbosity_level = 0;
-        if let Some(level) = params.verbosity_level {
-            verbosity_level = level;
-        }
+        let verbosity_level = params
+            .verbosity_level
+            .and_then(|level| usize::try_from(level).ok())
+            .unwrap_or(0);
 
         let (program, mut file) = self.get_program_and_file(&params.text_document.uri);
         let positions = self.converters.from_lsp_position_for_source_file(file, params.position, Feature::Hover);
@@ -68,10 +68,10 @@ impl LanguageService {
             // Always create VerbosityContext for hover so that canExpandSymbol can signal
             // canIncreaseVerbosity even at Level 0. The nodebuilder also detects expandable
             // types at Level 0 via shouldExpandType (maxExpansionDepth = 0).
-            let mut max_trunc_len = self.user_preferences().maximum_hover_length;
-            if max_trunc_len <= 0 {
-                max_trunc_len = 500;
-            }
+            let max_trunc_len = usize::try_from(self.user_preferences().maximum_hover_length)
+                .ok()
+                .filter(|&length| length > 0)
+                .unwrap_or(500);
             let vc = new_verbosity_context(verbosity_level, max_trunc_len);
 
             let vs_capability = caps.vs_supports_visual_studio_extensions;
@@ -504,7 +504,7 @@ struct QuickInfoWriter {
     node: P<Node>,
     meaning: SemanticMeaning,
     visited_aliases: FxHashSet<P<Symbol>>,
-    alias_level: i32,
+    alias_level: usize,
     first_declaration: Option<P<Node>>,
     symbol_was_expanded: bool,
 }

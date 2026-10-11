@@ -472,7 +472,7 @@ func (g *gen) genFunc(d *ast.FuncDecl, isTest bool) (code string, skip string, s
 		g.resultTypes = append(g.resultTypes, sig.Results().At(i).Type())
 	}
 	g.inResultFunc = sig.Results().Len() > 0
-	params, prologue := g.params(sig, d.Type.Params, false)
+	params, prologue := g.params(sig, d.Type.Params, false, -1, "")
 	ret := g.results(sig)
 	fmt.Fprintf(&b, "// %s:%d\npub fn %s(%s)%s {\n", filepath.Base(pos.Filename), pos.Line, ident(d.Name.Name), strings.Join(params, ", "), ret)
 	g.indent = 1
@@ -506,7 +506,7 @@ func isCallStmt(s ast.Stmt) (*ast.CallExpr, bool) {
 
 // params declares the parameters of a function or closure. Parameters that the body assigns to are re-bound as
 // owned values in the prologue.
-func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool) (params []string, prologue []string) {
+func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool, overrideParam int, rustType string) (params []string, prologue []string) {
 	i := 0
 	for _, field := range fl.List {
 		names := field.Names
@@ -514,7 +514,8 @@ func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool) (par
 			names = []*ast.Ident{nil}
 		}
 		for _, n := range names {
-			v := sig.Params().At(i)
+			paramIndex := i
+			v := sig.Params().At(paramIndex)
 			i++
 			t := v.Type()
 			name := "_"
@@ -522,6 +523,9 @@ func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool) (par
 				name = ident(n.Name)
 			}
 			rt := rtype(t, true)
+			if closure && paramIndex == overrideParam {
+				rt = rustType
+			}
 			if sig.Variadic() && i == sig.Params().Len() {
 				st := t.(*types.Slice)
 				if isString(st.Elem()) {

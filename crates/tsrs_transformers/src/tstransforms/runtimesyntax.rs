@@ -2,6 +2,7 @@
 
 use super::*;
 use tsrs_checker::LiteralValue;
+use tsrs_core::TextPos;
 
 /// Go `map[string]*ast.Node`: a reference type that `pushScope` saves and `popScope` restores by pointer, so a saved
 /// map and the current one may alias (mutations through one are visible through the other).
@@ -548,8 +549,15 @@ impl RuntimeSyntaxTransformer {
                 // tx.currentScope = node.AsNode()
                 let (visited, _) = self.visitor().visit_slice(alloc_vec(vec![body]));
                 statements = visited.to_vec();
-                let module_block = get_innermost_module_declaration_from_dotted_module(node).body().unwrap();
-                statements_location = module_block.as_module_block().statements.loc.get().with_pos(-1);
+                let module_block = get_innermost_module_declaration_from_dotted_module(node)
+                    .body()
+                    .unwrap();
+                statements_location = module_block
+                    .as_module_block()
+                    .statements
+                    .loc
+                    .get()
+                    .with_pos(TextPos::Synthetic);
             }
         }
 
@@ -1007,7 +1015,7 @@ impl RuntimeSyntaxTransformer {
         emit_context.set_source_map_range(expression, export_assignment_source_map_range);
 
         let statement = f.new_expression_statement(expression);
-        let export_statement_source_map_range = node.loc().with_pos(-1);
+        let export_statement_source_map_range = node.loc().with_pos(TextPos::Synthetic);
         emit_context.set_source_map_range(statement, export_statement_source_map_range);
         statement
     }

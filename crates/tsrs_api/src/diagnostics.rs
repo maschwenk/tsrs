@@ -28,12 +28,12 @@ fn category_number(c: Category) -> f64 {
     }
 }
 
-fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Value> {
+fn source_lines(file: &SourceFile, first_line: usize, last_line: usize) -> Option<Value> {
     let line_map = file.ecma_line_map();
     if line_map.is_empty() {
         return None;
     }
-    let lines: Vec<i32> = if last_line - first_line >= 4 {
+    let lines: Vec<usize> = if last_line - first_line >= 4 {
         vec![first_line, first_line + 1, last_line - 1, last_line]
     } else {
         (first_line..=last_line).collect()
@@ -41,9 +41,21 @@ fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Va
     let text = file.text();
     let mut result = Vec::with_capacity(lines.len());
     for line in lines {
-        let start = line_map[line as usize] as usize;
-        let end = if ((line + 1) as usize) < line_map.len() { line_map[(line + 1) as usize] as usize } else { text.len() };
-        result.push(Obj::new().set("line", n(line)).set("text", s(&text[start..end])).build());
+        let start = line_map[line] as usize;
+        let end = if line + 1 < line_map.len() {
+            line_map[line + 1] as usize
+        } else {
+            text.len()
+        };
+        result.push(
+            Obj::new()
+                .set(
+                    "line",
+                    n(u32::try_from(line).expect("line number exceeds u32")),
+                )
+                .set("text", s(&text[start..end]))
+                .build(),
+        );
     }
     Some(Value::Array(result))
 }
@@ -51,31 +63,59 @@ fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Va
 /// Go `NewDiagnosticResponse`.
 pub fn diagnostic_response(d: &Diagnostic) -> Value {
     let file = d.file();
-    let mut pos = d.pos();
-    let mut end = d.end();
-    if let Some(file) = file {
-        let len = file.text().len() as i32;
-        pos = pos.min(len).max(0);
-        end = end.min(len).max(pos);
-    }
-    let mut out_pos = pos;
-    let mut out_end = end;
+    let pos = d.pos();
+    let end = d.end();
     let mut file_name = None;
     let mut positions = None;
+    let mut o = Obj::new();
     if let Some(file) = file {
+        let len = u32::try_from(file.text().len()).expect("source length exceeds u32");
+        let pos = pos.unwrap_or(0).min(len);
+        let end = end.unwrap_or(pos).min(len).max(pos);
         file_name = Some(s(file.file_name()));
         let map = file.get_position_map();
-        out_pos = map.utf8_to_utf16(pos);
-        out_end = map.utf8_to_utf16(end);
-        let (start_line, start_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, pos);
-        let (end_line, end_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, end);
+        let (start_line, start_char) =
+            tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, pos);
+        let (end_line, end_char) =
+            tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, end);
         positions = Some((
-            Obj::new().set("line", n(start_line)).set("character", n(start_char as f64)).build(),
-            Obj::new().set("line", n(end_line)).set("character", n(end_char as f64)).build(),
+            Obj::new()
+                .set(
+                    "line",
+                    n(u32::try_from(start_line).expect("line number exceeds u32")),
+                )
+                .set(
+                    "character",
+                    n(u32::try_from(start_char).expect("character offset exceeds u32")),
+                )
+                .build(),
+            Obj::new()
+                .set(
+                    "line",
+                    n(u32::try_from(end_line).expect("line number exceeds u32")),
+                )
+                .set(
+                    "character",
+                    n(u32::try_from(end_char).expect("character offset exceeds u32")),
+                )
+                .build(),
             source_lines(&file, start_line, end_line),
         ));
+        o = o
+            .set("pos", n(map.utf8_to_utf16(pos)))
+            .set("end", n(map.utf8_to_utf16(end)));
+    } else {
+        o = o
+            .set(
+                "pos",
+                n(pos.map_or(-1, |value| i32::try_from(value).unwrap_or(i32::MAX))),
+            )
+            .set(
+                "end",
+                n(end.map_or(-1, |value| i32::try_from(value).unwrap_or(i32::MAX))),
+            );
     }
-    let mut o = Obj::new().set_opt("fileName", file_name).set("pos", n(out_pos)).set("end", n(out_end));
+    o = o.set_opt("fileName", file_name);
     if let Some((start, end, lines)) = positions {
         o = o.set("startPosition", start).set("endPosition", end).set_opt("sourceLines", lines);
     }
@@ -117,12 +157,27 @@ pub fn diagnostic_from_response(v: &Value) -> ApiResult<P<Diagnostic>> {
             _ => Err(ApiError::invalid_request(format!("diagnostic {key} must be an integer"))),
         }
     };
-    let category = category_from(num("category")?).ok_or_else(|| ApiError::invalid_request("invalid diagnostic category"))?;
-    let chain = p.array("messageChain")?.iter().map(diagnostic_from_response).collect::<ApiResult<Vec<_>>>()?;
-    let related = p.array("relatedInformation")?.iter().map(diagnostic_from_response).collect::<ApiResult<Vec<_>>>()?;
+    let category = category_from(num("category")?)
+        .ok_or_else(|| ApiError::invalid_request("invalid diagnostic category"))?;
+    let chain = p
+        .array("messageChain")?
+        .iter()
+        .map(diagnostic_from_response)
+        .collect::<ApiResult<Vec<_>>>()?;
+    let related = p
+        .array("relatedInformation")?
+        .iter()
+        .map(diagnostic_from_response)
+        .collect::<ApiResult<Vec<_>>>()?;
+    let pos = num("pos")?;
+    let end = num("end")?;
+    let loc = match (u32::try_from(pos), u32::try_from(end)) {
+        (Ok(pos), Ok(end)) => TextRange::new(pos, end),
+        _ => TextRange::synthetic(),
+    };
     Ok(tsrs_ast::new_diagnostic_from_text(
         None,
-        TextRange::new(num("pos")? as i32, num("end")? as i32),
+        loc,
         num("code")? as i32,
         category,
         p.str("text")?,

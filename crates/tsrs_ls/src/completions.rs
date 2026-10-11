@@ -65,9 +65,19 @@ impl LanguageService {
             return Ok(lsproto::CompletionItemsOrListOrNull::default());
         }
         file = positions[0].script;
-        let position = positions[0].position as i32;
-        let completion_list_internal = self.get_completions_at_position_internal(ctx, file, position, trigger_character, false /*includeSymbols*/)?;
-        let mut completion_list = ensure_item_data(file, position, completion_list_internal.map(CompletionList::to_lsp));
+        let position = positions[0].position;
+        let completion_list_internal = self.get_completions_at_position_internal(
+            ctx,
+            file,
+            position,
+            trigger_character,
+            false, /*includeSymbols*/
+        )?;
+        let mut completion_list = ensure_item_data(
+            file,
+            position,
+            completion_list_internal.map(CompletionList::to_lsp),
+        );
         if crate::lsconv::Script::span_map(&file).is_some() {
             self.filter_content_mapped_auto_imports(ctx, program, file, completion_list.as_mut());
         }
@@ -107,7 +117,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         trigger_character: Option<&str>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
@@ -151,14 +161,20 @@ pub struct CompletionList {
 }
 
 // completions.go:122
-fn ensure_item_data(file: P<SourceFile>, pos: i32, list: Option<lsproto::CompletionList>) -> Option<lsproto::CompletionList> {
+fn ensure_item_data(
+    file: P<SourceFile>,
+    pos: u32,
+    list: Option<lsproto::CompletionList>,
+) -> Option<lsproto::CompletionList> {
     let mut list = list?;
     for item in &mut list.items {
         if item.data.is_none() {
             item.data = Some(lsproto::CompletionItemData {
                 file_name: file.original_file_name().to_string(),
-                position: pos,
-                supplemental_file_index: supplemental_file_index(file),
+                position: i32::try_from(pos).expect("completion position exceeds protocol i32"),
+                supplemental_file_index: supplemental_file_index(file).map(|index| {
+                    i32::try_from(index).expect("supplemental file index exceeds protocol i32")
+                }),
                 name: item.label.clone(),
                 ..Default::default()
             });
@@ -168,11 +184,11 @@ fn ensure_item_data(file: P<SourceFile>, pos: i32, list: Option<lsproto::Complet
 }
 
 // completions.go:139
-pub(crate) fn supplemental_file_index(file: P<SourceFile>) -> Option<i32> {
+pub(crate) fn supplemental_file_index(file: P<SourceFile>) -> Option<usize> {
     let canonical = file.canonical_source_file()?;
     for (i, &supplemental) in canonical.supplemental_source_files().iter().enumerate() {
         if supplemental == file {
-            return Some(i as i32);
+            return Some(i);
         }
     }
     panic!("supplemental source file is not linked from its canonical source file");
@@ -184,10 +200,9 @@ pub(crate) fn source_file_for_supplemental_file_index(file: P<SourceFile>, index
         return Some(file);
     };
     let supplemental = file.supplemental_source_files();
-    if index >= 0 && (index as usize) < supplemental.len() {
-        return Some(supplemental[index as usize]);
-    }
-    None
+    usize::try_from(index)
+        .ok()
+        .and_then(|index| supplemental.get(index).copied())
 }
 
 // *completionDataData | *completionDataKeyword | *completionDataJSDocTagName | *completionDataJSDocTag | *completionDataJSDocParameterName
@@ -516,7 +531,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         trigger_character: Option<&str>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
@@ -603,7 +618,7 @@ impl LanguageService {
         ctx: &Context,
         type_checker: &mut Checker,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         preferences: &UserPreferences,
         for_item_resolve: bool,
     ) -> Result<Option<CompletionData>, lsproto::Error> {
@@ -656,7 +671,16 @@ impl LanguageService {
             //     /** @type {number | string} */
             // Completion should work in the brackets
             if let Some(tag) = get_jsdoc_tag_at_position(current_token, position) {
-                if tag.tag_name().pos() <= position && position <= tag.tag_name().end() {
+                let tag_name = tag.tag_name();
+                if tag_name
+                    .pos()
+                    .expect_source("parsed JSDoc tags have source positions")
+                    <= position
+                    && position
+                        <= tag_name
+                            .end()
+                            .expect_source("parsed JSDoc tags have source positions")
+                {
                     return Ok(Some(CompletionData::JSDocTagName));
                 }
                 if ast::is_jsdoc_import_tag(tag) {
@@ -674,7 +698,19 @@ impl LanguageService {
                     }
                     if !inside_jsdoc_tag_type_expression
                         && ast::is_jsdoc_parameter_tag(tag)
-                        && (ast::node_is_missing(tag.name()) || tag.name().unwrap().pos() <= position && position <= tag.name().unwrap().end())
+                        && (ast::node_is_missing(tag.name())
+                            || tag
+                                .name()
+                                .unwrap()
+                                .pos()
+                                .expect_source("parsed JSDoc names have source positions")
+                                <= position
+                                && position
+                                    <= tag
+                                        .name()
+                                        .unwrap()
+                                        .end()
+                                        .expect_source("parsed JSDoc names have source positions"))
                     {
                         return Ok(Some(CompletionData::JSDocParameterName(completionDataJSDocParameterName { tag })));
                     }
@@ -846,7 +882,12 @@ impl LanguageService {
                     Kind::JsxAttribute => {
                         // For `<div className="x" [||] ></div>`, `parent` will be JsxAttribute and `previousToken` will be its initializer.
                         let previous_token = previous_token.unwrap();
-                        if parent.initializer() == Some(previous_token) && previous_token.end() < position {
+                        if parent.initializer() == Some(previous_token)
+                            && previous_token
+                                .end()
+                                .expect_source("parsed tokens have source positions")
+                                < position
+                        {
                             is_jsx_identifier_expected = true;
                         } else {
                             match previous_token.kind() {
@@ -1001,7 +1042,7 @@ impl LanguageService {
 // The locals of Go's getCompletionData that its closures (completions.go:796-1704) read and mutate.
 struct getCompletionDataState {
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
     preferences: UserPreferences,
     for_item_resolve: bool,
     in_checked_file: bool,

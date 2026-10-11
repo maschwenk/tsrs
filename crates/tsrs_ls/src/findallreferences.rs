@@ -398,7 +398,10 @@ pub(crate) fn get_range_of_node(node: P<Node>, source_file: Option<P<SourceFile>
         None => ast::get_source_file_of_node(node).unwrap(),
     };
     let mut start = scanner::get_token_pos_of_node(node, source_file, false /*includeJsDoc*/);
-    let mut end = end_node.unwrap_or(node).end();
+    let mut end = end_node
+        .unwrap_or(node)
+        .end()
+        .expect_source("reference nodes have source positions");
     if ast::is_string_literal_like(node) && (end - start) > 2 {
         if end_node.is_some() {
             panic!("endNode is not nil for stringLiteralLike");
@@ -408,7 +411,9 @@ pub(crate) fn get_range_of_node(node: P<Node>, source_file: Option<P<SourceFile>
     }
     if let Some(end_node) = end_node {
         if end_node.kind() == Kind::CaseBlock {
-            end = end_node.pos();
+            end = end_node
+                .pos()
+                .expect_source("reference nodes have source positions");
         }
     }
     TextRange::new(start, end)
@@ -599,7 +604,8 @@ impl nonLocalDefinition {
                 let mapped = l.try_get_source_position(&self.file_name, self.start_pos);
                 if let Some(mapped) = mapped {
                     let script = l.get_script(&mapped.file_name).expect("nil script");
-                    let (mapped_position, mapped_fidelity) = l.converters.to_lsp_position(&script, mapped.pos);
+                    let (mapped_position, mapped_fidelity) =
+                        l.converters.to_lsp_position(&script, mapped.pos.into());
                     if mapped_fidelity.is_none() {
                         return None;
                     }
@@ -617,7 +623,8 @@ impl nonLocalDefinition {
                 let mapped = l.try_get_generated_position(&self.file_name, self.start_pos);
                 if let Some(mapped) = mapped {
                     let script = l.get_script(&mapped.file_name).expect("nil script");
-                    let (mapped_position, mapped_fidelity) = l.converters.to_lsp_position(&script, mapped.pos);
+                    let (mapped_position, mapped_fidelity) =
+                        l.converters.to_lsp_position(&script, mapped.pos.into());
                     if mapped_fidelity.is_none() {
                         return None;
                     }
@@ -725,7 +732,8 @@ impl LanguageService {
                 let mapped = self.try_get_source_position(file.file_name(), start_pos);
                 if let Some(mapped) = mapped {
                     let script = self.get_script(&mapped.file_name).expect("nil script");
-                    let (lsp_position, fidelity) = self.converters.to_lsp_position(&script, mapped.pos);
+                    let (lsp_position, fidelity) =
+                        self.converters.to_lsp_position(&script, mapped.pos.into());
                     if !fidelity.is_none() {
                         cb(lsconv::file_name_to_document_uri(&mapped.file_name), lsp_position);
                     }
@@ -754,7 +762,7 @@ pub(crate) struct SymbolEntryTransformOptions {
 pub struct SymbolAndEntriesData {
     pub original_node: Option<P<Node>>,
     pub symbols_and_entries: Vec<SymbolAndEntries>,
-    pub position: i32,
+    pub position: u32,
 }
 
 impl LanguageService {
@@ -809,7 +817,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         source_file: P<SourceFile>,
-        position: i32,
+        position: u32,
         is_rename: bool,
         implementations: bool,
     ) -> Option<SymbolAndEntriesData> {
@@ -853,7 +861,16 @@ impl LanguageService {
             }
 
             if let Some(entry_node) = entry.node {
-                let entries = self.get_symbol_and_entries(ctx, entry_node.pos(), entry_node, program, is_rename, implementations);
+                let entries = self.get_symbol_and_entries(
+                    ctx,
+                    entry_node
+                        .pos()
+                        .expect_source("reference entries have source positions"),
+                    entry_node,
+                    program,
+                    is_rename,
+                    implementations,
+                );
                 add_to_queue(entries, &mut queue);
             }
         }
@@ -864,7 +881,7 @@ impl LanguageService {
     pub(crate) fn get_symbol_and_entries(
         &self,
         ctx: &Context,
-        position: i32,
+        position: u32,
         node: P<Node>,
         program: &'static Program,
         is_rename: bool,
@@ -973,7 +990,7 @@ impl LanguageService {
         let caps = lsproto::get_client_capabilities(ctx);
         let vs_capability = caps.vs_supports_visual_studio_extensions;
         let mut items: Vec<lsproto::VSReferenceItem> = Vec::new();
-        let mut id: i32 = 0;
+        let mut id: usize = 0;
         let project_name = self.project_id.0.clone();
 
         for s in &data.symbols_and_entries {
@@ -987,7 +1004,7 @@ impl LanguageService {
             };
 
             // Create the definition item
-            let definition_id = id;
+            let definition_id = i32::try_from(id).expect("reference ID exceeds protocol i32");
             let empty_str = String::new();
             let def_item = lsproto::VSReferenceItem {
                 vs_id: definition_id,
@@ -1019,7 +1036,7 @@ impl LanguageService {
                 }
 
                 let ref_item = lsproto::VSReferenceItem {
-                    vs_id: id,
+                    vs_id: i32::try_from(id).expect("reference ID exceeds protocol i32"),
                     vs_definition_id: Some(definition_id),
                     vs_location: ref_location,
                     vs_kind: Some(vec![kind]),
@@ -1201,7 +1218,14 @@ impl LanguageService {
         let mut entries: Vec<Rc<ReferenceEntry>> = Vec::new();
         for entry in &data.symbols_and_entries {
             for r in &entry.references {
-                if seen_nodes.insert(r.node) && (!options.drop_origin_nodes || !r.node.unwrap().loc().contains_inclusive(data.position)) {
+                if seen_nodes.insert(r.node)
+                    && (!options.drop_origin_nodes
+                        || !r
+                            .node
+                            .unwrap()
+                            .loc()
+                            .contains_inclusive(data.position.into()))
+                {
                     entries.push(Rc::clone(r));
                 }
             }
@@ -1305,9 +1329,12 @@ impl LanguageService {
     // findallreferences.go:1149
     pub(crate) fn merge_references(&self, program: &'static Program, references_to_merge: Vec<Vec<SymbolAndEntries>>) -> Vec<SymbolAndEntries> {
         let mut result: Vec<SymbolAndEntries> = Vec::new();
-        let get_source_file_index_of_entry = |entry: &ReferenceEntry| -> isize {
+        let get_source_file_index_of_entry = |entry: &ReferenceEntry| -> Option<usize> {
             self.resolve_entry_source(entry);
-            program.source_files().iter().position(|&f| Some(f) == entry.source_file.get()).map_or(-1, |i| i as isize)
+            program
+                .source_files()
+                .iter()
+                .position(|&f| Some(f) == entry.source_file.get())
         };
 
         for references in references_to_merge {
@@ -1342,7 +1369,10 @@ impl LanguageService {
                         return entry1_file.cmp(&entry2_file);
                     }
 
-                    lsproto::compare_ranges(self.get_range_of_entry(entry1), self.get_range_of_entry(entry2)).cmp(&0)
+                    lsproto::compare_ranges(
+                        self.get_range_of_entry(entry1),
+                        self.get_range_of_entry(entry2),
+                    )
                 });
                 result[ref_index] = SymbolAndEntries { definition: reference.definition, references: sorted_refs };
             }
@@ -1354,8 +1384,24 @@ impl LanguageService {
     // It returns all referenced symbols and their reference entries for the given node across the provided source files.
     // (`_exported`: the unexported Go method of the same name exists.)
     // findallreferences.go:1202
-    pub fn get_referenced_symbols_for_node_exported(&self, ctx: &Context, position: i32, node: P<Node>, source_files: &[P<SourceFile>]) -> Vec<SymbolAndEntries> {
-        self.get_referenced_symbols_for_node(ctx, position, node, self.get_program(), source_files, RefOptions { use_: ReferenceUse::References, ..Default::default() })
+    pub fn get_referenced_symbols_for_node_exported(
+        &self,
+        ctx: &Context,
+        position: u32,
+        node: P<Node>,
+        source_files: &[P<SourceFile>],
+    ) -> Vec<SymbolAndEntries> {
+        self.get_referenced_symbols_for_node(
+            ctx,
+            position,
+            node,
+            self.get_program(),
+            source_files,
+            RefOptions {
+                use_: ReferenceUse::References,
+                ..Default::default()
+            },
+        )
     }
 }
 
@@ -1382,7 +1428,13 @@ impl LanguageService {
         }
 
         let source_files = self.get_program().get_source_files();
-        let entries = self.get_referenced_symbols_for_node_exported(ctx, name.pos(), name, source_files);
+        let entries = self.get_referenced_symbols_for_node_exported(
+            ctx,
+            name.pos()
+                .expect_source("signature names have source positions"),
+            name,
+            source_files,
+        );
 
         // Collect all declaration name nodes for the target symbol so we can
         // filter them out — the caller wants usages, not declarations.
@@ -1431,7 +1483,7 @@ impl LanguageService {
     pub(crate) fn get_referenced_symbols_for_node(
         &self,
         ctx: &Context,
-        position: i32,
+        position: u32,
         node: P<Node>,
         program: &'static Program,
         source_files: &[P<SourceFile>],
@@ -1909,8 +1961,12 @@ fn index_from(text: &str, start: usize, needle: &str) -> Option<usize> {
 }
 
 // findallreferences.go:1646
-pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>, symbol_name: &str, container: Option<P<Node>>) -> Vec<i32> {
-    let mut positions: Vec<i32> = Vec::new();
+pub(crate) fn get_possible_symbol_reference_positions(
+    source_file: P<SourceFile>,
+    symbol_name: &str,
+    container: Option<P<Node>>,
+) -> Vec<u32> {
+    let mut positions: Vec<u32> = Vec::new();
 
     // TODO: Cache symbol existence for files to save text search
     // Also, need to make this work for unicode escapes.
@@ -1927,25 +1983,38 @@ pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>
 
     let container = container.unwrap_or_else(|| source_file.as_node());
 
-    // Go quirk kept: the index is relative to container.Pos() but is used as an absolute position.
-    let mut position: isize = index_from(text_str, container.pos() as usize, symbol_name).map_or(-1, |i| i as isize);
-    let end_pos = container.end() as isize;
-    while position >= 0 && position < end_pos {
+    // Go quirk kept: the first index is relative to container.Pos() but is used as an absolute position.
+    let container_pos = usize::try_from(
+        container
+            .pos()
+            .expect_source("reference-search containers have source positions"),
+    )
+    .expect("source position exceeds usize");
+    let Some(mut position) = index_from(text_str, container_pos, symbol_name) else {
+        return positions;
+    };
+    let end_pos = usize::try_from(
+        container
+            .end()
+            .expect_source("reference-search containers have source positions"),
+    )
+    .expect("source position exceeds usize");
+    while position < end_pos {
         // We found a match.  Make sure it's not part of a larger word (i.e. the char
         // before and after it have to be a non-identifier char).
-        let p = position as usize;
+        let p = position;
         let end_position = p + symbol_name_length;
 
         if (p == 0 || !scanner::is_identifier_part(text[p - 1] as i32)) && (end_position == source_length || !scanner::is_identifier_part(text[end_position] as i32)) {
             // Found a real match.  Keep searching.
-            positions.push(p as i32);
+            positions.push(u32::try_from(p).expect("source position exceeds u32"));
         }
         let start_index = p + symbol_name_length + 1;
         if start_index > text.len() {
             break;
         }
         if let Some(found_index) = index_from(text_str, start_index, symbol_name) {
-            position = (start_index + found_index) as isize;
+            position = start_index + found_index;
         } else {
             break;
         }
@@ -2576,7 +2645,13 @@ impl<'a> RefState<'a> {
     }
 
     // findallreferences.go:2218
-    pub(crate) fn get_references_at_location(&mut self, source_file: P<SourceFile>, position: i32, search: &RefSearch, add_references_here: bool) {
+    pub(crate) fn get_references_at_location(
+        &mut self,
+        source_file: P<SourceFile>,
+        position: u32,
+        search: &RefSearch,
+        add_references_here: bool,
+    ) {
         let reference_location = astnav::get_touching_property_name(source_file, position);
 
         if !is_valid_reference_position(reference_location, &search.text) {

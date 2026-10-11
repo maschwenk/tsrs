@@ -81,7 +81,7 @@ impl WalkState {
                     use_case_sensitive_file_names: self.use_case_sensitive_file_names,
                     ..Default::default()
                 },
-            ) == 0
+            ) == std::cmp::Ordering::Equal
     }
 
     fn equivalent(&self, left: &str, right: &str) -> bool {
@@ -92,7 +92,7 @@ impl WalkState {
                 use_case_sensitive_file_names: self.use_case_sensitive_file_names,
                 ..Default::default()
             },
-        ) == 0
+        ) == std::cmp::Ordering::Equal
     }
 
     fn canonicalize(&self, path: &str) -> String {

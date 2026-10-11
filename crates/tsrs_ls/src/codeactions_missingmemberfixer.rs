@@ -15,7 +15,7 @@ use crate::lsutil::{self, QuotePreference, UserPreferences};
 bitflags::bitflags! {
     // codeactions_missingmemberfixer.go:18
     #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-    pub(crate) struct preserveOptionalFlags: i32 {
+    pub(crate) struct preserveOptionalFlags: u32 {
         const Method = 1 << 0;
         const Property = 1 << 1;
         const All = Self::Method.bits() | Self::Property.bits();
@@ -469,8 +469,10 @@ impl<'a> missingMemberFixer<'a> {
             }
         }
 
-        let max_non_rest_args = max_args_signature.parameters().len() as i32 - if max_args_signature.has_rest_parameter() { 1 } else { 0 };
-        let mut parameter_names: Vec<String> = Vec::with_capacity(max_args_signature.parameters().len());
+        let max_non_rest_args = max_args_signature.parameters().len()
+            - usize::from(max_args_signature.has_rest_parameter());
+        let mut parameter_names: Vec<String> =
+            Vec::with_capacity(max_args_signature.parameters().len());
         for symbol in max_args_signature.parameters() {
             parameter_names.push(symbol.name().to_string());
         }
@@ -480,8 +482,10 @@ impl<'a> missingMemberFixer<'a> {
         let factory = self.factory();
         if has_rest_parameter {
             let mut rest_parameter_name = "rest".to_string();
-            if (max_non_rest_args as usize) < parameter_names.len() && !parameter_names[max_non_rest_args as usize].is_empty() {
-                rest_parameter_name.clone_from(&parameter_names[max_non_rest_args as usize]);
+            if max_non_rest_args < parameter_names.len()
+                && !parameter_names[max_non_rest_args].is_empty()
+            {
+                rest_parameter_name.clone_from(&parameter_names[max_non_rest_args]);
             }
 
             let mut question_token: Option<P<Node>> = None;
@@ -619,12 +623,23 @@ impl<'a> missingMemberFixer<'a> {
 }
 
 // codeactions_missingmemberfixer.go:451
-pub(crate) fn create_dummy_parameters(factory: &NodeFactory, arg_count: i32, names: &[String], types: &[Option<P<Node>>], min_argument_count: i32, in_js: bool) -> P<NodeList> {
-    let mut parameters = Vec::with_capacity(arg_count.max(0) as usize);
-    let mut parameter_name_counts: FxHashMap<String, i32> = FxHashMap::default();
+pub(crate) fn create_dummy_parameters(
+    factory: &NodeFactory,
+    arg_count: usize,
+    names: &[String],
+    types: &[Option<P<Node>>],
+    min_argument_count: usize,
+    in_js: bool,
+) -> P<NodeList> {
+    let mut parameters = Vec::with_capacity(arg_count);
+    let mut parameter_name_counts: FxHashMap<String, usize> = FxHashMap::default();
 
     for i in 0..arg_count {
-        let mut parameter_name = if (i as usize) < names.len() && !names[i as usize].is_empty() { names[i as usize].clone() } else { format!("arg{}", i) };
+        let mut parameter_name = if i < names.len() && !names[i].is_empty() {
+            names[i].clone()
+        } else {
+            format!("arg{}", i)
+        };
 
         let count = parameter_name_counts.get(&parameter_name).copied().unwrap_or(0);
         parameter_name_counts.insert(parameter_name.clone(), count + 1);
@@ -640,8 +655,8 @@ pub(crate) fn create_dummy_parameters(factory: &NodeFactory, arg_count: i32, nam
 
         let type_node = if in_js {
             None
-        } else if (i as usize) < types.len() && types[i as usize].is_some() {
-            types[i as usize]
+        } else if i < types.len() && types[i].is_some() {
+            types[i]
         } else {
             Some(factory.new_keyword_type_node(Kind::UnknownKeyword))
         };

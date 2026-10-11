@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::stringutil;
 use tsrs_core::tspath;
-use tsrs_core::TextRange;
+use tsrs_core::{TextPos, TextRange};
 use tsrs_ls::lsconv::{self, Script};
 use tsrs_ls::spanmap::SpanMap;
 use tsrs_lsproto as lsproto;
@@ -57,7 +57,7 @@ impl RangeMarker {
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Marker {
     pub(crate) file_name: String,
-    pub position: i32,
+    pub position: TextPos,
     pub ls_position: lsproto::Position,
     pub name: Option<String>, // `nil` for anonymous markers such as `{| "foo": "bar" |}`
     // Go's map is nil for markers without data; object markers always have at least one key.
@@ -191,10 +191,16 @@ pub fn parse_test_data(t: &T, contents: &str, file_name: &str) -> TestData {
                     // The marker is an anonymous object marker, which does not need a name. Markers are only set into markerPositions if they have a name
                     continue;
                 }
-                t.fatal(&format!("Marker at position {} is unnamed", marker.position));
+                t.fatal(&format!(
+                    "Marker at position {:?} is unnamed",
+                    marker.position
+                ));
             };
             if let Some(existing) = marker_positions.get(name) {
-                t.fatal(&format!(r#"Duplicate marker name: "{}" at {} and {}"#, name, marker.position, existing.position));
+                t.fatal(&format!(
+                    r#"Duplicate marker name: "{}" at {:?} and {:?}"#,
+                    name, marker.position, existing.position
+                ));
             }
             marker_positions.insert(name.clone(), marker.clone());
         }
@@ -227,10 +233,10 @@ fn is_config_file(file_name: &str) -> bool {
 // test_parser.go:188
 #[derive(Clone, Copy)]
 struct LocationInformation {
-    position: i32,
-    source_position: i32,
-    source_line: i32,
-    source_column: i32,
+    position: usize,
+    source_position: usize,
+    source_line: usize,
+    source_column: usize,
 }
 
 // test_parser.go:195
@@ -317,11 +323,11 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
     let mut range_markers: Vec<(TextRange, Option<usize>)> = Vec::new();
 
     // The total number of metacharacters removed from the file (so far)
-    let mut difference: i32 = 0;
+    let mut difference: usize = 0;
 
     // One-based current position data
-    let mut line: i32 = 1;
-    let mut column: i32 = 1;
+    let mut line: usize = 1;
+    let mut column: usize = 1;
 
     // The current marker (or maybe multi-line comment?) we're parsing, possibly
     let mut open_marker: Option<LocationInformation> = None;
@@ -343,15 +349,14 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
     let mut current_character: char;
     while i < content.len() {
         (current_character, size) = decode_rune_in_string(&content[i..]);
-        let ii = i as i32;
         match state {
             ParserState::None => {
                 if previous_character == '[' && current_character == '|' {
                     // found a range start
                     open_ranges.push(RangeLocationInformation {
                         location_information: LocationInformation {
-                            position: (ii - 1) - difference,
-                            source_position: ii - 1,
+                            position: (i - 1) - difference,
+                            source_position: i - 1,
                             source_line: line,
                             source_column: column,
                         },
@@ -367,7 +372,14 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                         return Err(report_error(&file_name, line, column, "Found range end with no matching start."));
                     };
 
-                    range_markers.push((TextRange::new(range_start.location_information.position, (ii - 1) - difference), range_start.marker));
+                    range_markers.push((
+                        TextRange::new(
+                            u32::try_from(range_start.location_information.position)
+                                .expect("range start exceeds u32"),
+                            u32::try_from((i - 1) - difference).expect("range end exceeds u32"),
+                        ),
+                        range_start.marker,
+                    ));
 
                     // copy all text up to range marker position
                     flush(&mut output, last_normal_char_position, Some(i - 1));
@@ -377,8 +389,8 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                     // found a possible marker start
                     state = ParserState::InSlashStarMarker;
                     open_marker = Some(LocationInformation {
-                        position: (ii - 1) - difference,
-                        source_position: ii - 1,
+                        position: (i - 1) - difference,
+                        source_position: i - 1,
                         source_line: line,
                         source_column: column - 1,
                     });
@@ -386,8 +398,8 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                     // found an object marker start
                     state = ParserState::InObjectMarker;
                     open_marker = Some(LocationInformation {
-                        position: (ii - 1) - difference,
-                        source_position: ii - 1,
+                        position: (i - 1) - difference,
+                        source_position: i - 1,
                         source_line: line,
                         source_column: column,
                     });
@@ -398,7 +410,7 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                 // Object markers are only ever terminated by |} and have no content restrictions
                 if previous_character == '|' && current_character == '}' {
                     let om = open_marker.unwrap();
-                    let object_marker_data = content[om.source_position as usize + 2..i - 1].trim();
+                    let object_marker_data = content[om.source_position + 2..i - 1].trim();
                     let marker = get_object_marker(&file_name, &om, object_marker_data)?;
 
                     if let Some(last) = open_ranges.last_mut() {
@@ -408,7 +420,7 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
 
                     // Set the current start to point to the end of the current marker to ignore its text
                     last_normal_char_position = i + 1;
-                    difference += ii + 1 - om.source_position;
+                    difference += i + 1 - om.source_position;
 
                     // Reset the state
                     open_marker = None;
@@ -420,17 +432,26 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                     let om = open_marker.unwrap();
                     // Record the marker
                     // start + 2 to ignore the */, -1 on the end to ignore the * (/ is next)
-                    let marker_name_text = content[om.source_position as usize + 2..i - 1].trim().to_string();
-                    let marker = PendingMarker { position: om.position, name: Some(marker_name_text), data: OrderedMap::default() };
+                    let marker_name_text =
+                        content[om.source_position + 2..i - 1].trim().to_string();
+                    let marker = PendingMarker {
+                        position: om.position,
+                        name: Some(marker_name_text),
+                        data: OrderedMap::default(),
+                    };
                     if let Some(last) = open_ranges.last_mut() {
                         last.marker = Some(markers.len());
                     }
                     markers.push(marker);
 
                     // Set the current start to point to the end of the current marker to ignore its text
-                    flush(&mut output, last_normal_char_position, Some(om.source_position as usize));
+                    flush(
+                        &mut output,
+                        last_normal_char_position,
+                        Some(om.source_position),
+                    );
                     last_normal_char_position = i + 1;
-                    difference += ii + 1 - om.source_position;
+                    difference += i + 1 - om.source_position;
 
                     // Reset the state
                     open_marker = None;
@@ -511,8 +532,15 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
         .map(|m| {
             Arc::new(Marker {
                 file_name: file_name.clone(),
-                position: m.position,
-                ls_position: converters.position_to_line_and_character(&test_file_info, m.position),
+                position: TextPos::source(
+                    u32::try_from(m.position).expect("marker position exceeds u32"),
+                ),
+                ls_position: converters.position_to_line_and_character(
+                    &test_file_info,
+                    TextPos::source(
+                        u32::try_from(m.position).expect("marker position exceeds u32"),
+                    ),
+                ),
                 name: m.name,
                 data: m.data,
             })
@@ -563,14 +591,16 @@ fn get_object_marker(file_name: &str, location: &LocationInformation, text: &str
 
 // A *Marker under construction (its LSPosition is computed after the whole file is scanned).
 struct PendingMarker {
-    position: i32,
+    position: usize,
     name: Option<String>,
     data: OrderedMap<String, Any>,
 }
 
 // test_parser.go:495
-fn report_error(file_name: &str, line: i32, col: i32, message: &str) -> FourslashError {
-    FourslashError { err: format!("{file_name} ({line},{col}): {message}") }
+fn report_error(file_name: &str, line: usize, col: usize, message: &str) -> FourslashError {
+    FourslashError {
+        err: format!("{file_name} ({line},{col}): {message}"),
+    }
 }
 
 // test_parser.go:499

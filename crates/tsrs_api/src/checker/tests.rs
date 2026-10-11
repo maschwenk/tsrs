@@ -143,7 +143,8 @@ impl TestHost {
 
     fn handle_at(&self, file: &str, text: &str, needle: &str) -> String {
         let sf = self.program().get_source_file(file).unwrap();
-        let utf8 = text.find(needle).unwrap() as i32;
+        let utf8 = u32::try_from(text.find(needle).unwrap())
+            .expect("test source fits in a source position");
         let node = tsrs_astnav::get_touching_property_name(sf, utf8);
         self.node_handle(node).unwrap()
     }
@@ -431,7 +432,9 @@ fn overloads_signatures_and_resolution() {
     // Overload resolution at the call site `over(42)`.
     let call = {
         let sf = h.program().get_source_file(MAIN_FILE).unwrap();
-        let ident = tsrs_astnav::get_touching_property_name(sf, MAIN.find("over(42)").unwrap() as i32);
+        let pos = u32::try_from(MAIN.find("over(42)").unwrap())
+            .expect("test source fits in a source position");
+        let ident = tsrs_astnav::get_touching_property_name(sf, pos);
         h.node_handle(ident.parent().unwrap()).unwrap()
     };
     let resolved = h.ok("getResolvedSignature", &h.sp(&format!(r#""location":"{call}""#)));
@@ -619,7 +622,9 @@ impl TestHost {
     /// Handle of the `levels`-th ancestor of the token touching `needle`.
     fn ancestor_handle_at(&self, needle: &str, levels: usize) -> String {
         let sf = self.program().get_source_file(MAIN_FILE).unwrap();
-        let mut node = tsrs_astnav::get_touching_property_name(sf, MAIN.find(needle).unwrap() as i32);
+        let pos = u32::try_from(MAIN.find(needle).unwrap())
+            .expect("test source fits in a source position");
+        let mut node = tsrs_astnav::get_touching_property_name(sf, pos);
         for _ in 0..levels {
             node = node.parent().unwrap();
         }
@@ -1090,7 +1095,9 @@ fn well_known_singletons_identify_checker_results() {
     let sigs = h.ok("getWellKnownSignatures", &h.sp(""));
     let call = {
         let sf = h.program().get_source_file("/p/other.ts").unwrap();
-        let ident = tsrs_astnav::get_touching_property_name(sf, OTHER.find("notFn()").unwrap() as i32);
+        let pos = u32::try_from(OTHER.find("notFn()").unwrap())
+            .expect("test source fits in a source position");
+        let ident = tsrs_astnav::get_touching_property_name(sf, pos);
         h.node_handle(ident.parent().unwrap()).unwrap()
     };
     let resolved = h.ok("getResolvedSignature", &h.sp(&format!(r#""location":"{call}""#)));

@@ -59,7 +59,7 @@ impl From<P<Signature>> for TypeSystemEntity {
 }
 
 #[repr(i32)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum TypeSystemPropertyName {
     #[default]
     Type,
@@ -607,9 +607,9 @@ pub struct InferenceInfo {
     pub contra_candidates: LazyVec<P<Type>>, // Candidates in contravariant positions
     pub inferred_type: Cell<Option<P<Type>>>, // Cache for resolved inferred type
     pub priority: Cell<InferencePriority>, // Priority of current inference set
-    pub top_level: Cell<bool>, // True if all inferences are to top level occurrences
-    pub is_fixed: Cell<bool>, // True if inferences are fixed
-    pub implied_arity: Cell<i32>, // Implied arity (or -1)
+    pub top_level: Cell<bool>,        // True if all inferences are to top level occurrences
+    pub is_fixed: Cell<bool>,         // True if inferences are fixed
+    pub implied_arity: OptionalCountCell,
 }
 
 #[cfg(target_pointer_width = "64")]
@@ -617,25 +617,94 @@ const _: () = assert!(std::mem::size_of::<InferenceInfo>() == if tsrs_core::COMP
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 28);
 
-bitflags! {
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct InferencePriority: i32 {
-        const None = 0;
-        const NakedTypeVariable = 1 << 0; // Naked type variable in union or intersection type
-        const SpeculativeTuple = 1 << 1; // Speculative tuple inference
-        const SubstituteSource = 1 << 2; // Source of inference originated within a substitution type's substitute
-        const HomomorphicMappedType = 1 << 3; // Reverse inference for homomorphic mapped type
-        const PartialHomomorphicMappedType = 1 << 4; // Partial reverse inference for homomorphic mapped type
-        const MappedTypeConstraint = 1 << 5; // Reverse inference for mapped type
-        const ContravariantConditional = 1 << 6; // Conditional type in contravariant position
-        const ReturnType = 1 << 7; // Inference made from return type of generic function
-        const LiteralKeyof = 1 << 8; // Inference made from a string literal to a keyof T
-        const NoConstraints = 1 << 9; // Don't infer from constraints of instantiable types
-        const AlwaysStrict = 1 << 10; // Always use strict rules for contravariant inferences
-        const MaxValue = 1 << 11; // Seed for inference priority tracking
-        const Circularity = -1; // Inference circularity (value less than all other priorities)
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum InferencePriorityRepr {
+    Circularity,
+    // Store bits + 1 so zero remains the niche for `Circularity` and the wrapper stays four bytes.
+    Bits(std::num::NonZeroU32),
+}
 
-        const PriorityImpliesCombination = Self::ReturnType.bits() | Self::MappedTypeConstraint.bits() | Self::LiteralKeyof.bits(); // These priorities imply that the resulting type should be a combination of all candidates
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct InferencePriority(InferencePriorityRepr);
+
+#[expect(non_upper_case_globals, reason = "names match the upstream inference priorities")]
+impl InferencePriority {
+    pub const Circularity: Self = Self(InferencePriorityRepr::Circularity);
+    pub const None: Self = Self::from_bits(0);
+    pub const NakedTypeVariable: Self = Self::from_bits(1 << 0); // Naked type variable in union or intersection type
+    pub const SpeculativeTuple: Self = Self::from_bits(1 << 1); // Speculative tuple inference
+    pub const SubstituteSource: Self = Self::from_bits(1 << 2); // Source of inference originated within a substitution type's substitute
+    pub const HomomorphicMappedType: Self = Self::from_bits(1 << 3); // Reverse inference for homomorphic mapped type
+    pub const PartialHomomorphicMappedType: Self = Self::from_bits(1 << 4); // Partial reverse inference for homomorphic mapped type
+    pub const MappedTypeConstraint: Self = Self::from_bits(1 << 5); // Reverse inference for mapped type
+    pub const ContravariantConditional: Self = Self::from_bits(1 << 6); // Conditional type in contravariant position
+    pub const ReturnType: Self = Self::from_bits(1 << 7); // Inference made from return type of generic function
+    pub const LiteralKeyof: Self = Self::from_bits(1 << 8); // Inference made from a string literal to a keyof T
+    // These priorities imply that the resulting type should be a combination of all candidates.
+    pub const PriorityImpliesCombination: Self = Self::from_bits((1 << 7) | (1 << 5) | (1 << 8));
+    pub const NoConstraints: Self = Self::from_bits(1 << 9); // Don't infer from constraints of instantiable types
+    pub const AlwaysStrict: Self = Self::from_bits(1 << 10); // Always use strict rules for contravariant inferences
+    pub const MaxValue: Self = Self::from_bits(1 << 11); // Seed for inference priority tracking
+
+    const fn from_bits(bits: u32) -> Self {
+        // SAFETY: every priority bit is below `MaxValue`, so adding one cannot overflow or produce zero.
+        Self(InferencePriorityRepr::Bits(unsafe {
+            std::num::NonZeroU32::new_unchecked(bits + 1)
+        }))
+    }
+
+    const fn bits(self) -> Option<u32> {
+        match self.0 {
+            InferencePriorityRepr::Circularity => None,
+            InferencePriorityRepr::Bits(bits) => Some(bits.get() - 1),
+        }
+    }
+
+    pub fn intersects(self, other: Self) -> bool {
+        match (self.bits(), other.bits()) {
+            (Some(left), Some(right)) => left & right != 0,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn memo_bits(self) -> u32 {
+        self.bits().unwrap_or(u32::MAX)
+    }
+}
+
+impl Default for InferencePriority {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+const _: () = assert!(std::mem::size_of::<InferencePriority>() == 4);
+
+impl Ord for InferencePriority {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self.bits(), other.bits()) {
+            (None, None) => std::cmp::Ordering::Equal,
+            (None, Some(_)) => std::cmp::Ordering::Less,
+            (Some(_), None) => std::cmp::Ordering::Greater,
+            (Some(left), Some(right)) => left.cmp(&right),
+        }
+    }
+}
+
+impl PartialOrd for InferencePriority {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::ops::BitOr for InferencePriority {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match (self.bits(), rhs.bits()) {
+            (Some(left), Some(right)) => Self::from_bits(left | right),
+            _ => Self::Circularity,
+        }
     }
 }
 
@@ -660,7 +729,7 @@ bitflags! {
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct DeclarationSpaces: i32 {
+    pub struct DeclarationSpaces: u32 {
         const None = 0;
         const ExportValue = 1 << 0;
         const ExportType = 1 << 1;
@@ -930,7 +999,7 @@ pub struct VarianceStackEntry {
     pub type_parameters: &'static [P<Type>],
 }
 
-pub const maxSerializationLevel: i32 = 2;
+pub const maxSerializationLevel: u32 = 2;
 
 // Checker
 
@@ -944,9 +1013,9 @@ pub struct Checker {
     pub program: &'static dyn Program,
     pub compiler_options: P<CompilerOptions>,
     pub files: &'static [P<SourceFile>],
-    pub file_index_map: FxHashMap<P<SourceFile>, i32>,
+    pub file_index_map: FxHashMap<P<SourceFile>, usize>,
     /// `source_file_and_index_of_node` (utilities.rs): (node key, file key, file index); key 0 is an empty slot.
-    pub(crate) node_file_cache: Vec<(tsrs_core::ptr::PKey, tsrs_core::ptr::PKey, i32)>,
+    pub(crate) node_file_cache: Vec<(tsrs_core::ptr::PKey, tsrs_core::ptr::PKey, usize)>,
     pub type_count: u32,
     pub symbol_count: u32,
     pub signature_count: u32,
@@ -973,8 +1042,8 @@ pub struct Checker {
     pub(crate) expression_checks: u32,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
-    pub inline_level: i32,
-    pub serialization_level: i32,
+    pub inline_level: u32,
+    pub serialization_level: u32,
     pub current_node: Option<P<Node>>,
     /// tsrs-only: the file `check_source_file` is checking. The one check leaf (`SourceFile::is_check_leaf`) whose tree
     /// this checker may read.
@@ -1244,10 +1313,10 @@ pub struct Checker {
     pub base_types_depth: u32,
     pub base_types_resolved_log: Vec<P<Type>>,
     pub base_types_circular: Vec<P<Type>>,
-    pub resolution_start: i32,
+    pub resolution_start: usize,
     pub variance_stack: Vec<VarianceStackEntry>,
     pub call_resolution_stack: Vec<P<Node>>,
-    pub apparent_argument_count: Option<i32>,
+    pub apparent_argument_count: Option<usize>,
     pub last_get_combined_node_flags_node: Option<P<Node>>,
     pub last_get_combined_node_flags_result: NodeFlags,
     pub last_get_combined_modifier_flags_node: Option<P<Node>>,
@@ -1259,7 +1328,7 @@ pub struct Checker {
     pub shared_flows: Vec<SharedFlow>,
     pub antecedent_types: Vec<P<Type>>,
     pub flow_analysis_disabled: bool,
-    pub flow_invocation_count: i32,
+    pub flow_invocation_count: u32,
     pub flow_type_cache: Option<FxHashMap<P<Node>, P<Type>>>, // Go nil map, saved/restored as a whole
     /// The flow memo (flowmemo.rs). Boxed: the checker's hot fields keep their offsets.
     pub flow_memo: Box<crate::flowmemo::FlowMemo>,
@@ -1845,7 +1914,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.marker_sub_type_for_check.as_type_parameter().constraint.set(Some(c.marker_super_type_for_check));
     c.no_type_predicate = P::new(TypePredicate {
         kind: Cell::new(TypePredicateKind::Identifier),
-        parameter_index: Cell::new(0),
+        parameter_index: Cell::new(Some(0)),
         parameter_name: Cell::new("<<unresolved>>"),
         t: Cell::new(Some(c.any_type)),
     });
@@ -2285,11 +2354,19 @@ impl Checker {
         );
     }
 
-    pub(crate) fn compare_symbols(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 {
+    pub(crate) fn compare_symbols(
+        &mut self,
+        s1: Option<P<Symbol>>,
+        s2: Option<P<Symbol>>,
+    ) -> std::cmp::Ordering {
         self.compare_symbols_worker(s1, s2)
     }
 
-    pub(crate) fn compare_symbol_chains(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 {
+    pub(crate) fn compare_symbol_chains(
+        &mut self,
+        a: &[P<Symbol>],
+        b: &[P<Symbol>],
+    ) -> std::cmp::Ordering {
         self.compare_symbol_chains_worker(a, b)
     }
 
@@ -2363,8 +2440,16 @@ impl Checker {
     }
 
     /// The closure built by Go `getGlobalTypesResolver(names, arity, reportErrors)`.
-    pub(crate) fn get_global_types(&mut self, names: &[&str], arity: i32, report_errors: bool) -> &'static [P<Type>] {
-        let types: Vec<P<Type>> = names.iter().map(|name| self.get_global_type(name, arity, report_errors)).collect();
+    pub(crate) fn get_global_types(
+        &mut self,
+        names: &[&str],
+        arity: usize,
+        report_errors: bool,
+    ) -> &'static [P<Type>] {
+        let types: Vec<P<Type>> = names
+            .iter()
+            .map(|name| self.get_global_type(name, arity, report_errors))
+            .collect();
         alloc_slice(&types)
     }
 
@@ -2914,7 +2999,7 @@ impl CacheHashKey {
 
 /// Go `keyBuilder`; its methods are in checker_09.rs.
 pub struct keyBuilder {
-    pub inline_length: i32,
+    pub inline_length: usize,
     pub overflow_buffer: Option<Vec<u8>>, // Go nil slice = no overflow yet
     pub inline_buffer: [u8; 192],
 }
@@ -2940,9 +3025,9 @@ pub enum thisAssignmentDeclarationKind {
 pub struct TupleNormalizer {
     pub types: Vec<P<Type>>,
     pub infos: Vec<TupleElementInfo>,
-    pub last_required_index: i32,
-    pub first_rest_index: i32,
-    pub last_optional_or_rest_index: i32,
+    pub last_required_index: Option<usize>,
+    pub first_rest_index: Option<usize>,
+    pub last_optional_or_rest_index: Option<usize>,
 }
 
 #[repr(i32)]
@@ -2966,8 +3051,8 @@ bitflags! {
 // Limits on the size of a template literal type produced by getTemplateLiteralType. Recursive instantiations
 // such as `Recur<any, `${S}_${S}`>` double the text (or the number of placeholders) on every iteration and
 // exhaust memory long before the tail recursion limit in getConditionalType is reached (see #63271).
-pub const maxTemplateLiteralTypeLength: i32 = 50_000_000;
-pub const maxTemplateLiteralTypeSpans: i32 = 100_000;
+pub const maxTemplateLiteralTypeLength: usize = 50_000_000;
+pub const maxTemplateLiteralTypeSpans: usize = 100_000;
 
 /// Go `ObjectLiteralDiscriminator`; the `c` field is dropped (methods take `c: &mut Checker`).
 #[derive(Default)]

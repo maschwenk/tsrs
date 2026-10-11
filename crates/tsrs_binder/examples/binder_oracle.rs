@@ -224,11 +224,23 @@ fn dump_unit(out: &mut String, name: &str, text: &str) {
         i += 1;
     }
     for diag in file.bind_diagnostics() {
-        let _ = write!(d.sb, "B {} {} {} ", diag.code(), diag.pos(), diag.len());
+        let _ = write!(
+            d.sb,
+            "B {} {} {} ",
+            diag.code(),
+            diag.pos().map_or(-1_i64, i64::from),
+            diag.len().map_or(-1_i64, i64::from)
+        );
         escape(&mut d.sb, diag.message_text());
         d.sb.push_str(" R");
         for r in diag.related_information() {
-            let _ = write!(d.sb, " {}:{}:{}", r.code(), r.pos(), r.len());
+            let _ = write!(
+                d.sb,
+                " {}:{}:{}",
+                r.code(),
+                r.pos().map_or(-1_i64, i64::from),
+                r.len().map_or(-1_i64, i64::from)
+            );
         }
         d.sb.push('\n');
     }

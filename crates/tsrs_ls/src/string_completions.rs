@@ -8,7 +8,10 @@ use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Comparison};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
-use tsrs_core::{try_parse_pattern, CompilerOptions, ModuleResolutionKind, ResolutionMode, TextRange, P, RESOLUTION_MODE_NONE};
+use tsrs_core::{
+    CompilerOptions, ModuleResolutionKind, P, PatternKind, RESOLUTION_MODE_NONE, ResolutionMode,
+    TextRange, try_parse_pattern,
+};
 use tsrs_lsproto as lsproto;
 use tsrs_module::packagejson::{ExportsOrImports, InfoCacheEntryExt, JSONValueType};
 use tsrs_modulespecifiers::{self as modulespecifiers, ImportModuleSpecifierEndingPreference, ModuleSpecifierEnding};
@@ -69,7 +72,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         context_token: Option<P<Node>>,
         checker: &mut Checker,
         compiler_options: P<CompilerOptions>,
@@ -97,7 +100,7 @@ impl LanguageService {
         completion: Option<stringLiteralCompletions>,
         context_token: P<Node>,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         type_checker: &mut Checker,
         options: P<CompilerOptions>,
         include_symbols: bool,
@@ -175,7 +178,13 @@ impl LanguageService {
     }
 
     // string_completions.go:206
-    fn convert_path_completions(&self, ctx: &Context, completion: Option<pathCompletions>, file: P<SourceFile>, position: i32) -> Option<CompletionList> {
+    fn convert_path_completions(
+        &self,
+        ctx: &Context,
+        completion: Option<pathCompletions>,
+        file: P<SourceFile>,
+        position: u32,
+    ) -> Option<CompletionList> {
         let completion = completion?;
         let is_new_identifier_location = true; // The user may type in a path that doesn't yet exist, creating a "new identifier" with respect to the collection of identifiers the server is aware of.
         let default_commit_characters = get_default_commit_characters(is_new_identifier_location);
@@ -222,7 +231,7 @@ impl LanguageService {
         _ctx: &Context,
         file: P<SourceFile>,
         node: P<Node>,
-        position: i32,
+        position: u32,
         type_checker: &mut Checker,
     ) -> Option<stringLiteralCompletions> {
         let parent = walk_up_parentheses(node.parent().unwrap());
@@ -381,7 +390,12 @@ fn to_string_literal_completions_from_types(types: Vec<P<Type>>) -> Option<strin
 }
 
 // string_completions.go:466
-fn from_unionable_literal_type(grandparent: P<Node>, parent: P<Node>, position: i32, type_checker: &mut Checker) -> Option<stringLiteralCompletions> {
+fn from_unionable_literal_type(
+    grandparent: P<Node>,
+    parent: P<Node>,
+    position: u32,
+    type_checker: &mut Checker,
+) -> Option<stringLiteralCompletions> {
     match grandparent.kind() {
         Kind::CallExpression
         | Kind::ExpressionWithTypeArguments
@@ -409,7 +423,7 @@ fn from_unionable_literal_type(grandparent: P<Node>, parent: P<Node>, position: 
             //      let x: Foo["/*completion position*/"]
             let index_type = grandparent.as_indexed_access_type_node().index_type;
             let object_type = grandparent.as_indexed_access_type_node().object_type;
-            if !index_type.loc().contains_inclusive(position) {
+            if !index_type.loc().contains_inclusive(position.into()) {
                 return None;
             }
             let t = type_checker.get_type_from_type_node_exported(object_type);
@@ -491,7 +505,15 @@ impl LanguageService {
         let Some(text_range) = text_range else {
             return Some(None);
         };
-        let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(text_range.pos(), text_range.end(), file);
+        let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(
+            text_range
+                .pos()
+                .expect_source("completion ranges have source positions"),
+            text_range
+                .end()
+                .expect_source("completion ranges have source positions"),
+            file,
+        );
         if !fidelity.is_exact() {
             return None;
         }
@@ -515,7 +537,7 @@ fn is_any_directory_separator(r: char) -> bool {
 
 // Replace everything after the last directory separator that appears
 // string_completions.go:650
-fn get_directory_fragment_range(text: &str, text_start: i32) -> Option<TextRange> {
+fn get_directory_fragment_range(text: &str, text_start: u32) -> Option<TextRange> {
     let index = text.rfind(is_any_directory_separator);
     let mut offset = 0;
     if let Some(index) = index {
@@ -525,7 +547,12 @@ fn get_directory_fragment_range(text: &str, text_start: i32) -> Option<TextRange
     if length == 0 {
         return None;
     }
-    Some(TextRange::new(text_start + offset as i32, text_start + offset as i32 + length as i32))
+    let offset = u32::try_from(offset).expect("path fragment offset exceeds u32");
+    let length = u32::try_from(length).expect("path fragment length exceeds u32");
+    Some(TextRange::new(
+        text_start + offset,
+        text_start + offset + length,
+    ))
 }
 
 impl LanguageService {
@@ -1168,8 +1195,11 @@ impl LanguageService {
             if tspath::compare_paths(
                 exclude,
                 &file_path,
-                &ComparePathsOptions { use_case_sensitive_file_names: program.use_case_sensitive_file_names(), current_directory: program.get_current_directory().to_string() },
-            ) == 0
+                &ComparePathsOptions {
+                    use_case_sensitive_file_names: program.use_case_sensitive_file_names(),
+                    current_directory: program.get_current_directory().to_string(),
+                },
+            ) == std::cmp::Ordering::Equal
             {
                 continue; // Avoid self-imports
             }
@@ -1203,21 +1233,9 @@ impl LanguageService {
     ) -> bool {
         let get_patterns_for_keys = |key: &str| -> Vec<String> { paths.get(key).cloned().unwrap_or_default() };
         let compare_paths = |a: &str, b: &str| -> Comparison {
-            let pattern_a = try_parse_pattern(a);
-            let pattern_b = try_parse_pattern(b);
-            let mut length_a = a.len() as i32;
-            if pattern_a.star_index != -1 {
-                length_a = pattern_a.star_index;
-            }
-            let mut length_b = b.len() as i32;
-            if pattern_b.star_index != -1 {
-                length_b = pattern_b.star_index;
-            }
-            match length_b.cmp(&length_a) {
-                std::cmp::Ordering::Less => -1,
-                std::cmp::Ordering::Equal => 0,
-                std::cmp::Ordering::Greater => 1,
-            }
+            let length_a = a.find('*').unwrap_or(a.len());
+            let length_b = b.find('*').unwrap_or(b.len());
+            length_b.cmp(&length_a)
         };
         let keys: Vec<String> = paths.keys().cloned().collect();
         self.add_completion_entries_from_paths_or_exports_or_imports(
@@ -1295,7 +1313,11 @@ impl LanguageService {
                     matched_path = Some(normalized_key.clone());
                     path_results.retain(|pr| !pr.matched);
                 }
-                if path_pattern.star_index == -1 || matched_path.is_none() || compare_paths(&normalized_key, matched_path.as_ref().unwrap()) != stringutil::COMPARISON_GREATER_THAN {
+                if path_pattern.kind == PatternKind::Exact
+                    || matched_path.is_none()
+                    || compare_paths(&normalized_key, matched_path.as_ref().unwrap())
+                        != stringutil::COMPARISON_GREATER_THAN
+                {
                     path_results.push(pathResult {
                         matched: is_match,
                         results: self.get_completions_for_path_mapping(&normalized_key, &patterns, fragment, base_directory, is_exports, is_imports, extension_options, program),
@@ -1345,15 +1367,18 @@ impl LanguageService {
             return Vec::new();
         }
         // No stars in the pattern.
-        if parsed_path.star_index == -1 {
+        if parsed_path.kind == PatternKind::Exact {
             // For a path mapping "foo": ["/x/y/z.ts"], add "foo" itself as a completion.
             let pattern = patterns.first().cloned().unwrap_or_default();
             let extension = get_file_extension(&pattern);
             return just_path_mapping_name(path, moduleCompletionKind::File, extension);
         }
 
-        let path_prefix = &parsed_path.text[..parsed_path.star_index as usize];
-        let path_suffix = &parsed_path.text[(parsed_path.star_index + 1) as usize..];
+        let PatternKind::Wildcard(star_index) = parsed_path.kind else {
+            unreachable!("valid non-exact path patterns have a wildcard")
+        };
+        let path_prefix = &parsed_path.text[..star_index];
+        let path_suffix = &parsed_path.text[star_index + 1..];
         if !fragment.starts_with(path_prefix) {
             // Fragment doesn't match the path mapping prefix at all:
             // we cannot extend it via this path.
@@ -1420,12 +1445,12 @@ impl LanguageService {
         program: &'static Program,
     ) -> Vec<moduleCompletionNameAndKind> {
         let parsed = try_parse_pattern(pattern);
-        if !parsed.is_valid() || parsed.star_index == -1 {
+        let PatternKind::Wildcard(star_index) = parsed.kind else {
             return Vec::new();
-        }
+        };
 
-        let prefix = &parsed.text[..parsed.star_index as usize];
-        let suffix = &parsed.text[(parsed.star_index + 1) as usize..];
+        let prefix = &parsed.text[..star_index];
+        let suffix = &parsed.text[star_index + 1..];
 
         // The prefix has two effective parts: the directory path and the base component after the filepath that is not a
         // full directory component. For example: directory/path/of/prefix/base*
@@ -1755,7 +1780,9 @@ fn get_string_literal_completions_from_signature(call: P<Node>, arg: P<Node>, ar
     let candidates = type_checker.get_candidate_signatures_for_string_literal_completions(call, editing_argument);
     let mut types: Vec<P<Type>> = Vec::new();
     for candidate in candidates {
-        if !candidate.has_rest_parameter() && argument_info.argument_count > candidate.parameters().len() as i32 {
+        if !candidate.has_rest_parameter()
+            && argument_info.argument_count > candidate.parameters().len()
+        {
             continue;
         }
         let mut t = type_checker.get_type_parameter_at_position(candidate, argument_info.argument_index);
@@ -1783,7 +1810,7 @@ impl LanguageService {
         item: lsproto::CompletionItem,
         name: &str,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         context_token: Option<P<Node>>,
         doc_format: lsproto::MarkupKind,
     ) -> lsproto::CompletionItem {
@@ -1802,7 +1829,7 @@ impl LanguageService {
         item: lsproto::CompletionItem,
         name: &str,
         location: P<Node>,
-        position: i32,
+        position: u32,
         completion: &stringLiteralCompletions,
         _file: P<SourceFile>,
         checker: &mut Checker,
@@ -1830,8 +1857,12 @@ impl LanguageService {
 }
 
 // string_completions.go:2105
-fn is_in_reference_comment(file: P<SourceFile>, position: i32) -> bool {
-    let Some(comment_range) = is_in_comment(file, position, astnav::get_token_at_position(file, position)) else {
+fn is_in_reference_comment(file: P<SourceFile>, position: u32) -> bool {
+    let Some(comment_range) = is_in_comment(
+        file,
+        position,
+        astnav::get_token_at_position(file, position),
+    ) else {
         return false;
     };
     let comment_text = &file.text()[comment_range.pos() as usize..comment_range.end() as usize];
@@ -1918,10 +1949,22 @@ fn parse_triple_slash_directive_fragment(text: &str) -> Option<(String, String, 
 
 impl LanguageService {
     // string_completions.go:2188
-    fn get_triple_slash_reference_completions(&self, file: P<SourceFile>, position: i32, program: &'static Program, _checker: &mut Checker) -> Option<pathCompletions> {
+    fn get_triple_slash_reference_completions(
+        &self,
+        file: P<SourceFile>,
+        position: u32,
+        program: &'static Program,
+        _checker: &mut Checker,
+    ) -> Option<pathCompletions> {
         let compiler_options = program.options();
         let token = astnav::get_token_at_position(file, position);
-        let comment_ranges: Vec<ast::CommentRange> = scanner::get_leading_comment_ranges(file.text(), token.pos()).collect();
+        let comment_ranges: Vec<ast::CommentRange> = scanner::get_leading_comment_ranges(
+            file.text(),
+            token
+                .pos()
+                .expect_source("parsed tokens have source positions"),
+        )
+        .collect();
 
         let mut found_range: Option<&ast::CommentRange> = None;
         for comment_range in &comment_ranges {
@@ -1934,7 +1977,14 @@ impl LanguageService {
 
         let text = &file.text()[found_range.pos() as usize..position as usize];
         let (prefix, kind, to_complete) = parse_triple_slash_directive_fragment(text)?;
-        let replacement_span = self.path_completion_replacement_span(file, get_directory_fragment_range(&to_complete, found_range.pos() + prefix.len() as i32))?;
+        let replacement_span = self.path_completion_replacement_span(
+            file,
+            get_directory_fragment_range(
+                &to_complete,
+                found_range.pos()
+                    + u32::try_from(prefix.len()).expect("reference prefix exceeds u32"),
+            ),
+        )?;
 
         let script_path = tspath::get_directory_path(file.path());
 

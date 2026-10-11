@@ -135,20 +135,20 @@ use rustc_hash::FxHashMap;
 //   var primitiveTypeAliasSuggestions (checker.go:1786)
 
 // checker.go:1128
-pub(crate) fn create_file_index_map(files: &[P<SourceFile>]) -> FxHashMap<P<SourceFile>, i32> {
+pub(crate) fn create_file_index_map(files: &[P<SourceFile>]) -> FxHashMap<P<SourceFile>, usize> {
     let mut result = FxHashMap::with_capacity_and_hasher(files.len(), Default::default());
     for (i, file) in files.iter().enumerate() {
-        result.insert(*file, i as i32);
+        result.insert(*file, i);
     }
     result
 }
 
 // checker.go:1136
-pub(crate) fn count_global_symbols(files: &[P<SourceFile>]) -> i32 {
+pub(crate) fn count_global_symbols(files: &[P<SourceFile>]) -> usize {
     let mut count = 0;
     for file in files {
         if !ast::is_external_or_common_js_module(*file) {
-            count += file.locals().map_or(0, |locals| locals.len()) as i32;
+            count += file.locals().map_or(0, |locals| locals.len());
         }
     }
     count
@@ -176,11 +176,31 @@ impl Checker {
     // NewChecker assigns; in Rust those fields are the cached `get_global_*` methods in checker.rs.
 
     // checker.go:1195
-    pub(crate) fn get_global_type_alias_symbol(&mut self, name: &str, arity: i32, report_errors: bool) -> Option<P<Symbol>> {
-        let symbol = self.get_global_symbol(name, SymbolFlags::TypeAlias, if report_errors { Some(&diagnostics::Cannot_find_global_type_0) } else { None })?;
+    pub(crate) fn get_global_type_alias_symbol(
+        &mut self,
+        name: &str,
+        arity: usize,
+        report_errors: bool,
+    ) -> Option<P<Symbol>> {
+        let symbol = self.get_global_symbol(
+            name,
+            SymbolFlags::TypeAlias,
+            if report_errors {
+                Some(&diagnostics::Cannot_find_global_type_0)
+            } else {
+                None
+            },
+        )?;
         // Resolve the declared type of the symbol. This resolves type parameters for the type alias so that we can check arity.
         self.get_declared_type_of_symbol(symbol);
-        if self.type_alias_links.get(symbol).type_parameters.get().len() as i32 != arity {
+        if self
+            .type_alias_links
+            .get(symbol)
+            .type_parameters
+            .get()
+            .len()
+            != arity
+        {
             if report_errors {
                 let decl = symbol.declarations().iter().copied().find(|d| ast::is_type_alias_declaration(*d));
                 self.error(decl, &diagnostics::Global_type_0_must_have_1_type_parameter_s, &[&ast::symbol_name(symbol), &arity]);
@@ -200,12 +220,25 @@ impl Checker {
     }
 
     // checker.go:1220
-    pub(crate) fn get_global_type(&mut self, name: &str, arity: i32, report_errors: bool) -> P<Type> {
-        let symbol = self.get_global_symbol(name, SymbolFlags::Type, if report_errors { Some(&diagnostics::Cannot_find_global_type_0) } else { None });
+    pub(crate) fn get_global_type(
+        &mut self,
+        name: &str,
+        arity: usize,
+        report_errors: bool,
+    ) -> P<Type> {
+        let symbol = self.get_global_symbol(
+            name,
+            SymbolFlags::Type,
+            if report_errors {
+                Some(&diagnostics::Cannot_find_global_type_0)
+            } else {
+                None
+            },
+        );
         if let Some(symbol) = symbol {
             if symbol.flags().intersects(SymbolFlags::Class | SymbolFlags::Interface) {
                 let t = self.get_declared_type_of_symbol(symbol);
-                if t.as_interface_type().type_parameters().len() as i32 == arity {
+                if t.as_interface_type().type_parameters().len() == arity {
                     return t;
                 }
                 if report_errors {
@@ -393,21 +426,31 @@ impl Checker {
         let modules = self.pattern_ambient_modules.clone();
         for module in &modules {
             let attributes_type = self.get_type_of_module_import_attributes(module.symbol);
-            let mut group_index: i32 = -1;
-            let indexes = groups_by_pattern.get(&module.pattern.text).cloned().unwrap_or_default();
+            let mut group_index = None;
+            let indexes = groups_by_pattern
+                .get(&module.pattern.text)
+                .cloned()
+                .unwrap_or_default();
             for index in indexes {
                 let other = self.get_type_of_module_import_attributes(grouped[index].1);
                 if self.is_type_identical_to(attributes_type, other) {
-                    group_index = index as i32;
+                    group_index = Some(index);
                     break;
                 }
             }
-            if group_index == -1 {
-                groups_by_pattern.entry(module.pattern.text.clone()).or_default().push(grouped.len());
+            if group_index.is_none() {
+                groups_by_pattern
+                    .entry(module.pattern.text.clone())
+                    .or_default()
+                    .push(grouped.len());
                 grouped.push((module.pattern.clone(), module.symbol));
             } else {
-                let group_index = group_index as usize;
-                grouped[group_index].1 = self.merge_symbol(grouped[group_index].1, module.symbol, false /*unidirectional*/);
+                let group_index = group_index.unwrap();
+                grouped[group_index].1 = self.merge_symbol(
+                    grouped[group_index].1,
+                    module.symbol,
+                    false, /*unidirectional*/
+                );
             }
         }
         for module in &modules {

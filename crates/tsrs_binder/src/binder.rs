@@ -7,14 +7,14 @@ use tsrs_ast::{
     SymbolFlags, SymbolTable,
 };
 use tsrs_ast::lazylist::{self, LazyBindContext, LazyNodeList};
-use tsrs_core::{alloc_str, tspath, OwnedCell, P};
+use tsrs_core::{OwnedCell, P, PatternKind, alloc_str, tspath};
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use tsrs_scanner as scanner;
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct ContainerFlags: i32 {
+    pub struct ContainerFlags: u32 {
         // The current node is not a container, and no container manipulation should happen before
         // recursing into it.
         const None = 0;
@@ -395,7 +395,7 @@ impl Binder {
                     return ast::InternalSymbolNameGlobal;
                 }
                 let pattern = tsrs_core::try_parse_pattern(module_name);
-                if pattern.is_valid() && pattern.star_index >= 0 {
+                if matches!(pattern.kind, PatternKind::Wildcard(_)) {
                     if let Some(attributes) = node.as_module_declaration().attributes() {
                         return alloc_str(&format!(
                             "{}\"{}\"pattern@{}",
@@ -945,11 +945,19 @@ impl Binder {
                     let pattern = tsrs_core::try_parse_pattern(name.text());
                     if !pattern.is_valid() {
                         // An invalid pattern - must have multiple wildcards.
-                        self.error_on_first_token(name, &diagnostics::Pattern_0_can_have_at_most_one_Asterisk_character, &[&name.text()]);
-                    } else if pattern.star_index >= 0 {
-                        let mut pattern_ambient_modules = self.file.pattern_ambient_modules.get().to_vec();
-                        pattern_ambient_modules.push(P::new(ast::PatternAmbientModule { pattern, symbol }));
-                        self.file.pattern_ambient_modules.set(tsrs_core::alloc_slice(&pattern_ambient_modules));
+                        self.error_on_first_token(
+                            name,
+                            &diagnostics::Pattern_0_can_have_at_most_one_Asterisk_character,
+                            &[&name.text()],
+                        );
+                    } else if matches!(pattern.kind, PatternKind::Wildcard(_)) {
+                        let mut pattern_ambient_modules =
+                            self.file.pattern_ambient_modules.get().to_vec();
+                        pattern_ambient_modules
+                            .push(P::new(ast::PatternAmbientModule { pattern, symbol }));
+                        self.file
+                            .pattern_ambient_modules
+                            .set(tsrs_core::alloc_slice(&pattern_ambient_modules));
                     } else if attributes.is_some() {
                         self.error_on_node(
                             name,
@@ -1441,8 +1449,18 @@ impl Binder {
             self.check_strict_mode_eval_or_arguments(node, node.name());
         }
         if ast::is_binding_pattern(node.name().unwrap()) {
-            let index = node.parent().unwrap().parameters().iter().position(|&p| p == node).map_or(-1, |i| i as i64);
-            self.bind_anonymous_declaration(node, SymbolFlags::FunctionScopedVariable, alloc_str(&format!("__{}", index)));
+            let index = node
+                .parent()
+                .unwrap()
+                .parameters()
+                .iter()
+                .position(|&p| p == node)
+                .expect("parameter belongs to its parent");
+            self.bind_anonymous_declaration(
+                node,
+                SymbolFlags::FunctionScopedVariable,
+                alloc_str(&format!("__{}", index)),
+            );
         } else {
             self.declare_symbol_and_add_to_symbol_table(node, SymbolFlags::FunctionScopedVariable, SymbolFlags::ParameterExcludes);
         }
@@ -3194,8 +3212,17 @@ impl Binder {
         self.add_diagnostic(diagnostic);
     }
 
-    pub(crate) fn error_on_first_token(&mut self, node: P<Node>, message: &'static Message, args: &[&dyn std::fmt::Display]) {
-        let span = scanner::get_range_of_token_at_position(self.file, node.pos());
+    pub(crate) fn error_on_first_token(
+        &mut self,
+        node: P<Node>,
+        message: &'static Message,
+        args: &[&dyn std::fmt::Display],
+    ) {
+        let span = scanner::get_range_of_token_at_position(
+            self.file,
+            node.pos()
+                .expect_source("parsed nodes have source positions"),
+        );
         self.add_diagnostic(ast::new_diagnostic(Some(self.file), span, message, args));
     }
 

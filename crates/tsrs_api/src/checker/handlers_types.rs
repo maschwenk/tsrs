@@ -392,7 +392,11 @@ pub(crate) fn node_type_op(host: &dyn CheckerHost, p: &Params, op: NodeTypeOp) -
 pub(crate) fn get_contextual_type_for_argument(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let node = s.resolve_node(p.string("location")?)?;
-    let t = s.c().get_contextual_type_for_argument_at_index_exported(node, p.i32("index")?);
+    let index = usize::try_from(p.i32("index")?)
+        .map_err(|_| CheckerError::client("invalid parameter index"))?;
+    let t = s
+        .c()
+        .get_contextual_type_for_argument_at_index_exported(node, index);
     s.opt_type_response(t)
 }
 
@@ -506,10 +510,8 @@ pub(crate) enum ParameterAt {
 pub(crate) fn signature_parameter_at(host: &dyn CheckerHost, p: &Params, op: ParameterAt) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let sig = s.resolve_signature(p.u64("signature")?)?;
-    let index = p.i32("index")?;
-    if index < 0 {
-        return Err(CheckerError::client("invalid parameter index"));
-    }
+    let index = usize::try_from(p.i32("index")?)
+        .map_err(|_| CheckerError::client("invalid parameter index"))?;
     let t = match op {
         ParameterAt::ParameterType => s.c().get_type_at_position_exported(sig, index),
         ParameterAt::TypeParameter => s.c().get_type_parameter_at_position(sig, index),
@@ -525,7 +527,10 @@ pub(crate) fn get_type_predicate_of_signature(host: &dyn CheckerHost, p: &Params
     };
     let mut o = obj();
     o.num("kind", pred.kind() as i32 as f64);
-    o.num("parameterIndex", pred.parameter_index() as f64);
+    o.num(
+        "parameterIndex",
+        pred.parameter_index().map_or(-1.0, |index| index as f64),
+    );
     o.str_nonempty("parameterName", pred.parameter_name());
     if let Some(t) = pred.type_() {
         o.set("type", s.type_response(t)?);

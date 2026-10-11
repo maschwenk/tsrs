@@ -73,10 +73,10 @@ impl Checker {
         }
         let args = node.arguments();
         let spread_index = self.get_spread_argument_index(args);
-        if spread_index >= 0 {
+        if let Some(spread_index) = spread_index {
             // Create synthetic arguments from spreads of tuple types.
-            let mut effective_args = args[..spread_index as usize].to_vec();
-            for i in spread_index as usize..args.len() {
+            let mut effective_args = args[..spread_index].to_vec();
+            for i in spread_index..args.len() {
                 let arg = args[i];
                 let mut spread_type = None;
                 // We can call checkExpressionCached because spread expressions never have a contextual type.
@@ -108,7 +108,7 @@ impl Checker {
     }
 
     // checker.go:30597
-    pub(crate) fn get_spread_argument_index(&mut self, args: &[P<Node>]) -> i32 {
+    pub(crate) fn get_spread_argument_index(&mut self, args: &[P<Node>]) -> Option<usize> {
         find_index(args, |&arg| is_spread_argument(arg))
     }
 }
@@ -134,16 +134,16 @@ impl Checker {
     }
 
     // checker.go:30612
-    pub(crate) fn get_spread_indices(&mut self, node: P<Node>) -> (i32, i32) {
+    pub(crate) fn get_spread_indices(&mut self, node: P<Node>) -> (Option<usize>, Option<usize>) {
         let links = self.array_literal_links.get(node);
         if !links.indices_computed.get() {
-            let (mut first, mut last) = (-1, -1);
+            let (mut first, mut last) = (None, None);
             for (i, &element) in node.elements().iter().enumerate() {
                 if ast::is_spread_element(element) {
-                    if first < 0 {
-                        first = i as i32;
+                    if first.is_none() {
+                        first = Some(i);
                     }
-                    last = i as i32;
+                    last = Some(i);
                 }
             }
             links.first_spread_index.set(first);
@@ -204,8 +204,12 @@ impl Checker {
                     if ast::get_this_parameter(parent) == Some(node) {
                         break 'case;
                     }
-                    let index = parent.parameters().iter().position(|&p| p == node).map_or(-1, |i| i as i32) - if ast::get_this_parameter(parent).is_some() { 1 } else { 0 };
-                    assert!(index >= 0);
+                    let index = parent
+                        .parameters()
+                        .iter()
+                        .position(|&p| p == node)
+                        .expect("parameter belongs to its declaration")
+                        - usize::from(ast::get_this_parameter(parent).is_some());
                     // A parameter declaration decorator will have three arguments (see `ParameterDecorator` in
                     // core.d.ts).
                     let target_type;
@@ -597,8 +601,19 @@ impl Checker {
     // checker.go:31008
     pub(crate) fn new_call_signature(&mut self, type_parameters: &[P<Type>], this_parameter: Option<P<Symbol>>, parameters: &[P<Symbol>], return_type: P<Type>) -> P<Signature> {
         let any_keyword = self.factory.new_keyword_type_node(Kind::AnyKeyword);
-        let decl = self.factory.new_function_type_node(None, None, Some(any_keyword));
-        self.new_signature(SignatureFlags::None, Some(decl), type_parameters, this_parameter, parameters, Some(return_type), None, parameters.len() as i32)
+        let decl = self
+            .factory
+            .new_function_type_node(None, None, Some(any_keyword));
+        self.new_signature(
+            SignatureFlags::None,
+            Some(decl),
+            type_parameters,
+            this_parameter,
+            parameters,
+            Some(return_type),
+            None,
+            parameters.len(),
+        )
     }
 
     // checker.go:31013
@@ -848,7 +863,13 @@ impl Checker {
     pub(crate) fn is_circular_mapped_property(&mut self, symbol: P<Symbol>) -> bool {
         if symbol.check_flags.get().intersects(CheckFlags::Mapped) {
             let links = self.value_symbol_links.get(symbol);
-            return links.resolved_type.get().is_none() && self.find_resolution_cycle_start_index(TypeSystemEntity::Symbol(symbol), TypeSystemPropertyName::Type) >= 0;
+            return links.resolved_type.get().is_none()
+                && self
+                    .find_resolution_cycle_start_index(
+                        TypeSystemEntity::Symbol(symbol),
+                        TypeSystemPropertyName::Type,
+                    )
+                    .is_some();
         }
         false
     }
@@ -904,13 +925,12 @@ impl Checker {
 
 impl ObjectLiteralDiscriminator {
     // checker.go:31208
-    pub(crate) fn len(&mut self, _c: &mut Checker) -> i32 {
-        (self.props.len() + self.members.len()) as i32
+    pub(crate) fn len(&mut self, _c: &mut Checker) -> usize {
+        self.props.len() + self.members.len()
     }
 
     // checker.go:31212
-    pub(crate) fn name(&mut self, _c: &mut Checker, index: i32) -> &'static str {
-        let index = index as usize;
+    pub(crate) fn name(&mut self, _c: &mut Checker, index: usize) -> &'static str {
         if index < self.props.len() {
             return self.props[index].symbol().unwrap().name();
         }
@@ -918,8 +938,7 @@ impl ObjectLiteralDiscriminator {
     }
 
     // checker.go:31219
-    pub(crate) fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
-        let index = index as usize;
+    pub(crate) fn matches(&mut self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
         let prop_type;
         if index < self.props.len() {
             let prop = self.props[index];
@@ -1104,13 +1123,17 @@ impl Checker {
     }
 
     // checker.go:31375
-    pub(crate) fn find_contextual_node(&mut self, node: P<Node>, include_caches: bool) -> i32 {
+    pub(crate) fn find_contextual_node(
+        &mut self,
+        node: P<Node>,
+        include_caches: bool,
+    ) -> Option<usize> {
         for (i, info) in self.contextual_infos.iter().enumerate() {
             if node == info.node && (include_caches || !info.is_cache) {
-                return i as i32;
+                return Some(i);
             }
         }
-        -1
+        None
     }
 
     // Returns true if the given expression contains (at any level of nesting) a function or arrow expression
@@ -1974,7 +1997,12 @@ impl Checker {
                 // no other meta properties are valid syntax, thus no others should have symbols
                 return None;
             } else if ast::is_jsdoc_parameter_tag(parent) && parent.name() == Some(node) {
-                let func = ast::get_node_at_position(ast::get_source_file_of_node(node).unwrap(), node.pos(), false);
+                let func = ast::get_node_at_position(
+                    ast::get_source_file_of_node(node).unwrap(),
+                    node.pos()
+                        .expect_source("parsed nodes have source positions"),
+                    false,
+                );
                 if ast::is_function_like(func) {
                     for &param in func.parameters() {
                         if ast::is_identifier(param.name().unwrap()) && param.name().unwrap().text() == node.text() {

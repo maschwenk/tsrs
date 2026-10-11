@@ -76,7 +76,7 @@ fn get_base_paths(path: &str, includes: &[impl AsRef<str>], use_case_sensitive_f
         }
 
         // Sort the offsets array using either the literal or canonical path representations.
-        include_base_paths.sort_by(|a, b| string_comparer(a, b).cmp(&0));
+        include_base_paths.sort_by(|a, b| string_comparer(a, b));
 
         // Iterate over each include base path and include unique base paths that are not a
         // subpath of an existing base path
@@ -361,7 +361,7 @@ impl GlobPattern {
     fn match_segments(&self, segs: &[Segment], s: &str) -> bool {
         let s = s.as_bytes();
         let (mut seg_idx, mut s_idx) = (0usize, 0usize);
-        let (mut star_seg_idx, mut star_s_idx) = (-1isize, 0usize);
+        let (mut star_seg_idx, mut star_s_idx) = (None, 0usize);
 
         while s_idx < s.len() {
             if seg_idx < segs.len() {
@@ -385,7 +385,7 @@ impl GlobPattern {
                     }
                     SegmentKind::Star => {
                         // Record star position for backtracking, then try matching zero chars.
-                        star_seg_idx = seg_idx as isize;
+                        star_seg_idx = Some(seg_idx);
                         star_s_idx = s_idx;
                         seg_idx += 1;
                         continue;
@@ -394,12 +394,14 @@ impl GlobPattern {
             }
 
             // Current segment didn't match. Backtrack to last star if possible.
-            if star_seg_idx >= 0 && star_s_idx < s.len() && s[star_s_idx] != b'/' {
+            if let Some(star_seg_idx) =
+                star_seg_idx.filter(|_| star_s_idx < s.len() && s[star_s_idx] != b'/')
+            {
                 // Star consumes one more character (rune), retry from segment after star.
                 let (_, size) = decode_rune(&s[star_s_idx..]);
                 star_s_idx += size;
                 s_idx = star_s_idx;
-                seg_idx = star_seg_idx as usize + 1;
+                seg_idx = star_seg_idx + 1;
                 continue;
             }
 
@@ -901,14 +903,11 @@ impl SpecMatcher {
         false
     }
 
-    // MatchIndex returns the index of the first matching pattern, or -1.
-    pub fn match_index(&self, path: &str) -> i32 {
-        for (i, p) in self.patterns.iter().enumerate() {
-            if p.matches(path) {
-                return i as i32;
-            }
-        }
-        -1
+    // MatchIndex returns the index of the first matching pattern.
+    pub fn match_index(&self, path: &str) -> Option<usize> {
+        self.patterns
+            .iter()
+            .position(|pattern| pattern.matches(path))
     }
 }
 

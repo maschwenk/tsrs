@@ -1231,7 +1231,7 @@ fn test_spec_matchers_match_index() {
         usage: Usage,
         use_case_sensitive_file_names: bool,
         paths: Vec<&'static str>,
-        expected: Vec<i32>,
+        expected: Vec<Option<usize>>,
     }
     let cases = vec![
         Case {
@@ -1241,7 +1241,7 @@ fn test_spec_matchers_match_index() {
             usage: Usage::Files,
             use_case_sensitive_file_names: true,
             paths: vec!["/project/a.ts", "/project/a.tsx", "/project/a.js"],
-            expected: vec![0, 1, -1],
+            expected: vec![Some(0), Some(1), None],
         },
         Case {
             name: "exclude index lookup",
@@ -1256,7 +1256,7 @@ fn test_spec_matchers_match_index() {
                 "/project/bower_components/bar",
                 "/project/src",
             ],
-            expected: vec![-1, 0, -1, 1, -1],
+            expected: vec![None, Some(0), None, Some(1), None],
         },
     ];
 
@@ -1342,7 +1342,7 @@ fn test_spec_matchers() {
         usage: Usage,
         use_case_sensitive_file_names: bool,
         expect_nil: bool,
-        path_to_index: Vec<(&'static str, i32)>,
+        path_to_index: Vec<(&'static str, Option<usize>)>,
     }
     let cases = vec![
         Case {
@@ -1353,10 +1353,10 @@ fn test_spec_matchers() {
             use_case_sensitive_file_names: true,
             expect_nil: false,
             path_to_index: vec![
-                ("/project/a.ts", 0),
-                ("/project/b.tsx", 1),
-                ("/project/c.js", 2),
-                ("/project/d.css", -1), // no match
+                ("/project/a.ts", Some(0)),
+                ("/project/b.tsx", Some(1)),
+                ("/project/c.js", Some(2)),
+                ("/project/d.css", None), // no match
             ],
         },
         Case {

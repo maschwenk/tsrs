@@ -151,8 +151,8 @@ pub(crate) struct buildInfoDiagnosticWithFileName {
     // filename if it is for a File thats other than its stored for
     pub(crate) file: Path,
     pub(crate) no_file: bool,
-    pub(crate) pos: i32,
-    pub(crate) end: i32,
+    pub(crate) pos: u32,
+    pub(crate) end: u32,
     pub(crate) code: i32,
     pub(crate) category: Category,
     pub(crate) source: String,
@@ -478,9 +478,12 @@ impl Snapshot {
 }
 
 // snapshot.go:397
-pub(crate) fn get_text_handling_source_map_for_signature<'a>(text: &'a str, data: &WriteFileData) -> &'a str {
-    if data.source_map_url_pos != -1 {
-        return &text[..data.source_map_url_pos as usize];
+pub(crate) fn get_text_handling_source_map_for_signature<'a>(
+    text: &'a str,
+    data: &WriteFileData,
+) -> &'a str {
+    if let Some(source_map_url_pos) = data.source_map_url_pos {
+        return &text[..source_map_url_pos as usize];
     }
     text
 }
@@ -501,7 +504,7 @@ fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<Sourc
         )));
     }
     if diagnostic.file().is_some() {
-        let _ = write!(builder, "({},{}): ", diagnostic.pos(), diagnostic.len());
+        let _ = write!(builder, "({:?},{:?}): ", diagnostic.pos(), diagnostic.len());
     }
     builder.push_str(diagnostic.category().name());
     let _ = write!(builder, "{}: ", diagnostic.code());

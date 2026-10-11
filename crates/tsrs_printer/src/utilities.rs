@@ -7,7 +7,7 @@ use crate::*;
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub(crate) struct getLiteralTextFlags: i32 {
+    pub(crate) struct getLiteralTextFlags: u32 {
         const None = 0;
         const NeverAsciiEscape = 1 << 0;
         const JsxAttributeEscape = 1 << 1;
@@ -349,59 +349,151 @@ pub(crate) fn range_end_is_on_same_line_as_range_start(range1: TextRange, range2
     positions_are_on_same_line(range1.end(), get_start_position_of_range(range2, source_file, false /*includeComments*/), source_file)
 }
 
-pub(crate) fn get_start_position_of_range(r: TextRange, source_file: P<SourceFile>, include_comments: bool) -> i32 {
+pub(crate) fn get_start_position_of_range(
+    r: TextRange,
+    source_file: P<SourceFile>,
+    include_comments: bool,
+) -> TextPos {
     if position_is_synthesized(r.pos()) {
-        return -1;
+        return TextPos::Synthetic;
     }
-    scanner::skip_trivia_ex(source_file.text(), r.pos(), Some(&scanner::SkipTriviaOptions { stop_at_comments: include_comments, ..Default::default() }))
+    scanner::skip_trivia_ex(
+        source_file.text(),
+        r.pos().expect_source("source ranges have source positions"),
+        Some(&scanner::SkipTriviaOptions {
+            stop_at_comments: include_comments,
+            ..Default::default()
+        }),
+    )
+    .into()
 }
 
-pub fn positions_are_on_same_line(pos1: i32, pos2: i32, source_file: P<SourceFile>) -> bool {
-    get_lines_between_positions(source_file, pos1, pos2) == 0
+pub fn positions_are_on_same_line(
+    pos1: TextPos,
+    pos2: TextPos,
+    source_file: P<SourceFile>,
+) -> bool {
+    get_lines_between_positions(source_file, pos1, pos2).is_same()
 }
 
-pub fn get_lines_between_positions(source_file: P<SourceFile>, pos1: i32, pos2: i32) -> i32 {
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum LineDifference {
+    Before(u32),
+    Same,
+    After(u32),
+}
+
+impl LineDifference {
+    pub fn is_same(self) -> bool {
+        self == Self::Same
+    }
+
+    pub(crate) fn forward_count(self) -> usize {
+        match self {
+            Self::After(count) => count as usize,
+            Self::Before(_) | Self::Same => 0,
+        }
+    }
+}
+
+pub fn get_lines_between_positions(
+    source_file: P<SourceFile>,
+    pos1: TextPos,
+    pos2: TextPos,
+) -> LineDifference {
     if pos1 == pos2 {
-        return 0;
+        return LineDifference::Same;
     }
+    let Some((pos1, pos2)) = pos1.source_offset().zip(pos2.source_offset()) else {
+        return LineDifference::Same;
+    };
     let line_starts = scanner::get_ecma_line_starts(&*source_file);
     let lower = if pos1 < pos2 { pos1 } else { pos2 };
     let is_negative = lower == pos2;
     let upper = if is_negative { pos1 } else { pos2 };
     let lower_line = scanner::compute_line_of_position(line_starts, lower);
-    let upper_line = lower_line + scanner::compute_line_of_position(&line_starts[lower_line as usize..], upper);
-    if is_negative {
-        lower_line - upper_line
+    let upper_line =
+        lower_line + scanner::compute_line_of_position(&line_starts[lower_line..], upper);
+    let difference = u32::try_from(upper_line - lower_line).expect("line difference exceeds u32");
+    if difference == 0 {
+        LineDifference::Same
+    } else if is_negative {
+        LineDifference::Before(difference)
     } else {
-        upper_line - lower_line
+        LineDifference::After(difference)
     }
 }
 
-pub(crate) fn get_lines_between_range_end_and_range_start(range1: TextRange, range2: TextRange, source_file: P<SourceFile>, include_second_range_comments: bool) -> i32 {
-    let range2_start = get_start_position_of_range(range2, source_file, include_second_range_comments);
+pub(crate) fn get_lines_between_range_end_and_range_start(
+    range1: TextRange,
+    range2: TextRange,
+    source_file: P<SourceFile>,
+    include_second_range_comments: bool,
+) -> LineDifference {
+    let range2_start =
+        get_start_position_of_range(range2, source_file, include_second_range_comments);
     get_lines_between_positions(source_file, range1.end(), range2_start)
 }
 
-pub(crate) fn get_lines_between_position_and_preceding_non_whitespace_character(pos: i32, stop_pos: i32, source_file: P<SourceFile>, include_comments: bool) -> i32 {
-    let start_pos = scanner::skip_trivia_ex(source_file.text(), pos, Some(&scanner::SkipTriviaOptions { stop_at_comments: include_comments, ..Default::default() }));
+pub(crate) fn get_lines_between_position_and_preceding_non_whitespace_character(
+    pos: TextPos,
+    stop_pos: TextPos,
+    source_file: P<SourceFile>,
+    include_comments: bool,
+) -> LineDifference {
+    let pos = pos.expect_source("source ranges have source positions");
+    let stop_pos = stop_pos.expect_source("source ranges have source positions");
+    let start_pos = scanner::skip_trivia_ex(
+        source_file.text(),
+        pos,
+        Some(&scanner::SkipTriviaOptions {
+            stop_at_comments: include_comments,
+            ..Default::default()
+        }),
+    );
     let prev_pos = get_previous_non_whitespace_position(start_pos, stop_pos, source_file);
-    get_lines_between_positions(source_file, if prev_pos >= 0 { prev_pos } else { stop_pos }, start_pos)
+    get_lines_between_positions(
+        source_file,
+        prev_pos.unwrap_or(stop_pos).into(),
+        start_pos.into(),
+    )
 }
 
-pub(crate) fn get_lines_between_position_and_next_non_whitespace_character(pos: i32, stop_pos: i32, source_file: P<SourceFile>, include_comments: bool) -> i32 {
-    let next_pos = scanner::skip_trivia_ex(source_file.text(), pos, Some(&scanner::SkipTriviaOptions { stop_at_comments: include_comments, ..Default::default() }));
-    get_lines_between_positions(source_file, pos, if stop_pos < next_pos { stop_pos } else { next_pos })
+pub(crate) fn get_lines_between_position_and_next_non_whitespace_character(
+    pos: TextPos,
+    stop_pos: TextPos,
+    source_file: P<SourceFile>,
+    include_comments: bool,
+) -> LineDifference {
+    let pos = pos.expect_source("source ranges have source positions");
+    let stop_pos = stop_pos.expect_source("source ranges have source positions");
+    let next_pos = scanner::skip_trivia_ex(
+        source_file.text(),
+        pos,
+        Some(&scanner::SkipTriviaOptions {
+            stop_at_comments: include_comments,
+            ..Default::default()
+        }),
+    );
+    get_lines_between_positions(source_file, pos.into(), stop_pos.min(next_pos).into())
 }
 
-pub(crate) fn get_previous_non_whitespace_position(pos: i32, stop_pos: i32, source_file: P<SourceFile>) -> i32 {
+pub(crate) fn get_previous_non_whitespace_position(
+    pos: u32,
+    stop_pos: u32,
+    source_file: P<SourceFile>,
+) -> Option<u32> {
     let mut pos = pos;
     while pos >= stop_pos {
         if !stringutil::is_white_space_like(source_file.text().as_bytes()[pos as usize] as i32) {
-            return pos;
+            return Some(pos);
+        }
+        if pos == 0 {
+            break;
         }
         pos -= 1;
     }
-    -1
+    None
 }
 
 pub(crate) fn sibling_node_positions_are_comparable(emit_context: P<EmitContext>, previous_node: P<Node>, next_node: P<Node>) -> bool {
@@ -560,40 +652,40 @@ pub(crate) fn original_nodes_have_same_parent(emit_context: P<EmitContext>, node
 
 /// Go `tryGetEnd`: the values `greatestEnd` accepts (nil-able nodes, node lists, modifier lists, text ranges).
 pub(crate) trait TryGetEnd {
-    fn try_get_end(&self) -> Option<i32>;
+    fn try_get_end(&self) -> Option<TextPos>;
 }
 
 impl TryGetEnd for P<Node> {
-    fn try_get_end(&self) -> Option<i32> {
+    fn try_get_end(&self) -> Option<TextPos> {
         Some(self.end())
     }
 }
 
 impl TryGetEnd for Option<P<Node>> {
-    fn try_get_end(&self) -> Option<i32> {
+    fn try_get_end(&self) -> Option<TextPos> {
         self.map(|n| n.end())
     }
 }
 
 impl TryGetEnd for Option<P<NodeList>> {
-    fn try_get_end(&self) -> Option<i32> {
+    fn try_get_end(&self) -> Option<TextPos> {
         self.map(|n| n.end())
     }
 }
 
 impl TryGetEnd for Option<P<ModifierList>> {
-    fn try_get_end(&self) -> Option<i32> {
+    fn try_get_end(&self) -> Option<TextPos> {
         self.map(|n| n.end())
     }
 }
 
 impl TryGetEnd for TextRange {
-    fn try_get_end(&self) -> Option<i32> {
+    fn try_get_end(&self) -> Option<TextPos> {
         Some(self.end())
     }
 }
 
-pub(crate) fn greatest_end(end: i32, nodes: &[&dyn TryGetEnd]) -> i32 {
+pub(crate) fn greatest_end(end: TextPos, nodes: &[&dyn TryGetEnd]) -> TextPos {
     let mut end = end;
     for node in nodes.iter().rev() {
         if let Some(node_end) = node.try_get_end() {
@@ -791,7 +883,7 @@ fn match_quoted_string(text: &str, pos: &mut usize) -> bool {
 pub fn is_recognized_triple_slash_comment(text: &str, comment_range: CommentRange) -> bool {
     let bytes = text.as_bytes();
     if comment_range.kind == Kind::SingleLineCommentTrivia
-        && comment_range.text_range.len() > 2
+        && comment_range.text_range.len().is_some_and(|len| len > 2)
         && bytes[comment_range.pos() as usize + 1] == b'/'
         && bytes[comment_range.pos() as usize + 2] == b'/'
     {
@@ -844,14 +936,19 @@ pub fn is_recognized_triple_slash_comment(text: &str, comment_range: CommentRang
 
 pub(crate) fn is_jsdoc_like_text(text: &str, comment: CommentRange) -> bool {
     let bytes = text.as_bytes();
-    comment.kind == Kind::MultiLineCommentTrivia && comment.text_range.len() >= 5 && bytes[comment.pos() as usize + 2] == b'*' && bytes[comment.pos() as usize + 3] != b'/'
+    comment.kind == Kind::MultiLineCommentTrivia
+        && comment.text_range.len().is_some_and(|len| len >= 5)
+        && bytes[comment.pos() as usize + 2] == b'*'
+        && bytes[comment.pos() as usize + 3] != b'/'
 }
 
 pub fn is_pinned_comment(text: &str, comment: CommentRange) -> bool {
-    comment.kind == Kind::MultiLineCommentTrivia && comment.text_range.len() > 5 && text.as_bytes()[comment.pos() as usize + 2] == b'!'
+    comment.kind == Kind::MultiLineCommentTrivia
+        && comment.text_range.len().is_some_and(|len| len > 5)
+        && text.as_bytes()[comment.pos() as usize + 2] == b'!'
 }
 
-pub(crate) fn calculate_indent(text: &str, pos: i32, end: i32) -> i32 {
+pub(crate) fn calculate_indent(text: &str, pos: u32, end: u32) -> i32 {
     let mut pos = pos as usize;
     let end = end as usize;
     let mut current_line_indent = 0;
@@ -885,10 +982,10 @@ pub(crate) fn calculate_indent(text: &str, pos: i32, end: i32) -> i32 {
 // Character offsets are measured in UTF-16 code units per the source map specification.
 #[derive(Clone, Copy)]
 pub(crate) struct lineCharacterCache {
-    pub(crate) line_map: &'static [TextPos],
+    pub(crate) line_map: &'static [u32],
     pub(crate) text: &'static str,
-    pub(crate) cached_line: i32,
-    pub(crate) cached_pos: i32,
+    pub(crate) cached_line: usize,
+    pub(crate) cached_pos: u32,
     pub(crate) cached_char: UTF16Offset,
     pub(crate) has_cached: bool,
 }
@@ -902,32 +999,36 @@ impl lineCharacterCache {
     // utilities.go:912
     // getLineAndCharacter returns the 0-based line number and UTF-16 code unit
     // offset from the start of that line for the given byte position.
-    pub(crate) fn get_line_and_character(&mut self, pos: i32) -> (i32, UTF16Offset) {
+    pub(crate) fn get_line_and_character(&mut self, pos: u32) -> (u32, UTF16Offset) {
         let line = scanner::compute_line_of_position(self.line_map, pos);
-        let line_start = self.line_map[line as usize] as i32;
+        let line_start = self.line_map[line];
         // When pos is beyond the source text (e.g., for error-recovery tokens like
         // missing closing braces), we can't slice past the text end. Compute the
         // UTF-16 length up to EOF and add the remaining byte offset arithmetically,
         // matching TypeScript's computeLineAndCharacterOfPosition which uses
         // arithmetic (position - lineStarts[lineNumber]) and handles this implicitly.
-        let end_pos = pos.min(self.text.len() as i32);
-        let mut character = if self.has_cached && line == self.cached_line && end_pos >= self.cached_pos {
-            // Incremental: only count UTF-16 code units from the last cached position.
-            self.cached_char + utf16_len(&self.text[self.cached_pos as usize..end_pos as usize])
-        } else if self.has_cached && line == self.cached_line && end_pos - line_start > self.cached_pos - end_pos {
-            // tsrs-only: a position before the cached one on the same line (the printer maps a node's start after its
-            // children's ends) is nearer to the cached position than to the line start; count back from there.
-            self.cached_char - utf16_len(&self.text[end_pos as usize..self.cached_pos as usize])
-        } else {
-            // Full computation from line start.
-            utf16_len(&self.text[line_start as usize..end_pos as usize])
-        };
+        let end_pos = pos.min(self.text.len() as u32);
+        let mut character =
+            if self.has_cached && line == self.cached_line && end_pos >= self.cached_pos {
+                // Incremental: only count UTF-16 code units from the last cached position.
+                self.cached_char + utf16_len(&self.text[self.cached_pos as usize..end_pos as usize])
+            } else if self.has_cached
+                && line == self.cached_line
+                && end_pos - line_start > self.cached_pos - end_pos
+            {
+                // tsrs-only: a position before the cached one on the same line (the printer maps a node's start after its
+                // children's ends) is nearer to the cached position than to the line start; count back from there.
+                self.cached_char - utf16_len(&self.text[end_pos as usize..self.cached_pos as usize])
+            } else {
+                // Full computation from line start.
+                utf16_len(&self.text[line_start as usize..end_pos as usize])
+            };
         let cached_char = character;
-        character += (pos - end_pos) as UTF16Offset;
+        character += pos - end_pos;
         self.cached_line = line;
         self.cached_pos = end_pos;
         self.cached_char = cached_char;
         self.has_cached = true;
-        (line, character)
+        (line as u32, character)
     }
 }

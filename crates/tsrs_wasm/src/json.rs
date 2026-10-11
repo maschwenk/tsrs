@@ -38,12 +38,12 @@ fn num(v: impl Into<f64>) -> Value {
     Value::Number(v.into())
 }
 
-fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Value> {
+fn source_lines(file: &SourceFile, first_line: usize, last_line: usize) -> Option<Value> {
     let line_map = file.ecma_line_map();
     if line_map.is_empty() {
         return None;
     }
-    let lines: Vec<i32> = if last_line - first_line >= 4 {
+    let lines: Vec<usize> = if last_line - first_line >= 4 {
         vec![first_line, first_line + 1, last_line - 1, last_line]
     } else {
         (first_line..=last_line).collect()
@@ -51,24 +51,34 @@ fn source_lines(file: &SourceFile, first_line: i32, last_line: i32) -> Option<Va
     let text = file.text();
     let mut result = Vec::with_capacity(lines.len());
     for line in lines {
-        let start = line_map[line as usize] as usize;
-        let end = if ((line + 1) as usize) < line_map.len() { line_map[(line + 1) as usize] as usize } else { text.len() };
-        result.push(Obj::new().set("line", num(line)).set("text", Value::String(text[start..end].to_string())).build());
+        let start = line_map[line] as usize;
+        let end = if line + 1 < line_map.len() {
+            line_map[line + 1] as usize
+        } else {
+            text.len()
+        };
+        result.push(
+            Obj::new()
+                .set(
+                    "line",
+                    num(u32::try_from(line).expect("line number exceeds u32")),
+                )
+                .set("text", Value::String(text[start..end].to_string()))
+                .build(),
+        );
     }
     Some(Value::Array(result))
 }
 
 fn diagnostic_response(d: &Diagnostic) -> Value {
     let file = d.file();
-    let mut pos = d.pos();
-    let mut end = d.end();
-    if let Some(file) = file {
-        let len = file.text().len() as i32;
-        pos = pos.min(len).max(0);
-        end = end.min(len).max(pos);
-    }
+    let pos = d.pos();
+    let end = d.end();
     let mut o = Obj::new();
     if let Some(file) = file {
+        let len = u32::try_from(file.text().len()).expect("source length exceeds u32");
+        let pos = pos.unwrap_or(0).min(len);
+        let end = end.unwrap_or(pos).min(len).max(pos);
         let map = file.get_position_map();
         let (start_line, start_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, pos);
         let (end_line, end_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(&*file, end);
@@ -76,13 +86,45 @@ fn diagnostic_response(d: &Diagnostic) -> Value {
             .set("fileName", Value::String(file.file_name().to_string()))
             .set("pos", num(map.utf8_to_utf16(pos)))
             .set("end", num(map.utf8_to_utf16(end)))
-            .set("startPosition", Obj::new().set("line", num(start_line)).set("character", num(start_char as f64)).build())
-            .set("endPosition", Obj::new().set("line", num(end_line)).set("character", num(end_char as f64)).build());
+            .set(
+                "startPosition",
+                Obj::new()
+                    .set(
+                        "line",
+                        num(u32::try_from(start_line).expect("line number exceeds u32")),
+                    )
+                    .set(
+                        "character",
+                        num(u32::try_from(start_char).expect("character offset exceeds u32")),
+                    )
+                    .build(),
+            )
+            .set(
+                "endPosition",
+                Obj::new()
+                    .set(
+                        "line",
+                        num(u32::try_from(end_line).expect("line number exceeds u32")),
+                    )
+                    .set(
+                        "character",
+                        num(u32::try_from(end_char).expect("character offset exceeds u32")),
+                    )
+                    .build(),
+            );
         if let Some(lines) = source_lines(&file, start_line, end_line) {
             o = o.set("sourceLines", lines);
         }
     } else {
-        o = o.set("pos", num(pos)).set("end", num(end));
+        o = o
+            .set(
+                "pos",
+                num(pos.map_or(-1, |value| i32::try_from(value).unwrap_or(i32::MAX))),
+            )
+            .set(
+                "end",
+                num(end.map_or(-1, |value| i32::try_from(value).unwrap_or(i32::MAX))),
+            );
     }
     o = o.set("code", num(d.code())).set("category", num(category_number(d.category())));
     if !d.source().is_empty() {

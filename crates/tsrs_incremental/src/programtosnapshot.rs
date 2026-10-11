@@ -575,8 +575,8 @@ fn repopulate_diagnostic_message_chain(chain: &[P<Diagnostic>], p: &'static Comp
         if let Some(info) = c.repopulate_info() {
             // Convert to buildInfoDiagnosticWithFileName and repopulate
             let mut b = buildInfoDiagnosticWithFileName {
-                pos: c.pos(),
-                end: c.end(),
+                pos: c.pos().unwrap_or(0),
+                end: c.end().unwrap_or(0),
                 code: c.code(),
                 category: c.category(),
                 source: c.source().to_string(),
@@ -614,8 +614,8 @@ fn repopulate_diagnostic_message_chain(chain: &[P<Diagnostic>], p: &'static Comp
 // programtosnapshot.go:420
 fn ast_diag_to_build_info_diag(d: P<Diagnostic>) -> buildInfoDiagnosticWithFileName {
     let mut b = buildInfoDiagnosticWithFileName {
-        pos: d.pos(),
-        end: d.end(),
+        pos: d.pos().unwrap_or(0),
+        end: d.end().unwrap_or(0),
         code: d.code(),
         category: d.category(),
         source: d.source().to_string(),

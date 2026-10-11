@@ -359,8 +359,11 @@ impl LanguageService {
 
         // Span should only be the last component of the path. + 1 to account for the quote character.
         let index_after_last_slash = specifier_text.rfind('/').map_or(0, |i| i + 1);
-        let start = astnav::get_start_of_node(specifier, source_file, false /*includeJSDoc*/) + 1 + index_after_last_slash as i32;
-        let length = (specifier_text.len() - index_after_last_slash) as i32;
+        let start = astnav::get_start_of_node(specifier, source_file, false /*includeJSDoc*/)
+            + 1
+            + u32::try_from(index_after_last_slash).expect("module specifier offset exceeds u32");
+        let length = u32::try_from(specifier_text.len() - index_after_last_slash)
+            .expect("module specifier length exceeds u32");
 
         let (trigger_span, fidelity) = self.converters.to_lsp_range(&source_file, TextRange::new(start, start + length));
         if !fidelity.is_exact() {
@@ -482,7 +485,9 @@ fn get_rename_info_error(_ctx: &Context, message: &Message) -> RenameInfo {
 // rename.go:437
 fn get_rename_info_success(node: P<Node>, source_file: P<SourceFile>, display_name: &str, converters: &Converters) -> RenameInfo {
     let mut start = astnav::get_start_of_node(node, source_file, false /*includeJSDoc*/);
-    let mut end = node.end();
+    let mut end = node
+        .end()
+        .expect_source("parsed rename targets have source positions");
     if ast::is_string_literal_like(node) {
         // Exclude the quotes
         start += 1;

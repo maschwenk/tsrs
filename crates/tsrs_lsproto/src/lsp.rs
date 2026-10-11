@@ -477,19 +477,19 @@ pub(crate) fn json_object_raw_field<'a>(data: &'a Value, field: &str) -> Option<
 }
 
 // lsp.go:161: the index in `keys` of the first top-level key of the object (in document order) that is
-// one of `keys`, or -1.
-pub(crate) fn json_object_has_key(data: &Value, keys: &[&str]) -> i32 {
+// one of `keys`.
+pub(crate) fn json_object_has_key(data: &Value, keys: &[&str]) -> Option<usize> {
     let Value::Object(members) = data else {
-        return -1;
+        return None;
     };
     for name in members.keys() {
         for (i, key) in keys.iter().enumerate() {
             if name == key {
-                return i as i32;
+                return Some(i);
             }
         }
     }
-    -1
+    None
 }
 
 // Inspired by https://www.youtube.com/watch?v=dab3I-HcTVk

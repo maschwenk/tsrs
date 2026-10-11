@@ -319,7 +319,7 @@ f2<any, () =>/*1z*/T/*2z*/y/*3z*/"#;
         let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            f.go_to_each_marker(t, &[], |f: &mut fourslash::FourslashTest, marker: Arc<fourslash::Marker>, _index: i32| {
+            f.go_to_each_marker(t, &[], |f: &mut fourslash::FourslashTest, marker: Arc<fourslash::Marker>, _index: usize| {
                 let marker_name = marker.name.clone();
                 let value_only = (!marker_name.is_none()) && go::strings::has_suffix(marker_name.as_ref().unwrap(), "ValueOnly");
                 let mut commit_characters = Some(util::DEFAULT_COMMIT_CHARACTERS.clone());

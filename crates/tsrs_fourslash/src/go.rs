@@ -239,8 +239,8 @@ pub mod strings {
         s.ends_with(suffix)
     }
 
-    pub fn index(s: &str, substr: &str) -> i32 {
-        s.find(substr).map(|i| i as i32).unwrap_or(-1)
+    pub fn index(s: &str, substr: &str) -> Option<usize> {
+        s.find(substr)
     }
 
     pub fn join(elems: &[&str], sep: &str) -> String {

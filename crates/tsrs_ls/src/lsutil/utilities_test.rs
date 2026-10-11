@@ -1,4 +1,6 @@
-use tsrs_core::{ScriptKind, Tristate, P};
+use std::cmp::Ordering;
+
+use tsrs_core::{P, ScriptKind, Tristate};
 
 use super::*;
 
@@ -103,25 +105,49 @@ fn test_compare_organize_imports_natural_strings() {
         name: &'static str,
         a: &'static str,
         b: &'static str,
-        want: i32,
+        want: Ordering,
     }
     let tests = [
-        Test { name: "numeric runs sort by numeric value", a: "a2", b: "a100", want: -1 },
-        Test { name: "numeric runs with equal value use raw tie break", a: "a02", b: "a2", want: -1 },
-        Test { name: "accents are folded for primary comparison", a: "À", b: "B", want: -1 },
-        Test { name: "raw comparison breaks accent ties", a: "A", b: "À", want: -1 },
-        Test { name: "hyphen sorts before slash like Intl.Collator fallback", a: "app-init", b: "app/app", want: -1 },
+        Test {
+            name: "numeric runs sort by numeric value",
+            a: "a2",
+            b: "a100",
+            want: Ordering::Less,
+        },
+        Test {
+            name: "numeric runs with equal value use raw tie break",
+            a: "a02",
+            b: "a2",
+            want: Ordering::Less,
+        },
+        Test {
+            name: "accents are folded for primary comparison",
+            a: "À",
+            b: "B",
+            want: Ordering::Less,
+        },
+        Test {
+            name: "raw comparison breaks accent ties",
+            a: "A",
+            b: "À",
+            want: Ordering::Less,
+        },
+        Test {
+            name: "hyphen sorts before slash like Intl.Collator fallback",
+            a: "app-init",
+            b: "app/app",
+            want: Ordering::Less,
+        },
     ];
 
     for tt in tests {
-        let got = cmp_sign(comparer(tt.a, tt.b));
-        assert_eq!(got, tt.want, "{}: comparer({:?}, {:?})", tt.name, tt.a, tt.b);
+        let got = comparer(tt.a, tt.b);
+        assert_eq!(
+            got, tt.want,
+            "{}: comparer({:?}, {:?})",
+            tt.name, tt.a, tt.b
+        );
     }
-}
-
-// utilities_test.go:192
-fn cmp_sign(value: i32) -> i32 {
-    value.signum()
 }
 
 // Not in Go: unicode.ToUpper uses the simple case mapping, so a Greek letter with ypogegrammeni maps to its titlecase

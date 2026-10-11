@@ -6,7 +6,6 @@ use std::process::{Command, Stdio};
 use std::sync::Arc;
 
 use tsrs_core::json::Value;
-use tsrs_core::TextPos;
 use tsrs_lsproto as lsproto;
 
 use super::*;
@@ -252,11 +251,18 @@ fn test_converters_against_js_reference() {
     for (i, &(name, text)) in cases.iter().enumerate() {
         let (conv, script) = new_test_converters(text);
         for &(byte_pos, line, char) in &refs[i] {
-            let byte_pos = byte_pos as TextPos;
-            let expected_lc = lsproto::Position { line, character: char };
+            let byte_pos =
+                u32::try_from(byte_pos).expect("reference position fits in a source position");
+            let expected_lc = lsproto::Position {
+                line,
+                character: char,
+            };
 
-            let (got_lc, _) = conv.to_lsp_position(&script, byte_pos);
-            assert_eq!(got_lc, expected_lc, "{name}: PositionToLineAndCharacter({byte_pos}) mismatch in {text:?}");
+            let (got_lc, _) = conv.to_lsp_position(&script, byte_pos.into());
+            assert_eq!(
+                got_lc, expected_lc,
+                "{name}: PositionToLineAndCharacter({byte_pos}) mismatch in {text:?}"
+            );
 
             let positions = conv.from_lsp_position(script.clone(), expected_lc, Feature::All);
             assert_eq!(positions.len(), 1);

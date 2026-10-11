@@ -1,5 +1,5 @@
-use std::sync::atomic::{AtomicI32, Ordering};
-use std::sync::{mpsc, Condvar, Mutex};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Condvar, Mutex, mpsc};
 use std::time::{Duration, SystemTime};
 
 use tsrs_core::collections::{new_ordered_map_with_size_hint, OrderedMapExt};
@@ -196,7 +196,7 @@ impl<T: FS> FS for BlockingFS<T> {
 struct FlipFileExistsFS<T: FS> {
     fs: T,
     target_path: String,
-    call_count: AtomicI32,
+    call_count: AtomicUsize,
     first_arrived: Gate,
     second_arrived: Gate,
     first_gate: Gate,
@@ -210,7 +210,7 @@ impl<T: FS> FlipFileExistsFS<T> {
         FlipFileExistsFS {
             fs,
             target_path: target_path.to_string(),
-            call_count: AtomicI32::new(0),
+            call_count: AtomicUsize::new(0),
             first_arrived: Gate::default(),
             second_arrived: Gate::default(),
             first_gate: Gate::default(),

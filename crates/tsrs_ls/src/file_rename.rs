@@ -97,7 +97,7 @@ impl LanguageService {
         let old_path = old_path.to_string();
         let new_path = new_path.to_string();
         Box::new(move |path: &str| -> Option<String> {
-            if tspath::compare_paths(path, &old_path, &compare_options) == 0 {
+            if tspath::compare_paths(path, &old_path, &compare_options).is_eq() {
                 return Some(new_path.clone());
             }
             // Trim the directory prefix ourselves (rather than using
@@ -331,7 +331,13 @@ fn try_update_config_string(
         return false;
     };
 
-    let text_range = TextRange::new(scanner::get_token_pos_of_node(element, config_file, false) + 1, element.end() - 1);
+    let text_range = TextRange::new(
+        scanner::get_token_pos_of_node(element, config_file, false) + 1,
+        element
+            .end()
+            .expect_source("parsed nodes have source positions")
+            - 1,
+    );
     let (lsp_range, fidelity) = converters.to_lsp_range(&config_file, text_range);
     assert!(fidelity.is_exact(), "config files are not content-mapped");
     change_tracker.replace_range_with_text(config_file, lsp_range, &relative_path_from_directory(config_dir, &updated, use_case_sensitive_file_names));
@@ -396,7 +402,12 @@ fn get_updated_import_specifier_from_moved_source_files(
 
 // file_rename.go:366
 fn create_string_text_range(source_file: P<SourceFile>, node: P<Node>) -> TextRange {
-    TextRange::new(scanner::get_token_pos_of_node(node, source_file, false) + 1, node.end() - 1)
+    TextRange::new(
+        scanner::get_token_pos_of_node(node, source_file, false) + 1,
+        node.end()
+            .expect_source("parsed nodes have source positions")
+            - 1,
+    )
 }
 
 // file_rename.go:370

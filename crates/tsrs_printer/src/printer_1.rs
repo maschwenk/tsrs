@@ -70,7 +70,8 @@ pub struct PrintHandlers {
     pub has_global_name: Option<Rc<dyn Fn(&str) -> bool>>,
     // MapSourcePosition composes source-map positions before they reach the generator.
     // Returning ok=false (here `None`) emits a generated-only mapping for the current output position.
-    pub map_source_position: Option<Box<dyn Fn(SourceMapSource, i32) -> Option<(SourceMapSource, i32)>>>,
+    pub map_source_position:
+        Option<Box<dyn Fn(SourceMapSource, u32) -> Option<(SourceMapSource, u32)>>>,
 
     // !!! OnEmitNode, IsEmitNotificationEnabled, SubstituteNode, OnEmitSourceMapOf* (commented out in Go)
     pub on_before_emit_node: Option<Box<dyn FnMut(Option<P<Node>>)>>,
@@ -97,7 +98,7 @@ pub struct Printer {
     pub(crate) text_state: Rc<printerTextState>,
     pub(crate) unique_helper_names: Option<FxHashMap<String, P<Node>>>,
     pub(crate) external_helpers_module_name: Option<P<Node>>,
-    pub(crate) next_list_element_pos: i32,
+    pub(crate) next_list_element_pos: TextPos,
     pub(crate) writer: Option<Box<dyn EmitTextWriter>>,
     pub(crate) own_writer: Option<Box<dyn EmitTextWriter>>,
     pub(crate) write_kind: WriteKind,
@@ -111,9 +112,9 @@ pub struct Printer {
     pub(crate) source_map_line_char_cache: Option<lineCharacterCache>,
     pub(crate) most_recent_source_map_source: Option<SourceMapSource>,
     pub(crate) most_recent_source_map_source_index: tsrs_sourcemap::SourceIndex,
-    pub(crate) container_pos: i32,
-    pub(crate) container_end: i32,
-    pub(crate) declaration_list_container_end: i32,
+    pub(crate) container_pos: TextPos,
+    pub(crate) container_end: TextPos,
+    pub(crate) declaration_list_container_end: TextPos,
     pub(crate) detached_comments_info: Vec<detachedCommentsInfo>,
     pub(crate) comments_disabled: bool,
     pub(crate) in_extends: bool, // whether we are emitting the `extends` clause of a ConditionalTypeNode or InferTypeNode
@@ -123,17 +124,17 @@ pub struct Printer {
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct detachedCommentsInfo {
-    pub(crate) node_pos: i32,
-    pub(crate) detached_comment_end_pos: i32,
+    pub(crate) node_pos: TextPos,
+    pub(crate) detached_comment_end_pos: TextPos,
 }
 
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct commentState {
     pub(crate) emit_flags: EmitFlags, // holds the emit flags for the current node
     pub(crate) comment_range: TextRange, // holds the comment range calculated for the current node
-    pub(crate) container_pos: i32, // captures the value of containerPos prior to entering an node
-    pub(crate) container_end: i32, // captures the value of containerEnd prior to entering an node
-    pub(crate) declaration_list_container_end: i32, // captures the value of declarationListContainerEnd prior to entering an node
+    pub(crate) container_pos: TextPos, // captures the value of containerPos prior to entering an node
+    pub(crate) container_end: TextPos, // captures the value of containerEnd prior to entering an node
+    pub(crate) declaration_list_container_end: TextPos, // captures the value of declarationListContainerEnd prior to entering an node
 }
 
 #[derive(Clone, Copy, Debug, Default)]
@@ -163,21 +164,21 @@ pub fn new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_contex
         text_state: Rc::clone(&text_state),
         unique_helper_names: None,
         external_helpers_module_name: None,
-        next_list_element_pos: 0,
+        next_list_element_pos: TextPos::source(0),
         writer: None,
         own_writer: None,
         write_kind: WriteKind::None,
         source_maps_disabled: false,
         source_map_generator: None,
         source_map_source: None,
-        source_map_source_index: 0,
+        source_map_source_index: tsrs_sourcemap::SourceIndex::Missing,
         source_map_source_is_json: false,
         source_map_line_char_cache: None,
         most_recent_source_map_source: None,
-        most_recent_source_map_source_index: 0,
-        container_pos: 0,
-        container_end: 0,
-        declaration_list_container_end: 0,
+        most_recent_source_map_source_index: tsrs_sourcemap::SourceIndex::Missing,
+        container_pos: TextPos::Synthetic,
+        container_end: TextPos::Synthetic,
+        declaration_list_container_end: TextPos::Synthetic,
         detached_comments_info: Vec::new(),
         comments_disabled: false,
         in_extends: false,
@@ -189,11 +190,16 @@ pub fn new_printer(options: PrinterOptions, handlers: PrintHandlers, emit_contex
     printer.name_generator.get_text_of_node = Some(Rc::new(move |g: &mut NameGenerator, node: P<Node>| get_text_of_node_worker(g, &state, node, false)));
     let state = text_state;
     let has_global_name = printer.print_handlers.has_global_name.clone();
-    printer.name_generator.is_file_level_unique_name_in_current_file =
-        Some(Rc::new(move |name: &str, _private_name: bool| is_file_level_unique_name_in_current_file_worker(&state, has_global_name.as_deref(), name)));
-    printer.container_pos = -1;
-    printer.container_end = -1;
-    printer.declaration_list_container_end = -1;
+    printer
+        .name_generator
+        .is_file_level_unique_name_in_current_file =
+        Some(Rc::new(move |name: &str, _private_name: bool| {
+            is_file_level_unique_name_in_current_file_worker(
+                &state,
+                has_global_name.as_deref(),
+                name,
+            )
+        }));
     printer.comments_disabled = options.remove_comments;
     printer
 }
@@ -380,7 +386,7 @@ impl Printer {
         self.writer().write_line();
     }
 
-    pub(crate) fn write_line_repeat(&mut self, count: i32) {
+    pub(crate) fn write_line_repeat(&mut self, count: usize) {
         for _ in 0..count {
             self.write_line();
         }
@@ -440,7 +446,11 @@ impl Printer {
         }
     }
 
-    pub(crate) fn write_lines_and_indent(&mut self, line_count: i32, write_space_if_not_indenting: bool) {
+    pub(crate) fn write_lines_and_indent(
+        &mut self,
+        line_count: usize,
+        write_space_if_not_indenting: bool,
+    ) {
         if line_count > 0 {
             self.increase_indent();
             self.write_line_repeat(line_count);
@@ -462,14 +472,24 @@ impl Printer {
 
     pub(crate) fn write_line_separators_after(&mut self, node: P<Node>, parent: P<Node>) {
         if self.options.preserve_source_newlines {
-            let trailing_newlines = self.get_closing_line_terminator_count(Some(parent), Some(node), ListFormat::None, TextRange::new(-1, -1) /*childrenTextRange*/);
+            let trailing_newlines = self.get_closing_line_terminator_count(
+                Some(parent),
+                Some(node),
+                ListFormat::None,
+                TextRange::synthetic(),
+            );
             if trailing_newlines > 0 {
                 self.write_line_repeat(trailing_newlines);
             }
         }
     }
 
-    pub(crate) fn get_lines_between_nodes(&mut self, parent: P<Node>, node1: P<Node>, node2: P<Node>) -> i32 {
+    pub(crate) fn get_lines_between_nodes(
+        &mut self,
+        parent: P<Node>,
+        node1: P<Node>,
+        node2: P<Node>,
+    ) -> usize {
         if self.should_elide_indentation(parent) {
             return 0;
         }
@@ -495,7 +515,10 @@ impl Printer {
         0
     }
 
-    pub(crate) fn get_effective_lines(&self, get_line_difference: impl Fn(bool) -> i32) -> i32 {
+    pub(crate) fn get_effective_lines(
+        &self,
+        get_line_difference: impl Fn(bool) -> LineDifference,
+    ) -> usize {
         // If 'preserveSourceNewlines' is disabled, we should never call this function
         // because it could be more expensive than alternative approximations.
         if !self.options.preserve_source_newlines {
@@ -508,7 +531,7 @@ impl Printer {
         //   // NODE2 COMMENT
         //   node2;
         let lines = get_line_difference(true /*includeComments*/);
-        if lines == 0 {
+        if lines.is_same() {
             // However, if the line difference considering comments was 0, we might have this:
             //
             //   node1; // NODE2 COMMENT
@@ -516,12 +539,17 @@ impl Printer {
             //
             // in which case we should be ignoring node2's comment, so this too is counted as
             // a one-line difference, not zero.
-            return get_line_difference(false /*includeComments*/);
+            return get_line_difference(false /*includeComments*/).forward_count();
         }
-        lines
+        lines.forward_count()
     }
 
-    pub(crate) fn get_leading_line_terminator_count(&mut self, parent_node: Option<P<Node>>, first_child: Option<P<Node>>, format: ListFormat) -> i32 {
+    pub(crate) fn get_leading_line_terminator_count(
+        &mut self,
+        parent_node: Option<P<Node>>,
+        first_child: Option<P<Node>>,
+        format: ListFormat,
+    ) -> usize {
         if format.intersects(ListFormat::PreserveLines) || self.options.preserve_source_newlines {
             if format.intersects(ListFormat::PreferNewLine) {
                 return 1;
@@ -530,7 +558,12 @@ impl Printer {
             let Some(first_child) = first_child else {
                 return if parent_node.is_none() || self.current_source_file().is_some() && range_is_on_single_line(parent_node.unwrap().loc(), self.current_source_file().unwrap()) { 0 } else { 1 };
             };
-            if self.next_list_element_pos > 0 && first_child.pos() == self.next_list_element_pos {
+            if self
+                .next_list_element_pos
+                .source_offset()
+                .is_some_and(|pos| pos > 0)
+                && first_child.pos() == self.next_list_element_pos
+            {
                 // If this child starts at the beginning of a list item in a parent list, its leading
                 // line terminators have already been written as the separating line terminators of the
                 // parent list. Example:
@@ -573,7 +606,12 @@ impl Printer {
         }
     }
 
-    pub(crate) fn get_separating_line_terminator_count(&mut self, previous_node: Option<P<Node>>, next_node: Option<P<Node>>, format: ListFormat) -> i32 {
+    pub(crate) fn get_separating_line_terminator_count(
+        &mut self,
+        previous_node: Option<P<Node>>,
+        next_node: Option<P<Node>>,
+        format: ListFormat,
+    ) -> usize {
         if format.intersects(ListFormat::PreserveLines) || self.options.preserve_source_newlines {
             let (Some(previous_node), Some(next_node)) = (previous_node, next_node) else {
                 return 0;
@@ -609,7 +647,13 @@ impl Printer {
         }
     }
 
-    pub(crate) fn get_closing_line_terminator_count(&mut self, parent_node: Option<P<Node>>, last_child: Option<P<Node>>, format: ListFormat, children_text_range: TextRange) -> i32 {
+    pub(crate) fn get_closing_line_terminator_count(
+        &mut self,
+        parent_node: Option<P<Node>>,
+        last_child: Option<P<Node>>,
+        format: ListFormat,
+        children_text_range: TextRange,
+    ) -> usize {
         if format.intersects(ListFormat::PreserveLines) || self.options.preserve_source_newlines {
             if format.intersects(ListFormat::PreferNewLine) {
                 return 1;
@@ -646,30 +690,44 @@ impl Printer {
         self.write_comment_range_worker(text, line_map, comment.kind, comment.text_range);
     }
 
-    pub(crate) fn write_comment_range_worker(&mut self, text: &str, line_map: &[TextPos], kind: Kind, loc: TextRange) {
+    pub(crate) fn write_comment_range_worker(
+        &mut self,
+        text: &str,
+        line_map: &[u32],
+        kind: Kind,
+        loc: TextRange,
+    ) {
         if kind == Kind::MultiLineCommentTrivia {
             let indent_size = get_default_indent_size() as i32;
-            let first_line = scanner::compute_line_of_position(line_map, loc.pos());
-            let line_count = line_map.len() as i32;
-            let mut first_comment_line_indent = -1;
-            let mut pos = loc.pos();
+            let loc_pos = loc
+                .pos()
+                .expect_source("comment ranges have source positions");
+            let loc_end = loc
+                .end()
+                .expect_source("comment ranges have source positions");
+            let first_line = scanner::compute_line_of_position(line_map, loc_pos);
+            let line_count = line_map.len();
+            let mut first_comment_line_indent = None;
+            let mut pos = loc_pos;
             let mut current_line = first_line;
-            while pos < loc.end() {
+            while pos < loc_end {
                 let next_line_start;
                 if current_line + 1 == line_count {
-                    next_line_start = text.len() as i32 + 1;
+                    next_line_start = text.len() as u32 + 1;
                 } else {
-                    next_line_start = line_map[(current_line + 1) as usize];
+                    next_line_start = line_map[current_line + 1];
                 }
 
-                if pos != loc.pos() {
+                if pos != loc_pos {
                     // If we are not emitting first line, we need to write the spaces to adjust the alignment
-                    if first_comment_line_indent == -1 {
-                        first_comment_line_indent = calculate_indent(text, line_map[first_line as usize], loc.pos());
-                    }
+                    let first_comment_line_indent =
+                        *first_comment_line_indent.get_or_insert_with(|| {
+                            calculate_indent(text, line_map[first_line], loc_pos)
+                        });
 
                     // These are number of spaces writer is going to write at current indent
-                    let current_writer_indent_spacing = self.writer().get_indent() * indent_size;
+                    let current_writer_indent_spacing =
+                        self.writer().get_indent() as i32 * indent_size;
 
                     // Number of spaces we want to be writing
                     // eg: Assume writer indent
@@ -688,7 +746,12 @@ impl Printer {
                     let spaces_to_emit = current_writer_indent_spacing - first_comment_line_indent + calculate_indent(text, pos, next_line_start);
                     if spaces_to_emit > 0 {
                         let mut number_of_single_spaces_to_emit = spaces_to_emit % indent_size;
-                        let indent_size_space_string = get_indent_string((spaces_to_emit - number_of_single_spaces_to_emit) / indent_size, indent_size as usize);
+                        let indent_size_space_string = get_indent_string(
+                            ((spaces_to_emit - number_of_single_spaces_to_emit) / indent_size)
+                                .try_into()
+                                .expect("positive indentation fits in u32"),
+                            indent_size as usize,
+                        );
 
                         // Write indent size string ( in eg 1: = "", 2: "" , 3: string with 8 spaces 4: string with 12 spaces
                         self.writer().raw_write(&indent_size_space_string);
@@ -705,7 +768,7 @@ impl Printer {
                 }
 
                 // Write the comment line text
-                let mut end = std::cmp::min(loc.end(), next_line_start);
+                let mut end = std::cmp::min(loc_end, next_line_start);
                 let mut scan = pos;
                 while scan < end {
                     let (ch, size) = stringutil::decode_rune(&text.as_bytes()[scan as usize..end as usize]);
@@ -716,12 +779,12 @@ impl Printer {
                         end = scan;
                         break;
                     }
-                    scan += size as i32;
+                    scan += size as u32;
                 }
                 let current_line_text = go_trim_space(&text[pos as usize..end as usize]);
                 if !current_line_text.is_empty() {
                     self.write_comment(current_line_text);
-                    if end != loc.end() {
+                    if end != loc_end {
                         self.write_line();
                     }
                 } else {
@@ -734,7 +797,16 @@ impl Printer {
             }
         } else {
             // Single line comment of style //....
-            self.write_comment(&text[loc.pos() as usize..loc.end() as usize]);
+            self.write_comment(
+                &text[loc
+                    .pos()
+                    .expect_source("comment ranges have source positions")
+                    as usize
+                    ..loc
+                        .end()
+                        .expect_source("comment ranges have source positions")
+                        as usize],
+            );
         }
     }
 }
@@ -826,10 +898,19 @@ impl Printer {
     }
 
     pub(crate) fn should_emit_source_maps(&self, node: P<Node>) -> bool {
-        !self.source_maps_disabled && self.source_map_source.is_some() && !is_source_file(node) && !is_in_json_file(node)
+        !self.source_maps_disabled
+            && self.source_map_source.is_some()
+            && !is_source_file(node)
+            && !is_in_json_file(node)
     }
 
-    pub(crate) fn should_emit_token_source_maps(&self, token: Kind, _pos: i32, context_node: P<Node>, flags: tokenEmitFlags) -> bool {
+    pub(crate) fn should_emit_token_source_maps(
+        &self,
+        token: Kind,
+        _pos: TextPos,
+        context_node: P<Node>,
+        flags: tokenEmitFlags,
+    ) -> bool {
         // We don't emit source positions for most tokens as it tends to be quite noisy, however
         // we need to emit source positions for open and close braces so that tools like istanbul
         // can map branches for code coverage. However, we still omit brace source positions when
@@ -860,15 +941,25 @@ impl Printer {
         file.statements.nodes().is_empty() || !is_prologue_directive(file.statements.nodes()[0]) || node_is_synthesized(file.statements.nodes()[0])
     }
 
-    pub(crate) fn has_comments_at_position(&self, pos: i32) -> bool {
+    pub(crate) fn has_comments_at_position(&self, pos: TextPos) -> bool {
         let Some(current_source_file) = self.current_source_file() else {
             return false;
         };
+        if pos.is_synthetic() {
+            return false;
+        }
 
-        if scanner::get_trailing_comment_ranges(current_source_file.text(), pos + 1).next().is_some() {
+        let pos = pos.expect_source("source comments have source positions") + 1;
+        if scanner::get_trailing_comment_ranges(current_source_file.text(), pos)
+            .next()
+            .is_some()
+        {
             return true;
         }
-        if scanner::get_leading_comment_ranges(current_source_file.text(), pos + 1).next().is_some() {
+        if scanner::get_leading_comment_ranges(current_source_file.text(), pos)
+            .next()
+            .is_some()
+        {
             return true;
         }
         false
@@ -919,7 +1010,12 @@ impl Printer {
 //
 
 impl Printer {
-    pub(crate) fn write_token_text(&mut self, token: Kind, write_kind: WriteKind, pos: i32) -> i32 {
+    pub(crate) fn write_token_text(
+        &mut self,
+        token: Kind,
+        write_kind: WriteKind,
+        pos: TextPos,
+    ) -> TextPos {
         // !!! emit leading and trailing comments
         // !!! emit leading and trailing source maps
         let token_string = scanner::token_to_string(token);
@@ -927,15 +1023,28 @@ impl Printer {
         if position_is_synthesized(pos) {
             pos
         } else {
-            pos + token_string.len() as i32
+            pos.offset_by(token_string.len() as u32)
         }
     }
 
-    pub(crate) fn emit_token(&mut self, token: Kind, pos: i32, write_kind: WriteKind, context_node: P<Node>) -> i32 {
+    pub(crate) fn emit_token(
+        &mut self,
+        token: Kind,
+        pos: TextPos,
+        write_kind: WriteKind,
+        context_node: P<Node>,
+    ) -> TextPos {
         self.emit_token_ex(token, pos, write_kind, context_node, tokenEmitFlags::None)
     }
 
-    pub(crate) fn emit_token_ex(&mut self, token: Kind, pos: i32, write_kind: WriteKind, context_node: P<Node>, flags: tokenEmitFlags) -> i32 {
+    pub(crate) fn emit_token_ex(
+        &mut self,
+        token: Kind,
+        pos: TextPos,
+        write_kind: WriteKind,
+        context_node: P<Node>,
+        flags: tokenEmitFlags,
+    ) -> TextPos {
         let (state, pos) = self.enter_token(token, pos, context_node, flags);
         let pos = self.write_token_text(token, write_kind, pos);
         self.exit_token(token, pos, context_node, state);
@@ -1349,7 +1458,12 @@ enum Mode {
 }
 
 impl Printer {
-    pub(crate) fn emit_modifier_list(&mut self, parent_node: P<Node>, modifiers: Option<P<ModifierList>>, allow_decorators: bool) -> i32 {
+    pub(crate) fn emit_modifier_list(
+        &mut self,
+        parent_node: P<Node>,
+        modifiers: Option<P<ModifierList>>,
+        allow_decorators: bool,
+    ) -> TextPos {
         let Some(modifiers) = modifiers.filter(|m| !m.nodes().is_empty()) else {
             return parent_node.pos();
         };
@@ -1395,12 +1509,12 @@ impl Printer {
                     pos += 1;
                 }
 
-                let mut text_range = TextRange::new(-1, -1);
+                let mut text_range = TextRange::synthetic();
                 if start == 0 {
-                    text_range = TextRange::new(modifiers.pos(), text_range.end());
+                    text_range = text_range.with_pos(modifiers.pos());
                 }
                 if pos == modifier_nodes.len() - 1 {
-                    text_range = TextRange::new(text_range.pos(), modifiers.end());
+                    text_range = text_range.with_end(modifiers.end());
                 }
                 if allow_decorators || last_mode == Mode::ModeModifiers {
                     self.emit_list_items(
@@ -1521,7 +1635,12 @@ impl Printer {
         self.emit_type_node_outside_extends(node);
     }
 
-    pub(crate) fn emit_initializer(&mut self, node: Option<P<Node>>, equal_token_pos: i32, context_node: P<Node>) {
+    pub(crate) fn emit_initializer(
+        &mut self,
+        node: Option<P<Node>>,
+        equal_token_pos: TextPos,
+        context_node: P<Node>,
+    ) {
         let Some(node) = node else {
             return;
         };
@@ -1617,10 +1736,24 @@ impl Printer {
 
         if self.should_emit_block_function_body_on_single_line(body) && statement_offset == 0 && pos == self.writer().get_text_pos() {
             self.decrease_indent();
-            self.emit_list_range(Printer::emit_statement, Some(body), Some(statements), ListFormat::SingleLineFunctionBodyStatements, statement_offset as i32, -1);
+            self.emit_list_range(
+                Printer::emit_statement,
+                Some(body),
+                Some(statements),
+                ListFormat::SingleLineFunctionBodyStatements,
+                statement_offset,
+                None,
+            );
             self.increase_indent();
         } else {
-            self.emit_list_range(Printer::emit_statement, Some(body), Some(statements), ListFormat::MultiLineFunctionBodyStatements, statement_offset as i32, -1);
+            self.emit_list_range(
+                Printer::emit_statement,
+                Some(body),
+                Some(statements),
+                ListFormat::MultiLineFunctionBodyStatements,
+                statement_offset,
+                None,
+            );
         }
 
         self.emit_detached_comments_after_statement_list(body, statements.loc(), detached_state);

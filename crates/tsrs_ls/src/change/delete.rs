@@ -115,13 +115,23 @@ fn delete_default_import(t: &mut Tracker, source_file: P<SourceFile>, import_cla
         // import |d,| * as ns from './file'
         let name = clause.name().unwrap();
         let start = astnav::get_start_of_node(name, source_file, false);
-        let next_token = astnav::get_token_at_position(source_file, name.end());
+        let next_token = astnav::get_token_at_position(
+            source_file,
+            name.end()
+                .expect_source("parsed import names have source positions"),
+        );
         if next_token.kind() == Kind::CommaToken {
             // shift first non-whitespace position after comma to the start position of the node
             let end = scanner::skip_trivia_ex(
                 source_file.text(),
-                next_token.end(),
-                Some(&scanner::SkipTriviaOptions { stop_after_line_break: false, stop_at_comments: true, ..Default::default() }),
+                next_token
+                    .end()
+                    .expect_source("parsed tokens have source positions"),
+                Some(&scanner::SkipTriviaOptions {
+                    stop_after_line_break: false,
+                    stop_at_comments: true,
+                    ..Default::default()
+                }),
             );
             t.replace_text_range_with_text(source_file, TextRange::new(start, end), "");
         } else {
@@ -137,9 +147,22 @@ fn delete_import_binding(t: &mut Tracker, source_file: P<SourceFile>, node: P<No
         // Delete named imports while preserving the default import
         // import d|, * as ns| from './file'
         // import d|, { a }| from './file'
-        let previous_token = astnav::get_token_at_position(source_file, node.pos() - 1);
+        let previous_token = astnav::get_token_at_position(
+            source_file,
+            node.pos()
+                .expect_source("parsed import bindings have source positions")
+                - 1,
+        );
         let start = astnav::get_start_of_node(previous_token, source_file, false);
-        t.replace_text_range_with_text(source_file, TextRange::new(start, node.end()), "");
+        t.replace_text_range_with_text(
+            source_file,
+            TextRange::new(
+                start,
+                node.end()
+                    .expect_source("parsed import bindings have source positions"),
+            ),
+            "",
+        );
     } else {
         // Delete the entire import declaration
         // |import * as ns from './file'|
@@ -231,8 +254,17 @@ fn delete_node_in_list(t: &mut Tracker, deleted_nodes_in_lists: &mut OrderedMap<
 impl Tracker {
     // delete.go:226
     // startPositionToDeleteNodeInList finds the first non-whitespace position in the leading trivia of the node
-    pub(crate) fn start_position_to_delete_node_in_list(&self, source_file: P<SourceFile>, node: P<Node>) -> i32 {
-        let start = self.get_adjusted_start_position(source_file, node, LeadingTriviaOption::IncludeAll, false);
+    pub(crate) fn start_position_to_delete_node_in_list(
+        &self,
+        source_file: P<SourceFile>,
+        node: P<Node>,
+    ) -> u32 {
+        let start = self.get_adjusted_start_position(
+            source_file,
+            node,
+            LeadingTriviaOption::IncludeAll,
+            false,
+        );
         scanner::skip_trivia_ex(
             source_file.text(),
             start,
@@ -241,7 +273,13 @@ impl Tracker {
     }
 
     // delete.go:231
-    fn end_position_to_delete_node_in_list(&self, source_file: P<SourceFile>, node: P<Node>, prev_node: Option<P<Node>>, next_node: P<Node>) -> i32 {
+    fn end_position_to_delete_node_in_list(
+        &self,
+        source_file: P<SourceFile>,
+        node: P<Node>,
+        prev_node: Option<P<Node>>,
+        next_node: P<Node>,
+    ) -> u32 {
         let end = self.start_position_to_delete_node_in_list(source_file, next_node);
         let Some(prev_node) = prev_node else {
             return end;
@@ -258,8 +296,14 @@ impl Tracker {
                 let text = source_file.text();
                 let pos = scanner::skip_trivia_ex(
                     text,
-                    token.end(),
-                    Some(&scanner::SkipTriviaOptions { stop_after_line_break: true, stop_at_comments: true, ..Default::default() }),
+                    token
+                        .end()
+                        .expect_source("parsed tokens have source positions"),
+                    Some(&scanner::SkipTriviaOptions {
+                        stop_after_line_break: true,
+                        stop_at_comments: true,
+                        ..Default::default()
+                    }),
                 );
                 if positions_are_on_same_line(
                     astnav::get_start_of_node(prev_token, source_file, false),
@@ -281,8 +325,9 @@ impl Tracker {
 }
 
 // delete.go:254
-pub(crate) fn positions_are_on_same_line(pos1: i32, pos2: i32, source_file: P<SourceFile>) -> bool {
-    format::get_line_start_position_for_position(pos1, source_file) == format::get_line_start_position_for_position(pos2, source_file)
+pub(crate) fn positions_are_on_same_line(pos1: u32, pos2: u32, source_file: P<SourceFile>) -> bool {
+    format::get_line_start_position_for_position(pos1, source_file)
+        == format::get_line_start_position_for_position(pos2, source_file)
 }
 
 // delete.go:258

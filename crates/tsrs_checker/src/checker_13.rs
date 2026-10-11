@@ -242,7 +242,11 @@ impl Checker {
                 } else {
                     add_type(self, &mut types, &mut includes, t);
                 }
-                if total_order && start > 0 && types.len() > start && compare_types(self, Some(types[start - 1]), Some(types[start])) > 0 {
+                if total_order
+                    && start > 0
+                    && types.len() > start
+                    && compare_types(self, Some(types[start - 1]), Some(types[start])).is_gt()
+                {
                     run_starts.push(start);
                 }
                 last_type = Some(t);
@@ -978,8 +982,8 @@ impl Checker {
             for j in (0..types.len()).rev() {
                 if types[j].flags().intersects(TypeFlags::Union) {
                     let source_types = types[j].types();
-                    let length = source_types.len() as i32;
-                    constituents[j] = source_types[(n % length) as usize];
+                    let length = source_types.len();
+                    constituents[j] = source_types[n % length];
                     n /= length;
                 }
             }
@@ -993,7 +997,7 @@ impl Checker {
 }
 
 // checker.go:26922
-pub(crate) fn get_constituent_count(t: P<Type>) -> i32 {
+pub(crate) fn get_constituent_count(t: P<Type>) -> usize {
     if !t.flags().intersects(TypeFlags::UnionOrIntersection) || t.alias().is_some() {
         return 1;
     }
@@ -1006,7 +1010,7 @@ pub(crate) fn get_constituent_count(t: P<Type>) -> i32 {
 }
 
 // checker.go:26932
-pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> i32 {
+pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> usize {
     let mut n = 0;
     for &t in types {
         n += get_constituent_count(t);
@@ -1264,7 +1268,7 @@ fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type
         let left_is_long = left.len() >= right.len();
         let (mut long_run, short_run) = if left_is_long { (left, right) } else { (right, left) };
         for &t in short_run {
-            let i = long_run.partition_point(|&x| x != t && compare_types(c, Some(x), Some(t)) < 0);
+            let i = long_run.partition_point(|&x| x != t && compare_types(c, Some(x), Some(t)).is_lt());
             for &x in &long_run[..i] {
                 out(c, x);
             }
@@ -1290,7 +1294,7 @@ fn merge_sorted_types(c: &mut Checker, mut left: &[P<Type>], mut right: &[P<Type
             }
             left = &left[1..];
             right = &right[1..];
-        } else if compare_types(c, Some(l), Some(r)) < 0 {
+        } else if compare_types(c, Some(l), Some(r)).is_lt() {
             out(c, l);
             left = &left[1..];
         } else {
@@ -1366,9 +1370,9 @@ pub(crate) fn insert_type(c: &mut Checker, types: &[P<Type>], t: P<Type>) -> (Ve
 }
 
 // checker.go:27098
-pub(crate) fn count_types(t: P<Type>) -> i32 {
+pub(crate) fn count_types(t: P<Type>) -> usize {
     if t.flags().intersects(TypeFlags::Union) {
-        return t.types().len() as i32;
+        return t.types().len();
     } else if t.flags().intersects(TypeFlags::Never) {
         return 0;
     }
@@ -1460,18 +1464,15 @@ impl Checker {
     }
 
     // checker.go:27130
-    pub(crate) fn get_cross_product_union_size(&mut self, types: &[P<Type>]) -> i32 {
-        let mut size: i32 = 1;
+    pub(crate) fn get_cross_product_union_size(&mut self, types: &[P<Type>]) -> usize {
+        let mut size = 1usize;
         for &t in types {
             if t.flags().intersects(TypeFlags::Union) {
-                let n = t.types().len() as i32;
+                let n = t.types().len();
                 // Cap the result to avoid integer overflow when computing the cross product of many large unions.
                 // In TypeScript, number overflow produces Infinity which naturally exceeds the limit check;
                 // in Go, we must guard against int wrapping to zero or negative.
-                if n > 0 && size > i32::MAX / n {
-                    return i32::MAX;
-                }
-                size *= n;
+                size = size.saturating_mul(n);
             } else if t.flags().intersects(TypeFlags::Never) {
                 return 0;
             }
@@ -2371,7 +2372,7 @@ impl Checker {
 }
 
 // checker.go:27851
-pub(crate) fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: i32) -> bool {
+pub(crate) fn index_type_less_than(c: &mut Checker, index_type: P<Type>, limit: usize) -> bool {
     every_type(c, index_type, |_, t| {
         if t.flags().intersects(TypeFlags::StringOrNumberLiteral) {
             let prop_name = get_property_name_from_type(t);

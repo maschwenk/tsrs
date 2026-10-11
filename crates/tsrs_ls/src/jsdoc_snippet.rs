@@ -25,7 +25,12 @@ struct commentOwnerInfo {
 
 impl LanguageService {
     // jsdoc_snippet.go:29
-    pub(crate) fn get_jsdoc_snippet_completion(&self, ctx: &Context, file: P<SourceFile>, position: i32) -> Option<CompletionList> {
+    pub(crate) fn get_jsdoc_snippet_completion(
+        &self,
+        ctx: &Context,
+        file: P<SourceFile>,
+        position: u32,
+    ) -> Option<CompletionList> {
         if self.user_preferences().enable_jsdoc_completions.is_false() {
             return None;
         }
@@ -66,7 +71,10 @@ impl LanguageService {
 }
 
 // jsdoc_snippet.go:74
-pub(crate) fn is_potentially_valid_jsdoc_snippet_completion_position(file: P<SourceFile>, position: i32) -> bool {
+pub(crate) fn is_potentially_valid_jsdoc_snippet_completion_position(
+    file: P<SourceFile>,
+    position: u32,
+) -> bool {
     let text = file.text();
     let line_start = format::get_line_start_position_for_position(position, file);
     let prefix = &text[line_start as usize..position as usize];
@@ -81,20 +89,27 @@ pub(crate) fn is_potentially_valid_jsdoc_snippet_completion_position(file: P<Sou
 
 impl LanguageService {
     // jsdoc_snippet.go:87
-    fn get_jsdoc_snippet_completion_range(&self, ctx: &Context, file: P<SourceFile>, position: i32, new_text: &str) -> Option<lsproto::TextEditOrInsertReplaceEdit> {
+    fn get_jsdoc_snippet_completion_range(
+        &self,
+        ctx: &Context,
+        file: P<SourceFile>,
+        position: u32,
+        new_text: &str,
+    ) -> Option<lsproto::TextEditOrInsertReplaceEdit> {
         let text = file.text();
         let line_start = format::get_line_start_position_for_position(position, file);
         let prefix = &text[line_start as usize..position as usize];
         let mut start = position;
         if let Some(prefix_start) = get_jsdoc_snippet_prefix_start(prefix) {
-            start = line_start + prefix_start as i32;
+            start =
+                line_start + u32::try_from(prefix_start).expect("JSDoc prefix length exceeds u32");
         }
 
         let line_end = get_line_end_of_position(file, position);
         let suffix = &text[position as usize..line_end as usize];
         let mut end = position;
         if let (suffix_end, true) = get_jsdoc_snippet_suffix_end(suffix) {
-            end += suffix_end as i32;
+            end += u32::try_from(suffix_end).expect("JSDoc suffix length exceeds u32");
         }
 
         let (replacement_range, fidelity) = self.create_lsp_range_from_bounds(start, end, file);
@@ -112,7 +127,12 @@ impl LanguageService {
 }
 
 // jsdoc_snippet.go:124
-fn get_doc_comment_template_at_position(source_file: P<SourceFile>, position: i32, generate_return_in_doc_template: bool, new_line: &str) -> Option<docCommentTemplate> {
+fn get_doc_comment_template_at_position(
+    source_file: P<SourceFile>,
+    position: u32,
+    generate_return_in_doc_template: bool,
+    new_line: &str,
+) -> Option<docCommentTemplate> {
     // Go checks the token for nil; GetTokenAtPosition never returns nil.
     let mut token_at_pos = astnav::get_token_at_position(source_file, position);
 
@@ -162,7 +182,7 @@ fn get_doc_comment_template_at_position(source_file: P<SourceFile>, position: i3
 }
 
 // jsdoc_snippet.go:181
-fn get_doc_comment_end_at_position(file: P<SourceFile>, position: i32) -> (i32, bool, bool) {
+fn get_doc_comment_end_at_position(file: P<SourceFile>, position: u32) -> (u32, bool, bool) {
     let text = file.text();
     let line_start = format::get_line_start_position_for_position(position, file);
     let line_end = get_line_end_of_position(file, position);
@@ -172,11 +192,15 @@ fn get_doc_comment_end_at_position(file: P<SourceFile>, position: i32) -> (i32, 
         return (0, false, false);
     }
     let (suffix_end, has_closing) = get_jsdoc_snippet_suffix_end(suffix);
-    (position + suffix_end as i32, true, has_closing)
+    (
+        position + u32::try_from(suffix_end).expect("JSDoc suffix length exceeds u32"),
+        true,
+        has_closing,
+    )
 }
 
 // jsdoc_snippet.go:194
-fn skip_whitespace(text: &str, position: i32) -> i32 {
+fn skip_whitespace(text: &str, position: u32) -> u32 {
     let mut position = position as usize;
     while position < text.len() {
         let (ch, size) = stringutil::decode_js_string_rune(&text[position..]);
@@ -188,7 +212,7 @@ fn skip_whitespace(text: &str, position: i32) -> i32 {
         }
         position += size;
     }
-    position as i32
+    u32::try_from(position).expect("source position exceeds u32")
 }
 
 // jsdoc_snippet.go:208
@@ -335,7 +359,7 @@ fn returns_doc_comment(indentation: &str, new_line: &str) -> String {
 }
 
 // jsdoc_snippet.go:332
-fn get_indentation_string_at_position(source_file: P<SourceFile>, position: i32) -> String {
+fn get_indentation_string_at_position(source_file: P<SourceFile>, position: u32) -> String {
     let text = source_file.text();
     let line_start = format::get_line_start_position_for_position(position, source_file) as usize;
     let mut pos = line_start;
@@ -398,7 +422,11 @@ fn strip_jsdoc_template_indentation(template: &str, new_line: &str) -> String {
 }
 
 // jsdoc_snippet.go:390
-fn transform_jsdoc_template_lines(template: &str, new_line: &str, snippet_index: &mut i32) -> String {
+fn transform_jsdoc_template_lines(
+    template: &str,
+    new_line: &str,
+    snippet_index: &mut usize,
+) -> String {
     let mut lines: Vec<String> = template.split(new_line).map(|s| s.to_string()).collect();
     for i in 0..lines.len() {
         if i > 0 && lines[i - 1].starts_with("/**") && line_has_only_jsdoc_asterisk(&lines[i]) {
@@ -423,7 +451,7 @@ fn line_has_only_jsdoc_asterisk(line: &str) -> bool {
 }
 
 // jsdoc_snippet.go:413
-fn transform_jsdoc_param_line(line: &str, snippet_index: &mut i32) -> Option<String> {
+fn transform_jsdoc_param_line(line: &str, snippet_index: &mut usize) -> Option<String> {
     let mut prefix = "";
     let mut rest = line;
     if rest.starts_with(' ') {
@@ -468,7 +496,7 @@ fn transform_jsdoc_param_line(line: &str, snippet_index: &mut i32) -> Option<Str
 }
 
 // jsdoc_snippet.go:460
-fn transform_jsdoc_returns_line(line: &str, snippet_index: &mut i32) -> Option<String> {
+fn transform_jsdoc_returns_line(line: &str, snippet_index: &mut usize) -> Option<String> {
     let mut prefix = "";
     let mut rest = line;
     if rest.starts_with(' ') {
@@ -527,12 +555,13 @@ fn is_jsdoc_snippet_prefix(prefix: &str) -> bool {
 // jsdoc_snippet.go:512
 fn get_jsdoc_snippet_prefix_start(prefix: &str) -> Option<usize> {
     let trimmed = trim_right_single_line_whitespace(prefix).as_bytes();
-    let mut i = trimmed.len() as i32 - 1;
-    while i >= 0 && trimmed[i as usize] == b'*' {
-        if i > 0 && trimmed[(i - 1) as usize] == b'/' {
-            return Some((i - 1) as usize);
+    for i in (0..trimmed.len()).rev() {
+        if trimmed[i] != b'*' {
+            break;
         }
-        i -= 1;
+        if i > 0 && trimmed[i - 1] == b'/' {
+            return Some(i - 1);
+        }
     }
     if trimmed.ends_with(b"/") {
         return Some(trimmed.len() - 1);

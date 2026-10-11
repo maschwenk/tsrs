@@ -30,8 +30,8 @@ pub struct FlowState {
     pub initial_type: Cell<Option<P<Type>>>,
     pub flow_container: Cell<Option<P<Node>>>,
     pub ref_key: Cell<CacheHashKey>,
-    pub depth: Cell<i32>,
-    pub shared_flow_start: Cell<i32>,
+    pub depth: Cell<u32>,
+    pub shared_flow_start: Cell<usize>,
     pub reduce_labels: RefCell<Vec<P<ast::FlowReduceLabelData>>>,
     pub next: Cell<Option<P<FlowState>>>,
     // Flow memo (flowmemo.rs), per walk.

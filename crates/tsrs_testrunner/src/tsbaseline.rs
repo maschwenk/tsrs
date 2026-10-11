@@ -59,7 +59,7 @@ pub fn get_error_baseline(input_files: &[TestFile], diagnostics: &[Diag], pretty
 fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], pretty: bool) -> Vec<String> {
     let mut diagnostics: Vec<&Diag> = input_diagnostics.iter().collect();
     // slices.SortFunc is not stable; diagnostics that compare equal are indistinguishable in the output.
-    diagnostics.sort_by(|a, b| dw::compare_diagnostics(a, b).cmp(&0));
+    diagnostics.sort_by(|a, b| dw::compare_diagnostics(a, b));
 
     let mut output_lines = String::new();
     let mut first_line = true;
@@ -86,15 +86,32 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
         }
 
         for info in &diag.related {
-            let mut location = String::new();
-            if let Some(file) = &info.file {
-                location = format!(" {}", format_location(file, info.pos, &format_opts(), |output, text, _| output.push_str(text)));
-            }
-            location = remove_test_path_prefixes(&location, false);
-            if !location.is_empty() && is_default_library_file(&info.file.as_ref().unwrap().file_name) {
-                location = DIAGNOSTICS_LOCATION_PATTERN.replace_all(&location, "$1:--:--").into_owned();
-            }
-            err_lines.push(format!("!!! related TS{}{}: {}", info.code, location, dw::flatten_diagnostic_message(info, HARNESS_NEW_LINE)));
+                let mut location = String::new();
+                if let Some(file) = &info.file {
+                    location = format!(
+                        " {}",
+                        format_location(
+                            file,
+                            info.pos.unwrap_or(0),
+                            &format_opts(),
+                            |output, text, _| output.push_str(text)
+                        )
+                    );
+                }
+                location = remove_test_path_prefixes(&location, false);
+                if !location.is_empty()
+                    && is_default_library_file(&info.file.as_ref().unwrap().file_name)
+                {
+                    location = DIAGNOSTICS_LOCATION_PATTERN
+                        .replace_all(&location, "$1:--:--")
+                        .into_owned();
+                }
+                err_lines.push(format!(
+                    "!!! related TS{}{}: {}",
+                    info.code,
+                    location,
+                    dw::flatten_diagnostic_message(info, HARNESS_NEW_LINE)
+                ));
         }
 
         for e in err_lines {
@@ -127,7 +144,12 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
             .copied()
             .filter(|e| {
                 e.file.as_ref().is_some_and(|f| {
-                    tspath::compare_paths(&remove_test_path_prefixes(&f.file_name, false), &unit, &ComparePathsOptions::default()) == 0
+                    tspath::compare_paths(
+                        &remove_test_path_prefixes(&f.file_name, false),
+                        &unit,
+                        &ComparePathsOptions::default(),
+                    )
+                    .is_eq()
                 })
             })
             .collect();
@@ -148,22 +170,29 @@ fn iterate_error_baseline(input_files: &[TestFile], input_diagnostics: &[Diag], 
 
             let this_line_start = line_starts[line_index];
             // On the last line of the file, fake the next line start number so that we handle errors on the last character of the file correctly
-            let next_line_start = if line_index == lines.len() - 1 { content.len() as i32 } else { line_starts[line_index + 1] };
+            let next_line_start = if line_index == lines.len() - 1 {
+                u32::try_from(content.len()).expect("source length exceeds u32")
+            } else {
+                line_starts[line_index + 1]
+            };
             // Emit this line from the original file
             output_lines.push_str(new_line());
             output_lines.push_str("    ");
             output_lines.push_str(&tsrs_core::utf8::from_utf8_lossy(line));
             for err_diagnostic in &file_errors {
                 // Does any error start or continue on to this line? Emit squiggles
-                let err_start = err_diagnostic.pos;
-                let end = err_start + err_diagnostic.len();
-                if end >= this_line_start && (err_start < next_line_start || line_index == lines.len() - 1) {
+                let err_start = err_diagnostic.pos.unwrap_or(0);
+                let end = err_diagnostic.end.unwrap_or(err_start);
+                if end >= this_line_start
+                    && (err_start < next_line_start || line_index == lines.len() - 1)
+                {
                     // How many characters from the start of this line the error starts at (could be positive or negative)
-                    let relative_offset = err_start - this_line_start;
+                    let relative_offset = i64::from(err_start) - i64::from(this_line_start);
                     // How many characters of the error are on this line (might be longer than this line in reality)
-                    let length = (end - err_start) - 0.max(this_line_start - err_start);
+                    let length = end.saturating_sub(err_start.max(this_line_start));
                     // Calculate the start of the squiggle
-                    let squiggle_start = 0.max(relative_offset) as usize;
+                    let squiggle_start = usize::try_from(relative_offset.max(0))
+                        .expect("squiggle offset exceeds usize");
                     output_lines.push_str(new_line());
                     output_lines.push_str("    ");
                     output_lines.push_str(&replace_non_whitespace(&line[..squiggle_start.min(line.len())]));
@@ -205,7 +234,12 @@ fn replace_non_whitespace(bytes: &[u8]) -> String {
     out
 }
 
-fn format_location(file: &dw::FileLike, pos: i32, format_opts: &FormattingOptions, write_with_style_and_reset: dw::FormattedWriter) -> String {
+fn format_location(
+    file: &dw::FileLike,
+    pos: u32,
+    format_opts: &FormattingOptions,
+    write_with_style_and_reset: dw::FormattedWriter,
+) -> String {
     let mut output = String::new();
     dw::write_location(&mut output, file, pos, Some(format_opts), write_with_style_and_reset);
     output

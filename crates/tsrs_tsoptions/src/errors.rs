@@ -122,7 +122,15 @@ pub fn create_diagnostic_for_node_in_source_file(
 ) -> P<Diagnostic> {
     new_diagnostic(
         Some(source_file),
-        TextRange::new(tsrs_scanner::skip_trivia(source_file.text(), node.pos()), node.end()),
+        TextRange::new(
+            tsrs_scanner::skip_trivia(
+                source_file.text(),
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            node.end()
+                .expect_source("parsed nodes have source positions"),
+        ),
         message,
         args,
     )

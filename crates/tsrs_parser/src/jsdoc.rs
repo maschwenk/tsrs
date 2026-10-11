@@ -26,12 +26,16 @@ fn parse_jsdoc_for_node(source_file: &'static SourceFile, node: P<Node>) -> Vec<
         return Vec::new();
     }
     let mut jsdoc = Vec::with_capacity(ranges.len());
-    let mut pos = node.pos();
+    let mut pos = node
+        .pos()
+        .expect_source("parsed nodes have source positions");
     for comment in &ranges {
         if let Some(parsed) = p.parse_jsdoc_comment(node, comment.pos(), comment.end(), pos) {
             parsed.set_parent(Some(node));
             jsdoc.push(parsed);
-            pos = parsed.end();
+            pos = parsed
+                .end()
+                .expect_source("parsed nodes have source positions");
         }
     }
     jsdoc
@@ -47,7 +51,7 @@ enum JsdocState {
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub(crate) struct PropertyLikeParse: i32 {
+    pub(crate) struct PropertyLikeParse: u32 {
         const Property = 1 << 0;
         const Parameter = 1 << 1;
         const CallbackParameter = 1 << 2;
@@ -85,12 +89,16 @@ impl Parser {
         // Should only be called once per node
         self.has_deprecated_tag = false;
         let mut jsdoc: Vec<P<Node>> = Vec::with_capacity(ranges.len());
-        let mut pos = node.pos();
+        let mut pos = node
+            .pos()
+            .expect_source("parsed nodes have source positions");
         for comment in &ranges {
             if let Some(parsed) = self.parse_jsdoc_comment(node, comment.pos(), comment.end(), pos) {
                 parsed.set_parent(Some(node));
                 jsdoc.push(parsed);
-                pos = parsed.end();
+                pos = parsed
+                    .end()
+                    .expect_source("parsed nodes have source positions");
             }
         }
         if !jsdoc.is_empty() {
@@ -144,9 +152,13 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-    // Pass end=-1 to parse the text to the end
-    pub(crate) fn parse_jsdoc_comment(&mut self, _parent: P<Node>, start: i32, end: i32, full_start: i32) -> Option<P<Node>> {
-        let end = if end == -1 { self.source_text.len() as i32 } else { end };
+    pub(crate) fn parse_jsdoc_comment(
+        &mut self,
+        _parent: P<Node>,
+        start: u32,
+        end: u32,
+        full_start: u32,
+    ) -> Option<P<Node>> {
         // Check for /** (JSDoc opening part)
         if !is_jsdoc_like_text(&self.source_text[start as usize..]) {
             // TODO: This should be a panic, unless parseSingleJSDocComment is calling this (not ported yet)
@@ -163,17 +175,17 @@ impl Parser {
         let save_has_await_identifier = self.statement_has_await_identifier;
 
         // initial indent is start+4 to account for leading `/** `
-        // + 1 because \n is one character before the first character in the line and,
-        // if there is no \n before start, -1 is one index before the first character in the string
-        let last_newline = self.source_text[..start as usize].rfind('\n').map_or(-1, |i| i as i32);
-        let initial_indent = start + 4 - (last_newline + 1);
+        let line_start = self.source_text[..start as usize]
+            .rfind('\n')
+            .map_or(0, |i| i + 1) as u32;
+        let initial_indent = start + 4 - line_start;
         // -2 for trailing `*/`
         self.source_text = &self.source_text[..(end - 2) as usize];
         self.scanner.set_text(self.source_text);
         // +3 for leading `/**`
         self.scanner.reset_pos(start + 3);
         self.set_context_flags(NodeFlags::JSDoc, true);
-        self.parsing_contexts |= 1 << ParsingContext::JSDocComment as i32;
+        self.parsing_contexts |= 1 << ParsingContext::JSDocComment as u32;
 
         let comment = self.parse_jsdoc_comment_worker(start, end, full_start, initial_indent);
         // move jsdoc diagnostics to jsdocDiagnostics -- for JS files only
@@ -199,29 +211,35 @@ impl Parser {
      * @param offset - the offset in the containing file
      * @param indent - the number of spaces to consider as the margin (applies to non-first lines only)
      */
-    pub(crate) fn parse_jsdoc_comment_worker(&mut self, start: i32, end: i32, full_start: i32, indent: i32) -> P<Node> {
+    pub(crate) fn parse_jsdoc_comment_worker(
+        &mut self,
+        start: u32,
+        end: u32,
+        full_start: u32,
+        indent: u32,
+    ) -> P<Node> {
         let mut indent = indent;
         // Initially we can parse out a tag.  We also have seen a starting asterisk.
         // This is so that /** * @type */ doesn't parse.
         let mut tags: Vec<P<Node>> = Vec::new();
-        let mut tags_pos: i32 = -1;
-        let mut tags_end: i32 = -1;
+        let mut tags_pos = None;
+        let mut tags_end = 0;
         let mut state = JsdocState::SawAsterisk;
         let mut backtick_count = 0;
         let mut in_fenced_code_block = false;
         let mut comment_parts: Vec<P<Node>> = Vec::new();
         let mut comments: Vec<&'static str> = std::mem::take(&mut self.jsdoc_comments_space);
-        let mut comments_pos: i32 = -1;
+        let mut comments_pos = None;
         let mut link_end = start;
-        let mut margin: i32 = -1;
+        let mut margin = None;
         macro_rules! push_comment {
             ($text:expr_2021) => {{
                 let text: &'static str = $text;
-                if margin == -1 {
-                    margin = indent;
+                if margin.is_none() {
+                    margin = Some(indent);
                 }
                 comments.push(text);
-                indent += text.len() as i32;
+                indent += text.len() as u32;
             }};
         }
 
@@ -252,20 +270,25 @@ impl Parser {
                         push_comment!(self.scanner.token_text());
                     } else {
                         remove_trailing_whitespace(&mut comments);
-                        if comments_pos == -1 {
-                            comments_pos = self.node_pos();
+                        if comments_pos.is_none() {
+                            comments_pos = Some(self.node_pos());
                         }
                         let tag = self.parse_tag(&tags, indent);
-                        if tags_pos == -1 {
-                            tags_pos = tag.pos();
+                        if tags_pos.is_none() {
+                            tags_pos = Some(
+                                tag.pos()
+                                    .expect_source("parsed nodes have source positions"),
+                            );
                         }
                         tags.push(tag);
-                        tags_end = tag.end();
+                        tags_end = tag
+                            .end()
+                            .expect_source("parsed nodes have source positions");
                         // NOTE: According to usejsdoc.org, a tag goes to end of line, except the last tag.
                         // Real-world comments may break this rule, so "BeginningOfLine" will not be a real line beginning
                         // for malformed examples like `/** @param {string} x @returns {number} the length */`
                         state = JsdocState::BeginningOfLine;
-                        margin = -1;
+                        margin = None;
                     }
                 }
                 Kind::NewLineTrivia => {
@@ -285,7 +308,7 @@ impl Parser {
                         }
                         // Ignore the first asterisk on a line
                         state = JsdocState::SawAsterisk;
-                        indent += asterisk.len() as i32;
+                        indent += asterisk.len() as u32;
                     }
                 }
                 Kind::WhitespaceTrivia => {
@@ -294,17 +317,17 @@ impl Parser {
                     }
                     // only collect whitespace if we're already saving comments or have just crossed the comment indent margin
                     let whitespace = self.scanner.token_text();
-                    if margin > -1 && indent + whitespace.len() as i32 > margin {
-                        let mut existing_indent = margin - indent;
-                        if existing_indent < 0 {
-                            existing_indent += whitespace.len() as i32;
-                        }
-                        if existing_indent < 0 {
-                            existing_indent = 0;
-                        }
+                    let whitespace_len = whitespace.len() as u32;
+                    if let Some(margin) = margin.filter(|&margin| indent + whitespace_len > margin)
+                    {
+                        let existing_indent = if margin >= indent {
+                            margin - indent
+                        } else {
+                            whitespace_len.saturating_sub(indent - margin)
+                        };
                         comments.push(&whitespace[existing_indent as usize..]);
                     }
-                    indent += whitespace.len() as i32;
+                    indent += whitespace_len;
                 }
                 Kind::EndOfFile => break,
                 Kind::JSDocCommentTextToken => {
@@ -372,9 +395,7 @@ impl Parser {
             }
         }
 
-        if comments_pos == -1 {
-            comments_pos = self.scanner.token_full_start();
-        }
+        let comments_pos = comments_pos.unwrap_or_else(|| self.scanner.token_full_start());
 
         if !comments.is_empty() {
             let last = comments.len() - 1;
@@ -386,15 +407,8 @@ impl Parser {
         comments.clear();
         self.jsdoc_comments_space = comments; // Reuse this slice for further parses
 
-        if !comment_parts.is_empty() && !tags.is_empty() && comments_pos == -1 {
-            panic!("having parsed tags implies that the end of the comment span should be set");
-        }
-
-        let tags_node_list = if tags_pos != -1 {
-            Some(self.new_node_list(TextRange::new(tags_pos, tags_end), &tags))
-        } else {
-            None
-        };
+        let tags_node_list =
+            tags_pos.map(|tags_pos| self.new_node_list(TextRange::new(tags_pos, tags_end), &tags));
 
         let comment_list = self.new_node_list(TextRange::new(start, comments_pos), &comment_parts);
         let jsdoc_comment = self.factory.new_jsdoc(comment_list, tags_node_list);
@@ -458,7 +472,7 @@ impl Parser {
         }
     }
 
-    pub(crate) fn parse_tag(&mut self, tags: &[P<Node>], margin: i32) -> P<Node> {
+    pub(crate) fn parse_tag(&mut self, tags: &[P<Node>], margin: u32) -> P<Node> {
         if self.token != Kind::AtToken {
             panic!("should be called only at the start of a tag");
         }
@@ -522,7 +536,7 @@ impl Parser {
             }
             "return" | "returns" => self.parse_return_tag(tags, start, tag_name, margin, &indent_text),
             "template" => self.parse_template_tag(start, tag_name, margin, &indent_text),
-            "type" => self.parse_type_tag(tags, start, tag_name, margin, &indent_text),
+            "type" => self.parse_type_tag(tags, start, tag_name, Some(margin), &indent_text),
             "typedef" => self.parse_typedef_tag(start, tag_name, margin, &indent_text),
             "callback" => self.parse_callback_tag(start, tag_name, margin, &indent_text),
             "overload" => self.parse_overload_tag(start, tag_name, margin, &indent_text),
@@ -535,40 +549,47 @@ impl Parser {
         tag
     }
 
-    pub(crate) fn parse_trailing_tag_comments(&mut self, pos: i32, end: i32, margin: i32, indent_text: &str) -> Option<P<NodeList>> {
+    pub(crate) fn parse_trailing_tag_comments(
+        &mut self,
+        pos: u32,
+        end: u32,
+        margin: u32,
+        indent_text: &str,
+    ) -> Option<P<NodeList>> {
         let mut margin = margin;
         // some tags, like typedef and callback, have already parsed their comments earlier
         if indent_text.is_empty() {
             margin += end - pos;
         }
         let mut initial_margin: &'static str = "";
-        if margin < indent_text.len() as i32 {
+        if margin < indent_text.len() as u32 {
             initial_margin = alloc_str(&indent_text[margin as usize..]);
         }
         self.parse_tag_comments(margin, Some(initial_margin))
     }
 
-    pub(crate) fn parse_tag_comments(&mut self, indent: i32, initial_margin: Option<&'static str>) -> Option<P<NodeList>> {
+    pub(crate) fn parse_tag_comments(
+        &mut self,
+        indent: u32,
+        initial_margin: Option<&'static str>,
+    ) -> Option<P<NodeList>> {
         let mut indent = indent;
         let comments_pos = self.node_pos();
         let mut comments: Vec<&'static str> = std::mem::take(&mut self.jsdoc_tag_comments_space);
         let mut parts: Vec<P<Node>> = std::mem::take(&mut self.jsdoc_tag_comments_parts_space);
-        let mut link_end: i32 = -1;
+        let mut link_end = None;
         let mut state = JsdocState::BeginningOfLine;
         let mut backtick_count = 0;
         let mut in_fenced_code_block = false;
-        if indent < 0 {
-            panic!("indent must be a natural number");
-        }
-        let mut margin: i32 = -1;
+        let mut margin = None;
         macro_rules! push_comment {
             ($text:expr_2021) => {{
                 let text: &'static str = $text;
-                if margin == -1 {
-                    margin = indent;
+                if margin.is_none() {
+                    margin = Some(indent);
                 }
                 comments.push(text);
-                indent += text.len() as i32;
+                indent += text.len() as u32;
             }};
         }
 
@@ -620,15 +641,17 @@ impl Parser {
                     }
                     let whitespace = self.scanner.token_text();
                     // if the whitespace crosses the margin, take only the whitespace that passes the margin
-                    if margin > -1 && indent + whitespace.len() as i32 > margin {
-                        comments.push(&whitespace[(margin - indent).max(0) as usize..]);
+                    let whitespace_len = whitespace.len() as u32;
+                    if let Some(margin) = margin.filter(|&margin| indent + whitespace_len > margin)
+                    {
+                        comments.push(&whitespace[margin.saturating_sub(indent) as usize..]);
                         if in_fenced_code_block {
                             state = JsdocState::SavingBackticks;
                         } else {
                             state = JsdocState::SavingComments;
                         }
                     }
-                    indent += whitespace.len() as i32;
+                    indent += whitespace_len;
                 }
                 Kind::OpenBraceToken => {
                     if in_fenced_code_block {
@@ -640,13 +663,13 @@ impl Parser {
                         let link_start = self.scanner.token_end() - 1;
                         let link = self.parse_jsdoc_link(link_start);
                         if let Some(link) = link {
-                            let comment_start = if link_end > -1 { link_end } else { comments_pos };
+                            let comment_start = link_end.unwrap_or(comments_pos);
                             let text = self.factory.new_jsdoc_text(alloc_slice(&comments));
                             let text = self.finish_node_with_end(text, comment_start, comment_end);
                             parts.push(text);
                             parts.push(link);
                             comments.clear();
-                            link_end = self.scanner.token_end();
+                            link_end = Some(self.scanner.token_end());
                         } else {
                             push_comment!(self.scanner.token_text());
                         }
@@ -705,7 +728,7 @@ impl Parser {
         remove_leading_newlines(&mut comments);
         remove_trailing_whitespace(&mut comments);
         if !comments.is_empty() {
-            let comment_start = if link_end > -1 { link_end } else { comments_pos };
+            let comment_start = link_end.unwrap_or(comments_pos);
             let text = self.factory.new_jsdoc_text(alloc_slice(&comments));
             let text = self.finish_node(text, comment_start);
             parts.push(text);
@@ -724,7 +747,7 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_jsdoc_link(&mut self, start: i32) -> Option<P<Node>> {
+    pub(crate) fn parse_jsdoc_link(&mut self, start: u32) -> Option<P<Node>> {
         let state = self.mark();
         let Some(link_type) = self.parse_jsdoc_link_prefix() else {
             self.rewind(state);
@@ -789,7 +812,13 @@ impl Parser {
         None
     }
 
-    pub(crate) fn parse_unknown_tag(&mut self, start: i32, tag_name: P<Node>, indent: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_unknown_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        indent: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let pos = self.node_pos();
         let comments = self.parse_trailing_tag_comments(start, pos, indent, indent_text);
         let node = self.factory.new_jsdoc_unknown_tag(tag_name, comments);
@@ -836,10 +865,10 @@ impl Parser {
 
     pub(crate) fn parse_parameter_or_property_tag(
         &mut self,
-        start: i32,
+        start: u32,
         tag_name: P<Node>,
         target: PropertyLikeParse,
-        indent: i32,
+        indent: u32,
     ) -> P<Node> {
         let mut type_expression = self.try_parse_type_expression();
         let mut is_name_first = type_expression.is_none();
@@ -878,7 +907,7 @@ impl Parser {
         type_expression: Option<P<Node>>,
         name: P<Node>,
         target: PropertyLikeParse,
-        indent: i32,
+        indent: u32,
     ) -> Option<P<Node>> {
         if let Some(type_expression) = type_expression {
             if is_object_or_object_array_type_reference(type_expression.type_node().unwrap()) {
@@ -920,14 +949,21 @@ impl Parser {
     pub(crate) fn parse_return_tag(
         &mut self,
         previous_tags: &[P<Node>],
-        start: i32,
+        start: u32,
         tag_name: P<Node>,
-        indent: i32,
+        indent: u32,
         indent_text: &str,
     ) -> P<Node> {
         if previous_tags.iter().any(|t| ast::is_jsdoc_return_tag(*t)) {
             let end = self.scanner.token_start();
-            self.parse_error_at(tag_name.pos(), end, &diagnostics::X_0_tag_already_specified, &[&tag_name.text()]);
+            self.parse_error_at(
+                tag_name
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+                end,
+                &diagnostics::X_0_tag_already_specified,
+                &[&tag_name.text()],
+            );
         }
 
         let type_expression = self.try_parse_type_expression();
@@ -937,23 +973,29 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    // pass indent=-1 to skip parsing trailing comments (as when a type tag is nested in a typedef)
     pub(crate) fn parse_type_tag(
         &mut self,
         previous_tags: &[P<Node>],
-        start: i32,
+        start: u32,
         tag_name: P<Node>,
-        indent: i32,
+        indent: Option<u32>,
         indent_text: &str,
     ) -> P<Node> {
         if previous_tags.iter().any(|t| ast::is_jsdoc_type_tag(*t)) {
             let end = self.scanner.token_start();
-            self.parse_error_at(tag_name.pos(), end, &diagnostics::X_0_tag_already_specified, &[&tag_name.text()]);
+            self.parse_error_at(
+                tag_name
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+                end,
+                &diagnostics::X_0_tag_already_specified,
+                &[&tag_name.text()],
+            );
         }
 
         let type_expression = self.parse_jsdoc_type_expression(true);
         let mut comments = None;
-        if indent != -1 {
+        if let Some(indent) = indent {
             let pos = self.node_pos();
             comments = self.parse_trailing_tag_comments(start, pos, indent, indent_text);
         }
@@ -961,7 +1003,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_see_tag(&mut self, start: i32, tag_name: P<Node>, indent: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_see_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        indent: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let has_name_reference = self.is_identifier()
             && !self.source_text[self.scanner.token_end() as usize..].starts_with("://")
             || self.token == Kind::OpenBraceToken && self.look_ahead(Parser::next_token_is_identifier_or_keyword);
@@ -975,7 +1023,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_implements_tag(&mut self, start: i32, tag_name: P<Node>, margin: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_implements_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        margin: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let class_name = self.parse_expression_with_type_arguments_for_augments();
         let pos = self.node_pos();
         let comments = self.parse_trailing_tag_comments(start, pos, margin, indent_text);
@@ -983,7 +1037,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_augments_tag(&mut self, start: i32, tag_name: P<Node>, margin: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_augments_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        margin: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let class_name = self.parse_expression_with_type_arguments_for_augments();
         let pos = self.node_pos();
         let comments = self.parse_trailing_tag_comments(start, pos, margin, indent_text);
@@ -991,7 +1051,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_satisfies_tag(&mut self, start: i32, tag_name: P<Node>, margin: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_satisfies_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        margin: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let type_expression = self.parse_jsdoc_type_expression(false);
         let pos = self.node_pos();
         let comments = self.parse_trailing_tag_comments(start, pos, margin, indent_text);
@@ -999,7 +1065,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_throws_tag(&mut self, start: i32, tag_name: P<Node>, margin: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_throws_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        margin: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let type_expression = self.try_parse_type_expression();
         let pos = self.node_pos();
         let comment = self.parse_trailing_tag_comments(start, pos, margin, indent_text);
@@ -1007,7 +1079,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_import_tag(&mut self, start: i32, tag_name: P<Node>, margin: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_import_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        margin: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let after_import_tag_pos = self.scanner.token_full_start();
 
         let mut identifier = None;
@@ -1055,10 +1133,10 @@ impl Parser {
 
     pub(crate) fn parse_simple_tag(
         &mut self,
-        start: i32,
+        start: u32,
         create_tag: impl FnOnce(&mut Parser, P<Node>, Option<P<NodeList>>) -> P<Node>,
         tag_name: P<Node>,
-        margin: i32,
+        margin: u32,
         indent_text: &str,
     ) -> P<Node> {
         let pos = self.node_pos();
@@ -1067,7 +1145,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_this_tag(&mut self, start: i32, tag_name: P<Node>, margin: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_this_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        margin: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let type_expression = self.parse_jsdoc_type_expression(true);
         self.skip_whitespace();
         let pos = self.node_pos();
@@ -1102,7 +1186,13 @@ impl Parser {
         Some(type_name_or_namespace_name)
     }
 
-    pub(crate) fn parse_typedef_tag(&mut self, start: i32, tag_name: P<Node>, indent: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_typedef_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        indent: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let mut type_expression = self.try_parse_type_expression();
         self.skip_whitespace_or_asterisk();
         let mut full_name = self.parse_jsdoc_type_name_with_namespace(false /*nested*/);
@@ -1112,7 +1202,7 @@ impl Parser {
         self.skip_whitespace();
         let mut comment = self.parse_tag_comments(indent, None);
 
-        let mut end: i32 = -1;
+        let mut end = None;
         let mut has_children = false;
         if type_expression.is_none() || is_object_or_object_array_type_reference(type_expression.unwrap().type_node().unwrap()) {
             let mut child_type_tag: Option<P<Node>> = None;
@@ -1156,12 +1246,18 @@ impl Parser {
                 }
             }
             if has_children {
-                let is_array_type = type_expression.is_some_and(|t| t.type_node().unwrap().kind() == Kind::ArrayType);
-                let first_pos = jsdoc_property_tags.first().map(|t| t.pos());
-                let jsdoc_type_literal = self.factory.new_jsdoc_type_literal(alloc_vec(jsdoc_property_tags), is_array_type);
-                let child_type_expression = child_type_tag.map(|t| t.as_jsdoc_type_tag().type_expression);
-                if let Some(child_type_expression) =
-                    child_type_expression.filter(|t| !is_object_or_object_array_type_reference(t.type_node().unwrap()))
+                let is_array_type = type_expression
+                    .is_some_and(|t| t.type_node().unwrap().kind() == Kind::ArrayType);
+                let first_pos = jsdoc_property_tags
+                    .first()
+                    .map(|t| t.pos().expect_source("parsed nodes have source positions"));
+                let jsdoc_type_literal = self
+                    .factory
+                    .new_jsdoc_type_literal(alloc_vec(jsdoc_property_tags), is_array_type);
+                let child_type_expression =
+                    child_type_tag.map(|t| t.as_jsdoc_type_tag().type_expression);
+                if let Some(child_type_expression) = child_type_expression
+                    .filter(|t| !is_object_or_object_array_type_reference(t.type_node().unwrap()))
                 {
                     type_expression = Some(child_type_expression);
                 } else {
@@ -1169,24 +1265,38 @@ impl Parser {
                     let pos = first_pos.unwrap_or(start);
                     type_expression = Some(self.finish_node(jsdoc_type_literal, pos));
                 }
-                end = type_expression.unwrap().end();
+                end = Some(
+                    type_expression
+                        .unwrap()
+                        .end()
+                        .expect_source("parsed nodes have source positions"),
+                );
             }
         }
 
         // Only include the characters between the name end and the next token if a comment was actually parsed out - otherwise it's just whitespace
-        if end == -1 {
+        let end = end.unwrap_or_else(|| {
             if has_children && type_expression.is_some() {
-                end = type_expression.unwrap().end();
+                type_expression
+                    .unwrap()
+                    .end()
+                    .expect_source("parsed nodes have source positions")
             } else if comment.is_some() {
-                end = self.node_pos();
+                self.node_pos()
             } else if let Some(full_name) = full_name {
-                end = full_name.end();
+                full_name
+                    .end()
+                    .expect_source("parsed nodes have source positions")
             } else if let Some(type_expression) = type_expression {
-                end = type_expression.end();
+                type_expression
+                    .end()
+                    .expect_source("parsed nodes have source positions")
             } else {
-                end = tag_name.end();
+                tag_name
+                    .end()
+                    .expect_source("parsed nodes have source positions")
             }
-        }
+        });
 
         if comment.is_none() {
             comment = self.parse_trailing_tag_comments(start, end, indent, indent_text);
@@ -1200,7 +1310,7 @@ impl Parser {
         typedef_tag
     }
 
-    pub(crate) fn parse_callback_tag_parameters(&mut self, indent: i32) -> P<NodeList> {
+    pub(crate) fn parse_callback_tag_parameters(&mut self, indent: u32) -> P<NodeList> {
         let mut parameters: Vec<P<Node>> = Vec::new();
         let pos = self.node_pos();
         loop {
@@ -1224,7 +1334,7 @@ impl Parser {
         self.new_node_list(TextRange::new(pos, end), &parameters)
     }
 
-    pub(crate) fn parse_jsdoc_signature(&mut self, start: i32, indent: i32) -> P<Node> {
+    pub(crate) fn parse_jsdoc_signature(&mut self, start: u32, indent: u32) -> P<Node> {
         let parameters = self.parse_callback_tag_parameters(indent);
         let mut return_tag = None;
         let state = self.mark();
@@ -1241,7 +1351,13 @@ impl Parser {
         self.finish_node(node, start)
     }
 
-    pub(crate) fn parse_callback_tag(&mut self, start: i32, tag_name: P<Node>, indent: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_callback_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        indent: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         let mut full_name = self.parse_jsdoc_type_name_with_namespace(false /*nested*/);
         if full_name.is_none() {
             full_name = Some(self.parse_jsdoc_identifier_name(Some(&diagnostics::Identifier_expected)));
@@ -1254,12 +1370,26 @@ impl Parser {
             let pos = self.node_pos();
             comment = self.parse_trailing_tag_comments(start, pos, indent, indent_text);
         }
-        let end = if comment.is_some() { self.node_pos() } else { type_expression.end() };
-        let node = self.factory.new_jsdoc_callback_tag(tag_name, type_expression, full_name, comment);
+        let end = if comment.is_some() {
+            self.node_pos()
+        } else {
+            type_expression
+                .end()
+                .expect_source("parsed nodes have source positions")
+        };
+        let node =
+            self.factory
+                .new_jsdoc_callback_tag(tag_name, type_expression, full_name, comment);
         self.finish_node_with_end(node, start, end)
     }
 
-    pub(crate) fn parse_overload_tag(&mut self, start: i32, tag_name: P<Node>, indent: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_overload_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        indent: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         self.skip_whitespace();
         let mut comment = self.parse_tag_comments(indent, None);
         let type_expression = self.parse_jsdoc_signature(start, indent);
@@ -1267,19 +1397,27 @@ impl Parser {
             let pos = self.node_pos();
             comment = self.parse_trailing_tag_comments(start, pos, indent, indent_text);
         }
-        let end = if comment.is_some() { self.node_pos() } else { type_expression.end() };
-        let node = self.factory.new_jsdoc_overload_tag(tag_name, type_expression, comment);
+        let end = if comment.is_some() {
+            self.node_pos()
+        } else {
+            type_expression
+                .end()
+                .expect_source("parsed nodes have source positions")
+        };
+        let node = self
+            .factory
+            .new_jsdoc_overload_tag(tag_name, type_expression, comment);
         self.finish_node_with_end(node, start, end)
     }
 
-    pub(crate) fn parse_child_property_tag(&mut self, indent: i32) -> Option<P<Node>> {
+    pub(crate) fn parse_child_property_tag(&mut self, indent: u32) -> Option<P<Node>> {
         self.parse_child_parameter_or_property_tag(PropertyLikeParse::Property, indent, None)
     }
 
     pub(crate) fn parse_child_parameter_or_property_tag(
         &mut self,
         target: PropertyLikeParse,
-        indent: i32,
+        indent: u32,
         name: Option<P<Node>>,
     ) -> Option<P<Node>> {
         let mut can_parse_tag = true;
@@ -1322,7 +1460,11 @@ impl Parser {
         }
     }
 
-    pub(crate) fn try_parse_child_tag(&mut self, target: PropertyLikeParse, indent: i32) -> Option<P<Node>> {
+    pub(crate) fn try_parse_child_tag(
+        &mut self,
+        target: PropertyLikeParse,
+        indent: u32,
+    ) -> Option<P<Node>> {
         if self.token != Kind::AtToken {
             panic!("should only be called when at @");
         }
@@ -1335,7 +1477,7 @@ impl Parser {
         match tag_name.text() {
             "type" => {
                 if target == PropertyLikeParse::Property {
-                    return Some(self.parse_type_tag(&[], start, tag_name, -1, ""));
+                    return Some(self.parse_type_tag(&[], start, tag_name, None, ""));
                 }
             }
             "prop" | "property" => {
@@ -1405,7 +1547,13 @@ impl Parser {
         self.new_node_list(TextRange::new(0, 0), &nodes)
     }
 
-    pub(crate) fn parse_template_tag(&mut self, start: i32, tag_name: P<Node>, indent: i32, indent_text: &str) -> P<Node> {
+    pub(crate) fn parse_template_tag(
+        &mut self,
+        start: u32,
+        tag_name: P<Node>,
+        indent: u32,
+        indent_text: &str,
+    ) -> P<Node> {
         // The template tag looks like one of the following:
         //   @template T,U,V
         //   @template {Constraint} T
@@ -1449,7 +1597,9 @@ impl Parser {
             if self.parse_optional(Kind::OpenBracketToken) {
                 self.parse_expected(Kind::CloseBracketToken);
             }
-            let pos = entity.pos();
+            let pos = entity
+                .pos()
+                .expect_source("parsed nodes have source positions");
             let qualified = self.factory.new_qualified_name(entity, name);
             entity = self.finish_node(qualified, pos);
         }

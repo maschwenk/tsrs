@@ -189,8 +189,8 @@ impl toBuildInfo<'_> {
                 BuildInfoDiagnostic {
                     file,
                     no_file,
-                    pos: d.loc().pos(),
-                    end: d.loc().end(),
+                    pos: d.pos().unwrap_or(0),
+                    end: d.end().unwrap_or(0),
                     code: d.code(),
                     category: d.category(),
                     source: d.source().to_string(),

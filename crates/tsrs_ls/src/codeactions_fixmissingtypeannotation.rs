@@ -159,8 +159,9 @@ fn get_all_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeF
 
     for diag in all_diags {
         if is_fixable_diagnostic(diag, isolated_declarations_fix_error_codes()) {
-            let span = TextRange::new(diag.loc().pos(), diag.loc().end());
-            fixer.add_type_annotation(span);
+            if let Some(span) = diag.loc() {
+                fixer.add_type_annotation(span);
+            }
         }
     }
 
@@ -247,7 +248,11 @@ impl isolatedDeclarationsFixer<'_> {
 
     // codeactions_fixmissingtypeannotation.go:233
     fn add_type_annotation(&mut self, span: TextRange) -> String {
-        let node_with_diag = astnav::get_token_at_position(self.source_file, span.pos());
+        let node_with_diag = astnav::get_token_at_position(
+            self.source_file,
+            span.pos()
+                .expect_source("code-fix spans have source positions"),
+        );
 
         if let Some(expando_function) = find_expando_function(self.checker, node_with_diag) {
             if ast::is_function_declaration(expando_function) {
@@ -324,7 +329,11 @@ impl isolatedDeclarationsFixer<'_> {
 
     // codeactions_fixmissingtypeannotation.go:321
     fn add_inline_assertion(&mut self, span: TextRange) -> String {
-        let node_with_diag = astnav::get_token_at_position(self.source_file, span.pos());
+        let node_with_diag = astnav::get_token_at_position(
+            self.source_file,
+            span.pos()
+                .expect_source("code-fix spans have source positions"),
+        );
 
         // No inline assertions for expando members
         if find_expando_function(self.checker, node_with_diag).is_some() {
@@ -386,7 +395,17 @@ impl isolatedDeclarationsFixer<'_> {
             // Insert `: expr as Type` after the shorthand property name
             let cloned_name = factory.deep_clone_node(target_node.name()).unwrap();
             let as_expr = create_as_expression(&factory, cloned_name, type_node);
-            self.change_tracker.insert_node_at(self.source_file, target_node.end(), as_expr, NodeOptions { prefix: ": ".to_string(), ..Default::default() });
+            self.change_tracker.insert_node_at(
+                self.source_file,
+                target_node
+                    .end()
+                    .expect_source("parsed target nodes have source positions"),
+                as_expr,
+                NodeOptions {
+                    prefix: ": ".to_string(),
+                    ..Default::default()
+                },
+            );
         } else if is_expression_target {
             // Replace expression with `(expression) satisfies Type as Type` or `expression satisfies Type as Type`
             let mut cloned_target = factory.deep_clone_node(Some(target_node)).unwrap();
@@ -405,7 +424,11 @@ impl isolatedDeclarationsFixer<'_> {
 
     // codeactions_fixmissingtypeannotation.go:404
     fn extract_as_variable(&mut self, span: TextRange) -> String {
-        let node_with_diag = astnav::get_token_at_position(self.source_file, span.pos());
+        let node_with_diag = astnav::get_token_at_position(
+            self.source_file,
+            span.pos()
+                .expect_source("code-fix spans have source positions"),
+        );
         let Some(target_node) = find_best_fitting_node(Some(node_with_diag), span) else {
             return String::new();
         };
@@ -1289,17 +1312,27 @@ fn end_of_required_type_parameters(ch: &mut Checker, t: P<Type>) -> usize {
     };
     let type_params = interface_type.type_parameters();
     let local_type_params = interface_type.local_type_parameters();
-    let outer_count = type_params.len() as i64 - local_type_params.len() as i64;
+    let outer_count = type_params.len().saturating_sub(local_type_params.len());
     for cutoff in 0..type_args.len() {
         // Skip cutoff positions where the local type parameter has no default.
         // This matches TS's check for constraint === undefined on localTypeParameters,
         // which in practice skips type parameters without defaults (e.g. Set<T>
         // where T has no default should not have <unknown> elided).
-        let local_idx = cutoff as i64 - outer_count;
-        if local_idx < 0 || local_idx as usize >= local_type_params.len() || !type_param_has_default(local_type_params[local_idx as usize]) {
+        let Some(local_idx) = cutoff
+            .checked_sub(outer_count)
+            .filter(|&index| index < local_type_params.len())
+        else {
+            continue;
+        };
+        if !type_param_has_default(local_type_params[local_idx]) {
             continue;
         }
-        let filled_in = ch.fill_missing_type_arguments_exported(&type_args[..cutoff], type_params, cutoff as i32, false);
+        let filled_in = ch.fill_missing_type_arguments_exported(
+            &type_args[..cutoff],
+            type_params,
+            cutoff,
+            false,
+        );
         let mut all_match = true;
         for (i, &fill) in filled_in.iter().enumerate() {
             if fill != type_args[i] {
@@ -1392,7 +1425,7 @@ fn find_ancestor_with_missing_type(node: P<Node>) -> Option<P<Node>> {
 // findBestFittingNode walks up from the token to find the node that best fits the diagnostic span.
 fn find_best_fitting_node(node: Option<P<Node>>, span: TextRange) -> Option<P<Node>> {
     let mut node = node?;
-    while node.end() < span.pos() + span.len() {
+    while node.end() < span.end() {
         // Go walks to a nil parent and then dereferences it in the next loop.
         node = node.parent().expect("nil node");
     }

@@ -22,15 +22,15 @@ pub struct PositionMap {
 
 #[derive(Clone, Copy, Debug)]
 struct PositionMapEntry {
-    utf8_pos: i32, // UTF-8 byte offset AFTER this multi-byte character
-    delta: i32,    // cumulative (utf8 - utf16) offset difference after this character
+    utf8_pos: u32, // UTF-8 byte offset AFTER this multi-byte character
+    delta: u32,    // cumulative (utf8 - utf16) offset difference after this character
 }
 
 // Rust strings are always valid UTF-8, so the lone-surrogate sentinel that Go's
 // stringutil.DecodeJSStringRune special-cases cannot occur here; decoding by `char` is equivalent.
 pub fn compute_position_map(text: &str) -> PositionMap {
     let mut pm = PositionMap::default();
-    let mut delta = 0i32;
+    let mut delta = 0u32;
     let bytes = text.as_bytes();
     let mut i = 0usize;
     while i < bytes.len() {
@@ -42,8 +42,11 @@ pub fn compute_position_map(text: &str) -> PositionMap {
         let r = text[i..].chars().next().unwrap();
         let size = r.len_utf8();
         let utf16_size = if r as u32 >= 0x10000 { 2 } else { 1 };
-        delta += size as i32 - utf16_size;
-        pm.entries.push(PositionMapEntry { utf8_pos: (i + size) as i32, delta });
+        delta += u32::try_from(size).expect("UTF-8 character length exceeds u32") - utf16_size;
+        pm.entries.push(PositionMapEntry {
+            utf8_pos: u32::try_from(i + size).expect("source position exceeds u32"),
+            delta,
+        });
         i += size;
     }
     pm.ascii_only = pm.entries.is_empty();
@@ -55,7 +58,7 @@ impl PositionMap {
         self.ascii_only
     }
 
-    pub fn utf8_to_utf16(&self, utf8_offset: i32) -> i32 {
+    pub fn utf8_to_utf16(&self, utf8_offset: u32) -> u32 {
         if self.ascii_only {
             return utf8_offset;
         }
@@ -76,7 +79,7 @@ impl PositionMap {
         utf8_offset - self.entries[lo - 1].delta
     }
 
-    pub fn utf16_to_utf8(&self, utf16_offset: i32) -> i32 {
+    pub fn utf16_to_utf8(&self, utf16_offset: u32) -> u32 {
         if self.ascii_only {
             return utf16_offset;
         }
@@ -108,7 +111,7 @@ mod tests {
         let text = "const x = 1;";
         let pm = compute_position_map(text);
         assert!(pm.is_ascii_only());
-        for i in 0..=text.len() as i32 {
+        for i in 0..=u32::try_from(text.len()).unwrap() {
             assert_eq!(pm.utf8_to_utf16(i), i);
             assert_eq!(pm.utf16_to_utf8(i), i);
         }
@@ -124,7 +127,7 @@ mod tests {
         }
         assert_eq!(pm.utf8_to_utf16(9), 9);
         assert_eq!(pm.utf8_to_utf16(11), 10);
-        let x_utf8 = text.rfind('x').unwrap() as i32;
+        let x_utf8 = u32::try_from(text.rfind('x').unwrap()).unwrap();
         assert_eq!(pm.utf8_to_utf16(x_utf8), x_utf8 - 1);
         assert_eq!(pm.utf16_to_utf8(x_utf8 - 1), x_utf8);
     }
@@ -134,7 +137,7 @@ mod tests {
         let text = "const a = \"🎉\";\nconst b = 2;";
         let pm = compute_position_map(text);
         assert!(!pm.is_ascii_only());
-        let b_utf8 = text.rfind('b').unwrap() as i32;
+        let b_utf8 = u32::try_from(text.rfind('b').unwrap()).unwrap();
         let b_utf16 = b_utf8 - 2;
         assert_eq!(pm.utf8_to_utf16(b_utf8), b_utf16);
         assert_eq!(pm.utf16_to_utf8(b_utf16), b_utf8);
@@ -153,7 +156,7 @@ mod tests {
     fn position_map_roundtrip() {
         let text = "let café = \"🎉\"; // naïve";
         let pm = compute_position_map(text);
-        let utf16_len = pm.utf8_to_utf16(text.len() as i32);
+        let utf16_len = pm.utf8_to_utf16(u32::try_from(text.len()).unwrap());
         for i in 0..=utf16_len {
             let utf8_pos = pm.utf16_to_utf8(i);
             assert_eq!(pm.utf8_to_utf16(utf8_pos), i);

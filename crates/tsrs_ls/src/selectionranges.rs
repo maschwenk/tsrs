@@ -173,7 +173,10 @@ fn split_children(factory: &NodeFactory, children: &[P<Node>], pivot_on: impl Fn
 // selectionranges.go:181
 fn create_syntax_list(factory: &NodeFactory, children: &[P<Node>]) -> P<Node> {
     let list = factory.new_syntax_list(alloc_slice(children));
-    list.set_loc(TextRange::new(children[0].pos(), children[children.len() - 1].end()));
+    list.set_loc(TextRange::from_text_pos(
+        children[0].pos(),
+        children[children.len() - 1].end(),
+    ));
     list
 }
 
@@ -181,7 +184,7 @@ fn create_syntax_list(factory: &NodeFactory, children: &[P<Node>]) -> P<Node> {
 struct SmartSelection<'a> {
     l: &'a LanguageService,
     source_file: P<SourceFile>,
-    pos: i32,
+    pos: u32,
     ranges: SelectionRangeBuilder,
     last_range: lsproto::Range,
 }
@@ -191,23 +194,30 @@ impl SmartSelection<'_> {
         let Some(node) = node else {
             return false;
         };
-        let start = scanner::get_token_pos_of_node(node, self.source_file, true /*includeJSDoc*/);
-        let end = node.end();
+        let start =
+            scanner::get_token_pos_of_node(node, self.source_file, true /*includeJSDoc*/);
+        let end = node
+            .end()
+            .expect_source("parsed nodes have source positions");
         start <= self.pos && self.pos < end
     }
 
     fn position_should_snap_to_node(&self, node: P<Node>) -> bool {
-        if self.pos < node.end() {
+        let node_end = node
+            .end()
+            .expect_source("parsed nodes have source positions");
+        if self.pos < node_end {
             return true;
         }
-        if node.end() == self.pos {
-            let touching_property_name = astnav::get_touching_property_name(self.source_file, self.pos);
+        if node_end == self.pos {
+            let touching_property_name =
+                astnav::get_touching_property_name(self.source_file, self.pos);
             return touching_property_name.pos() < node.end();
         }
         false
     }
 
-    fn push_selection_range(&mut self, start: i32, end: i32) {
+    fn push_selection_range(&mut self, start: u32, end: u32) {
         if start == end {
             return;
         }
@@ -229,7 +239,7 @@ impl SmartSelection<'_> {
         self.ranges.push(lsp_range);
     }
 
-    fn push_selection_comment_range(&mut self, start: i32, end: i32) {
+    fn push_selection_comment_range(&mut self, start: u32, end: u32) {
         self.push_selection_range(start, end);
 
         let mut comment_pos = start;
@@ -240,7 +250,7 @@ impl SmartSelection<'_> {
         self.push_selection_range(comment_pos, end);
     }
 
-    fn positions_are_on_same_line(&self, pos1: i32, pos2: i32) -> bool {
+    fn positions_are_on_same_line(&self, pos1: u32, pos2: u32) -> bool {
         if pos1 == pos2 {
             return true;
         }
@@ -314,7 +324,11 @@ fn collect_visited_children(node: P<Node>) -> Vec<VisitedChild> {
 }
 
 // selectionranges.go:186
-fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, pos: i32) -> Option<lsproto::SelectionRange> {
+fn get_smart_selection_range(
+    l: &LanguageService,
+    source_file: P<SourceFile>,
+    pos: u32,
+) -> Option<lsproto::SelectionRange> {
     let factory = NodeFactory::default();
     // Traversal discovers ranges from broadest to most specific, so retain the newest ranges nearest to the cursor
     let mut s = SmartSelection {
@@ -326,8 +340,14 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
     };
     let mut root: Option<lsproto::SelectionRange> = None;
     if source_file.content_mapper().is_empty() {
-        let (full_range, _) = l.converters.to_lsp_range(&source_file, TextRange::new(source_file.as_node().pos(), source_file.as_node().end()));
-        root = Some(lsproto::SelectionRange { range: full_range, parent: None });
+        let (full_range, _) = l.converters.to_lsp_range(
+            &source_file,
+            TextRange::from_text_pos(source_file.as_node().pos(), source_file.as_node().end()),
+        );
+        root = Some(lsproto::SelectionRange {
+            range: full_range,
+            parent: None,
+        });
         s.last_range = full_range;
     }
 
@@ -340,20 +360,39 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
             if next.is_some() {
                 return;
             }
-            let found_comment = scanner::get_trailing_comment_ranges(source_file.text(), node.end()).next();
+            let found_comment = scanner::get_trailing_comment_ranges(
+                source_file.text(),
+                node.end()
+                    .expect_source("parsed nodes have source positions"),
+            )
+            .next();
             if let Some(found_comment) = found_comment {
                 if found_comment.kind == Kind::SingleLineCommentTrivia {
-                    s.push_selection_comment_range(found_comment.text_range.pos(), found_comment.text_range.end());
+                    s.push_selection_comment_range(
+                        found_comment
+                            .text_range
+                            .pos()
+                            .expect_source("comment ranges have source positions"),
+                        found_comment
+                            .text_range
+                            .end()
+                            .expect_source("comment ranges have source positions"),
+                    );
                 }
             }
 
             if s.node_contains_position(Some(node)) {
                 // Add range for multi-line function bodies before skipping the block
                 if ast::is_block(node) && ast::is_function_like_declaration(parent) {
-                    if !s.positions_are_on_same_line(astnav::get_start_of_node(node, source_file, false), node.end()) {
+                    let node_end = node
+                        .end()
+                        .expect_source("parsed nodes have source positions");
+                    if !s.positions_are_on_same_line(
+                        astnav::get_start_of_node(node, source_file, false),
+                        node_end,
+                    ) {
                         let start = astnav::get_start_of_node(node, source_file, false);
-                        let end = node.end();
-                        s.push_selection_range(start, end);
+                        s.push_selection_range(start, node_end);
                     }
                 }
 
@@ -362,19 +401,25 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
                     let template_span = parent.as_template_span();
                     // Start from just before the '${' and end after the '}'
                     // The '${' is 2 characters before the expression start
-                    let span_start = node.pos() - 2;
+                    let span_start = node
+                        .pos()
+                        .expect_source("parsed template nodes have source positions")
+                        .checked_sub(2)
+                        .expect("template expression begins after `${`");
                     // The '}' is the first character of the template literal (middle or tail)
                     let span_end = astnav::get_start_of_node(template_span.literal, source_file, false) + 1;
                     // Validate the positions are reasonable
                     let text = source_file.text();
-                    if span_start >= 0 && span_end as usize <= text.len() && span_start < span_end {
+                    if span_end as usize <= text.len() && span_start < span_end {
                         s.push_selection_range(span_start, span_end);
                     }
                 }
 
                 if !should_skip_node(node, Some(parent)) {
                     let start = astnav::get_start_of_node(node, source_file, false);
-                    let end = node.end();
+                    let end = node
+                        .end()
+                        .expect_source("parsed nodes have source positions");
                     s.push_selection_range(start, end);
 
                     if ast::is_mapped_type_node(node) {
@@ -387,7 +432,12 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
                                     break;
                                 }
                                 if s.position_should_snap_to_node(child) {
-                                    s.push_selection_range(child_start, child.end());
+                                    s.push_selection_range(
+                                        child_start,
+                                        child
+                                            .end()
+                                            .expect_source("parsed nodes have source positions"),
+                                    );
                                     selection_child = Some(child);
                                     break;
                                 }
@@ -402,7 +452,7 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
                     // String literals should have a stop both inside and outside their quotes.
                     if ast::is_string_literal(node) || node.kind() == Kind::TemplateExpression || node.kind() == Kind::NoSubstitutionTemplateLiteral {
                         // Only add inner content range if there's actually content (handles unterminated literals)
-                        if start + 1 < end - 1 {
+                        if start + 1 < end.saturating_sub(1) {
                             s.push_selection_range(start + 1, end - 1);
                         }
                     }
@@ -426,8 +476,11 @@ fn get_smart_selection_range(l: &LanguageService, source_file: P<SourceFile>, po
                         let should_skip_list = ast::is_variable_declaration_list(parent) || ast::is_template_expression(parent);
 
                         if !should_skip_list {
-                            let start = astnav::get_start_of_node(nodes_slice[0], source_file, false);
-                            let end = nodes_slice[nodes_slice.len() - 1].end();
+                            let start =
+                                astnav::get_start_of_node(nodes_slice[0], source_file, false);
+                            let end = nodes_slice[nodes_slice.len() - 1]
+                                .end()
+                                .expect_source("parsed nodes have source positions");
 
                             if start <= s.pos && s.pos < end {
                                 s.push_selection_range(start, end);

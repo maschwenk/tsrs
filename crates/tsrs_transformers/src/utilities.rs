@@ -244,8 +244,18 @@ pub fn is_original_node_single_line(emit_context: P<EmitContext>, node: Option<P
     let Some(source) = ast::get_source_file_of_node(Some(original)) else {
         return false;
     };
-    let start_line = scanner::get_ecma_line_of_position(&*source, original.pos());
-    let end_line = scanner::get_ecma_line_of_position(&*source, original.end());
+    let start_line = scanner::get_ecma_line_of_position(
+        &*source,
+        original
+            .pos()
+            .expect_source("parsed nodes have source positions"),
+    );
+    let end_line = scanner::get_ecma_line_of_position(
+        &*source,
+        original
+            .end()
+            .expect_source("parsed nodes have source positions"),
+    );
     start_line == end_line
 }
 
@@ -295,7 +305,7 @@ pub fn get_super_call_from_statement(statement: P<Node>) -> Option<P<Node>> {
 // utilities.go:308
 pub fn move_range_past_modifiers(node: P<Node>) -> tsrs_core::TextRange {
     if ast::is_property_declaration(node) || ast::is_method_declaration(node) {
-        return tsrs_core::TextRange::new(node.name().unwrap().pos(), node.end());
+        return tsrs_core::TextRange::from_text_pos(node.name().unwrap().pos(), node.end());
     }
 
     let mut last_modifier = None;
@@ -305,7 +315,7 @@ pub fn move_range_past_modifiers(node: P<Node>) -> tsrs_core::TextRange {
 
     if let Some(last_modifier) = last_modifier {
         if !ast::position_is_synthesized(last_modifier.end()) {
-            return tsrs_core::TextRange::new(last_modifier.end(), node.end());
+            return tsrs_core::TextRange::from_text_pos(last_modifier.end(), node.end());
         }
     }
     move_range_past_decorators(node)
@@ -324,7 +334,7 @@ pub fn move_range_past_decorators(node: P<Node>) -> tsrs_core::TextRange {
 
     if let Some(last_decorator) = last_decorator {
         if !ast::position_is_synthesized(last_decorator.end()) {
-            return tsrs_core::TextRange::new(last_decorator.end(), node.end());
+            return tsrs_core::TextRange::from_text_pos(last_decorator.end(), node.end());
         }
     }
     node.loc()

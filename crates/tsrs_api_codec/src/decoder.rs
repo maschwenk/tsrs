@@ -7,7 +7,7 @@
 
 use tsrs_ast::*;
 use tsrs_core::arena::Region;
-use tsrs_core::{alloc_str, tspath, LanguageVariant, ScriptKind, TextRange, P};
+use tsrs_core::{LanguageVariant, P, ScriptKind, TextPos, TextRange, alloc_str, tspath};
 
 use crate::format::*;
 
@@ -29,6 +29,14 @@ pub enum DecodeError {
     /// Input on which the pinned Go decoder panics (the server recovers and returns `panic: <message>`); the
     /// Rust decoder fails at the same point instead of decoding more than Go can.
     GoDecoderPanic(String),
+}
+
+fn decode_text_pos(pos: u32) -> TextPos {
+    if pos >= u32::MAX - 1 {
+        TextPos::Synthetic
+    } else {
+        TextPos::source(pos)
+    }
 }
 
 impl std::fmt::Display for DecodeError {
@@ -249,9 +257,18 @@ impl<'a> Decoder<'a> {
                 return Err(DecodeError::InvalidTree(format!("node {i} has parent {parent}")));
             }
             let child_indices = self.collect_children(i)?;
-            let loc = TextRange::new(pos as i32, end as i32);
+            let trailing_comma = end == u32::MAX - 1;
+            let loc = TextRange::from_text_pos(decode_text_pos(pos), decode_text_pos(end));
             if kind == SYNTAX_KIND_NODE_LIST {
-                let nodes: Vec<P<Node>> = child_indices.iter().filter_map(|&ci| self.nodes[ci]).collect();
+                let nodes: Vec<P<Node>> = child_indices
+                    .iter()
+                    .filter_map(|&ci| self.nodes[ci])
+                    .collect();
+                if trailing_comma {
+                    if let Some(last) = nodes.last() {
+                        last.mark_trailing_comma();
+                    }
+                }
                 let list = self.factory.new_node_list(nodes);
                 list.loc.set(loc);
                 self.lists[i] = Some(list);
@@ -331,7 +348,9 @@ impl<'a> Decoder<'a> {
             6 => ScriptKind::JSON,
             v => return Err(DecodeError::InvalidExtendedData(format!("scriptKind {v}"))),
         };
-        if tspath::get_encoded_root_length(file_name) == 0 || file_name != tspath::normalize_path(file_name) {
+        if tspath::get_encoded_root_length(file_name) == tspath::EncodedRootLength::Relative
+            || file_name != tspath::normalize_path(file_name)
+        {
             return Err(DecodeError::InvalidSourceFileName(file_name.to_string()));
         }
         let parse_opts = read_le32(self.raw, HEADER_OFFSET_PARSE_OPTIONS).unwrap();
@@ -361,15 +380,27 @@ impl<'a> Decoder<'a> {
 
     fn ext_text_raw_flags(&self, data: u32) -> Result<(&'static str, &'static str, TokenFlags), DecodeError> {
         let off = data & NODE_DATA_STRING_INDEX_MASK;
-        Ok((self.get_string(self.read_ext(off, 0)?)?, self.get_string(self.read_ext(off, 4)?)?, TokenFlags::from_bits_retain(self.read_ext(off, 8)? as i32)))
+        Ok((
+            self.get_string(self.read_ext(off, 0)?)?,
+            self.get_string(self.read_ext(off, 4)?)?,
+            TokenFlags::from_bits_retain(self.read_ext(off, 8)?),
+        ))
     }
 
     fn ext_text_flags(&self, data: u32) -> Result<(&'static str, TokenFlags), DecodeError> {
         let off = data & NODE_DATA_STRING_INDEX_MASK;
-        Ok((self.get_string(self.read_ext(off, 0)?)?, TokenFlags::from_bits_retain(self.read_ext(off, 4)? as i32)))
+        Ok((
+            self.get_string(self.read_ext(off, 0)?)?,
+            TokenFlags::from_bits_retain(self.read_ext(off, 4)?),
+        ))
     }
 
-    pub(crate) fn decode_extended_data_template_head(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_template_head(
+        &mut self,
+        data: u32,
+        _: &[usize],
+        _: u32,
+    ) -> Result<P<Node>, DecodeError> {
         let (t, r, f) = self.ext_text_raw_flags(data)?;
         Ok(self.factory.new_template_head(t, r, f))
     }

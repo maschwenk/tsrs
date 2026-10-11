@@ -78,12 +78,10 @@ pub struct Common {
 
 pub fn root_length(p: &str) -> usize {
     let l = tspath::get_encoded_root_length(p);
-    if l == 0 {
+    if l == tspath::EncodedRootLength::Relative {
         panic!("vfs: path {:?} is not absolute", p);
-    } else if l < 0 {
-        return (!l) as usize;
     }
-    l as usize
+    l.len()
 }
 
 pub fn split_path(p: &str) -> (String, String) {

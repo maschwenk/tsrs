@@ -4,7 +4,7 @@ use std::fmt;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::tspath::Path;
-use tsrs_core::{alloc_slice, alloc_str, undefined_text_range, OwnedCell, ResolutionMode, TextPos, TextRange, P};
+use tsrs_core::{OwnedCell, P, ResolutionMode, TextRange, alloc_slice, alloc_str};
 use tsrs_diagnostics::{self as diagnostics, Category, Key, Message};
 
 use crate::SourceFile;
@@ -31,7 +31,7 @@ pub struct RepopulateDiagnosticInfo {
 
 pub struct Diagnostic {
     file: OwnedCell<Option<P<SourceFile>>>,
-    loc: OwnedCell<TextRange>,
+    loc: OwnedCell<Option<TextRange>>,
     code: i32,
     category: OwnedCell<Category>,
     // source, when non-empty, is a custom prefix (e.g. a content mapper's name) shown instead of "TS"
@@ -90,16 +90,16 @@ impl Diagnostic {
     pub fn file(&self) -> Option<P<SourceFile>> {
         self.file.get()
     }
-    pub fn pos(&self) -> i32 {
-        self.loc.get().pos()
+    pub fn pos(&self) -> Option<u32> {
+        self.loc.get()?.source_pos()
     }
-    pub fn end(&self) -> i32 {
-        self.loc.get().end()
+    pub fn end(&self) -> Option<u32> {
+        self.loc.get()?.source_end()
     }
-    pub fn len(&self) -> i32 {
-        self.loc.get().len()
+    pub fn len(&self) -> Option<u32> {
+        self.loc.get()?.len()
     }
-    pub fn loc(&self) -> TextRange {
+    pub fn loc(&self) -> Option<TextRange> {
         self.loc.get()
     }
     pub fn code(&self) -> i32 {
@@ -146,7 +146,7 @@ impl Diagnostic {
         self.file.set(file)
     }
     pub fn set_location(&self, loc: TextRange) {
-        self.loc.set(loc)
+        self.loc.set(loc.is_valid().then_some(loc))
     }
     pub fn set_category(&self, category: Category) {
         self.category.set(category)
@@ -256,15 +256,17 @@ impl Diagnostic {
         if !self.source.get().is_empty() {
             return Cow::Borrowed(&self.message_args);
         }
-        let Some(segment) = tsrs_spanmap::alias_for_virtual_span(file.span_map().as_deref(), self.loc.get()) else {
+        let Some(loc) = self.loc.get() else {
+            return Cow::Borrowed(&self.message_args);
+        };
+        let Some(segment) = tsrs_spanmap::alias_for_virtual_span(file.span_map().as_deref(), loc)
+        else {
             return Cow::Borrowed(&self.message_args);
         };
         let virtual_text = file.text();
         let original_text = file.original_text();
-        if segment.virtual_start < 0
-            || segment.virtual_end > virtual_text.len() as TextPos
-            || segment.original_start < 0
-            || segment.original_end > original_text.len() as TextPos
+        if segment.virtual_end > virtual_text.len() as u32
+            || segment.original_end > original_text.len() as u32
         {
             return Cow::Borrowed(&self.message_args);
         }
@@ -300,12 +302,17 @@ impl fmt::Debug for Diagnostic {
     }
 }
 
-pub fn new_diagnostic(file: Option<P<SourceFile>>, loc: TextRange, message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
+pub fn new_diagnostic(
+    file: Option<P<SourceFile>>,
+    loc: impl Into<Option<TextRange>>,
+    message: &'static Message,
+    args: &[&dyn fmt::Display],
+) -> P<Diagnostic> {
     // Diagnostics outlive a scratch region (one file's emit) they are reported in.
     let _outer = tsrs_core::arena::escape_scratch();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
-        loc: OwnedCell::new(loc),
+        loc: OwnedCell::new(loc.into().filter(|loc| loc.is_valid())),
         code: message.code(),
         category: OwnedCell::new(message.category()),
         source: OwnedCell::new(""),
@@ -340,7 +347,7 @@ pub fn new_diagnostic_from_serialized(
     let _outer = tsrs_core::arena::escape_scratch();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
-        loc: OwnedCell::new(loc),
+        loc: OwnedCell::new(loc.is_valid().then_some(loc)),
         code,
         category: OwnedCell::new(category),
         source: OwnedCell::new(""),
@@ -363,11 +370,14 @@ pub fn new_diagnostic_chain(chain: impl Into<Option<P<Diagnostic>>>, message: &'
             .add_message_chain(chain)
             .set_related_info(chain.related_information.get());
     }
-    new_diagnostic(None, TextRange::default(), message, args)
+    new_diagnostic(None, None, message, args)
 }
 
-pub fn new_compiler_diagnostic(message: &'static Message, args: &[&dyn fmt::Display]) -> P<Diagnostic> {
-    new_diagnostic(None, undefined_text_range(), message, args)
+pub fn new_compiler_diagnostic(
+    message: &'static Message,
+    args: &[&dyn fmt::Display],
+) -> P<Diagnostic> {
+    new_diagnostic(None, None, message, args)
 }
 
 // NewExternalDiagnostic creates a diagnostic reported by an external source such as a content mapper.
@@ -386,7 +396,7 @@ pub fn new_external_diagnostic(
     let _outer = tsrs_core::arena::escape_scratch();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
-        loc: OwnedCell::new(loc),
+        loc: OwnedCell::new(loc.is_valid().then_some(loc)),
         code,
         category: OwnedCell::new(category),
         source: OwnedCell::new(alloc_str(source)),
@@ -481,7 +491,8 @@ impl DiagnosticsCollection {
 
     fn get_global_diagnostics_locked(&mut self) -> Vec<P<Diagnostic>> {
         if !self.non_file_diagnostics_sorted {
-            self.non_file_diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+            self.non_file_diagnostics
+                .sort_by(|a, b| compare_diagnostics(*a, *b));
             self.non_file_diagnostics_sorted = true;
         }
         self.non_file_diagnostics.clone()
@@ -495,7 +506,7 @@ impl DiagnosticsCollection {
         let path = file.path().clone();
         if !self.file_diagnostics_sorted.contains(&path) {
             if let Some(diagnostics) = self.file_diagnostics.get_mut(&path) {
-                diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+                diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b));
             }
             self.file_diagnostics_sorted.insert(path.clone());
         }
@@ -512,7 +523,7 @@ impl DiagnosticsCollection {
         for diags in self.file_diagnostics.values() {
             diagnostics.extend_from_slice(diags);
         }
-        diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+        diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b));
         diagnostics
     }
 }
@@ -523,7 +534,7 @@ impl DiagnosticsCollection {
 #[derive(Clone)]
 struct DiagnosticLocationKey {
     file: Option<P<SourceFile>>,
-    loc: TextRange,
+    loc: Option<TextRange>,
     code: i32,
 }
 
@@ -600,109 +611,100 @@ fn equal_message_chain(c1: P<Diagnostic>, c2: P<Diagnostic>) -> bool {
         && slices_equal_func(c1.message_chain(), c2.message_chain(), equal_message_chain)
 }
 
-fn compare_strings(a: &str, b: &str) -> i32 {
-    match a.cmp(b) {
-        Ordering::Less => -1,
-        Ordering::Equal => 0,
-        Ordering::Greater => 1,
-    }
+fn compare_strings(a: &str, b: &str) -> Ordering {
+    a.cmp(b)
 }
 
 // Go `slices.Compare` over []string.
-fn compare_string_slices(a: &[String], b: &[String]) -> i32 {
-    match a.cmp(b) {
-        Ordering::Less => -1,
-        Ordering::Equal => 0,
-        Ordering::Greater => 1,
-    }
+fn compare_string_slices(a: &[String], b: &[String]) -> Ordering {
+    a.cmp(b)
 }
 
-fn compare_message_chain_size(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> i32 {
-    let c = c2.len() as i32 - c1.len() as i32;
-    if c != 0 {
+fn compare_message_chain_size(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> Ordering {
+    let c = c2.len().cmp(&c1.len());
+    if c != Ordering::Equal {
         return c;
     }
     for i in 0..c1.len() {
         let c = compare_message_chain_size(c1[i].message_chain(), c2[i].message_chain());
-        if c != 0 {
+        if c != Ordering::Equal {
             return c;
         }
     }
-    0
+    Ordering::Equal
 }
 
-fn compare_message_chain_content(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> i32 {
+fn compare_message_chain_content(c1: &[P<Diagnostic>], c2: &[P<Diagnostic>]) -> Ordering {
     for i in 0..c1.len() {
         let c = compare_string_slices(c1[i].message_args(), c2[i].message_args());
-        if c != 0 {
+        if c != Ordering::Equal {
             return c;
         }
         if !c1[i].message_chain().is_empty() {
             let c = compare_message_chain_content(c1[i].message_chain(), c2[i].message_chain());
-            if c != 0 {
+            if c != Ordering::Equal {
                 return c;
             }
         }
     }
-    0
+    Ordering::Equal
 }
 
-fn compare_related_info(r1: &[P<Diagnostic>], r2: &[P<Diagnostic>]) -> i32 {
-    let c = r2.len() as i32 - r1.len() as i32;
-    if c != 0 {
+fn compare_related_info(r1: &[P<Diagnostic>], r2: &[P<Diagnostic>]) -> Ordering {
+    let c = r2.len().cmp(&r1.len());
+    if c != Ordering::Equal {
         return c;
     }
     for i in 0..r1.len() {
         let c = compare_diagnostics(r1[i], r2[i]);
-        if c != 0 {
+        if c != Ordering::Equal {
             return c;
         }
     }
-    0
+    Ordering::Equal
 }
 
-pub fn compare_diagnostics(d1: P<Diagnostic>, d2: P<Diagnostic>) -> i32 {
+pub fn compare_diagnostics(d1: P<Diagnostic>, d2: P<Diagnostic>) -> Ordering {
     if d1 == d2 {
-        return 0;
+        return Ordering::Equal;
     }
     let mut c = compare_strings(get_diagnostic_path(d1), get_diagnostic_path(d2));
-    if c != 0 {
+    if c != Ordering::Equal {
         return c;
     }
-    c = d1.loc().pos() - d2.loc().pos();
-    if c != 0 {
+    c = d1.loc().cmp(&d2.loc());
+    if c != Ordering::Equal {
         return c;
     }
-    c = d1.loc().end() - d2.loc().end();
-    if c != 0 {
+    c = d1.code().cmp(&d2.code());
+    if c != Ordering::Equal {
         return c;
     }
-    c = d1.code() - d2.code();
-    if c != 0 {
-        return c;
-    }
-    c = d1.category() as i32 - d2.category() as i32;
-    if c != 0 {
+    c = d1.category().cmp(&d2.category());
+    if c != Ordering::Equal {
         return c;
     }
     c = compare_strings(d1.source(), d2.source());
-    if c != 0 {
+    if c != Ordering::Equal {
         return c;
     }
-    c = compare_strings(get_diagnostic_message_identity(d1), get_diagnostic_message_identity(d2));
-    if c != 0 {
+    c = compare_strings(
+        get_diagnostic_message_identity(d1),
+        get_diagnostic_message_identity(d2),
+    );
+    if c != Ordering::Equal {
         return c;
     }
     c = compare_string_slices(d1.message_args(), d2.message_args());
-    if c != 0 {
+    if c != Ordering::Equal {
         return c;
     }
     c = compare_message_chain_size(d1.message_chain(), d2.message_chain());
-    if c != 0 {
+    if c != Ordering::Equal {
         return c;
     }
     c = compare_message_chain_content(d1.message_chain(), d2.message_chain());
-    if c != 0 {
+    if c != Ordering::Equal {
         return c;
     }
     compare_related_info(d1.related_information(), d2.related_information())
@@ -756,7 +758,9 @@ mod tests {
         let mut collection = DiagnosticsCollection::default();
         for &diagnostic in &all {
             assert!(!equal_diagnostics_no_related_info(first, diagnostic) || diagnostic == first);
-            assert!(compare_diagnostics(first, diagnostic) != 0 || diagnostic == first);
+            assert!(
+                compare_diagnostics(first, diagnostic) != Ordering::Equal || diagnostic == first
+            );
             collection.add(diagnostic);
         }
         assert_eq!(collection.get_diagnostics().len(), all.len());
@@ -813,7 +817,7 @@ pub fn new_diagnostic_from_text(
 ) -> P<Diagnostic> {
     P::new(Diagnostic {
         file: OwnedCell::new(file),
-        loc: OwnedCell::new(loc),
+        loc: OwnedCell::new(loc.is_valid().then_some(loc)),
         code,
         category: OwnedCell::new(category),
         source: OwnedCell::new(""),

@@ -542,20 +542,21 @@ pub fn is_call_or_new_expression(node: P<Node>) -> bool {
 }
 
 // Go `slices.BinarySearchFunc`: the leftmost insertion index and whether the target was found.
-pub(crate) fn binary_search_func<T: Copy, U: Copy>(items: &[T], target: U, mut cmp: impl FnMut(T, U) -> i32) -> (usize, bool) {
-    let i = items.partition_point(|&item| cmp(item, target) < 0);
-    (i, i < items.len() && cmp(items[i], target) == 0)
+pub(crate) fn binary_search_func<T: Copy, U: Copy>(
+    items: &[T],
+    target: U,
+    mut cmp: impl FnMut(T, U) -> std::cmp::Ordering,
+) -> (usize, bool) {
+    let i = items.partition_point(|&item| cmp(item, target).is_lt());
+    (i, i < items.len() && cmp(items[i], target).is_eq())
 }
 
-pub fn index_of_node(nodes: &[P<Node>], node: P<Node>) -> i32 {
+pub fn index_of_node(nodes: &[P<Node>], node: P<Node>) -> Option<usize> {
     let (index, ok) = binary_search_func(nodes, node, compare_node_positions);
-    if ok {
-        return index as i32;
-    }
-    -1
+    ok.then_some(index)
 }
 
-pub fn compare_node_positions(n1: P<Node>, n2: P<Node>) -> i32 {
+pub fn compare_node_positions(n1: P<Node>, n2: P<Node>) -> std::cmp::Ordering {
     compare_text_ranges(n1.loc(), n2.loc())
 }
 

@@ -347,23 +347,24 @@ pub(crate) fn combine_references(results: &[lsproto::ReferencesResponse]) -> lsp
 pub(crate) fn combine_vs_references(results: Vec<lsproto::VSReferencesResponse>) -> lsproto::VSReferencesResponse {
     let mut combined: Vec<lsproto::VSReferenceItem> = Vec::new();
     // Re-number IDs across projects to maintain unique IDs and correct definition references
-    let mut next_id: i32 = 0;
+    let mut next_id: usize = 0;
     for resp in results {
         let Some(items) = resp.vs_reference_items else {
             continue;
         };
         // Map old IDs to new IDs for this batch
-        let mut id_map: FxHashMap<i32, i32> = FxHashMap::default();
+        let mut id_map: FxHashMap<i32, usize> = FxHashMap::default();
         for item in items {
             let old_id = item.vs_id;
-            let new_id = next_id;
-            id_map.insert(old_id, new_id);
+            let new_id = i32::try_from(next_id).expect("reference ID exceeds protocol i32");
+            id_map.insert(old_id, next_id);
             next_id += 1;
 
             let mut new_item = item.clone();
             new_item.vs_id = new_id;
             if let Some(definition_id) = item.vs_definition_id {
-                let new_def_id = id_map.get(&definition_id).copied().unwrap_or(0);
+                let new_def_id = i32::try_from(id_map.get(&definition_id).copied().unwrap_or(0))
+                    .expect("reference ID exceeds protocol i32");
                 new_item.vs_definition_id = Some(new_def_id);
             }
             combined.push(new_item);

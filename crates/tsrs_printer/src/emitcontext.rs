@@ -32,7 +32,7 @@ pub struct EmitContext {
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub(crate) struct environmentFlags: i32 {
+    pub(crate) struct environmentFlags: u32 {
         const None = 0;
         const InParameters = 1 << 0; // currently visiting a parameter list
         const VariablesHoistedInParameters = 1 << 1; // a temp variable was hoisted while visiting a parameter list
@@ -361,26 +361,50 @@ impl EmitContext {
 
         // splice other custom prologues from right into left
         if right_custom_prologue_end > right_hoisted_variables_end {
-            left = splice(&left, left_hoisted_variables_end as i32, 0, &declarations[right_hoisted_variables_end..right_custom_prologue_end]).into_owned();
+            left = splice(
+                &left,
+                SpliceStart::FromStart(left_hoisted_variables_end),
+                0,
+                &declarations[right_hoisted_variables_end..right_custom_prologue_end],
+            )
+            .into_owned();
             changed = true;
         }
 
         // splice hoisted variables from right into left
         if right_hoisted_variables_end > right_hoisted_functions_end {
-            left = splice(&left, left_hoisted_functions_end as i32, 0, &declarations[right_hoisted_functions_end..right_hoisted_variables_end]).into_owned();
+            left = splice(
+                &left,
+                SpliceStart::FromStart(left_hoisted_functions_end),
+                0,
+                &declarations[right_hoisted_functions_end..right_hoisted_variables_end],
+            )
+            .into_owned();
             changed = true;
         }
 
         // splice hoisted functions from right into left
         if right_hoisted_functions_end > right_standard_prologue_end {
-            left = splice(&left, left_standard_prologue_end as i32, 0, &declarations[right_standard_prologue_end..right_hoisted_functions_end]).into_owned();
+            left = splice(
+                &left,
+                SpliceStart::FromStart(left_standard_prologue_end),
+                0,
+                &declarations[right_standard_prologue_end..right_hoisted_functions_end],
+            )
+            .into_owned();
             changed = true;
         }
 
         // splice standard prologues from right into left (that are not already in left)
         if right_standard_prologue_end > 0 {
             if left_standard_prologue_end == 0 {
-                left = splice(&left, 0, 0, &declarations[..right_standard_prologue_end]).into_owned();
+                left = splice(
+                    &left,
+                    SpliceStart::FromStart(0),
+                    0,
+                    &declarations[..right_standard_prologue_end],
+                )
+                .into_owned();
                 changed = true;
             } else {
                 let mut left_prologues: FxHashSet<&'static str> = FxHashSet::default();
@@ -973,14 +997,26 @@ impl EmitContext {
         node
     }
 
-    pub fn add_synthetic_leading_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().leading_comments.push(SynthesizedComment {
-            kind,
-            loc: TextRange::new(-1, -1),
-            has_leading_new_line: false,
-            has_trailing_new_line,
-            text: text.to_string(),
-        });
+    pub fn add_synthetic_leading_comment(
+        &self,
+        node: P<Node>,
+        kind: Kind,
+        text: &str,
+        has_trailing_new_line: bool,
+    ) -> P<Node> {
+        self.emit_nodes
+            .borrow_mut()
+            .entry(node)
+            .or_default()
+            .rare_mut()
+            .leading_comments
+            .push(SynthesizedComment {
+                kind,
+                loc: TextRange::synthetic(),
+                has_leading_new_line: false,
+                has_trailing_new_line,
+                text: text.to_string(),
+            });
         node
     }
 
@@ -996,14 +1032,26 @@ impl EmitContext {
         node
     }
 
-    pub fn add_synthetic_trailing_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().trailing_comments.push(SynthesizedComment {
-            kind,
-            loc: TextRange::new(-1, -1),
-            has_leading_new_line: false,
-            has_trailing_new_line,
-            text: text.to_string(),
-        });
+    pub fn add_synthetic_trailing_comment(
+        &self,
+        node: P<Node>,
+        kind: Kind,
+        text: &str,
+        has_trailing_new_line: bool,
+    ) -> P<Node> {
+        self.emit_nodes
+            .borrow_mut()
+            .entry(node)
+            .or_default()
+            .rare_mut()
+            .trailing_comments
+            .push(SynthesizedComment {
+                kind,
+                loc: TextRange::synthetic(),
+                has_leading_new_line: false,
+                has_trailing_new_line,
+                text: text.to_string(),
+            });
         node
     }
 

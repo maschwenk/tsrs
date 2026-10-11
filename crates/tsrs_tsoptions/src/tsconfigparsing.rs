@@ -739,7 +739,12 @@ impl CommandLineOptionNameMap {
     }
 
     pub fn get_spelling_suggestion(&self, name: &str) -> Option<&'static CommandLineOption> {
-        tsrs_core::get_spelling_suggestion(name, self.0.values().copied(), |option| option.name, |a, b| a.name.cmp(b.name) as i32)
+        tsrs_core::get_spelling_suggestion(
+            name,
+            self.0.values().copied(),
+            |option| option.name,
+            |a, b| a.name.cmp(b.name),
+        )
     }
 }
 
@@ -1718,20 +1723,26 @@ fn parse_json_config_file_content_worker(
 
     let content_mapper_source_file = source_file.map(|f| f.source_file);
     let mut content_mappers: Vec<Mapper> = Vec::new();
-    let mut content_mapper_indices: Vec<i32> = Vec::new();
-    let content_mappers_of_raw = get_prop_from_raw("contentMappers", &is_object, "object", &mut errors);
-    for (i, element) in content_mappers_of_raw.slice_value.iter().flatten().enumerate() {
+    let mut content_mapper_indices: Vec<usize> = Vec::new();
+    let content_mappers_of_raw =
+        get_prop_from_raw("contentMappers", &is_object, "object", &mut errors);
+    for (i, element) in content_mappers_of_raw
+        .slice_value
+        .iter()
+        .flatten()
+        .enumerate()
+    {
         let (mapper, mapper_errors) = parse_content_mapper(element);
         for mapper_error in mapper_errors {
             errors.push(set_content_mapper_diagnostic_location(
                 mapper_error,
                 content_mapper_source_file,
-                get_content_mapper_syntax(content_mapper_source_file, i as i32, ""),
+                get_content_mapper_syntax(content_mapper_source_file, Some(i), ""),
             ));
         }
         if let Some(mapper) = mapper {
             content_mappers.push(mapper);
-            content_mapper_indices.push(i as i32);
+            content_mapper_indices.push(i);
         }
     }
     let total_content_mapper_extensions: usize = content_mappers.iter().map(|m| m.definition.extensions.len()).sum();
@@ -1803,7 +1814,11 @@ fn parse_json_config_file_content_worker(
                 errors.push(set_content_mapper_diagnostic_location(
                     diagnostic,
                     content_mapper_source_file,
-                    get_content_mapper_syntax(content_mapper_source_file, content_mapper_indices[j], "package"),
+                    get_content_mapper_syntax(
+                        content_mapper_source_file,
+                        Some(content_mapper_indices[j]),
+                        "package",
+                    ),
                 ));
                 continue;
             }
@@ -1970,16 +1985,20 @@ fn invalid_dot_dot_after_recursive_wildcard(s: &str) -> bool {
     // can be matched in many arbitrary positions when multiple are present, resulting
     // in bad backtracking (and we don't care which is matched - just that some /.. segment
     // comes after some **/ segment).
-    let wildcard_index: i64 = if s.starts_with("**/") {
-        0
+    let wildcard_index = if s.starts_with("**/") {
+        Some(0)
     } else {
-        s.find("/**/").map_or(-1, |i| i as i64)
+        s.find("/**/")
     };
-    if wildcard_index == -1 {
+    let Some(wildcard_index) = wildcard_index else {
         return false;
-    }
-    let last_dot_index: i64 = if s.ends_with("/..") { s.len() as i64 } else { s.rfind("/../").map_or(-1, |i| i as i64) };
-    last_dot_index > wildcard_index
+    };
+    let last_dot_index = if s.ends_with("/..") {
+        Some(s.len())
+    } else {
+        s.rfind("/../")
+    };
+    last_dot_index.is_some_and(|last_dot_index| last_dot_index > wildcard_index)
 }
 
 pub fn get_ts_config_prop_array_element_value(
@@ -2068,8 +2087,12 @@ pub fn get_options_syntax_by_array_element_value(object_literal: Option<P<Node>>
 // getContentMapperSyntax returns the tsconfig JSON node to attribute a diagnostic about the content
 // mapper at index to: the value of subKey within that mapper's object (when subKey is non-empty),
 // falling back to the mapper element, then to the "contentMappers" array. An index outside the array
-// (e.g. -1) yields the array itself. Returns nil when there is no source file (JSON API).
-fn get_content_mapper_syntax(source_file: Option<P<SourceFile>>, index: i32, sub_key: &str) -> Option<P<Node>> {
+// yields the array itself. Returns nil when there is no source file (JSON API).
+fn get_content_mapper_syntax(
+    source_file: Option<P<SourceFile>>,
+    index: Option<usize>,
+    sub_key: &str,
+) -> Option<P<Node>> {
     source_file?;
     for_each_ts_config_prop_array(source_file, "contentMappers", |property| {
         let initializer = property.initializer().unwrap();
@@ -2077,10 +2100,10 @@ fn get_content_mapper_syntax(source_file: Option<P<SourceFile>>, index: i32, sub
             return Some(initializer);
         }
         let elements = initializer.elements();
-        if index < 0 || index as usize >= elements.len() {
+        let Some(index) = index.filter(|&index| index < elements.len()) else {
             return Some(initializer);
-        }
-        let element = elements[index as usize];
+        };
+        let element = elements[index];
         if !sub_key.is_empty() && tsrs_ast::is_object_literal_expression(element) {
             if let Some(node) = for_each_property_assignment(Some(element), sub_key, |property| property.initializer(), None) {
                 return Some(node);
@@ -2103,7 +2126,10 @@ pub fn get_content_mapper_option_diagnostic_location(
         return (None, tsrs_core::undefined_text_range());
     };
     // Go `slices.Index(config.ContentMappers(), mapper)` compares the *Mapper pointers.
-    let index = config.content_mappers().iter().position(|m| std::ptr::eq(m, mapper)).map_or(-1, |i| i as i32);
+    let index = config
+        .content_mappers()
+        .iter()
+        .position(|m| std::ptr::eq(m, mapper));
     let mapper_node = get_content_mapper_syntax(Some(config_file.source_file), index, "");
     let mut node = get_content_mapper_syntax(Some(config_file.source_file), index, "options");
     if node.is_none() {
@@ -2130,7 +2156,18 @@ pub fn get_content_mapper_option_diagnostic_location(
         return (None, tsrs_core::undefined_text_range());
     };
     let file = config_file.source_file;
-    (Some(file), TextRange::new(tsrs_scanner::skip_trivia(file.text(), node.pos()), node.end()))
+    (
+        Some(file),
+        TextRange::new(
+            tsrs_scanner::skip_trivia(
+                file.text(),
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            node.end()
+                .expect_source("parsed nodes have source positions"),
+        ),
+    )
 }
 
 // getContentMappersKeySyntax returns the "contentMappers" property key node, used to attribute a
@@ -2142,8 +2179,12 @@ fn get_content_mappers_key_syntax(source_file: Option<P<SourceFile>>) -> Option<
 
 // getContentMapperExtensionSyntax returns the node for a specific extension string within the content
 // mapper at index, falling back to the "extensions" array or the mapper element.
-fn get_content_mapper_extension_syntax(source_file: Option<P<SourceFile>>, index: i32, ext: &str) -> Option<P<Node>> {
-    let node = get_content_mapper_syntax(source_file, index, "extensions");
+fn get_content_mapper_extension_syntax(
+    source_file: Option<P<SourceFile>>,
+    index: usize,
+    ext: &str,
+) -> Option<P<Node>> {
+    let node = get_content_mapper_syntax(source_file, Some(index), "extensions");
     if let Some(node) = node {
         if tsrs_ast::is_array_literal_expression(node) {
             if let Some(element) =
@@ -2166,7 +2207,15 @@ fn set_content_mapper_diagnostic_location(
 ) -> P<Diagnostic> {
     if let (Some(source_file), Some(node)) = (source_file, node) {
         diagnostic.set_file(Some(source_file));
-        diagnostic.set_location(TextRange::new(tsrs_scanner::skip_trivia(source_file.text(), node.pos()), node.end()));
+        diagnostic.set_location(TextRange::new(
+            tsrs_scanner::skip_trivia(
+                source_file.text(),
+                node.pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            node.end()
+                .expect_source("parsed nodes have source positions"),
+        ));
     }
     diagnostic
 }
@@ -2395,11 +2444,10 @@ pub(crate) fn get_file_names_from_config_specs(
                         validated_include_specs.iter().filter(|include| include.ends_with(tspath::EXTENSION_JSON)).cloned().collect();
                     vfsmatch::new_spec_matcher(&includes, &base_path, vfsmatch::Usage::Files, host.use_case_sensitive_file_names())
                 });
-                let mut include_index: i32 = -1;
-                if let Some(matchers) = matchers {
-                    include_index = matchers.match_index(&file);
-                }
-                if include_index != -1 {
+                if matchers
+                    .as_ref()
+                    .is_some_and(|matchers| matchers.match_index(&file).is_some())
+                {
                     let key = key_mappper(&file);
                     if !literal_file_map.contains_key(&key) && !wild_card_json_file_map.contains_key(&key) {
                         wild_card_json_file_map.set(key, file.clone());

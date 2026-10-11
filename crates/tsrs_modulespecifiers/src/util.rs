@@ -14,14 +14,18 @@ use tsrs_core::tspath;
 // func ProcessEntrypointEnding (util.go:388) is not generated; it is hand-ported below (process_entrypoint_ending).
 
 // util.go:29
-pub(crate) fn compare_paths_by_redirect(a: &ModulePath, b: &ModulePath, use_case_sensitive_file_names: bool) -> i32 {
+pub(crate) fn compare_paths_by_redirect(
+    a: &ModulePath,
+    b: &ModulePath,
+    use_case_sensitive_file_names: bool,
+) -> std::cmp::Ordering {
     // Redirects sort first, matching Strada's compareBooleans(b.isRedirect, a.isRedirect).
     let c = compare_booleans(b.is_redirect, a.is_redirect);
-    if c != 0 {
+    if c != std::cmp::Ordering::Equal {
         return c;
     }
     let c = tspath::compare_number_of_directory_separators(&a.file_name, &b.file_name);
-    if c != 0 {
+    if c != std::cmp::Ordering::Equal {
         return c;
     }
     // Strada relies on Map insertion order to break remaining ties deterministically;
@@ -57,9 +61,7 @@ pub(crate) fn string_to_regex(pattern: &str) -> Option<P<regex::Regex>> {
     let mut case_insensitive = false;
 
     if pattern.len() > 2 && pattern.as_bytes()[0] == b'/' {
-        let last_slash = pattern.rfind('/').map_or(-1, |i| i as i32);
-        if last_slash > 0 {
-            let last_slash = last_slash as usize;
+        if let Some(last_slash) = pattern.rfind('/').filter(|&index| index > 0) {
             let bytes = pattern.as_bytes();
             let mut has_unescaped_middle_slash = false;
             for i in 1..last_slash {
@@ -249,22 +251,22 @@ pub(crate) fn package_json_paths_are_equal(a: &str, b: &str, options: &tspath::C
     if a.is_empty() || b.is_empty() {
         return false;
     }
-    tspath::compare_paths(a, b, options) == 0
+    tspath::compare_paths(a, b, options) == std::cmp::Ordering::Equal
 }
 
 // util.go:250
 pub(crate) fn prefers_ts_extension(allowed_endings: &[ModuleSpecifierEnding]) -> bool {
     let js_priority = index_of_ending(allowed_endings, ModuleSpecifierEnding::JsExtension);
     let ts_priority = index_of_ending(allowed_endings, ModuleSpecifierEnding::TsExtension);
-    if ts_priority > -1 {
-        return ts_priority < js_priority;
-    }
-    false
+    matches!((ts_priority, js_priority), (Some(ts), Some(js)) if ts < js)
 }
 
 /// Go `slices.Index(allowedEndings, e)`.
-pub(crate) fn index_of_ending(allowed_endings: &[ModuleSpecifierEnding], e: ModuleSpecifierEnding) -> i32 {
-    allowed_endings.iter().position(|x| *x == e).map_or(-1, |i| i as i32)
+pub(crate) fn index_of_ending(
+    allowed_endings: &[ModuleSpecifierEnding],
+    e: ModuleSpecifierEnding,
+) -> Option<usize> {
+    allowed_endings.iter().position(|x| *x == e)
 }
 
 // util.go:259
@@ -280,25 +282,28 @@ pub fn get_node_module_path_parts(full_path: &str) -> Option<NodeModulePathParts
 
     let mut top_level_node_modules_index = 0;
     let mut top_level_package_name_index = 0;
-    let mut package_root_index = 0;
+    let mut package_root_index = None;
 
-    let mut part_start: i32 = 0;
-    let mut part_end: i32 = 0;
+    let mut part_start = 0;
+    let mut part_end = Some(0);
     let mut state = nodeModulesPathParseState::BeforeNodeModules;
 
-    while part_end >= 0 {
-        part_start = part_end;
-        part_end = index_after(full_path, "/", (part_start + 1) as usize);
+    while let Some(end) = part_end {
+        part_start = end;
+        part_end = index_after(full_path, "/", part_start + 1);
         match state {
             nodeModulesPathParseState::BeforeNodeModules => {
-                if full_path[part_start as usize..].starts_with("/node_modules/") {
+                if full_path[part_start..].starts_with("/node_modules/") {
                     top_level_node_modules_index = part_start;
-                    top_level_package_name_index = part_end;
+                    top_level_package_name_index =
+                        part_end.expect("node_modules path has a following package segment");
                     state = nodeModulesPathParseState::NodeModules;
                 }
             }
             nodeModulesPathParseState::NodeModules | nodeModulesPathParseState::Scope => {
-                if state == nodeModulesPathParseState::NodeModules && full_path.as_bytes()[(part_start + 1) as usize] == b'@' {
+                if state == nodeModulesPathParseState::NodeModules
+                    && full_path.as_bytes()[part_start + 1] == b'@'
+                {
                     state = nodeModulesPathParseState::Scope;
                 } else {
                     package_root_index = part_end;
@@ -306,7 +311,7 @@ pub fn get_node_module_path_parts(full_path: &str) -> Option<NodeModulePathParts
                 }
             }
             nodeModulesPathParseState::PackageContent => {
-                if full_path[part_start as usize..].starts_with("/node_modules/") {
+                if full_path[part_start..].starts_with("/node_modules/") {
                     state = nodeModulesPathParseState::NodeModules;
                 } else {
                     state = nodeModulesPathParseState::PackageContent;

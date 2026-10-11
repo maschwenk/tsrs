@@ -154,20 +154,16 @@ impl Version {
     }
 }
 
-pub(crate) const COMPARISON_LESS_THAN: i32 = -1;
-pub(crate) const COMPARISON_EQUAL_TO: i32 = 0;
-pub(crate) const COMPARISON_GREATER_THAN: i32 = 1;
+pub(crate) const COMPARISON_LESS_THAN: Ordering = Ordering::Less;
+pub(crate) const COMPARISON_EQUAL_TO: Ordering = Ordering::Equal;
+pub(crate) const COMPARISON_GREATER_THAN: Ordering = Ordering::Greater;
 
-fn cmp_compare<T: Ord + Copy>(a: T, b: T) -> i32 {
-    match a.cmp(&b) {
-        Ordering::Less => COMPARISON_LESS_THAN,
-        Ordering::Equal => COMPARISON_EQUAL_TO,
-        Ordering::Greater => COMPARISON_GREATER_THAN,
-    }
+fn cmp_compare<T: Ord + Copy>(a: T, b: T) -> Ordering {
+    a.cmp(&b)
 }
 
 impl Version {
-    pub fn compare(&self, b: &Version) -> i32 {
+    pub fn compare(&self, b: &Version) -> Ordering {
         // https://semver.org/#spec-item-11
         // > Precedence is determined by the first difference when comparing each of these
         // > identifiers from left to right as follows: Major, minor, and patch versions are
@@ -186,17 +182,17 @@ impl Version {
         }
 
         let r = cmp_compare(a.major, b.major);
-        if r != 0 {
+        if r != Ordering::Equal {
             return r;
         }
 
         let r = cmp_compare(a.minor, b.minor);
-        if r != 0 {
+        if r != Ordering::Equal {
             return r;
         }
 
         let r = cmp_compare(a.patch, b.patch);
-        if r != 0 {
+        if r != Ordering::Equal {
             return r;
         }
 
@@ -204,7 +200,7 @@ impl Version {
     }
 }
 
-pub(crate) fn compare_pre_release_identifiers(left: &[String], right: &[String]) -> i32 {
+pub(crate) fn compare_pre_release_identifiers(left: &[String], right: &[String]) -> Ordering {
     // https://semver.org/#spec-item-11
     // > When major, minor, and patch are equal, a pre-release version has lower precedence
     // > than a normal version.
@@ -223,20 +219,20 @@ pub(crate) fn compare_pre_release_identifiers(left: &[String], right: &[String])
     // > a difference is found [...]
     for (l, r) in left.iter().zip(right.iter()) {
         let c = compare_pre_release_identifier(l, r);
-        if c != 0 {
+        if c != Ordering::Equal {
             return c;
         }
     }
     cmp_compare(left.len(), right.len())
 }
 
-pub(crate) fn compare_pre_release_identifier(left: &str, right: &str) -> i32 {
+pub(crate) fn compare_pre_release_identifier(left: &str, right: &str) -> Ordering {
     // https://semver.org/#spec-item-11
     // > Precedence for two pre-release versions with the same major, minor, and patch version
     // > MUST be determined by comparing each dot separated identifier from left to right until
     // > a difference is found [...]
     let compare_result = cmp_compare(left, right);
-    if compare_result == 0 {
+    if compare_result == Ordering::Equal {
         return compare_result;
     }
 
@@ -265,7 +261,7 @@ pub(crate) fn compare_pre_release_identifier(left: &str, right: &str) -> i32 {
                 let left_len = left.len();
                 let right_len = right.len();
                 let len_compare = cmp_compare(left_len, right_len);
-                if len_compare == 0 {
+                if len_compare == Ordering::Equal {
                     return compare_result;
                 } else {
                     return len_compare;

@@ -1,6 +1,7 @@
 // Port of ls/symbols.go.
 
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::rc::Rc;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -344,28 +345,65 @@ impl LanguageService {
     // symbols.go:292
     pub(crate) fn new_document_symbol(&self, node: P<Node>, name: Option<P<Node>>, children: Vec<DocSym>) -> Option<DocSym> {
         let file = ast::get_source_file_of_node(node).unwrap();
-        let node_start_pos = scanner::skip_trivia(file.text(), node.pos());
-        let name = if name.is_none() { ast::get_name_of_declaration(node) } else { name };
+        let node_start_pos = scanner::skip_trivia(
+            file.text(),
+            node.pos()
+                .expect_source("document-symbol nodes have source positions"),
+        );
+        let name = if name.is_none() {
+            ast::get_name_of_declaration(node)
+        } else {
+            name
+        };
         let mut text: String;
-        let name_start_pos: i32;
-        let name_end_pos: i32;
+        let name_start_pos: u32;
+        let name_end_pos: u32;
         if ast::is_module_declaration(node) && !ast::is_ambient_module(node) {
             text = get_module_name(node);
-            name_start_pos = scanner::skip_trivia(file.text(), name.unwrap().pos());
-            name_end_pos = get_interior_module(node).name().unwrap().end();
-        } else if ast::is_any_export_assignment(node) && node.as_export_assignment().is_export_equals {
+            name_start_pos = scanner::skip_trivia(
+                file.text(),
+                name.unwrap()
+                    .pos()
+                    .expect_source("module names have source positions"),
+            );
+            name_end_pos = get_interior_module(node)
+                .name()
+                .unwrap()
+                .end()
+                .expect_source("module names have source positions");
+        } else if ast::is_any_export_assignment(node)
+            && node.as_export_assignment().is_export_equals
+        {
             text = "export=".to_string();
             if !ast::node_is_missing(name) {
-                name_start_pos = scanner::skip_trivia(file.text(), name.unwrap().pos());
-                name_end_pos = name.unwrap().end();
+                name_start_pos = scanner::skip_trivia(
+                    file.text(),
+                    name.unwrap()
+                        .pos()
+                        .expect_source("export names have source positions"),
+                );
+                name_end_pos = name
+                    .unwrap()
+                    .end()
+                    .expect_source("export names have source positions");
             } else {
                 name_start_pos = node_start_pos;
-                name_end_pos = node.end();
+                name_end_pos = node
+                    .end()
+                    .expect_source("document-symbol nodes have source positions");
             }
         } else if let Some(name) = name {
             text = get_text_of_name(name);
-            name_start_pos = scanner::skip_trivia(file.text(), name.pos()).max(node_start_pos);
-            name_end_pos = name.end().max(node_start_pos);
+            name_start_pos = scanner::skip_trivia(
+                file.text(),
+                name.pos()
+                    .expect_source("declaration names have source positions"),
+            )
+            .max(node_start_pos);
+            name_end_pos = name
+                .end()
+                .expect_source("declaration names have source positions")
+                .max(node_start_pos);
         } else {
             text = get_unnamed_node_label(node);
             name_start_pos = node_start_pos;
@@ -384,8 +422,15 @@ impl LanguageService {
         if !selection_fidelity.is_single_segment() {
             return None;
         }
-        let (mut symbol_range, range_fidelity) =
-            self.converters.to_lsp_range_for_feature(&file, TextRange::new(node_start_pos, node.end()), Feature::DocumentSymbols);
+        let (mut symbol_range, range_fidelity) = self.converters.to_lsp_range_for_feature(
+            &file,
+            TextRange::new(
+                node_start_pos,
+                node.end()
+                    .expect_source("document-symbol nodes have source positions"),
+            ),
+            Feature::DocumentSymbols,
+        );
         if range_fidelity.is_none() {
             symbol_range = selection_range;
         }
@@ -618,7 +663,7 @@ fn get_module_name(node: P<Node>) -> String {
 struct DeclarationInfo {
     name: String,
     declaration: P<Node>,
-    match_score: i32,
+    match_score: usize,
 }
 
 // symbols.go:546
@@ -649,8 +694,7 @@ pub fn provide_workspace_symbols(
         }
         let declaration_map = source_file.get_declaration_map();
         for (name, declarations) in declaration_map {
-            let score = get_match_score(name, query);
-            if score >= 0 {
+            if let Some(score) = get_match_score(name, query) {
                 for &declaration in declarations {
                     infos.push(DeclarationInfo { name: name.clone(), declaration, match_score: score });
                 }
@@ -674,9 +718,19 @@ pub fn provide_workspace_symbols(
         // computeDeclarationMap only adds declarations whose GetDeclarationName (string
         // form) is non-empty, which implies a name node exists.
         let name_node = ast::get_name_of_declaration(node).unwrap();
-        let name_start = astnav::get_start_of_node(name_node, source_file, false /*includeJsDoc*/);
-        let name_range = TextRange::new(name_start, name_node.end());
-        let (location, fidelity) = converters.to_lsp_location_for_feature(&source_file, name_range, Feature::DocumentSymbols);
+        let name_start =
+            astnav::get_start_of_node(name_node, source_file, false /*includeJsDoc*/);
+        let name_range = TextRange::new(
+            name_start,
+            name_node
+                .end()
+                .expect_source("workspace-symbol names have source positions"),
+        );
+        let (location, fidelity) = converters.to_lsp_location_for_feature(
+            &source_file,
+            name_range,
+            Feature::DocumentSymbols,
+        );
         if !fidelity.is_single_segment() {
             // The name has no counterpart in the original text, so there is nothing to navigate to.
             continue;
@@ -723,14 +777,14 @@ fn go_to_lower(r: char) -> stringutil::Rune {
 // number of characters in `s` that weren't matched. Thus, zero represents an exact match, and higher values represent
 // increasingly less specific partial matches.
 // symbols.go:628
-fn get_match_score(s: &str, pattern: &str) -> i32 {
+fn get_match_score(s: &str, pattern: &str) -> Option<usize> {
     let mut score = 0;
     let mut s = s.chars();
     for p in pattern.chars() {
         let exact = go_is_upper(p);
         loop {
             let Some(c) = s.next() else {
-                return -1;
+                return None;
             };
             if exact && c == p || !exact && go_to_lower(c) == go_to_lower(p) {
                 break;
@@ -738,38 +792,30 @@ fn get_match_score(s: &str, pattern: &str) -> i32 {
             score += 1;
         }
     }
-    score
+    Some(score)
 }
 
 // Sort DeclarationInfos by ascending match score, then ascending case insensitive name, then
 // ascending case sensitive name, and finally by source file name and position.
 // symbols.go:649
-fn compare_declaration_infos(d1: &DeclarationInfo, d2: &DeclarationInfo) -> i32 {
+fn compare_declaration_infos(d1: &DeclarationInfo, d2: &DeclarationInfo) -> Ordering {
     if d1.match_score != d2.match_score {
-        return d1.match_score - d2.match_score;
+        return d1.match_score.cmp(&d2.match_score);
     }
     let c = stringutil::compare_strings_case_insensitive(&d1.name, &d2.name);
-    if c != 0 {
+    if !c.is_eq() {
         return c;
     }
-    let c = go_strings_compare(&d1.name, &d2.name);
-    if c != 0 {
+    let c = d1.name.cmp(&d2.name);
+    if !c.is_eq() {
         return c;
     }
     let s1 = ast::get_source_file_of_node(d1.declaration).unwrap();
     let s2 = ast::get_source_file_of_node(d2.declaration).unwrap();
     if s1 != s2 {
-        return go_strings_compare(s1.path().as_str(), s2.path().as_str());
+        return s1.path().as_str().cmp(s2.path().as_str());
     }
-    d1.declaration.pos() - d2.declaration.pos()
-}
-
-fn go_strings_compare(a: &str, b: &str) -> i32 {
-    match a.cmp(b) {
-        std::cmp::Ordering::Less => -1,
-        std::cmp::Ordering::Equal => 0,
-        std::cmp::Ordering::Greater => 1,
-    }
+    d1.declaration.pos().cmp(&d2.declaration.pos())
 }
 
 // getSymbolKindFromNode converts an AST node to an LSP SymbolKind.

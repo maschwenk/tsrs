@@ -167,7 +167,7 @@ fn get_symbol_of_call_hierarchy_declaration(c: &mut Checker, node: P<Node>) -> O
 
 // Gets the text and range for the name of a call hierarchy declaration.
 // callhierarchy.go:161
-fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (String, i32, i32) {
+fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (String, u32, u32) {
     if ast::is_source_file(node) {
         let source_file = node.as_source_file();
         return (source_file.file_name().to_string(), 0, 0);
@@ -178,8 +178,17 @@ fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (St
             for &m in modifiers.nodes() {
                 if m.kind() == Kind::DefaultKeyword {
                     let source_file = ast::get_source_file_of_node(node).unwrap();
-                    let start = scanner::skip_trivia(source_file.text(), m.pos());
-                    return ("default".to_string(), start, m.end());
+                    let start = scanner::skip_trivia(
+                        source_file.text(),
+                        m.pos()
+                            .expect_source("parsed modifiers have source positions"),
+                    );
+                    return (
+                        "default".to_string(),
+                        start,
+                        m.end()
+                            .expect_source("parsed modifiers have source positions"),
+                    );
                 }
             }
         }
@@ -187,7 +196,12 @@ fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (St
 
     if ast::is_class_static_block_declaration(node) {
         let source_file = ast::get_source_file_of_node(node).unwrap();
-        let pos = scanner::skip_trivia(source_file.text(), move_range_past_modifiers(node).pos());
+        let pos = scanner::skip_trivia(
+            source_file.text(),
+            move_range_past_modifiers(node)
+                .pos()
+                .expect_source("call-hierarchy declarations have source positions"),
+        );
         let end = pos + 6; // "static".length
         let mut c = program.get_type_checker_for_file(&Context::background(), source_file);
         let c: &mut Checker = &mut c;
@@ -204,10 +218,20 @@ fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (St
     if decl_name.is_none_or(|decl_name| !ast::node_is_present(Some(decl_name))) {
         let source_file = ast::get_source_file_of_node(node).unwrap();
         if ast::is_function_declaration(node) || ast::is_function_expression(node) {
-            let kw_pos = scanner::skip_trivia(source_file.text(), move_range_past_modifiers(node).pos());
+            let kw_pos = scanner::skip_trivia(
+                source_file.text(),
+                move_range_past_modifiers(node)
+                    .pos()
+                    .expect_source("call-hierarchy declarations have source positions"),
+            );
             return ("(anonymous)".to_string(), kw_pos, kw_pos + 8); // "function".length
         } else if ast::is_class_declaration(node) || ast::is_class_expression(node) {
-            let kw_pos = scanner::skip_trivia(source_file.text(), move_range_past_modifiers(node).pos());
+            let kw_pos = scanner::skip_trivia(
+                source_file.text(),
+                move_range_past_modifiers(node)
+                    .pos()
+                    .expect_source("call-hierarchy declarations have source positions"),
+            );
             return ("(anonymous)".to_string(), kw_pos, kw_pos + 5); // "class".length
         }
         assert!(decl_name.is_some(), "Expected call hierarchy item to have a name");
@@ -217,9 +241,20 @@ fn get_call_hierarchy_item_name(program: &'static Program, node: P<Node>) -> (St
     let text = get_text_of_call_hierarchy_name(program, node, decl_name, node);
 
     let source_file = ast::get_source_file_of_node(node).unwrap();
-    let name_pos = scanner::skip_trivia(source_file.text(), decl_name.pos());
+    let name_pos = scanner::skip_trivia(
+        source_file.text(),
+        decl_name
+            .pos()
+            .expect_source("parsed declaration names have source positions"),
+    );
 
-    (text, name_pos, decl_name.end())
+    (
+        text,
+        name_pos,
+        decl_name
+            .end()
+            .expect_source("parsed declaration names have source positions"),
+    )
 }
 
 // callhierarchy.go:221
@@ -313,10 +348,10 @@ fn get_call_hierarchy_item_container_name(program: &'static Program, node: P<Nod
 fn move_range_past_modifiers(node: P<Node>) -> TextRange {
     if let Some(modifiers) = node.modifiers() {
         if let Some(&last_mod) = modifiers.nodes().last() {
-            return TextRange::new(last_mod.end(), node.end());
+            return TextRange::from_text_pos(last_mod.end(), node.end());
         }
     }
-    TextRange::new(node.pos(), node.end())
+    TextRange::from_text_pos(node.pos(), node.end())
 }
 
 // Finds the implementation of a function-like declaration, if one exists.
@@ -365,7 +400,7 @@ fn find_all_initial_declarations(c: &mut Checker, node: P<Node>) -> Option<Vec<P
     #[derive(Clone)]
     struct declKey {
         file: String,
-        pos: i32,
+        pos: TextPos,
     }
 
     let mut indices: Vec<usize> = (0..symbol_declarations.len()).collect();
@@ -523,9 +558,29 @@ impl LanguageService {
 
         let kind = get_symbol_kind_from_node(node);
 
-        let full_start = scanner::skip_trivia_ex(source_file.text(), node.pos(), Some(&scanner::SkipTriviaOptions { stop_at_comments: true, ..Default::default() }));
-        let (mut span, span_fidelity) = self.converters.to_lsp_range_for_feature(&source_file, TextRange::new(full_start, node.end()), Feature::CallHierarchy);
-        let (selection_span, selection_fidelity) = self.converters.to_lsp_range_for_feature(&source_file, TextRange::new(name_pos, name_end), Feature::CallHierarchy);
+        let full_start = scanner::skip_trivia_ex(
+            source_file.text(),
+            node.pos()
+                .expect_source("call-hierarchy declarations have source positions"),
+            Some(&scanner::SkipTriviaOptions {
+                stop_at_comments: true,
+                ..Default::default()
+            }),
+        );
+        let (mut span, span_fidelity) = self.converters.to_lsp_range_for_feature(
+            &source_file,
+            TextRange::new(
+                full_start,
+                node.end()
+                    .expect_source("call-hierarchy declarations have source positions"),
+            ),
+            Feature::CallHierarchy,
+        );
+        let (selection_span, selection_fidelity) = self.converters.to_lsp_range_for_feature(
+            &source_file,
+            TextRange::new(name_pos, name_end),
+            Feature::CallHierarchy,
+        );
         if !selection_fidelity.is_single_segment() {
             return None;
         }
@@ -577,8 +632,18 @@ fn convert_entry_to_call_site(entry: &ReferenceEntry) -> Option<callSite> {
     let source_file = ast::get_source_file_of_node(node).unwrap();
     let ancestor = ast::find_ancestor(Some(node), |n| is_valid_call_hierarchy_declaration(Some(n))).unwrap_or_else(|| source_file.as_node());
 
-    let start = scanner::skip_trivia(source_file.text(), node.pos());
-    Some(callSite { declaration: ancestor, text_range: TextRange::new(start, node.end()), source_file: source_file.as_node() })
+    let start = scanner::skip_trivia(
+        source_file.text(),
+        node.pos().expect_source("call sites have source positions"),
+    );
+    Some(callSite {
+        declaration: ancestor,
+        text_range: TextRange::new(
+            start,
+            node.end().expect_source("call sites have source positions"),
+        ),
+        source_file: source_file.as_node(),
+    })
 }
 
 // callhierarchy.go:568
@@ -603,7 +668,7 @@ impl LanguageService {
             return None;
         }
 
-        from_ranges.sort_by(|a, b| lsproto::compare_ranges(*a, *b).cmp(&0));
+        from_ranges.sort_by(|a, b| lsproto::compare_ranges(*a, *b));
 
         Some(lsproto::CallHierarchyIncomingCall { from, from_ranges })
     }
@@ -666,8 +731,13 @@ impl LanguageService {
             return Ok(lsproto::CallHierarchyIncomingCallsOrNull::default());
         };
         let location_file = ast::get_source_file_of_node(location).unwrap();
-        let location_start = scanner::get_token_pos_of_node(location, location_file, false /*includeJsDoc*/);
-        let (_, fidelity) = self.converters.to_lsp_position_for_feature(&location_file, location_start as TextPos, Feature::CallHierarchy);
+        let location_start =
+            scanner::get_token_pos_of_node(location, location_file, false /*includeJsDoc*/);
+        let (_, fidelity) = self.converters.to_lsp_position_for_feature(
+            &location_file,
+            location_start.into(),
+            Feature::CallHierarchy,
+        );
         if fidelity.is_none() {
             return Ok(lsproto::CallHierarchyIncomingCallsOrNull::default());
         }
@@ -695,7 +765,7 @@ impl LanguageService {
                     if a.from_ranges.is_empty() || b.from_ranges.is_empty() {
                         return std::cmp::Ordering::Equal;
                     }
-                    lsproto::compare_ranges(a.from_ranges[0], b.from_ranges[0]).cmp(&0)
+                    lsproto::compare_ranges(a.from_ranges[0], b.from_ranges[0])
                 });
             }
         }
@@ -774,8 +844,18 @@ impl callSiteCollector {
         };
 
         let source_file = ast::get_source_file_of_node(target).unwrap();
-        let start = scanner::skip_trivia(source_file.text(), target.pos());
-        let text_range = TextRange::new(start, target.end());
+        let start = scanner::skip_trivia(
+            source_file.text(),
+            target
+                .pos()
+                .expect_source("call targets have source positions"),
+        );
+        let text_range = TextRange::new(
+            start,
+            target
+                .end()
+                .expect_source("call targets have source positions"),
+        );
 
         match declaration {
             CallHierarchyDeclarations::Node(decl) => {
@@ -990,7 +1070,7 @@ impl LanguageService {
             return None;
         }
 
-        from_ranges.sort_by(|a, b| lsproto::compare_ranges(*a, *b).cmp(&0));
+        from_ranges.sort_by(|a, b| lsproto::compare_ranges(*a, *b));
 
         Some(lsproto::CallHierarchyOutgoingCall { to, from_ranges })
     }
@@ -1033,7 +1113,7 @@ impl LanguageService {
             if a.from_ranges.is_empty() || b.from_ranges.is_empty() {
                 return std::cmp::Ordering::Equal;
             }
-            lsproto::compare_ranges(a.from_ranges[0], b.from_ranges[0]).cmp(&0)
+            lsproto::compare_ranges(a.from_ranges[0], b.from_ranges[0])
         });
 
         result

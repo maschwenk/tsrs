@@ -649,10 +649,10 @@ pub(crate) fn is_optional_initialized_or_rest_parameter(node: P<Node>) -> bool {
 // and no rest token. This is computed in a single reverse pass so callers can
 // determine "has required parameter after index i" with `i+1 < lastRequired`
 // (equivalently, `i < lastRequired-1`) in O(1).
-pub(crate) fn last_required_param_index(params: &[P<Node>]) -> i32 {
+pub(crate) fn last_required_param_index(params: &[P<Node>]) -> usize {
     for (i, param) in params.iter().enumerate().rev() {
         if !is_optional_initialized_or_rest_parameter(*param) {
-            return i as i32 + 1;
+            return i + 1;
         }
     }
     0
@@ -687,18 +687,26 @@ impl PseudoChecker {
             return Some(new_pseudo_type_no_result(node));
         }
         let p = parent.parameters();
-        let self_idx = p.iter().position(|n| *n == node).map_or(-1, |i| i as i32);
+        let self_idx = p
+            .iter()
+            .position(|n| *n == node)
+            .expect("parameter belongs to its parent's parameter list");
         let last_required = last_required_param_index(p);
         self.type_from_parameter_worker(node, self_idx, last_required)
     }
 
     // lookup.go:649
-    pub(crate) fn type_from_parameter_worker(&self, node: P<Node>, self_idx: i32, last_required: i32) -> Option<P<PseudoType>> {
+    pub(crate) fn type_from_parameter_worker(
+        &self,
+        node: P<Node>,
+        self_idx: usize,
+        last_required: usize,
+    ) -> Option<P<PseudoType>> {
         let parent = node.parent().unwrap();
         if parent.kind() == Kind::SetAccessor {
             return self.get_type_of_accessor(parent);
         }
-        let has_required_after = self_idx < last_required - 1;
+        let has_required_after = self_idx + 1 < last_required;
         let p_decl = node.as_parameter_declaration();
         let declared_type = p_decl.type_();
         if let Some(declared_type) = declared_type {
@@ -753,13 +761,14 @@ impl PseudoChecker {
                 // A parameter with an initializer is optional only if all subsequent
                 // parameters are also optional/have initializers/are rest parameters.
                 // This matches the checker's isOptionalParameter semantics.
-                optional = i as i32 >= last_required - 1;
+                optional = i + 1 >= last_required;
             }
             result.push(new_pseudo_parameter(
                 p.dot_dot_dot_token().is_some(),
                 e.name().unwrap(),
                 optional,
-                self.type_from_parameter_worker(e, i as i32, last_required).unwrap(),
+                self.type_from_parameter_worker(e, i, last_required)
+                    .unwrap(),
             ));
         }
         result

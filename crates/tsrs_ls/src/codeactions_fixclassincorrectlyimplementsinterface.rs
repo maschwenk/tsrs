@@ -84,8 +84,14 @@ fn get_all_code_actions_to_fix_class_incorrectly_implements_interface(
     let mut seen_class_declarations: Set<P<Node>> = Set::new();
 
     for diag in all_diags {
-        if is_fixable_diagnostic(diag, fix_class_incorrectly_implements_interface_error_codes()) {
-            let Some(class_declaration) = get_class(fix_context.source_file, TextRange::new(diag.pos(), diag.end())) else {
+        if is_fixable_diagnostic(
+            diag,
+            fix_class_incorrectly_implements_interface_error_codes(),
+        ) {
+            let Some(diag_loc) = diag.loc() else {
+                continue;
+            };
+            let Some(class_declaration) = get_class(fix_context.source_file, diag_loc) else {
                 continue;
             };
             if seen_class_declarations.add_if_absent(class_declaration) {
@@ -211,7 +217,11 @@ fn insert_interface_member_node(change_tracker: &mut change::Tracker, source_fil
 
 // codeactions_fixclassincorrectlyimplementsinterface.go:165
 fn get_class(source_file: P<SourceFile>, span: TextRange) -> Option<P<Node>> {
-    let token = astnav::get_token_at_position(source_file, span.pos());
+    let token = astnav::get_token_at_position(
+        source_file,
+        span.pos()
+            .expect_source("diagnostics in source files have source positions"),
+    );
     ast::get_containing_class(token)
 }
 
