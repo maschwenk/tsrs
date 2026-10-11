@@ -1348,6 +1348,7 @@ pub struct Checker {
     pub free_type_mapper_caches: Vec<PackedMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub free_signature_lists: Vec<Vec<P<Signature>>>, // Rust-only: empty buffers for `reorder_candidates`
+    pub free_strings: Vec<String>, // Rust-only: empty buffers for text built and dropped in one call
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
     pub within_unreachable_code: bool,
@@ -1752,6 +1753,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         free_type_mapper_caches: Vec::new(),
         free_type_lists: Vec::new(),
         free_signature_lists: Vec::new(),
+        free_strings: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
         within_unreachable_code: false,
@@ -2246,6 +2248,7 @@ impl Checker {
             free_type_mapper_caches: Vec::new(),
             free_type_lists: Vec::new(),
             free_signature_lists: Vec::new(),
+            free_strings: Vec::new(),
             ambient_modules_once: base.ambient_modules_once.clone(),
             ambient_modules: base.ambient_modules.clone(),
             within_unreachable_code: base.within_unreachable_code.clone(),
