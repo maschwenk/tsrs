@@ -389,6 +389,18 @@ static ASCII_IDENTIFIER_PART: [bool; 256] = {
     }
     t
 };
+
+static ASCII_JSDOC_COMMENT_TEXT: [[bool; 256]; 2] = {
+    let mut tables = [[false; 256]; 2];
+    let mut byte = 0;
+    while byte < 128 {
+        let is_text = !matches!(byte as u8, b'\r' | b'\n' | b'`');
+        tables[0][byte] = is_text && !matches!(byte as u8, b'{' | b'@');
+        tables[1][byte] = is_text;
+        byte += 1;
+    }
+    tables
+};
 pub(crate) const RUNE_ERROR: Rune = 0xFFFD;
 
 /// Go `utf8.DecodeRuneInString` over raw bytes: `(RuneError, 0)` for empty input,
@@ -757,6 +769,30 @@ impl Scanner {
         }
         for &byte in tail {
             if !ASCII_IDENTIFIER_PART[byte as usize] {
+                break;
+            }
+            scanned += 1;
+        }
+        self.state.pos += scanned as u32;
+    }
+
+    #[inline]
+    fn scan_ascii_jsdoc_comment_text(&mut self, in_backticks: bool) {
+        let text = &self.text.as_bytes()[self.state.pos as usize..];
+        let table = &ASCII_JSDOC_COMMENT_TEXT[in_backticks as usize];
+        let (batches, tail) = text.as_chunks::<32>();
+        let mut scanned = 0;
+        for batch in batches {
+            for (i, &byte) in batch.iter().enumerate() {
+                if !table[byte as usize] {
+                    self.state.pos += (scanned + i) as u32;
+                    return;
+                }
+            }
+            scanned += batch.len();
+        }
+        for &byte in tail {
+            if !table[byte as usize] {
                 break;
             }
             scanned += 1;
@@ -1880,8 +1916,15 @@ impl Scanner {
         }
         self.state.token_start = self.state.pos;
         let text = self.text.as_bytes();
-        let (mut ch, mut size) = self.char_and_size();
-        while (self.state.pos as usize) < self.text.len() && !stringutil::is_line_break(ch) && ch != '`' as Rune {
+        while (self.state.pos as usize) < self.text.len() {
+            self.scan_ascii_jsdoc_comment_text(in_backticks);
+            if self.state.pos as usize == self.text.len() {
+                break;
+            }
+            let (ch, size) = self.char_and_size();
+            if stringutil::is_line_break(ch) || ch == '`' as Rune {
+                break;
+            }
             if !in_backticks {
                 if ch == '{' as Rune {
                     break;
@@ -1897,7 +1940,6 @@ impl Scanner {
                 }
             }
             self.state.pos += size;
-            (ch, size) = self.char_and_size();
         }
         if self.state.pos == self.state.token_start {
             return self.scan_jsdoc_token();
