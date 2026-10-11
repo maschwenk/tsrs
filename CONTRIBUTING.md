@@ -3,6 +3,9 @@
 tsrs is a Rust port of the TypeScript 7 type checker (the Go code in microsoft/TypeScript, `tsc/internal`). Bug
 reports with a small reproduction are the most useful contribution; fixes are welcome too.
 
+The port was written largely by AI coding agents, directed and reviewed by Max Schwenk. Its correctness rests on
+the [conformance results](docs/COMPATIBILITY.md#conformance) rather than on review alone.
+
 ## The fidelity rule: Go is the spec
 
 The Go implementation at the commit in `Cargo.toml` (`[workspace.metadata.typescript]`) is the specification.
@@ -28,6 +31,13 @@ tools/lint/source.py                              # unsafe Send/Sync inventory, 
 tools/gen-check.sh                                # generated code matches its generator (change the generator, then --write)
 ```
 
+The language-server test runner and WebAssembly module have separate builds:
+
+```sh
+cargo build --release -p tsrs_fourslash
+tools/wasm/build.sh  # requires the wasm32-wasip1 target and wasm-opt
+```
+
 ## Run the tests
 
 The conformance suite reads the reference baselines from a checkout of microsoft/TypeScript at the pinned commit in
@@ -41,6 +51,8 @@ git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commi
 ./target/release/tsrs-test run --suite all                       # summary table; lists in target/test-results/
 ./target/release/tsrs-test run --filter <substring>              # one test or a cluster
 ./target/release/tsrs-test show <suite/name>                     # expected vs actual
+./target/release/tsrs-test run --suite all --baselines types,symbols # type and symbol baselines
+./target/release/tsrs-fourslash run                             # language-server suite
 .github/scripts/conformance-gate.sh                              # what CI enforces: errors, .types, .symbols
 tools/regressions.sh                                             # testdata/regressions (CI runs it too)
 cargo test -p tsrs_core -p tsrs_scanner -p tsrs_cli              # unit and CLI tests (see .depot/workflows/ci.yml)

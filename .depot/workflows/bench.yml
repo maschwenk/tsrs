@@ -1,17 +1,17 @@
 # Depot CI workflow (https://depot.dev/docs/ci/overview). Benchmarks tsrs against tsgo (typescript@7.0.2) on the
 # typescript-benchmarking projects and the open-source applications of bench/projects.json (bench/README.md) and
-# rewrites the table between the bench markers at the top of README.md. Not a GitHub Actions workflow: this
+# rewrites the table between the bench markers in bench/RESULTS.md. Not a GitHub Actions workflow: this
 # repository is connected to Depot CI, and Depot's runners for GitHub Actions only serve organization-owned
 # repositories.
 #
 # Four jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
 # bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
 # without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
-# takes about 5); `measure-wide` measures every project in the default mode (`wide`, the README table) and with
+# takes about 5); `measure-wide` measures every project in the default mode (`wide`, the summary table) and with
 # `--checkers 16` on one 16-vCPU machine, with `bun check` as a third column; `merge` joins the partial results into
 # one result file (bench/run.py --merge), flags regressions and commits.
 #
-# Loop guards: the results commit only touches README.md and bench/results/** (excluded by `paths`), and carries
+# Loop guards: the results commit only touches bench/RESULTS.md and bench/results/** (excluded by `paths`), and carries
 # [skip ci], which the build job's `if` also checks (the commit is pushed by Depot's GitHub app, which may trigger
 # Depot CI); the other jobs need the build job, so they are skipped with it.
 
@@ -23,20 +23,21 @@ on:
     paths:
       - "**"
       - "!README.md"
+      - "!bench/RESULTS.md"
       - "!bench/results/**"
   workflow_dispatch:
     inputs:
       commit:
         description: >-
           commit to measure instead of the ref's head (backfill: a commit whose bench was skipped or cancelled);
-          its results file is committed and README.md gets its table only if no newer commit's table is there
+          its results file is committed and bench/RESULTS.md gets its table only if no newer commit's table is there
         default: ""
 
 # One bench per push, never cancelled: the group is the commit, so a push during a run starts its own run (the
 # measuring jobs never share a machine, so overlapping runs do not disturb each other) and only a re-dispatch of the
 # same commit replaces a queued twin. Until 2026-10-07 the group was shared and a push replaced the queued bench, so
 # bursts of merges left most commits without a results file (25 of 48 non-skip commits on 2026-10-06/07) and the
-# regression flag could only name "one of N merges". The results commit and the README table handle overlapping
+# regression flag could only name "one of N merges". The results commit and the summary table handle overlapping
 # runs: see the "Commit results" step.
 concurrency:
   group: bench-${{ inputs.commit || github.sha }} # the measured commit, so backfills of different commits run side by side
@@ -366,7 +367,7 @@ jobs:
           if-no-files-found: ignore
 
   # The 16-vCPU machine's tables: every project in one job, in default mode (`wide`: each compiler at its own thread
-  # count, which is the README table) and at `--checkers 16` (16 checker threads would oversubscribe the fixed-spec
+  # count, which is the summary table) and at `--checkers 16` (16 checker threads would oversubscribe the fixed-spec
   # machine), each with `bun check` from Bun canary as a third column. It runs while the fixed-spec jobs do; it is the
   # run's only 16-vCPU job. Its cells record their machine (bench/run.py --merge). The regression flag never reads them:
   # it compares the single-threaded counts of the fixed-spec jobs.
@@ -571,10 +572,10 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
-  # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the README table, flags
+  # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the summary table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
-  # README.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
-  # every mode. If the wide job failed or was cancelled, the results file has no 16-vCPU sections and the README tables
+  # bench/RESULTS.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
+  # every mode. If the wide job failed or was cancelled, the results file has no 16-vCPU sections and the summary tables
   # are left as they were.
   merge:
     needs: [build, measure, measure-wide]
@@ -599,10 +600,10 @@ jobs:
         run: |
           echo "ref=$GITHUB_REF event=$GITHUB_EVENT_NAME sha=$GITHUB_SHA"
           ls -R /tmp/bench-partials
-          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-readme.md
+          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-summary.md
           cp /tmp/bench-merged/* bench/results/
-          # The README table needs the wide job's cells; without them --readme-table holds an empty table.
-          if ! grep -q '^| ' /tmp/bench-readme.md; then echo "::warning::no 16-vCPU results; README.md keeps its table"; rm /tmp/bench-readme.md; fi
+          # The summary table needs the wide job's cells; without them --readme-table holds an empty table.
+          if ! grep -q '^| ' /tmp/bench-summary.md; then echo "::warning::no 16-vCPU results; bench/RESULTS.md keeps its table"; rm /tmp/bench-summary.md; fi
 
       - name: Upload the merged result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -644,26 +645,26 @@ jobs:
           # The measured commit: the ref's head on a push, the `commit` input on a backfill dispatch.
           measured=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tsrs"]["commit"])' /tmp/bench-merged/*.json)
           measured=$(git rev-parse --verify "$measured^{commit}")
-          # The results commit is re-created on top of the latest main instead of rebased: README.md is edited by
-          # people while a bench runs, and rebasing the table commit over such edits conflicts.
+          # The results commit is re-created on top of the latest main instead of rebased: bench/RESULTS.md can be edited
+          # while a bench runs, and rebasing the table commit over such edits conflicts.
           for attempt in 1 2 3 4 5; do
             git fetch -q origin main
             git checkout -q -f -B main origin/main
             cp /tmp/bench-merged/* bench/results/
-            # README.md keeps the newest commit's table. Runs overlap, so a run of an older commit can finish after
+            # bench/RESULTS.md keeps the newest commit's table. Runs overlap, so a run of an older commit can finish after
             # a descendant's run has published: then it adds its results file and leaves the table alone. The
             # commit a table came from is in its last line ("tsrs commit: `<sha>`", bench/run.py).
-            readme_commit=$(sed -n 's/.*tsrs commit: `\([0-9a-f]\{7,40\}\)`.*/\1/p' README.md | head -1)
-            if [ ! -f /tmp/bench-readme.md ]; then
-              echo "::notice::no 16-vCPU table for ${measured::12}; README.md keeps its table"
-            elif [ -n "$readme_commit" ] && [ "$readme_commit" != "${measured::12}" ] \
-                && git cat-file -e "$readme_commit^{commit}" 2>/dev/null \
-                && git merge-base --is-ancestor "$measured" "$readme_commit"; then
-              echo "::notice::README.md keeps the table of $readme_commit, a descendant of ${measured::12}; this run's table is bench/results/$(basename /tmp/bench-merged/*.md)"
+            table_commit=$(sed -n 's/.*tsrs commit: `\([0-9a-f]\{7,40\}\)`.*/\1/p' bench/RESULTS.md | head -1)
+            if [ ! -f /tmp/bench-summary.md ]; then
+              echo "::notice::no 16-vCPU table for ${measured::12}; bench/RESULTS.md keeps its table"
+            elif [ -n "$table_commit" ] && [ "$table_commit" != "${measured::12}" ] \
+                && git cat-file -e "$table_commit^{commit}" 2>/dev/null \
+                && git merge-base --is-ancestor "$measured" "$table_commit"; then
+              echo "::notice::bench/RESULTS.md keeps the table of $table_commit, a descendant of ${measured::12}; this run's table is bench/results/$(basename /tmp/bench-merged/*.md)"
             else
-              python3 bench/run.py --apply-table /tmp/bench-readme.md --readme README.md
+              python3 bench/run.py --apply-table /tmp/bench-summary.md --readme bench/RESULTS.md
             fi
-            git add README.md bench/results
+            git add bench/RESULTS.md bench/results
             git commit -q -m "bench: results for ${measured::12} [skip ci]"
             git push -q origin HEAD:main && exit 0
             sleep $((attempt * 5))

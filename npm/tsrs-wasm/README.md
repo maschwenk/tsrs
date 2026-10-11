@@ -47,6 +47,11 @@ any `HostFileSystem`, and `memoryFileSystem(files)`.
 
 ## Runtime notes
 
+In the [recorded build and benchmark](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md), the module
+was 2.58 MB gzipped and ran at about half the speed of native single-threaded tsrs. A one-off comparison was
+2.7x to 7x faster than [ts-rust](https://github.com/pingdotgg/ts-rust)'s WebAssembly build and used 1.2x to 2.6x
+less memory ([nine-project comparison](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md#nine-projects-2026-10-08)).
+
 - **Node**: every call runs in a fresh worker thread with a 256 MB stack (`resourceLimits.stackSizeMb`): the checker
   recurses deeply, and every wasm frame also uses the engine's native stack, so the main thread's stack is too
   small. The module is compiled once per process; each call gets a new instance (the compiler keeps process-wide

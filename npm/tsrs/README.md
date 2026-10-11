@@ -1,59 +1,65 @@
 # tsrs
 
-`tsrs` is a Rust port of the TypeScript 7 compiler and language server (the Go implementation in
-microsoft/TypeScript). It does what `tsc` does: same diagnostics, same exit codes, same `tsconfig.json` handling, and
-it emits by default like tsc (pass `--noEmit` to only type check). `tsrs --lsp -stdio` is the language server (what `tsgo --lsp -stdio` is). The package version names the TypeScript commit it ports: `0.10.0-ts7.1.0-dev.20260929` is tsrs 0.10.0
-following TypeScript `7.1.0-dev.20260929`.
+[![npm](https://img.shields.io/npm/v/tsrs)](https://www.npmjs.com/package/tsrs)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue)](https://github.com/maschwenk/tsrs/blob/main/LICENSE)
+
+tsrs is a **drop-in replacement for the TypeScript 7 compiler and language server**, written in Rust.
+Our goal is **100% conformance**, with much lower memory use and faster type checking.
+
+## Get started
+
+Install tsrs and use it in place of `tsc`, with your existing `tsconfig.json`:
 
 ```sh
 pnpm add -D tsrs
-pnpm exec tsrs -p path/to/project              # like `tsc -p path/to/project` (emits)
-pnpm exec tsrs -p path/to/project --noEmit     # like `tsc --noEmit -p path/to/project`
-pnpm exec tsrs -p . --extendedDiagnostics      # counters and timings, like tsc
-pnpm exec tsrs --checkers 8                    # checker threads (default: one per core up to 16, then half the cores, 4-32; fewer, down to 4, for small projects; 4 per --build project); --singleThreaded = 1
-pnpm exec tsrs --version
-pnpm exec tsrs --lsp -stdio                    # language server; editor setup: docs/LSP.md in the repository
+pnpm exec tsrs -p .             # compile your project
+pnpm exec tsrs -p . --noEmit    # type-check only
 ```
 
-Supported platforms: macOS arm64, Linux x64/arm64 (glibc and musl). The binary comes from the optional
-dependency `@ts-rs/<os>-<arch>` (with `-gnu` or `-musl` on Linux), installed automatically for the current
-platform. To run a locally built binary through the same launcher, set `TSRS_BINARY=/path/to/tsrs`.
+Like `tsc`, tsrs emits JavaScript by default. To try it without installing, run `pnpm dlx tsrs -p . --noEmit`.
 
-`require("tsrs")` exports `version`, `typescriptVersion` and `typescriptCommit`.
+Prebuilt binaries are available for macOS arm64 and Linux x64/arm64 (glibc). See
+[platform support](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md) for the full list, including upcoming musl builds.
 
-## JS API (unstable)
+## Less waiting. Less memory.
 
-The package also ships TypeScript 7's programmatic API, copied unchanged from microsoft/TypeScript
-`packages/typescript` at the commit the binary ports (see `UPSTREAM.json`), under the same subpaths as the `typescript`
-7 package:
+Type-checking the VS Code repository, with each compiler's default settings:
 
-| subpath | contents |
-| --- | --- |
-| `tsrs/unstable/sync` | `API` with synchronous calls (MessagePack over the server's stdio) |
-| `tsrs/unstable/async` | `API` with promise-returning calls (JSON-RPC) |
-| `tsrs/unstable/ast` (`/is`, `/factory`, `/utils`, `/scanner`, `/visitor`, `/clone`) | AST types, guards, factory and traversal |
-| `tsrs/unstable/fs`, `/proto` | filesystem callbacks/request filesystems, protocol types |
+[![VS Code benchmark: tsrs takes 0.86 seconds and 2.09 GiB peak memory; TypeScript 7 takes 10.77 seconds and 7.49 GiB.](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/vscode.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#vs-code-chart-snapshot)
 
-```js
-import { API } from "tsrs/unstable/sync";
+Snapshot from October 11, 2026, on 16 vCPUs. [Measurement details](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#vs-code-chart-snapshot)
+and [latest results across 17 projects](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md).
 
-const api = new API({ cwd: process.cwd() });            // spawns `tsrs --api`; tsserverPath overrides the binary
-const snapshot = api.createSnapshot({ openProject: "/abs/path/tsconfig.json" });
-const project = snapshot.getConfiguredProject("/abs/path/tsconfig.json");
-console.log(project.program.getSemanticDiagnostics("/abs/path/src/index.ts"));
-project.program.emit();                                  // follows the project's compiler options
-api.close();
-```
+## Compatibility
 
-The code is TypeScript's, with one intentional difference: if the server process dies, the async API rejects
-every pending and later request with an error starting `API server connection lost: ` instead of leaving them
-pending forever (see `npm/README.md` in the repository).
+tsrs follows TypeScript's Go implementation, currently pinned to TypeScript 7.1-dev. Any difference from that
+reference is a bug. On the upstream conformance suite, it matches **13,458 of 13,462 error baselines** and all
+**12,779 type and symbol baselines**; the four remaining error-baseline differences are test-harness artifacts.
 
-These entry points are unstable upstream and here. The API is served by the `tsrs` binary (`tsrs --api`), whose
-coverage of the protocol is still incomplete; `npm/sdk/METHODS.md` in the repository tracks it per method.
-TypeScript consumers need `esnext.disposable` (or a newer lib) for the declarations' `Symbol.dispose` members.
-The JS API runs on the package's minimum Node (16.20; checked on 16.20, 18, 20, 22 and 24). Where Node has no
-`Symbol.dispose` (before 18.18/20.4), call `close()` / `dispose()` instead of `using`.
+Type checking, JavaScript and declaration emit, source maps, incremental builds, project references and the
+language server are supported. Some features still have gaps: `--watch`, `--init` and `--showConfig` are not
+supported, and the language server and Node API are still working toward full conformance.
+See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md) for the complete picture.
 
-Licensed under Apache-2.0. tsrs is a derivative work of TypeScript (Copyright (c) Microsoft Corporation); the
-bundled `lib.*.d.ts` files and the structure of the code come from that project. See `LICENSE` and `NOTICE.txt`.
+## Learn more
+
+- [CLI usage and memory tuning](https://github.com/maschwenk/tsrs/blob/main/docs/USAGE.md)
+- [Editor setup](https://github.com/maschwenk/tsrs/blob/main/docs/LSP.md#editor-setup)
+- [Node API (unstable)](https://github.com/maschwenk/tsrs/blob/main/docs/NODE_API.md)
+- [WebAssembly for Node and browsers](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md)
+- [Benchmarks and methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)
+- [Release notes](https://github.com/maschwenk/tsrs/blob/main/docs/STATUS.md)
+
+## Contributing
+
+Bug reports with a small reproduction and fixes are welcome. See the [contributing guide](https://github.com/maschwenk/tsrs/blob/main/CONTRIBUTING.md)
+for building from source and running the suites, the [Code of Conduct](https://github.com/maschwenk/tsrs/blob/main/CODE_OF_CONDUCT.md), and
+[security policy](https://github.com/maschwenk/tsrs/blob/main/SECURITY.md) for reporting vulnerabilities.
+
+## Acknowledgments and license
+
+Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for transferring the `tsrs` npm package name.
+
+tsrs is a derivative of TypeScript (Copyright Microsoft Corporation), licensed under [Apache-2.0](https://github.com/maschwenk/tsrs/blob/main/LICENSE).
+The bundled `lib.*.d.ts` files are TypeScript's. See [NOTICE](https://github.com/maschwenk/tsrs/blob/main/NOTICE) for attribution.
+Not affiliated with or endorsed by Microsoft.

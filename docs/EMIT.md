@@ -5,8 +5,8 @@ emit paths, source maps, `.tsbuildinfo` and `--build` are ported; no stub is lef
 section 6 is removed: the project's/CLI's `noEmit`, `emitDeclarationOnly`, `noEmitOnError` and
 `incremental`/`composite` decide as in Go (an incremental `--noEmit` program still writes its tsbuildinfo), and the
 old variable no longer changes anything (regression test: `crates/tsrs_cli/tests/default_emit.rs`). Current pass
-counts are in the README capability table ("What it does and doesn't do": 13,392 `.js` baselines pass, 0 fail; 149 `.js.map` and 156
-`.sourcemap.txt` baselines pass; the `tsbuild`/`tsc` scenario counts).
+counts are in the [capability table](COMPATIBILITY.md#what-it-does-and-doesnt-do) (13,392 `.js` baselines pass,
+0 fail; 149 `.js.map` and 156 `.sourcemap.txt` baselines pass; the `tsbuild`/`tsc` scenario counts).
 
 Sections 2, 10, 10b and 12 describe the current code, except where a line says otherwise; sections 1, 3–9 and 11
 are the plan as written on 2026-10-03, while emit was opt-in and most transformers were missing, and section 13 is
@@ -573,7 +573,7 @@ for E1–E6); mui-docs (JSX).
 ## 13. Progress tables (history, 2026-10-03)
 
 These rows are the per-wave log of the port, before the remaining transformers landed; for current pass counts see
-the README capability table.
+the [capability table](COMPATIBILITY.md#what-it-does-and-doesnt-do).
 
 `.js` = `tsrs-test run --suite all --baselines js` (js pass / js total, crash = gate stub reached). Oracle =
 `tools/oracle/emit/monorepo.sh <private monorepo>` (103 packages whose `build` runs `tsc`); "dts" mode adds
