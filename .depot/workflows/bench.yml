@@ -1,6 +1,6 @@
 # Depot CI workflow (https://depot.dev/docs/ci/overview). Benchmarks tsrs against tsgo (typescript@7.0.2) on the
 # typescript-benchmarking projects and the open-source applications of bench/projects.json (bench/README.md) and
-# rewrites the table between the bench markers in bench/RESULTS.md. Not a GitHub Actions workflow: this
+# renders the tables in bench/RESULTS.md and the SVG chart linked from README.md. Not a GitHub Actions workflow: this
 # repository is connected to Depot CI, and Depot's runners for GitHub Actions only serve organization-owned
 # repositories.
 #
@@ -30,7 +30,7 @@ on:
       commit:
         description: >-
           commit to measure instead of the ref's head (backfill: a commit whose bench was skipped or cancelled);
-          its results file is committed and bench/RESULTS.md gets its table only if no newer commit's table is there
+          its results file is committed and the tables/chart update only if no newer commit's report is there
         default: ""
 
 # One bench per push, never cancelled: the group is the commit, so a push during a run starts its own run (the
@@ -575,8 +575,8 @@ jobs:
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the summary table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
   # bench/RESULTS.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
-  # every mode. If the wide job failed or was cancelled, the results file has no 16-vCPU sections and the summary tables
-  # are left as they were.
+  # every mode. The results commit also draws bench/results/latest.svg. If the wide job failed or was cancelled,
+  # the results file has no 16-vCPU sections and the summary tables and chart are left as they were.
   merge:
     needs: [build, measure, measure-wide]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}
@@ -600,10 +600,8 @@ jobs:
         run: |
           echo "ref=$GITHUB_REF event=$GITHUB_EVENT_NAME sha=$GITHUB_SHA"
           ls -R /tmp/bench-partials
-          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged --readme-modes wide --readme-table /tmp/bench-summary.md
+          python3 bench/run.py --merge /tmp/bench-partials/*/*.json --out-dir /tmp/bench-merged
           cp /tmp/bench-merged/* bench/results/
-          # The summary table needs the wide job's cells; without them --readme-table holds an empty table.
-          if ! grep -q '^| ' /tmp/bench-summary.md; then echo "::warning::no 16-vCPU results; bench/RESULTS.md keeps its table"; rm /tmp/bench-summary.md; fi
 
       - name: Upload the merged result
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -651,19 +649,9 @@ jobs:
             git fetch -q origin main
             git checkout -q -f -B main origin/main
             cp /tmp/bench-merged/* bench/results/
-            # bench/RESULTS.md keeps the newest commit's table. Runs overlap, so a run of an older commit can finish after
-            # a descendant's run has published: then it adds its results file and leaves the table alone. The
-            # commit a table came from is in its last line ("tsrs commit: `<sha>`", bench/run.py).
-            table_commit=$(sed -n 's/.*tsrs commit: `\([0-9a-f]\{7,40\}\)`.*/\1/p' bench/RESULTS.md | head -1)
-            if [ ! -f /tmp/bench-summary.md ]; then
-              echo "::notice::no 16-vCPU table for ${measured::12}; bench/RESULTS.md keeps its table"
-            elif [ -n "$table_commit" ] && [ "$table_commit" != "${measured::12}" ] \
-                && git cat-file -e "$table_commit^{commit}" 2>/dev/null \
-                && git merge-base --is-ancestor "$measured" "$table_commit"; then
-              echo "::notice::bench/RESULTS.md keeps the table of $table_commit, a descendant of ${measured::12}; this run's table is bench/results/$(basename /tmp/bench-merged/*.md)"
-            else
-              python3 bench/run.py --apply-table /tmp/bench-summary.md --readme bench/RESULTS.md
-            fi
+            # Render both the tables and SVG after fetching main on every retry. Older runs and missing wide
+            # results preserve the latest report and chart together.
+            python3 bench/publish.py /tmp/bench-merged/*.json
             git add bench/RESULTS.md bench/results
             git commit -q -m "bench: results for ${measured::12} [skip ci]"
             git push -q origin HEAD:main && exit 0
