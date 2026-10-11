@@ -160,7 +160,7 @@ Updating this table (AGENTS.md says when):
 | Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass; 13,869 of 13,869 responses identical in a recorded editor session |
 | Automatic type acquisition, telemetry, profiling (language server) | no | not ported |
 | Node API server (`--api`) | yes, with gaps | upstream client test suites pass; request-filesystem Go fixtures exercise the production implementation in default tests; no profiling requests, no Windows named pipes ([`docs/NODE_API.md`](docs/NODE_API.md)) |
-| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | since 0.12.0; macOS arm64 and Linux x64/arm64; next release adds GNU/musl suffixes and musl builds; earlier releases used `@maschwenk` |
+| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | 0.14.0: macOS arm64 and Linux x64/arm64 GNU/musl, selected by libc; earlier Linux packages used unsuffixed GNU names, and releases before 0.12.0 used `@maschwenk` |
 | WebAssembly (`@ts-rs/wasm`) | yes | single-threaded; renamed in 0.12.0; byte-identical to native `--singleThreaded` on a 2,000-case conformance sample (notes/wasm-build.md) |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
 | `--watch` | no | exits with "not supported" |
