@@ -18,8 +18,12 @@ impl ipc::Handler for diagnosticCodeCollisionHandler {
             METHOD_TRANSFORM => {
                 let p: TransformParams = unmarshal_params(params)?;
                 let mapped_output = identity_mapped_output(&p.content)?;
-                // strings.Index: -1 when absent.
-                let start = p.content.find("foo").map_or(-1, |start| start as i64);
+                let start = i64::try_from(
+                    p.content
+                        .find("foo")
+                        .expect("collision test input contains foo"),
+                )
+                .expect("diagnostic position exceeds protocol i64");
                 Ok(TransformResult {
                     mapped_output,
                     diagnostics: vec![Diagnostic {

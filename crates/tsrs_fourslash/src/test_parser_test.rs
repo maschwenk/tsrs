@@ -79,20 +79,25 @@ fn check_case(expected: &Value) -> Result<(), String> {
     if td.markers.len() != want_markers.len() {
         return Err(format!("{test}: {} markers, Go has {}", td.markers.len(), want_markers.len()));
     }
-    for (m, w) in td.markers.iter().zip(want_markers) {
-        let got = (m.file_name.clone(), m.position as i64, (m.ls_position.line as i64, m.ls_position.character as i64), m.name.clone());
+    if let Some(result) = td.markers.iter().zip(want_markers).into_iter().find_map(|(m, w)| {
+        let got = (m.file_name.clone(), i64::from( m.position .expect_source("parsed markers have source positions"),
+            ), (m.ls_position.line as i64, m.ls_position.character as i64), m.name.clone(), );
         let name = match field(w, "name") {
             Value::Null => None,
             v => Some(s(v)),
         };
         let want = (s(field(w, "fileName")), n(field(w, "position")), pos(field(w, "ls")), name);
         if got != want {
-            return Err(format!("{test}: marker differs:\n  rust {got:?}\n  go   {want:?}"));
+            return Some(Err(format!("{test}: marker differs:\n  rust {got:?}\n  go   {want:?}")));
         }
         let got_data = if m.data.is_empty() { Value::Null } else { Value::Object(m.data.iter().map(|(k, v)| (k.clone(), v.to_json())).collect()) };
         if got_data != *field(w, "data") {
-            return Err(format!("{test}: marker data differs:\n  rust {got_data:?}\n  go   {:?}", field(w, "data")));
+            return Some(Err(format!("{test}: marker data differs:\n  rust {got_data:?}\n  go   {:?}", field(w, "data"))));
         }
+
+        None
+    }) {
+        return result;
     }
 
     let mut names: Vec<String> = td.marker_positions.keys().cloned().collect();
@@ -107,23 +112,38 @@ fn check_case(expected: &Value) -> Result<(), String> {
     if td.ranges.len() != want_ranges.len() {
         return Err(format!("{test}: {} ranges, Go has {}", td.ranges.len(), want_ranges.len()));
     }
-    for (r, w) in td.ranges.iter().zip(want_ranges) {
+    if let Some(result) = td.ranges.iter().zip(want_ranges).into_iter().find_map(|(r, w)| {
         let marker_index = match &r.marker {
             None => -1,
             Some(m) => td.markers.iter().position(|x| std::sync::Arc::ptr_eq(x, m)).map(|i| i as i64).unwrap_or(-2),
         };
         let got = (
             r.file_name.clone(),
-            r.range.pos() as i64,
-            r.range.end() as i64,
-            (r.ls_range.start.line as i64, r.ls_range.start.character as i64),
+            i64::from(
+                r.range
+                    .pos()
+                    .expect_source("parsed ranges have source positions"),
+            ),
+            i64::from(
+                r.range
+                    .end()
+                    .expect_source("parsed ranges have source positions"),
+            ),
+            (
+                r.ls_range.start.line as i64,
+                r.ls_range.start.character as i64,
+            ),
             (r.ls_range.end.line as i64, r.ls_range.end.character as i64),
             marker_index,
         );
         let want = (s(field(w, "fileName")), n(field(w, "pos")), n(field(w, "end")), pos(field(w, "start")), pos(field(w, "stop")), n(field(w, "marker")));
         if got != want {
-            return Err(format!("{test}: range differs:\n  rust {got:?}\n  go   {want:?}"));
+            return Some(Err(format!("{test}: range differs:\n  rust {got:?}\n  go   {want:?}")));
         }
+
+        None
+    }) {
+        return result;
     }
 
     if td.symlinks != string_map(field(expected, "symlinks")) {
@@ -165,10 +185,14 @@ fn test_parser_markers_and_ranges() {
     assert_eq!(td.files.len(), 1);
     assert_eq!(td.files[0].content, "let x = 1;\ny");
     let m = &td.marker_positions["m"];
-    assert_eq!(m.position, 4);
+    assert_eq!(m.position.source_offset(), Some(4));
     let nm = &td.marker_positions["n"];
     assert_eq!((nm.ls_position.line, nm.ls_position.character), (1, 0));
     assert_eq!(td.ranges.len(), 1);
-    assert_eq!((td.ranges[0].range.pos(), td.ranges[0].range.end()), (4, 5));
-    assert!(std::sync::Arc::ptr_eq(td.ranges[0].marker.as_ref().unwrap(), m));
+    assert_eq!(td.ranges[0].range.source_pos(), Some(4));
+    assert_eq!(td.ranges[0].range.source_end(), Some(5));
+    assert!(std::sync::Arc::ptr_eq(
+        td.ranges[0].marker.as_ref().unwrap(),
+        m
+    ));
 }

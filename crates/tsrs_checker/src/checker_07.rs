@@ -431,13 +431,11 @@ impl Checker {
             return Vec::new();
         }
         let mut result = Vec::new();
-        for target_prop in self.get_properties_of_type(target).iter().copied() {
+        result.extend(self.get_properties_of_type(target).iter().copied().filter_map(|target_prop| {
             let s = self.get_type_of_property_of_type(source, target_prop.name());
             let t = self.get_type_of_symbol(target_prop);
-            if self.is_exact_optional_property_mismatch(s, Some(t)) {
-                result.push(target_prop);
-            }
-        }
+            if self.is_exact_optional_property_mismatch(s, Some(t)) { Some(target_prop) } else { None }
+        }));
         result
     }
 
@@ -872,15 +870,17 @@ impl Checker {
     pub(crate) fn get_union_index_infos(&mut self, types: &[P<Type>]) -> Vec<P<IndexInfo>> {
         let source_infos = self.get_index_infos_of_type(types[0]);
         let mut result = Vec::new();
-        for info in source_infos {
+        result.extend(source_infos.iter().filter_map(|info| {
             let index_type = info.key_type.get().unwrap();
             if types.iter().all(|&t| self.get_index_info_of_type(t, index_type).is_some()) {
                 let value_types: Vec<P<Type>> = types.iter().map(|&t| self.get_index_type_of_type(t, index_type).unwrap()).collect();
                 let value_type = self.get_union_type(&value_types);
                 let is_readonly = types.iter().any(|&t| self.get_index_info_of_type(t, index_type).unwrap().is_readonly.get());
-                result.push(self.new_index_info(index_type, value_type, is_readonly, None, &[]));
+                Some(self.new_index_info(index_type, value_type, is_readonly, None, &[]))
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
@@ -1081,7 +1081,7 @@ impl Checker {
     }
 
     // checker.go:13880
-    pub(crate) fn is_const_type_variable(&mut self, t: Option<P<Type>>, depth: i32) -> bool {
+    pub(crate) fn is_const_type_variable(&mut self, t: Option<P<Type>>, depth: u32) -> bool {
         let Some(t) = t else {
             return false;
         };
@@ -1101,10 +1101,8 @@ impl Checker {
             if t.flags().intersects(TypeFlags::Union) && t.object_flags().intersects(ObjectFlags::PrimitiveUnion) {
                 return false;
             }
-            for &s in t.types() {
-                if self.may_be_const_type_variable(s) && self.is_const_type_variable(Some(s), depth) {
-                    return true;
-                }
+            if t.types().iter().any(|&s| self.may_be_const_type_variable(s) && self.is_const_type_variable(Some(s), depth)) {
+                return true;
             }
             return false;
         } else if t.flags().intersects(TypeFlags::IndexedAccess) {
@@ -1118,10 +1116,10 @@ impl Checker {
             let type_variable = self.get_homomorphic_type_variable(t);
             return type_variable.is_some() && self.is_const_type_variable(type_variable, depth);
         } else if self.is_generic_tuple_type(t) {
-            for (i, s) in self.get_element_types(t).iter().copied().enumerate() {
-                if t.target_tuple_type().element_infos.get()[i].flags.intersects(ElementFlags::Variadic) && self.is_const_type_variable(Some(s), depth) {
-                    return true;
-                }
+            if self.get_element_types(t).iter().copied().enumerate().any(|(i, s)| {
+                t.target_tuple_type().element_infos.get()[i].flags.intersects(ElementFlags::Variadic) && self.is_const_type_variable(Some(s), depth)
+            }) {
+                return true;
             }
         }
         false
@@ -1321,9 +1319,19 @@ impl Checker {
                                 && every_type(self, rest_type, |_, t| is_tuple_type(t))
                                 && !fn_.parameters().iter().any(|&p| self.is_some_symbol_assigned(p))
                             {
-                                let narrowed_type = self.get_flow_type_of_reference_ex(fn_, rest_type, rest_type, None /*flowContainer*/, get_flow_node_of_node(location));
-                                let index = fn_.parameters().iter().position(|&p| p == declaration).map_or(-1, |i| i as i32)
-                                    - if ast::get_this_parameter(fn_).is_some() { 1 } else { 0 };
+                                let narrowed_type = self.get_flow_type_of_reference_ex(
+                                    fn_,
+                                    rest_type,
+                                    rest_type,
+                                    None, /*flowContainer*/
+                                    get_flow_node_of_node(location),
+                                );
+                                let index = fn_
+                                    .parameters()
+                                    .iter()
+                                    .position(|&p| p == declaration)
+                                    .expect("parameter belongs to its declaration")
+                                    - usize::from(ast::get_this_parameter(fn_).is_some());
                                 let index_type = self.get_number_literal_type(Number(index as f64));
                                 t = self.get_indexed_access_type(narrowed_type, index_type);
                             }
@@ -1870,10 +1878,10 @@ impl Checker {
             let leading_message = create_diagnostic_for_node(Some(adjusted_node), &diagnostics::X_0_was_also_declared_here, &[&symbol_name]);
             let follow_on_message = create_diagnostic_for_node(Some(adjusted_node), &diagnostics::X_and_here, &[]);
             if err.related_information().len() >= 5
-                || err
-                    .related_information()
-                    .iter()
-                    .any(|&d| ast::compare_diagnostics(d, follow_on_message) == 0 || ast::compare_diagnostics(d, leading_message) == 0)
+                || err.related_information().iter().any(|&d| {
+                    ast::compare_diagnostics(d, follow_on_message) == std::cmp::Ordering::Equal
+                        || ast::compare_diagnostics(d, leading_message) == std::cmp::Ordering::Equal
+                })
             {
                 continue;
             }
@@ -2678,11 +2686,10 @@ impl Checker {
                 // Go's findInMap over the exports map (iteration order is unspecified in Go).
                 let mut exported_symbol: Option<P<Symbol>> = None;
                 if let Some(exports) = exports {
-                    for (_, symbol) in exports.entries() {
-                        if self.get_symbol_if_same_reference(symbol, local_symbol).is_some() {
-                            exported_symbol = Some(symbol);
-                            break;
-                        }
+                    if let Some(symbol) =
+                        exports.entries().into_iter().find_map(|(_, symbol)| self.get_symbol_if_same_reference(symbol, local_symbol).map(|_| symbol))
+                    {
+                        exported_symbol = Some(symbol);
                     }
                 }
                 let diagnostic = if let Some(exported_symbol) = exported_symbol {

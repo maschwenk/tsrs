@@ -139,7 +139,10 @@ pub(crate) fn statement_pieces(file: P<SourceFile>, count: usize) -> Vec<Range<u
     if count < 2 || !all_declarations(file) {
         return Vec::new();
     }
-    let lengths: Vec<u64> = statements.iter().map(|s| (s.end() - s.pos()).max(1) as u64).collect();
+    let lengths: Vec<u64> = statements
+        .iter()
+        .map(|s| u64::from(s.loc().len().unwrap_or(0).max(1)))
+        .collect();
     let total: u64 = lengths.iter().sum();
     let mut pieces = Vec::with_capacity(count);
     let (mut start, mut sum) = (0, 0u64);
@@ -239,10 +242,10 @@ impl SplitFile {
             drop(results);
             by_other.sort_unstable();
             let mut found = Vec::new();
-            for k in by_other {
+            found.extend(by_other.into_iter().flat_map(|k| {
                 let (added, _) = checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
-                found.extend(added);
-            }
+                added
+            }));
             *self.owner_found.lock().unwrap() = found;
             checker.add_piece_diagnostics(self.file, &[], &[]);
             return;
@@ -261,8 +264,19 @@ impl SplitFile {
         let results = self.wait_for_pieces();
         let others: Vec<P<Diagnostic>> = results.iter().filter(|r| r.by_other).flat_map(|r| r.diagnostics.iter().copied()).collect();
         drop(results);
-        let contains = |list: &[P<Diagnostic>], d: P<Diagnostic>| list.iter().any(|&e| compare_diagnostics(e, d) == 0 && equal_diagnostics(e, d));
-        let describe = |d: P<Diagnostic>| format!("TS{} at {}: {:?}", d.code(), d.pos(), d.message().map(|m| m.text()));
+        let contains = |list: &[P<Diagnostic>], d: P<Diagnostic>| {
+            list.iter().any(|&e| {
+                compare_diagnostics(e, d) == std::cmp::Ordering::Equal && equal_diagnostics(e, d)
+            })
+        };
+        let describe = |d: P<Diagnostic>| {
+            format!(
+                "TS{} at {:?}: {:?}",
+                d.code(),
+                d.pos(),
+                d.message().map(|m| m.text())
+            )
+        };
         if let Some(&d) = others.iter().find(|&&d| !contains(whole, d)) {
             panic!(
                 "TSRS_SPLIT_FILES=shadow: {} in {} pieces: another checker reports {}, which the unsplit check does not",

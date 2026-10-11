@@ -13,10 +13,10 @@ impl testHandler for prefixedSupplementalHandler {}
 // A verbatim segment with every feature, the shape most of editing.go's segments have.
 fn verbatim_segment(virtual_start: usize, virtual_end: usize, original_start: usize, original_end: usize) -> Segment {
     Segment {
-        virtual_start: virtual_start as i32,
-        virtual_end: virtual_end as i32,
-        original_start: original_start as i32,
-        original_end: original_end as i32,
+        virtual_start: virtual_start as u32,
+        virtual_end: virtual_end as u32,
+        original_start: original_start as u32,
+        original_end: original_end as u32,
         kind: Kind::Verbatim,
         features: Feature::All,
     }

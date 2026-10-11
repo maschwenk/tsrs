@@ -157,7 +157,9 @@ pub fn compile_files_with_host_emit(
         let mut diag = new_compiler_diagnostic(tsrs_diagnostics::new_ad_hoc_message(&message), &[]);
         diag = diag.add_related_info(new_compiler_diagnostic(tsrs_diagnostics::new_ad_hoc_message("The excess diagnostics are:"), &[]));
         for &d in longer_errors {
-            let matched = shorter_errors.iter().any(|&d2| tsrs_ast::compare_diagnostics(d, d2) == 0);
+            let matched = shorter_errors
+                .iter()
+                .any(|&d2| tsrs_ast::compare_diagnostics(d, d2).is_eq());
             if !matched {
                 diag = diag.add_related_info(d);
             }
@@ -218,9 +220,7 @@ pub fn new_emit_outputs(recorder: &OutputRecorderFS, program: &'static compiler:
     for (rest, target) in [(js, &mut c.js), (dts, &mut c.dts), (maps, &mut c.maps)] {
         let mut docs: Vec<TestFile> = rest.into_values().collect();
         docs.sort_by(|a, b| a.unit_name.cmp(&b.unit_name));
-        for d in docs {
-            target.insert(d.unit_name.clone(), d);
-        }
+        target.extend(docs.into_iter().map(|d| (d.unit_name.clone(), d)));
     }
     c
 }
@@ -326,9 +326,7 @@ pub fn do_js_emit_baseline(
 
     if !outputs.dts.is_empty() {
         js_code.push_str("\r\n\r\n");
-        for decl_file in outputs.dts.values() {
-            js_code.push_str(&file_output(decl_file, harness_settings));
-        }
+        js_code.extend(outputs.dts.values().map(|decl_file| file_output(decl_file, harness_settings)));
     }
 
     let decl_file_context = prepare_declaration_compilation_context(to_be_compiled, other_files, result, options)?;

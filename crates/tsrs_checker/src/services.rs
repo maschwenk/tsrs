@@ -391,8 +391,14 @@ impl Checker {
 }
 
 // services.go:355
-pub fn get_resolved_signature_for_signature_help(node: P<Node>, argument_count: i32, c: &mut Checker) -> (Option<P<Signature>>, Vec<P<Signature>>) {
-    c.run_without_resolved_signature_caching(node, |c| c.get_resolved_signature_worker(node, CheckMode::IsForSignatureHelp, argument_count))
+pub fn get_resolved_signature_for_signature_help(
+    node: P<Node>,
+    argument_count: usize,
+    c: &mut Checker,
+) -> (Option<P<Signature>>, Vec<P<Signature>>) {
+    c.run_without_resolved_signature_caching(node, |c| {
+        c.get_resolved_signature_worker(node, CheckMode::IsForSignatureHelp, argument_count)
+    })
 }
 
 impl Checker {
@@ -442,9 +448,7 @@ impl Checker {
             return vec![symbol];
         }
         let mut result = Vec::new();
-        for root in roots {
-            result.extend(self.get_root_symbols(root));
-        }
+        result.extend(roots.into_iter().flat_map(|root| self.get_root_symbols(root)));
         result
     }
 
@@ -461,11 +465,7 @@ impl Checker {
         if symbol.check_flags().intersects(CheckFlags::Synthetic) {
             let types = self.value_symbol_links.get(symbol).containing_type().unwrap().types().to_vec();
             let mut result = Vec::new();
-            for t in types {
-                if let Some(p) = self.get_property_of_type(t, symbol.name()) {
-                    result.push(p);
-                }
-            }
+            result.extend(types.into_iter().filter_map(|t| if let Some(p) = self.get_property_of_type(t, symbol.name()) { Some(p) } else { None }));
             return result;
         }
         if symbol.flags().intersects(SymbolFlags::Transient) {
@@ -600,12 +600,12 @@ impl Checker {
     // This is used as a quick check for whether a symbol is used at all in a file.
     pub fn is_symbol_referenced_in_file(&mut self, source_file: P<SourceFile>, definition: P<Node>, symbol: P<Symbol>) -> bool {
         let identifier_text = definition.text();
-        for token in get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())) {
+        if get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())).into_iter().any(|token| {
             if !ast::is_identifier(token) {
-                continue;
+                return false;
             }
             if token == definition || token.text() != identifier_text {
-                continue;
+                return false;
             }
             let ref_symbol = self.get_symbol_at_location_exported(token);
             if ref_symbol == Some(symbol) {
@@ -627,6 +627,10 @@ impl Checker {
                     }
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }
@@ -636,37 +640,36 @@ impl Checker {
     pub fn get_references_to_symbol_in_file(&mut self, source_file: P<SourceFile>, symbol: P<Symbol>) -> Vec<P<Node>> {
         let identifier_text = symbol.name();
         let mut result = Vec::new();
-        for token in get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())) {
+        result.extend(get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())).into_iter().filter_map(|token| {
             if !ast::is_identifier(token) {
-                continue;
+                return None;
             }
             if token.text() != identifier_text {
-                continue;
+                return None;
             }
             let ref_symbol = self.get_symbol_at_location_exported(token);
             if ref_symbol == Some(symbol) {
-                result.push(token);
-                continue;
+                return Some(token);
             }
             if let Some(parent) = token.parent() {
                 if parent.kind() == Kind::ShorthandPropertyAssignment {
                     let shorthand_symbol = self.get_shorthand_assignment_value_symbol(Some(parent));
                     if shorthand_symbol == Some(symbol) {
-                        result.push(token);
-                        continue;
+                        return Some(token);
                     }
                 }
             }
             if let Some(parent) = token.parent() {
                 if ast::is_export_specifier(parent) {
                     let local_symbol = self.get_local_symbol_for_export_specifier(token, ref_symbol, parent);
-                    if local_symbol == Some(symbol) {
-                        result.push(token);
-                        continue;
-                    }
+                    if local_symbol == Some(symbol) { Some(token) } else { None }
+                } else {
+                    None
                 }
+            } else {
+                None
             }
-        }
+        }));
         result
     }
 
@@ -710,7 +713,11 @@ pub(crate) fn get_possible_symbol_reference_nodes(source_file: P<SourceFile>, sy
 }
 
 // services.go:655
-pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>, symbol_name: &str, container: Option<P<Node>>) -> Vec<i32> {
+pub(crate) fn get_possible_symbol_reference_positions(
+    source_file: P<SourceFile>,
+    symbol_name: &str,
+    container: Option<P<Node>>,
+) -> Vec<u32> {
     let mut positions = Vec::new();
 
     // TODO: Cache symbol existence for files to save text search
@@ -723,33 +730,39 @@ pub(crate) fn get_possible_symbol_reference_positions(source_file: P<SourceFile>
 
     let text = source_file.text();
     let bytes = text.as_bytes();
-    let source_length = text.len() as i32;
-    let symbol_name_length = symbol_name.len() as i32;
+    let source_length = text.len();
+    let symbol_name_length = symbol_name.len();
 
     let container = container.unwrap_or(source_file.as_node());
 
-    let mut position = match find_bytes(&bytes[container.pos() as usize..], symbol_name.as_bytes()) {
-        Some(i) => i as i32,
-        None => -1,
+    let container_start = container
+        .pos()
+        .expect_source("parsed containers have source positions")
+        as usize;
+    let Some(mut position) = find_bytes(&bytes[container_start..], symbol_name.as_bytes()) else {
+        return positions;
     };
-    let end_pos = container.end();
-    while position >= 0 && position < end_pos {
+    let end_pos = container
+        .end()
+        .expect_source("parsed containers have source positions") as usize;
+    while position < end_pos {
         // We found a match.  Make sure it's not part of a larger word (i.e. the char
         // before and after it have to be a non-identifier char).
         let end_position = position + symbol_name_length;
 
-        if (position == 0 || !tsrs_scanner::is_identifier_part(bytes[(position - 1) as usize] as i32))
-            && (end_position == source_length || !tsrs_scanner::is_identifier_part(bytes[end_position as usize] as i32))
+        if (position == 0 || !tsrs_scanner::is_identifier_part(u32::from(bytes[position - 1])))
+            && (end_position == source_length
+                || !tsrs_scanner::is_identifier_part(u32::from(bytes[end_position])))
         {
             // Found a real match.  Keep searching.
-            positions.push(position);
+            positions.push(position.try_into().expect("source position fits in u32"));
         }
         let start_index = position + symbol_name_length + 1;
-        if start_index > text.len() as i32 {
+        if start_index > text.len() {
             break;
         }
-        if let Some(found_index) = find_bytes(&bytes[start_index as usize..], symbol_name.as_bytes()) {
-            position = start_index + found_index as i32;
+        if let Some(found_index) = find_bytes(&bytes[start_index..], symbol_name.as_bytes()) {
+            position = start_index + found_index;
         } else {
             break;
         }
@@ -803,35 +816,33 @@ impl Checker {
     // services.go:727
     pub(crate) fn get_type_parameter_constraint_for_position_across_signatures(&mut self, signatures: &[P<Signature>], position: usize) -> P<Type> {
         let mut relevant_constraints = Vec::new();
-        for signature in signatures {
+        relevant_constraints.extend(signatures.iter().filter_map(|signature| {
             if position >= signature.type_parameters().len() {
-                continue;
+                return None;
             }
             let relevant_type_parameter = signature.type_parameters()[position];
             let relevant_constraint = self.get_constraint_of_type_parameter(relevant_type_parameter);
-            if let Some(relevant_constraint) = relevant_constraint {
-                relevant_constraints.push(relevant_constraint);
-            }
-        }
+            if let Some(relevant_constraint) = relevant_constraint { Some(relevant_constraint) } else { None }
+        }));
         self.get_union_type(&relevant_constraints)
     }
 
     // services.go:742
     pub(crate) fn get_type_argument_constraint(&mut self, node: P<Node>) -> Option<P<Type>> {
-        let mut type_argument_position: i32 = -1;
+        let mut type_argument_position = None;
         let parent = node.parent().unwrap();
         if ast::has_type_arguments(parent) {
             let type_args = parent.type_arguments();
-            for (i, &arg) in type_args.iter().enumerate() {
-                if arg == node {
-                    type_argument_position = i as i32;
-                    break;
-                }
+            if let Some((i, _arg)) = type_args
+                .iter()
+                .enumerate()
+                .find_map(|(i, &arg)| if arg == node { Some((i, arg)) } else { None })
+            {
+                type_argument_position = Some(i);
             }
         }
 
-        if type_argument_position >= 0 {
-            let type_argument_position = type_argument_position as usize;
+        if let Some(type_argument_position) = type_argument_position {
             // The node could be a type argument of a call, a `new` expression, a decorator, an
             // instantiation expression, or a generic type instantiation.
 
@@ -984,7 +995,12 @@ impl Checker {
 
 
     // services.go:899
-    pub(crate) fn get_resolved_signature_worker(&mut self, node: P<Node>, check_mode: CheckMode, argument_count: i32) -> (Option<P<Signature>>, Vec<P<Signature>>) {
+    pub(crate) fn get_resolved_signature_worker(
+        &mut self,
+        node: P<Node>,
+        check_mode: CheckMode,
+        argument_count: usize,
+    ) -> (Option<P<Signature>>, Vec<P<Signature>>) {
         // Go: printer.NewEmitContext().ParseNode(node). A fresh EmitContext has no original-node links, so ParseNode
         // returns the node itself when it is a parse tree node and nil otherwise.
         let parsed_node = if ast::is_parse_tree_node(node) { Some(node) } else { None };
@@ -1013,24 +1029,24 @@ impl Checker {
             inference_candidates
         });
 
-        for candidate in other_candidates {
+        candidates.extend(other_candidates.into_iter().filter_map(|candidate| {
             if candidates_set.contains(&candidate) {
-                continue;
+                return None;
             }
-            candidates.push(candidate);
-        }
+            Some(candidate)
+        }));
 
         candidates
     }
 
     // services.go:936
     // GetTypeAtPosition returns the type of a parameter at a given index in a signature.
-    pub fn get_type_at_position_exported(&mut self, s: P<Signature>, pos: i32) -> P<Type> {
+    pub fn get_type_at_position_exported(&mut self, s: P<Signature>, pos: usize) -> P<Type> {
         self.get_type_at_position(s, pos)
     }
 
     // services.go:940
-    pub fn get_type_parameter_at_position(&mut self, s: P<Signature>, pos: i32) -> P<Type> {
+    pub fn get_type_parameter_at_position(&mut self, s: P<Signature>, pos: usize) -> P<Type> {
         let t = self.get_type_at_position(s, pos);
         if t.is_index() && is_this_type_parameter(t.as_index_type().target().unwrap()) {
             let constraint = self.get_base_constraint_of_type(t.as_index_type().target().unwrap());
@@ -1044,27 +1060,36 @@ impl Checker {
     // services.go:953
     // GetContextualTypeForArrayLiteralAtPosition returns the contextual type for an element at the given position
     // in an array with the given contextual type.
-    pub fn get_contextual_type_for_array_literal_at_position(&mut self, contextual_array_type: Option<P<Type>>, array_literal: P<Node>, position: i32) -> Option<P<Type>> {
+    pub fn get_contextual_type_for_array_literal_at_position(
+        &mut self,
+        contextual_array_type: Option<P<Type>>,
+        array_literal: P<Node>,
+        position: u32,
+    ) -> Option<P<Type>> {
         contextual_array_type?;
-        let (mut first_spread_index, mut last_spread_index) = (-1, -1);
+        let (mut first_spread_index, mut last_spread_index) = (None, None);
         let mut element_index = 0;
         let elements = array_literal.elements();
         for (i, &elem) in elements.iter().enumerate() {
-            if elem.pos() < position {
+            if elem
+                .pos()
+                .expect_source("parsed nodes have source positions")
+                < position
+            {
                 element_index += 1;
             }
             if ast::is_spread_element(elem) {
-                if first_spread_index == -1 {
-                    first_spread_index = i as i32;
+                if first_spread_index.is_none() {
+                    first_spread_index = Some(i);
                 }
-                last_spread_index = i as i32;
+                last_spread_index = Some(i);
             }
         }
         // The array may be incomplete, so we don't know its final length.
         self.get_contextual_type_for_element_expression(
             contextual_array_type,
             element_index,
-            -1, /*length*/
+            None, /*length*/
             first_spread_index,
             last_spread_index,
         )
@@ -1208,16 +1233,38 @@ impl Checker {
         //     for ({ skills: { primary, secondary } } = multiRobot, i = 0; i < 1; i++) {
         if ast::is_property_assignment(parent) {
             let node = parent.parent().unwrap();
-            let type_of_parent_object_literal = self.get_type_of_assignment_pattern(node).unwrap_or(self.error_type);
-            let property_index = index_of_node(node.properties(), parent);
-            return self.check_object_literal_destructuring_property_assignment(node, type_of_parent_object_literal, property_index, None, false);
+            let type_of_parent_object_literal = self
+                .get_type_of_assignment_pattern(node)
+                .unwrap_or(self.error_type);
+            let property_index = index_of_node(node.properties(), parent)?;
+            return self.check_object_literal_destructuring_property_assignment(
+                node,
+                type_of_parent_object_literal,
+                property_index,
+                None,
+                false,
+            );
         }
         // Array literal assignment - array destructuring pattern
         let node = parent;
         //    [{ property1: p1, property2 }] = elems;
-        let type_of_array_literal = self.get_type_of_assignment_pattern(node).unwrap_or(self.error_type);
-        let element_type = self.check_iterated_type_or_element_type(IterationUse::Destructuring, type_of_array_literal, self.undefined_type, Some(parent));
-        self.check_array_literal_destructuring_element_assignment(node, type_of_array_literal, index_of_node(node.elements(), expr), element_type, CheckMode::Normal)
+        let type_of_array_literal = self
+            .get_type_of_assignment_pattern(node)
+            .unwrap_or(self.error_type);
+        let element_type = self.check_iterated_type_or_element_type(
+            IterationUse::Destructuring,
+            type_of_array_literal,
+            self.undefined_type,
+            Some(parent),
+        );
+        let element_index = index_of_node(node.elements(), expr)?;
+        self.check_array_literal_destructuring_element_assignment(
+            node,
+            type_of_array_literal,
+            element_index,
+            element_type,
+            CheckMode::Normal,
+        )
     }
 
     // services.go:1120
@@ -1232,13 +1279,17 @@ impl Checker {
             return false;
         };
         let declarations = symbol.declarations().to_vec();
-        for decl in declarations {
+        if declarations.into_iter().any(|decl| {
             let sf = ast::get_source_file_of_node(decl);
             if let Some(sf) = sf {
                 if self.program.is_source_file_default_library(sf.path()) {
                     return true;
                 }
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }

@@ -1,12 +1,38 @@
 // spanmap/spanmap_test.go. Go's subtests run as loops; BenchmarkOriginalToVirtualPositionNearEnd is a benchmark,
 // not a test, and is not ported.
 
-use tsrs_core::{new_text_range, TextPos};
+use tsrs_core::new_text_range;
 
 use crate::*;
 
-fn segment(virtual_start: TextPos, virtual_end: TextPos, original_start: TextPos, original_end: TextPos, kind: Kind, features: Feature) -> Segment {
-    Segment { virtual_start, virtual_end, original_start, original_end, kind, features }
+fn segment(
+    virtual_start: u32,
+    virtual_end: u32,
+    original_start: u32,
+    original_end: u32,
+    kind: Kind,
+    features: Feature,
+) -> Segment {
+    Segment {
+        virtual_start,
+        virtual_end,
+        original_start,
+        original_end,
+        kind,
+        features,
+    }
+}
+
+fn source_pos(range: tsrs_core::TextRange) -> u32 {
+    range
+        .pos()
+        .expect_source("test ranges have source positions")
+}
+
+fn source_end(range: tsrs_core::TextRange) -> u32 {
+    range
+        .end()
+        .expect_source("test ranges have source positions")
 }
 
 // spanmap_test.go:11
@@ -16,8 +42,8 @@ fn test_virtual_to_original_span_verbatim() {
     let m = new(&[segment(0, 10, 100, 110, Kind::Verbatim, Feature::All)]);
 
     let (got, fidelity) = m.virtual_to_original_span(new_text_range(3, 7));
-    assert_eq!(got.pos(), 103);
-    assert_eq!(got.end(), 107);
+    assert_eq!(source_pos(got), 103);
+    assert_eq!(source_end(got), 107);
     assert_eq!(fidelity, Fidelity::Exact);
 }
 
@@ -29,8 +55,8 @@ fn test_virtual_to_original_span_atom() {
 
     // A span inside the atom maps to the whole atom span.
     let (got, fidelity) = m.virtual_to_original_span(new_text_range(5, 9));
-    assert_eq!(got.pos(), 60);
-    assert_eq!(got.end(), 71);
+    assert_eq!(source_pos(got), 60);
+    assert_eq!(source_end(got), 71);
     assert_eq!(fidelity, Fidelity::Atom);
 }
 
@@ -61,8 +87,8 @@ fn test_virtual_to_original_span_synthesized_gap() {
     let m = new(&[segment(0, 10, 100, 110, Kind::Verbatim, Feature::All), segment(20, 30, 200, 210, Kind::Verbatim, Feature::All)]);
 
     let (got, fidelity) = m.virtual_to_original_span(new_text_range(12, 15));
-    assert_eq!(got.pos(), 110);
-    assert_eq!(got.end(), 110);
+    assert_eq!(source_pos(got), 110);
+    assert_eq!(source_end(got), 110);
     assert_eq!(fidelity, Fidelity::None);
 }
 
@@ -85,8 +111,8 @@ fn test_virtual_to_original_span_empty_is_synthesized() {
     // An empty map describes fully synthesized output: everything maps to the start with no fidelity.
     let m = new(&[]);
     let (got, fidelity) = m.virtual_to_original_span(new_text_range(5, 10));
-    assert_eq!(got.pos(), 0);
-    assert_eq!(got.end(), 0);
+    assert_eq!(source_pos(got), 0);
+    assert_eq!(source_end(got), 0);
     assert_eq!(fidelity, Fidelity::None);
 }
 
@@ -96,8 +122,8 @@ fn test_virtual_to_original_span_crossing_segments() {
     let m = new(&[segment(0, 10, 100, 110, Kind::Verbatim, Feature::None), segment(10, 20, 200, 210, Kind::Verbatim, Feature::None)]);
 
     let (got, fidelity) = m.virtual_to_original_span(new_text_range(5, 15));
-    assert_eq!(got.pos(), 105);
-    assert_eq!(got.end(), 205);
+    assert_eq!(source_pos(got), 105);
+    assert_eq!(source_end(got), 205);
     assert_eq!(fidelity, Fidelity::Approximate);
 }
 
@@ -105,8 +131,8 @@ fn test_virtual_to_original_span_crossing_segments() {
 #[test]
 fn test_virtual_to_original_span_nil_identity() {
     let (got, fidelity) = virtual_to_original_span(None, new_text_range(3, 7));
-    assert_eq!(got.pos(), 3);
-    assert_eq!(got.end(), 7);
+    assert_eq!(source_pos(got), 3);
+    assert_eq!(source_end(got), 7);
     assert_eq!(fidelity, Fidelity::Exact);
 }
 
@@ -118,8 +144,8 @@ fn test_virtual_to_original_position() {
 
     struct Case {
         name: &'static str,
-        pos: TextPos,
-        want: TextPos,
+        pos: u32,
+        want: u32,
         fidelity: Fidelity,
     }
     let test_cases = [
@@ -133,7 +159,7 @@ fn test_virtual_to_original_position() {
         assert_eq!(fidelity, tc.fidelity, "{}", tc.name);
         // VirtualToOriginalPosition must agree with VirtualToOriginalSpan on a zero-length range.
         let (span, span_fidelity) = m.virtual_to_original_span(new_text_range(tc.pos, tc.pos));
-        assert_eq!(got, span.pos(), "{}", tc.name);
+        assert_eq!(got, source_pos(span), "{}", tc.name);
         assert_eq!(fidelity, span_fidelity, "{}", tc.name);
     }
 }
@@ -202,8 +228,8 @@ fn test_original_to_virtual_span_verbatim() {
 
     let results = m.original_to_virtual_spans(new_text_range(103, 107), Feature::All);
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].span.pos(), 3);
-    assert_eq!(results[0].span.end(), 7);
+    assert_eq!(source_pos(results[0].span), 3);
+    assert_eq!(source_end(results[0].span), 7);
     assert_eq!(results[0].fidelity, Fidelity::Exact);
 }
 
@@ -216,8 +242,8 @@ fn test_original_to_virtual_span_atom() {
     // A span inside the original atom maps to the whole virtual span.
     let results = m.original_to_virtual_spans(new_text_range(63, 67), Feature::All);
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].span.pos(), 3);
-    assert_eq!(results[0].span.end(), 14);
+    assert_eq!(source_pos(results[0].span), 3);
+    assert_eq!(source_end(results[0].span), 14);
     assert_eq!(results[0].fidelity, Fidelity::Atom);
 }
 
@@ -235,8 +261,8 @@ fn test_original_to_virtual_span_gap() {
 fn test_original_to_virtual_span_nil_identity() {
     let results = original_to_virtual_spans(None, new_text_range(3, 7), Feature::All);
     assert_eq!(results.len(), 1);
-    assert_eq!(results[0].span.pos(), 3);
-    assert_eq!(results[0].span.end(), 7);
+    assert_eq!(source_pos(results[0].span), 3);
+    assert_eq!(source_end(results[0].span), 7);
     assert_eq!(results[0].fidelity, Fidelity::Exact);
 }
 
@@ -248,8 +274,8 @@ fn test_original_to_virtual_positions() {
 
     struct Case {
         name: &'static str,
-        pos: TextPos,
-        want: TextPos,
+        pos: u32,
+        want: u32,
         fidelity: Fidelity,
     }
     let test_cases = [
@@ -269,7 +295,7 @@ fn test_original_to_virtual_positions() {
         assert_eq!(positions[0].position, tc.want, "{}", tc.name);
         assert_eq!(positions[0].fidelity, tc.fidelity, "{}", tc.name);
         assert_eq!(spans.len(), 1, "{}", tc.name);
-        assert_eq!(spans[0].span.pos(), tc.want, "{}", tc.name);
+        assert_eq!(source_pos(spans[0].span), tc.want, "{}", tc.name);
         assert_eq!(spans[0].fidelity, tc.fidelity, "{}", tc.name);
     }
 }
@@ -320,10 +346,10 @@ fn test_original_to_virtual_duplicate_group() {
 
     let spans = m.original_to_virtual_spans(new_text_range(10, 13), Feature::Definition);
     assert_eq!(spans.len(), 2);
-    assert_eq!(spans[0].span.pos(), 0);
-    assert_eq!(spans[0].span.end(), 3);
-    assert_eq!(spans[1].span.pos(), 20);
-    assert_eq!(spans[1].span.end(), 25);
+    assert_eq!(source_pos(spans[0].span), 0);
+    assert_eq!(source_end(spans[0].span), 3);
+    assert_eq!(source_pos(spans[1].span), 20);
+    assert_eq!(source_end(spans[1].span), 25);
 }
 
 // spanmap_test.go:397
@@ -495,8 +521,8 @@ fn test_validate() {
     const TRANSFORMED: &str = "const greeting = 1;\n";
     const ORIGINAL: &str = "<x>const greeting = 1;\n</x>";
     let script_start = 3; // index of "const" in original
-    let transformed_len = TRANSFORMED.len() as TextPos;
-    let original_len = ORIGINAL.len() as TextPos;
+    let transformed_len = TRANSFORMED.len() as u32;
+    let original_len = ORIGINAL.len() as u32;
 
     struct Case {
         name: &'static str,

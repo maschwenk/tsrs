@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="940" viewBox="0 0 960 940" role="img" aria-labelledby="title description">
+  <title id="title">TypeScript 7 versus tsrs on VS Code, T3 Code and MUI docs</title>
+  <desc id="description">VS Code (microsoft/vscode, src): 10,427 files loaded by tsrs. TypeScript 7 takes 10.96 seconds and 7.63 GiB peak RSS; tsrs takes 0.86 seconds and 2.09 GiB. 12.7 times faster, 73 percent less memory. T3 Code (pingdotgg/t3code, apps/server): 2,945 files loaded by tsrs. Heavy use of Effect and Zod. TypeScript 7 takes 13.66 seconds and 6.19 GiB peak RSS; tsrs takes 1.37 seconds and 2.14 GiB. 10.0 times faster, 65 percent less memory. MUI docs (mui/material-ui, docs): 16,766 files loaded by tsrs. TypeScript 7 takes 12.24 seconds and 7.50 GiB peak RSS; tsrs takes 0.86 seconds and 1.60 GiB. 14.2 times faster, 79 percent less memory. Lower is better. Medians of 10 tsrs runs and 3 TypeScript runs on a 16-vCPU Linux runner, using default compiler settings. tsrs uses the PGO-optimized dist build. File counts include libraries and dependencies. Shared bar scales: time 0–16 seconds, memory 0–8 GiB. Static snapshot measured October 11, 2026 at 14:32 UTC; tsrs follows TypeScript 7.1-dev and is compared with TypeScript 7.0.2.</desc>
+  <metadata>Static source: bench/results/2026-10-11-b8bdd76bf789.json; mode: wide; tsrs commit: b8bdd76bf789975cbc4d558d9d42fa78675abfd1; measured: 2026-10-11 14:32 UTC; build: pgo-dist; median of 10 tsrs runs and 3 TypeScript runs; TypeScript: 7.0.2; TypeScript reference: b85298b6a81f772d080b0455de0ca9d744cd6fd6. Details: https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#large-project-chart-snapshot</metadata>
+  <rect x="0.5" y="0.5" width="959" height="939" rx="20" fill="#fafcfb" stroke="#dce5e1" />
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" fill="#162d27">
+    <text x="40" y="55" font-size="34" font-weight="700">TypeScript 7 vs tsrs</text>
+    <g id="vscode">
+      <rect x="24" y="88" width="912" height="266" rx="12" fill="#ffffff" stroke="#e0e8e3" />
+      <text x="48" y="125" font-size="27" font-weight="700">VS Code</text>
+      <text x="48" y="152" font-size="17" fill="#52655e">microsoft/vscode · src</text>
+      <text x="912" y="125" text-anchor="end" font-size="25" font-weight="700">10,427 files</text>
+      <line x1="48" y1="169" x2="912" y2="169" stroke="#e3eae6" />
+      <g data-metric="wall_s">
+        <text x="48" y="203" font-size="19" font-weight="600">Time</text>
+        <text x="446" y="203" text-anchor="end" font-size="23" font-weight="700" fill="#087b5b">12.7× faster</text>
+        <text x="48" y="233" font-size="17" font-weight="400">TypeScript 7</text>
+        <text x="446" y="233" text-anchor="end" font-size="19" font-weight="700" fill="#3178c6">10.96 s</text>
+        <rect x="48" y="243" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsgo" x="48" y="243" width="272.5305" height="20" rx="3" fill="#3178c6" />
+        <text x="48" y="295" font-size="17" font-weight="700">tsrs</text>
+        <text x="446" y="295" text-anchor="end" font-size="19" font-weight="700" fill="#087b5b">0.86 s</text>
+        <rect x="48" y="305" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsrs" x="48" y="305" width="21.4049" height="20" rx="3" fill="#087b5b" />
+      </g>
+      <g data-metric="peak_rss_bytes">
+        <text x="514" y="203" font-size="19" font-weight="600">Peak memory</text>
+        <text x="912" y="203" text-anchor="end" font-size="23" font-weight="700" fill="#087b5b">73% less</text>
+        <text x="514" y="233" font-size="17" font-weight="400">TypeScript 7</text>
+        <text x="912" y="233" text-anchor="end" font-size="19" font-weight="700" fill="#3178c6">7.63 GiB</text>
+        <rect x="514" y="243" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsgo" x="514" y="243" width="379.3859" height="20" rx="3" fill="#3178c6" />
+        <text x="514" y="295" font-size="17" font-weight="700">tsrs</text>
+        <text x="912" y="295" text-anchor="end" font-size="19" font-weight="700" fill="#087b5b">2.09 GiB</text>
+        <rect x="514" y="305" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsrs" x="514" y="305" width="104.0598" height="20" rx="3" fill="#087b5b" />
+      </g>
+    </g>
+    <g id="t3code-server">
+      <rect x="24" y="370" width="912" height="266" rx="12" fill="#ffffff" stroke="#e0e8e3" />
+      <text x="48" y="407" font-size="27" font-weight="700">T3 Code</text>
+      <text x="48" y="434" font-size="17" fill="#52655e">pingdotgg/t3code · apps/server</text>
+      <text x="912" y="407" text-anchor="end" font-size="25" font-weight="700">2,945 files</text>
+      <text x="912" y="434" text-anchor="end" font-size="17" fill="#52655e">Heavy use of Effect and Zod</text>
+      <line x1="48" y1="451" x2="912" y2="451" stroke="#e3eae6" />
+      <g data-metric="wall_s">
+        <text x="48" y="485" font-size="19" font-weight="600">Time</text>
+        <text x="446" y="485" text-anchor="end" font-size="23" font-weight="700" fill="#087b5b">10.0× faster</text>
+        <text x="48" y="515" font-size="17" font-weight="400">TypeScript 7</text>
+        <text x="446" y="515" text-anchor="end" font-size="19" font-weight="700" fill="#3178c6">13.66 s</text>
+        <rect x="48" y="525" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsgo" x="48" y="525" width="339.7179" height="20" rx="3" fill="#3178c6" />
+        <text x="48" y="577" font-size="17" font-weight="700">tsrs</text>
+        <text x="446" y="577" text-anchor="end" font-size="19" font-weight="700" fill="#087b5b">1.37 s</text>
+        <rect x="48" y="587" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsrs" x="48" y="587" width="33.9917" height="20" rx="3" fill="#087b5b" />
+      </g>
+      <g data-metric="peak_rss_bytes">
+        <text x="514" y="485" font-size="19" font-weight="600">Peak memory</text>
+        <text x="912" y="485" text-anchor="end" font-size="23" font-weight="700" fill="#087b5b">65% less</text>
+        <text x="514" y="515" font-size="17" font-weight="400">TypeScript 7</text>
+        <text x="912" y="515" text-anchor="end" font-size="19" font-weight="700" fill="#3178c6">6.19 GiB</text>
+        <rect x="514" y="525" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsgo" x="514" y="525" width="307.7076" height="20" rx="3" fill="#3178c6" />
+        <text x="514" y="577" font-size="17" font-weight="700">tsrs</text>
+        <text x="912" y="577" text-anchor="end" font-size="19" font-weight="700" fill="#087b5b">2.14 GiB</text>
+        <rect x="514" y="587" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsrs" x="514" y="587" width="106.6718" height="20" rx="3" fill="#087b5b" />
+      </g>
+    </g>
+    <g id="mui-docs">
+      <rect x="24" y="652" width="912" height="266" rx="12" fill="#ffffff" stroke="#e0e8e3" />
+      <text x="48" y="689" font-size="27" font-weight="700">MUI docs</text>
+      <text x="48" y="716" font-size="17" fill="#52655e">mui/material-ui · docs</text>
+      <text x="912" y="689" text-anchor="end" font-size="25" font-weight="700">16,766 files</text>
+      <line x1="48" y1="733" x2="912" y2="733" stroke="#e3eae6" />
+      <g data-metric="wall_s">
+        <text x="48" y="767" font-size="19" font-weight="600">Time</text>
+        <text x="446" y="767" text-anchor="end" font-size="23" font-weight="700" fill="#087b5b">14.2× faster</text>
+        <text x="48" y="797" font-size="17" font-weight="400">TypeScript 7</text>
+        <text x="446" y="797" text-anchor="end" font-size="19" font-weight="700" fill="#3178c6">12.24 s</text>
+        <rect x="48" y="807" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsgo" x="48" y="807" width="304.4451" height="20" rx="3" fill="#3178c6" />
+        <text x="48" y="859" font-size="17" font-weight="700">tsrs</text>
+        <text x="446" y="859" text-anchor="end" font-size="19" font-weight="700" fill="#087b5b">0.86 s</text>
+        <rect x="48" y="869" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsrs" x="48" y="869" width="21.3801" height="20" rx="3" fill="#087b5b" />
+      </g>
+      <g data-metric="peak_rss_bytes">
+        <text x="514" y="767" font-size="19" font-weight="600">Peak memory</text>
+        <text x="912" y="767" text-anchor="end" font-size="23" font-weight="700" fill="#087b5b">79% less</text>
+        <text x="514" y="797" font-size="17" font-weight="400">TypeScript 7</text>
+        <text x="912" y="797" text-anchor="end" font-size="19" font-weight="700" fill="#3178c6">7.50 GiB</text>
+        <rect x="514" y="807" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsgo" x="514" y="807" width="373.3675" height="20" rx="3" fill="#3178c6" />
+        <text x="514" y="859" font-size="17" font-weight="700">tsrs</text>
+        <text x="912" y="859" text-anchor="end" font-size="19" font-weight="700" fill="#087b5b">1.60 GiB</text>
+        <rect x="514" y="869" width="398" height="20" rx="3" fill="#eef3f0" />
+        <rect data-compiler="tsrs" x="514" y="869" width="79.5335" height="20" rx="3" fill="#087b5b" />
+      </g>
+    </g>
+  </g>
+</svg>

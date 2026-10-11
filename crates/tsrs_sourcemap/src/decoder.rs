@@ -5,11 +5,11 @@ use super::*;
 // decoder.go:10
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Mapping {
-    pub generated_line: i32,
+    pub generated_line: u32,
     pub generated_character: UTF16Offset,
     pub source_index: SourceIndex,
-    pub source_line: i32,
-    pub source_character: UTF16Offset,
+    pub source_line: Option<u32>,
+    pub source_character: Option<UTF16Offset>,
     pub name_index: NameIndex,
 }
 
@@ -27,14 +27,14 @@ impl Mapping {
 
     // decoder.go:28
     pub fn is_source_mapping(&self) -> bool {
-        self.source_index != MISSING_SOURCE && self.source_line != MISSING_LINE_OR_COLUMN && self.source_character != MISSING_UTF16_COLUMN
+        self.source_index != MISSING_SOURCE
+            && self.source_line.is_some()
+            && self.source_character.is_some()
     }
 }
 
-pub const MISSING_SOURCE: SourceIndex = -1;
-pub const MISSING_NAME: NameIndex = -1;
-pub const MISSING_LINE_OR_COLUMN: i32 = -1;
-pub const MISSING_UTF16_COLUMN: UTF16Offset = -1;
+pub const MISSING_LINE_OR_COLUMN: Option<u32> = None;
+pub const MISSING_UTF16_COLUMN: Option<UTF16Offset> = None;
 
 // decoder.go:41
 // Go allocates the returned mappings in a per-decoder arena (`mappingArena`); Mapping is a small value type here.
@@ -43,12 +43,12 @@ pub struct MappingsDecoder {
     mappings: String,
     done: bool,
     pos: usize,
-    generated_line: i32,
+    generated_line: u32,
     generated_character: UTF16Offset,
-    source_index: SourceIndex,
-    source_line: i32,
+    source_index: u32,
+    source_line: u32,
     source_character: UTF16Offset,
-    name_index: NameIndex,
+    name_index: u32,
     error: Option<String>,
 }
 
@@ -104,56 +104,52 @@ impl MappingsDecoder {
 
             let mut has_source = false;
             let mut has_name = false;
-            self.generated_character = self.generated_character.wrapping_add(self.base64_vlq_format_decode() as UTF16Offset);
-            if self.has_reported_error() {
-                return self.stop_iterating();
-            }
-            if self.generated_character < 0 {
-                return self.set_error_and_stop_iterating("Invalid generatedCharacter found");
-            }
+            let delta = self.base64_vlq_format_decode()?;
+            self.generated_character = match apply_delta(self.generated_character, delta) {
+                Some(value) => value,
+                None => {
+                    return self.set_error_and_stop_iterating("Invalid generatedCharacter found");
+                }
+            };
 
             if !self.is_source_mapping_segment_end() {
                 has_source = true;
 
-                self.source_index = self.source_index.wrapping_add(self.base64_vlq_format_decode() as SourceIndex);
-                if self.has_reported_error() {
-                    return self.stop_iterating();
-                }
-                if self.source_index < 0 {
-                    return self.set_error_and_stop_iterating("Invalid sourceIndex found");
-                }
+                let delta = self.base64_vlq_format_decode()?;
+                self.source_index = match apply_delta(self.source_index, delta) {
+                    Some(value) => value,
+                    None => return self.set_error_and_stop_iterating("Invalid sourceIndex found"),
+                };
                 if self.is_source_mapping_segment_end() {
                     return self.set_error_and_stop_iterating("Unsupported Format: No entries after sourceIndex");
                 }
 
-                self.source_line = self.source_line.wrapping_add(self.base64_vlq_format_decode() as i32);
-                if self.has_reported_error() {
-                    return self.stop_iterating();
-                }
-                if self.source_line < 0 {
-                    return self.set_error_and_stop_iterating("Invalid sourceLine found");
-                }
+                let delta = self.base64_vlq_format_decode()?;
+                self.source_line = match apply_delta(self.source_line, delta) {
+                    Some(value) => value,
+                    None => return self.set_error_and_stop_iterating("Invalid sourceLine found"),
+                };
                 if self.is_source_mapping_segment_end() {
                     return self.set_error_and_stop_iterating("Unsupported Format: No entries after sourceLine");
                 }
 
-                self.source_character = self.source_character.wrapping_add(self.base64_vlq_format_decode() as UTF16Offset);
-                if self.has_reported_error() {
-                    return self.stop_iterating();
-                }
-                if self.source_character < 0 {
-                    return self.set_error_and_stop_iterating("Invalid sourceCharacter found");
-                }
+                let delta = self.base64_vlq_format_decode()?;
+                self.source_character = match apply_delta(self.source_character, delta) {
+                    Some(value) => value,
+                    None => {
+                        return self.set_error_and_stop_iterating("Invalid sourceCharacter found");
+                    }
+                };
 
                 if !self.is_source_mapping_segment_end() {
                     has_name = true;
-                    self.name_index = self.name_index.wrapping_add(self.base64_vlq_format_decode() as NameIndex);
-                    if self.has_reported_error() {
-                        return self.stop_iterating();
-                    }
-                    if self.name_index < 0 {
-                        return self.set_error_and_stop_iterating("Invalid nameIndex found");
-                    }
+                    let delta = self.base64_vlq_format_decode()?;
+                    self.name_index = match apply_delta(self.name_index, delta) {
+                        Some(value) => value,
+                        None => {
+                            return self.set_error_and_stop_iterating("Invalid nameIndex found");
+                        }
+                    };
 
                     if !self.is_source_mapping_segment_end() {
                         return self.set_error_and_stop_iterating("Unsupported Error Format: Entries after nameIndex");
@@ -172,10 +168,18 @@ impl MappingsDecoder {
         Mapping {
             generated_line: self.generated_line,
             generated_character: self.generated_character,
-            source_index: if has_source { self.source_index } else { MISSING_SOURCE },
-            source_line: if has_source { self.source_line } else { MISSING_LINE_OR_COLUMN },
-            source_character: if has_source { self.source_character } else { MISSING_UTF16_COLUMN },
-            name_index: if has_name { self.name_index } else { MISSING_NAME },
+            source_index: if has_source {
+                SourceIndex::Index(self.source_index)
+            } else {
+                MISSING_SOURCE
+            },
+            source_line: has_source.then_some(self.source_line),
+            source_character: has_source.then_some(self.source_character),
+            name_index: if has_name {
+                NameIndex::Index(self.name_index)
+            } else {
+                MISSING_NAME
+            },
         }
     }
 
@@ -197,10 +201,6 @@ impl MappingsDecoder {
     }
 
     // decoder.go:192
-    fn has_reported_error(&self) -> bool {
-        self.error.is_some()
-    }
-
     // decoder.go:196
     fn is_source_mapping_segment_end(&self) -> bool {
         self.pos == self.mappings.len() || self.mappings.as_bytes()[self.pos] == b',' || self.mappings.as_bytes()[self.pos] == b';'
@@ -208,22 +208,22 @@ impl MappingsDecoder {
 
     // decoder.go:200
     // Returns Go's (64-bit) int.
-    fn base64_vlq_format_decode(&mut self) -> i64 {
+    fn base64_vlq_format_decode(&mut self) -> Option<i64> {
         let mut more_digits = true;
         let mut shift_count: u32 = 0;
         let mut value: i64 = 0;
         while more_digits {
             if self.pos >= self.mappings.len() {
                 self.set_error("Error in decoding base64VLQFormatDecode, past the mapping string");
-                return -1;
+                return None;
             }
 
             // 6 digit number
-            let current_byte = base64_format_decode(self.mappings.as_bytes()[self.pos]);
-            if current_byte == -1 {
+            let Some(current_byte) = base64_format_decode(self.mappings.as_bytes()[self.pos])
+            else {
                 self.set_error("Invalid character in VLQ");
-                return -1;
-            }
+                return None;
+            };
 
             // If msb is set, we still have more bits to continue
             more_digits = (current_byte & 32) != 0;
@@ -245,18 +245,22 @@ impl MappingsDecoder {
             value = value.wrapping_neg();
         }
 
-        value
+        Some(value)
     }
 }
 
 // decoder.go:238
-pub(crate) fn base64_format_decode(ch: u8) -> i32 {
+pub(crate) fn base64_format_decode(ch: u8) -> Option<u8> {
     match ch {
-        b'A'..=b'Z' => (ch - b'A') as i32,
-        b'a'..=b'z' => (ch - b'a' + 26) as i32,
-        b'0'..=b'9' => (ch - b'0' + 52) as i32,
-        b'+' => 62,
-        b'/' => 63,
-        _ => -1,
+        b'A'..=b'Z' => Some(ch - b'A'),
+        b'a'..=b'z' => Some(ch - b'a' + 26),
+        b'0'..=b'9' => Some(ch - b'0' + 52),
+        b'+' => Some(62),
+        b'/' => Some(63),
+        _ => None,
     }
+}
+
+fn apply_delta(value: u32, delta: i64) -> Option<u32> {
+    i64::from(value).checked_add(delta)?.try_into().ok()
 }

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use tsrs_core::{new_text_range, P};
+use tsrs_core::{P, undefined_text_range};
 
 use crate::*;
 
@@ -10,7 +10,7 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
         let visited = visitor.visit_each_child(Some(node)).unwrap();
         if visited != node {
             if synthetic_location {
-                visited.set_loc(new_text_range(-1, -1));
+                visited.set_loc(undefined_text_range());
             }
             return Some(visited);
         }
@@ -19,35 +19,45 @@ fn get_deep_clone_visitor(f: NodeFactory, synthetic_location: bool) -> NodeVisit
         // Node.Clone in corsa reliably uses `Update` calls for all nodes and so copies locations by default.
         // Deep clones are done to copy a node across files, so here, we explicitly make the location range synthetic on all cloned nodes
         if synthetic_location {
-            c.set_loc(new_text_range(-1, -1));
+            c.set_loc(undefined_text_range());
         }
         Some(c)
     });
-    let visit_nodes: VisitNodesHook = Rc::new(move |nodes: Option<P<NodeList>>, v: &mut NodeVisitor| {
-        let nodes = nodes?;
-        let visited = v.visit_nodes(Some(nodes)).unwrap();
-        let new_list = if visited != nodes { visited } else { nodes.clone_list(&v.factory) };
-        if synthetic_location {
-            new_list.loc.set(new_text_range(-1, -1));
-            if nodes.has_trailing_comma() {
-                new_list.nodes()[new_list.nodes().len() - 1].set_loc(new_text_range(-2, -2));
+    let visit_nodes: VisitNodesHook =
+        Rc::new(move |nodes: Option<P<NodeList>>, v: &mut NodeVisitor| {
+            let nodes = nodes?;
+            let visited = v.visit_nodes(Some(nodes)).unwrap();
+            let new_list = if visited != nodes {
+                visited
+            } else {
+                nodes.clone_list(&v.factory)
+            };
+            if synthetic_location {
+                new_list.loc.set(undefined_text_range());
+                if nodes.has_trailing_comma() {
+                    new_list.nodes()[new_list.nodes().len() - 1].mark_trailing_comma();
+                }
             }
-        }
-        Some(new_list)
-    });
-    let visit_modifiers: VisitModifiersHook = Rc::new(move |nodes: Option<P<ModifierList>>, v: &mut NodeVisitor| {
-        let nodes = nodes?;
-        let visited = v.visit_modifiers(Some(nodes)).unwrap();
-        let new_list = if visited != nodes { visited } else { nodes.clone_list(&v.factory) };
-        if synthetic_location {
-            new_list.list.loc.set(new_text_range(-1, -1));
-            if nodes.has_trailing_comma() {
-                let new_nodes = new_list.nodes();
-                new_nodes[new_nodes.len() - 1].set_loc(new_text_range(-2, -2));
+            Some(new_list)
+        });
+    let visit_modifiers: VisitModifiersHook =
+        Rc::new(move |nodes: Option<P<ModifierList>>, v: &mut NodeVisitor| {
+            let nodes = nodes?;
+            let visited = v.visit_modifiers(Some(nodes)).unwrap();
+            let new_list = if visited != nodes {
+                visited
+            } else {
+                nodes.clone_list(&v.factory)
+            };
+            if synthetic_location {
+                new_list.list.loc.set(undefined_text_range());
+                if nodes.has_trailing_comma() {
+                    let new_nodes = new_list.nodes();
+                    new_nodes[new_nodes.len() - 1].mark_trailing_comma();
+                }
             }
-        }
-        Some(new_list)
-    });
+            Some(new_list)
+        });
     new_node_visitor(
         Some(visit),
         Some(f),
@@ -82,16 +92,17 @@ impl NodeFactory {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use tsrs_core::TextRange;
 
     #[test]
     fn deep_clone_reparse_copies_subtree_and_sets_parents() {
         let f = NodeFactory::default();
         let left = f.new_identifier("a");
-        left.set_loc(new_text_range(0, 1));
+        left.set_loc(TextRange::new(0, 1));
         let right = f.new_identifier("b");
-        right.set_loc(new_text_range(2, 3));
+        right.set_loc(TextRange::new(2, 3));
         let name = f.new_qualified_name(left, right);
-        name.set_loc(new_text_range(0, 3));
+        name.set_loc(TextRange::new(0, 3));
 
         let clone = f.deep_clone_reparse(Some(name)).unwrap();
         assert!(clone != name);
@@ -103,7 +114,10 @@ mod tests {
         assert_eq!(q.left.parent(), Some(clone));
 
         let synthetic = f.deep_clone_node(Some(name)).unwrap();
-        assert_eq!(synthetic.loc(), new_text_range(-1, -1));
-        assert_eq!(synthetic.as_qualified_name().right.loc(), new_text_range(-1, -1));
+        assert_eq!(synthetic.loc(), undefined_text_range());
+        assert_eq!(
+            synthetic.as_qualified_name().right.loc(),
+            undefined_text_range()
+        );
     }
 }

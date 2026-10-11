@@ -1,12 +1,11 @@
 use crate::*;
-use std::borrow::Cow;
 use tsrs_ast as ast;
 
 // Non-function declarations of inference.go (InferenceKey, InferenceState) are in inference_types.rs.
 
-// Go `min` over InferencePriority values (signed: Circularity is -1).
+// Go `min` over InferencePriority values (Circularity sorts before every bit-flag priority).
 fn min_priority(a: InferencePriority, b: InferencePriority) -> InferencePriority {
-    if b.bits() < a.bits() { b } else { a }
+    a.min(b)
 }
 
 impl Checker {
@@ -97,11 +96,10 @@ impl Checker {
             return;
         }
         if target.flags().intersects(TypeFlags::Union) {
-            let single_source = [source];
-            let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Union) { source.types() } else { &single_source };
+            let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Union) { source.types() } else { std::slice::from_ref(&source) };
             // First, infer between identically matching source and target constituents and remove the
             // matching types.
-            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, source_types, target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
+            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
             // Next, infer between closely matching source and target constituents and remove
             // the matching types. Types closely match when they are instantiations of the same
             // object type or instantiations of the same type alias.
@@ -126,10 +124,9 @@ impl Checker {
             // infer { extra: any } for T. But when inferring to 'string[] & Iterable<T>' we want to keep the
             // string[] on the source side and infer string for T.
             if !source.flags().intersects(TypeFlags::Union) {
-                let single_source = [source];
-                let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { &single_source };
+                let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { std::slice::from_ref(&source) };
                 // Infer between identically matching source and target constituents and remove the matching types.
-                let (sources, targets) = self.infer_from_matching_types(n, source_types, target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
+                let (sources, targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
                 if sources.is_empty() || targets.is_empty() {
                     return;
                 }
@@ -175,7 +172,7 @@ impl Checker {
                     if candidate == self.blocked_string_type {
                         return;
                     }
-                    if n.priority.get().bits() < inference.priority.get().bits() {
+                    if n.priority.get() < inference.priority.get() {
                         inference.candidates.clear();
                         inference.contra_candidates.clear();
                         inference.top_level.set(true);
@@ -290,11 +287,11 @@ impl Checker {
 
     // inference.go:284
     pub(crate) fn infer_from_type_arguments(&mut self, n: P<InferenceState>, source_types: &[P<Type>], target_types: &[P<Type>], variances: &[VarianceFlags]) {
-        for i in 0..source_types.len().min(target_types.len()) {
+        for (i, (&source, &target)) in source_types.iter().zip(target_types).enumerate() {
             if i < variances.len() && (variances[i] & VarianceFlags::VarianceMask) == VarianceFlags::Contravariant {
-                self.infer_from_contravariant_types(n, source_types[i], target_types[i]);
+                self.infer_from_contravariant_types(n, source, target);
             } else {
-                self.infer_from_types(n, source_types[i], target_types[i]);
+                self.infer_from_types(n, source, target);
             }
         }
     }
@@ -382,8 +379,14 @@ impl Checker {
     }
 
     // inference.go:370
-    /// tsrs: the unmatched sources and targets are the inputs themselves (not copies) when none matched.
-    pub(crate) fn infer_from_matching_types<'a>(&mut self, n: P<InferenceState>, sources: &'a [P<Type>], targets: &'a [P<Type>], mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool, sort: bool) -> (Cow<'a, [P<Type>]>, Cow<'a, [P<Type>]>) {
+    pub(crate) fn infer_from_matching_types<'a, 'b>(
+        &mut self,
+        n: P<InferenceState>,
+        sources: &'a [P<Type>],
+        targets: &'b [P<Type>],
+        mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool,
+        sort: bool,
+    ) -> (std::borrow::Cow<'a, [P<Type>]>, std::borrow::Cow<'b, [P<Type>]>) {
         let mut matched_sources: Vec<P<Type>> = Vec::new();
         let mut matched_targets: Vec<P<Type>> = Vec::new();
         for &t in targets {
@@ -410,7 +413,7 @@ impl Checker {
             // string[][] to T[].
             // Go sorts with `slices.SortFunc` (pdqsort, not stable). The stable sort gives the same order as long as
             // `compare_types_and_depth` returns 0 for no two distinct types (`matched_targets` has no duplicates).
-            matched_targets.sort_by(|&t1, &t2| compare_types_and_depth(self, t1, t2).cmp(&0));
+            matched_targets.sort_by(|&t1, &t2| compare_types_and_depth(self, t1, t2));
             for &t in &matched_targets {
                 for &s in &matched_sources {
                     if matches(self, s, t) {
@@ -419,19 +422,23 @@ impl Checker {
                 }
             }
         }
-        let sources = if matched_sources.is_empty() { Cow::Borrowed(sources) } else { sources.iter().copied().filter(|t| !matched_sources.contains(t)).collect() };
-        let targets = if matched_targets.is_empty() { Cow::Borrowed(targets) } else { targets.iter().copied().filter(|t| !matched_targets.contains(t)).collect() };
+        let sources = if matched_sources.is_empty() { sources.into() } else { sources.iter().copied().filter(|t| !matched_sources.contains(t)).collect() };
+        let targets = if matched_targets.is_empty() { targets.into() } else { targets.iter().copied().filter(|t| !matched_targets.contains(t)).collect() };
         (sources, targets)
     }
 }
 
 // Compare two types first by depth and then by the regular type ordering.
 // inference.go:410
-pub(crate) fn compare_types_and_depth(c: &mut Checker, t1: P<Type>, t2: P<Type>) -> i32 {
+pub(crate) fn compare_types_and_depth(
+    c: &mut Checker,
+    t1: P<Type>,
+    t2: P<Type>,
+) -> std::cmp::Ordering {
     let d1 = get_type_depth(c, t1, 3);
     let d2 = get_type_depth(c, t2, 3);
     if d1 != d2 {
-        return d2 - d1; // Largest depth sorts first
+        return d2.cmp(&d1); // Largest depth sorts first
     }
     compare_types(c, Some(t1), Some(t2))
 }
@@ -441,7 +448,7 @@ pub(crate) fn compare_types_and_depth(c: &mut Checker, t1: P<Type>, t2: P<Type>)
 // intersection types, the depth is the largest constituent type depth. For all other types,
 // the depth is zero. The maximum depth limits infinite recursion of circular types.
 // inference.go:423
-pub(crate) fn get_type_depth(c: &mut Checker, t: P<Type>, max_depth: i32) -> i32 {
+pub(crate) fn get_type_depth(c: &mut Checker, t: P<Type>, max_depth: usize) -> usize {
     if max_depth != 0 {
         if let Some(alias) = t.alias() {
             if !alias.type_arguments().is_empty() {
@@ -462,11 +469,13 @@ pub(crate) fn get_type_depth(c: &mut Checker, t: P<Type>, max_depth: i32) -> i32
 }
 
 // inference.go:440
-pub(crate) fn get_type_list_depth(c: &mut Checker, types: &[P<Type>], max_depth: i32) -> i32 {
+pub(crate) fn get_type_list_depth(c: &mut Checker, types: &[P<Type>], max_depth: usize) -> usize {
     let mut depth = 0;
-    for &t in types {
+    depth = types.iter().fold(depth, |mut depth, &t| {
         depth = depth.max(get_type_depth(c, t, max_depth));
-    }
+
+        depth
+    });
     depth
 }
 
@@ -476,7 +485,7 @@ impl Checker {
         let mut type_variable_count = 0;
         if target_flags.intersects(TypeFlags::Union) {
             let mut naked_type_variable: Option<P<Type>> = None;
-            let sources: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Union) { source.types().to_vec() } else { vec![source] };
+            let sources: &[P<Type>] = if source.flags().intersects(TypeFlags::Union) { source.types() } else { std::slice::from_ref(&source) };
             let mut matched = vec![false; sources.len()];
             let mut inference_circularity = false;
             // First infer to types that are not naked type variables. For each source type we
@@ -488,10 +497,10 @@ impl Checker {
                     naked_type_variable = Some(t);
                     type_variable_count += 1;
                 } else {
-                    for i in 0..sources.len() {
+                    for (i, element) in sources.iter().enumerate() {
                         let save_inference_priority = n.inference_priority.get();
                         n.inference_priority.set(InferencePriority::MaxValue);
-                        self.infer_from_types(n, sources[i], t);
+                        self.infer_from_types(n, *element, t);
                         if n.inference_priority.get() == n.priority.get() {
                             matched[i] = true;
                         }
@@ -516,11 +525,7 @@ impl Checker {
             // naked type variable.
             if type_variable_count == 1 && !inference_circularity {
                 let mut unmatched: Vec<P<Type>> = Vec::new();
-                for (i, &s) in sources.iter().enumerate() {
-                    if !matched[i] {
-                        unmatched.push(s);
-                    }
-                }
+                unmatched.extend(sources.iter().enumerate().filter_map(|(i, &s)| if !matched[i] { Some(s) } else { None }));
                 if !unmatched.is_empty() {
                     let union = self.get_union_type(&unmatched);
                     self.infer_from_types(n, union, naked_type_variable.unwrap());
@@ -622,9 +627,11 @@ impl Checker {
                         if let Some(constraint) = constraint {
                             if !is_type_any(Some(constraint)) {
                                 let mut all_type_flags = TypeFlags::None;
-                                for t in constraint.distributed_iter() {
+                                all_type_flags = constraint.distributed_iter().fold(all_type_flags, |mut all_type_flags, t| {
                                     all_type_flags |= t.flags();
-                                }
+
+                                    all_type_flags
+                                });
                                 // If the constraint contains `string`, we don't need to look for a more preferred type
                                 if !all_type_flags.intersects(TypeFlags::String) {
                                     let str = get_string_literal_value(source);
@@ -637,9 +644,11 @@ impl Checker {
                                         all_type_flags &= !TypeFlags::BigIntLike;
                                     }
                                     let mut matching_type = self.never_type;
-                                    for t in constraint.distributed_iter() {
+                                    matching_type = constraint.distributed_iter().fold(matching_type, |mut matching_type, t| {
                                         matching_type = infer_to_template_literal_type_choose(self, matching_type, t, all_type_flags, source, &str);
-                                    }
+
+                                        matching_type
+                                    });
                                     if !matching_type.flags().intersects(TypeFlags::Never) {
                                         self.infer_from_types(n, matching_type, target);
                                         continue 'outer;
@@ -776,14 +785,14 @@ impl Checker {
                 // When source and target are tuple types with the same structure (fixed, variadic, and rest are matched
                 // to the same kind in each position), simply infer between the element types.
                 if is_tuple_type(source) && self.is_tuple_type_structure_matching(source, target) {
-                    for i in 0..target_arity as usize {
+                    for (i, element) in element_types[..target_arity].iter().enumerate() {
                         let s = self.get_type_arguments(source)[i];
-                        self.infer_from_types(n, s, element_types[i]);
+                        self.infer_from_types(n, s, *element);
                     }
                     return;
                 }
-                let mut start_length: i32 = 0;
-                let mut end_length: i32 = 0;
+                let mut start_length = 0;
+                let mut end_length = 0;
                 if is_tuple_type(source) {
                     start_length = source.target_tuple_type().fixed_length().min(target.target_tuple_type().fixed_length());
                     if target.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
@@ -791,32 +800,42 @@ impl Checker {
                     }
                 }
                 // Infer between starting fixed elements.
-                for i in 0..start_length as usize {
+                for (i, element) in element_types[..start_length].iter().enumerate() {
                     let s = self.get_type_arguments(source)[i];
-                    self.infer_from_types(n, s, element_types[i]);
+                    self.infer_from_types(n, s, *element);
                 }
-                if !is_tuple_type(source) || source_arity - start_length - end_length == 1 && source.target_tuple_type().element_infos()[start_length as usize].flags.intersects(ElementFlags::Rest) {
+                if !is_tuple_type(source)
+                    || source_arity == start_length + end_length + 1
+                        && source.target_tuple_type().element_infos()[start_length]
+                            .flags
+                            .intersects(ElementFlags::Rest)
+                {
                     // Single rest element remains in source, infer from that to every element in target
-                    let rest_type = self.get_type_arguments(source)[start_length as usize];
+                    let rest_type = self.get_type_arguments(source)[start_length];
                     for i in start_length..target_arity - end_length {
                         let mut t = rest_type;
-                        if element_infos[i as usize].flags.intersects(ElementFlags::Variadic) {
+                        if element_infos[i].flags.intersects(ElementFlags::Variadic) {
                             t = self.create_array_type(t);
                         }
-                        self.infer_from_types(n, t, element_types[i as usize]);
+                        self.infer_from_types(n, t, element_types[i]);
                     }
                 } else {
-                    let middle_length = target_arity - start_length - end_length;
-                    let sl = start_length as usize;
-                    if middle_length == 2 {
-                        if (element_infos[sl].flags & element_infos[sl + 1].flags).intersects(ElementFlags::Variadic) {
+                    let middle_length = target_arity.checked_sub(start_length + end_length);
+                    let sl = start_length;
+                    if middle_length == Some(2) {
+                        if (element_infos[sl].flags & element_infos[sl + 1].flags)
+                            .intersects(ElementFlags::Variadic)
+                        {
                             // Middle of target is [...T, ...U] and source is tuple type
                             let target_info = get_inference_info_for_type(n, element_types[sl]);
                             if let Some(target_info) = target_info {
-                                if target_info.implied_arity.get() >= 0 {
+                                if let Some(implied_arity) = target_info.implied_arity.get() {
                                     // Infer slices from source based on implied arity of T.
-                                    let implied_arity = target_info.implied_arity.get();
-                                    let slice = self.slice_tuple_type(source, start_length, end_length + source_arity - implied_arity);
+                                    let slice = self.slice_tuple_type(
+                                        source,
+                                        start_length,
+                                        (end_length + source_arity).saturating_sub(implied_arity),
+                                    );
                                     self.infer_from_types(n, slice, element_types[sl]);
                                     let slice = self.slice_tuple_type(source, start_length + implied_arity, end_length);
                                     self.infer_from_types(n, slice, element_types[sl + 1]);
@@ -830,7 +849,7 @@ impl Checker {
                                 if let Some(constraint) = constraint {
                                     if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.target_tuple_type().fixed_length();
-                                        let slice = self.slice_tuple_type(source, start_length, source_arity - (start_length + implied_arity));
+                                        let slice = self.slice_tuple_type(source, start_length, source_arity.saturating_sub(start_length + implied_arity));
                                         self.infer_from_types(n, slice, element_types[sl]);
                                         if let Some(rest_type) = self.get_element_type_of_slice_of_tuple_type(source, start_length + implied_arity, end_length, false, false) {
                                             self.infer_from_types(n, rest_type, element_types[sl + 1]);
@@ -846,31 +865,59 @@ impl Checker {
                                 if let Some(constraint) = constraint {
                                     if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.target_tuple_type().fixed_length();
-                                        let end_index = source_arity - get_end_element_count(target.target_tuple_type(), ElementFlags::Fixed);
-                                        let start_index = end_index - implied_arity;
-                                        if start_index >= start_length {
-                                            let source_type_arguments = self.get_type_arguments(source);
-                                            let trailing_slice = self.create_tuple_type_ex(
-                                                &source_type_arguments[start_index as usize..end_index as usize],
-                                                &source.target_tuple_type().element_infos()[start_index as usize..end_index as usize],
-                                                false, /*readonly*/
-                                            );
-                                            if let Some(rest_type) = self.get_element_type_of_slice_of_tuple_type(source, start_length, end_length + implied_arity, false, false) {
-                                                self.infer_from_types(n, rest_type, element_types[sl]);
+                                        if let Some(end_index) = source_arity.checked_sub(get_end_element_count(target.target_tuple_type(), ElementFlags::Fixed)) {
+                                            if let Some(start_index) = end_index.checked_sub(implied_arity).filter(|&index| index >= start_length) {
+                                                let source_type_arguments = self.get_type_arguments(source);
+                                                let trailing_slice = self.create_tuple_type_ex(
+                                                    &source_type_arguments[start_index..end_index],
+                                                    &source.target_tuple_type().element_infos()
+                                                        [start_index..end_index],
+                                                    false, /*readonly*/
+                                                );
+                                                if let Some(rest_type) = self
+                                                    .get_element_type_of_slice_of_tuple_type(
+                                                        source,
+                                                        start_length,
+                                                        end_length + implied_arity,
+                                                        false,
+                                                        false,
+                                                    )
+                                                {
+                                                    self.infer_from_types(
+                                                        n,
+                                                        rest_type,
+                                                        element_types[sl],
+                                                    );
+                                                }
+                                                self.infer_from_types(
+                                                    n,
+                                                    trailing_slice,
+                                                    element_types[sl + 1],
+                                                );
                                             }
-                                            self.infer_from_types(n, trailing_slice, element_types[sl + 1]);
                                         }
                                     }
                                 }
                             }
                         }
-                    } else if middle_length == 1 && element_infos[sl].flags.intersects(ElementFlags::Variadic) {
+                    } else if middle_length == Some(1)
+                        && element_infos[sl].flags.intersects(ElementFlags::Variadic)
+                    {
                         // Middle of target is exactly one variadic element. Infer the slice between the fixed parts in the source.
                         // If target ends in optional element(s), make a lower priority a speculative inference.
-                        let priority = if element_infos[(target_arity - 1) as usize].flags.intersects(ElementFlags::Optional) { InferencePriority::SpeculativeTuple } else { InferencePriority::None };
+                        let priority = if element_infos[target_arity - 1]
+                            .flags
+                            .intersects(ElementFlags::Optional)
+                        {
+                            InferencePriority::SpeculativeTuple
+                        } else {
+                            InferencePriority::None
+                        };
                         let source_slice = self.slice_tuple_type(source, start_length, end_length);
                         self.infer_with_priority(n, source_slice, element_types[sl], priority);
-                    } else if middle_length == 1 && element_infos[sl].flags.intersects(ElementFlags::Rest) {
+                    } else if middle_length == Some(1)
+                        && element_infos[sl].flags.intersects(ElementFlags::Rest)
+                    {
                         // Middle of target is exactly one rest element. If middle of source is not empty, infer union of middle element types.
                         let rest_type = self.get_element_type_of_slice_of_tuple_type(source, start_length, end_length, false, false);
                         if let Some(rest_type) = rest_type {
@@ -880,8 +927,8 @@ impl Checker {
                 }
                 // Infer between ending fixed elements
                 for i in 0..end_length {
-                    let s = self.get_type_arguments(source)[(source_arity - i - 1) as usize];
-                    self.infer_from_types(n, s, element_types[(target_arity - i - 1) as usize]);
+                    let s = self.get_type_arguments(source)[source_arity - i - 1];
+                    self.infer_from_types(n, s, element_types[target_arity - i - 1]);
                 }
                 return;
             }
@@ -917,16 +964,16 @@ impl Checker {
     // inference.go:838
     pub(crate) fn infer_from_signatures(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, kind: SignatureKind) {
         let source_signatures = self.get_signatures_of_type(source, kind);
-        let source_len = source_signatures.len() as i32;
-        if source_len > 0 {
+        let source_len = source_signatures.len();
+        if source_len != 0 {
             // We match source and target signatures from the bottom up, and if the source has fewer signatures
             // than the target, we infer from the first source signature to the excess target signatures.
             let target_signatures = self.get_signatures_of_type(target, kind);
-            let target_len = target_signatures.len() as i32;
+            let target_len = target_signatures.len();
             for i in 0..target_len {
-                let source_index = (source_len - target_len + i).max(0);
-                let base_signature = self.get_base_signature(source_signatures[source_index as usize]);
-                let erased_signature = self.get_erased_signature(target_signatures[i as usize]);
+                let source_index = (source_len + i).saturating_sub(target_len);
+                let base_signature = self.get_base_signature(source_signatures[source_index]);
+                let erased_signature = self.get_erased_signature(target_signatures[i]);
                 self.infer_from_signature(n, base_signature, erased_signature);
             }
         }
@@ -1013,21 +1060,23 @@ impl Checker {
         if self.is_object_type_with_inferable_index(source) {
             for &target_info in index_infos {
                 let mut prop_types: Vec<P<Type>> = Vec::new();
-                for prop in self.get_properties_of_type(source).iter().copied() {
+                prop_types.extend(self.get_properties_of_type(source).iter().copied().filter_map(|prop| {
                     let literal_type = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
                     if self.is_applicable_index_type(literal_type, target_info.key_type()) {
                         let mut prop_type = self.get_type_of_symbol(prop);
                         if prop.flags.get().intersects(SymbolFlags::Optional) {
                             prop_type = self.remove_missing_or_undefined_type(prop_type);
                         }
-                        prop_types.push(prop_type);
+                        Some(prop_type)
+                    } else {
+                        None
                     }
-                }
-                for info in self.get_index_infos_of_type(source) {
-                    if self.is_applicable_index_type(info.key_type(), target_info.key_type()) {
-                        prop_types.push(info.value_type());
-                    }
-                }
+                }));
+                prop_types.extend(
+                    self.get_index_infos_of_type(source)
+                        .iter()
+                        .filter_map(|info| if self.is_applicable_index_type(info.key_type(), target_info.key_type()) { Some(info.value_type()) } else { None }),
+                );
                 if !prop_types.is_empty() {
                     let union = self.get_union_type(&prop_types);
                     self.infer_with_priority(n, union, target_info.value_type(), priority);
@@ -1095,9 +1144,7 @@ impl Checker {
             // If no inferences can be made to K's constraint, infer from a union of the property types
             // in the source to the template type X.
             let mut prop_types: Vec<P<Type>> = Vec::new();
-            for prop in self.get_properties_of_type(source).iter().copied() {
-                prop_types.push(self.get_type_of_symbol(prop));
-            }
+            prop_types.extend(self.get_properties_of_type(source).iter().copied().map(|prop| self.get_type_of_symbol(prop)));
             let index_types: Vec<P<Type>> = self
                 .get_index_infos_of_type(source)
                 .iter()
@@ -1148,9 +1195,7 @@ impl Checker {
         }
         if is_tuple_type(source) {
             let mut element_types: Vec<Option<P<Type>>> = Vec::new();
-            for &t in self.get_element_types(source) {
-                element_types.push(self.infer_reverse_mapped_type(t, target, constraint));
-            }
+            element_types.extend(self.get_element_types(source).iter().map(|&t| self.infer_reverse_mapped_type(t, target, constraint)));
             if !element_types.iter().all(|t| t.is_some()) {
                 return None;
             }
@@ -1373,12 +1418,12 @@ impl Checker {
         if self.get_type_reference_arity(t1) != self.get_type_reference_arity(t2) {
             return false;
         }
-        for (i, e) in t1.target_tuple_type().element_infos().iter().enumerate() {
-            if (e.flags & ElementFlags::Variable) != (t2.target_tuple_type().element_infos()[i].flags & ElementFlags::Variable) {
-                return false;
-            }
-        }
-        true
+        !(t1
+            .target_tuple_type()
+            .element_infos()
+            .iter()
+            .enumerate()
+            .any(|(i, e)| (e.flags & ElementFlags::Variable) != (t2.target_tuple_type().element_infos()[i].flags & ElementFlags::Variable)))
     }
 
     // inference.go:1214
@@ -1495,8 +1540,8 @@ impl Checker {
     }
 
     // inference.go:1317
-    pub(crate) fn get_inferred_type(&mut self, n: P<InferenceContext>, index: i32) -> P<Type> {
-        let inference = n.inferences.get()[index as usize];
+    pub(crate) fn get_inferred_type(&mut self, n: P<InferenceContext>, index: usize) -> P<Type> {
+        let inference = n.inferences.get()[index];
         if inference.inferred_type.get().is_none() {
             if inference.type_parameter.get() == Some(self.error_type) {
                 return inference.type_parameter.get().unwrap();
@@ -1629,9 +1674,7 @@ impl Checker {
     pub(crate) fn get_inferred_types(&mut self, n: P<InferenceContext>) -> Vec<P<Type>> {
         let len = n.inferences.get().len();
         let mut result = Vec::with_capacity(len);
-        for i in 0..len {
-            result.push(self.get_inferred_type(n, i as i32));
-        }
+        result.extend((0..len).map(|i| self.get_inferred_type(n, i)));
         result
     }
 
@@ -1721,7 +1764,12 @@ impl Checker {
     }
 
     // inference.go:1493
-    pub(crate) fn is_type_parameter_at_top_level(&mut self, t: P<Type>, tp: P<Type>, depth: i32) -> bool {
+    pub(crate) fn is_type_parameter_at_top_level(
+        &mut self,
+        t: P<Type>,
+        tp: P<Type>,
+        depth: u32,
+    ) -> bool {
         t == tp
             || t.flags().intersects(TypeFlags::UnionOrIntersection) && t.types().iter().any(|&t| self.is_type_parameter_at_top_level(t, tp, depth))
             || depth < 3 && t.flags().intersects(TypeFlags::Conditional) && {
@@ -1764,10 +1812,10 @@ impl Checker {
 pub(crate) fn get_inference_info_for_type(n: P<InferenceState>, t: P<Type>) -> Option<P<InferenceInfo>> {
     if t.flags().intersects(TypeFlags::TypeVariable) {
         let t = get_non_distributed_type_parameter(t);
-        for &inference in n.inferences.borrow().iter() {
-            if t == inference.type_parameter.get() {
-                return Some(inference);
-            }
+        if let Some(result) =
+            n.inferences.borrow().iter().find_map(|&inference| if t == inference.type_parameter.get() { Some(Some(inference)) } else { None })
+        {
+            return result;
         }
     }
     None
@@ -1817,11 +1865,13 @@ impl Checker {
     // inference.go:1569
     pub(crate) fn find_leftmost_type(&mut self, types: &[P<Type>], mut f: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool) -> Option<P<Type>> {
         let mut candidate: Option<P<Type>> = None;
-        for &t in types {
+        candidate = types.iter().fold(candidate, |mut candidate, &t| {
             if candidate.is_none() || f(self, candidate.unwrap(), t) {
                 candidate = Some(t);
             }
-        }
+
+            candidate
+        });
         candidate
     }
 
@@ -1829,11 +1879,13 @@ impl Checker {
     // inference.go:1580
     pub(crate) fn get_common_subtype(&mut self, types: &[P<Type>]) -> Option<P<Type>> {
         let mut subtype: Option<P<Type>> = None;
-        for &t in types {
+        subtype = types.iter().fold(subtype, |mut subtype, &t| {
             if subtype.is_none() || self.is_type_subtype_of(t, subtype.unwrap()) {
                 subtype = Some(t);
             }
-        }
+
+            subtype
+        });
         subtype
     }
 
@@ -1890,7 +1942,7 @@ pub(crate) fn new_inference_info(type_parameter: P<Type>) -> P<InferenceInfo> {
         type_parameter: Cell::new(Some(type_parameter)),
         priority: Cell::new(InferencePriority::MaxValue),
         top_level: Cell::new(true),
-        implied_arity: Cell::new(-1),
+        implied_arity: OptionalCountCell::default(),
         ..Default::default()
     })
 }
@@ -1905,7 +1957,11 @@ pub(crate) fn clone_inference_info(info: P<InferenceInfo>) -> P<InferenceInfo> {
         priority: Cell::new(info.priority.get()),
         top_level: Cell::new(info.top_level.get()),
         is_fixed: Cell::new(info.is_fixed.get()),
-        implied_arity: Cell::new(info.implied_arity.get()),
+        implied_arity: {
+            let implied_arity = OptionalCountCell::default();
+            implied_arity.set(info.implied_arity.get());
+            implied_arity
+        },
     })
 }
 
@@ -1931,10 +1987,12 @@ pub(crate) fn has_inference_candidates_or_default(info: P<InferenceInfo>) -> boo
 // inference.go:1659
 pub(crate) fn has_type_parameter_default(tp: P<Type>) -> bool {
     if let Some(symbol) = tp.symbol() {
-        for &d in symbol.declarations().iter() {
-            if ast::is_type_parameter_declaration(d) && d.as_type_parameter_declaration().default_type().is_some() {
-                return true;
-            }
+        if symbol
+            .declarations()
+            .iter()
+            .any(|&d| ast::is_type_parameter_declaration(d) && d.as_type_parameter_declaration().default_type().is_some())
+        {
+            return true;
         }
     }
     false
@@ -1942,20 +2000,15 @@ pub(crate) fn has_type_parameter_default(tp: P<Type>) -> bool {
 
 // inference.go:1670
 pub(crate) fn has_overlapping_inferences(a: &[P<InferenceInfo>], b: &[P<InferenceInfo>]) -> bool {
-    for i in 0..a.len() {
-        if has_inference_candidates(a[i]) && has_inference_candidates(b[i]) {
-            return true;
-        }
-    }
-    false
+    (0..a.len()).any(|i| has_inference_candidates(a[i]) && has_inference_candidates(b[i]))
 }
 
 impl Checker {
     // inference.go:1679
     pub(crate) fn merge_inferences(&mut self, target: &mut [P<InferenceInfo>], source: &[P<InferenceInfo>]) {
-        for i in 0..target.len() {
-            if !has_inference_candidates(target[i]) && has_inference_candidates(source[i]) {
-                target[i] = source[i];
+        for (i, element) in target.iter_mut().enumerate() {
+            if !has_inference_candidates(*element) && has_inference_candidates(source[i]) {
+                (*element) = source[i];
             }
         }
     }

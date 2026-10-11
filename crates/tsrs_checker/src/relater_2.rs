@@ -321,9 +321,7 @@ impl Checker {
     // relater.go:2829
     pub(crate) fn get_type_of_property_in_types(&mut self, types: &[P<Type>], name: &str) -> P<Type> {
         let mut prop_types: Vec<P<Type>> = Vec::new();
-        for &t in types {
-            prop_types.push(self.get_type_of_property_in_type(t, name).unwrap());
-        }
+        prop_types.extend(types.iter().map(|&t| self.get_type_of_property_in_type(t, name).unwrap()));
         self.get_union_type(&prop_types)
     }
 
@@ -369,13 +367,11 @@ impl Checker {
             let (n, m) = (source.types().len(), target.types().len());
             // A scan touches each target type at most once; the searches cost about log2(m) comparisons per source
             // type, each far more than an identity test.
-            if n * (usize::BITS - m.leading_zeros()) as usize * 8 >= m && self.program.source_files_complete() {
+            if n * m.bit_width() as usize * 8 >= m && self.program.source_files_complete() {
                 return crate::checker_13::is_sorted_subset(source.types(), target.types());
             }
-            for &t in source.types() {
-                if !contains_type(self, target.types(), t) {
-                    return false;
-                }
+            if source.types().iter().any(|&t| !contains_type(self, target.types(), t)) {
+                return false;
             }
             return true;
         }
@@ -435,7 +431,7 @@ impl Relater {
             let source_types = source.types();
             let mut changed = false;
             let mut constraints: Vec<P<Type>> = Vec::with_capacity(source_types.len());
-            for &t in source_types {
+            constraints.extend(source_types.iter().map(|&t| {
                 let mapped = if t.flags().intersects(TypeFlags::Instantiable) {
                     let constraint = c.get_base_constraint_of_type(t);
                     match constraint {
@@ -448,8 +444,8 @@ impl Relater {
                 if mapped != t {
                     changed = true;
                 }
-                constraints.push(mapped);
-            }
+                mapped
+            }));
             if changed {
                 source = c.get_intersection_type(&constraints);
                 if source.flags().intersects(TypeFlags::Never) {
@@ -477,11 +473,23 @@ impl Relater {
         if source.flags().intersects(TypeFlags::Union) && contains_type(c, source_types, target) {
             return Ternary::True;
         }
-        for (i, &t) in source_types.iter().enumerate() {
-            let related = self.is_related_to_ex(c, t, target, RecursionFlags::Source, report_errors && i == source_types.len() - 1, None /*headMessage*/, intersection_state);
+        if let Some(result) = source_types.iter().enumerate().find_map(|(i, &t)| {
+            let related = self.is_related_to_ex(
+                c,
+                t,
+                target,
+                RecursionFlags::Source,
+                report_errors && i == source_types.len() - 1,
+                None, /*headMessage*/
+                intersection_state,
+            );
             if related != Ternary::False {
-                return related;
+                return Some(related);
             }
+
+            None
+        }) {
+            return result;
         }
         Ternary::False
     }
@@ -497,25 +505,40 @@ impl Relater {
         if stripped_target.flags().intersects(TypeFlags::Union) {
             stripped_types = stripped_target.types();
         }
-        for (i, &source_type) in source_types.iter().enumerate() {
-            if stripped_target.flags().intersects(TypeFlags::Union) && source_types.len() >= stripped_types.len() && source_types.len() % stripped_types.len() == 0 {
+        result = match source_types.iter().enumerate().try_fold(result, |mut result, (i, &source_type)| {
+            if stripped_target.flags().intersects(TypeFlags::Union)
+                && source_types.len() >= stripped_types.len()
+                && source_types.len() % stripped_types.len() == 0
+            {
                 // many unions are mappings of one another; in such cases, simply comparing members at the same index can shortcut the comparison
                 // such unions will have identical lengths, and their corresponding elements will match up. Another common scenario is where a large
                 // union has a union of objects intersected with it. In such cases, if the input was, eg `("a" | "b" | "c") & (string | boolean | {} | {whatever})`,
                 // the result will have the structure `"a" | "b" | "c" | "a" & {} | "b" & {} | "c" & {} | "a" & {whatever} | "b" & {whatever} | "c" & {whatever}`
                 // - the resulting union has a length which is a multiple of the original union, and the elements correspond modulo the length of the original union
-                let related = self.is_related_to_ex(c, source_type, stripped_types[i % stripped_types.len()], RecursionFlags::Both, false /*reportErrors*/, None /*headMessage*/, intersection_state);
+                let related = self.is_related_to_ex(
+                    c,
+                    source_type,
+                    stripped_types[i % stripped_types.len()],
+                    RecursionFlags::Both,
+                    false, /*reportErrors*/
+                    None,  /*headMessage*/
+                    intersection_state,
+                );
                 if related != Ternary::False {
                     result &= related;
-                    continue;
+                    return Ok(result);
                 }
             }
             let related = self.is_related_to_ex(c, source_type, target, RecursionFlags::Source, report_errors, None /*headMessage*/, intersection_state);
             if related == Ternary::False {
-                return Ternary::False;
+                return Err(Ternary::False);
             }
             result &= related;
-        }
+            Ok(result)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         result
     }
 
@@ -728,13 +751,17 @@ impl Relater {
     pub(crate) fn type_related_to_each_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, intersection_state: IntersectionState) -> Ternary {
         let mut result = Ternary::True;
         let target_types = target.types();
-        for &target_type in target_types {
+        result = match target_types.iter().try_fold(result, |mut result, &target_type| {
             let related = self.is_related_to_ex(c, source, target_type, RecursionFlags::Target, report_errors, None /*headMessage*/, intersection_state);
             if related == Ternary::False {
-                return Ternary::False;
+                return Err(Ternary::False);
             }
             result &= related;
-        }
+            Ok(result)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         result
     }
 
@@ -742,13 +769,17 @@ impl Relater {
     pub(crate) fn each_type_related_to_some_type(&self, c: &mut Checker, source: P<Type>, target: P<Type>) -> Ternary {
         let mut result = Ternary::True;
         let source_types = source.types();
-        for &source_type in source_types {
+        result = match source_types.iter().try_fold(result, |mut result, &source_type| {
             let related = self.type_related_to_some_type(c, source_type, target, false /*reportErrors*/, IntersectionState::None);
             if related == Ternary::False {
-                return Ternary::False;
+                return Err(Ternary::False);
             }
             result &= related;
-        }
+            Ok(result)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         result
     }
 
@@ -825,15 +856,15 @@ impl Relater {
         self.maybe_stack_push(id);
         let save_expanding_flags = self.expanding_flags.get();
         if recursion_flags.intersects(RecursionFlags::Source) {
-            self.source_stack.borrow_mut().push(source);
+            self.source_stack.borrow_mut().push(RelaterStackEntry::new(source));
             // isDeeplyNestedType never reaches this relater, so the stack borrow is not held across a re-entry.
-            if !self.expanding_flags.get().intersects(ExpandingFlags::Source) && c.is_deeply_nested_type(source, &self.source_stack.borrow(), 3) {
+            if !self.expanding_flags.get().intersects(ExpandingFlags::Source) && c.is_deeply_nested_on_stack(source, &self.source_stack.borrow(), 3) {
                 self.expanding_flags.set(self.expanding_flags.get() | ExpandingFlags::Source);
             }
         }
         if recursion_flags.intersects(RecursionFlags::Target) {
-            self.target_stack.borrow_mut().push(target);
-            if !self.expanding_flags.get().intersects(ExpandingFlags::Target) && c.is_deeply_nested_type(target, &self.target_stack.borrow(), 3) {
+            self.target_stack.borrow_mut().push(RelaterStackEntry::new(target));
+            if !self.expanding_flags.get().intersects(ExpandingFlags::Target) && c.is_deeply_nested_on_stack(target, &self.target_stack.borrow(), 3) {
                 self.expanding_flags.set(self.expanding_flags.get() | ExpandingFlags::Target);
             }
         }
@@ -862,9 +893,9 @@ impl Relater {
                 if (result == Ternary::True || result == Ternary::Maybe) && record {
                     // If result is definitely true, record all maybe keys as having succeeded. Also, record Ternary.Maybe
                     // results as having succeeded once we reach depth 0, but never record Ternary.Unknown results.
-                    self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, true);
+                    self.reset_maybe_stack(c, maybe_start, propagating_variance_flags, true);
                 } else {
-                    self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, false);
+                    self.reset_maybe_stack(c, maybe_start, propagating_variance_flags, false);
                 }
             }
             // Note: it's intentional that we don't reset in the else case;
@@ -877,14 +908,19 @@ impl Relater {
                 Relation::set(&self.rel(), id, RelationComparisonResult::Failed | propagating_variance_flags);
                 self.relation_count.set(self.relation_count.get() - 1);
             }
-            self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, false);
+            self.reset_maybe_stack(c, maybe_start, propagating_variance_flags, false);
         }
         result
     }
 
     // relater.go:3201
-    pub(crate) fn reset_maybe_stack(&self, _c: &mut Checker, maybe_start: i32, propagating_variance_flags: RelationComparisonResult, mark_all_as_succeeded: bool) {
-        let maybe_start = maybe_start as usize;
+    pub(crate) fn reset_maybe_stack(
+        &self,
+        _c: &mut Checker,
+        maybe_start: usize,
+        propagating_variance_flags: RelationComparisonResult,
+        mark_all_as_succeeded: bool,
+    ) {
         let len = self.maybe_keys.borrow().len();
         if mark_all_as_succeeded {
             for i in maybe_start..len {
@@ -923,9 +959,7 @@ impl Relater {
         keys.push(key);
         let mut set = self.maybe_keys_set.borrow_mut();
         if keys.len() == MAYBE_STACK_SCAN_MAX + 1 {
-            for &k in keys.iter() {
-                set.add(k);
-            }
+            set.m.extend(keys.iter().map(|&k| k));
         } else if keys.len() > MAYBE_STACK_SCAN_MAX {
             set.add(key);
         }
@@ -979,7 +1013,7 @@ impl Relater {
             // the type param can be compared with itself in the target (with the influence of its constraint to match other parts)
             // For example, if `T extends 1 | 2` and `U extends 2 | 3` and we compare `T & U` to `T & U & (1 | 2 | 3)`
             if result == Ternary::False && (source.flags().intersects(TypeFlags::Intersection) || source.flags().intersects(TypeFlags::TypeParameter) && target.flags().intersects(TypeFlags::Union)) {
-                let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Intersection) { source.types().to_vec() } else { vec![source] };
+                let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { std::slice::from_ref(&source) };
                 let constraint = c.get_effective_constraint_of_intersection(&source_types, target.flags().intersects(TypeFlags::Union));
                 if let Some(constraint) = constraint {
                     if every_type(c, constraint, |_, t| t != source) {
@@ -1147,6 +1181,7 @@ impl Relater {
             } else if source.flags().intersects(TypeFlags::TemplateLiteral) {
                 if source.as_template_literal_type().texts() == target.as_template_literal_type().texts() {
                     result = Ternary::True;
+                    // A measured hot loop: a recursive try_fold costs more (notes/perf-iterator-regressions.md).
                     for (i, &source_type) in source.as_template_literal_type().types().iter().enumerate() {
                         let target_type = target.as_template_literal_type().types()[i];
                         result &= self.is_related_to(c, source_type, target_type, RecursionFlags::Both, false /*reportErrors*/);
@@ -1355,7 +1390,7 @@ impl Relater {
         } else if target.flags().intersects(TypeFlags::Conditional) {
             // If we reach 10 levels of nesting for the same conditional type, assume it is an infinitely expanding recursive
             // conditional type and bail out with a Ternary.Maybe result.
-            if c.is_deeply_nested_type(target, &self.target_stack.borrow(), 10) {
+            if c.is_deeply_nested_on_stack(target, &self.target_stack.borrow(), 10) {
                 return Ternary::Maybe;
             }
             let target_conditional = target.as_conditional_type();
@@ -1563,7 +1598,7 @@ impl Relater {
         } else if source.flags().intersects(TypeFlags::Conditional) {
             // If we reach 10 levels of nesting for the same conditional type, assume it is an infinitely expanding recursive
             // conditional type and bail out with a Ternary.Maybe result.
-            if c.is_deeply_nested_type(source, &self.source_stack.borrow(), 10) {
+            if c.is_deeply_nested_on_stack(source, &self.source_stack.borrow(), 10) {
                 return Ternary::Maybe;
             }
             if target.flags().intersects(TypeFlags::Conditional) {
@@ -1844,9 +1879,20 @@ impl Relater {
         if modifiers_related {
             let target_constraint = c.get_constraint_type_from_mapped_type(target);
             let source_constraint_uninstantiated = c.get_constraint_type_from_mapped_type(source);
-            let mapper = if c.get_combined_mapped_type_optionality(source) < 0 { c.report_unmeasurable_mapper } else { c.report_unreliable_mapper };
-            let source_constraint = c.instantiate_type(source_constraint_uninstantiated, Some(mapper));
-            let result = self.is_related_to(c, target_constraint, source_constraint, RecursionFlags::Both, report_errors);
+            let mapper = if c.get_combined_mapped_type_optionality(source).is_lt() {
+                c.report_unmeasurable_mapper
+            } else {
+                c.report_unreliable_mapper
+            };
+            let source_constraint =
+                c.instantiate_type(source_constraint_uninstantiated, Some(mapper));
+            let result = self.is_related_to(
+                c,
+                target_constraint,
+                source_constraint,
+                RecursionFlags::Both,
+                report_errors,
+            );
             if result != Ternary::False {
                 let source_type_parameter = c.get_type_parameter_from_mapped_type(source);
                 let target_type_parameter = c.get_type_parameter_from_mapped_type(target);
@@ -1887,7 +1933,7 @@ impl Relater {
         // array allocations. To reduce this overhead, we first compute
         // the number of combinations to ensure we will not surpass our
         // fixed limit before incurring the cost of any allocations:
-        let mut num_combinations: i32 = 1;
+        let mut num_combinations = 1usize;
         for &source_property in &source_properties_filtered {
             num_combinations *= count_types(c.get_non_missing_type_of_symbol(source_property));
             if num_combinations > 25 {
@@ -1906,12 +1952,12 @@ impl Relater {
             excluded_properties.add(source_property.name().to_string());
         }
         // Build the cartesian product
-        let mut discriminant_combinations: Vec<Vec<P<Type>>> = Vec::with_capacity(num_combinations as usize);
-        for i in 0..num_combinations as usize {
+        let mut discriminant_combinations: Vec<Vec<P<Type>>> = Vec::with_capacity(num_combinations);
+        for i in 0..num_combinations {
             let mut combination: Vec<Option<P<Type>>> = vec![None; source_discriminant_types.len()];
             let mut n = i;
-            for j in (0..source_discriminant_types.len()).rev() {
-                let source_types = &source_discriminant_types[j];
+            for (j, element) in source_discriminant_types.iter().enumerate().rev() {
+                let source_types = &(*element);
                 let length = source_types.len();
                 combination[j] = Some(source_types[n % length]);
                 n /= length;
@@ -1924,8 +1970,8 @@ impl Relater {
         for combination in &discriminant_combinations {
             let mut has_match = false;
             'outer: for &t in target.types() {
-                for i in 0..source_properties_filtered.len() {
-                    let source_property = source_properties_filtered[i];
+                for (i, element) in source_properties_filtered.iter().enumerate() {
+                    let source_property = *element;
                     let target_property = c.get_property_of_type(t, source_property.name());
                     let Some(target_property) = target_property else {
                         continue 'outer;
@@ -1936,7 +1982,17 @@ impl Relater {
                     // We compare the source property to the target in the context of a single discriminant type.
                     let combination_type = combination[i];
                     let skip_optional = c.strict_null_checks || self.rel() == c.comparable_relation;
-                    let related = self.property_related_to(c, source, target, source_property, target_property, |_, _| combination_type, false /*reportErrors*/, IntersectionState::None, skip_optional /*skipOptional*/);
+                    let related = self.property_related_to(
+                        c,
+                        source,
+                        target,
+                        source_property,
+                        target_property,
+                        |_, _| combination_type,
+                        false, /*reportErrors*/
+                        IntersectionState::None,
+                        skip_optional, /*skipOptional*/
+                    );
                     // If the target property could not be found, or if the properties were not related,
                     // then this constituent is not a match.
                     if related == Ternary::False {
@@ -1955,8 +2011,16 @@ impl Relater {
         }
         // Compare the remaining non-discriminant properties of each match.
         let mut result = Ternary::True;
-        for &t in &matching_types {
-            result &= self.properties_related_to(c, source, t, false /*reportErrors*/, &excluded_properties, false /*optionalsOnly*/, IntersectionState::None);
+        result = match matching_types.iter().try_fold(result, |mut result, &t| {
+            result &= self.properties_related_to(
+                c,
+                source,
+                t,
+                false, /*reportErrors*/
+                &excluded_properties,
+                false, /*optionalsOnly*/
+                IntersectionState::None,
+            );
             if result != Ternary::False {
                 result &= self.signatures_related_to(c, source, t, SignatureKind::Call, false /*reportErrors*/, IntersectionState::None);
                 if result != Ternary::False {
@@ -1966,14 +2030,25 @@ impl Relater {
                         // element types should be sufficiently covered by `propertiesRelatedTo`. It also causes problems
                         // with index type assignability as the types for the excluded discriminants are still included
                         // in the index type.
-                        result &= self.index_signatures_related_to(c, source, t, false /*sourceIsPrimitive*/, false /*reportErrors*/, IntersectionState::None);
+                        result &= self.index_signatures_related_to(
+                            c,
+                            source,
+                            t,
+                            false, /*sourceIsPrimitive*/
+                            false, /*reportErrors*/
+                            IntersectionState::None,
+                        );
                     }
                 }
             }
             if result == Ternary::False {
-                return result;
+                return Err(result);
             }
-        }
+            Ok(result)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         result
     }
 
@@ -2023,9 +2098,13 @@ impl Relater {
                 let target_end_count = get_end_element_count(target.target_tuple_type(), ElementFlags::NonRest);
                 let mut can_exclude_discriminants = excluded_properties.len() != 0;
                 for source_position in 0..source_arity {
-                    let source_flags = if is_tuple_type(source) { source.target_tuple_type().element_infos.get()[source_position as usize].flags } else { ElementFlags::Rest };
+                    let source_flags = if is_tuple_type(source) {
+                        source.target_tuple_type().element_infos.get()[source_position].flags
+                    } else {
+                        ElementFlags::Rest
+                    };
                     let source_position_from_end = source_arity - 1 - source_position;
-                    let target_position: i32;
+                    let target_position;
                     if target_has_rest_element && source_position >= target_start_count {
                         target_position = target_arity - 1 - source_position_from_end.min(target_end_count);
                     } else {
@@ -2037,11 +2116,11 @@ impl Relater {
                         }
                         target_position = source_position;
                     }
-                    let mut target_flags = ElementFlags::None;
-                    if target_position >= 0 {
-                        target_flags = target.target_tuple_type().element_infos.get()[target_position as usize].flags;
-                    }
-                    if target_flags.intersects(ElementFlags::Variadic) && !source_flags.intersects(ElementFlags::Variadic) {
+                    let target_flags =
+                        target.target_tuple_type().element_infos.get()[target_position].flags;
+                    if target_flags.intersects(ElementFlags::Variadic)
+                        && !source_flags.intersects(ElementFlags::Variadic)
+                    {
                         if report_errors {
                             self.report_error(c, &diagnostics::Source_provides_no_match_for_variadic_element_at_position_0_in_target, &[&target_position]);
                         }
@@ -2115,15 +2194,19 @@ impl Relater {
         }
         if is_object_literal_type(target) {
             let source_properties = c.get_properties_of_type(source);
-            for source_prop in exclude_properties(&source_properties, excluded_properties).iter().copied() {
+            if let Some(result) = exclude_properties(&source_properties, excluded_properties).iter().copied().into_iter().find_map(|source_prop| {
                 if c.get_property_of_object_type(target, source_prop.name()).is_none() {
                     if report_errors {
                         let source_prop_string = c.symbol_to_string(source_prop);
                         let target_string = c.type_to_string_exported(target);
                         self.report_error(c, &diagnostics::Property_0_does_not_exist_on_type_1, &[&source_prop_string, &target_string]);
                     }
-                    return Ternary::False;
+                    return Some(Ternary::False);
                 }
+
+                None
+            }) {
+                return result;
             }
         }
         // We only call this for union target types when we're attempting to do excess property checking - in those cases, we want to get _all possible props_
@@ -2347,17 +2430,21 @@ impl Relater {
             return Ternary::False;
         }
         let mut result = Ternary::True;
-        for &source_prop in source_properties.iter() {
+        result = match source_properties.iter().try_fold(result, |mut result, &source_prop| {
             let target_prop = c.get_property_of_object_type(target, source_prop.name());
             let Some(target_prop) = target_prop else {
-                return Ternary::False;
+                return Err(Ternary::False);
             };
             let related = c.compare_properties(source_prop, target_prop, |c, s, t| self.is_related_to_simple(c, s, t));
             if related == Ternary::False {
-                return Ternary::False;
+                return Err(Ternary::False);
             }
             result &= related;
-        }
+            Ok(result)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         result
     }
 
@@ -2400,8 +2487,8 @@ impl Relater {
             // method). Simply do a pairwise comparison of the signatures in the two signature lists instead
             // of the much more expensive N * M comparison matrix we explore below. We erase type parameters
             // as they are known to always be the same.
-            for i in 0..target_signatures.len() {
-                let related = self.signature_related_to(c, source_signatures[i], target_signatures[i], true /*erase*/, report_errors, intersection_state);
+            for (i, element) in target_signatures.iter().enumerate() {
+                let related = self.signature_related_to(c, source_signatures[i], *element, true /*erase*/, report_errors, intersection_state);
                 if related == Ternary::False {
                     return Ternary::False;
                 }
@@ -2504,8 +2591,15 @@ impl Relater {
             return Ternary::False;
         }
         let mut result = Ternary::True;
-        for i in 0..source_signatures.len() {
-            let related = c.compare_signatures_identical(source_signatures[i], target_signatures[i], false /*partialMatch*/, false /*ignoreThisTypes*/, false /*ignoreReturnTypes*/, |c, s, t| self.is_related_to_simple(c, s, t));
+        for (i, element) in source_signatures.iter().enumerate() {
+            let related = c.compare_signatures_identical(
+                *element,
+                target_signatures[i],
+                false, /*partialMatch*/
+                false, /*ignoreThisTypes*/
+                false, /*ignoreReturnTypes*/
+                |c, s, t| self.is_related_to_simple(c, s, t),
+            );
             if related == Ternary::False {
                 return Ternary::False;
             }
@@ -2523,8 +2617,12 @@ impl Relater {
         let string_type = c.string_type;
         let target_has_string_index = index_infos.iter().any(|info| info.key_type() == string_type);
         let mut result = Ternary::True;
-        for &target_info in index_infos {
-            let related = if self.rel() != c.strict_subtype_relation && !source_is_primitive && target_has_string_index && target_info.value_type().flags().intersects(TypeFlags::Any) {
+        result = match index_infos.iter().try_fold(result, |mut result, &target_info| {
+            let related = if self.rel() != c.strict_subtype_relation
+                && !source_is_primitive
+                && target_has_string_index
+                && target_info.value_type().flags().intersects(TypeFlags::Any)
+            {
                 Ternary::True
             } else if c.is_generic_mapped_type(source) && target_has_string_index {
                 let template_type = c.get_template_type_from_mapped_type(source);
@@ -2533,10 +2631,14 @@ impl Relater {
                 self.type_related_to_index_info(c, source, target_info, report_errors, intersection_state)
             };
             if related == Ternary::False {
-                return Ternary::False;
+                return Err(Ternary::False);
             }
             result &= related;
-        }
+            Ok(result)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         result
     }
 
@@ -2572,10 +2674,8 @@ impl Checker {
     // relater.go:4656
     pub(crate) fn is_object_type_with_inferable_index(&mut self, t: P<Type>) -> bool {
         if t.flags().intersects(TypeFlags::Intersection) {
-            for &t in t.types() {
-                if !self.is_object_type_with_inferable_index(t) {
-                    return false;
-                }
+            if t.types().iter().any(|&t| !self.is_object_type_with_inferable_index(t)) {
+                return false;
             }
             return true;
         }
@@ -2621,15 +2721,19 @@ impl Relater {
                 result &= related;
             }
         }
-        for info in c.get_index_infos_of_type(source).iter().copied() {
+        result = match c.get_index_infos_of_type(source).iter().copied().try_fold(result, |mut result, info| {
             if c.is_applicable_index_type(info.key_type(), key_type) {
                 let related = self.index_info_related_to(c, info, target_info, report_errors, intersection_state);
                 if related == Ternary::False {
-                    return Ternary::False;
+                    return Err(Ternary::False);
                 }
                 result &= related;
             }
-        }
+            Ok(result)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         result
     }
 
@@ -2656,14 +2760,18 @@ impl Relater {
         if source_infos.len() != target_infos.len() {
             return Ternary::False;
         }
-        for &target_info in target_infos {
+        if let Some(result) = target_infos.iter().find_map(|&target_info| {
             let source_info = c.get_index_info_of_type(source, target_info.key_type());
             if !(source_info.is_some()
                 && self.is_related_to(c, source_info.unwrap().value_type(), target_info.value_type(), RecursionFlags::Both, false) != Ternary::False
                 && source_info.unwrap().is_readonly() == target_info.is_readonly())
             {
-                return Ternary::False;
+                return Some(Ternary::False);
             }
+
+            None
+        }) {
+            return result;
         }
         Ternary::True
     }
@@ -2697,11 +2805,14 @@ impl Relater {
         } else if original_target.flags().intersects(TypeFlags::Intersection) && original_target.object_flags_lazy().intersects(ObjectFlags::IsNeverIntersection) {
             let mut message = &diagnostics::The_intersection_0_was_reduced_to_never_because_property_1_has_conflicting_types_in_some_constituents;
             let mut prop: Option<P<Symbol>> = None;
-            for p in c.get_properties_of_union_or_intersection_type(original_target).iter().copied() {
-                if c.is_discriminant_with_never_type(p) {
-                    prop = Some(p);
-                    break;
-                }
+            if let Some(p) = c
+                .get_properties_of_union_or_intersection_type(original_target)
+                .iter()
+                .copied()
+                .into_iter()
+                .find_map(|p| if c.is_discriminant_with_never_type(p) { Some(p) } else { None })
+            {
+                prop = Some(p);
             }
             if prop.is_none() {
                 message = &diagnostics::The_intersection_0_was_reduced_to_never_because_property_1_exists_in_multiple_constituents_and_is_private_in_some;
@@ -2897,7 +3008,11 @@ pub(crate) fn add_to_dotted_name(head: &str, tail: &str) -> String {
 
 impl Relater {
     // relater.go:4934
-    pub(crate) fn get_chain_message(&self, _c: &mut Checker, index: i32) -> Option<&'static Message> {
+    pub(crate) fn get_chain_message(
+        &self,
+        _c: &mut Checker,
+        index: usize,
+    ) -> Option<&'static Message> {
         let mut index = index;
         let mut e = self.error_chain.get();
         loop {
@@ -2918,12 +3033,16 @@ impl Relater {
     // args: &[&dyn Display] -> &[Option<&str>] (Go passes nil as a wildcard; stored chain args are strings).
     pub(crate) fn chain_args_match(&self, _c: &mut Checker, args: &[Option<&str>]) -> bool {
         let chain = self.error_chain.get().unwrap();
-        for (i, a) in args.iter().enumerate() {
+        if args.iter().enumerate().any(|(i, a)| {
             if let Some(a) = a {
                 if *a != chain.args[i] {
-                    return false;
+                    return true;
                 }
             }
+
+            false
+        }) {
+            return false;
         }
         true
     }
@@ -2949,7 +3068,7 @@ pub(crate) fn is_conversion_or_interface_implementation_message(message: &'stati
 }
 
 // relater.go:4976
-pub(crate) fn chain_depth(chain: Option<P<ErrorChain>>) -> i32 {
+pub(crate) fn chain_depth(chain: Option<P<ErrorChain>>) -> usize {
     let mut chain = chain;
     let mut depth = 0;
     while let Some(c) = chain {
@@ -2973,26 +3092,11 @@ impl Checker {
     // relater.go:4995
     pub(crate) fn is_type_derived_from(&mut self, source: P<Type>, target: P<Type>) -> bool {
         if source.flags().intersects(TypeFlags::Union) {
-            for &t in source.as_union_type().types.get() {
-                if !self.is_type_derived_from(t, target) {
-                    return false;
-                }
-            }
-            true
+            !(source.as_union_type().types.get().iter().any(|&t| !self.is_type_derived_from(t, target)))
         } else if target.flags().intersects(TypeFlags::Union) {
-            for &t in target.as_union_type().types.get() {
-                if self.is_type_derived_from(source, t) {
-                    return true;
-                }
-            }
-            false
+            target.as_union_type().types.get().iter().any(|&t| self.is_type_derived_from(source, t))
         } else if source.flags().intersects(TypeFlags::Intersection) {
-            for &t in source.as_intersection_type().types.get() {
-                if self.is_type_derived_from(t, target) {
-                    return true;
-                }
-            }
-            false
+            source.as_intersection_type().types.get().iter().any(|&t| self.is_type_derived_from(t, target))
         } else if source.flags().intersects(TypeFlags::InstantiableNonPrimitive) {
             let constraint = match self.get_base_constraint_of_type(source) {
                 Some(constraint) => constraint,

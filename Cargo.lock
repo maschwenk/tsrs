@@ -90,6 +90,16 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
 
 [[package]]
+name = "errno"
+version = "0.3.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "39cab71617ae0d63f51a36d69f866391735b51691dbda63cf6f96d042b63efeb"
+dependencies = [
+ "libc",
+ "windows-sys",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -133,6 +143,12 @@ dependencies = [
  "cmake",
  "libc",
 ]
+
+[[package]]
+name = "linux-raw-sys"
+version = "0.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "32a66949e030da00e8c7d4434b251670a91556f4144941d37452769c25d58a53"
 
 [[package]]
 name = "memchr"
@@ -223,6 +239,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d"
 
 [[package]]
+name = "rustix"
+version = "1.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "891efababe418670775f199f0d233d84843c227a0949a883ce15b37c78d6629d"
+dependencies = [
+ "bitflags",
+ "errno",
+ "libc",
+ "linux-raw-sys",
+ "windows-sys",
+]
+
+[[package]]
 name = "serde"
 version = "1.0.229"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -299,7 +328,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_api"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "serde_json",
@@ -323,7 +352,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_api_codec"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
@@ -336,7 +365,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_api_transport"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "serde",
@@ -347,9 +376,10 @@ dependencies = [
 
 [[package]]
 name = "tsrs_ast"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
+ "hashbrown",
  "memchr",
  "rustc-hash",
  "tsrs_core",
@@ -359,7 +389,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_astnav"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "tsrs_ast",
  "tsrs_core",
@@ -368,7 +398,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_binder"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "rustc-hash",
@@ -381,7 +411,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_checker"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "hashbrown",
@@ -403,7 +433,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_cli"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "libc",
  "libmimalloc-sys2",
@@ -421,7 +451,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_compiler"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rayon",
  "rustc-hash",
@@ -446,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_contentmapper"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
@@ -461,7 +491,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_contentmappertest"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_contentmapper",
@@ -473,7 +503,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_core"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "dragonbox_ecma",
  "hashbrown",
@@ -488,7 +518,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_declarations"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
@@ -504,14 +534,14 @@ dependencies = [
 
 [[package]]
 name = "tsrs_diagnostics"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
 ]
 
 [[package]]
 name = "tsrs_execute"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "libc",
  "rustc-hash",
@@ -530,7 +560,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_fourslash"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "regex",
  "rustc-hash",
@@ -551,7 +581,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_fswatch"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "libc",
  "rustc-hash",
@@ -560,7 +590,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_incremental"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "rayon",
@@ -580,7 +610,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_ipc"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_core",
@@ -588,7 +618,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_ls"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "indexmap",
@@ -615,7 +645,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_lsp"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "indexmap",
  "rustc-hash",
@@ -631,7 +661,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_lsproto"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_core",
@@ -640,7 +670,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_module"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "rustc-hash",
@@ -652,7 +682,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_modulespecifiers"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "regex",
  "rustc-hash",
@@ -664,7 +694,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_parser"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "mimalloc-safe",
@@ -678,7 +708,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_printer"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "rustc-hash",
@@ -692,7 +722,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_project"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
@@ -714,7 +744,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_projectutil"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_core",
@@ -722,7 +752,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_pseudochecker"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "tsrs_ast",
  "tsrs_core",
@@ -730,7 +760,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_scanner"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "memchr",
@@ -742,7 +772,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_sourcemap"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
@@ -752,7 +782,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_spanmap"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "tsrs_core",
@@ -760,7 +790,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_testrunner"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "indexmap",
  "mimalloc-safe",
@@ -784,7 +814,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_transformers"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "rustc-hash",
@@ -801,7 +831,7 @@ dependencies = [
 
 [[package]]
 name = "tsrs_tsoptions"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "rustc-hash",
  "tsrs_ast",
@@ -816,17 +846,18 @@ dependencies = [
 
 [[package]]
 name = "tsrs_vfs"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "bitflags",
  "rayon",
  "rustc-hash",
+ "rustix",
  "tsrs_core",
 ]
 
 [[package]]
 name = "tsrs_wasm"
-version = "0.13.0"
+version = "0.14.0"
 dependencies = [
  "tsrs_api",
  "tsrs_ast",
@@ -850,6 +881,21 @@ name = "unicode-ident"
 version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d245f478577f809a851594d02313b640fb437e0bb33866753cff937863096954"
+
+[[package]]
+name = "windows-link"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f0805222e57f7521d6a62e36fa9163bc891acd422f971defe97d64e70d0a4fe5"
+
+[[package]]
+name = "windows-sys"
+version = "0.61.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc"
+dependencies = [
+ "windows-link",
+]
 
 [[package]]
 name = "xxhash-rust"

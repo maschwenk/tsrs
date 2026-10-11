@@ -517,19 +517,19 @@ impl kqueueBackend {
             // exist on disk.
             let mut to_remove = Vec::new();
             if let Some(m) = st.entry_maps.get(&map_id) {
-                #[expect(clippy::iter_over_hash_type, reason = "stale children are removed from disjoint subtrees and from per-path event entries; Go ranges the map too")]
-                for p in m.keys() {
+                // stale children are removed from disjoint subtrees and from per-path event entries; Go ranges the map too
+                to_remove.extend(m.keys().filter_map(|p| {
                     let Some(rest) = p.strip_prefix(&dir_start) else {
-                        continue;
+                        return None;
                     };
                     if rest.contains('/') {
-                        continue;
+                        return None;
                     }
                     if snapshot.current_display_paths.contains(p) {
-                        continue;
+                        return None;
                     }
-                    to_remove.push(p.clone());
-                }
+                    Some(p.clone())
+                }));
             }
             for p in to_remove {
                 sub.dir_watch.events.remove(&p);
@@ -695,11 +695,12 @@ impl kqState {
 // readEntries lists directory entries (excluding "." and "..") at path. (Go `os.ReadDir` sorts by name.)
 fn read_entries(path: &str) -> Result<Vec<(String, bool)>, Error> {
     let mut out = Vec::new();
-    for ent in std::fs::read_dir(path).map_err(Error::from_io)? {
+    out = (std::fs::read_dir(path).map_err(Error::from_io)?).try_fold(out, |mut out, ent| {
         let ent = ent.map_err(Error::from_io)?;
         let is_dir = ent.file_type().map(|t| t.is_dir()).unwrap_or(false);
         out.push((ent.file_name().to_string_lossy().into_owned(), is_dir));
-    }
+        Ok::<_, Error>(out)
+    })?;
     out.sort();
     Ok(out)
 }
@@ -808,9 +809,7 @@ impl watcherImpl for kqueueBackend {
             if !removed_any {
                 continue;
             }
-            for s in list.iter().filter(|s| dwKey(Arc::clone(&s.dir_watch)) == key) {
-                maps_of_watch.insert(s.entries);
-            }
+            maps_of_watch.extend(list.iter().filter(|s| dwKey(Arc::clone(&s.dir_watch)) == key).map(|s| s.entries));
             let first_fd = list[0].fd;
             let kept: Vec<kqueueSubscription> = list.iter().filter(|s| dwKey(Arc::clone(&s.dir_watch)) != key).cloned().collect();
             if kept.is_empty() {

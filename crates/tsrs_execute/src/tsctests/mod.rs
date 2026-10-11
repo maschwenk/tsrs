@@ -95,9 +95,7 @@ fn load_scenario(path: &FsPath) -> scenario {
     let Value::Object(o) = tsrs_core::json::unmarshal(&text).unwrap() else { panic!("scenario") };
     let mut env = FxHashMap::default();
     if let Some(Value::Object(e)) = o.get("env") {
-        for (k, v) in e {
-            env.insert(k.clone(), s(Some(v)));
-        }
+        env.extend(e.into_iter().map(|(k, v)| (k.clone(), s(Some(v)))));
     }
     let files = match o.get("files") {
         Some(Value::Array(a)) => a
@@ -148,16 +146,12 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
     let clock = TestClock::new();
     let libs: FxHashSet<String> = test.default_libs.iter().cloned().collect();
     let mut initial: Vec<(String, MapFile)> = Vec::new();
-    for f in &test.files {
+    initial.extend(test.files.iter().filter_map(|f| {
         if libs.contains(&f.path) {
-            continue;
+            return None;
         }
-        if !f.symlink.is_empty() {
-            initial.push((f.path.clone(), vfstest::symlink(&f.symlink)));
-        } else {
-            initial.push((f.path.clone(), MapFile::from(f.content.as_str())));
-        }
-    }
+        if !f.symlink.is_empty() { Some((f.path.clone(), vfstest::symlink(&f.symlink))) } else { Some((f.path.clone(), MapFile::from(f.content.as_str()))) }
+    }));
     let clock_fn = clock.clone();
     let fs = Arc::new(vfstest::from_map_with_clock(initial, !test.ignore_case, Arc::new(move || clock_fn.now())));
     let mut lib_files: Vec<&scenarioFile> = test.files.iter().filter(|f| libs.contains(&f.path)).collect();

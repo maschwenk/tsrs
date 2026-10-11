@@ -93,6 +93,12 @@ func (g *gen) fArgs(sig *types.Signature, owner string) []string {
 
 // args translates call arguments for signature sig. harness: function literals receive the FourslashTest first.
 func (g *gen) args(e *ast.CallExpr, sig *types.Signature, harness bool) []string {
+	return g.argsWithClosureParamOverride(e, sig, harness, -1, -1, "")
+}
+
+// argsWithClosureParamOverride is args with one Rust-only callback parameter type override. Some Rust APIs use a
+// more precise type than their Go source, whose collection indexes are plain int.
+func (g *gen) argsWithClosureParamOverride(e *ast.CallExpr, sig *types.Signature, harness bool, closureArg, closureParam int, rustType string) []string {
 	params := sig.Params()
 	var out []string
 	n := params.Len()
@@ -116,7 +122,11 @@ func (g *gen) args(e *ast.CallExpr, sig *types.Signature, harness bool) []string
 		}
 		pt := params.At(i).Type()
 		if fl, ok := a.(*ast.FuncLit); ok {
-			out = append(out, g.funcLit(fl, harness, harness))
+			if i == closureArg {
+				out = append(out, g.funcLitWithParamOverride(fl, harness, harness, closureParam, rustType))
+			} else {
+				out = append(out, g.funcLit(fl, harness, harness))
+			}
 			continue
 		}
 		out = append(out, g.expr(a, pt, mParam))
@@ -179,6 +189,9 @@ func (g *gen) methodCall(e *ast.CallExpr, fun *ast.SelectorExpr, sel *types.Sele
 		harness = true
 	}
 	args := g.args(e, sig, harness)
+	if isFourslashTestPtr(recvT) && name == "GoToEachMarker" {
+		args = g.argsWithClosureParamOverride(e, sig, harness, 2, 1, "usize")
+	}
 	if isFourslashTestPtr(recvT) && g.curF != "" {
 		// Arguments that pass the FourslashTest to a closure are evaluated before the receiver is borrowed.
 		hoist := false
@@ -369,6 +382,10 @@ func (g *gen) closureBody(fl *ast.FuncLit, sig *types.Signature) string {
 // funcLit translates a closure. takesF: the FourslashTest is passed as the first parameter (named like the
 // enclosing one, shadowing it).
 func (g *gen) funcLit(fl *ast.FuncLit, takesF bool, harness bool) string {
+	return g.funcLitWithParamOverride(fl, takesF, harness, -1, "")
+}
+
+func (g *gen) funcLitWithParamOverride(fl *ast.FuncLit, takesF bool, harness bool, overrideParam int, rustType string) string {
 	sig := g.typeOf(fl).(*types.Signature)
 	scope := g.saveScope()
 	var params []string
@@ -379,7 +396,7 @@ func (g *gen) funcLit(fl *ast.FuncLit, takesF bool, harness bool) string {
 	if takesF {
 		params = append(params, fName+": &mut fourslash::FourslashTest")
 	}
-	ps, prologue := g.params(sig, fl.Type.Params, true)
+	ps, prologue := g.params(sig, fl.Type.Params, true, overrideParam, rustType)
 	params = append(params, ps...)
 	g.curF = fName
 	if !takesF && harness {

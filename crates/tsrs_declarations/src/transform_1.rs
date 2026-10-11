@@ -140,18 +140,35 @@ impl DeclarationTransformer {
                 // to handle
                 // ... parameters, /** @internal */
                 // public param: string
-                let trailing_pos = scanner::skip_trivia_ex(text, previous_sibling.end() + 1, Some(&scanner::SkipTriviaOptions { stop_at_comments: true, ..Default::default() }));
-                for comment in scanner::get_trailing_comment_ranges(text, trailing_pos) {
-                    comment_ranges.push(comment);
-                }
-                for comment in scanner::get_leading_comment_ranges(text, node.pos()) {
-                    comment_ranges.push(comment);
-                }
+                let trailing_pos = scanner::skip_trivia_ex(
+                    text,
+                    previous_sibling
+                        .end()
+                        .expect_source("parsed nodes have source positions")
+                        .checked_add(1)
+                        .expect("source position overflow"),
+                    Some(&scanner::SkipTriviaOptions {
+                        stop_at_comments: true,
+                        ..Default::default()
+                    }),
+                );
+                comment_ranges.extend(scanner::get_trailing_comment_ranges(text, trailing_pos));
+                comment_ranges.extend(scanner::get_leading_comment_ranges(
+                    text,
+                    node.pos()
+                        .expect_source("parsed nodes have source positions"),
+                ));
             } else {
-                let trailing_pos = scanner::skip_trivia_ex(text, node.pos(), Some(&scanner::SkipTriviaOptions { stop_at_comments: true, ..Default::default() }));
-                for comment in scanner::get_trailing_comment_ranges(text, trailing_pos) {
-                    comment_ranges.push(comment);
-                }
+                let trailing_pos = scanner::skip_trivia_ex(
+                    text,
+                    node.pos()
+                        .expect_source("parsed nodes have source positions"),
+                    Some(&scanner::SkipTriviaOptions {
+                        stop_at_comments: true,
+                        ..Default::default()
+                    }),
+                );
+                comment_ranges.extend(scanner::get_trailing_comment_ranges(text, trailing_pos));
             }
 
             if !comment_ranges.is_empty() {
@@ -160,12 +177,10 @@ impl DeclarationTransformer {
             return false;
         }
 
-        for comment_range in self.get_leading_comment_ranges_of_node(parse_tree_node, source_file) {
-            if has_internal_annotation(comment_range, source_file) {
-                return true;
-            }
-        }
-        false
+        self
+            .get_leading_comment_ranges_of_node(parse_tree_node, source_file)
+            .into_iter()
+            .any(|comment_range| has_internal_annotation(comment_range, source_file))
     }
 
     // transform.go:203
@@ -173,7 +188,12 @@ impl DeclarationTransformer {
         if node.kind() == Kind::JsxText {
             return Vec::new();
         }
-        scanner::get_leading_comment_ranges(source_file.text(), node.pos()).collect()
+        scanner::get_leading_comment_ranges(
+            source_file.text(),
+            node.pos()
+                .expect_source("parsed nodes have source positions"),
+        )
+        .collect()
     }
 }
 
@@ -443,16 +463,16 @@ impl DeclarationTransformer {
         let mut results: Vec<P<FileReference>> = Vec::new();
         // Handle path rewrites for triple slash ref comments
         let raw_referenced_files = self.raw_referenced_files.borrow().clone();
-        for pair in raw_referenced_files {
+        results.extend(raw_referenced_files.into_iter().filter_map(|pair| {
             let source_file = pair.file;
             let ref_ = pair.ref_;
 
             if !ref_.preserve {
-                continue;
+                return None;
             }
 
             let Some(file) = self.host.get_source_file_from_reference(source_file, ref_) else {
-                continue;
+                return None;
             };
 
             let decl_file_name: String;
@@ -473,18 +493,26 @@ impl DeclarationTransformer {
             // Should only be missing if the source file is missing a fileName (at which point we can't name a reference to it anyway)
             // TODO: Shouldn't this be a crash or assert instead of a silent continue?
             if decl_file_name.is_empty() {
-                continue;
+                return None;
             }
 
             let file_name = tspath::get_relative_path_to_directory_or_url(
                 output_file_path,
                 &decl_file_name,
                 false, // TODO: Probably unsafe to assume this isn't a URL, but that's what strada does
-                &tspath::ComparePathsOptions { current_directory: self.host.get_current_directory().to_string(), use_case_sensitive_file_names: self.host.use_case_sensitive_file_names() },
+                &tspath::ComparePathsOptions {
+                    current_directory: self.host.get_current_directory().to_string(),
+                    use_case_sensitive_file_names: self.host.use_case_sensitive_file_names(),
+                },
             );
 
-            results.push(P::new(FileReference { text_range: tsrs_core::TextRange::new(-1, -1), file_name, resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
-        }
+            Some(P::new(FileReference {
+                text_range: tsrs_core::TextRange::synthetic(),
+                file_name,
+                resolution_mode: ref_.resolution_mode,
+                preserve: ref_.preserve,
+            }))
+        }));
         results
     }
 
@@ -492,12 +520,17 @@ impl DeclarationTransformer {
     pub(crate) fn get_lib_references(&self) -> Vec<P<FileReference>> {
         let mut result: Vec<P<FileReference>> = Vec::new();
         // clone retained references
-        for ref_ in self.raw_lib_reference_directives.borrow().iter() {
+        result.extend(self.raw_lib_reference_directives.borrow().iter().filter_map(|ref_| {
             if !ref_.preserve {
-                continue;
+                return None;
             }
-            result.push(P::new(FileReference { text_range: tsrs_core::TextRange::new(-1, -1), file_name: ref_.file_name.clone(), resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
-        }
+            Some(P::new(FileReference {
+                text_range: tsrs_core::TextRange::synthetic(),
+                file_name: ref_.file_name.clone(),
+                resolution_mode: ref_.resolution_mode,
+                preserve: ref_.preserve,
+            }))
+        }));
         result
     }
 
@@ -505,12 +538,17 @@ impl DeclarationTransformer {
     pub(crate) fn get_type_references(&self) -> Vec<P<FileReference>> {
         let mut result: Vec<P<FileReference>> = Vec::new();
         // clone retained references
-        for ref_ in self.raw_type_reference_directives.borrow().iter() {
+        result.extend(self.raw_type_reference_directives.borrow().iter().filter_map(|ref_| {
             if !ref_.preserve {
-                continue;
+                return None;
             }
-            result.push(P::new(FileReference { text_range: tsrs_core::TextRange::new(-1, -1), file_name: ref_.file_name.clone(), resolution_mode: ref_.resolution_mode, preserve: ref_.preserve }));
-        }
+            Some(P::new(FileReference {
+                text_range: tsrs_core::TextRange::synthetic(),
+                file_name: ref_.file_name.clone(),
+                resolution_mode: ref_.resolution_mode,
+                preserve: ref_.preserve,
+            }))
+        }));
         result
     }
 
@@ -819,9 +857,9 @@ impl DeclarationTransformer {
 
 // transform.go:859
 pub(crate) fn has_any_binding_initializers(binding_pattern: P<Node>) -> bool {
-    for &elem in binding_pattern.as_binding_pattern().elements.nodes() {
+    if binding_pattern.as_binding_pattern().elements.nodes().iter().any(|&elem| {
         if !ast::is_binding_element(elem) {
-            continue;
+            return false;
         }
         let e = elem.as_binding_element();
         if e.initializer().is_some() {
@@ -832,6 +870,10 @@ pub(crate) fn has_any_binding_initializers(binding_pattern: P<Node>) -> bool {
                 return true;
             }
         }
+
+        false
+    }) {
+        return true;
     }
     false
 }
@@ -852,12 +894,12 @@ impl DeclarationTransformer {
 
             // `const {x, y: z} = require("something")` -> `import {x, y as z} from "something"`
             let mut import_specifiers: Vec<P<Node>> = Vec::new();
-            for &elem in name.as_binding_pattern().elements.nodes() {
+            import_specifiers.extend(name.as_binding_pattern().elements.nodes().iter().filter_map(|&elem| {
                 if !ast::is_identifier(elem.name().unwrap()) {
-                    continue; // nested destructuring, bail
+                    return None; // nested destructuring, bail
                 }
-                import_specifiers.push(self.factory().new_import_specifier(false, elem.property_name(), elem.name().unwrap()));
-            }
+                Some(self.factory().new_import_specifier(false, elem.property_name(), elem.name().unwrap()))
+            }));
             Some(self.factory().new_import_declaration(
                 None,
                 Some(self.factory().new_import_clause(Kind::Unknown, None, Some(self.factory().new_named_imports(self.factory().new_node_list(import_specifiers))))),
@@ -870,16 +912,18 @@ impl DeclarationTransformer {
     // transform.go:907
     pub(crate) fn recreate_binding_pattern(&self, input: P<Node>) -> Option<P<Node>> {
         let mut results: Vec<P<Node>> = Vec::new();
-        for &elem in input.as_binding_pattern().elements.nodes() {
+        results = input.as_binding_pattern().elements.nodes().iter().fold(results, |mut results, &elem| {
             let Some(result) = self.recreate_binding_element(elem) else {
-                continue;
+                return results;
             };
             if result.kind() == Kind::SyntaxList {
                 results.extend_from_slice(result.as_syntax_list().children);
             } else {
                 results.push(result);
             }
-        }
+
+            results
+        });
         if results.is_empty() {
             return None;
         }

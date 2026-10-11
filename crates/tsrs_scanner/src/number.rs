@@ -18,12 +18,16 @@ fn parse_decimal(text: &str) -> Option<f64> {
     // Every decimal integer of at most 19 digits fits in a u64.
     if text.len() <= 19 {
         let mut value = 0_u64;
-        for byte in text.bytes() {
+        value = match text.bytes().try_fold(value, |mut value, byte| {
             if !byte.is_ascii_digit() {
-                return text.parse().ok();
+                return Err(text.parse().ok());
             }
             value = value * 10 + u64::from(byte & 15);
-        }
+            Ok(value)
+        }) {
+            Ok(value) => value,
+            Err(value) => return value,
+        };
         return Some(value as f64);
     }
     text.parse().ok()
@@ -46,9 +50,7 @@ fn parse_radix<const BITS: u32>(digits: &[u8]) -> Option<f64> {
         return parse_radix_slow::<BITS>(digits);
     }
     let mut value = 0_u64;
-    for &byte in digits {
-        value = (value << BITS) | u64::from(digit::<BITS>(byte)?);
-    }
+    value = digits.iter().try_fold(value, |value, &byte| Some((value << BITS) | u64::from(digit::<BITS>(byte)?)))?;
     Some(value as f64)
 }
 

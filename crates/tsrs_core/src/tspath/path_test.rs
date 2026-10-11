@@ -480,10 +480,11 @@ fn test_has_relative_path_segment_matches_segment_split() {
     for len in 0..=11 {
         for mut code in 0..3usize.pow(len) {
             bytes.clear();
-            for _ in 0..len {
-                bytes.push(alphabet[code % 3]);
+            bytes.extend((0..len).map(|_| {
+                let byte = alphabet[code % 3];
                 code /= 3;
-            }
+                byte
+            }));
             let p = std::str::from_utf8(&bytes).unwrap();
             assert_eq!(has_relative_path_segment(p), by_segments(p), "{p}");
             let prefixed = format!("/ab/c{p}");
@@ -511,9 +512,7 @@ fn test_path_is_relative() {
         ("c:/foo/bar".into(), false),
     ];
     let old = tests.clone();
-    for (p, r) in old {
-        tests.push((p.replace('/', "\\"), r));
-    }
+    tests.extend(old.into_iter().map(|(p, r)| (p.replace('/', "\\"), r)));
     for (p, expected) in tests {
         assert_eq!(path_is_relative(&p), expected, "{p}");
     }
@@ -569,7 +568,10 @@ fn test_get_common_parents() {
 #[test]
 fn test_untitled_path_handling() {
     let untitled_path = "^/untitled/ts-nul-authority/Untitled-2";
-    assert_eq!(get_encoded_root_length(untitled_path), 2);
+    assert_eq!(
+        get_encoded_root_length(untitled_path),
+        EncodedRootLength::Disk(2)
+    );
     assert!(is_rooted_disk_path(untitled_path));
     let current_dir = "/home/user/project";
     assert_eq!(to_path(untitled_path, current_dir, true).as_str(), "^/untitled/ts-nul-authority/Untitled-2");
@@ -588,7 +590,15 @@ fn test_untitled_path_edge_cases() {
         ("^/untitled/ts-nul-authority/path/with/deeper/structure", 2, true),
     ];
     for (path, expected, is_rooted) in cases {
-        assert_eq!(get_encoded_root_length(path), expected, "{path}");
+        assert_eq!(
+            get_encoded_root_length(path),
+            if expected == 0 {
+                EncodedRootLength::Relative
+            } else {
+                EncodedRootLength::Disk(expected)
+            },
+            "{path}"
+        );
         assert_eq!(is_rooted_disk_path(path), is_rooted, "{path}");
     }
 }

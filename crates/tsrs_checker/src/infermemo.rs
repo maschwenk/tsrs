@@ -297,13 +297,21 @@ impl Checker {
             return false;
         }
         key.clear();
-        key.extend_from_slice(&[source.id.0, target.id.0, n.priority.get().bits() as u32, u32::from(n.contravariant.get()), inferences.len() as u32]);
+        key.extend_from_slice(&[
+            source.id.0,
+            target.id.0,
+            n.priority.get().memo_bits(),
+            u32::from(n.contravariant.get()),
+            inferences.len() as u32,
+        ]);
         for info in inferences.iter() {
             key.extend_from_slice(&[
                 info.type_parameter.get().map_or(0, |t| t.id.0),
-                info.priority.get().bits() as u32,
+                info.priority.get().memo_bits(),
                 u32::from(info.top_level.get()) | u32::from(info.is_fixed.get()) << 1,
-                info.implied_arity.get() as u32,
+                info.implied_arity
+                    .get()
+                    .map_or(u32::MAX, |arity| arity as u32),
             ]);
             for list in [&info.candidates, &info.contra_candidates] {
                 list.with_slice(|types| {

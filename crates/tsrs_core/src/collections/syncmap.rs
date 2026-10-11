@@ -105,11 +105,7 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
     pub fn range(&self, mut f: impl FnMut(&K, &V) -> bool) {
         // Go's sync.Map.Range visits a snapshot in no particular order; this visits the shards in index order.
         let entries: Vec<(K, V)> = self.shards.iter().flat_map(|s| s.read().unwrap().iter().cloned().collect::<Vec<_>>()).collect();
-        for (k, v) in &entries {
-            if !f(k, v) {
-                break;
-            }
-        }
+        entries.iter().all(|(k, v)| f(k, v));
     }
 
     // Size returns the approximate number of items in the map.

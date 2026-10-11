@@ -58,8 +58,8 @@ impl From<P<Signature>> for TypeSystemEntity {
     }
 }
 
-#[repr(i32)]
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
+#[repr(u32)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub enum TypeSystemPropertyName {
     #[default]
     Type,
@@ -102,7 +102,7 @@ pub struct InferenceContextInfo {
 
 // WideningKind
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum WideningKind {
     #[default]
@@ -130,7 +130,7 @@ pub struct EnumRelationKey {
 
 // TypeCacheKind
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum CachedTypeKind {
     #[default]
@@ -607,9 +607,9 @@ pub struct InferenceInfo {
     pub contra_candidates: LazyVec<P<Type>>, // Candidates in contravariant positions
     pub inferred_type: Cell<Option<P<Type>>>, // Cache for resolved inferred type
     pub priority: Cell<InferencePriority>, // Priority of current inference set
-    pub top_level: Cell<bool>, // True if all inferences are to top level occurrences
-    pub is_fixed: Cell<bool>, // True if inferences are fixed
-    pub implied_arity: Cell<i32>, // Implied arity (or -1)
+    pub top_level: Cell<bool>,        // True if all inferences are to top level occurrences
+    pub is_fixed: Cell<bool>,         // True if inferences are fixed
+    pub implied_arity: OptionalCountCell,
 }
 
 #[cfg(target_pointer_width = "64")]
@@ -617,25 +617,94 @@ const _: () = assert!(std::mem::size_of::<InferenceInfo>() == if tsrs_core::COMP
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<InferenceInfo>() == 28);
 
-bitflags! {
-    #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct InferencePriority: i32 {
-        const None = 0;
-        const NakedTypeVariable = 1 << 0; // Naked type variable in union or intersection type
-        const SpeculativeTuple = 1 << 1; // Speculative tuple inference
-        const SubstituteSource = 1 << 2; // Source of inference originated within a substitution type's substitute
-        const HomomorphicMappedType = 1 << 3; // Reverse inference for homomorphic mapped type
-        const PartialHomomorphicMappedType = 1 << 4; // Partial reverse inference for homomorphic mapped type
-        const MappedTypeConstraint = 1 << 5; // Reverse inference for mapped type
-        const ContravariantConditional = 1 << 6; // Conditional type in contravariant position
-        const ReturnType = 1 << 7; // Inference made from return type of generic function
-        const LiteralKeyof = 1 << 8; // Inference made from a string literal to a keyof T
-        const NoConstraints = 1 << 9; // Don't infer from constraints of instantiable types
-        const AlwaysStrict = 1 << 10; // Always use strict rules for contravariant inferences
-        const MaxValue = 1 << 11; // Seed for inference priority tracking
-        const Circularity = -1; // Inference circularity (value less than all other priorities)
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+enum InferencePriorityRepr {
+    Circularity,
+    // Store bits + 1 so zero remains the niche for `Circularity` and the wrapper stays four bytes.
+    Bits(std::num::NonZeroU32),
+}
 
-        const PriorityImpliesCombination = Self::ReturnType.bits() | Self::MappedTypeConstraint.bits() | Self::LiteralKeyof.bits(); // These priorities imply that the resulting type should be a combination of all candidates
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct InferencePriority(InferencePriorityRepr);
+
+#[expect(non_upper_case_globals, reason = "names match the upstream inference priorities")]
+impl InferencePriority {
+    pub const Circularity: Self = Self(InferencePriorityRepr::Circularity);
+    pub const None: Self = Self::from_bits(0);
+    pub const NakedTypeVariable: Self = Self::from_bits(1 << 0); // Naked type variable in union or intersection type
+    pub const SpeculativeTuple: Self = Self::from_bits(1 << 1); // Speculative tuple inference
+    pub const SubstituteSource: Self = Self::from_bits(1 << 2); // Source of inference originated within a substitution type's substitute
+    pub const HomomorphicMappedType: Self = Self::from_bits(1 << 3); // Reverse inference for homomorphic mapped type
+    pub const PartialHomomorphicMappedType: Self = Self::from_bits(1 << 4); // Partial reverse inference for homomorphic mapped type
+    pub const MappedTypeConstraint: Self = Self::from_bits(1 << 5); // Reverse inference for mapped type
+    pub const ContravariantConditional: Self = Self::from_bits(1 << 6); // Conditional type in contravariant position
+    pub const ReturnType: Self = Self::from_bits(1 << 7); // Inference made from return type of generic function
+    pub const LiteralKeyof: Self = Self::from_bits(1 << 8); // Inference made from a string literal to a keyof T
+    // These priorities imply that the resulting type should be a combination of all candidates.
+    pub const PriorityImpliesCombination: Self = Self::from_bits((1 << 7) | (1 << 5) | (1 << 8));
+    pub const NoConstraints: Self = Self::from_bits(1 << 9); // Don't infer from constraints of instantiable types
+    pub const AlwaysStrict: Self = Self::from_bits(1 << 10); // Always use strict rules for contravariant inferences
+    pub const MaxValue: Self = Self::from_bits(1 << 11); // Seed for inference priority tracking
+
+    const fn from_bits(bits: u32) -> Self {
+        // SAFETY: every priority bit is below `MaxValue`, so adding one cannot overflow or produce zero.
+        Self(InferencePriorityRepr::Bits(unsafe {
+            std::num::NonZeroU32::new_unchecked(bits + 1)
+        }))
+    }
+
+    const fn bits(self) -> Option<u32> {
+        match self.0 {
+            InferencePriorityRepr::Circularity => None,
+            InferencePriorityRepr::Bits(bits) => Some(bits.get() - 1),
+        }
+    }
+
+    pub fn intersects(self, other: Self) -> bool {
+        match (self.bits(), other.bits()) {
+            (Some(left), Some(right)) => left & right != 0,
+            _ => false,
+        }
+    }
+
+    pub(crate) fn memo_bits(self) -> u32 {
+        self.bits().unwrap_or(u32::MAX)
+    }
+}
+
+impl Default for InferencePriority {
+    fn default() -> Self {
+        Self::None
+    }
+}
+
+const _: () = assert!(std::mem::size_of::<InferencePriority>() == 4);
+
+impl Ord for InferencePriority {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        match (self.bits(), other.bits()) {
+            (None, None) => std::cmp::Ordering::Equal,
+            (None, Some(_)) => std::cmp::Ordering::Less,
+            (Some(_), None) => std::cmp::Ordering::Greater,
+            (Some(left), Some(right)) => left.cmp(&right),
+        }
+    }
+}
+
+impl PartialOrd for InferencePriority {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl std::ops::BitOr for InferencePriority {
+    type Output = Self;
+
+    fn bitor(self, rhs: Self) -> Self::Output {
+        match (self.bits(), rhs.bits()) {
+            (Some(left), Some(right)) => Self::from_bits(left | right),
+            _ => Self::Circularity,
+        }
     }
 }
 
@@ -660,7 +729,7 @@ bitflags! {
 
 bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
-    pub struct DeclarationSpaces: i32 {
+    pub struct DeclarationSpaces: u32 {
         const None = 0;
         const ExportValue = 1 << 0;
         const ExportType = 1 << 1;
@@ -670,7 +739,7 @@ bitflags! {
 
 // IntrinsicTypeKind
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum IntrinsicTypeKind {
     #[default]
@@ -702,7 +771,7 @@ bitflags! {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum MappedTypeNameTypeKind {
     #[default]
@@ -711,7 +780,7 @@ pub enum MappedTypeNameTypeKind {
     Remapping,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ReferenceHint {
     #[default]
@@ -843,7 +912,7 @@ pub struct IterationTypes {
     pub next_type: Option<P<Type>>,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum IterationTypeKind {
     #[default]
@@ -930,7 +999,7 @@ pub struct VarianceStackEntry {
     pub type_parameters: &'static [P<Type>],
 }
 
-pub const maxSerializationLevel: i32 = 2;
+pub const maxSerializationLevel: u32 = 2;
 
 // Checker
 
@@ -944,9 +1013,9 @@ pub struct Checker {
     pub program: &'static dyn Program,
     pub compiler_options: P<CompilerOptions>,
     pub files: &'static [P<SourceFile>],
-    pub file_index_map: FxHashMap<P<SourceFile>, i32>,
+    pub file_index_map: FxHashMap<P<SourceFile>, usize>,
     /// `source_file_and_index_of_node` (utilities.rs): (node key, file key, file index); key 0 is an empty slot.
-    pub(crate) node_file_cache: Vec<(tsrs_core::ptr::PKey, tsrs_core::ptr::PKey, i32)>,
+    pub(crate) node_file_cache: Vec<(tsrs_core::ptr::PKey, tsrs_core::ptr::PKey, usize)>,
     pub type_count: u32,
     pub symbol_count: u32,
     pub signature_count: u32,
@@ -973,8 +1042,8 @@ pub struct Checker {
     pub(crate) expression_checks: u32,
     pub instantiation_stack: Vec<P<Type>>,
     pub conditional_constraint_depth: u32,
-    pub inline_level: i32,
-    pub serialization_level: i32,
+    pub inline_level: u32,
+    pub serialization_level: u32,
     pub current_node: Option<P<Node>>,
     /// tsrs-only: the file `check_source_file` is checking. The one check leaf (`SourceFile::is_check_leaf`) whose tree
     /// this checker may read.
@@ -1095,6 +1164,9 @@ pub struct Checker {
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
     pub(crate) lazy_member_tables: crate::basedmap::Based<FxHashMap<P<Type>, P<LazyMemberTable>>, P<Type>>,
+    /// Per generic target, what `prepare_lazy_members` learned about its declared members for good
+    /// (`lazy_unaffected_members`).
+    pub(crate) lazy_unaffected: FxHashMap<P<Type>, crate::checker_09::LazyUnaffected>,
     // Go `StructuredType.objectTypeWithoutAbstractConstructSignatures`: set only by the node builder, for few types,
     // so kept here instead of in every object, union and intersection type.
     pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
@@ -1105,6 +1177,9 @@ pub struct Checker {
     pub(crate) lazy_mapped_tables: crate::basedmap::Based<FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>, P<Type>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
+    /// `TSRS_DEEP_NESTED=shadow`: every deeply-nested test on a relater stack is also made without the stack's kept
+    /// recursion identities, and the kept identities are recomputed; any difference panics (relater_1.rs).
+    pub(crate) deep_nested_shadow: bool,
     /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
     pub lazy_tuples: bool,
     /// site-counts profile: creation site of each instantiated symbol until its type is resolved.
@@ -1126,6 +1201,8 @@ pub struct Checker {
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
     /// Reused buffers for `get_unmatched_property_recording` (relater_1.rs), one per nested `propertiesRelatedTo`.
     pub(crate) unmatched_found_pool: Vec<Vec<Option<Option<P<Symbol>>>>>,
+    /// Reused buffers for `some_property_reduces_to_never` (checker_11.rs), one per nested call.
+    pub(crate) name_counts_pool: Vec<crate::checker_11::NameCounts>,
     /// `contextual_property_type_of_large_union` (checker_15.rs): per (union, name hash), the name, the
     /// `members_reset_epoch` it was computed in and the positions of the constituents that can contribute.
     pub(crate) contextual_relevant: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[u32]>)>>,
@@ -1246,10 +1323,10 @@ pub struct Checker {
     pub base_types_depth: u32,
     pub base_types_resolved_log: Vec<P<Type>>,
     pub base_types_circular: Vec<P<Type>>,
-    pub resolution_start: i32,
+    pub resolution_start: usize,
     pub variance_stack: Vec<VarianceStackEntry>,
     pub call_resolution_stack: Vec<P<Node>>,
-    pub apparent_argument_count: Option<i32>,
+    pub apparent_argument_count: Option<usize>,
     pub last_get_combined_node_flags_node: Option<P<Node>>,
     pub last_get_combined_node_flags_result: NodeFlags,
     pub last_get_combined_modifier_flags_node: Option<P<Node>>,
@@ -1261,7 +1338,7 @@ pub struct Checker {
     pub shared_flows: Vec<SharedFlow>,
     pub antecedent_types: Vec<P<Type>>,
     pub flow_analysis_disabled: bool,
-    pub flow_invocation_count: i32,
+    pub flow_invocation_count: u32,
     pub flow_type_cache: Option<FxHashMap<P<Node>, P<Type>>>, // Go nil map, saved/restored as a whole
     /// The flow memo (flowmemo.rs). Boxed: the checker's hot fields keep their offsets.
     pub flow_memo: Box<crate::flowmemo::FlowMemo>,
@@ -1349,6 +1426,8 @@ pub struct Checker {
     pub scratch_mapper_lists: Vec<(P<TypeMapper>, &'static [P<Type>])>,
     pub free_type_mapper_caches: Vec<PackedMap<CacheHashKey, P<Type>>>, // Rust-only: cleared maps for reuse (Go keeps them in the slice capacity)
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
+    pub free_strings: Vec<String>, // Rust-only: empty buffers for text built and dropped in one call
+    pub free_name_sets: Vec<FxHashSet<&'static str>>, // Rust-only: empty sets for names seen during one walk
     pub ambient_modules_once: bool, // Go sync.Once: true once ambient_modules has been computed
     pub ambient_modules: Vec<P<Symbol>>,
     pub within_unreachable_code: bool,
@@ -1531,11 +1610,13 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
         lazy_member_tables: Default::default(),
+        lazy_unaffected: FxHashMap::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
         object_type_instantiations: Default::default(),
         lazy_mapped_tables: Default::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
+        deep_nested_shadow: std::env::var("TSRS_DEEP_NESTED").is_ok_and(|v| v == "shadow"),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         #[cfg(feature = "site-counts")]
         inst_symbol_sites: FxHashMap::default(),
@@ -1547,6 +1628,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_stats: Default::default(),
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
+        name_counts_pool: Vec::new(),
         contextual_relevant: FxHashMap::default(),
         discriminant_property_types: FxHashMap::default(),
         constituent_flags: FxHashMap::default(),
@@ -1753,6 +1835,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         scratch_mapper_lists: Vec::new(),
         free_type_mapper_caches: Vec::new(),
         free_type_lists: Vec::new(),
+        free_strings: Vec::new(),
+        free_name_sets: Vec::new(),
         ambient_modules_once: false,
         ambient_modules: Vec::new(),
         within_unreachable_code: false,
@@ -1848,7 +1932,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.marker_sub_type_for_check.as_type_parameter().constraint.set(Some(c.marker_super_type_for_check));
     c.no_type_predicate = P::new(TypePredicate {
         kind: Cell::new(TypePredicateKind::Identifier),
-        parameter_index: Cell::new(0),
+        parameter_index: Cell::new(Some(0)),
         parameter_name: Cell::new("<<unresolved>>"),
         t: Cell::new(Some(c.any_type)),
     });
@@ -2025,11 +2109,13 @@ impl Checker {
             reg_exp_scanner: None,
             pattern_for_type: base.pattern_for_type.clone(),
             lazy_member_tables: crate::basedmap::Based::over(&base.lazy_member_tables),
+            lazy_unaffected: FxHashMap::default(),
             object_types_without_abstract_construct_signatures: base.object_types_without_abstract_construct_signatures.clone(),
             structured_type_base_constraints: base.structured_type_base_constraints.clone(),
             object_type_instantiations: crate::basedmap::Based::over(&base.object_type_instantiations),
             lazy_mapped_tables: crate::basedmap::Based::over(&base.lazy_mapped_tables),
             lazy_members: base.lazy_members.clone(),
+            deep_nested_shadow: base.deep_nested_shadow,
             lazy_tuples: base.lazy_tuples.clone(),
             #[cfg(feature = "site-counts")]
             inst_symbol_sites: base.inst_symbol_sites.clone(),
@@ -2041,6 +2127,7 @@ impl Checker {
             lazy_member_stats: base.lazy_member_stats.clone(),
             augment_filter: base.augment_filter.clone(),
             unmatched_found_pool: Vec::new(),
+            name_counts_pool: Vec::new(),
             contextual_relevant: FxHashMap::default(),
             discriminant_property_types: FxHashMap::default(),
             constituent_flags: FxHashMap::default(),
@@ -2247,6 +2334,8 @@ impl Checker {
             scratch_mapper_lists: Vec::new(),
             free_type_mapper_caches: Vec::new(),
             free_type_lists: Vec::new(),
+            free_strings: Vec::new(),
+            free_name_sets: Vec::new(),
             ambient_modules_once: base.ambient_modules_once.clone(),
             ambient_modules: base.ambient_modules.clone(),
             within_unreachable_code: base.within_unreachable_code.clone(),
@@ -2289,11 +2378,19 @@ impl Checker {
         );
     }
 
-    pub(crate) fn compare_symbols(&mut self, s1: Option<P<Symbol>>, s2: Option<P<Symbol>>) -> i32 {
+    pub(crate) fn compare_symbols(
+        &mut self,
+        s1: Option<P<Symbol>>,
+        s2: Option<P<Symbol>>,
+    ) -> std::cmp::Ordering {
         self.compare_symbols_worker(s1, s2)
     }
 
-    pub(crate) fn compare_symbol_chains(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 {
+    pub(crate) fn compare_symbol_chains(
+        &mut self,
+        a: &[P<Symbol>],
+        b: &[P<Symbol>],
+    ) -> std::cmp::Ordering {
         self.compare_symbol_chains_worker(a, b)
     }
 
@@ -2361,14 +2458,25 @@ impl Checker {
         self.compare_types_assignable_worker(source, target, report_errors)
     }
 
-    /// `c.compareTypesAssignable` used as a value (`TypeComparer`).
+    /// `c.compareTypesAssignable` used as a value (`TypeComparer`): a function item, so no arena allocation per call.
     pub(crate) fn compare_types_assignable_comparer(&self) -> TypeComparer {
-        type_comparer(|c, s, t, report_errors| c.compare_types_assignable(s, t, report_errors))
+        fn compare_types_assignable(c: &mut Checker, s: P<Type>, t: P<Type>, report_errors: bool) -> Ternary {
+            c.compare_types_assignable(s, t, report_errors)
+        }
+        &compare_types_assignable
     }
 
     /// The closure built by Go `getGlobalTypesResolver(names, arity, reportErrors)`.
-    pub(crate) fn get_global_types(&mut self, names: &[&str], arity: i32, report_errors: bool) -> &'static [P<Type>] {
-        let types: Vec<P<Type>> = names.iter().map(|name| self.get_global_type(name, arity, report_errors)).collect();
+    pub(crate) fn get_global_types(
+        &mut self,
+        names: &[&str],
+        arity: usize,
+        report_errors: bool,
+    ) -> &'static [P<Type>] {
+        let types: Vec<P<Type>> = names
+            .iter()
+            .map(|name| self.get_global_type(name, arity, report_errors))
+            .collect();
         alloc_slice(&types)
     }
 
@@ -2824,17 +2932,14 @@ pub fn primitive_type_alias_suggestions() -> &'static [(&'static str, P<Symbol>)
         // Process-wide: never in a freeable region (language server).
         let _arena = tsrs_core::arena::enter_thread_arena();
         let mut result = Vec::new();
-        for (primitive, builtin) in [
-            ("string", "String"),
-            ("number", "Number"),
-            ("boolean", "Boolean"),
-            ("object", "Object"),
-            ("bigint", "BigInt"),
-            ("symbol", "Symbol"),
-        ] {
-            let sym = Symbol::new(SymbolFlags::TypeAlias | SymbolFlags::Transient, primitive);
-            result.push((builtin, sym));
-        }
+        result.extend(
+            ([("string", "String"), ("number", "Number"), ("boolean", "Boolean"), ("object", "Object"), ("bigint", "BigInt"), ("symbol", "Symbol")])
+                .into_iter()
+                .map(|(primitive, builtin)| {
+                    let sym = Symbol::new(SymbolFlags::TypeAlias | SymbolFlags::Transient, primitive);
+                    (builtin, sym)
+                }),
+        );
         result
     })
 }
@@ -2845,7 +2950,7 @@ pub struct InheritanceInfo {
     pub containing_type: P<Type>,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum UnusedKind {
     #[default]
@@ -2918,7 +3023,7 @@ impl CacheHashKey {
 
 /// Go `keyBuilder`; its methods are in checker_09.rs.
 pub struct keyBuilder {
-    pub inline_length: i32,
+    pub inline_length: usize,
     pub overflow_buffer: Option<Vec<u8>>, // Go nil slice = no overflow yet
     pub inline_buffer: [u8; 192],
 }
@@ -2929,7 +3034,7 @@ impl Default for keyBuilder {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum thisAssignmentDeclarationKind {
     #[default]
@@ -2944,12 +3049,12 @@ pub enum thisAssignmentDeclarationKind {
 pub struct TupleNormalizer {
     pub types: Vec<P<Type>>,
     pub infos: Vec<TupleElementInfo>,
-    pub last_required_index: i32,
-    pub first_rest_index: i32,
-    pub last_optional_or_rest_index: i32,
+    pub last_required_index: Option<usize>,
+    pub first_rest_index: Option<usize>,
+    pub last_optional_or_rest_index: Option<usize>,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum UnionReduction {
     #[default]
@@ -2970,8 +3075,8 @@ bitflags! {
 // Limits on the size of a template literal type produced by getTemplateLiteralType. Recursive instantiations
 // such as `Recur<any, `${S}_${S}`>` double the text (or the number of placeholders) on every iteration and
 // exhaust memory long before the tail recursion limit in getConditionalType is reached (see #63271).
-pub const maxTemplateLiteralTypeLength: i32 = 50_000_000;
-pub const maxTemplateLiteralTypeSpans: i32 = 100_000;
+pub const maxTemplateLiteralTypeLength: usize = 50_000_000;
+pub const maxTemplateLiteralTypeSpans: usize = 100_000;
 
 /// Go `ObjectLiteralDiscriminator`; the `c` field is dropped (methods take `c: &mut Checker`).
 #[derive(Default)]

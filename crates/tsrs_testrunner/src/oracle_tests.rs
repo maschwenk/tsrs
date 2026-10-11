@@ -64,8 +64,8 @@ fn to_diag(v: &Value, texts: &Value, cache: &mut FxHashMap<String, Rc<FileLike>>
     let related = list("related", cache);
     Diag {
         file,
-        pos: v["pos"].as_i64().unwrap_or(0) as i32,
-        end: v["end"].as_i64().unwrap_or(0) as i32,
+        pos: u32::try_from(v["pos"].as_i64().unwrap_or(0)).ok(),
+        end: u32::try_from(v["end"].as_i64().unwrap_or(0)).ok(),
         code: v["code"].as_i64().unwrap_or(0) as i32,
         category: category(v["category"].as_i64().unwrap_or(1)),
         source: v["source"].as_str().unwrap_or("").to_string(),

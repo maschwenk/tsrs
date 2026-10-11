@@ -767,11 +767,7 @@ pub(crate) fn unstable_name_index() -> &'static FxHashMap<&'static str, usize> {
     INDEX.get_or_init(|| {
         let infos = field_info_cache();
         let mut index = FxHashMap::with_capacity_and_hasher(infos.len(), Default::default());
-        for (i, info) in infos.iter().enumerate() {
-            if !info.raw_name.is_empty() {
-                index.insert(info.raw_name, i);
-            }
-        }
+        index.extend(infos.iter().enumerate().filter_map(|(i, info)| if !info.raw_name.is_empty() { Some((info.raw_name, i)) } else { None }));
         index
     })
 }
@@ -816,9 +812,7 @@ pub(crate) fn collect_field_infos(fields: &'static [FieldTag]) -> Vec<FieldInfo>
             info.config_invert = config_path.invert;
         }
         if !fallback_config_tag.is_empty() {
-            for tag in fallback_config_tag.split(';') {
-                info.fallback_config_paths.push(parse_config_path_tag(tag));
-            }
+            info.fallback_config_paths.extend(fallback_config_tag.split(';').map(parse_config_path_tag));
         }
 
         infos.push(info);
@@ -842,12 +836,12 @@ pub(crate) fn parse_config_path_tag(tag: &'static str) -> ConfigPathInfo {
 pub(crate) fn get_nested_value<'a>(config: &'a OrderedMap<String, Value>, path: &str) -> Option<&'a Value> {
     let mut parts = path.split('.');
     let mut current = config.get(parts.next().unwrap())?;
-    for part in parts {
+    current = parts.try_fold(current, |current, part| {
         let Value::Object(m) = current else {
             return None;
         };
-        current = m.get(part)?;
-    }
+        m.get(part)
+    })?;
     Some(current)
 }
 
@@ -855,15 +849,15 @@ pub(crate) fn get_nested_value<'a>(config: &'a OrderedMap<String, Value>, path: 
 pub(crate) fn set_nested_value(config: &mut OrderedMap<String, Value>, path: &str, value: Value) {
     let parts: Vec<&str> = path.split('.').collect();
     let mut current = config;
-    for part in &parts[..parts.len() - 1] {
+    current = parts[..parts.len() - 1].iter().fold(current, |mut current, part| {
         if !matches!(current.get(*part), Some(Value::Object(_))) {
             current.insert(part.to_string(), Value::Object(OrderedMap::default()));
         }
-        let Some(Value::Object(next)) = current.get_mut(*part) else {
-            unreachable!()
-        };
+        let Some(Value::Object(next)) = current.get_mut(*part) else { unreachable!() };
         current = next;
-    }
+
+        current
+    });
     current.insert(parts[parts.len() - 1].to_string(), value);
 }
 
@@ -1001,11 +995,7 @@ pub(crate) fn set_field_from_value(field: FieldMut<'_>, val: &Value) {
         FieldMut::Slice(f) => {
             if let Value::Array(arr) = val {
                 let mut result = Vec::with_capacity(arr.len());
-                for item in arr {
-                    if let Value::String(s) = item {
-                        result.push(s.clone());
-                    }
-                }
+                result.extend(arr.iter().filter_map(|item| if let Value::String(s) = item { Some(s.clone()) } else { None }));
                 *f = Some(result);
             }
         }
@@ -1168,11 +1158,13 @@ pub fn parse_user_preferences(items: &OrderedMap<String, Value>) -> UserPreferen
         }
     }
     // Apply javascript, then typescript, then js/ts (highest precedence).
-    for section in ["javascript", "typescript", "js/ts"] {
+    prefs = (["javascript", "typescript", "js/ts"]).into_iter().fold(prefs, |mut prefs, section| {
         if let Some(Value::Object(settings)) = items.get(section) {
             prefs = prefs.with_config(settings);
         }
-    }
+
+        prefs
+    });
     prefs
 }
 

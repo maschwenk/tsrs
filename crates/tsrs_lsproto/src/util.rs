@@ -1,14 +1,16 @@
+use std::cmp::Ordering;
+
 use crate::{Diagnostic, IntegerOrString, Position, Range, StringOrMarkupContent};
 
 // util.go:11
 // Implements a cmp.Compare like function for two Position
 // ComparePositions(pos, other) == cmp.Compare(pos, other)
-pub fn compare_positions(pos: Position, other: Position) -> i32 {
-    let line_comp = crate::structcodec::cmp_compare(&pos.line, &other.line);
-    if line_comp != 0 {
+pub fn compare_positions(pos: Position, other: Position) -> Ordering {
+    let line_comp = pos.line.cmp(&other.line);
+    if !line_comp.is_eq() {
         return line_comp;
     }
-    crate::structcodec::cmp_compare(&pos.character, &other.character)
+    pos.character.cmp(&other.character)
 }
 
 // util.go:22
@@ -16,9 +18,9 @@ pub fn compare_positions(pos: Position, other: Position) -> i32 {
 // CompareRanges(lsRange, other) == cmp.Compare(lsRange, other)
 //
 //	Range.Start is compared before Range.End
-pub fn compare_ranges(ls_range: Range, other: Range) -> i32 {
+pub fn compare_ranges(ls_range: Range, other: Range) -> Ordering {
     let start_comp = compare_positions(ls_range.start, other.start);
-    if start_comp != 0 {
+    if !start_comp.is_eq() {
         return start_comp;
     }
     compare_positions(ls_range.end, other.end)
@@ -54,19 +56,14 @@ impl IntegerOrString {
 
 // util.go:53
 fn diagnostic_exists_in_slice(elem: &Diagnostic, diags: &[Diagnostic]) -> bool {
-    for diag in diags {
-        if diagnostics_equal(elem, diag) {
-            return true;
-        }
-    }
-    false
+    diags.iter().any(|diag| diagnostics_equal(elem, diag))
 }
 
 // util.go:62
 fn diagnostics_equal(diag1: &Diagnostic, diag2: &Diagnostic) -> bool {
     diagnostic_codes_equal(diag1.code.as_ref(), diag2.code.as_ref())
         && diagnostic_messages_equal(&diag1.message, &diag2.message)
-        && compare_ranges(diag1.range, diag2.range) == 0
+        && compare_ranges(diag1.range, diag2.range).is_eq()
 }
 
 // util.go:69
@@ -97,16 +94,8 @@ fn diagnostic_messages_equal(message1: &StringOrMarkupContent, message2: &String
 pub fn compare_diagnostics<'a>(list1: &'a [Diagnostic], list2: &'a [Diagnostic]) -> (Vec<&'a Diagnostic>, Vec<&'a Diagnostic>) {
     let mut missing_from_list1 = Vec::new();
     let mut missing_from_list2 = Vec::new();
-    for elem in list1 {
-        if !diagnostic_exists_in_slice(elem, list2) {
-            missing_from_list2.push(elem);
-        }
-    }
-    for elem in list2 {
-        if !diagnostic_exists_in_slice(elem, list1) {
-            missing_from_list1.push(elem);
-        }
-    }
+    missing_from_list2.extend(list1.iter().filter_map(|elem| if !diagnostic_exists_in_slice(elem, list2) { Some(elem) } else { None }));
+    missing_from_list1.extend(list2.iter().filter_map(|elem| if !diagnostic_exists_in_slice(elem, list1) { Some(elem) } else { None }));
     (missing_from_list1, missing_from_list2)
 }
 

@@ -26,16 +26,11 @@ fn print_node(bytes: &[u8]) -> Result<String, String> {
 fn print_node_matches_pinned_go_server() {
     let dir = crate_dir().join("tests/golden/print");
     let mut cases: Vec<(String, Vec<u8>)> = Vec::new();
-    for (name, _) in fixtures() {
-        cases.push((name.clone(), golden(&name)));
-        cases.push((format!("{name}.client"), client_golden(&name)));
-    }
-    for e in std::fs::read_dir(&dir).unwrap() {
+    cases.extend(fixtures().into_iter().flat_map(|(name, _)| [(name.clone(), golden(&name)), (format!("{name}.client"), client_golden(&name))]));
+    cases.extend(std::fs::read_dir(&dir).unwrap().filter_map(|e| {
         let f = e.unwrap().file_name().into_string().unwrap();
-        if let Some(base) = f.strip_suffix(".client.bin") {
-            cases.push((base.to_string(), std::fs::read(dir.join(&f)).unwrap()));
-        }
-    }
+        if let Some(base) = f.strip_suffix(".client.bin") { Some((base.to_string(), std::fs::read(dir.join(&f)).unwrap())) } else { None }
+    }));
     cases.sort();
     let (mut printed, mut errors, mut failures) = (0, 0, Vec::new());
     for (case, bytes) in &cases {

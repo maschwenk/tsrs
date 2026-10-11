@@ -64,9 +64,7 @@ fn goldens_cover_every_parser_node_kind() {
     for (name, _) in fixtures() {
         let b = golden(&name);
         let nodes = rd(&b, HEADER_OFFSET_NODES) as usize;
-        for i in (nodes + NODE_SIZE..b.len()).step_by(NODE_SIZE) {
-            seen.insert(rd(&b, i));
-        }
+        seen.extend((nodes + NODE_SIZE..b.len()).step_by(NODE_SIZE).map(|i| rd(&b, i)));
     }
     // Kinds no parser output contains: checker-internal, emit-internal and the lexer-only JsxTextAllWhiteSpaces.
     let not_parsed = ["SyntheticExpression", "SyntaxList", "NotEmittedStatement", "PartiallyEmittedExpression", "SyntheticReferenceExpression", "NotEmittedTypeElement"];

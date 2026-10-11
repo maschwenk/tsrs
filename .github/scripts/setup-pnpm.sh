@@ -11,7 +11,7 @@ case "$(uname -s)-$(uname -m)" in
   Linux-x86_64) platform=linux-x64; checksum=502a275984a4cd01e5579ac72049a241091cac5118e44becf84951130c3e079e ;;
   *) echo "unsupported pnpm runner: $(uname -s)-$(uname -m)" >&2; exit 1 ;;
 esac
-test "$(node -p 'require("./npm/package.json").packageManager')" = "pnpm@$version"
+test "$(node -p 'require("./package.json").packageManager')" = "pnpm@$version"
 
 pnpm_home="$RUNNER_TEMP/tsrs-pnpm"
 archive="$RUNNER_TEMP/pnpm-$platform.tar.gz"

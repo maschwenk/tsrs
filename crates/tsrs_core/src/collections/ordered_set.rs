@@ -40,9 +40,7 @@ mod tests {
     #[test]
     fn test_ordered_set() {
         let mut s: OrderedSet<i32> = OrderedSet::default();
-        for i in 0..10 {
-            s.add(i);
-        }
+        s.extend(0..10);
         s.add(3);
         assert_eq!(s.size(), 10);
         assert!(s.delete(&3));

@@ -8,7 +8,7 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 | `@ts-rs/<os>-<arch>[-<libc>]` | the `tsrs` binary for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
 | `@ts-rs/wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
 
-Next-release platforms: `darwin-arm64`, `linux-x64-gnu`, `linux-arm64-gnu`, `linux-x64-musl` and `linux-arm64-musl`
+Platforms since 0.14.0: `darwin-arm64`, `linux-x64-gnu`, `linux-arm64-gnu`, `linux-x64-musl` and `linux-arm64-musl`
 (earlier releases use unsuffixed GNU names; `darwin-x64` was published up to 0.2.1). `npm/build.mjs` and the launcher
 also know `win32-x64` (see TODO).
 
@@ -61,11 +61,11 @@ commit, update `[workspace.metadata.typescript]`.
 
 ## Building packages locally
 
-Use pnpm 12.10.1, pinned in `npm/package.json`, for the build tooling, packing and publishing.
+Use pnpm 12.10.1, pinned in the root `package.json`, for the build tooling, packing and publishing.
 
 ```sh
 cargo build --release -p tsrs_cli
-pnpm --dir npm install --frozen-lockfile     # build-only compiler for the JS API
+pnpm install --frozen-lockfile     # build-only compiler for the JS API
 node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 # -> npm/dist/ts-rs-darwin-arm64-<version>.tgz, npm/dist/tsrs-<version>.tgz, npm/dist/packages.json
 ```
@@ -94,7 +94,7 @@ After bumping `[workspace.metadata.typescript]`, check out that commit as `ts-re
 `node npm/sdk/sync-upstream.mjs --check` fails if the copy drifted.
 
 ```sh
-pnpm --dir npm install --frozen-lockfile                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
+pnpm install --frozen-lockfile                        # build-only tools: typescript@7 (compiler), @types/node, tinybench
 node npm/build.mjs --sdk-only              # npm/tsrs/src -> npm/tsrs/dist (also part of every package build)
 cd npm/tsrs && TSRS_BINARY=/path/to/server node --conditions @typescript/source --test 'test/**/*.test.ts'
 node npm/sdk/smoke-consumer.mjs            # after build.mjs --pack: offline install into a temp consumer, typecheck, sync+async compile
@@ -150,7 +150,9 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
 4. assembles and packs the native packages with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact,
    and publishes the platform packages, then the main package, then `@ts-rs/wasm`, with
    `--access public --tag latest` using npm trusted publishing (skipping any already on the registry, so a failed
-   run can be re-run). Releases publish directly, without a staged approval step.
+   run can be re-run). Before publishing the main package, waits up to 10 minutes for every optional dependency's
+   exact version metadata and tarball to be available on npm, including platform packages skipped on a re-run.
+   Dry runs skip this check. Releases publish directly, without a staged approval step.
 
 The conformance and fourslash gates run on the GNU Linux release binaries (`bolt.sh`). The macOS binary gets only the
 smoke tests; `ci.yml` (Linux) gates the source, and the WebAssembly differential gate (`tools/wasm/gate.sh`) runs only

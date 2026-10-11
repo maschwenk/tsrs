@@ -1,5 +1,58 @@
 # The language server (`tsrs --lsp -stdio`)
 
+tsrs provides diagnostics, hover, go to definition, references, rename, completions with auto-imports, code fixes
+and formatting through the TypeScript 7 language-server protocol. It passes 4,066 of 4,546 fourslash tests; see
+[known gaps](#known-gaps) and the [compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do).
+
+## Editor setup
+
+`tsrs --lsp -stdio` speaks the same protocol as `tsgo --lsp -stdio` (Go's flag parsing: `-stdio` and `--stdio` both
+work; only stdio is supported, like Go). Build it with `cargo build --release -p tsrs_cli` (binary
+`target/release/tsrs`) or install the npm package (`tsrs`, binary `tsrs`). The configurations below follow the
+editors' documented mechanisms.
+
+**VS Code** — the TypeScript 7 extension (`TypeScriptTeam.native-preview`, source in
+`ts-ref/packages/vscode-typescript`) starts `<tsdk>/tsgo --lsp --stdio` when `js/ts.tsdk.path` points at a directory
+that contains an executable named `tsgo` or `tsc` (`src/util.ts`: `tsdkConfigSources`, `packagedExeBaseNames`). So:
+
+```sh
+mkdir -p ~/.tsrs-tsdk && ln -sf "$PWD/target/release/tsrs" ~/.tsrs-tsdk/tsgo
+```
+
+```jsonc
+// settings.json (user settings; a workspace-level tsdk asks for workspace trust and consent)
+{
+  "js/ts.tsdk.path": "/Users/<you>/.tsrs-tsdk",
+  "js/ts.trace.server": "verbose"   // optional: protocol log in the "TypeScript 7" output channel
+}
+```
+
+Run "TypeScript 7: Restart Server" (or reload the window); the output channel names the executable it started.
+The server does not run content mappers yet (`js/ts.contentMappers.enabled`); turn them off if a workspace
+contributes any. `tsrs -p` and `tsrs -b` do run them.
+
+**Neovim** (0.11+, built-in client):
+
+```lua
+vim.lsp.config('tsrs', {
+  cmd = { 'tsrs', '--lsp', '-stdio' },          -- or the absolute path to target/release/tsrs
+  filetypes = { 'typescript', 'typescriptreact', 'javascript', 'javascriptreact' },
+  root_markers = { 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' },
+})
+vim.lsp.enable('tsrs')
+```
+
+Disable other TypeScript servers for the same buffers (e.g. `ts_ls`, `vtsls`) to avoid duplicate results.
+Verified headless (Neovim 0.11.6, `nvim --headless --clean -u init.lua`, scratch HOME, no plugins): the client
+attaches, the type error of the opened file arrives as a diagnostic, and hover returns the quick info.
+`:checkhealth vim.lsp` shows the attached client; `vim.lsp.set_log_level('debug')` logs the protocol.
+
+What to expect: diagnostics are pull-based (`textDocument/diagnostic`; both clients support it) and tsconfig errors
+are pushed; everything in the Progress table works; see Known gaps. Memory: see the memory plan (program versions,
+checkers and old file versions are freed).
+
+## Implementation
+
 Port of Go's language server: `tsgo --lsp -stdio` (`cmd/tsc/lsp.go` -> `internal/lsp` -> `internal/project` ->
 `internal/ls`). Same rules as the rest of the port (PORTING.md): function-by-function from Go, same names in
 snake_case, `// file.go:LINE` origin markers, Go quirks preserved, no redesign. This file is the design record,
@@ -285,53 +338,6 @@ auto-import registry also fixed the 152 auto-import divergences listed above, an
 Go's zero value (tsrs_compiler set a current directory, which made `IsGlobalTypingsFile` true for every `.d.ts` when no
 typings location is configured and hid them from auto-imports); the conformance suite is unchanged (13,458 pass both
 before and after; lazy-off `.types` / `.symbols` 12,779 / 12,779).
-
-## Editor setup
-
-`tsrs --lsp -stdio` speaks the same protocol as `tsgo --lsp -stdio` (Go's flag parsing: `-stdio` and `--stdio` both
-work; only stdio is supported, like Go). Build it with `cargo build --release -p tsrs_cli` (binary
-`target/release/tsrs`) or install the npm package (`tsrs`, binary `tsrs`). Nothing below has been installed
-on the development machine; the configurations follow the editors' documented mechanisms.
-
-**VS Code** — the TypeScript 7 extension (`TypeScriptTeam.native-preview`, source in
-`ts-ref/packages/vscode-typescript`) starts `<tsdk>/tsgo --lsp --stdio` when `js/ts.tsdk.path` points at a directory
-that contains an executable named `tsgo` or `tsc` (`src/util.ts`: `tsdkConfigSources`, `packagedExeBaseNames`). So:
-
-```sh
-mkdir -p ~/.tsrs-tsdk && ln -sf "$PWD/target/release/tsrs" ~/.tsrs-tsdk/tsgo
-```
-
-```jsonc
-// settings.json (user settings; a workspace-level tsdk asks for workspace trust and consent)
-{
-  "js/ts.tsdk.path": "/Users/<you>/.tsrs-tsdk",
-  "js/ts.trace.server": "verbose"   // optional: protocol log in the "TypeScript 7" output channel
-}
-```
-
-Run "TypeScript 7: Restart Server" (or reload the window); the output channel names the executable it started.
-The server does not run content mappers yet (`js/ts.contentMappers.enabled`); turn them off if a workspace
-contributes any. `tsrs -p` and `tsrs -b` do run them.
-
-**Neovim** (0.11+, built-in client):
-
-```lua
-vim.lsp.config('tsrs', {
-  cmd = { 'tsrs', '--lsp', '-stdio' },          -- or the absolute path to target/release/tsrs
-  filetypes = { 'typescript', 'typescriptreact', 'javascript', 'javascriptreact' },
-  root_markers = { 'tsconfig.json', 'jsconfig.json', 'package.json', '.git' },
-})
-vim.lsp.enable('tsrs')
-```
-
-Disable other TypeScript servers for the same buffers (e.g. `ts_ls`, `vtsls`) to avoid duplicate results.
-Verified headless (Neovim 0.11.6, `nvim --headless --clean -u init.lua`, scratch HOME, no plugins): the client
-attaches, the type error of the opened file arrives as a diagnostic, and hover returns the quick info.
-`:checkhealth vim.lsp` shows the attached client; `vim.lsp.set_log_level('debug')` logs the protocol.
-
-What to expect: diagnostics are pull-based (`textDocument/diagnostic`; both clients support it) and tsconfig errors
-are pushed; everything in the Progress table works; see Known gaps. Memory: see the memory plan (program versions,
-checkers and old file versions are freed).
 
 ## Known gaps
 

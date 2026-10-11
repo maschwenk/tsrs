@@ -145,8 +145,11 @@ fn normalize(result: &Value) -> String {
     let mut result = result.clone();
     if let Value::Object(m) = &mut result {
         if let Some(Value::Array(items)) = m.get("items") {
-            let mut parsed: Vec<lsproto::CompletionItem> = items.iter().map(|i| lsproto::CompletionItem::from_json(i).unwrap()).collect();
-            parsed.sort_by(|a, b| compare_completion_entries(a, b).cmp(&0));
+            let mut parsed: Vec<lsproto::CompletionItem> = items
+                .iter()
+                .map(|i| lsproto::CompletionItem::from_json(i).unwrap())
+                .collect();
+            parsed.sort_by(compare_completion_entries);
             let sorted: Vec<Value> = parsed.iter().map(|i| i.to_json()).collect();
             m.insert("items".to_string(), Value::Array(sorted));
         }
@@ -169,10 +172,10 @@ fn read_expected(name: &str) -> OrderedMap<String, Value> {
     let Ok(text) = std::fs::read_to_string(format!("{DIR}/{name}.out")) else {
         return expected;
     };
-    for line in text.lines() {
+    expected.extend(text.lines().map(|line| {
         let v = json::unmarshal(line).unwrap();
-        expected.insert(str_field(&v, "id").to_string(), v);
-    }
+        (str_field(&v, "id").to_string(), v)
+    }));
     expected
 }
 

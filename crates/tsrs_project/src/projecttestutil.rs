@@ -123,7 +123,7 @@ impl SessionUtils {
     // lowercased, so callers should pass the lowercased path.
     pub(crate) fn watches_file(&self, file_path: &str) -> bool {
         for call in self.client.watch_files_calls() {
-            for watcher in &call.watchers {
+            if call.watchers.iter().any(|watcher| {
                 if let Some(pattern) = &watcher.glob_pattern.pattern {
                     if let Ok(g) = tsrs_core::glob::parse(pattern) {
                         if g.match_(file_path) {
@@ -143,6 +143,10 @@ impl SessionUtils {
                         }
                     }
                 }
+
+                false
+            }) {
+                return true;
             }
         }
         false

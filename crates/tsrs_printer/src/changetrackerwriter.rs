@@ -20,9 +20,9 @@ enum triviaPositionKey {
 // The fields Go's `GetPrintHandlers` closures share with the writer through the `*ChangeTrackerWriter` pointer.
 #[derive(Default)]
 struct changeTrackerPositions {
-    last_non_trivia_position: i32,
-    pos: FxHashMap<triviaPositionKey, i32>,
-    end: FxHashMap<triviaPositionKey, i32>,
+    last_non_trivia_position: u32,
+    pos: FxHashMap<triviaPositionKey, u32>,
+    end: FxHashMap<triviaPositionKey, u32>,
 }
 
 // changetrackerwriter.go:12
@@ -32,9 +32,8 @@ pub struct ChangeTrackerWriter {
 }
 
 // changetrackerwriter.go:24
-pub fn new_change_tracker_writer(newline: &str, indent_size: i32) -> ChangeTrackerWriter {
-    // TODO: Callers passing -1 should pass actual indent options once indent-related formatting is ported.
-    let indent_size = if indent_size < 0 { get_default_indent_size() } else { indent_size as usize };
+pub fn new_change_tracker_writer(newline: &str, indent_size: Option<usize>) -> ChangeTrackerWriter {
+    let indent_size = indent_size.unwrap_or_else(get_default_indent_size);
     let mut ctw = ChangeTrackerWriter {
         text_writer: textWriter::new_with(newline, indent_size),
         positions: Rc::new(RefCell::new(changeTrackerPositions::default())),
@@ -102,7 +101,9 @@ impl ChangeTrackerWriter {
                     break;
                 }
             }
-            last -= (s.len() - pos) as i32;
+            last = last
+                .checked_sub((s.len() - pos) as u32)
+                .expect("trailing whitespace exceeds written text");
             self.positions.borrow_mut().last_non_trivia_position = last;
         }
     }
@@ -154,12 +155,12 @@ fn set_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPosition
 }
 
 // changetrackerwriter.go:82
-fn get_pos(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> i32 {
+fn get_pos(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> u32 {
     positions.borrow().pos.get(&node).copied().unwrap_or(0)
 }
 
 // changetrackerwriter.go:86
-fn get_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> i32 {
+fn get_end(positions: &Rc<RefCell<changeTrackerPositions>>, node: triviaPositionKey) -> u32 {
     positions.borrow().end.get(&node).copied().unwrap_or(0)
 }
 
@@ -301,11 +302,11 @@ impl EmitTextWriter for ChangeTrackerWriter {
         self.set_last_non_trivia_position(s, true);
     }
     // changetrackerwriter.go:240
-    fn get_text_pos(&self) -> i32 {
+    fn get_text_pos(&self) -> u32 {
         self.text_writer.get_text_pos()
     }
     // changetrackerwriter.go:241
-    fn get_line(&self) -> i32 {
+    fn get_line(&self) -> u32 {
         self.text_writer.get_line()
     }
     // changetrackerwriter.go:242
@@ -313,7 +314,7 @@ impl EmitTextWriter for ChangeTrackerWriter {
         self.text_writer.get_column()
     }
     // changetrackerwriter.go:243
-    fn get_indent(&self) -> i32 {
+    fn get_indent(&self) -> u32 {
         self.text_writer.get_indent()
     }
     // changetrackerwriter.go:244

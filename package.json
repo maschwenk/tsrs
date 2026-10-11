@@ -1,0 +1,5 @@
+{
+    "name": "tsrs-tooling",
+    "private": true,
+    "packageManager": "pnpm@12.10.1"
+}

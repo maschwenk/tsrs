@@ -1,7 +1,8 @@
+use rustc_hash::FxHashMap;
+use std::cmp::Ordering;
+use std::fmt::Write as _;
 use std::rc::Rc;
 use std::sync::Arc;
-use std::fmt::Write as _;
-use rustc_hash::FxHashMap;
 use tsrs_ast::{self as ast, Kind, Node, NodeFactory, NodeFactoryHooks, SourceFile};
 use tsrs_checker::Checker;
 use tsrs_compiler::Program;
@@ -124,8 +125,11 @@ struct organizeImportsComparerSettings {
 impl organizeImportsComparerSettings {
     // Go calls the (possibly nil) func value directly; a nil comparer is only reachable when detection found
     // nothing, where Go would panic on the call too.
-    fn module_specifier_comparer(&self) -> &dyn Fn(&str, &str) -> i32 {
-        &**self.module_specifier_comparer.as_ref().expect("nil moduleSpecifierComparer")
+    fn module_specifier_comparer(&self) -> &dyn Fn(&str, &str) -> Ordering {
+        &**self
+            .module_specifier_comparer
+            .as_ref()
+            .expect("nil moduleSpecifierComparer")
     }
 }
 
@@ -159,7 +163,7 @@ fn organize_imports_worker(
         if should_sort {
             goslices::sort_func(&mut grouped, |a, b| {
                 if a.is_empty() || b.is_empty() {
-                    return 0;
+                    return Ordering::Equal;
                 }
                 lsutil::compare_module_specifiers(a[0].module_specifier(), b[0].module_specifier(), comparer.module_specifier_comparer())
             });
@@ -170,13 +174,14 @@ fn organize_imports_worker(
             comparer.named_import_comparer.clone(),
         );
 
-        for import_group in &grouped {
-            let mut coalesced = coalesce_imports_worker(import_group, comparer.module_specifier_comparer(), &specifier_comparer, Some(source_file), change_tracker);
+        new_import_decls.extend(grouped.iter().flat_map(|import_group| {
+            let mut coalesced =
+                coalesce_imports_worker(import_group, comparer.module_specifier_comparer(), &specifier_comparer, Some(source_file), change_tracker);
             if should_sort {
                 goslices::sort_func(&mut coalesced, |&a, &b| lsutil::compare_imports_or_require_statements(a, b, comparer.module_specifier_comparer()));
             }
-            new_import_decls.extend(coalesced);
-        }
+            coalesced
+        }));
     } else {
         new_import_decls = processed_imports;
     }
@@ -229,9 +234,7 @@ fn group_by_module_specifier(imports: &[P<Node>]) -> Vec<Vec<P<Node>>> {
     }
 
     let mut result = Vec::with_capacity(order.len());
-    for key in order {
-        result.push(groups.remove(key).unwrap());
-    }
+    result.extend(order.into_iter().map(|key| groups.remove(key).unwrap()));
     result
 }
 
@@ -344,12 +347,10 @@ fn filter_used_import_specifiers(
     jsx_mode_needs_explicit_import: bool,
 ) -> Vec<P<Node>> {
     let mut result = Vec::new();
-    for &elem in elements {
+    result.extend(elements.iter().filter_map(|&elem| {
         let spec_name = elem.as_import_specifier().name();
-        if type_checker.is_declaration_used(source_file, spec_name, jsx_elements_present, jsx_mode_needs_explicit_import) {
-            result.push(elem);
-        }
-    }
+        if type_checker.is_declaration_used(source_file, spec_name, jsx_elements_present, jsx_mode_needs_explicit_import) { Some(elem) } else { None }
+    }));
     result
 }
 
@@ -363,13 +364,7 @@ fn has_module_declaration_matching_specifier(source_file: P<SourceFile>, module_
     }
     let module_specifier_text = module_specifier.text();
 
-    for &module_name in source_file.module_augmentations() {
-        if ast::is_string_literal(module_name) && module_name.text() == module_specifier_text {
-            return true;
-        }
-    }
-
-    false
+    source_file.module_augmentations().iter().any(|&module_name| ast::is_string_literal(module_name) && module_name.text() == module_specifier_text)
 }
 
 // organizeimports.go:353
@@ -433,13 +428,12 @@ pub(crate) fn group_by_newline_contiguous(source_file: P<SourceFile>, decls: &[P
 
 // organizeimports.go:409
 fn is_new_group(source_file: P<SourceFile>, decl: P<Node>, s: &mut scanner::Scanner) -> bool {
-    let full_start = decl.pos();
-    if full_start < 0 {
+    let Some(full_start) = decl.pos().source_offset() else {
         return false;
-    }
+    };
 
     let text = source_file.text();
-    let text_len = text.len() as i32;
+    let text_len = u32::try_from(text.len()).expect("source text length exceeds u32");
 
     if full_start >= text_len {
         return false;
@@ -470,7 +464,7 @@ fn is_new_group(source_file: P<SourceFile>, decl: P<Node>, s: &mut scanner::Scan
 // organizeimports.go:445
 fn coalesce_imports_worker(
     import_decls: &[P<Node>],
-    comparer: &dyn Fn(&str, &str) -> i32,
+    comparer: &dyn Fn(&str, &str) -> Ordering,
     specifier_comparer: &NodeComparer,
     source_file: Option<P<SourceFile>>,
     change_tracker: &mut change::Tracker,
@@ -537,7 +531,7 @@ fn coalesce_imports_worker(
                 comparer(n1.text(), n2.text())
             });
 
-            for &ns_import in &group.namespace_imports {
+            coalesced_imports.extend(group.namespace_imports.iter().map(|&ns_import| {
                 let ns_import_decl = ns_import.as_import_declaration();
                 let clause_node = ns_import_decl.import_clause.unwrap();
                 let clause = clause_node.as_import_clause();
@@ -549,8 +543,8 @@ fn coalesce_imports_worker(
                     ns_import_decl.module_specifier,
                     ns_import_decl.attributes(),
                 );
-                coalesced_imports.push(new_import_decl);
-            }
+                new_import_decl
+            }));
 
             let first_default_import = group.default_imports.first().copied();
             let first_named_import = group.named_imports.first().copied();
@@ -565,13 +559,13 @@ fn coalesce_imports_worker(
             if group.default_imports.len() == 1 {
                 new_default_import = group.default_imports[0].as_import_declaration().import_clause.unwrap().as_import_clause().name();
             } else {
-                for &default_import in &group.default_imports {
+                new_import_specifiers.extend(group.default_imports.iter().map(|&default_import| {
                     let default_clause = default_import.as_import_declaration().import_clause.unwrap().as_import_clause();
                     let default_name = default_clause.name().unwrap();
                     let property_name = factory.new_identifier("default");
                     let import_spec = factory.new_import_specifier(false, Some(property_name), default_name);
-                    new_import_specifiers.push(import_spec);
-                }
+                    import_spec
+                }));
             }
 
             new_import_specifiers.extend(get_new_import_specifiers(&group.named_imports, &factory));
@@ -715,7 +709,7 @@ fn get_new_import_specifiers(named_imports: &[P<Node>], factory: &NodeFactory) -
             continue;
         };
 
-        for &elem in elements {
+        result.extend(elements.iter().filter_map(|&elem| {
             let spec = elem.as_import_specifier();
 
             if let Some(property_name) = spec.property_name() {
@@ -724,13 +718,12 @@ fn get_new_import_specifiers(named_imports: &[P<Node>], factory: &NodeFactory) -
 
                 if property_text == name_text {
                     let normalized = factory.update_import_specifier(elem, spec.is_type_only, None, spec.name());
-                    result.push(normalized);
-                    continue;
+                    return Some(normalized);
                 }
             }
 
-            result.push(elem);
-        }
+            Some(elem)
+        }));
     }
 
     result
@@ -791,10 +784,10 @@ fn get_top_level_export_groups(source_file: P<SourceFile>) -> Vec<Vec<P<Node>>> 
     }
 
     let mut result = Vec::new();
-    for export_group in &top_level_export_groups {
+    result.extend(top_level_export_groups.iter().flat_map(|export_group| {
         let sub_groups = group_by_newline_contiguous(source_file, export_group);
-        result.extend(sub_groups);
-    }
+        sub_groups
+    }));
 
     result
 }
@@ -854,7 +847,7 @@ fn organize_exports_worker(
 fn coalesce_exports_worker(
     export_group: &[P<Node>],
     specifier_comparer: &NodeComparer,
-    module_specifier_comparer: &dyn Fn(&str, &str) -> i32,
+    module_specifier_comparer: &dyn Fn(&str, &str) -> Ordering,
     source_file: Option<P<SourceFile>>,
     change_tracker: &mut change::Tracker,
 ) -> Vec<P<Node>> {
@@ -876,10 +869,10 @@ fn coalesce_exports_worker(
 
     goslices::sort_stable_func(&mut module_specifier_order, |a, b| {
         if a.is_empty() && !b.is_empty() {
-            return 1;
+            return Ordering::Greater;
         }
         if !a.is_empty() && b.is_empty() {
-            return -1;
+            return Ordering::Less;
         }
         module_specifier_comparer(a, b)
     });
@@ -902,14 +895,23 @@ fn coalesce_exports_worker(
             }
 
             let mut new_export_specifiers: Vec<P<Node>> = Vec::new();
-            for &export_decl in sub_group {
-                if let Some(export_clause) = export_decl.as_export_declaration().export_clause {
-                    if export_clause.kind() == Kind::NamedExports {
-                        let named_exports = export_clause.as_named_exports();
-                        new_export_specifiers.extend_from_slice(named_exports.elements.nodes());
-                    }
-                }
-            }
+            new_export_specifiers.extend(
+                sub_group
+                    .iter()
+                    .filter_map(|&export_decl| {
+                        if let Some(export_clause) = export_decl.as_export_declaration().export_clause {
+                            if export_clause.kind() == Kind::NamedExports {
+                                let named_exports = export_clause.as_named_exports();
+                                Some(named_exports.elements.nodes().iter().copied())
+                            } else {
+                                None
+                            }
+                        } else {
+                            None
+                        }
+                    })
+                    .flatten(),
+            );
 
             goslices::sort_stable_func(&mut new_export_specifiers, |&a, &b| specifier_comparer(a, b));
 

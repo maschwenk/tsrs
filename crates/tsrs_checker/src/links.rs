@@ -106,27 +106,32 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
 }
 
 impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
-    /// Returns the links for `key`, creating them on first use.
+    /// Returns the links for `key`, creating them on first use. A hit is a probe and no call (so no saved
+    /// registers where this is inlined); the first access probes again in `create`.
     #[inline]
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub fn get(&mut self, key: P<K>) -> P<V> {
         let key = Self::address(key);
-        let index = match self.slots.entry(Self::hash(key), |slot| ({ slot.key }) == key, |slot| Self::hash(slot.key)) {
-            hashbrown::hash_table::Entry::Occupied(slot) => slot.get().index,
-            hashbrown::hash_table::Entry::Vacant(slot) => {
-                tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
-                let index = self.len;
-                slot.insert(LinkSlot { key, index });
-                if index as usize % LINK_CHUNK == 0 {
-                    self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
-                }
-                self.len += 1;
-                if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.index_by_pkey(key).map(|i| p.at(i))) {
-                    self.at(index).copy_link_from(&frozen);
-                }
-                index
-            }
-        };
+        match self.index_by_pkey(key) {
+            Some(index) => self.at(index),
+            None => self.create(key),
+        }
+    }
+
+    /// `get` of a key without links.
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    #[inline(never)]
+    fn create(&mut self, key: PKey) -> P<V> {
+        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+        let index = self.len;
+        self.slots.insert_unique(Self::hash(key), LinkSlot { key, index }, |slot| Self::hash(slot.key));
+        if index as usize % LINK_CHUNK == 0 {
+            self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+        }
+        self.len += 1;
+        if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.index_by_pkey(key).map(|i| p.at(i))) {
+            self.at(index).copy_link_from(&frozen);
+        }
         self.at(index)
     }
 }
@@ -253,28 +258,30 @@ impl<K: 'static, V: KeyedLinks + Default + LinkCopy + 'static> KeyedLinkStore<K,
     pub fn get(&mut self, key: P<K>) -> P<V> {
         let key = key.key();
         let chunks = &self.chunks;
-        match self.slots.entry(
-            Self::hash(key),
-            |&i| keyed_at(chunks, i).link_key().get() == key,
-            |&i| Self::hash(keyed_at(chunks, i).link_key().get()),
-        ) {
-            hashbrown::hash_table::Entry::Occupied(slot) => keyed_at(&self.chunks, *slot.get()),
-            hashbrown::hash_table::Entry::Vacant(slot) => {
-                tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
-                let index = self.len;
-                if index as usize % LINK_CHUNK == 0 {
-                    self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
-                }
-                self.len += 1;
-                let value = keyed_at(&self.chunks, index);
-                if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get_pkey(key)) {
-                    value.copy_link_from(&frozen);
-                }
-                value.link_key().set(key);
-                slot.insert(index);
-                value
-            }
+        match self.slots.find(Self::hash(key), |&i| keyed_at(chunks, i).link_key().get() == key) {
+            Some(&index) => keyed_at(chunks, index),
+            None => self.create(key),
         }
+    }
+
+    /// `get` of a key without links (see `LinkStore::create`).
+    #[cfg_attr(feature = "site-counts", track_caller)]
+    #[inline(never)]
+    fn create(&mut self, key: PKey) -> P<V> {
+        tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
+        let index = self.len;
+        if index as usize % LINK_CHUNK == 0 {
+            self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+        }
+        self.len += 1;
+        let value = keyed_at(&self.chunks, index);
+        if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.try_get_pkey(key)) {
+            value.copy_link_from(&frozen);
+        }
+        value.link_key().set(key);
+        let chunks = &self.chunks;
+        self.slots.insert_unique(Self::hash(key), index, |&i| Self::hash(keyed_at(chunks, i).link_key().get()));
+        value
     }
 }
 
@@ -431,7 +438,9 @@ impl<V: 'static> IdLinkStore<V> {
         }
     }
 
-    #[inline(never)]
+    /// Inline: a call here would make every caller that inlines `narrow_slot` save registers on its hit path
+    /// (`get_type_of_symbol`'s cached-type return).
+    #[inline]
     fn dense_slot(dense: P<[Cell<u32>; ID_GROUP]>, i: usize) -> Option<u32> {
         dense[i].get().checked_sub(1)
     }

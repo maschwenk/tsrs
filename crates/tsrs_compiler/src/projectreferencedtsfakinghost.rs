@@ -229,11 +229,13 @@ impl projectReferenceDtsFakingVfs {
     // projectreferencedtsfakinghost.go:217
     fn directory_exists_if_project_reference_decl_dir(&self, dir: &str) -> Tristate {
         let dir_path = self.to_path(dir);
-        #[expect(clippy::iter_over_hash_type, reason = "returns True if any entry matches; the order does not matter")]
-        for decl_dir_path in &self.project_reference_file_mapper.dts_directories {
-            if dir_path.contains_path(decl_dir_path) || decl_dir_path.contains_path(&dir_path) {
-                return Tristate::True;
-            }
+        // returns True if any entry matches; the order does not matter
+        if let Some(result) =
+            self.project_reference_file_mapper.dts_directories.iter().find_map(|decl_dir_path| {
+                if dir_path.contains_path(decl_dir_path) || decl_dir_path.contains_path(&dir_path) { Some(Tristate::True) } else { None }
+            })
+        {
+            return result;
         }
         Tristate::Unknown
     }

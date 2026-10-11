@@ -542,20 +542,21 @@ pub fn is_call_or_new_expression(node: P<Node>) -> bool {
 }
 
 // Go `slices.BinarySearchFunc`: the leftmost insertion index and whether the target was found.
-pub(crate) fn binary_search_func<T: Copy, U: Copy>(items: &[T], target: U, mut cmp: impl FnMut(T, U) -> i32) -> (usize, bool) {
-    let i = items.partition_point(|&item| cmp(item, target) < 0);
-    (i, i < items.len() && cmp(items[i], target) == 0)
+pub(crate) fn binary_search_func<T: Copy, U: Copy>(
+    items: &[T],
+    target: U,
+    mut cmp: impl FnMut(T, U) -> std::cmp::Ordering,
+) -> (usize, bool) {
+    let i = items.partition_point(|&item| cmp(item, target).is_lt());
+    (i, i < items.len() && cmp(items[i], target).is_eq())
 }
 
-pub fn index_of_node(nodes: &[P<Node>], node: P<Node>) -> i32 {
+pub fn index_of_node(nodes: &[P<Node>], node: P<Node>) -> Option<usize> {
     let (index, ok) = binary_search_func(nodes, node, compare_node_positions);
-    if ok {
-        return index as i32;
-    }
-    -1
+    ok.then_some(index)
 }
 
-pub fn compare_node_positions(n1: P<Node>, n2: P<Node>) -> i32 {
+pub fn compare_node_positions(n1: P<Node>, n2: P<Node>) -> std::cmp::Ordering {
     compare_text_ranges(n1.loc(), n2.loc())
 }
 
@@ -962,13 +963,13 @@ pub fn class_element_or_class_element_parameter_is_decorated(use_legacy_decorato
         return true;
     }
     if let Some(parameters) = parameters {
-        for &parameter in parameters.nodes() {
+        if parameters.nodes().iter().any(|&parameter| {
             if is_this_parameter(parameter) {
-                continue;
+                return false;
             }
-            if node_is_decorated(use_legacy_decorators, parameter, Some(node), Some(parent)) {
-                return true;
-            }
+            node_is_decorated(use_legacy_decorators, parameter, Some(node), Some(parent))
+        }) {
+            return true;
         }
     }
     false
@@ -1037,15 +1038,13 @@ pub fn get_all_accessor_declarations(parent_declarations: &[P<Node>], accessor: 
     let accessor_name = get_property_name_for_property_name_node(accessor.name().unwrap());
     let accessor_static = is_static(accessor);
     let mut matches = Vec::new();
-    for &member in parent_declarations {
+    matches.extend(parent_declarations.iter().filter_map(|&member| {
         if !is_accessor(member) || is_static(member) != accessor_static {
-            continue;
+            return None;
         }
         let member_name = get_property_name_for_property_name_node(member.name().unwrap());
-        if member_name == accessor_name {
-            matches.push(member);
-        }
-    }
+        if member_name == accessor_name { Some(member) } else { None }
+    }));
     get_all_accessor_declarations_for_declaration(accessor, &matches)
 }
 
@@ -1264,10 +1263,8 @@ pub fn is_whitespace_only_jsx_text(node: P<Node>) -> bool {
 
 // utilities.go:3056
 pub fn for_each_child_and_jsdoc(node: P<Node>, source_file: &'static SourceFile, v: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-    for &jsdoc in node.jsdoc(Some(source_file)) {
-        if v(jsdoc) {
-            return true;
-        }
+    if node.jsdoc(Some(source_file)).iter().any(|&jsdoc| v(jsdoc)) {
+        return true;
     }
     node.for_each_child(v)
 }

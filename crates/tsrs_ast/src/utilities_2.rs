@@ -6,7 +6,7 @@ use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ResolutionMode, ScriptKind
 
 use crate::*;
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum JSDeclarationKind {
     #[default]
@@ -159,8 +159,8 @@ pub fn is_ambient_module_symbol_name(s: &str) -> bool {
 // Ambient module symbols are either of the form `"modulename"` or `InternalSymbolNamePrefix + "\"modulename\"pattern@nodeId"`;
 // see `getDeclarationName`.
 pub fn try_get_ambient_module_name_from_symbol_name(s: &str) -> Option<&str> {
-    if s.starts_with('"') && s.ends_with('"') && s.len() >= 2 {
-        return Some(&s[1..s.len() - 1]);
+    if let Some(name) = s.strip_circumfix('"', '"') {
+        return Some(name);
     }
     let pattern_prefix = format!("{}\"", InternalSymbolNamePrefix);
     let rest = s.strip_prefix(pattern_prefix.as_str())?;
@@ -251,10 +251,8 @@ pub fn is_name_of_heritage_clause_type_reference(mut node: P<Node>) -> bool {
 
 pub fn get_heritage_clause(node: P<Node>, kind: Kind) -> Option<P<Node>> {
     if let Some(clauses) = get_heritage_clauses(node) {
-        for &clause in clauses.nodes() {
-            if clause.as_heritage_clause().token == kind {
-                return Some(clause);
-            }
+        if let Some(result) = clauses.nodes().iter().find_map(|&clause| if clause.as_heritage_clause().token == kind { Some(Some(clause)) } else { None }) {
+            return result;
         }
     }
     None
@@ -770,7 +768,7 @@ pub fn is_block_scope(node: P<Node>, parent_node: Option<P<Node>>) -> bool {
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub struct SemanticMeaning: i32 {
+    pub struct SemanticMeaning: u32 {
         const None = 0;
         const Value = 1 << 0;
         const Type = 1 << 1;
@@ -885,7 +883,7 @@ pub(crate) fn pop_ancestor(ancestors: &[P<Node>], node: P<Node>) -> (&[P<Node>],
     (&ancestors[..n], Some(ancestors[n]))
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum ModuleInstanceState {
     #[default]
@@ -957,15 +955,19 @@ pub(crate) fn get_module_instance_state_worker(
                 if decl.module_specifier.is_none() && export_clause.kind() == Kind::NamedExports {
                     let mut state = ModuleInstanceState::NonInstantiated;
                     let ancestors = push_ancestor(&push_ancestor(ancestors, node), export_clause);
-                    for &specifier in export_clause.elements() {
+                    state = match export_clause.elements().iter().try_fold(state, |mut state, &specifier| {
                         let specifier_state = get_module_instance_state_for_alias_target(specifier, &ancestors, visited);
                         if specifier_state > state {
                             state = specifier_state;
                         }
                         if state == ModuleInstanceState::Instantiated {
-                            return state;
+                            return Err(state);
                         }
-                    }
+                        Ok(state)
+                    }) {
+                        Ok(value) => value,
+                        Err(value) => return value,
+                    };
                     return state;
                 }
             }
@@ -1236,16 +1238,15 @@ pub fn is_parse_tree_node(node: P<Node>) -> bool {
 }
 
 // Returns a token if position is in [start-of-leading-trivia, end), includes JSDoc only if requested
-pub fn get_node_at_position(file: P<SourceFile>, position: i32, include_jsdoc: bool) -> P<Node> {
+pub fn get_node_at_position(file: P<SourceFile>, position: u32, include_jsdoc: bool) -> P<Node> {
     let mut current = file.as_node();
     loop {
         let mut child: Option<P<Node>> = None;
         if include_jsdoc {
-            for &jsdoc in current.jsdoc(Some(file.get())) {
-                if node_contains_position(jsdoc, position) {
-                    child = Some(jsdoc);
-                    break;
-                }
+            if let Some(jsdoc) =
+                current.jsdoc(Some(file.get())).iter().find_map(|&jsdoc| if node_contains_position(jsdoc, position) { Some(jsdoc) } else { None })
+            {
+                child = Some(jsdoc);
             }
         }
         if child.is_none() {
@@ -1264,28 +1265,35 @@ pub fn get_node_at_position(file: P<SourceFile>, position: i32, include_jsdoc: b
     }
 }
 
-pub(crate) fn node_contains_position(node: P<Node>, position: i32) -> bool {
-    node.kind() >= Kind::FirstNode && node.pos() <= position && (position < node.end() || position == node.end() && node.kind() == Kind::EndOfFile)
+pub(crate) fn node_contains_position(node: P<Node>, position: u32) -> bool {
+    let (Some(pos), Some(end)) = (node.pos().source_offset(), node.end().source_offset()) else {
+        return false;
+    };
+    node.kind() >= Kind::FirstNode
+        && pos <= position
+        && (position < end || position == end && node.kind() == Kind::EndOfFile)
 }
 
 // Go scans for the first 'i' or 'r' and compares; the first "import" or "require" at or after `start` is the
 // same position, found here with two substring searches (the "require" search stops where "import" was found).
-pub(crate) fn find_import_or_require(text: &str, start: i32) -> (i32, i32) {
-    static IMPORT: LazyLock<memchr::memmem::Finder<'static>> = LazyLock::new(|| memchr::memmem::Finder::new("import"));
-    static REQUIRE: LazyLock<memchr::memmem::Finder<'static>> = LazyLock::new(|| memchr::memmem::Finder::new("require"));
+pub(crate) fn find_import_or_require(text: &str, start: u32) -> Option<(u32, u32)> {
+    static IMPORT: LazyLock<memchr::memmem::Finder<'static>> =
+        LazyLock::new(|| memchr::memmem::Finder::new("import"));
+    static REQUIRE: LazyLock<memchr::memmem::Finder<'static>> =
+        LazyLock::new(|| memchr::memmem::Finder::new("require"));
     let bytes = text.as_bytes();
-    let index = (start.max(0) as usize).min(bytes.len());
+    let index = (start as usize).min(bytes.len());
     let import = IMPORT.find(&bytes[index..]).map(|i| index + i);
     let require_end = match import {
         Some(i) => (i + "require".len()).min(bytes.len()),
         None => bytes.len(),
     };
     if let Some(i) = REQUIRE.find(&bytes[index..require_end]) {
-        return ((index + i) as i32, 7);
+        return Some(((index + i) as u32, 7));
     }
     match import {
-        Some(i) => (i as i32, 6),
-        None => (-1, 0),
+        Some(i) => Some((i as u32, 6)),
+        None => None,
     }
 }
 
@@ -1296,9 +1304,13 @@ pub fn for_each_dynamic_import_or_require_call(
     mut cb: impl FnMut(P<Node>, P<Node>) -> bool,
 ) -> bool {
     let is_java_script_file = is_in_js_file(file.as_node());
-    let (mut last_index, mut size) = find_import_or_require(file.text(), 0);
-    while last_index >= 0 {
-        let node = get_node_at_position(file, last_index, is_java_script_file && include_type_space_imports);
+    let mut next = find_import_or_require(file.text(), 0);
+    while let Some((last_index, size)) = next {
+        let node = get_node_at_position(
+            file,
+            last_index,
+            is_java_script_file && include_type_space_imports,
+        );
         if is_java_script_file && is_require_call(node, require_string_literal_like_argument) {
             if cb(node, node.arguments()[0]) {
                 return true;
@@ -1316,8 +1328,7 @@ pub fn for_each_dynamic_import_or_require_call(
             }
         }
         // skip past import/require
-        last_index += size;
-        (last_index, size) = find_import_or_require(file.text(), last_index);
+        next = find_import_or_require(file.text(), last_index + size);
     }
     false
 }
@@ -1373,10 +1384,8 @@ pub fn get_jsx_runtime_import(base: &str, options: &CompilerOptions) -> String {
 pub fn get_pragma_from_source_file(file: Option<P<SourceFile>>, name: &str) -> Option<&'static Pragma> {
     let mut result = None;
     if let Some(file) = file {
-        for pragma in file.pragmas() {
-            if pragma.name == name {
-                result = Some(pragma); // Last one wins
-            }
+        if let Some(pragma) = file.pragmas().iter().rev().find(|pragma| pragma.name == name) {
+            result = Some(pragma); // Last one wins
         }
     }
     result

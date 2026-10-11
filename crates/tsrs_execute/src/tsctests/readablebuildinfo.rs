@@ -204,9 +204,7 @@ pub(crate) fn to_readable_build_info(build_info: &BuildInfo, build_info_text: &s
     }
     if !build_info.referenced_map.is_empty() {
         let mut m = OrderedMap::default();
-        for entry in &build_info.referenced_map {
-            m.insert(r.to_file_path(entry.file_id), strings(&r.file_ids_list[entry.file_id_list_id as usize - 1]));
-        }
+        m.extend(build_info.referenced_map.iter().map(|entry| (r.to_file_path(entry.file_id), strings(&r.file_ids_list[entry.file_id_list_id as usize - 1]))));
         o.set("referencedMap", Value::Object(m));
     }
     o.list(

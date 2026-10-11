@@ -340,13 +340,7 @@ fn test_bom() {
 
     for (name, big_endian) in [("BigEndian", true), ("LittleEndian", false)] {
         let mut buf: Vec<u8> = if big_endian { vec![0xFE, 0xFF] } else { vec![0xFF, 0xFE] };
-        for r in EXPECTED.encode_utf16() {
-            if big_endian {
-                buf.extend_from_slice(&r.to_be_bytes());
-            } else {
-                buf.extend_from_slice(&r.to_le_bytes());
-            }
-        }
+        buf.extend(EXPECTED.encode_utf16().flat_map(|r| if big_endian { r.to_be_bytes() } else { r.to_le_bytes() }));
 
         let fs = from_map([("/foo.ts", buf)], true);
 

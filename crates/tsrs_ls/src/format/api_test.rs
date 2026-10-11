@@ -9,13 +9,19 @@ pub(crate) fn apply_bulk_edits(text: &str, edits: &[TextChange]) -> String {
     let mut b = String::with_capacity(text.len());
     let mut last_end = 0usize;
     for e in edits {
-        let start = e.text_range.pos() as usize;
+        let start = e
+            .text_range
+            .pos()
+            .expect_source("format edits have source positions") as usize;
         if start != last_end {
             b.push_str(&text[last_end..start]);
         }
         b.push_str(&e.new_text);
 
-        last_end = e.text_range.end() as usize;
+        last_end = e
+            .text_range
+            .end()
+            .expect_source("format edits have source positions") as usize;
     }
     b.push_str(&text[last_end..]);
 

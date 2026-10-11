@@ -1,5 +1,5 @@
 use std::fmt;
-use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Weak};
 use std::time::SystemTime;
 
@@ -26,12 +26,12 @@ struct logTreeNode {
     logs: Mutex<Vec<logEntry>>,
     // None on the root itself (Go: `root == self`).
     root: Option<Weak<logTreeNode>>,
-    level: i32,
+    level: usize,
     verbose: AtomicBool,
 
     // Only set on root
-    count: AtomicI32,
-    string_length: AtomicI32,
+    count: AtomicUsize,
+    string_length: AtomicUsize,
 }
 
 // logtree.go:44
@@ -42,8 +42,8 @@ pub fn new_log_tree(name: &str) -> LogTree {
         root: None,
         level: 0,
         verbose: AtomicBool::new(false),
-        count: AtomicI32::new(0),
-        string_length: AtomicI32::new(0),
+        count: AtomicUsize::new(0),
+        string_length: AtomicUsize::new(0),
     })))
 }
 
@@ -61,7 +61,7 @@ impl logTreeNode {
     // logtree.go:52
     fn add(self: &Arc<Self>, log: logEntry) {
         // indent + header + message + newline
-        let len = self.level + 15 + log.message.len() as i32 + 1;
+        let len = self.level + 15 + log.message.len() + 1;
         self.with_root(|root| {
             root.string_length.fetch_add(len, Ordering::Relaxed);
             root.count.fetch_add(1, Ordering::Relaxed);
@@ -162,8 +162,8 @@ impl LogTree {
             root: Some(root),
             level: c.level + 1,
             verbose: AtomicBool::new(c.verbose.load(Ordering::Relaxed)),
-            count: AtomicI32::new(0),
-            string_length: AtomicI32::new(0),
+            count: AtomicUsize::new(0),
+            string_length: AtomicUsize::new(0),
         })));
         c.add(new_log_entry(child.clone(), message.to_string()));
         child
@@ -176,7 +176,8 @@ impl LogTree {
             panic!("can only call String on root LogTree");
         }
         let header = format!("======== {} ========\n", c.name);
-        let mut builder = String::with_capacity(c.string_length.load(Ordering::Relaxed).max(0) as usize + header.len());
+        let mut builder =
+            String::with_capacity(c.string_length.load(Ordering::Relaxed) + header.len());
         builder.push_str(&header);
         c.write_logs_recursive(&mut builder, "");
         builder

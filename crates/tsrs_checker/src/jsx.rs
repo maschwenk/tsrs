@@ -237,14 +237,20 @@ impl Checker {
     }
 
     // jsx.go:229
-    pub(crate) fn get_contextual_jsx_element_attributes_type(&mut self, node: P<Node>, context_flags: ContextFlags) -> Option<P<Type>> {
-        if ast::is_jsx_opening_element(node) && context_flags != ContextFlags::IgnoreNodeInferences {
-            let index = self.find_contextual_node(node.parent().unwrap(), context_flags == ContextFlags::None);
-            if index >= 0 {
+    pub(crate) fn get_contextual_jsx_element_attributes_type(
+        &mut self,
+        node: P<Node>,
+        context_flags: ContextFlags,
+    ) -> Option<P<Type>> {
+        if ast::is_jsx_opening_element(node) && context_flags != ContextFlags::IgnoreNodeInferences
+        {
+            if let Some(index) = self
+                .find_contextual_node(node.parent().unwrap(), context_flags == ContextFlags::None)
+            {
                 // Contextually applied type is moved from attributes up to the outer jsx attributes so when walking up from the children they get hit
                 // _However_ to hit them from the _attributes_ we must look for them here; otherwise we'll used the declared type
                 // (as below) instead!
-                return self.contextual_infos[index as usize].t;
+                return self.contextual_infos[index].t;
             }
         }
         self.get_contextual_type_for_argument_at_index(node, 0)
@@ -267,8 +273,14 @@ impl Checker {
             _ => return None,
         };
         let real_children = ast::get_semantic_jsx_children(node.children().nodes());
-        let child_index = real_children.iter().position(|&c| c == child).map_or(-1, |i| i as i32);
-        let child_field_type = self.get_type_of_property_of_contextual_type(attributes_type, &jsx_children_property_name)?;
+        let child_index = real_children
+            .iter()
+            .position(|&c| c == child)
+            .expect("JSX child belongs to its parent");
+        let child_field_type = self.get_type_of_property_of_contextual_type(
+            attributes_type,
+            &jsx_children_property_name,
+        )?;
         if real_children.len() == 1 {
             return Some(child_field_type);
         }
@@ -294,7 +306,7 @@ impl Checker {
         let jsx_namespace = self.get_jsx_namespace_at(Some(node));
         let jsx_children_property_name = self.get_jsx_element_children_property_name(jsx_namespace);
         let mut discriminant_properties: Vec<P<Node>> = Vec::new();
-        for &p in node.properties() {
+        discriminant_properties.extend(node.properties().iter().filter_map(|&p| {
             let keep = 'keep: {
                 let symbol = p.symbol();
                 let Some(symbol) = symbol else {
@@ -307,12 +319,10 @@ impl Checker {
                 (initializer.is_none() || self.is_possibly_discriminant_value(initializer.unwrap()))
                     && self.is_discriminant_property(Some(contextual_type), symbol.name())
             };
-            if keep {
-                discriminant_properties.push(p);
-            }
-        }
+            if keep { Some(p) } else { None }
+        }));
         let mut discriminant_members: Vec<P<Symbol>> = Vec::new();
-        for s in self.get_properties_of_type(contextual_type).iter().copied() {
+        discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter_map(|s| {
             let keep = 'keep: {
                 if !s.flags().intersects(SymbolFlags::Optional) || node.symbol().is_none() {
                     break 'keep false;
@@ -327,10 +337,8 @@ impl Checker {
                 node.symbol().unwrap().members().and_then(|members| members.lookup(s.name())).is_none()
                     && self.is_discriminant_property(Some(contextual_type), s.name())
             };
-            if keep {
-                discriminant_members.push(s);
-            }
-        }
+            if keep { Some(s) } else { None }
+        }));
         let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
         let discriminated = self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator);
         self.discriminated_contextual_types.insert(key, discriminated);
@@ -690,7 +698,17 @@ impl Checker {
                     self.check_source_elements(type_arguments);
                     let source_file = ast::get_source_file_of_node(node).unwrap();
                     let type_argument_list = node.type_argument_list().unwrap();
-                    let loc = TextRange::new(tsrs_scanner::skip_trivia(source_file.text(), type_argument_list.pos()), type_argument_list.end());
+                    let loc = TextRange::new(
+                        tsrs_scanner::skip_trivia(
+                            source_file.text(),
+                            type_argument_list
+                                .pos()
+                                .expect_source("parsed node lists have source positions"),
+                        ),
+                        type_argument_list
+                            .end()
+                            .expect_source("parsed node lists have source positions"),
+                    );
                     self.add_diagnostic(ast::new_diagnostic(
                         Some(source_file),
                         loc,
@@ -709,7 +727,12 @@ impl Checker {
             return self.resolve_error_call(node);
         }
         let signatures = self.get_uninstantiated_jsx_signatures_of_type(expr_types, node);
-        if self.is_untyped_function_call(expr_types, apparent_type, signatures.len() as i32, 0 /*constructSignatures*/) {
+        if self.is_untyped_function_call(
+            expr_types,
+            apparent_type,
+            signatures.len(),
+            0, /*constructSignatures*/
+        ) {
             return self.resolve_untyped_call(node);
         }
         if signatures.is_empty() {
@@ -956,20 +979,20 @@ impl Checker {
     // jsx.go:877
     pub(crate) fn check_jsx_children(&mut self, node: P<Node>, check_mode: CheckMode) -> Vec<P<Type>> {
         let mut child_types: Vec<P<Type>> = Vec::new();
-        for &child in node.children().nodes() {
+        child_types.extend(node.children().nodes().iter().filter_map(|&child| {
             // In React, JSX text that contains only whitespaces will be ignored so we don't want to type-check that
             // because then type of children property will have constituent of string type.
             if ast::is_jsx_text(child) {
-                if !child.as_jsx_text().contains_only_trivia_white_spaces {
-                    child_types.push(self.string_type);
-                }
-            } else if ast::is_jsx_expression(child) && child.expression().is_none() {
-                // empty jsx expressions don't *really* count as present children
-                continue;
+                if !child.as_jsx_text().contains_only_trivia_white_spaces { Some(self.string_type) } else { None }
             } else {
-                child_types.push(self.check_expression_for_mutable_location(child, check_mode));
+                if ast::is_jsx_expression(child) && child.expression().is_none() {
+                    // empty jsx expressions don't *really* count as present children
+                    None
+                } else {
+                    Some(self.check_expression_for_mutable_location(child, check_mode))
+                }
             }
-        }
+        }));
         child_types
     }
 
@@ -1124,7 +1147,12 @@ impl Checker {
         if managed_sym.flags().intersects(SymbolFlags::TypeAlias) {
             let params = self.type_alias_links.get(managed_sym).type_parameters.get();
             if params.len() >= type_arguments.len() {
-                let args = self.fill_missing_type_arguments(type_arguments, params, type_arguments.len() as i32, in_java_script);
+                let args = self.fill_missing_type_arguments(
+                    type_arguments,
+                    params,
+                    type_arguments.len(),
+                    in_java_script,
+                );
                 if args.is_empty() {
                     return Some(declared_managed_type);
                 }
@@ -1137,7 +1165,7 @@ impl Checker {
             let args = self.fill_missing_type_arguments(
                 type_arguments,
                 declared_managed_type.as_interface_type().type_parameters(),
-                type_arguments.len() as i32,
+                type_arguments.len(),
                 in_java_script,
             );
             return Some(self.create_type_reference(declared_managed_type, &args));
@@ -1594,7 +1622,7 @@ fn pragma_factory_argument(pragma: &'static Pragma) -> &'static str {
 
 // jsx.go:1443
 pub(crate) fn mark_as_synthetic(node: P<Node>) -> bool {
-    node.set_loc(TextRange::new(-1, -1));
+    node.set_loc(TextRange::synthetic());
     node.for_each_child(&mut |child| mark_as_synthetic(child));
     false
 }
@@ -1706,7 +1734,7 @@ fn check_tag_name_does_not_expect_too_many_arguments(c: &mut Checker, node: P<No
         // to guard against generic factories which won't have signatures directly, do not error
         return true;
     }
-    let mut absolute_min_arg_count = i32::MAX;
+    let mut absolute_min_arg_count = usize::MAX;
     for &tag_sig in tag_call_signatures {
         let tag_required_arg_count = c.get_min_argument_count(tag_sig);
         if tag_required_arg_count < absolute_min_arg_count {

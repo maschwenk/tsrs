@@ -24,10 +24,10 @@ pub trait EmitTextWriter {
     fn string(&self) -> String;
     fn raw_write(&mut self, s: &str);
     fn write_literal(&mut self, s: &str);
-    fn get_text_pos(&self) -> i32;
-    fn get_line(&self) -> i32;
+    fn get_text_pos(&self) -> u32;
+    fn get_line(&self) -> u32;
     fn get_column(&self) -> UTF16Offset;
-    fn get_indent(&self) -> i32;
+    fn get_indent(&self) -> u32;
     fn is_at_start_of_line(&self) -> bool;
     fn has_trailing_comment(&self) -> bool;
     fn has_trailing_whitespace(&self) -> bool;
@@ -94,16 +94,16 @@ impl<T: EmitTextWriter + ?Sized> EmitTextWriter for Box<T> {
     fn write_literal(&mut self, s: &str) {
         (**self).write_literal(s)
     }
-    fn get_text_pos(&self) -> i32 {
+    fn get_text_pos(&self) -> u32 {
         (**self).get_text_pos()
     }
-    fn get_line(&self) -> i32 {
+    fn get_line(&self) -> u32 {
         (**self).get_line()
     }
     fn get_column(&self) -> UTF16Offset {
         (**self).get_column()
     }
-    fn get_indent(&self) -> i32 {
+    fn get_indent(&self) -> u32 {
         (**self).get_indent()
     }
     fn is_at_start_of_line(&self) -> bool {

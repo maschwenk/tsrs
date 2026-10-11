@@ -99,7 +99,7 @@ impl Checker {
     }
 
     // checker.go:24025
-    pub(crate) fn get_tuple_element_type(&mut self, t: P<Type>, index: i32) -> Option<P<Type>> {
+    pub(crate) fn get_tuple_element_type(&mut self, t: P<Type>, index: usize) -> Option<P<Type>> {
         let prop_type = self.get_type_of_property_of_type(t, &index.to_string());
         if prop_type.is_some() {
             return prop_type;
@@ -135,10 +135,12 @@ impl Checker {
         let t = self.get_declared_type_of_symbol(symbol);
         let type_parameters = self.type_alias_links.get(symbol).type_parameters.get();
         if !type_parameters.is_empty() {
-            let num_type_arguments = type_arguments.len() as i32;
+            let num_type_arguments = type_arguments.len();
             let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
-            if num_type_arguments < min_type_argument_count || num_type_arguments > type_parameters.len() as i32 {
-                let message = if min_type_argument_count == type_parameters.len() as i32 {
+            if num_type_arguments < min_type_argument_count
+                || num_type_arguments > type_parameters.len()
+            {
+                let message = if min_type_argument_count == type_parameters.len() {
                     &diagnostics::Generic_type_0_requires_1_type_argument_s
                 } else {
                     &diagnostics::Generic_type_0_requires_between_1_and_2_type_arguments
@@ -406,11 +408,11 @@ impl Checker {
     pub(crate) fn get_infer_type_parameters(&mut self, node: P<Node>) -> Vec<P<Type>> {
         let mut result = Vec::new();
         let symbols = node.locals().map_or_else(Vec::new, |locals| locals.values());
-        for symbol in symbols {
-            if symbol.flags().intersects(SymbolFlags::TypeParameter) {
-                result.push(self.get_declared_type_of_symbol(symbol));
-            }
-        }
+        result.extend(
+            symbols
+                .into_iter()
+                .filter_map(|symbol| if symbol.flags().intersects(SymbolFlags::TypeParameter) { Some(self.get_declared_type_of_symbol(symbol)) } else { None }),
+        );
         result
     }
 
@@ -425,11 +427,13 @@ impl Checker {
     pub(crate) fn append_local_type_parameters_of_class_or_interface_or_type_alias(&mut self, types: &[P<Type>], symbol: P<Symbol>) -> Vec<P<Type>> {
         let mut types = types.to_vec();
         let declarations = symbol.declarations();
-        for &node in declarations {
+        types = declarations.iter().fold(types, |mut types, &node| {
             if ast::node_kind_is(node, &[Kind::InterfaceDeclaration, Kind::ClassDeclaration, Kind::ClassExpression]) || is_type_alias(node) {
                 types = self.append_type_parameters(&types, node.type_parameters());
             }
-        }
+
+            types
+        });
         types
     }
 
@@ -502,7 +506,7 @@ impl Checker {
             let declarations = symbol.declarations();
             for declaration in declarations {
                 if declaration.kind() == Kind::EnumDeclaration {
-                    for &member in declaration.members() {
+                    member_type_list.extend(declaration.members().iter().filter_map(|&member| {
                         if !ast::has_dynamic_name(member) {
                             let member_symbol = self.get_symbol_of_declaration(member).unwrap();
                             let value = self.get_enum_member_value(member).value;
@@ -513,9 +517,11 @@ impl Checker {
                             };
                             let member_links = self.declared_type_links.get(member_symbol);
                             member_links.declared_type.set(Some(self.get_fresh_type_of_literal_type(member_type)));
-                            member_type_list.push(member_type);
+                            Some(member_type)
+                        } else {
+                            None
                         }
-                    }
+                    }));
                 }
             }
             let enum_type = if !member_type_list.is_empty() {
@@ -1617,7 +1623,10 @@ impl Checker {
     // checker.go:25245
     pub(crate) fn create_tuple_target_type(&mut self, element_infos: &[TupleElementInfo], readonly: bool) -> P<Type> {
         let arity = element_infos.len();
-        let min_length = count_where(element_infos, |e| e.flags.intersects(ElementFlags::Required | ElementFlags::Variadic)) as i32;
+        let min_length = count_where(element_infos, |e| {
+            e.flags
+                .intersects(ElementFlags::Required | ElementFlags::Variadic)
+        });
         let mut type_parameters: Vec<P<Type>> = Vec::new();
         let members = SymbolTable::new();
         let mut combined_flags = ElementFlags::None;
@@ -1634,10 +1643,10 @@ impl Checker {
                 self.tuple_elements.push((type_parameter, name));
             }
             type_parameters = Vec::with_capacity(arity + 1);
-            for i in 0..arity {
+            for (i, element_info) in element_infos.iter().enumerate().take(arity) {
                 let (type_parameter, name) = self.tuple_elements[i];
                 type_parameters.push(type_parameter);
-                let flags = element_infos[i].flags;
+                let flags = (*element_info).flags;
                 combined_flags |= flags;
                 if !combined_flags.intersects(ElementFlags::Variable) {
                     let property = self.new_symbol_ex(
@@ -1651,15 +1660,23 @@ impl Checker {
                 }
             }
         }
-        let fixed_length = members.len() as i32;
-        let length_symbol = self.new_symbol_ex(SymbolFlags::Property, "length", if readonly { CheckFlags::Readonly } else { CheckFlags::None });
+        let fixed_length = members.len();
+        let length_symbol = self.new_symbol_ex(
+            SymbolFlags::Property,
+            "length",
+            if readonly {
+                CheckFlags::Readonly
+            } else {
+                CheckFlags::None
+            },
+        );
         if combined_flags.intersects(ElementFlags::Variable) {
             self.value_symbol_links.get(length_symbol).resolved_type.set(Some(self.number_type));
         } else {
             let mut literal_types = Vec::new();
-            for i in min_length..=(arity as i32) {
-                literal_types.push(self.get_number_literal_type(Number(i as f64)));
-            }
+            literal_types.extend(
+                (min_length..=arity).map(|i| self.get_number_literal_type(Number(i as f64))),
+            );
             let length_type = self.get_union_type(&literal_types);
             self.value_symbol_links.get(length_symbol).resolved_type.set(Some(length_type));
         }
@@ -1687,19 +1704,28 @@ impl Checker {
     }
 
     // checker.go:25300
-    pub(crate) fn get_element_type_of_slice_of_tuple_type(&mut self, t: P<Type>, index: i32, end_skip_count: i32, writing: bool, no_reductions: bool) -> Option<P<Type>> {
-        let length = self.get_type_reference_arity(t) - end_skip_count;
+    pub(crate) fn get_element_type_of_slice_of_tuple_type(
+        &mut self,
+        t: P<Type>,
+        index: usize,
+        end_skip_count: usize,
+        writing: bool,
+        no_reductions: bool,
+    ) -> Option<P<Type>> {
+        let length = self
+            .get_type_reference_arity(t)
+            .saturating_sub(end_skip_count);
         let element_infos = t.target_tuple_type().element_infos.get();
         if index < length {
             let type_arguments = self.get_type_arguments(t);
             let mut element_types = Vec::new();
-            for i in index..length {
-                let mut e = type_arguments[i as usize];
-                if element_infos[i as usize].flags.intersects(ElementFlags::Variadic) {
+            element_types.extend((index..length).map(|i| {
+                let mut e = type_arguments[i];
+                if element_infos[i].flags.intersects(ElementFlags::Variadic) {
                     e = self.get_indexed_access_type(e, self.number_type);
                 }
-                element_types.push(e);
-            }
+                e
+            }));
             if writing {
                 return Some(self.get_intersection_type(&element_types));
             }
@@ -1751,9 +1777,11 @@ impl Checker {
         if t.flags().intersects(TypeFlags::UnionOrIntersection | TypeFlags::Substitution) {
             if !t.object_flags_lazy().intersects(ObjectFlags::IsGenericTypeComputed) {
                 if t.flags().intersects(TypeFlags::UnionOrIntersection) {
-                    for &u in t.types() {
+                    combined_flags = t.types().iter().fold(combined_flags, |mut combined_flags, &u| {
                         combined_flags |= self.get_generic_object_flags(u);
-                    }
+
+                        combined_flags
+                    });
                 } else {
                     let d = t.as_substitution_type();
                     combined_flags = self.get_generic_object_flags(d.base_type.get().unwrap()) | self.get_generic_object_flags(d.constraint.get().unwrap());
@@ -2101,7 +2129,7 @@ impl Checker {
             } else {
                 data.set_signatures(alloc_slice(call_signatures));
             }
-            data.set_call_signature_count(call_signatures.len() as i32);
+            data.set_call_signature_count(call_signatures.len());
         } else {
             if !construct_signatures.is_empty() {
                 data.set_signatures(alloc_slice(construct_signatures));
@@ -2127,11 +2155,13 @@ impl Checker {
     // checker.go:25648
     pub(crate) fn get_propagating_flags_of_types(&mut self, types: &[P<Type>], exclude_kinds: TypeFlags) -> ObjectFlags {
         let mut result = ObjectFlags::None;
-        for &t in types {
+        result = types.iter().fold(result, |mut result, &t| {
             if !t.flags().intersects(exclude_kinds) {
                 result |= t.object_flags();
             }
-        }
+
+            result
+        });
         result & ObjectFlags::PropagatingFlags
     }
 
@@ -2215,7 +2245,7 @@ impl Checker {
         parameters: &[P<Symbol>],
         resolved_return_type: Option<P<Type>>,
         resolved_type_predicate: Option<P<TypePredicate>>,
-        min_argument_count: i32,
+        min_argument_count: usize,
     ) -> P<Signature> {
         self.signature_count += 1;
         tsrs_core::sitecount::hit("signature", "");
@@ -2229,7 +2259,7 @@ impl Checker {
         sig.resolved_return_type.set(resolved_return_type);
         sig.set_resolved_type_predicate(resolved_type_predicate, self.no_type_predicate);
         sig.min_argument_count.set(min_argument_count);
-        sig.resolved_min_argument_count.set(-1);
+        sig.resolved_min_argument_count.set(None);
         sig
     }
 
@@ -2609,15 +2639,13 @@ impl Checker {
         }
         let mut mapped_types = self.free_type_lists.pop().unwrap_or_default();
         let mut changed = false;
-        for &s in types {
+        mapped_types.extend(types.iter().filter_map(|&s| {
             let mapped = if s.flags().intersects(TypeFlags::Union) { self.map_type_ex_worker(s, f, no_reductions) } else { f(self, s) };
             if mapped != Some(s) {
                 changed = true;
             }
-            if let Some(mapped) = mapped {
-                mapped_types.push(mapped);
-            }
-        }
+            if let Some(mapped) = mapped { Some(mapped) } else { None }
+        }));
         let result = if !changed {
             Some(t)
         } else if mapped_types.is_empty() {

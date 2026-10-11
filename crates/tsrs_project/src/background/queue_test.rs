@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use tsrs_core::context::Context;
@@ -27,7 +27,7 @@ fn queue_basic_enqueue() {
 fn queue_multiple_tasks_execution() {
     let q = new_queue();
 
-    let counter = Arc::new(AtomicI64::new(0));
+    let counter = Arc::new(AtomicUsize::new(0));
     let num_tasks = 10;
 
     for _ in 0..num_tasks {

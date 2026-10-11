@@ -1,4 +1,4 @@
-use std::sync::atomic::AtomicI32;
+use std::sync::atomic::AtomicUsize;
 use std::sync::atomic::Ordering::SeqCst;
 use std::sync::Arc;
 
@@ -17,8 +17,8 @@ use crate::verbatim::verbatimHandler;
 // dynamic_verbatim.go:14
 #[derive(Debug, Default)]
 pub struct ProjectLifecycle {
-    pub opens: AtomicI32,
-    pub closes: AtomicI32,
+    pub opens: AtomicUsize,
+    pub closes: AtomicUsize,
 }
 
 // dynamic_verbatim.go:19 (Go embeds verbatimHandler, which carries no state.)

@@ -16,10 +16,10 @@ pub fn print_and_position_node(
     node: P<Node>,
     source_file: Option<P<SourceFile>>,
     new_line: &str,
-    indent_size: i32,
+    indent_size: usize,
     emit_context: Option<P<EmitContext>>,
 ) -> (String, P<Node>) {
-    let mut writer = new_change_tracker_writer(new_line, indent_size);
+    let mut writer = new_change_tracker_writer(new_line, Some(indent_size));
     new_printer(
         PrinterOptions {
             new_line: get_new_line_kind(new_line),
@@ -47,11 +47,15 @@ pub fn print_and_position_node(
 // syntheticfile.go:39
 pub fn create_synthetic_source_file(factory: &NodeFactory, node: P<Node>, text: &str, parse_options: SourceFileParseOptions) -> P<SourceFile> {
     let eof = factory.new_token(Kind::EndOfFile);
-    eof.set_loc(TextRange::new(text.len() as i32, text.len() as i32));
+    let text_len =
+        u32::try_from(text.len()).expect("synthetic source file exceeds supported source length");
+    eof.set_loc(TextRange::new(text_len, text_len));
     let statements = factory.new_node_list(vec![node]);
-    statements.loc.set(TextRange::new(node.pos(), node.end()));
+    statements
+        .loc
+        .set(TextRange::from_text_pos(node.pos(), node.end()));
     let synthetic_file = factory.new_source_file(parse_options, alloc_str(text), statements, eof);
-    synthetic_file.set_loc(TextRange::new(0, text.len() as i32));
+    synthetic_file.set_loc(TextRange::new(0, text_len));
     set_parent_in_children(synthetic_file);
     synthetic_file.as_source_file_p()
 }

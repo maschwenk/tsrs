@@ -47,7 +47,11 @@ impl Parser {
             let loc = self.skip_range_trivia(name.loc());
             self.parse_error_at_range(loc, &diagnostics::Identifier_expected, &[]);
             identifier_name = self.new_identifier("");
-            self.finish_node(identifier_name, name.pos());
+            self.finish_node(
+                identifier_name,
+                name.pos()
+                    .expect_source("parsed nodes have source positions"),
+            );
         }
         let node = self.factory.new_import_specifier(is_type_only, property_name, identifier_name);
         let node = self.finish_node(node, pos);
@@ -159,7 +163,7 @@ impl Parser {
 
     pub(crate) fn parse_export_assignment(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -185,7 +189,7 @@ impl Parser {
 
     pub(crate) fn parse_namespace_export_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -204,7 +208,7 @@ impl Parser {
 
     pub(crate) fn parse_export_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -254,7 +258,7 @@ impl Parser {
         result
     }
 
-    pub(crate) fn parse_namespace_export(&mut self, pos: i32) -> P<Node> {
+    pub(crate) fn parse_namespace_export(&mut self, pos: u32) -> P<Node> {
         let (export_name, _) = self.parse_module_export_name(false /*disallowKeywords*/);
         let node = self.factory.new_namespace_export(export_name);
         self.finish_node(node, pos)
@@ -563,8 +567,14 @@ impl Parser {
     pub(crate) fn parse_this_type_predicate(&mut self, lhs: P<Node>) -> P<Node> {
         self.next_token();
         let type_ = self.parse_type();
-        let node = self.factory.new_type_predicate_node(None /*assertsModifier*/, lhs, Some(type_));
-        self.finish_node(node, lhs.pos())
+        let node =
+            self.factory
+                .new_type_predicate_node(None /*assertsModifier*/, lhs, Some(type_));
+        self.finish_node(
+            node,
+            lhs.pos()
+                .expect_source("parsed nodes have source positions"),
+        )
     }
 
     pub(crate) fn parse_jsdoc_all_type(&mut self) -> P<Node> {
@@ -1207,9 +1217,10 @@ impl Parser {
     pub(crate) fn parse_name_of_parameter(&mut self, modifiers: Option<P<ModifierList>>) -> P<Node> {
         // FormalParameter [Yield,Await]:
         //      BindingElement[?Yield,?Await]
-        let name =
-            self.parse_identifier_or_pattern_with_diagnostic(Some(&diagnostics::Private_identifiers_cannot_be_used_as_parameters));
-        if name.loc().len() == 0 && modifiers.is_none() && ast::is_modifier_kind(self.token) {
+        let name = self.parse_identifier_or_pattern_with_diagnostic(Some(
+            &diagnostics::Private_identifiers_cannot_be_used_as_parameters,
+        ));
+        if name.loc().len() == Some(0) && modifiers.is_none() && ast::is_modifier_kind(self.token) {
             // in cases like
             // 'use strict'
             // function foo(static)
@@ -1277,7 +1288,7 @@ impl Parser {
 
     pub(crate) fn parse_accessor_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
         kind: Kind,
@@ -1441,7 +1452,7 @@ impl Parser {
 
     pub(crate) fn parse_index_signature_declaration(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {
@@ -1463,7 +1474,7 @@ impl Parser {
 
     pub(crate) fn parse_property_or_method_signature(
         &mut self,
-        pos: i32,
+        pos: u32,
         jsdoc: JsdocScannerInfo,
         modifiers: Option<P<ModifierList>>,
     ) -> P<Node> {

@@ -140,6 +140,28 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Within the flow-walk skip (notes/perf-flow-skip-unnarrowed.md, landed): computing an assertion candidate's effects
+  signature in the skip check instead of peeking at it (overflowed the 512 MB stack on vscode: it starts resolution
+  chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);
+  root names instead of reference paths (a quarter of the skips).
+
+- Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
+  0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic
+  search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone
+  does not establish equivalent cost. The final direct comparison is below the pre-refactor baseline on all 17
+  projects; retain the template iterators whose isolated reversion regressed counts. The note records the causes,
+  rejected candidates, allocation checks and instruction/RSS measurements.
+
+- Derived equality and ordering on the niche-encoded `TextPos` enum (PR #306;
+  notes/perf-unsigned-positions.md): extra discriminant handling despite a four-byte encoding that already supplies
+  equality and order. The first correctness-clean refactor added 0.086% to 1.002% instructions on all seventeen
+  projects. Direct encoded-key comparisons and cold failure paths remove that work without enlarging the positions.
+  Keep the relation budget signed as in Go: its negative exhausted states otherwise require saturation on every
+  recorded relation. The owner explicitly requested eliminating even instruction increases below the usual gate.
+  The subsequent internal-integer audit is also owner-requested domain cleanup, not a speedup claim: unsigned
+  masks and bounded IDs retain their width, emitter indexes avoid narrowing, and genuine signed domains remain
+  signed. Before/after validation and measurements are recorded in the same note.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
@@ -156,12 +178,21 @@ with the switch off, which is why it is not in the default build.
   gate). Initially rejected on performance, then both changes were applied at the owner's explicit request on
   2026-10-11 to align with Oxc. These measurements do not establish a speedup; further performance work needs a
   numeric-conversion profile or new evidence of a qualifying whole-project improvement.
+- Oxc-style lightweight VFS metadata (`notes/perf-vfs-lightweight-metadata.md`): existence probes avoid constructing
+  full `FileInfo`, and Linux requests only `STATX_TYPE`. Public macOS screening was -0.27% single-threaded
+  instructions and -0.49% default peak RSS, below the landing bars; the Linux-only path still needs a pinned
+  `bench/count.py` run before this can be reconsidered.
 - Scanner arena string construction (notes/perf-scanner-arena-builder.md, branch
   `codex/scanner-arena-builder`): exact over 14,013 public VS Code files; parse-only heap allocations -16.8% and
   instructions about -0.10%. Abandoned growth buffers add about 0.7 MB of arena requests without changing chunk
   capacity or peak RSS. Retained as an independent implementation at the owner's request on 2026-10-11. Repeat
   only with an exact-sizing or composed design that can move whole-project instructions or peak memory across a
   landing threshold.
+- Scanner numeric-cache identity avoidance (notes/perf-scanner-numeric-identity.md, branch
+  `codex/scanner-numeric-identity`): exact over 14,013 public VS Code files; parse-only heap allocations -13.5%
+  and instructions about -0.24%, with full-front-end peak RSS unchanged within 0.10%. Retained as an independent
+  implementation at the owner's request on 2026-10-11. Repeat only with a workload or composition that can move
+  whole-project instructions or peak memory across a landing threshold.
 - `mimalloc-safe 0.1.67` without its `v3` feature (notes/perf-mimalloc-safe.md): the crate defaults to mimalloc
   v2.5.2, unlike the old crate's v3.3.2 default. On macOS arm64 it adds about 4% peak RSS at the default checker
   count on both Compiler workloads; the prior large Linux measurement found v2 3-14% slower. The migration enables
@@ -349,6 +380,12 @@ with the switch off, which is why it is not in the default build.
 - Longest-processing-time-first queues and thieves taking from the front (notes/perf-checker-64.md): LPT +3.6% CPU at
   16 checkers and 5-8% more CPU per checker with the static assignment (program order keeps caches warm), README bench
   -2%; front-stealing +4-6% CPU at every count.
+- Assignment and stealing knobs on the 38k-file codebase at 8 checkers (notes/perf-icount-assign.md): the module
+  affinity's mu, gamma and passes away from 1 / 0.5 / 3 (+0.3% to +2.2% exact, static assignment); stealing runs of
+  files instead of single files, picking the victim by module overlap with the thief (+0.6% to +1.0%), and a gate on
+  starting a new victim late (only trims the extra stealing a loaded machine causes): within the noise. One thief per
+  queue at a time cost vscode 2% of check time at 9-12 checkers (1-7% at 4-16 when a thief never gave up its place);
+  the landed limit is checkers/4 at a time from 8 to 15.
 - Memory-traffic work at 32 checkers (notes/perf-memory-traffic-32.md): IPC is equal or higher at 32 checkers than at
   1 (vscode 1.92 -> 1.96) and miss rates are low, so padding, pinning, prefetching and hot/cold splits have nothing to
   win; `ReferenceInstantiations` slot hashes (A2) were within noise (+11 MiB peak).
@@ -408,6 +445,25 @@ with the switch off, which is why it is not in the default build.
   node's conditional or mapped ancestor (80% of lookups repeat a node, about 0.13% for about 50 MB), a memo of
   intersection type facts (the base constraint can be mid-resolution), and a direct-mapped front cache for relation
   lookups (simulated: 29% hits, about 0.1% net).
+- Heap allocation churn (notes/perf-heap-churn.md, landed): vscode single-threaded 41.3M -> 22.3M heap allocations,
+  -2.0% to -4.0% instructions on five projects, from returning stored names and lists instead of copies (accessed
+  property names, effective call arguments, path helpers), arena concatenation of symbol declarations, two pools and
+  two `SmallVec`s. Do not redo those sites. Left, with the reason, in the note: `SymbolMap` growth (memory-tuned),
+  `SymbolTable` snapshots (callees may mutate the table), results Go allocates too, `get_text_of_node`'s copy
+  (58 callers). The heap profile's `TSRS_HEAP_PROFILE=count` names the caller's caller of each allocation as built
+  (the note has the fix used); check a site's attribution before trusting it. Measured and not landed there:
+  `somePropertyReducesToNever`'s count map from a per-checker pool, -0.88% mui-docs / -0.83% mikro-orm instructions
+  (branch `perf/property-count-pool`; landed later with notes/perf-icount-alloc.md, -0.78% there with other pools).
+- From notes/perf-icount-alloc.md (exact VM counts, locality mode, a large private monorepo at 8 checkers): the
+  arguments of a pending type alias held as a `Cow` (the alias's own list when unchanged, a pooled buffer when
+  changed), together with pooled lists for template-literal instantiation: +0.20%, and +0.26% with the helpers out
+  of line (not explained). Pools for symbol and signature lists that are copied straight into the arena,
+  `getNamedMembers` into a pooled buffer, and object-literal all-properties tables presized: -0.012%, inside the
+  spread. A pool's push and pop cost about what mimalloc's fast path does. Pooling paid for hash tables and for
+  growth chains (realloc and copy), not for one short-lived Vec.
+  Relater round (notes/perf-icount-relater.md; another large private monorepo, DynamoRIO counts): an exact early exit
+  from the deeply-nested walk (+0.04% single-threaded), `Relation::set` through hashbrown's `entry` (-0.005%, noise),
+  a Bloom filter of names in `some_property_reduces_to_never`'s counts (+0.03%).
 
 ## The lint ratchet
 

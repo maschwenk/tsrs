@@ -502,7 +502,7 @@ fn get_checker_associations_in_order(
         edge_count += adjacent_files[i].len() as i64;
     }
 
-    let mut associations: Vec<i64> = vec![-1; file_weights.len()];
+    let mut associations: Vec<Option<usize>> = vec![None; file_weights.len()];
     let mut checker_weights: Vec<i64> = vec![0; checker_count];
     let checker_count_i = checker_count as i64;
     let average_checker_weight = (total_weight + checker_count_i - 1) / checker_count_i;
@@ -520,15 +520,14 @@ fn get_checker_associations_in_order(
 
         neighbor_counts.iter_mut().for_each(|c| *c = 0);
         for &adjacent_file in &adjacent_files[file_index] {
-            let checker_index = associations[adjacent_file];
-            if checker_index >= 0 {
-                neighbor_counts[checker_index as usize] += 1;
+            if let Some(checker_index) = associations[adjacent_file] {
+                neighbor_counts[checker_index] += 1;
             }
         }
 
         // tsrs-only: the locality assignment also counts the modules a group shares with each checker (affinity.rs).
         let module_affinities = affinity.as_deref_mut().map(|a| a.affinities(file_index));
-        let mut best_checker: i64 = -1;
+        let mut best_checker = None;
         let mut best_score = f64::NEG_INFINITY;
         for (checker_index, &checker_weight) in checker_weights.iter().enumerate() {
             if checker_weight + file_weights[file_index] > max_checker_weight {
@@ -541,27 +540,31 @@ fn get_checker_associations_in_order(
             let penalty = alpha * (new_penalty - old_penalty);
             let score = neighbor_counts[checker_index] as f64 - penalty + module_affinities.map_or(0.0, |a| a[checker_index]);
             if score > best_score
-                || score == best_score && (best_checker < 0 || checker_weight < checker_weights[best_checker as usize])
+                || score == best_score
+                    && best_checker.is_none_or(|best| checker_weight < checker_weights[best])
             {
-                best_checker = checker_index as i64;
+                best_checker = Some(checker_index);
                 best_score = score;
             }
         }
-        if best_checker < 0 {
-            best_checker = 0;
-            for (checker_index, &checker_weight) in checker_weights[1..].iter().enumerate() {
-                if checker_weight < checker_weights[best_checker as usize] {
-                    best_checker = checker_index as i64 + 1;
+        if best_checker .is_none() {
+            best_checker = Some( 0) ;
+            best_checker = checker_weights[1..].iter().enumerate().fold(best_checker, |mut best_checker, (checker_index, &checker_weight)| {
+                if checker_weight < checker_weights[best_checker .unwrap()] {
+                    best_checker = Some( checker_index  + 1) ;
                 }
-            }
+
+                best_checker
+            });
         }
-        associations[file_index] = best_checker;
-        checker_weights[best_checker as usize] += file_weights[file_index];
+        let best_checker = best_checker.unwrap();
+        associations[file_index] = Some(best_checker);
+        checker_weights[best_checker] += file_weights[file_index];
         if let Some(affinity) = affinity.as_deref_mut() {
-            affinity.place(file_index, best_checker as usize);
+            affinity.place(file_index, best_checker);
         }
     }
-    associations.into_iter().map(|a| a as usize).collect()
+    associations.into_iter().map(Option::unwrap).collect()
 }
 
 // getCheckerAssociationOrder places source files before declarations and orders each group by
@@ -824,6 +827,7 @@ impl checkerPool {
         let steal = allow_steal && !single && stealing_enabled();
         // Like the module affinity (affinity.rs `applies`; steal_sticky).
         let sticky = steal && crate::affinity::applies(n, files.len()) && steal_sticky();
+        let max_thieves = max_thieves_per_queue(n);
         let file_weight = |i: u32| index_of[i as usize].map_or(1, |fi| state.weights.get(fi).copied().unwrap_or(1).max(0) as u64);
         // Positions from `files.len()` on are the queued pieces of split files (`piece_items`).
         let split = match split_ctx {
@@ -881,8 +885,8 @@ impl checkerPool {
             let mut scope = guard.enter();
             crate::sharedgraph::enter_checker(&guard);
             let recycle = allow_steal && state.recycle;
-            let mut last_victim = usize::MAX;
-            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, sticky.then_some(&mut last_victim)) {
+            let (mut slot, mut last_victim) = (usize::MAX, usize::MAX);
+            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, max_thieves, &mut slot, sticky.then_some(&mut last_victim)) {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
                     let piece_start = file_times.then(std::time::Instant::now);
                     let cpu_start = if file_times { thread_cpu_seconds() } else { 0.0 };
@@ -1138,15 +1142,18 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
             }
             let lengths: Vec<u64> = pieces
                 .iter()
-                .map(|r| file.statements.nodes()[r.clone()].iter().map(|s| (s.end() - s.pos()).max(1) as u64).sum())
+                .map(|r| {
+                    file.statements.nodes()[r.clone()]
+                        .iter()
+                        .map(|s| u64::from(s.loc().len().unwrap_or(0).max(1)))
+                        .sum()
+                })
                 .collect();
             let length: u64 = lengths.iter().sum();
             let piece_weights: Vec<u64> = lengths.iter().map(|&l| (w * l / length.max(1)).max(1)).collect();
             let s = plan.files.len();
             let split_file = splitcheck::SplitFile::new(file, pieces, config.shadow);
-            for k in split_file.queued_pieces() {
-                plan.piece_items.push((s, k, piece_weights[k]));
-            }
+            plan.piece_items.extend(split_file.queued_pieces().into_iter().map(|k| (s, k, piece_weights[k])));
             plan.owner_weights.push(piece_weights[0]);
             plan.split_of.insert(i, s);
             plan.files.push(split_file);
@@ -1177,6 +1184,8 @@ struct FileQueue {
     positions: Vec<u32>,
     prefix: Vec<u64>,
     range: std::sync::atomic::AtomicU64,
+    // A bit per checker (index below 64) that steals from this queue now (max_thieves_per_queue).
+    thieves: std::sync::atomic::AtomicU64,
 }
 
 const QUEUE_LOW: u64 = u32::MAX as u64;
@@ -1186,12 +1195,12 @@ impl FileQueue {
         let mut prefix = Vec::with_capacity(positions.len() + 1);
         let mut sum = 0;
         prefix.push(0);
-        for &i in &positions {
+        prefix.extend(positions.iter().map(|&i| {
             sum += weight(i);
-            prefix.push(sum);
-        }
+            sum
+        }));
         let len = positions.len() as u64;
-        FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32) }
+        FileQueue { positions, prefix, range: std::sync::atomic::AtomicU64::new(len << 32), thieves: std::sync::atomic::AtomicU64::new(0) }
     }
 
     fn remaining(&self) -> u64 {
@@ -1205,20 +1214,60 @@ impl FileQueue {
         }
     }
 
-    fn take(&self, front: bool) -> Option<usize> {
-        // The compare-exchange on `range` alone decides who gets a position; nothing else is published through it.
-        let mut r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+    // Whether checker `me` may take from this queue as a thief: it is one of its thieves, or the queue has fewer than
+    // `max` (0: no limit). Checkers from index 64 on are not counted.
+    fn admits(&self, me: usize, max: u32) -> bool {
+        if max == 0 || me >= 64 {
+            return true;
+        }
+        // A heuristic read: `admit` decides.
+        let bits = self.thieves.load(std::sync::atomic::Ordering::Relaxed);
+        bits & (1 << me) != 0 || bits.count_ones() < max
+    }
+
+    // Records `me` as one of this queue's thieves, unless it has `max` others already (then false).
+    fn admit(&self, me: usize, max: u32) -> bool {
+        if max == 0 || me >= 64 {
+            return true;
+        }
+        // The exchange below decides; this read only seeds it.
+        let mut bits = self.thieves.load(std::sync::atomic::Ordering::Relaxed);
         loop {
-            if (r & QUEUE_LOW) >= (r >> 32) {
-                return None;
+            if bits & (1 << me) != 0 {
+                return true;
             }
-            let new = if front { r + 1 } else { r - (1 << 32) };
-            // As above: the exchange only claims the position.
-            match self.range.compare_exchange_weak(r, new, std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
-                Ok(_) => break,
-                Err(current) => r = current,
+            if bits.count_ones() >= max {
+                return false;
+            }
+            // The exchange only counts thieves; nothing else is published through it.
+            match self.thieves.compare_exchange_weak(bits, bits | (1 << me), std::sync::atomic::Ordering::Relaxed, std::sync::atomic::Ordering::Relaxed) {
+                Ok(_) => return true,
+                Err(current) => bits = current,
             }
         }
+    }
+
+    // Checker `me` no longer steals from this queue.
+    fn release(&self, me: usize) {
+        if me < 64 {
+            // As in `admit`: only counts thieves.
+            self.thieves.fetch_and(!(1 << me), std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    fn take(&self, front: bool) -> Option<usize> {
+        // The compare-exchange on `range` alone decides who gets a position; nothing else is published through it.
+        // As above: the exchange only claims the position.
+        let r = self
+            .range
+            .try_update(
+                std::sync::atomic::Ordering::Relaxed, // Only claims the position; publishes no data.
+                std::sync::atomic::Ordering::Relaxed, // A failed claim only retries the range value.
+                |r| {
+                    ((r & QUEUE_LOW) < (r >> 32)).then(|| if front { r + 1 } else { r - (1 << 32) })
+                },
+            )
+            .ok()?;
         let pos = if front { r & QUEUE_LOW } else { (r >> 32) - 1 };
         Some(self.positions[pos as usize] as usize)
     }
@@ -1235,9 +1284,37 @@ fn steal_sticky() -> bool {
     *VALUE.get_or_init(|| !std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
 }
 
-// The next position for checker `me` and whether it came from another checker's queue. With `last_victim` (the queue
-// `me` last took from, usize::MAX for none) a thief keeps its victim (steal_sticky).
-fn queues_next(queues: &[FileQueue], me: usize, steal: bool, mut last_victim: Option<&mut usize>) -> Option<(usize, bool)> {
+// tsrs-only (notes/perf-icount-assign.md): from 8 to 15 checkers, at most a quarter of the checkers steal from any one
+// queue at a time. A thief checks a stolen file without the types its owner built for the file's neighbourhood, and the
+// first stolen file of a region pays for building them, once per thief. When every idle thief converges on the last
+// queues with work, each pays for the same region: on t3code-server at 8 checkers five thieves each took one file of
+// one test directory near the end of the pass and each spent ~8 G instructions on it (0.01-0.05 G on its owner), 119 G
+// against 75 G without stealing. With two thieves per queue at a time at 8 checkers: t3code-server 95 G (check time
+// -4%), mui-docs 92 G against 92-98 G (-6%), cal-diy and the large private monorepo -0.3% to -0.6%, vscode and
+// supabase-studio unchanged. One thief at a time saves more (t3code-server 86 G, cal-diy -4%) but cost vscode 2% of
+// check time at 9 and 12 checkers. From 16 checkers on the sticky thief applies (steal_sticky) and this limit was not
+// measured. TSRS_STEAL_MAX_THIEVES=<m> sets the limit at every checker count, `0` for none.
+const THIEF_LIMIT_CHECKERS: std::ops::Range<usize> = 8..crate::affinity::MIN_CHECKERS;
+const CHECKERS_PER_THIEF: usize = 4;
+
+fn max_thieves_per_queue(checker_count: usize) -> u32 {
+    static VALUE: OnceLock<Option<u32>> = OnceLock::new();
+    let configured = *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_MAX_THIEVES").ok().and_then(|v| v.parse().ok()));
+    configured.unwrap_or(if THIEF_LIMIT_CHECKERS.contains(&checker_count) { (checker_count / CHECKERS_PER_THIEF) as u32 } else { 0 })
+}
+
+// The next position for checker `me` and whether it came from another checker's queue. A thief takes only from queues
+// that admit it (`max_thieves`, max_thieves_per_queue); `slot` is the queue it steals from now (usize::MAX for none),
+// whose place it gives up when it moves to another. With `last_victim` (the queue `me` last took from, usize::MAX for
+// none) a thief keeps its victim (steal_sticky).
+fn queues_next(
+    queues: &[FileQueue],
+    me: usize,
+    steal: bool,
+    max_thieves: u32,
+    slot: &mut usize,
+    mut last_victim: Option<&mut usize>,
+) -> Option<(usize, bool)> {
     if let Some(i) = queues[me].take(true) {
         return Some((i, false));
     }
@@ -1245,16 +1322,37 @@ fn queues_next(queues: &[FileQueue], me: usize, steal: bool, mut last_victim: Op
         return None;
     }
     loop {
-        let (mut victim, left) = queues.iter().enumerate().map(|(c, q)| (c, q.remaining())).max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
+        if queues.iter().all(|q| q.remaining() == 0) {
+            // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
+            return queues.iter().enumerate().find_map(|(c, q)| if c == me { None } else { q.take(false).map(|i| (i, true)) });
+        }
+        let (mut victim, left) = queues
+            .iter()
+            .enumerate()
+            .filter(|&(c, q)| c != me && q.admits(me, max_thieves))
+            .map(|(c, q)| (c, q.remaining()))
+            .max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
+        if left == 0 {
+            // The queues with work left have their thieves; their owners finish them.
+            if *slot != usize::MAX {
+                queues[*slot].release(me);
+            }
+            return None;
+        }
         if let Some(last) = last_victim.as_deref_mut() {
-            if *last != usize::MAX && queues[*last].remaining() * 2 >= left && left > 0 {
+            if *last != usize::MAX && queues[*last].admits(me, max_thieves) && queues[*last].remaining() * 2 >= left {
                 victim = *last;
             }
             *last = victim;
         }
-        if left == 0 {
-            // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
-            return queues.iter().enumerate().find_map(|(c, q)| if c == me { None } else { q.take(false).map(|i| (i, true)) });
+        if victim != *slot {
+            if !queues[victim].admit(me, max_thieves) {
+                continue;
+            }
+            if *slot != usize::MAX {
+                queues[*slot].release(me);
+            }
+            *slot = victim;
         }
         if let Some(i) = queues[victim].take(false) {
             return Some((i, true));
@@ -1405,18 +1503,16 @@ fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
     else {
         return (entries, 0);
     };
-    for line in lines {
+    entries.extend(lines.filter_map(|line| {
         let mut fields = line.splitn(3, '\t');
         let (Some(seconds), Some(checker), Some(file)) = (fields.next(), fields.next(), fields.next()) else {
-            continue;
+            return None;
         };
         let (Ok(seconds), Ok(checker)) = (seconds.parse::<f64>(), checker.parse::<usize>()) else {
-            continue;
+            return None;
         };
-        if seconds.is_finite() && seconds >= 0.0 && checker < checker_count {
-            entries.insert(file.to_string(), CostEntry { seconds, checker });
-        }
-    }
+        if seconds.is_finite() && seconds >= 0.0 && checker < checker_count { Some((file.to_string(), CostEntry { seconds, checker })) } else { None }
+    }));
     (entries, checker_count)
 }
 
@@ -1439,12 +1535,10 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
         }
     }
     let mut entries: Vec<(&str, f64, usize)> = Vec::new();
-    for (i, file) in program.files.iter().enumerate() {
+    entries.extend(program.files.iter().enumerate().filter_map(|(i, file)| {
         let skipped = (file.is_declaration_file.get() || ast::is_json_source_file(*file)) && program.skip_type_checking(*file, false);
-        if measured[i] >= 0.0 && !skipped {
-            entries.push((file.path(), measured[i], state.owner_at(i)));
-        }
-    }
+        if measured[i] >= 0.0 && !skipped { Some((file.path().as_str(), measured[i], state.owner_at(i))) } else { None }
+    }));
     entries.sort_by(|a, b| a.0.cmp(b.0));
     let mut out = String::with_capacity(entries.len() * 100);
     let _ = writeln!(out, "{COST_CACHE_MAGIC} checkers={}", state.checkers.len());
@@ -1711,12 +1805,12 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
             }
             let mut result = if previous.iter().all(|p| p.0 == usize::MAX) { fennel(&group_weights) } else { vec![usize::MAX; group_weights.len()] };
             let mut loads = vec![0i64; checker_count];
-            for g in 0..result.len() {
+            for (g, element) in result.iter_mut().enumerate() {
                 if previous[g].0 != usize::MAX {
-                    result[g] = previous[g].0;
+                    (*element) = previous[g].0;
                 }
-                if result[g] != usize::MAX {
-                    loads[result[g]] += group_weights[g];
+                if (*element) != usize::MAX {
+                    loads[*element] += group_weights[g];
                 }
             }
             // Groups without a previous checker (new files) go to the least loaded checker, largest first.
@@ -1807,7 +1901,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             break;
         }
         let mut best: Option<(f64, i64, usize, usize)> = None; // (new max, -affinity gain, group, destination)
-        for g in 0..costs.len() {
+        for (g, element) in costs.iter().enumerate() {
             if associations[g] != heavy {
                 continue;
             }
@@ -1815,15 +1909,15 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             for &n in &adjacency[g] {
                 affinity[associations[n]] += 1;
             }
-            let cost = costs[g] as f64;
+            let cost = (*element) as f64;
             for dest in 0..checker_count {
                 if dest == heavy {
                     continue;
                 }
                 let mut new_max = (loads[heavy] - cost).max(loads[dest] + cost * MOVE_COST_PREMIUM);
-                for c in 0..checker_count {
+                for (c, element) in loads[..checker_count].iter().enumerate() {
                     if c != heavy && c != dest {
-                        new_max = new_max.max(loads[c]);
+                        new_max = new_max.max(*element);
                     }
                 }
                 let key = (new_max, affinity[heavy] - affinity[dest], g, dest);
@@ -1922,9 +2016,7 @@ fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
 fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
-    for (i, &file) in files.iter().enumerate() {
-        file_indices.insert(file, i);
-    }
+    file_indices.extend(files.iter().enumerate().map(|(i, &file)| (file, i)));
     // The in-program import targets of each file, in resolution-map order (looking a resolved file name up
     // normalizes it, so this part runs on the worker pool); the adjacency lists are then built in file order.
     let targets_of = |file_index: usize| -> Vec<usize> {
@@ -1984,6 +2076,13 @@ mod stealing_tests {
 
     #[test]
     fn every_position_is_taken_exactly_once() {
+        // No limit on thieves per queue, and one or two thieves per queue (max_thieves_per_queue).
+        for max_thieves in [0, 1, 2] {
+            every_position_is_taken_exactly_once_with(max_thieves);
+        }
+    }
+
+    fn every_position_is_taken_exactly_once_with(max_thieves: u32) {
         let sizes = [5000usize, 0, 20000, 300, 1];
         let mut base = 0u32;
         let queues: Vec<FileQueue> = sizes
@@ -2002,8 +2101,8 @@ mod stealing_tests {
                 s.spawn(move || {
                     let mut mine = Vec::new();
                     // Every other thread keeps its victim (steal_sticky), so both rules are exercised.
-                    let mut last_victim = usize::MAX;
-                    while let Some(t) = queues_next(queues, me, true, (me % 2 == 0).then_some(&mut last_victim)) {
+                    let (mut slot, mut last_victim) = (usize::MAX, usize::MAX);
+                    while let Some(t) = queues_next(queues, me, true, max_thieves, &mut slot, (me % 2 == 0).then_some(&mut last_victim)) {
                         mine.push(t);
                     }
                     taken.lock().unwrap().extend(mine);
@@ -2020,7 +2119,8 @@ mod stealing_tests {
     #[test]
     fn without_stealing_a_checker_keeps_its_own_files_in_order() {
         let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
-        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, None)).collect();
+        let mut slot = usize::MAX;
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, 0, &mut slot, None)).collect();
         assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
         assert_eq!(queues[1].remaining(), 2);
     }

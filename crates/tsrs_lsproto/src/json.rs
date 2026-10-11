@@ -466,9 +466,10 @@ impl<T: Json> Json for Vec<T> {
         match v {
             Value::Array(items) => {
                 let mut out = Vec::with_capacity(items.len());
-                for (i, item) in items.iter().enumerate() {
+                out = items.iter().enumerate().try_fold(out, |mut out, (i, item)| {
                     out.push(T::from_json(item).map_err(|e| e.within_index(i))?);
-                }
+                    Ok::<_, JsonError>(out)
+                })?;
                 Ok(out)
             }
             Value::Null => Ok(Vec::new()),
@@ -537,9 +538,7 @@ impl<K: JsonKey, V: Json> Json for OrderedMap<K, V> {
     fn to_json(&self) -> Value {
         let mut m = OrderedMap::default();
         m.reserve(self.len());
-        for (k, v) in self {
-            m.insert(k.key_string().to_string(), v.to_json());
-        }
+        m.extend(self.into_iter().map(|(k, v)| (k.key_string().to_string(), v.to_json())));
         Value::Object(m)
     }
 
@@ -548,9 +547,10 @@ impl<K: JsonKey, V: Json> Json for OrderedMap<K, V> {
             Value::Object(members) => {
                 let mut out = OrderedMap::default();
                 out.reserve(members.len());
-                for (k, item) in members {
+                out = members.into_iter().try_fold(out, |mut out, (k, item)| {
                     out.insert(K::from_key(k), V::from_json(item).map_err(|e| e.within(k))?);
-                }
+                    Ok::<_, JsonError>(out)
+                })?;
                 Ok(out)
             }
             Value::Null => Ok(OrderedMap::default()),

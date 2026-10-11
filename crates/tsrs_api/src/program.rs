@@ -60,10 +60,11 @@ impl Session {
         };
         if p.has("files") {
             let mut all = Vec::new();
-            for file in DocumentIdentifier::parse_list(p.array("files")?, "files")? {
+            all = (DocumentIdentifier::parse_list(p.array("files")?, "files")?).into_iter().try_fold(all, |mut all, file| {
                 let source_file = resolve_source_file(program, &file)?;
                 all.extend(get(Some(source_file)));
-            }
+                Ok::<_, ApiError>(all)
+            })?;
             return Ok(nullable_diagnostics(&all));
         }
         Ok(nullable_diagnostics(&get(None)))
@@ -149,9 +150,10 @@ impl Session {
             return Err(ApiError::client("files is required"));
         }
         let mut targets = Vec::new();
-        for file in DocumentIdentifier::parse_list(p.array("files")?, "files")? {
+        targets = (DocumentIdentifier::parse_list(p.array("files")?, "files")?).into_iter().try_fold(targets, |mut targets, file| {
             targets.push(resolve_source_file(program, &file)?);
-        }
+            Ok::<_, ApiError>(targets)
+        })?;
         Ok(emit_to_output(program, Some(targets), emit_only, true))
     }
 }

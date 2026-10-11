@@ -1,6 +1,7 @@
 use std::hash::BuildHasher;
 use std::sync::atomic::AtomicU32;
 
+use hashbrown::HashTable;
 use rustc_hash::FxBuildHasher;
 use tsrs_core::{FrozenCell, OwnedCell, OwnedPSliceCell, OwnedTaggedStrCell, PKey, P};
 
@@ -112,6 +113,10 @@ impl Symbol {
     /// Go `append(symbol.Declarations, declarations...)`.
     pub fn append_declarations(&self, declarations: &[P<Node>]) {
         if declarations.is_empty() {
+            return;
+        }
+        if self.declarations.get().is_empty() {
+            self.set_declarations(declarations);
             return;
         }
         let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
@@ -496,7 +501,7 @@ impl SymbolMapEntry {
 
 #[derive(Default, Clone)]
 struct SymbolMapExtra {
-    index: Option<PosIndex>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
+    index: Option<HashTable<u32>>, // positions in `entries`; present once len > SYMBOL_TABLE_LINEAR_MAX
     odd_keys: Vec<(u32, &'static str)>, // (position, key) of the entries whose key is not their symbol's name
 }
 
@@ -615,7 +620,8 @@ fn hash_name(name: &str) -> u32 {
     } else {
         (0, 0)
     };
-    let m = ((x ^ 0x243f_6a88_85a3_08d3) as u128).wrapping_mul((y ^ 0x1319_8a2e_0370_7344 ^ len as u64) as u128);
+    // The two constants are AArch64 logical immediates (one `eor` each, no four-instruction load).
+    let m = ((x ^ 0x5555_5555_5555_5555) as u128).wrapping_mul((y ^ 0x3333_3333_3333_3333 ^ len as u64) as u128);
     let h = (m as u64) ^ ((m >> 64) as u64);
     (h ^ (h >> 32)) as u32
 }
@@ -628,100 +634,44 @@ fn same_text(a: &str, b: &str) -> bool {
     a.len() == b.len() && (std::ptr::eq(a.as_ptr(), b.as_ptr()) || a.as_bytes() == b.as_bytes())
 }
 
-/// The hash index of a large table: open addressing with linear probing over a power-of-two array of slots. A slot
-/// is 0 when empty, else the entry's position plus one in the low bits and 8 bits of the key's hash above them, so a
-/// probe reads an entry only when those bits match. Lookups in tables of 17 to 64 entries are 40% of all symbol
-/// table lookups and a quarter of them miss; a probe here costs a few instructions, where `hashbrown`'s group probe
-/// cost about 60 with its bookkeeping. Slots are 16 bits up to 255 entries and 32 bits
-/// beyond; both are below `hashbrown`'s peak RSS.
-#[derive(Clone)]
-enum PosIndex {
-    /// Tables of at most 255 entries: 8 position bits, at most half full.
-    Narrow(Box<[u16]>),
-    /// 24 position bits, at most three quarters full.
-    Wide(Box<[u32]>),
-}
-
-impl PosIndex {
-    const NARROW_MAX: usize = 255;
-    const WIDE_MAX: usize = (1 << 24) - 1;
-
-    fn with_capacity(n: usize) -> PosIndex {
-        if n <= Self::NARROW_MAX {
-            PosIndex::Narrow(vec![0; (2 * n).next_power_of_two()].into_boxed_slice())
-        } else {
-            assert!(n <= Self::WIDE_MAX, "symbol table with more than 16M entries");
-            PosIndex::Wide(vec![0; (4 * n).div_ceil(3).next_power_of_two()].into_boxed_slice())
-        }
-    }
-
-    fn heap_bytes(&self) -> usize {
-        match self {
-            PosIndex::Narrow(slots) => slots.len() * 2,
-            PosIndex::Wide(slots) => slots.len() * 4,
-        }
-    }
-
-    /// Whether `n` entries fit without growing.
-    #[inline]
-    fn has_room_for(&self, n: usize) -> bool {
-        match self {
-            PosIndex::Narrow(slots) => n <= Self::NARROW_MAX && 2 * n <= slots.len(),
-            PosIndex::Wide(slots) => 4 * n <= 3 * slots.len(),
-        }
-    }
-
-    /// Adds position `i` (not yet in the index) of a key with hash `hash`.
-    #[inline]
-    fn insert(&mut self, hash: u32, i: usize) {
-        match self {
-            PosIndex::Narrow(slots) => insert_slot(slots, 8, hash, i),
-            PosIndex::Wide(slots) => insert_slot(slots, 24, hash, i),
-        }
-    }
-
-}
-
-/// The first slot to probe (the top bits of the hash spread over 64 bits) and the tag bits of a slot.
+/// `a == b` for two strings of the same length of at most 16 bytes, with the loads `hash_name` makes (no call).
 #[inline]
-fn slot_start_and_tag(len: usize, pos_bits: u32, hash: u32) -> (usize, u32) {
-    let spread = (hash as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-    ((spread >> 32) as usize & (len - 1), (hash & 0xff) << pos_bits)
-}
-
-fn insert_slot<T: Copy + Into<u32> + TryFrom<u32>>(slots: &mut [T], pos_bits: u32, hash: u32, i: usize) {
-    let mask = slots.len() - 1;
-    let (mut slot, tag) = slot_start_and_tag(slots.len(), pos_bits, hash);
-    while slots[slot].into() != 0 {
-        slot = (slot + 1) & mask;
+fn short_text_eq(a: &[u8], b: &[u8]) -> bool {
+    let len = a.len();
+    debug_assert!(len == b.len() && len <= 16);
+    if len >= 8 {
+        a.first_chunk::<8>() == b.first_chunk::<8>() && a.last_chunk::<8>() == b.last_chunk::<8>()
+    } else if len >= 4 {
+        a.first_chunk::<4>() == b.first_chunk::<4>() && a.last_chunk::<4>() == b.last_chunk::<4>()
+    } else {
+        len == 0 || a[0] == b[0] && a[len / 2] == b[len / 2] && a[len - 1] == b[len - 1]
     }
-    let Ok(v) = T::try_from(tag | (i as u32 + 1)) else { unreachable!("position {i} past the index width") };
-    slots[slot] = v;
 }
 
+/// `SymbolMap::key` from the parts it reads (for the index's rehash, which borrows the index).
 #[inline]
-/// The position in `slots` whose key has hash `hash` and satisfies `matches`.
-fn find_slot<T: Copy + Into<u32>>(slots: &[T], pos_bits: u32, hash: u32, matches: impl Fn(usize) -> bool) -> Option<usize> {
-    let mask = slots.len() - 1;
-    let pos_mask = (1u32 << pos_bits) - 1;
-    let (mut slot, tag) = slot_start_and_tag(slots.len(), pos_bits, hash);
-    loop {
-        let v: u32 = slots[slot].into();
-        if v == 0 {
-            return None;
-        }
-        if v & !pos_mask == tag && matches((v & pos_mask) as usize - 1) {
-            return Some((v & pos_mask) as usize - 1);
-        }
-        slot = (slot + 1) & mask;
+fn key_at(entries: &[SymbolMapEntry], odd_keys: &[(u32, &'static str)], i: usize) -> &'static str {
+    let e = entries[i];
+    if !e.is_odd() {
+        return e.symbol().name();
     }
+    odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
+}
+
+/// The index's hash of an entry: hashbrown takes the bucket from the low bits (the name hash's low bits) and its
+/// 7-bit tag from the top bits, here name hash bits 13-19, which neither the bucket of a table below 8192 buckets
+/// nor the entry fingerprint (bits 20-31) uses. One shifted `orr`, no constant to load.
+#[inline]
+fn index_hash(hash: u32) -> u64 {
+    let h = hash as u64;
+    h | h << 44
 }
 
 
 impl SymbolMap {
     fn with_capacity(n: usize) -> SymbolMap {
         let extra = if n > SYMBOL_TABLE_LINEAR_MAX {
-            ExtraSlot::boxed(SymbolMapExtra { index: Some(PosIndex::with_capacity(n)), odd_keys: Vec::new() })
+            ExtraSlot::boxed(SymbolMapExtra { index: Some(HashTable::with_capacity(n)), odd_keys: Vec::new() })
         } else {
             ExtraSlot::default()
         };
@@ -729,7 +679,7 @@ impl SymbolMap {
     }
 
     #[inline]
-    fn index(&self) -> Option<&PosIndex> {
+    fn index(&self) -> Option<&HashTable<u32>> {
         self.extra.get().and_then(|e| e.index.as_ref())
     }
 
@@ -740,8 +690,7 @@ impl SymbolMap {
         if !e.is_odd() {
             return e.symbol().name();
         }
-        let odd_keys = &self.extra.get().unwrap().odd_keys;
-        odd_keys.iter().find(|&&(j, _)| j as usize == i).unwrap().1
+        key_at(&self.entries, &self.extra.get().unwrap().odd_keys, i)
     }
 
     /// Whether entry `i`'s key is `name` (whose fingerprint is `print`).
@@ -773,15 +722,39 @@ impl SymbolMap {
         self.search(name, hash)
     }
 
-    /// `position` past the filter (`hash` = `hash_name(name)`).
+    /// `position` past the filter (`hash` = `hash_name(name)`): the first entry with the key's fingerprint, returned
+    /// at once when its key has the looked-up text and at most 16 bytes; anything else goes to `search_text`. Nearly
+    /// every search ends here (a miss, or a hit on a short name), and without a call on this path the function saves
+    /// no registers.
     #[inline(never)]
     fn search(&self, name: &str, hash: u32) -> Option<usize> {
         let print = KeyPrint::of(name, hash);
+        let i = match self.index() {
+            None => (0..self.entries.len()).find(|&i| self.entries[i].print() == print)?,
+            Some(index) => *index.find(index_hash(hash), |&i| self.entries[i as usize].print() == print)? as usize,
+        };
+        let e = self.entries[i];
+        if !e.is_odd() {
+            let key = e.symbol().name();
+            if key.len() == name.len() && (std::ptr::eq(key.as_ptr(), name.as_ptr()) || name.len() <= 16 && short_text_eq(key.as_bytes(), name.as_bytes())) {
+                return Some(i);
+            }
+        }
+        self.search_text(name, hash, i)
+    }
+
+    /// `search` from candidate `i` (the first entry with the key's fingerprint) on, comparing the text. Keys are
+    /// unique, so a candidate with the same text is the answer; after a fingerprint collision the linear scan goes on
+    /// past `i` and the index is probed again.
+    #[inline(never)]
+    fn search_text(&self, name: &str, hash: u32, i: usize) -> Option<usize> {
+        let print = KeyPrint::of(name, hash);
+        if same_text(self.key(i), name) {
+            return Some(i);
+        }
         match self.index() {
-            None => (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print)),
-            // One closure per width: a closure called from both instantiations is not inlined.
-            Some(PosIndex::Narrow(slots)) => find_slot(slots, 8, hash, |i| self.entry_matches(i, name, print)),
-            Some(PosIndex::Wide(slots)) => find_slot(slots, 24, hash, |i| self.entry_matches(i, name, print)),
+            None => (i + 1..self.entries.len()).find(|&j| self.entry_matches(j, name, print)),
+            Some(index) => index.find(index_hash(hash), |&j| self.entry_matches(j as usize, name, print)).map(|&j| j as usize),
         }
     }
 
@@ -815,22 +788,42 @@ impl SymbolMap {
         if !same_text(symbol.name(), name) {
             self.add_odd_key(i, name);
         }
-        let len = self.entries.len();
-        let has_index = self.index().is_some();
-        if has_index || len > SYMBOL_TABLE_LINEAR_MAX {
-            match self.extra.get_mut().and_then(|e| e.index.as_mut()) {
-                Some(index) if index.has_room_for(len) => index.insert(hash, i),
-                _ => self.rebuild_index(),
-            }
+        if let Some(SymbolMapExtra { index: Some(index), odd_keys }) = self.extra.get_mut() {
+            let entries = &self.entries;
+            index.insert_unique(index_hash(hash), i as u32, |&m| index_hash(hash_name(key_at(entries, odd_keys, m as usize))));
+        } else if self.entries.len() > SYMBOL_TABLE_LINEAR_MAX {
+            self.build_index();
         }
+    }
+
+    /// The index of a linear table that has grown past `SYMBOL_TABLE_LINEAR_MAX` entries.
+    #[cold]
+    #[inline(never)]
+    fn build_index(&mut self) {
+        let len = self.entries.len();
+        let mut index = HashTable::with_capacity(len);
+        for j in 0..len {
+            index.insert_unique(index_hash(self.entry_hash(j)), j as u32, |&m| index_hash(self.entry_hash(m as usize)));
+        }
+        self.extra.get_or_insert().index = Some(index);
     }
 
     fn shift_remove(&mut self, name: &str) {
         let Some(i) = self.position(name) else {
             return;
         };
-        let has_index = self.index().is_some();
+        let hash = self.entry_hash(i);
         if let Some(extra) = self.extra.get_mut() {
+            if let Some(index) = &mut extra.index {
+                if let Ok(entry) = index.find_entry(index_hash(hash), |&j| j as usize == i) {
+                    entry.remove();
+                }
+                for j in index.iter_mut() {
+                    if *j as usize > i {
+                        *j -= 1;
+                    }
+                }
+            }
             extra.odd_keys.retain(|&(j, _)| j as usize != i);
             for (j, _) in extra.odd_keys.iter_mut() {
                 if *j as usize > i {
@@ -839,20 +832,6 @@ impl SymbolMap {
             }
         }
         self.entries.remove(i);
-        if has_index {
-            // Later positions all move down by one; deletes are rare, so the index is built again.
-            self.rebuild_index();
-        }
-    }
-
-    /// Builds the index of all entries, sized for the table's length.
-    fn rebuild_index(&mut self) {
-        let len = self.entries.len();
-        let mut index = PosIndex::with_capacity(len);
-        for j in 0..len {
-            index.insert(self.entry_hash(j), j);
-        }
-        self.extra.get_or_insert().index = Some(index);
     }
 
     fn pairs(&self) -> Vec<(&'static str, P<Symbol>)> {
@@ -983,7 +962,9 @@ impl SymbolTable {
         if let Some(extra) = m.extra.get() {
             bytes += std::mem::size_of::<SymbolMapExtra>() + extra.odd_keys.capacity() * 24;
             if let Some(index) = &extra.index {
-                bytes += index.heap_bytes();
+                let cap = index.capacity();
+                let buckets = if cap < 8 { (cap + 1).next_power_of_two() } else { cap / 7 * 8 };
+                bytes += (buckets * 4).div_ceil(16) * 16 + buckets + 16;
             }
         }
         (m.entries.len(), m.entries.capacity(), bytes)
@@ -1117,7 +1098,7 @@ mod tests {
 
     #[test]
     fn index_finds_every_key_through_growth_and_deletes() {
-        // Past both index widths (255 entries), presized and grown, with deletes, an odd key and a replaced symbol.
+        // Past the linear limit and 255 entries, presized and grown, with deletes, an odd key and a replaced symbol.
         for presized in [0, 20, 300] {
             let table = if presized == 0 { SymbolTable::new() } else { SymbolTable::with_capacity(presized) };
             let names: Vec<&'static str> = (0..600).map(|i| &*Box::leak(format!("k{i}").into_boxed_str())).collect();

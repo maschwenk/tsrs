@@ -37,7 +37,15 @@ impl LanguageService {
 
         let mut checker_handle = program.get_type_checker_for_file(ctx, file);
         let checker: &mut Checker = &mut checker_handle;
-        Ok(self.get_completion_item_details(ctx, program, checker, data.position, file, item, data))
+        Ok(self.get_completion_item_details(
+            ctx,
+            program,
+            checker,
+            u32::try_from(data.position).unwrap_or(0),
+            file,
+            item,
+            data,
+        ))
     }
 }
 
@@ -53,7 +61,7 @@ impl LanguageService {
         ctx: &Context,
         program: &'static Program,
         checker: &mut Checker,
-        position: i32,
+        position: u32,
         file: P<SourceFile>,
         mut item: lsproto::CompletionItem,
         data: &lsproto::CompletionItemData,
@@ -143,7 +151,14 @@ struct symbolDetails {
 
 impl LanguageService {
     // completions.go:5626
-    fn get_symbol_completion_from_item_data(&self, ctx: &Context, ch: &mut Checker, file: P<SourceFile>, position: i32, item_data: &lsproto::CompletionItemData) -> detailsData {
+    fn get_symbol_completion_from_item_data(
+        &self,
+        ctx: &Context,
+        ch: &mut Checker,
+        file: P<SourceFile>,
+        position: u32,
+        item_data: &lsproto::CompletionItemData,
+    ) -> detailsData {
         if item_data.source == SOURCE_SWITCH_CASES {
             return detailsData { cases: Some(()), ..Default::default() };
         }
@@ -164,11 +179,8 @@ impl LanguageService {
         };
 
         let mut literal: Option<LiteralValue> = None;
-        for l in &data.literals {
-            if completion_name_for_literal(file, &preferences, l) == item_data.name {
-                literal = Some(*l);
-                break;
-            }
+        if let Some(l) = data.literals.iter().find_map(|l| if completion_name_for_literal(file, &preferences, l) == item_data.name { Some(l) } else { None }) {
+            literal = Some(*l);
         }
         if literal.is_some() {
             return detailsData { literal, ..Default::default() };
@@ -178,16 +190,18 @@ impl LanguageService {
         // We don't need to perform character checks here because we're only comparing the
         // name against 'entryName' (which is known to be good), not building a new
         // completion entry.
-        for (index, &symbol) in data.symbols.iter().enumerate() {
+        if let Some(result) = data.symbols.iter().enumerate().find_map(|(index, &symbol)| {
             let origin = data.symbol_to_origin_info_map.get(&index);
-            let (display_name, _) = get_completion_entry_display_name_for_symbol(file, &preferences, symbol, origin, data.completion_kind, data.is_jsx_identifier_expected);
+            let (display_name, _) =
+                get_completion_entry_display_name_for_symbol(file, &preferences, symbol, origin, data.completion_kind, data.is_jsx_identifier_expected);
             if display_name == item_data.name
                 && (item_data.source == COMPLETION_SOURCE_CLASS_MEMBER_SNIPPET && symbol.flags().intersects(SymbolFlags::ClassMember)
-                    || item_data.source == COMPLETION_SOURCE_OBJECT_LITERAL_METHOD_SNIPPET && symbol.flags().intersects(SymbolFlags::Property | SymbolFlags::Method)
+                    || item_data.source == COMPLETION_SOURCE_OBJECT_LITERAL_METHOD_SNIPPET
+                        && symbol.flags().intersects(SymbolFlags::Property | SymbolFlags::Method)
                     || get_source_from_origin(origin) == item_data.source
                     || item_data.source == COMPLETION_SOURCE_OBJECT_LITERAL_MEMBER_WITH_COMMA)
             {
-                return detailsData {
+                return Some(detailsData {
                     symbol: Some(symbolDetails {
                         symbol,
                         location: data.location,
@@ -198,8 +212,12 @@ impl LanguageService {
                         is_type_only_location: data.is_type_only_location,
                     }),
                     ..Default::default()
-                };
+                });
             }
+
+            None
+        }) {
+            return result;
         }
         detailsData::default()
     }
@@ -242,7 +260,7 @@ impl LanguageService {
         symbol: P<Symbol>,
         checker: &mut Checker,
         location: P<Node>,
-        _position: i32,
+        _position: u32,
         doc_format: lsproto::MarkupKind,
     ) -> lsproto::CompletionItem {
         let (quick_info, documentation, _, _) = self.get_quick_info_and_documentation_for_symbol(checker, Some(symbol), location, doc_format, None, false /*vsCapability*/);
@@ -331,8 +349,10 @@ impl LanguageService {
         }
         let source_file = ast::get_source_file_of_node(node).unwrap();
         // Use token position (excluding JSDoc/trivia) instead of node.Pos() to avoid including JSDoc comments
-        let token_pos = scanner::get_token_pos_of_node(node, source_file, false /*includeJSDoc*/);
-        if printer::get_lines_between_positions(source_file, token_pos, node.end()) == 0 {
+        let token_pos =
+            scanner::get_token_pos_of_node(node, source_file, false /*includeJSDoc*/);
+        if printer::get_lines_between_positions(source_file, token_pos.into(), node.end()).is_same()
+        {
             let (lsp_range, fidelity) = self.create_lsp_range_from_node(node, source_file);
             if !fidelity.is_exact() {
                 return None;
@@ -362,8 +382,14 @@ impl LanguageService {
         };
 
         let without_module_specifier = TextRange::new(
-            scanner::get_token_pos_of_node(lsutil::get_first_token(node, source_file).unwrap(), source_file, false),
-            potential_split_point.pos(),
+            scanner::get_token_pos_of_node(
+                lsutil::get_first_token(node, source_file).unwrap(),
+                source_file,
+                false,
+            ),
+            potential_split_point
+                .pos()
+                .expect_source("parsed module specifiers have source positions"),
         );
         // The module specifier/reference was previously found to be missing, empty, or
         // not a string literal - in this last case, it's likely that statement on a following
@@ -374,8 +400,22 @@ impl LanguageService {
         // But if everything but the "module specifier" is on one line, by this point we can
         // assume that the "module specifier" is actually just another statement, and return
         // the single-line range of the import excluding that probable statement.
-        if printer::get_lines_between_positions(source_file, without_module_specifier.pos(), without_module_specifier.end()) == 0 {
-            let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(without_module_specifier.pos(), without_module_specifier.end(), source_file);
+        if printer::get_lines_between_positions(
+            source_file,
+            without_module_specifier.pos(),
+            without_module_specifier.end(),
+        )
+        .is_same()
+        {
+            let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(
+                without_module_specifier
+                    .pos()
+                    .expect_source("import ranges have source positions"),
+                without_module_specifier
+                    .end()
+                    .expect_source("import ranges have source positions"),
+                source_file,
+            );
             if !fidelity.is_exact() {
                 return None;
             }
@@ -403,12 +443,14 @@ fn can_complete_from_named_bindings(named_bindings: P<Node>) -> bool {
         // we try to only consider the probably-valid ones.
         let invalid_named_import = get_potentially_invalid_import_specifier(Some(named_bindings));
         let elements = named_bindings.elements();
-        let mut valid_imports = elements.len() as i32;
-        if let Some(invalid_named_import) = invalid_named_import {
-            valid_imports = elements.iter().position(|&e| e == invalid_named_import).map_or(-1, |i| i as i32);
-        }
+        let valid_imports = match invalid_named_import {
+            Some(invalid_named_import) => elements
+                .iter()
+                .position(|&element| element == invalid_named_import),
+            None => Some(elements.len()),
+        };
 
-        return valid_imports < 2 && valid_imports > -1;
+        return valid_imports.is_some_and(|count| count < 2);
     }
     true
 }
@@ -430,7 +472,16 @@ fn get_potentially_invalid_import_specifier(named_bindings: Option<P<Node>>) -> 
     named_bindings.elements().iter().copied().find(|&e| {
         e.property_name().is_none()
             && lsutil::is_non_contextual_keyword(scanner::string_to_token(e.name().unwrap().text()))
-            && astnav::find_preceding_token(ast::get_source_file_of_node(named_bindings).unwrap(), e.name().unwrap().pos()).unwrap().kind() != Kind::CommaToken
+            && astnav::find_preceding_token(
+                ast::get_source_file_of_node(named_bindings).unwrap(),
+                e.name()
+                    .unwrap()
+                    .pos()
+                    .expect_source("parsed import names have source positions"),
+            )
+            .unwrap()
+            .kind()
+                != Kind::CommaToken
     })
 }
 
@@ -450,16 +501,16 @@ fn is_module_specifier_missing_or_empty(specifier: Option<P<Node>>) -> bool {
 }
 
 // completions.go:5935
-pub(crate) fn has_doc_comment(file: P<SourceFile>, position: i32) -> bool {
+pub(crate) fn has_doc_comment(file: P<SourceFile>, position: u32) -> bool {
     let token = astnav::get_token_at_position(file, position);
     ast::find_ancestor(token, |n| n.is_jsdoc()).is_some()
 }
 
 // Get the corresponding JSDocTag node if the position is in a JSDoc comment
 // completions.go:5941
-pub(crate) fn get_jsdoc_tag_at_position(node: P<Node>, position: i32) -> Option<P<Node>> {
+pub(crate) fn get_jsdoc_tag_at_position(node: P<Node>, position: u32) -> Option<P<Node>> {
     ast::find_ancestor_or_quit(node, |n| {
-        if ast::is_jsdoc_tag(n) && n.loc().contains_inclusive(position) {
+        if ast::is_jsdoc_tag(n) && n.loc().contains_inclusive(position.into()) {
             return FindAncestorResult::True;
         }
         if n.is_jsdoc() {
@@ -496,10 +547,29 @@ fn is_tag_with_type_expression(tag: P<Node>) -> bool {
 
 impl LanguageService {
     // completions.go:5983
-    pub(crate) fn js_doc_completion_info(&self, ctx: &Context, position: i32, file: P<SourceFile>, mut items: Vec<CompletionItem>) -> CompletionList {
-        let default_commit_characters = get_default_commit_characters(false /*isNewIdentifierLocation*/);
-        let item_defaults = self.set_item_defaults(ctx, position, file, &mut items, Some(&default_commit_characters), None /*optionalReplacementSpan*/);
-        CompletionList { is_incomplete: false, item_defaults, items, ..Default::default() }
+    pub(crate) fn js_doc_completion_info(
+        &self,
+        ctx: &Context,
+        position: u32,
+        file: P<SourceFile>,
+        mut items: Vec<CompletionItem>,
+    ) -> CompletionList {
+        let default_commit_characters =
+            get_default_commit_characters(false /*isNewIdentifierLocation*/);
+        let item_defaults = self.set_item_defaults(
+            ctx,
+            position,
+            file,
+            &mut items,
+            Some(&default_commit_characters),
+            None, /*optionalReplacementSpan*/
+        );
+        CompletionList {
+            is_incomplete: false,
+            item_defaults,
+            items,
+            ..Default::default()
+        }
     }
 }
 
@@ -596,14 +666,12 @@ fn js_doc_tag_name_completion_items() -> &'static [lsproto::CompletionItem] {
     static ITEMS: OnceLock<Vec<lsproto::CompletionItem>> = OnceLock::new();
     ITEMS.get_or_init(|| {
         let mut items = Vec::with_capacity(JS_DOC_TAG_NAMES.len());
-        for tag_name in JS_DOC_TAG_NAMES {
-            items.push(lsproto::CompletionItem {
-                label: tag_name.to_string(),
-                kind: Some(lsproto::CompletionItemKind::Keyword),
-                sort_text: Some(SORT_TEXT_LOCATION_PRIORITY.to_string()),
-                ..Default::default()
-            });
-        }
+        items.extend(JS_DOC_TAG_NAMES.iter().map(|tag_name| lsproto::CompletionItem {
+            label: tag_name.to_string(),
+            kind: Some(lsproto::CompletionItemKind::Keyword),
+            sort_text: Some(SORT_TEXT_LOCATION_PRIORITY.to_string()),
+            ..Default::default()
+        }));
         items
     })
 }
@@ -613,14 +681,12 @@ fn js_doc_tag_completion_items() -> &'static [lsproto::CompletionItem] {
     static ITEMS: OnceLock<Vec<lsproto::CompletionItem>> = OnceLock::new();
     ITEMS.get_or_init(|| {
         let mut items = Vec::with_capacity(JS_DOC_TAG_NAMES.len());
-        for tag_name in JS_DOC_TAG_NAMES {
-            items.push(lsproto::CompletionItem {
-                label: format!("@{}", tag_name),
-                kind: Some(lsproto::CompletionItemKind::Keyword),
-                sort_text: Some(SORT_TEXT_LOCATION_PRIORITY.to_string()),
-                ..Default::default()
-            });
-        }
+        items.extend(JS_DOC_TAG_NAMES.iter().map(|tag_name| lsproto::CompletionItem {
+            label: format!("@{}", tag_name),
+            kind: Some(lsproto::CompletionItemKind::Keyword),
+            sort_text: Some(SORT_TEXT_LOCATION_PRIORITY.to_string()),
+            ..Default::default()
+        }));
         items
     })
 }
@@ -639,7 +705,7 @@ pub(crate) fn get_jsdoc_tag_completions() -> Vec<CompletionItem> {
 pub(crate) fn get_jsdoc_parameter_completions(
     _ctx: &Context,
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
     type_checker: &mut Checker,
     options: P<CompilerOptions>,
     preferences: &UserPreferences,
@@ -666,15 +732,17 @@ pub(crate) fn get_jsdoc_parameter_completions(
     if let Some(t) = js_doc.as_jsdoc().tags {
         tags = t.nodes();
     }
-    for &tag in tags {
-        if ast::is_jsdoc_parameter_tag(tag) && astnav::get_start_of_node(tag, file, false /*includeJSDoc*/) < position && ast::is_identifier(tag.name().unwrap()) {
-            param_tag_count += 1;
-        }
-    }
-    let mut param_index: i32 = -1;
+    param_tag_count += tags
+        .iter()
+        .filter(|&&tag| {
+            ast::is_jsdoc_parameter_tag(tag)
+                && astnav::get_start_of_node(tag, file, false /*includeJSDoc*/) < position
+                && ast::is_identifier(tag.name().unwrap())
+        })
+        .count();
+
     let mut result = Vec::new();
-    for &param in fun.parameters() {
-        param_index += 1;
+    for (param_index, &param) in fun.parameters().iter().enumerate() {
         if param_index < param_tag_count {
             // This parameter is already annotated.
             continue;
@@ -785,7 +853,7 @@ fn get_jsdoc_param_annotation(
     type_checker: &mut Checker,
     _options: P<CompilerOptions>,
     preferences: &UserPreferences,
-    mut tabstop_counter: Option<&mut i32>,
+    mut tabstop_counter: Option<&mut usize>,
 ) -> String {
     if is_snippet {
         assert!(tabstop_counter.is_some());
@@ -909,7 +977,7 @@ fn js_doc_param_pattern_worker(
     type_checker: &mut Checker,
     options: P<CompilerOptions>,
     preferences: &UserPreferences,
-    counter: &mut i32,
+    counter: &mut usize,
 ) -> Vec<String> {
     if ast::is_object_binding_pattern(pattern) && dot_dot_dot_token.is_none() {
         let mut child_counter = *counter;
@@ -968,7 +1036,7 @@ fn js_doc_param_element_worker(
     type_checker: &mut Checker,
     options: P<CompilerOptions>,
     preferences: &UserPreferences,
-    counter: &mut i32,
+    counter: &mut usize,
 ) -> Vec<String> {
     if ast::is_identifier(element.name().unwrap()) {
         // `{ b }` or `{ b: newB }`
@@ -1033,25 +1101,25 @@ pub(crate) fn get_jsdoc_parameter_name_completions(tag: P<Node>) -> Vec<Completi
     }
 
     let mut result = Vec::new();
-    for &param in fn_.parameters() {
+    result.extend(fn_.parameters().iter().filter_map(|&param| {
         if !ast::is_identifier(param.name().unwrap()) {
-            continue;
+            return None;
         }
 
         let name = param.name().unwrap().text();
         if tags.iter().any(|&t| t != tag && ast::is_jsdoc_parameter_tag(t) && ast::is_identifier(t.name().unwrap()) && t.name().unwrap().text() == name)
             || !name_thus_far.is_empty() && !name.starts_with(name_thus_far)
         {
-            continue;
+            return None;
         }
 
-        result.push(CompletionItem::new(lsproto::CompletionItem {
+        Some(CompletionItem::new(lsproto::CompletionItem {
             label: name.to_string(),
             kind: Some(lsproto::CompletionItemKind::Variable),
             sort_text: Some(SORT_TEXT_LOCATION_PRIORITY.to_string()),
             ..Default::default()
-        }));
-    }
+        }))
+    }));
     result
 }
 
@@ -1062,7 +1130,7 @@ impl LanguageService {
         ctx: &Context,
         case_block: P<Node>,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         options: P<CompilerOptions>,
         program: &'static Program,
         c: &mut Checker,
@@ -1149,13 +1217,13 @@ impl LanguageService {
                 None, /*emitContext*/
             );
             let mut texts: Vec<String> = Vec::with_capacity(new_clauses.len());
-            for (i, &clause) in new_clauses.iter().enumerate() {
+            texts.extend(new_clauses.iter().enumerate().map(|(i, &clause)| {
                 if client_supports_item_snippet(ctx) {
-                    texts.push(format!("{}${}", printer.print_and_format_node(ctx, clause, file), i + 1));
+                    format!("{}${}", printer.print_and_format_node(ctx, clause, file), i + 1)
                 } else {
-                    texts.push(printer.print_unescaped_node(clause));
+                    printer.print_unescaped_node(clause)
                 }
-            }
+            }));
             let insert_text = texts.join(&new_line_char);
 
             let first_clause = printer.print_unescaped_node(new_clauses[0]);
@@ -1178,8 +1246,11 @@ impl LanguageService {
                 insert_text_format: if client_supports_item_snippet(ctx) { Some(lsproto::InsertTextFormat::Snippet) } else { None },
                 data: Some(lsproto::CompletionItemData {
                     file_name: file.original_file_name().to_string(),
-                    position,
-                    supplemental_file_index: supplemental_file_index(file),
+                    position: i32::try_from(position)
+                        .expect("completion position exceeds protocol i32"),
+                    supplemental_file_index: supplemental_file_index(file).map(|index| {
+                        i32::try_from(index).expect("supplemental file index exceeds protocol i32")
+                    }),
                     name,
                     source: COMPLETION_SOURCE_SWITCH_CASES.to_string(),
                     ..Default::default()
@@ -1301,10 +1372,23 @@ impl snippetPrinter {
 // completions.go:6836
 pub(crate) fn create_snippet_printer(options: PrinterOptions, emit_context: Option<P<EmitContext>>) -> snippetPrinter {
     let emit_context = emit_context.unwrap_or_else(printer::new_emit_context);
-    let base_writer = printer::new_change_tracker_writer(options.new_line.get_new_line_character(), -1);
-    let printer = printer::new_printer(options, base_writer.get_print_handlers(), Some(emit_context));
-    let writer = snippetEmitTextWriter { base: base_writer, escapes: Vec::new() };
-    snippetPrinter { emit_context, printer, writer, factory: emit_context.factory.as_node_factory().clone() }
+    let base_writer =
+        printer::new_change_tracker_writer(options.new_line.get_new_line_character(), None);
+    let printer = printer::new_printer(
+        options,
+        base_writer.get_print_handlers(),
+        Some(emit_context),
+    );
+    let writer = snippetEmitTextWriter {
+        base: base_writer,
+        escapes: Vec::new(),
+    };
+    snippetPrinter {
+        emit_context,
+        printer,
+        writer,
+        factory: emit_context.factory.as_node_factory().clone(),
+    }
 }
 
 // Override base writer methods to perform snippet escaping.
@@ -1404,16 +1488,16 @@ impl EmitTextWriter for snippetEmitTextWriter {
     fn write_literal(&mut self, s: &str) {
         self.base.write_literal(s)
     }
-    fn get_text_pos(&self) -> i32 {
+    fn get_text_pos(&self) -> u32 {
         self.base.get_text_pos()
     }
-    fn get_line(&self) -> i32 {
+    fn get_line(&self) -> u32 {
         self.base.get_line()
     }
     fn get_column(&self) -> tsrs_core::UTF16Offset {
         self.base.get_column()
     }
-    fn get_indent(&self) -> i32 {
+    fn get_indent(&self) -> u32 {
         self.base.get_indent()
     }
     fn is_at_start_of_line(&self) -> bool {

@@ -4,9 +4,9 @@
 // and run `cargo test -p tsrs_module oracle -- --ignored`. `testdata/oracle` holds the handcrafted subset
 // (`grep handcrafted`) of both files.
 
-use tsrs_core::collections::{new_ordered_map_with_size_hint, OrderedMapExt};
-use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, Tristate, P};
-use tsrs_vfs::{vfstest, FS};
+use tsrs_core::collections::new_ordered_map_with_size_hint;
+use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, P, Tristate};
+use tsrs_vfs::{FS, vfstest};
 
 use crate::packagejson::json::{self, Json};
 use crate::*;
@@ -113,12 +113,10 @@ fn format_trace(d: &DiagAndArgs) -> String {
 fn run(scenario: &Json) -> Vec<(String, String, String)> {
     let mut files: Vec<(String, vfstest::MapFile)> = Vec::new();
     if let Some(Json::Object(members)) = get(scenario, "files") {
-        for (path, value) in members {
-            match value {
-                Json::String(text) => files.push((path.clone(), text.into())),
-                _ => files.push((path.clone(), vfstest::symlink(&str_of(get(value, "symlink"))))),
-            }
-        }
+        files.extend(members.iter().map(|(path, value)| match value {
+            Json::String(text) => (path.clone(), text.into()),
+            _ => (path.clone(), vfstest::symlink(&str_of(get(value, "symlink")))),
+        }));
     }
     let host: &'static Host = Box::leak(Box::new(Host {
         fs: Box::new(vfstest::from_map(files, bool_of(get(scenario, "caseSensitive")))),
@@ -151,10 +149,10 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
     };
     if let Some(Json::Array(entries)) = get(o, "paths") {
         let mut paths = new_ordered_map_with_size_hint(entries.len());
-        for entry in entries {
+        paths.extend(entries.iter().map(|entry| {
             let Json::Array(pair) = entry else { panic!("bad paths entry") };
-            paths.set(str_of(Some(&pair[0])), strings_of(Some(&pair[1])).unwrap_or_default());
-        }
+            (str_of(Some(&pair[0])), strings_of(Some(&pair[1])).unwrap_or_default())
+        }));
         options.paths = Some(paths);
     }
     let options = P::new(options);
@@ -195,7 +193,7 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
             actual.push(("primary", m.primary.to_string()));
             actual.push(("diagnostics", m.resolution_diagnostics.iter().map(|d| d.code().to_string()).collect::<Vec<_>>().join(",")));
         }
-        for (field, value) in &actual {
+        mismatches.extend(actual.iter().filter_map(|(field, value)| {
             let want = match get(expected, field) {
                 Some(Json::String(s)) => s.clone(),
                 Some(Json::Bool(b)) => b.to_string(),
@@ -204,10 +202,8 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
                 }
                 _ => String::new(),
             };
-            if &want != value {
-                mismatches.push((label.clone(), field.to_string(), format!("want {want:?}, got {value:?}")));
-            }
-        }
+            if &want != value { Some((label.clone(), field.to_string(), format!("want {want:?}, got {value:?}"))) } else { None }
+        }));
         let want_traces: Vec<String> = match get(expected, "traces") {
             Some(Json::Array(items)) => items.iter().map(|i| str_of(Some(i))).collect(),
             _ => Vec::new(),

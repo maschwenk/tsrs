@@ -132,7 +132,7 @@ fn from_map_with_clock_option<K: AsRef<str>, F: Into<MapFile>>(
     // Sorted creation to ensure times are always guaranteed to be in order.
     input.sort_by(|a, b| compare_paths_by_parts(&a.0, &b.0));
     let mut mfs: Vec<(String, MapFile)> = Vec::with_capacity(input.len());
-    for (p, f) in input {
+    mfs.extend(input.into_iter().map(|(p, f)| {
         check_path(&p);
 
         let mut file = f;
@@ -147,8 +147,8 @@ fn from_map_with_clock_option<K: AsRef<str>, F: Into<MapFile>>(
         }
 
         let p = p.strip_prefix('/').unwrap_or(&p).to_string();
-        mfs.push((p, file));
-    }
+        (p, file)
+    }));
 
     if posix && windows {
         panic!("mixed posix and windows paths");
@@ -671,14 +671,14 @@ impl MapFS {
         input_keys.sort_by(|a, b| compare_paths_by_parts(a, b));
 
         let mut result = Vec::with_capacity(input_keys.len());
-        for p in input_keys {
+        result.extend(input_keys.into_iter().map(|p| {
             let file = &inner.m[p];
             let mut path = file.realpath.clone();
             if !tspath::path_is_absolute(&path) {
                 path = format!("/{}", path);
             }
-            result.push((path, file.file.clone()));
-        }
+            (path, file.file.clone())
+        }));
         result
     }
 

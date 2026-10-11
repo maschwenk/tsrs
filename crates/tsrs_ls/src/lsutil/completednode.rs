@@ -8,11 +8,18 @@ use crate::astnav;
 // completednode.go:12
 // PositionBelongsToNode returns true if the position belongs to the node.
 // Assumes `candidate.Pos() <= position` holds.
-pub fn position_belongs_to_node(candidate: P<Node>, position: i32, file: P<SourceFile>) -> bool {
-    if candidate.pos() > position {
+pub fn position_belongs_to_node(candidate: P<Node>, position: u32, file: P<SourceFile>) -> bool {
+    let candidate_pos = candidate
+        .pos()
+        .expect_source("parsed nodes have source positions");
+    if candidate_pos > position {
         panic!("Expected candidate.pos <= position");
     }
-    position < candidate.end() || !is_completed_node(Some(candidate), file)
+    position
+        < candidate
+            .end()
+            .expect_source("parsed nodes have source positions")
+        || !is_completed_node(Some(candidate), file)
 }
 
 // completednode.go:19
@@ -145,13 +152,13 @@ fn node_ends_with(n: P<Node>, expected_last_token: Kind, source_file: P<SourceFi
     let token_start_pos = match last_child_node {
         Some(c) => {
             last_node_and_tokens.push(c);
-            c.end()
+            c.end().expect_source("parsed nodes have source positions")
         }
-        None => n.pos(),
+        None => n.pos().expect_source("parsed nodes have source positions"),
     };
     let mut scanner = scanner::get_scanner_for_source_file(source_file, token_start_pos);
     let mut start_pos = token_start_pos;
-    while start_pos < n.end() {
+    while start_pos < n.end().expect_source("parsed nodes have source positions") {
         let token_kind = scanner.token();
         let token_full_start = scanner.token_full_start();
         let token_end = scanner.token_end();

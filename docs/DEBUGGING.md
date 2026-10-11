@@ -83,7 +83,9 @@ files included) a group shares with each checker, then moves groups while that l
 (notes/perf-clustered-assignment.md); `TSRS_MODULE_AFFINITY=off` restores the placement by import edges alone, and
 `TSRS_MODULE_AFFINITY=<mu>`, `TSRS_MODULE_AFFINITY_GAMMA=<g>` and `TSRS_MODULE_AFFINITY_PASSES=<n>` are for experiments.
 From 16 checkers on, a thief also keeps stealing from the checker it stole from last while that checker has at least
-half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checker for every file.
+half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checker for every file. From 8 to 15
+checkers at most a quarter of the checkers take files from any one checker at a time (notes/perf-icount-assign.md);
+`TSRS_STEAL_MAX_THIEVES=<m>` sets that limit at every checker count, `0` for none.
 
 ## Why a TS2590 comes and goes: `TSRS_TRACE_UNION_REDUCTION`
 
@@ -340,6 +342,16 @@ notes/perf-heavy-files-infer-memo.md).
 | `TSRS_INFER_MEMO` | unset (on; off under `--checkerAssignment go`), `0`/`off`, `1`/`on` (on in every mode), `shadow` | `shadow` also walks every hit from the same starting state and panics unless the walk again creates nothing but lazy member symbols, has no other effects and ends in the stored outcome (the panic names the type ids and both outcomes) |
 | `TSRS_INFER_MEMO_STATS` | `1` | at exit, one line on stderr: lookups, hits, the `inferFromTypes` steps the hits skipped, stores, and why long walks were not stored (shadow mode prints it too) |
 | `TSRS_INFER_MEMO_MIN_STEPS` | default `16` | the shortest walk (in `inferFromTypes` steps) that is stored; lower stores more walks (more memory, more lookups that pay) |
+
+## The relater stacks' recursion identities and their shadow mode: `TSRS_DEEP_NESTED`
+
+Each entry of a relater's source and target stacks keeps its recursion identity once a deeply-nested test has
+computed it (`RelaterStackEntry`, `is_deeply_nested_on_stack` in `crates/tsrs_checker/src/relater_1.rs`); the first
+walk to reach an entry computes it as `hasMatchingRecursionIdentity` would.
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_DEEP_NESTED` | unset, `shadow` | `shadow` also makes every such test with a fresh walk (`is_deeply_nested_type`) and recomputes every kept identity, and panics on a difference (the panic names the type id and the stack length) |
 
 ## Freeing checked leaf files: `TSRS_FREE_LEAVES`
 

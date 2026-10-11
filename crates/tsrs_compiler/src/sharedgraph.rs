@@ -63,14 +63,13 @@ pub(crate) fn seed_positions(program: &Program, files: &[P<SourceFile>], weight:
     let light: u64 = candidates.iter().map(|&i| weight(i as u32)).sum();
     let step = (light / budget.max(1)).max(1) as usize;
     let mut out = Vec::new();
-    let mut sum = 0;
-    for &i in candidates.iter().step_by(step) {
-        if sum >= budget {
-            break;
+    out.extend(candidates.iter().step_by(step).scan(0, |sum, &i| {
+        if *sum >= budget {
+            return None;
         }
-        sum += weight(i as u32);
-        out.push(i as u32);
-    }
+        *sum += weight(i as u32);
+        Some(i as u32)
+    }));
     out
 }
 

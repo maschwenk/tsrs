@@ -511,11 +511,11 @@ impl Checker {
     pub(crate) fn get_with_alternative_containers(&mut self, container: P<Symbol>, symbol: P<Symbol>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags) -> Vec<P<Symbol>> {
         let container_declarations = container.declarations().to_vec();
         let mut additional_containers = Vec::new();
-        for &d in &container_declarations {
-            if let Some(s) = self.get_file_symbol_if_file_symbol_export_equals_container(d, container) {
-                additional_containers.push(s);
-            }
-        }
+        additional_containers.extend(
+            container_declarations
+                .iter()
+                .filter_map(|&d| if let Some(s) = self.get_file_symbol_if_file_symbol_export_equals_container(d, container) { Some(s) } else { None }),
+        );
         let mut reexport_containers = Vec::new();
         if enclosing_declaration.is_some() {
             reexport_containers = self.get_alternative_containing_modules(symbol, enclosing_declaration);
@@ -583,22 +583,22 @@ impl Checker {
         let mut results: Vec<P<Symbol>> = Vec::new();
         if !containing_file.imports().is_empty() {
             // Try to make an import using an import already in the enclosing file, if possible
-            for &import_ref in containing_file.imports() {
+            results.extend(containing_file.imports().iter().filter_map(|&import_ref| {
                 if ast::node_is_synthesized(import_ref) {
                     // Synthetic names can't be resolved by `resolveExternalModuleName` - they'll cause a debug assert if they error
-                    continue;
+                    return None;
                 }
                 let import_attributes_type = self.get_import_attributes_type_for_module_specifier(import_ref);
                 let resolved_module = self.resolve_external_module_name(enclosing_declaration, import_ref /*ignoreErrors*/, true, import_attributes_type);
                 let Some(resolved_module) = resolved_module else {
-                    continue;
+                    return None;
                 };
                 let ref_ = self.get_alias_for_symbol_in_container(resolved_module, symbol);
                 if ref_.is_none() {
-                    continue;
+                    return None;
                 }
-                results.push(resolved_module);
-            }
+                Some(resolved_module)
+            }));
             if !results.is_empty() {
                 links.extended_containers_by_file.borrow_mut().insert(id, alloc_slice(&results));
                 return results;
@@ -613,24 +613,24 @@ impl Checker {
             Some(found) => results = found,
             None => {
                 let other_files = self.program.source_files();
-                for &file in other_files {
+                results.extend(other_files.iter().filter_map(|&file| {
                     if !ast::is_external_module(file) {
-                        continue;
+                        return None;
                     }
                     // tsrs-only: a check leaf another checker may have freed; its answer is nil for any symbol this
                     // checker can name here. Its export table holds only symbols declared in it (no alias, `export *`
                     // or `export =`) and nothing outside it refers to it, so `symbol`, declared elsewhere, is neither
                     // its export nor re-exported by it (`is_unreadable_check_leaf`).
                     if self.is_unreadable_check_leaf(file) {
-                        continue;
+                        return None;
                     }
                     let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
                     let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
                     if ref_.is_none() {
-                        continue;
+                        return None;
                     }
-                    results.push(sym);
-                }
+                    Some(sym)
+                }));
             }
         }
         links.extended_containers.set(Some(alloc_slice(&results)));
@@ -804,11 +804,12 @@ impl Checker {
         let mut candidates: Vec<P<Symbol>> = Vec::new();
         if let Some(exports) = exports {
             if !self.exports_by_target(exports, symbol, &mut candidates) {
-                for exported in exports.values() {
-                    if self.get_symbol_if_same_reference(exported, symbol).is_some() {
-                        candidates.push(exported);
-                    }
-                }
+                candidates.extend(
+                    exports
+                        .values()
+                        .into_iter()
+                        .filter_map(|exported| if self.get_symbol_if_same_reference(exported, symbol).is_some() { Some(exported) } else { None }),
+                );
             }
         }
         if !candidates.is_empty() {
@@ -1127,11 +1128,7 @@ impl Checker {
         }
         let mut aliases: Vec<P<Symbol>> = Vec::new();
         if let Some(symbols) = symbols {
-            for sym in symbols.values() {
-                if sym.flags().intersects(SymbolFlags::Alias) {
-                    aliases.push(sym);
-                }
-            }
+            aliases.extend(symbols.values().into_iter().filter_map(|sym| if sym.flags().intersects(SymbolFlags::Alias) { Some(sym) } else { None }));
         }
         if kind == stKindGlobals || kind == stKindExports || kind == stKindResolvedExports {
             self.symbol_table_alias_cache.insert(table_id, alloc_slice(&aliases));
@@ -1165,33 +1162,33 @@ impl Checker {
 
         // Iterate only alias symbols from the table (cached per tableId).
         // This avoids iterating thousands of non-alias symbols in large tables like globals.
-        for symbol_from_symbol_table in self.get_symbol_table_aliases(symbols, table_id) {
+        candidate_chains.extend(self.get_symbol_table_aliases(symbols, table_id).into_iter().filter_map(|symbol_from_symbol_table| {
             let declarations = symbol_from_symbol_table.declarations().to_vec();
             // for every non-default, non-export= alias symbol in scope, check if it refers to or can chain to the target symbol
             if symbol_from_symbol_table.name() != InternalSymbolNameExportEquals
-                && symbol_from_symbol_table.name() != InternalSymbolNameDefault
-                && !(is_umd_export_symbol(Some(symbol_from_symbol_table))
-                    && ctx.enclosing_declaration.is_some()
-                    && ast::is_external_module(ast::get_source_file_of_node(ctx.enclosing_declaration).unwrap()))
-                // If `!useOnlyExternalAliasing`, we can use any type of alias to get the name
-                && (!ctx.use_only_external_aliasing || declarations.iter().any(|&d| ast::is_external_module_import_equals_declaration(d)))
-                // If we're looking up a local name to reference directly, omit namespace reexports, otherwise when we're trawling through an export list to make a dotted name, we can keep it
-                && (is_local_name_lookup && !declarations.iter().any(|&d| is_namespace_reexport_declaration(d)) || !is_local_name_lookup)
-                // While exports are generally considered to be in scope, export-specifier declared symbols are _not_
-                // See similar comment in `resolveName` for details
-                && (ignore_qualification || get_declarations_of_kind(symbol_from_symbol_table, Kind::ExportSpecifier).is_empty())
+                    && symbol_from_symbol_table.name() != InternalSymbolNameDefault
+                    && !(is_umd_export_symbol(Some(symbol_from_symbol_table))
+                        && ctx.enclosing_declaration.is_some()
+                        && ast::is_external_module(ast::get_source_file_of_node(ctx.enclosing_declaration).unwrap()))
+                    // If `!useOnlyExternalAliasing`, we can use any type of alias to get the name
+                    && (!ctx.use_only_external_aliasing || declarations.iter().any(|&d| ast::is_external_module_import_equals_declaration(d)))
+                    // If we're looking up a local name to reference directly, omit namespace reexports, otherwise when we're trawling through an export list to make a dotted name, we can keep it
+                    && (is_local_name_lookup && !declarations.iter().any(|&d| is_namespace_reexport_declaration(d)) || !is_local_name_lookup)
+                    // While exports are generally considered to be in scope, export-specifier declared symbols are _not_
+                    // See similar comment in `resolveName` for details
+                    && (ignore_qualification || get_declarations_of_kind(symbol_from_symbol_table, Kind::ExportSpecifier).is_empty())
             {
                 let resolved_imported_symbol = self.resolve_alias(symbol_from_symbol_table);
                 let candidate = self.get_candidate_list_for_symbol(ctx, symbol_from_symbol_table, resolved_imported_symbol, ignore_qualification);
-                if !candidate.is_empty() {
-                    candidate_chains.push(candidate);
-                }
+                if !candidate.is_empty() { Some(candidate) } else { None }
+            } else {
+                None
             }
-        }
+        }));
 
         if !candidate_chains.is_empty() {
             // pick first, shortest
-            candidate_chains.sort_by(|a, b| self.compare_symbol_chains(a, b).cmp(&0));
+            candidate_chains.sort_by(|a, b| self.compare_symbol_chains(a, b));
             return candidate_chains.swap_remove(0);
         }
 
@@ -1204,21 +1201,25 @@ impl Checker {
     }
 
     // symbolaccessibility.go:595
-    pub(crate) fn compare_symbol_chains_worker(&mut self, a: &[P<Symbol>], b: &[P<Symbol>]) -> i32 {
-        let chain_len = a.len() as i32 - b.len() as i32;
-        if chain_len != 0 {
+    pub(crate) fn compare_symbol_chains_worker(
+        &mut self,
+        a: &[P<Symbol>],
+        b: &[P<Symbol>],
+    ) -> std::cmp::Ordering {
+        let chain_len = a.len().cmp(&b.len());
+        if chain_len != std::cmp::Ordering::Equal {
             return chain_len;
         }
 
         let mut idx = 0;
         while idx < a.len() {
             let comparison = self.compare_symbols(Some(a[idx]), Some(b[idx]));
-            if comparison != 0 {
+            if comparison != std::cmp::Ordering::Equal {
                 return comparison;
             }
             idx += 1;
         }
-        0
+        std::cmp::Ordering::Equal
     }
 }
 
@@ -1347,11 +1348,11 @@ impl Checker {
 pub(crate) fn is_property_or_method_declaration_symbol(symbol: P<Symbol>) -> bool {
     let declarations = symbol.declarations();
     if !declarations.is_empty() {
-        for declaration in declarations.iter() {
-            match declaration.kind() {
-                Kind::PropertyDeclaration | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => continue,
-                _ => return false,
-            }
+        if declarations
+            .iter()
+            .any(|declaration| !matches!(declaration.kind(), Kind::PropertyDeclaration | Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor))
+        {
+            return false;
         }
         return true;
     }

@@ -118,9 +118,11 @@ fn propagate_node_list_subtree_facts(children: impl Into<Option<P<NodeList>>>, p
         return NONE;
     };
     let mut facts = NONE;
-    for &child in children.nodes() {
+    facts = children.nodes().iter().fold(facts, |mut facts, &child| {
         facts |= propagate(child);
-    }
+
+        facts
+    });
     facts
 }
 
@@ -129,9 +131,11 @@ fn propagate_modifier_list_subtree_facts(children: Option<P<ModifierList>>) -> S
         None => NONE,
         Some(children) => {
             let mut facts = NONE;
-            for &child in children.nodes() {
+            facts = children.nodes().iter().fold(facts, |mut facts, &child| {
                 facts |= propagate_subtree_facts(child);
-            }
+
+                facts
+            });
             facts
         }
     }
@@ -729,7 +733,7 @@ pub fn contains_object_rest_or_spread(node: P<Node>) -> bool {
     if node.subtree_facts().intersects(SubtreeFacts::ContainsESObjectRestOrSpread) {
         // check for nested spread assignments, otherwise '{ x: { a, ...b } = foo } = c'
         // will not be correctly interpreted by the rest/spread transformer
-        for &element in get_elements_of_binding_or_assignment_pattern(node) {
+        if get_elements_of_binding_or_assignment_pattern(node).iter().any(|&element| {
             let target = get_target_of_binding_or_assignment_element(element);
             if let Some(target) = target {
                 if is_assignment_pattern(target) {
@@ -741,6 +745,10 @@ pub fn contains_object_rest_or_spread(node: P<Node>) -> bool {
                     }
                 }
             }
+
+            false
+        }) {
+            return true;
         }
     }
     false

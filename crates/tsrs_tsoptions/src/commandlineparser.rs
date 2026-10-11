@@ -231,18 +231,14 @@ impl CommandLineParser {
         let text_length = text.len();
         let mut pos = 0;
         while pos < text_length {
-            while pos < text_length && text[pos] <= ' ' {
-                pos += 1;
-            }
+            pos += (pos..text_length).take_while(|&index| text[index] <= ' ').count();
             if pos >= text_length {
                 break;
             }
             let start = pos;
             if text[pos] == '"' {
                 pos += 1;
-                while pos < text_length && text[pos] != '"' {
-                    pos += 1;
-                }
+                pos += (pos..text_length).take_while(|&index| text[index] != '"').count();
                 if pos < text_length {
                     args.push(text[start + 1..pos].iter().collect());
                     pos += 1;
@@ -253,9 +249,7 @@ impl CommandLineParser {
                     ));
                 }
             } else {
-                while pos < text_length && text[pos] > ' ' {
-                    pos += 1;
-                }
+                pos += (pos..text_length).take_while(|&index| text[index] > ' ').count();
                 args.push(text[start..pos].iter().collect());
             }
         }
@@ -392,7 +386,7 @@ impl CommandLineParser {
                     }
                     _ => {
                         let (val, err) =
-                            convert_json_option_of_enum_type(opt, args[i].trim_matches(|c: char| stringutil::is_white_space_like(c)), None, None);
+                            convert_json_option_of_enum_type(opt, args[i].trim_matches(|c: char| stringutil::is_white_space_like(c as u32)), None, None);
                         self.options.set(opt.name.to_string(), val);
                         self.errors.extend(err);
                         i += 1;
@@ -457,7 +451,7 @@ pub fn parse_list_type_option(opt: &'static CommandLineOption, value: &str) -> (
             let mut result = Vec::new();
             for v in values {
                 let (val, err) =
-                    convert_json_option_of_enum_type(elements, v.trim_matches(|c: char| stringutil::is_white_space_like(c)), None, None);
+                    convert_json_option_of_enum_type(elements, v.trim_matches(|c: char| stringutil::is_white_space_like(c as u32)), None, None);
                 if let CompilerOptionsValue::String(s) = &val {
                     if err.is_empty() && !s.is_empty() {
                         result.push(CompilerOptionsValue::String(s.clone()));

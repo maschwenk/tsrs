@@ -54,13 +54,13 @@ fn transform_hoisting(content: &str) -> Result<(String, Value), ipc::Error> {
     let mut segments = Vec::new();
 
     let mut write_mapped = |virtual_: &mut String, original_start: usize, original_end: usize| {
-        let virtual_start = virtual_.len() as i32;
+        let virtual_start = virtual_.len() as u32;
         virtual_.push_str(&content[original_start..original_end]);
         segments.push(Segment {
             virtual_start,
-            virtual_end: virtual_.len() as i32,
-            original_start: original_start as i32,
-            original_end: original_end as i32,
+            virtual_end: virtual_.len() as u32,
+            original_start: original_start as u32,
+            original_end: original_end as u32,
             kind: Kind::Verbatim,
             features: Feature::All,
         });
@@ -101,9 +101,7 @@ fn script_range(content: &str) -> Result<(usize, usize), ipc::Error> {
 fn leading_import_range(content: &str, script_start: usize, script_end: usize) -> (usize, usize) {
     let bytes = content.as_bytes();
     let mut start = script_start;
-    while start < script_end && is_space_byte(bytes[start]) {
-        start += 1;
-    }
+    start += (start..script_end).take_while(|&index| is_space_byte(bytes[index])).count();
     let mut end = start;
     while end < script_end && content[end..script_end].starts_with("import ") {
         let Some(line_end) = content[end..script_end].find('\n') else {
@@ -111,13 +109,9 @@ fn leading_import_range(content: &str, script_start: usize, script_end: usize) -
             break;
         };
         end += line_end;
-        while end < script_end && is_space_byte(bytes[end]) {
-            end += 1;
-        }
+        end += (end..script_end).take_while(|&index| is_space_byte(bytes[index])).count();
     }
-    while end > start && is_space_byte(bytes[end - 1]) {
-        end -= 1;
-    }
+    end -= (start..end).rev().take_while(|&i| is_space_byte(bytes[i])).count();
     (start, end)
 }
 

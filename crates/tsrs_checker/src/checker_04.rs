@@ -120,11 +120,7 @@ impl Checker {
     // checker.go:6598
     pub(crate) fn get_iteration_type_union(&mut self, iteration_types: &[IterationTypes], mut f: impl FnMut(&mut Checker, IterationTypes) -> Option<P<Type>>) -> Option<P<Type>> {
         let mut types: Vec<P<Type>> = Vec::new();
-        for &it in iteration_types {
-            if let Some(t) = f(self, it) {
-                types.push(t);
-            }
-        }
+        types.extend(iteration_types.iter().filter_map(|&it| if let Some(t) = f(self, it) { Some(t) } else { None }));
         if types.is_empty() {
             return None;
         }
@@ -168,11 +164,7 @@ impl Checker {
                 }
                 let all_signatures = self.get_signatures_of_type(method_type, SignatureKind::Call);
                 let mut valid_signatures: Vec<P<Signature>> = Vec::new();
-                for &sig in all_signatures {
-                    if self.get_min_argument_count(sig) == 0 {
-                        valid_signatures.push(sig);
-                    }
-                }
+                valid_signatures.extend(all_signatures.iter().filter_map(|&sig| if self.get_min_argument_count(sig) == 0 { Some(sig) } else { None }));
                 if !valid_signatures.is_empty() {
                     let return_types: Vec<P<Type>> = valid_signatures.iter().map(|&sig| self.get_return_type_of_signature(sig)).collect();
                     let iterator_type = self.get_intersection_type(&return_types);
@@ -796,9 +788,11 @@ impl Checker {
             let symbol = c.get_symbol_of_declaration(node).unwrap();
             let target = c.resolve_alias(symbol);
             let declarations = target.declarations();
-            for &d in declarations {
+            result = declarations.iter().fold(result, |mut result, &d| {
                 result |= c.get_declaration_spaces(d);
-            }
+
+                result
+            });
             result
         }
         match node.kind() {
@@ -837,12 +831,16 @@ impl Checker {
             let default_type_node = node.as_type_parameter_declaration().default_type;
             if let Some(default_type_node) = default_type_node {
                 seen_default = true;
-                self.check_type_parameters_not_referenced(default_type_node, type_parameter_declarations, i as i32);
+                self.check_type_parameters_not_referenced(
+                    default_type_node,
+                    type_parameter_declarations,
+                    i,
+                );
             } else if seen_default {
                 self.error(Some(node), &diagnostics::Required_type_parameters_may_not_follow_optional_type_parameters, &[]);
             }
-            for j in 0..i {
-                if type_parameter_declarations[j].symbol() == node.symbol() {
+            for element in type_parameter_declarations[..i].iter() {
+                if element.symbol() == node.symbol() {
                     self.error(node.name(), &diagnostics::Duplicate_identifier_0, &[&tsrs_scanner::declaration_name_to_string(node.name())]);
                 }
             }
@@ -851,13 +849,23 @@ impl Checker {
 
     // Check that type parameter defaults only reference previously declared type parameters */
     // checker.go:7194
-    pub(crate) fn check_type_parameters_not_referenced(&mut self, root: P<Node>, type_parameters: &[P<Node>], index: i32) {
-        fn visit(c: &mut Checker, node: P<Node>, type_parameters: &[P<Node>], index: i32) -> bool {
+    pub(crate) fn check_type_parameters_not_referenced(
+        &mut self,
+        root: P<Node>,
+        type_parameters: &[P<Node>],
+        index: usize,
+    ) {
+        fn visit(
+            c: &mut Checker,
+            node: P<Node>,
+            type_parameters: &[P<Node>],
+            index: usize,
+        ) -> bool {
             if is_type_reference_node(node) {
                 let t = c.get_type_from_type_reference(node);
                 if t.flags().intersects(TypeFlags::TypeParameter) {
-                    for i in index as usize..type_parameters.len() {
-                        if t.symbol() == c.get_symbol_of_declaration(type_parameters[i]) {
+                    for element in type_parameters.iter().skip(index) {
+                        if t.symbol() == c.get_symbol_of_declaration(*element) {
                             c.error(Some(node), &diagnostics::Type_parameter_defaults_can_only_reference_previously_declared_type_parameters, &[]);
                         }
                     }
@@ -1231,7 +1239,7 @@ impl Checker {
                     // entire parameter does not have type annotation, suggest adding an annotation
                     diagnostic.add_related_info(new_diagnostic(
                         get_source_file_of_node(wrapping_declaration),
-                        TextRange::new(wrapping_declaration.end(), wrapping_declaration.end()),
+                        TextRange::from_text_pos(wrapping_declaration.end(), wrapping_declaration.end()),
                         &diagnostics::We_can_only_write_a_type_for_0_by_adding_a_type_for_the_entire_parameter_here,
                         &[&tsrs_scanner::declaration_name_to_string(node.property_name())],
                     ));
@@ -2117,11 +2125,11 @@ impl Checker {
         }
         let element_type: P<Type>;
         if !element_types.is_empty() {
-            for i in 0..element_types.len() {
-                let e = element_types[i];
+            for (i, element) in element_types.iter_mut().enumerate() {
+                let e = *element;
                 if element_infos[i].flags.intersects(ElementFlags::Variadic) {
                     let number_type = self.number_type;
-                    element_types[i] = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, AliasArg::None).unwrap_or(self.any_type);
+                    (*element) = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, AliasArg::None).unwrap_or(self.any_type);
                 }
             }
             element_type = self.get_union_type_ex(&element_types, UnionReduction::Subtype, AliasArg::None, None);
@@ -2318,11 +2326,15 @@ impl Checker {
     // checker.go:8429
     pub(crate) fn get_constituent_property(&mut self, object_type: P<Type>, property_name: &str) -> Option<P<Symbol>> {
         let apparent_type = self.get_apparent_type(object_type);
-        for t in apparent_type.distributed_iter() {
+        if let Some(result) = apparent_type.distributed_iter().into_iter().find_map(|t| {
             let prop = self.get_property_of_type(t, property_name);
             if prop.is_some() {
-                return prop;
+                return Some(prop);
             }
+
+            None
+        }) {
+            return result;
         }
         None
     }
@@ -2360,11 +2372,14 @@ impl Checker {
                 self.check_type_assignable_to(options_type, target, Some(args[1]), None);
             }
             if is_object_literal_expression(args[1]) {
-                for &prop in args[1].as_object_literal_expression().properties.nodes() {
+                if let Some(prop) = args[1].as_object_literal_expression().properties.nodes().iter().find_map(|&prop| {
                     if is_property_assignment(prop) && is_identifier(prop.name().unwrap()) && prop.name().unwrap().text() == "assert" {
-                        self.error(prop.name(), &diagnostics::Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert, &[]);
-                        break;
+                        Some(prop)
+                    } else {
+                        None
                     }
+                }) {
+                    self.error(prop.name(), &diagnostics::Import_assertions_have_been_replaced_by_import_attributes_Use_with_instead_of_assert, &[]);
                 }
             }
             import_attributes_type = self.get_type_of_property_of_type(options_type, "with");
@@ -2520,7 +2535,7 @@ impl Checker {
             // through resolution of the containing function call. By resetting the resolution stack we'll
             // retry the symbol type resolution with the resolvingSignature marker in place to suppress
             // the contextual type circularity.
-            self.resolution_start = self.type_resolutions.len() as i32;
+            self.resolution_start = self.type_resolutions.len();
         }
         links.resolved_signature.set(Some(self.resolving_signature));
         let mut result = self.resolve_signature(node, candidates_out_array, check_mode);
@@ -2622,7 +2637,12 @@ impl Checker {
         // TS 1.0 Spec: 4.12
         // In an untyped function call no TypeArgs are permitted, Args can be any argument list, no contextual
         // types are provided for the argument expressions, and the result is always of type Any.
-        if self.is_untyped_function_call(func_type, apparent_type, call_signatures.len() as i32, num_construct_signatures as i32) {
+        if self.is_untyped_function_call(
+            func_type,
+            apparent_type,
+            call_signatures.len(),
+            num_construct_signatures,
+        ) {
             // The unknownType indicates that an error already occurred (and was reported).  No
             // need to report another error in this case.
             if !self.is_error_type(func_type) && node.type_argument_list().is_some() {
@@ -2641,9 +2661,18 @@ impl Checker {
                 let mut related_information: Option<P<Diagnostic>> = None;
                 if node.arguments().len() == 1 {
                     let text = get_source_file_of_node(node).unwrap().text();
-                    let options = tsrs_scanner::SkipTriviaOptions { stop_after_line_break: true, ..Default::default() };
-                    let pos = tsrs_scanner::skip_trivia_ex(text, expression.end(), Some(&options));
-                    if stringutil::is_line_break(text.as_bytes()[(pos - 1) as usize]) {
+                    let options = tsrs_scanner::SkipTriviaOptions {
+                        stop_after_line_break: true,
+                        ..Default::default()
+                    };
+                    let pos = tsrs_scanner::skip_trivia_ex(
+                        text,
+                        expression
+                            .end()
+                            .expect_source("parsed nodes have source positions"),
+                        Some(&options),
+                    );
+                    if stringutil::is_line_break(u32::from(text.as_bytes()[(pos - 1) as usize])) {
                         related_information = Some(create_diagnostic_for_node(Some(expression), &diagnostics::Are_you_missing_a_semicolon, &[]));
                     }
                 }

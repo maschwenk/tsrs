@@ -567,11 +567,11 @@ impl EmitResolver {
             let merged = c.get_merged_symbol(s);
             if merged != s {
                 if !merged.declarations().is_empty() {
-                    for &d in merged.declarations() {
+                    if merged.declarations().iter().any(|&d| {
                         let decl_file = ast::get_source_file_of_node(d);
-                        if decl_file == Some(import_target) {
-                            return true;
-                        }
+                        decl_file == Some(import_target)
+                    }) {
+                        return true;
                     }
                 }
             }
@@ -715,12 +715,7 @@ impl EmitResolver {
         }
         // this is substantially different from strada, but so is expando property checking
         let props = self.get_properties_of_container_function(c, Some(node));
-        for p in props {
-            if ast::is_expando_property_declaration(p.value_declaration()) {
-                return true;
-            }
-        }
-        false
+        props.into_iter().any(|p| ast::is_expando_property_declaration(p.value_declaration()))
     }
 
     // emitresolver.go:675
@@ -1370,9 +1365,9 @@ impl EmitResolver {
         };
         // Go also returns false when getDeclaredTypeOfSymbol is nil; the Rust function never returns nil.
         let parent_type = c.get_declared_type_of_symbol(s_parent);
-        for &base in c.get_base_types(parent_type) {
+        if c.get_base_types(parent_type).iter().any(|&base| {
             let Some(base_prop) = c.get_property_of_type(base, s.name()) else {
-                continue;
+                return false;
             };
             if base_prop.flags().intersects(SymbolFlags::Accessor | SymbolFlags::Method | SymbolFlags::Function) {
                 return true;
@@ -1387,6 +1382,10 @@ impl EmitResolver {
             {
                 return true;
             }
+
+            false
+        }) {
+            return true;
         }
         false
     }

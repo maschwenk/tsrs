@@ -27,7 +27,7 @@ const SYMBOL_FORMAT_FLAGS: SymbolFormatFlags = SymbolFormatFlags::WriteTypeParam
     .union(SymbolFormatFlags::UseAliasDefinedOutsideCurrentScope);
 const TYPE_FORMAT_FLAGS: TypeFormatFlags = TypeFormatFlags::UseAliasDefinedOutsideCurrentScope.union(TypeFormatFlags::UseInstantiationExpressions);
 
-fn new_verbosity_context(level: i32, max_truncation_length: i32) -> P<VerbosityContext> {
+fn new_verbosity_context(level: usize, max_truncation_length: usize) -> P<VerbosityContext> {
     P::new(VerbosityContext {
         level: Cell::new(level),
         max_truncation_length: Cell::new(max_truncation_length),
@@ -42,10 +42,10 @@ impl LanguageService {
         let caps = lsproto::get_client_capabilities(ctx);
         let content_format = lsproto::preferred_markup_kind(&caps.text_document.hover.content_format);
 
-        let mut verbosity_level = 0;
-        if let Some(level) = params.verbosity_level {
-            verbosity_level = level;
-        }
+        let verbosity_level = params
+            .verbosity_level
+            .and_then(|level| usize::try_from(level).ok())
+            .unwrap_or(0);
 
         let (program, mut file) = self.get_program_and_file(&params.text_document.uri);
         let positions = self.converters.from_lsp_position_for_source_file(file, params.position, Feature::Hover);
@@ -68,10 +68,10 @@ impl LanguageService {
             // Always create VerbosityContext for hover so that canExpandSymbol can signal
             // canIncreaseVerbosity even at Level 0. The nodebuilder also detects expandable
             // types at Level 0 via shouldExpandType (maxExpansionDepth = 0).
-            let mut max_trunc_len = self.user_preferences().maximum_hover_length;
-            if max_trunc_len <= 0 {
-                max_trunc_len = 500;
-            }
+            let max_trunc_len = usize::try_from(self.user_preferences().maximum_hover_length)
+                .ok()
+                .filter(|&length| length > 0)
+                .unwrap_or(500);
             let vc = new_verbosity_context(verbosity_level, max_trunc_len);
 
             let vs_capability = caps.vs_supports_visual_studio_extensions;
@@ -308,16 +308,21 @@ fn documentation_from_alias(
         candidates.push(export_symbol);
     }
 
-    for candidate in candidates {
+    if let Some(result) = candidates.into_iter().find_map(|candidate| {
         let aliased_declaration = candidate.value_declaration().or_else(|| candidate.declarations().first().copied());
         if aliased_declaration.is_none() {
-            continue;
+            return None;
         }
 
-        let documentation = get_documentation_from_declaration(get_mapped_location, c, Some(candidate), aliased_declaration, Some(node), content_format, comment_only);
+        let documentation =
+            get_documentation_from_declaration(get_mapped_location, c, Some(candidate), aliased_declaration, Some(node), content_format, comment_only);
         if !documentation.is_empty() {
-            return documentation;
+            return Some(documentation);
         }
+
+        None
+    }) {
+        return result;
     }
 
     String::new()
@@ -504,7 +509,7 @@ struct QuickInfoWriter {
     node: P<Node>,
     meaning: SemanticMeaning,
     visited_aliases: FxHashSet<P<Symbol>>,
-    alias_level: i32,
+    alias_level: usize,
     first_declaration: Option<P<Node>>,
     symbol_was_expanded: bool,
 }
@@ -1148,10 +1153,8 @@ fn get_call_or_new_expression(mut node: P<Node>) -> Option<P<Node>> {
 fn contains_typedef_tag(jsdoc: P<Node>) -> bool {
     if jsdoc.kind() == Kind::JSDoc {
         if let Some(tags) = jsdoc.as_jsdoc().tags {
-            for &tag in tags.nodes() {
-                if tag.kind() == Kind::JSDocTypedefTag || tag.kind() == Kind::JSDocCallbackTag {
-                    return true;
-                }
+            if tags.nodes().iter().any(|&tag| tag.kind() == Kind::JSDocTypedefTag || tag.kind() == Kind::JSDocCallbackTag) {
+                return true;
             }
         }
     }
@@ -1167,16 +1170,12 @@ fn write_code(b: &mut String, lang: &str, code: &str) {
     while code.contains(&"`".repeat(ticks)) {
         ticks += 1;
     }
-    for _ in 0..ticks {
-        b.push('`');
-    }
+    b.extend((0..ticks).map(|_| '`'));
     b.push_str(lang);
     b.push('\n');
     b.push_str(code);
     b.push('\n');
-    for _ in 0..ticks {
-        b.push('`');
-    }
+    b.extend((0..ticks).map(|_| '`'));
     b.push('\n');
 }
 

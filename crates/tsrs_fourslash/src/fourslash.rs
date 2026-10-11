@@ -104,19 +104,73 @@ impl TestConverters {
     }
 
     // fourslash.go:95
-    pub fn line_and_character_to_position<S: Script + Clone>(&self, script: S, position: lsproto::Position) -> TextPos {
-        let positions = self.converters.from_lsp_position(script, position, Feature::All);
-        assert!(positions.len() == 1, "fourslash script must have exactly one position projection");
+    pub fn line_and_character_to_position<S: Script + Clone>(
+        &self,
+        script: S,
+        position: lsproto::Position,
+    ) -> u32 {
+        let positions = self
+            .converters
+            .from_lsp_position(script, position, Feature::All);
+        assert!(
+            positions.len() == 1,
+            "fourslash script must have exactly one position projection"
+        );
         positions[0].position
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub(crate) enum TextLengthChange {
+    Removed(u32),
+    Same,
+    Added(u32),
+}
+
+impl TextLengthChange {
+    fn between(old_length: u32, new_length: u32) -> Self {
+        match new_length.cmp(&old_length) {
+            std::cmp::Ordering::Less => Self::Removed(old_length - new_length),
+            std::cmp::Ordering::Equal => Self::Same,
+            std::cmp::Ordering::Greater => Self::Added(new_length - old_length),
+        }
+    }
+
+    fn combine(self, other: Self) -> Self {
+        match (self, other) {
+            (Self::Same, change) | (change, Self::Same) => change,
+            (Self::Added(a), Self::Added(b)) => {
+                Self::Added(a.checked_add(b).expect("aggregate edit growth exceeds u32"))
+            }
+            (Self::Removed(a), Self::Removed(b)) => Self::Removed(
+                a.checked_add(b)
+                    .expect("aggregate edit shrinkage exceeds u32"),
+            ),
+            (Self::Added(a), Self::Removed(b)) | (Self::Removed(b), Self::Added(a)) => {
+                match a.cmp(&b) {
+                    std::cmp::Ordering::Less => Self::Removed(b - a),
+                    std::cmp::Ordering::Equal => Self::Same,
+                    std::cmp::Ordering::Greater => Self::Added(a - b),
+                }
+            }
+        }
+    }
+
+    fn apply_to(self, position: u32) -> Option<u32> {
+        match self {
+            Self::Removed(length) => position.checked_sub(length),
+            Self::Same => Some(position),
+            Self::Added(length) => position.checked_add(length),
+        }
     }
 }
 
 // fourslash.go:101
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct TextEditSpan {
-    pub(crate) start: i32,
-    pub(crate) end: i32,
-    pub(crate) length: i32,
+    pub(crate) start: u32,
+    pub(crate) end: u32,
+    pub(crate) length: u32,
 }
 
 // fourslash.go:107
@@ -133,13 +187,17 @@ impl ScriptInfo {
     }
 
     // fourslash.go:136
-    pub(crate) fn get_line_content(&self, line: i32) -> String {
-        let num_lines = self.line_map.line_starts.len() as i32;
-        if line < 0 || line >= num_lines {
+    pub(crate) fn get_line_content(&self, line: usize) -> String {
+        let num_lines = self.line_map.line_starts.len();
+        if line >= num_lines {
             return String::new();
         }
-        let start = self.line_map.line_starts[line as usize];
-        let end = if line + 1 < num_lines { self.line_map.line_starts[line as usize + 1] } else { self.content.len() as TextPos };
+        let start = self.line_map.line_starts[line];
+        let end = if line + 1 < num_lines {
+            self.line_map.line_starts[line + 1]
+        } else {
+            u32::try_from(self.content.len()).expect("source length exceeds u32")
+        };
 
         self.content[start as usize..end as usize].trim_end_matches(['\r', '\n']).to_string()
     }
@@ -219,10 +277,10 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
         script_infos.insert(file_path.clone(), new_script_info(&file_path, &file.content));
     }
 
-    for (link, target) in &test_data.symlinks {
+    testfs.extend(test_data.symlinks.iter().map(|(link, target)| {
         let file_path = tspath::get_normalized_absolute_path(link, ROOT_DIR);
-        testfs.insert(file_path, TestFsEntry::Symlink(tspath::get_normalized_absolute_path(target, ROOT_DIR)));
-    }
+        (file_path, TestFsEntry::Symlink(tspath::get_normalized_absolute_path(target, ROOT_DIR)))
+    }));
 
     // !!! use default compiler options for inferred project as base
     let mut compiler_options =
@@ -358,13 +416,7 @@ fn handle_server_request(user_preferences: &Mutex<lsutil::UserPreferences>, req:
                 return ResponseMessage { id: req.id.clone(), result: Some(Value::Array(vec![prefs()])), ..Default::default() };
             };
             let mut results = Vec::with_capacity(params.items.len());
-            for item in &params.items {
-                if item.section.as_deref() == Some("js/ts") {
-                    results.push(prefs());
-                } else {
-                    results.push(Value::Null);
-                }
-            }
+            results.extend(params.items.iter().map(|item| if item.section.as_deref() == Some("js/ts") { prefs() } else { Value::Null }));
             ResponseMessage { id: req.id.clone(), result: Some(Value::Array(results)), ..Default::default() }
         }
 
@@ -876,7 +928,7 @@ pub struct VerifyCodeFixOptions {
     pub description: String,
     pub new_file_content: String,
     pub new_range_content: String,
-    pub index: i32,
+    pub index: usize,
     pub apply_changes: bool,
     pub user_preferences: Option<lsutil::UserPreferences>,
 }
@@ -915,7 +967,7 @@ pub struct VerifySignatureHelpOptions {
     // DocComment is the documentation comment for the signature
     pub doc_comment: String,
     // ParameterCount is the expected number of parameters
-    pub parameter_count: i32,
+    pub parameter_count: usize,
     // ParameterName is the expected name of the active parameter
     pub parameter_name: String,
     // ParameterSpan is the expected label of the active parameter (e.g., "x: string")
@@ -923,9 +975,9 @@ pub struct VerifySignatureHelpOptions {
     // ParameterDocComment is the documentation for the active parameter
     pub parameter_doc_comment: String,
     // OverloadsCount is the expected number of overloads (signatures)
-    pub overloads_count: i32,
+    pub overloads_count: usize,
     // OverrideSelectedItemIndex overrides which signature to check (default: ActiveSignature)
-    pub override_selected_item_index: i32,
+    pub override_selected_item_index: usize,
     // IsVariadic indicates if the signature has a rest parameter
     pub is_variadic: bool,
     // IsVariadicSet is true when IsVariadic was explicitly set (to distinguish from default false)
@@ -1020,7 +1072,9 @@ impl FourslashTest {
     // fourslash.go:845
     pub fn go_to_eof(&mut self, t: &T) {
         let script = self.get_script_info(&self.active_filename.clone());
-        let pos = script.content.len() as TextPos;
+        let pos = TextPos::source(
+            u32::try_from(script.content.len()).expect("source length exceeds u32"),
+        );
         let lsp_pos = self.converters.position_to_line_and_character(&script, pos);
         self.go_to_position_impl(t, lsp_pos);
     }
@@ -1031,9 +1085,11 @@ impl FourslashTest {
     }
 
     // fourslash.go:856
-    pub fn go_to_position(&mut self, t: &T, position: i32) {
+    pub fn go_to_position(&mut self, t: &T, position: u32) {
         let script = self.get_script_info(&self.active_filename.clone());
-        let lsp_pos = self.converters.position_to_line_and_character(&script, position);
+        let lsp_pos = self
+            .converters
+            .position_to_line_and_character(&script, position.into());
         self.go_to_position_impl(t, lsp_pos);
     }
 
@@ -1044,23 +1100,28 @@ impl FourslashTest {
     }
 
     // fourslash.go:867
-    pub fn go_to_each_marker(&mut self, t: &T, marker_names: &[&str], mut action: impl FnMut(&mut FourslashTest, Arc<Marker>, i32)) {
+    pub fn go_to_each_marker(
+        &mut self,
+        t: &T,
+        marker_names: &[&str],
+        mut action: impl FnMut(&mut FourslashTest, Arc<Marker>, usize),
+    ) {
         let mut markers: Vec<Arc<Marker>> = Vec::new();
         // (Go tests the length of the still-empty `markers`, so the names are never used.)
         if markers.is_empty() {
             markers = self.markers();
         } else {
             markers = Vec::with_capacity(marker_names.len());
-            for name in marker_names {
+            markers.extend(marker_names.iter().map(|name| {
                 let Some(marker) = self.test_data.marker_positions.get(*name).cloned() else {
                     t.fatal(&format!("Marker '{name}' not found"));
                 };
-                markers.push(marker);
-            }
+                marker
+            }));
         }
         for (i, marker) in markers.into_iter().enumerate() {
             self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
-            action(self, marker, i as i32);
+            action(self, marker, i);
         }
     }
 
@@ -1108,11 +1169,15 @@ impl FourslashTest {
     }
 
     // fourslash.go:927
-    pub fn go_to_file_number(&mut self, t: &T, index: i32) {
-        if index < 0 || index as usize >= self.test_data.files.len() {
-            t.fatal(&format!("File index {} out of range (0-{})", index, self.test_data.files.len() as i32 - 1));
+    pub fn go_to_file_number(&mut self, t: &T, index: usize) {
+        if index >= self.test_data.files.len() {
+            t.fatal(&format!(
+                "File index {} out of range (0-{})",
+                index,
+                self.test_data.files.len().saturating_sub(1)
+            ));
         }
-        let filename = self.test_data.files[index as usize].file_name.clone();
+        let filename = self.test_data.files[index].file_name.clone();
         self.open_file(t, &filename);
     }
 
@@ -1142,11 +1207,11 @@ impl FourslashTest {
     // fourslash.go:956
     pub(crate) fn get_ranges_in_file(&self, file_name: &str) -> Vec<Arc<RangeMarker>> {
         let mut ranges_in_file = Vec::new();
-        for range_marker in &self.test_data.ranges {
-            if range_marker.file_name == file_name {
-                ranges_in_file.push(range_marker.clone());
-            }
-        }
+        ranges_in_file.extend(self.test_data.ranges.iter().filter_map(
+            |range_marker| {
+                if range_marker.file_name == file_name { Some(range_marker.clone()) } else { None }
+            },
+        ));
         ranges_in_file
     }
 
@@ -1266,7 +1331,9 @@ impl FourslashTest {
 
     // fourslash.go:1070
     pub fn verify_current_line_content(&mut self, t: &T, expected_content: &str) {
-        let actual_content = self.get_script_info(&self.active_filename.clone()).get_line_content(self.current_caret_position.line as i32);
+        let actual_content = self
+            .get_script_info(&self.active_filename.clone())
+            .get_line_content(self.current_caret_position.line as usize);
         crate::go::assert::equal(
             t,
             actual_content.as_str(),
@@ -1276,7 +1343,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:1083
-    pub fn verify_indentation(&mut self, _t: &T, _num_spaces: i32) {
+    pub fn verify_indentation(&mut self, _t: &T, _num_spaces: usize) {
         // not implemented
     }
 
@@ -1387,7 +1454,14 @@ impl FourslashTest {
     }
 
     // fourslash.go:1250
-    pub fn verify_jsdoc_completion(&mut self, t: &T, marker_input: Any, expected_offset: i32, expected_text: &str, generate_return_in_doc_template: Option<bool>) {
+    pub fn verify_jsdoc_completion(
+        &mut self,
+        t: &T,
+        marker_input: Any,
+        expected_offset: u32,
+        expected_text: &str,
+        generate_return_in_doc_template: Option<bool>,
+    ) {
         t.helper();
         self.go_to_marker_input(t, &marker_input);
 
@@ -1409,7 +1483,9 @@ impl FourslashTest {
             let active = self.active_filename.clone();
             self.edit_script_and_update_markers(t, &active, insert_start, insert_start + 3, "");
             // (Go converts with the script info captured before the edits.)
-            self.current_caret_position = self.converters.position_to_line_and_character(&script, insert_start);
+            self.current_caret_position = self
+                .converters
+                .position_to_line_and_character(&script, insert_start.into());
         }
         let Some(list) = list else {
             t.fatal(&format!("{}Expected JSDoc completion, got nil completion list.", self.get_current_position_prefix()));
@@ -1441,7 +1517,9 @@ impl FourslashTest {
         let item = find_jsdoc_completion_item(list.as_ref());
         let active = self.active_filename.clone();
         self.edit_script_and_update_markers(t, &active, insert_start, insert_start + 3, "");
-        self.current_caret_position = self.converters.position_to_line_and_character(&script, insert_start);
+        self.current_caret_position = self
+            .converters
+            .position_to_line_and_character(&script, insert_start.into());
         if item.is_some() {
             t.fatal(&format!("{}Did not expect JSDoc completion item.", self.get_current_position_prefix()));
         }
@@ -1474,7 +1552,7 @@ impl FourslashTest {
         // The client is expected to sort them by SortText and then by Label.
         // We are the client here.
         if let Some(list) = &mut result.list {
-            list.items.sort_by(|a, b| tsrs_ls::compare_completion_entries(a, b).cmp(&0));
+            list.items.sort_by(tsrs_ls::compare_completion_entries);
         }
         result.list
     }
@@ -1757,19 +1835,20 @@ impl FourslashTest {
         if actions.is_empty() {
             t.fatal("No code fixes returned.");
         }
-        if options.index as usize >= actions.len() {
-            t.fatal(&format!("Code fix index {} out of range (got {} fixes)", options.index, actions.len()));
+        if options.index >= actions.len() {
+            t.fatal(&format!(
+                "Code fix index {} out of range (got {} fixes)",
+                options.index,
+                actions.len()
+            ));
         }
 
-        let mut matching_action = actions[options.index as usize].clone();
+        let mut matching_action = actions[options.index].clone();
         if matching_action.title != options.description {
             let mut found = false;
-            for action in &actions {
-                if action.title == options.description {
-                    matching_action = action.clone();
-                    found = true;
-                    break;
-                }
+            if let Some(action) = actions.iter().find_map(|action| if action.title == options.description { Some(action) } else { None }) {
+                matching_action = action.clone();
+                found = true;
             }
             if !found {
                 let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
@@ -1791,9 +1870,15 @@ impl FourslashTest {
             }
             expected_content = format!(
                 "{}{}{}",
-                &original_content[..selection.pos() as usize],
+                &original_content[..selection
+                    .pos()
+                    .expect_source("fourslash selections have source positions")
+                    as usize],
                 options.new_range_content,
-                &original_content[selection.end() as usize..]
+                &original_content[selection
+                    .end()
+                    .expect_source("fourslash selections have source positions")
+                    as usize..]
             );
         }
 
@@ -1828,7 +1913,14 @@ impl FourslashTest {
     }
 
     // fourslash.go:1768
-    pub fn verify_range_after_code_fix(&mut self, t: &T, expected_text: &str, include_whitespace: bool, error_code: i32, index: i32) {
+    pub fn verify_range_after_code_fix(
+        &mut self,
+        t: &T,
+        expected_text: &str,
+        include_whitespace: bool,
+        error_code: i32,
+        index: usize,
+    ) {
         t.helper();
 
         let actions = self.get_code_fix_actions(t, Some(error_code));
@@ -1836,11 +1928,15 @@ impl FourslashTest {
             t.fatal("No code fixes returned.");
         }
 
-        if index as usize >= actions.len() {
-            t.fatal(&format!("Code fix index {} out of range (got {} fixes)", index, actions.len()));
+        if index >= actions.len() {
+            t.fatal(&format!(
+                "Code fix index {} out of range (got {} fixes)",
+                index,
+                actions.len()
+            ));
         }
 
-        let action = actions[index as usize].clone();
+        let action = actions[index].clone();
         let active = self.active_filename.clone();
         let ranges = self.get_ranges_in_file(&active);
         if ranges.len() != 1 {
@@ -1857,7 +1953,14 @@ impl FourslashTest {
 
         self.apply_text_edits(t, edits);
         let actual_content = self.get_script_info(&active).content;
-        let actual_text = &actual_content[updated_range.pos() as usize..updated_range.end() as usize];
+        let actual_text = &actual_content[updated_range
+            .pos()
+            .expect_source("updated fourslash ranges have source positions")
+            as usize
+            ..updated_range
+                .end()
+                .expect_source("updated fourslash ranges have source positions")
+                as usize];
 
         if include_whitespace {
             crate::go::assert::equal(t, expected_text, actual_text, "Range content after applying code fix did not match expected content.");
@@ -1976,11 +2079,11 @@ impl FourslashTest {
             fix_all_action = Some(fix_all_candidates[0]);
         } else {
             // If there are multiple fix-all candidates, match by FixID in the title.
-            for action in &fix_all_candidates {
-                if action.title.to_lowercase().contains(&options.fix_id.to_lowercase()) {
-                    fix_all_action = Some(action);
-                    break;
-                }
+            if let Some(action) = fix_all_candidates
+                .iter()
+                .find_map(|action| if action.title.to_lowercase().contains(&options.fix_id.to_lowercase()) { Some(action) } else { None })
+            {
+                fix_all_action = Some(action);
             }
         }
 
@@ -2085,13 +2188,13 @@ impl FourslashTest {
 
         let mut actions = Vec::new();
         if let Some(items) = result.command_or_code_action_array {
-            for item in items {
+            actions.extend(items.into_iter().filter_map(|item| {
                 if let Some(code_action) = item.code_action {
-                    if code_action.kind == Some(lsproto::CodeActionKind::QuickFix) {
-                        actions.push(code_action);
-                    }
+                    if code_action.kind == Some(lsproto::CodeActionKind::QuickFix) { Some(code_action) } else { None }
+                } else {
+                    None
                 }
-            }
+            }));
         }
 
         actions
@@ -2113,14 +2216,18 @@ impl FourslashTest {
     fn update_text_range_for_text_edits(&self, text_range: TextRange, edits: &[lsproto::TextEdit]) -> TextRange {
         let script = self.get_script_info(&self.active_filename);
         let mut spans: Vec<textEditSpan> = Vec::with_capacity(edits.len());
-        for edit in edits {
-            spans.push(textEditSpan {
-                start: self.converters.line_and_character_to_position(script.clone(), edit.range.start) as i32,
-                end: self.converters.line_and_character_to_position(script.clone(), edit.range.end) as i32,
-                length: edit.new_text.len() as i32,
-            });
-        }
-        tsrs_core::goslices::sort_func(&mut spans, |a, b| a.start - b.start);
+        spans.extend(edits.iter().map(|edit| {
+            textEditSpan {
+                start: self
+                    .converters
+                    .line_and_character_to_position(script.clone(), edit.range.start),
+                end: self
+                    .converters
+                    .line_and_character_to_position(script.clone(), edit.range.end),
+                length: u32::try_from(edit.new_text.len()).expect("edit length exceeds u32"),
+            }
+        }));
+        tsrs_core::goslices::sort_func(&mut spans, |a, b| a.start.cmp(&b.start));
 
         let mut pos = text_range.pos();
         let mut end = text_range.end();
@@ -2129,15 +2236,14 @@ impl FourslashTest {
             pos = update_position_for_text_edit(pos, edit.start, edit.end, edit.length);
             end = update_position_for_text_edit(end, edit.start, edit.end, edit.length);
 
-            let delta = edit.length - (edit.end - edit.start);
             for span in spans.iter_mut().skip(i + 1) {
                 if span.start >= edit.start {
-                    span.start += delta;
-                    span.end += delta;
+                    span.start = position_after_edit(span.start, edit.start, edit.end, edit.length);
+                    span.end = position_after_edit(span.end, edit.start, edit.end, edit.length);
                 }
             }
         }
-        TextRange::new(pos, end)
+        TextRange::from_text_pos(pos, end)
     }
 
     // fourslash.go:2119
@@ -2145,9 +2251,13 @@ impl FourslashTest {
     fn apply_edits_to_content(&self, content: &str, mut edits: Vec<lsproto::TextEdit>) -> String {
         let script = self.get_script_info(&self.active_filename);
         tsrs_core::goslices::sort_func(&mut edits, |a, b| {
-            let a_start = self.converters.line_and_character_to_position(script.clone(), a.range.start);
-            let b_start = self.converters.line_and_character_to_position(script.clone(), b.range.start);
-            a_start as i32 - b_start as i32
+            let a_start = self
+                .converters
+                .line_and_character_to_position(script.clone(), a.range.start);
+            let b_start = self
+                .converters
+                .line_and_character_to_position(script.clone(), b.range.start);
+            a_start.cmp(&b_start)
         });
         let mut content = content.to_string();
         for edit in edits.iter().rev() {
@@ -2193,10 +2303,21 @@ impl FourslashTest {
         let params = lsproto::CodeActionParams {
             text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&active) },
             range: lsproto::Range {
-                start: lsproto::Position { line: 0, character: 0 },
-                end: self.converters.position_to_line_and_character(&script, script.content.len() as TextPos),
+                start: lsproto::Position {
+                    line: 0,
+                    character: 0,
+                },
+                end: self.converters.position_to_line_and_character(
+                    &script,
+                    TextPos::source(
+                        u32::try_from(script.content.len()).expect("source length exceeds u32"),
+                    ),
+                ),
             },
-            context: lsproto::CodeActionContext { only: Some(vec![requested_kind]), ..Default::default() },
+            context: lsproto::CodeActionContext {
+                only: Some(vec![requested_kind]),
+                ..Default::default()
+            },
             ..Default::default()
         };
 
@@ -2245,15 +2366,17 @@ impl FourslashTest {
         if let Some(item) = items.iter().find(|item| item.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty())) {
             return Some(item.clone());
         }
-        for item in items {
+        if let Some(result) = items.iter().find_map(|item| {
             let resolved_item = self.resolve_completion_item_impl(t, item.clone());
             if resolved_item.additional_text_edits.as_ref().is_none_or(|e| e.is_empty()) {
-                continue;
+                return None;
             }
             if !description.is_empty() && !resolved_item.detail.as_ref().is_some_and(|d| d.contains(description)) {
-                continue;
+                return None;
             }
-            return Some(resolved_item);
+            Some(Some(resolved_item))
+        }) {
+            return result;
         }
         None
     }
@@ -2353,13 +2476,17 @@ impl FourslashTest {
         // Skip fix-all entries (those without diagnostics attached)
         let mut import_actions: Vec<lsproto::CodeAction> = Vec::new();
         if let Some(items) = result.command_or_code_action_array {
-            for item in items {
+            import_actions.extend(items.into_iter().filter_map(|item| {
                 if let Some(code_action) = item.code_action {
                     if code_action.kind == Some(lsproto::CodeActionKind::QuickFix) && code_action.diagnostics.as_ref().is_some_and(|d| !d.is_empty()) {
-                        import_actions.push(code_action);
+                        Some(code_action)
+                    } else {
+                        None
                     }
+                } else {
+                    None
                 }
-            }
+            }));
         }
 
         if import_actions.is_empty() {
@@ -2405,7 +2532,8 @@ impl FourslashTest {
 
             // Restore original content for next fix
             // (Go's `script` is the shared *scriptInfo, so len(script.content) is the edited length.)
-            let current_len = self.get_script_info(&active).content.len() as i32;
+            let current_len = u32::try_from(self.get_script_info(&active).content.len())
+                .expect("source length exceeds u32");
             self.edit_script_and_update_markers(t, &active, 0, current_len, &original_content);
             self.current_caret_position = current_caret_position;
         }
@@ -2413,14 +2541,7 @@ impl FourslashTest {
         // Compare results
         if expected_texts.len() != actual_text_array.len() {
             let mut actual_joined = String::new();
-            for (i, actual) in actual_text_array.iter().enumerate() {
-                if i > 0 {
-                    actual_joined.push_str("\n\n");
-                    actual_joined.push_str(&"-".repeat(20));
-                    actual_joined.push_str("\n\n");
-                }
-                actual_joined.push_str(actual);
-            }
+            actual_joined.push_str(&actual_text_array.join(&format!("\n\n{}\n\n", "-".repeat(20))));
             t.fatal(&format!("Expected {} import fixes, got {}:\n\n{}", expected_texts.len(), actual_text_array.len(), actual_joined));
         }
         for (i, expected) in expected_texts.iter().enumerate() {
@@ -2463,14 +2584,16 @@ impl FourslashTest {
                 if let Some(code_action) = item.code_action {
                     if code_action.kind == Some(lsproto::CodeActionKind::QuickFix) {
                         if let Some(changes) = code_action.edit.and_then(|e| e.changes) {
-                            for change_edits in changes.values() {
+                            actual_module_specifiers = changes.values().fold(actual_module_specifiers, |mut actual_module_specifiers, change_edits| {
                                 for edit in change_edits {
                                     let module_spec = extract_module_specifier(&edit.new_text);
                                     if !module_spec.is_empty() && !actual_module_specifiers.contains(&module_spec) {
                                         actual_module_specifiers.push(module_spec);
                                     }
                                 }
-                            }
+
+                                actual_module_specifiers
+                            });
                         }
                     }
                 }
@@ -2572,9 +2695,7 @@ impl FourslashTest {
             // Include file contents with markers
             let mut locations: Vec<lsproto::Location> = Vec::new();
             if let Some(items) = &result.vs_reference_items {
-                for item in items {
-                    locations.push(item.vs_location.clone());
-                }
+                locations.extend(items.iter().map(|item| item.vs_location.clone()));
             }
             let file_contents = self.get_baseline_for_locations_with_file_contents(
                 &locations,
@@ -2777,7 +2898,9 @@ impl FourslashTest {
             let start_pos = lsproto::Position { line: actual_range.start_line, character: actual_range.start_character.unwrap() };
             let end_pos = lsproto::Position { line: actual_range.end_line, character: actual_range.end_character.unwrap() };
 
-            if lsproto::compare_positions(start_pos, expected_range.ls_range.start) != 0 || lsproto::compare_positions(end_pos, expected_range.ls_range.end) != 0 {
+            if !lsproto::compare_positions(start_pos, expected_range.ls_range.start).is_eq()
+                || !lsproto::compare_positions(end_pos, expected_range.ls_range.end).is_eq()
+            {
                 t.fatal(&format!(
                     "verifyOutliningSpans failed - span {} has invalid positions:\n  actual: start ({},{}), end ({},{})\n  expected: start ({},{}), end ({},{})",
                     i + 1,
@@ -2825,9 +2948,9 @@ impl FourslashTest {
     // fourslash.go:2932
     pub fn verify_baseline_hover(&mut self, t: &T) {
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::Hover>>> = Vec::new();
-        for marker in self.markers() {
+        markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
             if marker.name.is_none() {
-                continue;
+                return None;
             }
 
             let params = lsproto::HoverParams {
@@ -2837,8 +2960,8 @@ impl FourslashTest {
             };
 
             let result = self.send_request(t, lsproto::TEXT_DOCUMENT_HOVER_INFO, params);
-            markers_and_items.push(MarkerAndItem { marker, item: result.hover });
-        }
+            Some(MarkerAndItem { marker, item: result.hover })
+        }));
 
         let get_range = |item: &Option<lsproto::Hover>| -> Option<lsproto::Range> { item.as_ref().and_then(|item| item.range) };
 
@@ -2862,9 +2985,9 @@ impl FourslashTest {
     // fourslash.go:2992
     pub fn verify_baseline_vs_hover(&mut self, t: &T) {
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::Hover>>> = Vec::new();
-        for marker in self.markers() {
+        markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
             if marker.name.is_none() {
-                continue;
+                return None;
             }
 
             let params = lsproto::HoverParams {
@@ -2874,8 +2997,8 @@ impl FourslashTest {
             };
 
             let result = self.send_request(t, lsproto::TEXT_DOCUMENT_HOVER_INFO, params);
-            markers_and_items.push(MarkerAndItem { marker, item: result.hover });
-        }
+            Some(MarkerAndItem { marker, item: result.hover })
+        }));
 
         let get_range = |item: &Option<lsproto::Hover>| -> Option<lsproto::Range> { item.as_ref().and_then(|item| item.range) };
 
@@ -2991,9 +3114,9 @@ impl FourslashTest {
     // fourslash.go:3173
     pub fn verify_baseline_signature_help(&mut self, t: &T) {
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::SignatureHelp>>> = Vec::new();
-        for marker in self.markers() {
+        markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
             if marker.name.is_none() {
-                continue;
+                return None;
             }
 
             let params = lsproto::SignatureHelpParams {
@@ -3003,8 +3126,8 @@ impl FourslashTest {
             };
 
             let result = self.send_request(t, lsproto::TEXT_DOCUMENT_SIGNATURE_HELP_INFO, params);
-            markers_and_items.push(MarkerAndItem { marker, item: result.signature_help });
-        }
+            Some(MarkerAndItem { marker, item: result.signature_help })
+        }));
 
         // SignatureHelp doesn't have a range like hover does
         let get_range = |_item: &Option<lsproto::SignatureHelp>| -> Option<lsproto::Range> { None };
@@ -3111,8 +3234,16 @@ impl FourslashTest {
             let file_content = script.content.clone();
 
             // Add the marker position indicator
-            let marker_pos = marker.position as usize;
-            let baseline_content = format!("{}/**/{}{}", &file_content[..marker_pos], &file_content[marker_pos..], new_line);
+            let marker_pos = marker
+                .position
+                .expect_source("fourslash markers have source positions")
+                as usize;
+            let baseline_content = format!(
+                "{}/**/{}{}",
+                &file_content[..marker_pos],
+                &file_content[marker_pos..],
+                new_line
+            );
             result.push_str(&baseline_content);
 
             // Get selection ranges at this marker
@@ -3170,17 +3301,15 @@ impl FourslashTest {
 
                 // Remove blank lines
                 let mut non_blank_lines: Vec<&str> = Vec::new();
-                for line in masked_str.split('\n') {
+                non_blank_lines.extend(masked_str.split('\n').filter_map(|line| {
                     let trimmed = line.trim_matches(go_is_space);
-                    if !trimmed.is_empty() && trimmed != "↲" {
-                        non_blank_lines.push(line);
-                    }
-                }
+                    if !trimmed.is_empty() && trimmed != "↲" { Some(line) } else { None }
+                }));
                 masked_str = non_blank_lines.join("\n");
 
                 // Find leading and trailing width of non-whitespace characters
                 let masked_runes: Vec<char> = masked_str.chars().collect();
-                let is_real_character = |ch: char| ch != '•' && ch != '↲' && !stringutil::is_white_space_like(ch);
+                let is_real_character = |ch: char| ch != '•' && ch != '↲' && !stringutil::is_white_space_like(ch as u32);
 
                 let leading_width = masked_runes.iter().position(|&ch| is_real_character(ch));
                 let trailing_width = masked_runes.iter().rposition(|&ch| is_real_character(ch));
@@ -3261,17 +3390,15 @@ impl FourslashTest {
         marker_or_range_or_names: &[Any],
     ) {
         let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
-        for marker_or_range_or_name in marker_or_range_or_names {
-            match marker_or_range_or_name {
-                Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
-                    Some(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
-                    None => t.fatal(&format!("Marker '{name}' not found")),
-                },
-                Any::Marker(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
-                Any::RangeMarker(range) => marker_or_ranges.push(MarkerOrRange::RangeMarker(range.clone())),
-                other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
-            }
-        }
+        marker_or_ranges.extend(marker_or_range_or_names.iter().filter_map(|marker_or_range_or_name| match marker_or_range_or_name {
+            Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
+                Some(marker) => Some(MarkerOrRange::Marker(marker.clone())),
+                None => t.fatal(&format!("Marker '{name}' not found")),
+            },
+            Any::Marker(marker) => Some(MarkerOrRange::Marker(marker.clone())),
+            Any::RangeMarker(range) => Some(MarkerOrRange::RangeMarker(range.clone())),
+            other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
+        }));
 
         self.verify_baseline_document_highlights_impl(t, preferences, files_to_search, marker_or_ranges);
     }
@@ -3302,16 +3429,10 @@ impl FourslashTest {
                 let result = self.send_request(t, lsproto::CUSTOM_TEXT_DOCUMENT_MULTI_DOCUMENT_HIGHLIGHT_INFO, params);
                 let multi_highlights = result.multi_document_highlights.unwrap_or_default();
 
-                for mh in &multi_highlights {
-                    for h in &mh.highlights {
-                        spans.push(lsproto::Location { uri: mh.uri.clone(), range: h.range });
-                    }
-                }
+                spans.extend(multi_highlights.iter().flat_map(|mh| mh.highlights.iter().map(|h| lsproto::Location { uri: mh.uri.clone(), range: h.range })));
 
                 header.push_str("// filesToSearch:\n");
-                for file in files_to_search {
-                    header.push_str(&format!("//   {}\n", file));
-                }
+                header.extend(files_to_search.iter().map(|file| format!("//   {}\n", file)));
                 header.push('\n');
             } else {
                 // Single-file: use the standard LSP method.
@@ -3323,9 +3444,7 @@ impl FourslashTest {
                 let result = self.send_request(t, lsproto::TEXT_DOCUMENT_DOCUMENT_HIGHLIGHT_INFO, params);
                 let highlights = result.document_highlights.unwrap_or_default();
 
-                for h in &highlights {
-                    spans.push(lsproto::Location { uri: lsconv::file_name_to_document_uri(&self.active_filename), range: h.range });
-                }
+                spans.extend(highlights.iter().map(|h| lsproto::Location { uri: lsconv::file_name_to_document_uri(&self.active_filename), range: h.range }));
             }
 
             // Add result to baseline
@@ -3355,18 +3474,22 @@ impl FourslashTest {
 
     // fourslash.go:3904
     // Removes the text at the current caret position as if the user pressed backspace `count` times.
-    pub fn backspace(&mut self, t: &T, count: i32) {
+    pub fn backspace(&mut self, t: &T, count: usize) {
         let script = self.get_script_info(&self.active_filename.clone());
         let mut offset = self.converters.line_and_character_to_position(script, self.current_caret_position);
         self.baseline_state(t);
 
         for _ in 0..count {
-            offset -= 1;
+            offset = offset
+                .checked_sub(1)
+                .expect("cannot backspace before start of file");
             let active = self.active_filename.clone();
             self.edit_script_and_update_markers(t, &active, offset, offset + 1, "");
             // (Go's `script` is the shared *scriptInfo, so it sees the edit.)
             let script = self.get_script_info(&active);
-            self.current_caret_position = self.converters.position_to_line_and_character(&script, offset);
+            self.current_caret_position = self
+                .converters
+                .position_to_line_and_character(&script, offset.into());
             // Don't need to examine formatting because there are no formatting changes on backspace.
         }
 
@@ -3375,7 +3498,7 @@ impl FourslashTest {
 
     // fourslash.go:3920
     // DeleteAtCaret removes the text at the current caret position as if the user pressed delete `count` times.
-    pub fn delete_at_caret(&mut self, t: &T, count: i32) {
+    pub fn delete_at_caret(&mut self, t: &T, count: usize) {
         let script = self.get_script_info(&self.active_filename.clone());
         let offset = self.converters.line_and_character_to_position(script, self.current_caret_position);
         self.baseline_state(t);
@@ -3403,7 +3526,12 @@ impl FourslashTest {
                 text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&active) },
                 range: lsproto::Range {
                     start: self.current_caret_position,
-                    end: self.converters.position_to_line_and_character(&script, start + text.len() as i32),
+                    end: self.converters.position_to_line_and_character(
+                        &script,
+                        (start
+                            + u32::try_from(text.len()).expect("inserted text length exceeds u32"))
+                        .into(),
+                    ),
                 },
                 options: self.user_preferences.format_code_settings.to_ls_format_options(),
                 ..Default::default()
@@ -3418,16 +3546,21 @@ impl FourslashTest {
 
     // fourslash.go:3958
     // Selects a line and replaces it with a new text.
-    pub fn replace_line(&mut self, t: &T, line_index: i32, text: &str) {
+    pub fn replace_line(&mut self, t: &T, line_index: usize, text: &str) {
         self.baseline_state(t);
         self.select_line(t, line_index);
         self.type_text(t, text);
     }
 
     // fourslash.go:4032
-    pub fn replace(&mut self, t: &T, start: i32, length: i32, text: &str) {
+    pub fn replace(&mut self, t: &T, start: TextPos, length: u32, text: &str) {
         self.baseline_state(t);
-        self.replace_worker(t, start, length, text);
+        self.replace_worker(
+            t,
+            start.expect_source("replacement starts have source positions"),
+            length,
+            text,
+        );
     }
 
     // fourslash.go:4183
@@ -3505,9 +3638,9 @@ impl FourslashTest {
         t.helper();
 
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::VSOnAutoInsertResponseItem>>> = Vec::new();
-        for marker in self.markers() {
+        markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
             if marker.name.is_none() {
-                continue;
+                return None;
             }
 
             let params = lsproto::VSOnAutoInsertParams {
@@ -3518,8 +3651,8 @@ impl FourslashTest {
             };
 
             let result = self.send_request(t, lsproto::TEXT_DOCUMENT_VS_ON_AUTO_INSERT_INFO, params);
-            markers_and_items.push(MarkerAndItem { marker, item: result.vs_on_auto_insert_response_item });
-        }
+            Some(MarkerAndItem { marker, item: result.vs_on_auto_insert_response_item })
+        }));
 
         // Returning nil lets annotateContentWithTooltips render the caret marker at
         // the marker position. The text edit's range is zero-width at the cursor,
@@ -3559,7 +3692,7 @@ impl FourslashTest {
         // Determine which signature to check
         let mut selected_index: usize = 0;
         if expected.override_selected_item_index > 0 {
-            selected_index = expected.override_selected_item_index as usize;
+            selected_index = expected.override_selected_item_index;
         } else if let Some(active_signature) = help.active_signature {
             selected_index = active_signature as usize;
         }
@@ -3571,8 +3704,12 @@ impl FourslashTest {
         let selected_sig = &help.signatures[selected_index];
 
         // Verify overloads count
-        if expected.overloads_count > 0 && help.signatures.len() != expected.overloads_count as usize {
-            t.error(&format!("{prefix}Expected {} overloads, got {}", expected.overloads_count, help.signatures.len()));
+        if expected.overloads_count > 0 && help.signatures.len() != expected.overloads_count {
+            t.error(&format!(
+                "{prefix}Expected {} overloads, got {}",
+                expected.overloads_count,
+                help.signatures.len()
+            ));
         }
 
         // Verify signature text
@@ -3591,8 +3728,11 @@ impl FourslashTest {
         // Verify parameter count
         if expected.parameter_count > 0 {
             let param_count = selected_sig.parameters.as_ref().map_or(0, Vec::len);
-            if param_count != expected.parameter_count as usize {
-                t.error(&format!("{prefix}Expected {} parameters, got {param_count}", expected.parameter_count));
+            if param_count != expected.parameter_count {
+                t.error(&format!(
+                    "{prefix}Expected {} parameters, got {param_count}",
+                    expected.parameter_count
+                ));
             }
         }
 
@@ -3836,8 +3976,15 @@ impl FourslashTest {
                 let marker = self.test_data.marker_positions[marker_name].clone();
                 let ext = tspath::get_any_extension_from_path(&active, &[], true);
                 let ext = ext.strip_prefix('.').unwrap_or(&ext);
-                let lang = if ext == "mts" || ext == "cts" { "ts" } else { ext };
-                let position = marker.position as usize;
+                let lang = if ext == "mts" || ext == "cts" {
+                    "ts"
+                } else {
+                    ext
+                };
+                let position = marker
+                    .position
+                    .expect_source("fourslash markers have source positions")
+                    as usize;
                 self.write_to_baseline(
                     AUTO_IMPORTS_CMD,
                     &code_fence(lang, &format!("// @FileName: {active}\n{}/*{marker_name}*/{}", &file_content[..position], &file_content[position..])),
@@ -3872,7 +4019,8 @@ impl FourslashTest {
 
                     // !!! calculate the change provided by the completiontext
                     // sorted from back-of-file-most to front-of-file-most
-                    all_changes.sort_by(|a, b| lsproto::compare_positions(b.range.start, a.range.start).cmp(&0));
+                    all_changes
+                        .sort_by(|a, b| lsproto::compare_positions(b.range.start, a.range.start));
                     let mut new_file_content = file_content.clone();
                     for change in &all_changes {
                         let start = converters.line_and_character_to_position(current_file.clone(), change.range.start) as usize;
@@ -3890,17 +4038,15 @@ impl FourslashTest {
     // fourslash.go:4754
     pub fn verify_baseline_rename(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>, marker_or_name_or_ranges: &[Any]) {
         let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
-        for marker_or_name_or_range in marker_or_name_or_ranges {
-            match marker_or_name_or_range {
-                Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
-                    Some(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
-                    None => t.fatal(&format!("Marker '{name}' not found")),
-                },
-                Any::Marker(marker) => marker_or_ranges.push(MarkerOrRange::Marker(marker.clone())),
-                Any::RangeMarker(range) => marker_or_ranges.push(MarkerOrRange::RangeMarker(range.clone())),
-                other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
-            }
-        }
+        marker_or_ranges.extend(marker_or_name_or_ranges.iter().filter_map(|marker_or_name_or_range| match marker_or_name_or_range {
+            Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
+                Some(marker) => Some(MarkerOrRange::Marker(marker.clone())),
+                None => t.fatal(&format!("Marker '{name}' not found")),
+            },
+            Any::Marker(marker) => Some(MarkerOrRange::Marker(marker.clone())),
+            Any::RangeMarker(range) => Some(MarkerOrRange::RangeMarker(range.clone())),
+            other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
+        }));
 
         self.verify_baseline_rename_impl(t, preferences, marker_or_ranges);
     }
@@ -4262,10 +4408,11 @@ impl FourslashTest {
     // fourslash.go:5226
     pub fn verify_baseline_rename_at_ranges_with_text(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>, texts: &[&str]) {
         let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
-        for text in texts {
+        marker_or_ranges = texts.iter().fold(marker_or_ranges, |mut marker_or_ranges, text| {
             let ranges_by_text = self.get_ranges_by_text();
             marker_or_ranges.extend(ranges_by_text.get(&text.to_string()).iter().map(|r| MarkerOrRange::RangeMarker(r.clone())));
-        }
+            marker_or_ranges
+        });
         self.verify_baseline_rename_impl(t, preferences, marker_or_ranges);
     }
 
@@ -4287,7 +4434,14 @@ impl FourslashTest {
     // fourslash.go:5252
     pub(crate) fn get_range_text(&self, r: &RangeMarker) -> String {
         let script = self.get_script_info(&r.file_name);
-        script.content[r.range.pos() as usize..r.range.end() as usize].to_string()
+        script.content[r
+            .range
+            .pos()
+            .expect_source("fourslash ranges have source positions") as usize
+            ..r.range
+                .end()
+                .expect_source("fourslash ranges have source positions") as usize]
+            .to_string()
     }
 
     // fourslash.go:5257
@@ -4313,7 +4467,13 @@ impl FourslashTest {
         let lsp_range = match span {
             None => {
                 let script = self.get_script_info(&file_name);
-                let (r, _) = self.converters.converters.to_lsp_range(&script, TextRange::new(0, script.content.len() as i32));
+                let (r, _) = self.converters.converters.to_lsp_range(
+                    &script,
+                    TextRange::new(
+                        0,
+                        u32::try_from(script.content.len()).expect("source length exceeds u32"),
+                    ),
+                );
                 r
             }
             Some(span) => span,
@@ -4382,8 +4542,13 @@ impl FourslashTest {
             for i in 0..file.content.len() {
                 let script = self.get_script_info(&file.file_name());
                 let params = lsproto::LinkedEditingRangeParams {
-                    text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&file.file_name()) },
-                    position: self.converters.position_to_line_and_character(&script, i as TextPos),
+                    text_document: lsproto::TextDocumentIdentifier {
+                        uri: lsconv::file_name_to_document_uri(&file.file_name()),
+                    },
+                    position: self.converters.position_to_line_and_character(
+                        &script,
+                        TextPos::source(u32::try_from(i).expect("source position exceeds u32")),
+                    ),
                     ..Default::default()
                 };
                 let result = self.send_request(t, lsproto::TEXT_DOCUMENT_LINKED_EDITING_RANGE_INFO, params);
@@ -4401,7 +4566,8 @@ impl FourslashTest {
             }
 
             // sort entries in each file
-            results.sort_by(|a, b| lsproto::compare_positions(a.ranges[0].start, b.ranges[0].start).cmp(&0));
+            results
+                .sort_by(|a, b| lsproto::compare_positions(a.ranges[0].start, b.ranges[0].start));
             let mut baseline_details: Vec<(lsproto::Position, String)> = Vec::new();
             let mut found_edit_info_builder = String::new();
             for edit in &results {
@@ -4416,7 +4582,7 @@ impl FourslashTest {
             }
 
             // sort baselineDetails by position
-            baseline_details.sort_by(|a, b| lsproto::compare_positions(a.0, b.0).cmp(&0));
+            baseline_details.sort_by(|a, b| lsproto::compare_positions(a.0, b.0));
 
             // write file content with inline annotations for linked edits
             let mut last_position = 0usize;
@@ -4501,9 +4667,7 @@ impl FourslashTest {
             }
             files.push(crate::tsbaseline::TestFile { unit_name: file_name.clone(), content: script_info.content.clone() });
             let lsp_diagnostics: Vec<lsproto::Diagnostic> = self.get_diagnostics(t, file_name).into_iter().filter(|d| !is_suggestion_diagnostic(d)).collect();
-            for d in &lsp_diagnostics {
-                diagnostics.push(self.to_diagnostic(script_info, d));
-            }
+            diagnostics.extend(lsp_diagnostics.iter().map(|d| self.to_diagnostic(script_info, d)));
         }
         files.sort_by(|a, b| a.unit_name.cmp(&b.unit_name));
         let result = crate::tsbaseline::get_error_baseline(t, &files, &diagnostics, compare_diagnostics);
@@ -4579,9 +4743,11 @@ impl FourslashTest {
             }
         }
         let mut spans = Vec::with_capacity(symbol_by_span.len());
-        for (key, symbol) in symbol_by_span.iter() {
-            spans.push(DocumentSpan { uri: key.uri.clone(), text_span: key.text_span, context_span: Some(symbol.range) });
-        }
+        spans.extend(symbol_by_span.iter().map(|(key, symbol)| DocumentSpan {
+            uri: key.uri.clone(),
+            text_span: key.text_span,
+            context_span: Some(symbol.range),
+        }));
         let baseline = self.get_baseline_for_spans_with_file_contents(
             &spans,
             BaselineFourslashLocationsOptions {
@@ -4602,12 +4768,19 @@ impl FourslashTest {
     }
 
     // fourslash.go:5871
-    pub fn verify_number_of_errors_in_current_file(&mut self, t: &T, expected_count: i32) {
+    pub fn verify_number_of_errors_in_current_file(&mut self, t: &T, expected_count: usize) {
         let diagnostics = self.get_diagnostics(t, &self.active_filename.clone());
         // Filter to only include errors (not suggestions/hints)
-        let errors: Vec<&lsproto::Diagnostic> = diagnostics.iter().filter(|d| !is_suggestion_diagnostic(d)).collect();
-        if errors.len() as i32 != expected_count {
-            t.fatal(&format!("Expected {} errors in current file, but got {}", expected_count, errors.len()));
+        let errors: Vec<&lsproto::Diagnostic> = diagnostics
+            .iter()
+            .filter(|d| !is_suggestion_diagnostic(d))
+            .collect();
+        if errors.len() != expected_count {
+            t.fatal(&format!(
+                "Expected {} errors in current file, but got {}",
+                expected_count,
+                errors.len()
+            ));
         }
     }
     // VerifyNoErrors verifies that no errors exist in any open files.
@@ -4670,17 +4843,24 @@ impl FourslashTest {
         }
 
         let diagnostics = self.get_diagnostics(t, &start_marker.file_name());
-        let start_pos = start_marker.position;
-        let end_pos = end_marker.position;
+        let start_pos = start_marker
+            .position
+            .expect_source("fourslash markers have source positions");
+        let end_pos = end_marker
+            .position
+            .expect_source("fourslash markers have source positions");
 
-        for diag in &diagnostics {
+        if diagnostics.iter().any(|diag| {
             if !is_suggestion_diagnostic(diag) {
                 let diag_start = self.converters.line_and_character_to_position(self.get_script_info(&start_marker.file_name()), diag.range.start);
                 let diag_end = self.converters.line_and_character_to_position(self.get_script_info(&start_marker.file_name()), diag.range.end);
                 if diag_start >= start_pos && diag_end <= end_pos {
-                    return; // Found an error in the range
+                    return true; // Found an error in the range
                 }
             }
+            false
+        }) {
+            return;
         }
         t.fatal(&format!("Expected error between markers '{start_marker_name}' and '{end_marker_name}' but none was found"));
     }
@@ -4689,7 +4869,7 @@ impl FourslashTest {
     // fourslash.go:5952
     pub fn verify_error_exists_after_marker(&mut self, t: &T, marker_name: &str) {
         let file_name: String;
-        let marker_pos: i32;
+        let marker_pos: u32;
 
         if marker_name.is_empty() {
             // Use current position
@@ -4700,18 +4880,23 @@ impl FourslashTest {
                 t.fatal(&format!("Marker '{marker_name}' not found"));
             };
             file_name = marker.file_name();
-            marker_pos = marker.position;
+            marker_pos = marker
+                .position
+                .expect_source("fourslash markers have source positions");
         }
 
         let diagnostics = self.get_diagnostics(t, &file_name);
 
-        for diag in &diagnostics {
+        if diagnostics.iter().any(|diag| {
             if !is_suggestion_diagnostic(diag) {
                 let diag_start = self.converters.line_and_character_to_position(self.get_script_info(&file_name), diag.range.start);
                 if diag_start >= marker_pos {
-                    return; // Found an error after the marker
+                    return true; // Found an error after the marker
                 }
             }
+            false
+        }) {
+            return;
         }
         t.fatal(&format!("Expected error after marker '{marker_name}' but none was found"));
     }
@@ -4720,7 +4905,7 @@ impl FourslashTest {
     // fourslash.go:5983
     pub fn verify_error_exists_before_marker(&mut self, t: &T, marker_name: &str) {
         let file_name: String;
-        let marker_pos: i32;
+        let marker_pos: u32;
 
         if marker_name.is_empty() {
             // Use current position
@@ -4731,18 +4916,23 @@ impl FourslashTest {
                 t.fatal(&format!("Marker '{marker_name}' not found"));
             };
             file_name = marker.file_name();
-            marker_pos = marker.position;
+            marker_pos = marker
+                .position
+                .expect_source("fourslash markers have source positions");
         }
 
         let diagnostics = self.get_diagnostics(t, &file_name);
 
-        for diag in &diagnostics {
+        if diagnostics.iter().any(|diag| {
             if !is_suggestion_diagnostic(diag) {
                 let diag_end = self.converters.line_and_character_to_position(self.get_script_info(&file_name), diag.range.end);
                 if diag_end <= marker_pos {
-                    return; // Found an error before the marker
+                    return true; // Found an error before the marker
                 }
             }
+            false
+        }) {
+            return;
         }
         t.fatal(&format!("Expected error before marker '{marker_name}' but none was found"));
     }
@@ -4914,13 +5104,13 @@ impl FourslashTest {
     }
 
     // fourslash.go:3964
-    fn select_line(&mut self, t: &T, line_index: i32) {
+    fn select_line(&mut self, t: &T, line_index: usize) {
         let script = self.get_script_info(&self.active_filename.clone());
-        let start = script.line_map.line_starts[line_index as usize];
-        let end = if line_index as usize + 1 >= script.line_map.line_starts.len() {
-            script.content.len() as TextPos
+        let start = script.line_map.line_starts[line_index];
+        let end = if line_index + 1 >= script.line_map.line_starts.len() {
+            u32::try_from(script.content.len()).expect("source length exceeds u32")
         } else {
-            script.line_map.line_starts[line_index as usize + 1] - 1
+            script.line_map.line_starts[line_index + 1] - 1
         };
         self.select_range(t, TextRange::new(start, end));
     }
@@ -4951,7 +5141,11 @@ impl FourslashTest {
 
     // Updates f.currentCaretPosition
     // fourslash.go:3999
-    pub(crate) fn apply_text_edits(&mut self, t: &T, mut edits: Vec<lsproto::TextEdit>) -> i32 {
+    pub(crate) fn apply_text_edits(
+        &mut self,
+        t: &T,
+        mut edits: Vec<lsproto::TextEdit>,
+    ) -> TextLengthChange {
         let script = self.get_script_info(&self.active_filename.clone());
         edits.sort_by(|a, b| {
             let a_start = self.converters.line_and_character_to_position(script.clone(), a.range.start);
@@ -4959,8 +5153,10 @@ impl FourslashTest {
             a_start.cmp(&b_start)
         });
 
-        let mut total_offset = 0;
-        let mut current_caret_position = self.converters.line_and_character_to_position(script.clone(), self.current_caret_position);
+        let mut total_offset = TextLengthChange::Same;
+        let mut current_caret_position = self
+            .converters
+            .line_and_character_to_position(script.clone(), self.current_caret_position);
         // Apply edits in reverse order to avoid affecting the positions of earlier edits.
         for edit in edits.iter().rev() {
             // (Go's `script` is the shared *scriptInfo: positions are converted against the edited text.)
@@ -4970,25 +5166,30 @@ impl FourslashTest {
             let active = self.active_filename.clone();
             self.edit_script_and_update_markers(t, &active, start, end, &edit.new_text);
 
-            let delta = edit.new_text.len() as i32 - (end - start);
+            let new_text_length =
+                u32::try_from(edit.new_text.len()).expect("edit length exceeds u32");
+            let delta = TextLengthChange::between(end - start, new_text_length);
             if start <= current_caret_position {
                 if end <= current_caret_position {
                     // The entirety of the edit span falls before the caret position, shift the caret accordingly
-                    current_caret_position += delta;
+                    current_caret_position =
+                        position_after_edit(current_caret_position, start, end, new_text_length);
                 } else {
                     // The span being replaced includes the caret position, place the caret at the beginning of the span
                     current_caret_position = start;
                 }
             }
-            total_offset += delta;
+            total_offset = total_offset.combine(delta);
         }
         let script = self.get_script_info(&self.active_filename.clone());
-        self.current_caret_position = self.converters.position_to_line_and_character(&script, current_caret_position);
+        self.current_caret_position = self
+            .converters
+            .position_to_line_and_character(&script, current_caret_position.into());
         total_offset
     }
 
     // fourslash.go:4037
-    fn replace_worker(&mut self, t: &T, start: i32, length: i32, text: &str) {
+    fn replace_worker(&mut self, t: &T, start: u32, length: u32, text: &str) {
         t.helper();
         let active = self.active_filename.clone();
         self.edit_script_and_update_markers(t, &active, start, start + length, text);
@@ -5002,7 +5203,16 @@ impl FourslashTest {
         self.report_format_on_type_crash = false;
         let r = crate::go::run(|| {
             let selection = self.get_selection();
-            self.replace_worker(t, selection.pos(), selection.end() - selection.pos(), "");
+            self.replace_worker(
+                t,
+                selection
+                    .pos()
+                    .expect_source("fourslash selections have source positions"),
+                selection
+                    .len()
+                    .expect("fourslash selections have source positions"),
+                "",
+            );
 
             let mut total_size = 0;
 
@@ -5015,9 +5225,11 @@ impl FourslashTest {
                 self.edit_script_and_update_markers(t, &active, offset, offset, &text[total_size..total_size + size]);
 
                 total_size += size;
-                offset += size as i32;
+                offset += u32::try_from(size).expect("inserted character length exceeds u32");
                 let script = self.get_script_info(&active);
-                self.current_caret_position = self.converters.position_to_line_and_character(&script, offset);
+                self.current_caret_position = self
+                    .converters
+                    .position_to_line_and_character(&script, offset.into());
 
                 // Handle post-keystroke formatting
                 if self.state_enable_formatting {
@@ -5029,7 +5241,10 @@ impl FourslashTest {
                     };
                     let result = self.send_request_and_baseline_worker(t, lsproto::TEXT_DOCUMENT_ON_TYPE_FORMATTING_INFO, params, false);
                     if let Some(text_edits) = result.text_edits {
-                        offset += self.apply_text_edits(t, text_edits);
+                        offset = self
+                            .apply_text_edits(t, text_edits)
+                            .apply_to(offset)
+                            .expect("formatting edits move the caret outside the file");
                     }
                 }
             }
@@ -5043,8 +5258,22 @@ impl FourslashTest {
     // Edits the script and updates marker and range positions accordingly.
     // This does not update the current caret position.
     // fourslash.go:4087
-    pub(crate) fn edit_script_and_update_markers(&mut self, t: &T, file_name: &str, edit_start: i32, edit_end: i32, new_text: &str) {
-        self.edit_script_and_update_markers_worker(t, file_name, &[TextChange { text_range: TextRange::new(edit_start, edit_end), new_text: new_text.to_string() }]);
+    pub(crate) fn edit_script_and_update_markers(
+        &mut self,
+        t: &T,
+        file_name: &str,
+        edit_start: u32,
+        edit_end: u32,
+        new_text: &str,
+    ) {
+        self.edit_script_and_update_markers_worker(
+            t,
+            file_name,
+            &[TextChange {
+                text_range: TextRange::new(edit_start, edit_end),
+                new_text: new_text.to_string(),
+            }],
+        );
     }
 
     // fourslash.go:4091
@@ -5085,10 +5314,24 @@ impl FourslashTest {
                         updated.marker = Some(m);
                     }
                     if updated.file_name() == file_name {
-                        let start = update_position(updated.range.pos(), edit_start, edit_end, &change.new_text);
-                        let end = update_position(updated.range.end(), edit_start, edit_end, &change.new_text);
-                        updated.range = TextRange::new(start, end);
-                        updated.ls_range = self.converters.converters.to_lsp_range(&script, updated.range).0;
+                        let start = update_position(
+                            updated.range.pos(),
+                            edit_start,
+                            edit_end,
+                            &change.new_text,
+                        );
+                        let end = update_position(
+                            updated.range.end(),
+                            edit_start,
+                            edit_end,
+                            &change.new_text,
+                        );
+                        updated.range = TextRange::from_text_pos(start, end);
+                        updated.ls_range = self
+                            .converters
+                            .converters
+                            .to_lsp_range(&script, updated.range)
+                            .0;
                     }
                     *range_marker = Arc::new(updated);
                 }
@@ -5205,7 +5448,7 @@ impl FourslashTest {
         let actual_diagnostics: Vec<lsproto::Diagnostic> = actual_diagnostics.into_iter().filter(|d| filter_diagnostics(d)).collect();
         let empty_range = lsproto::Range::default();
         let mut expected_with_ranges = Vec::with_capacity(expected.len());
-        for diag in expected {
+        expected_with_ranges.extend(expected.iter().map(|diag| {
             if diag.range == empty_range {
                 let ranges_in_file = self.get_ranges_in_file(&self.active_filename);
                 if ranges_in_file.is_empty() {
@@ -5213,11 +5456,11 @@ impl FourslashTest {
                 }
                 let mut diag_with_range = diag.clone();
                 diag_with_range.range = ranges_in_file[0].ls_range;
-                expected_with_ranges.push(diag_with_range);
+                diag_with_range
             } else {
-                expected_with_ranges.push(diag.clone());
+                diag.clone()
             }
-        }
+        }));
         if actual_diagnostics.is_empty() && expected_with_ranges.is_empty() {
             return;
         }
@@ -5364,9 +5607,9 @@ fn render_vs_container_element(el: &lsproto::VSContainerElement, indent: &str) -
             lines.push(format!("{child_indent}ImageElement {{ Guid: {}, Id: 0x{:X} }}", image_id.guid, image_id.id));
         } else if let Some(classified_text_element) = &child.classified_text_element {
             lines.push(format!("{child_indent}ClassifiedTextElement"));
-            for run in &classified_text_element.runs {
-                lines.push(format!("{child_indent}  [{}] {}", run.classification_type_name, crate::go::quote(&run.text)));
-            }
+            lines.extend(
+                classified_text_element.runs.iter().map(|run| format!("{child_indent}  [{}] {}", run.classification_type_name, crate::go::quote(&run.text))),
+            );
         } else if let Some(container_element) = &child.container_element {
             lines.extend(render_vs_container_element(container_element, &child_indent));
         } else {
@@ -5433,15 +5676,23 @@ fn hover_content_string(hover: Option<&lsproto::Hover>) -> String {
 }
 
 // fourslash.go:4122
-fn update_position(pos: i32, edit_start: i32, edit_end: i32, new_text: &str) -> i32 {
+fn update_position(pos: TextPos, edit_start: u32, edit_end: u32, new_text: &str) -> TextPos {
+    let Some(pos) = pos.source_offset() else {
+        return TextPos::Synthetic;
+    };
     if pos <= edit_start {
-        return pos;
+        return pos.into();
     }
-    // If inside the edit, return -1 to mark as invalid
     if pos < edit_end {
-        return -1;
+        return TextPos::Synthetic;
     }
-    pos + new_text.len() as i32 - (edit_end - edit_start)
+    position_after_edit(
+        pos,
+        edit_start,
+        edit_end,
+        u32::try_from(new_text.len()).expect("edit length exceeds u32"),
+    )
+    .into()
 }
 
 // fourslash.go:5485
@@ -5460,7 +5711,10 @@ pub(crate) fn marker_and_item_to_json<I>(m: &MarkerAndItem<I>, item_to_json: imp
 
 pub(crate) fn marker_to_json(marker: &Marker) -> Value {
     let mut o = OrderedMap::default();
-    o.insert("Position".to_string(), Value::Number(marker.position as f64));
+    o.insert(
+        "Position".to_string(),
+        Value::Number(marker.position.source_offset().map_or(-1.0, f64::from)),
+    );
     o.insert("LSPosition".to_string(), marker.ls_position.to_json());
     o.insert("Name".to_string(), marker.name.as_ref().map_or(Value::Null, |n| Value::String(n.clone())));
     // json/v2 marshals a nil map as {}.
@@ -5484,7 +5738,7 @@ pub(crate) struct FourslashDiagnostic {
 pub(crate) struct FourslashDiagnosticFile {
     pub(crate) file_name: String,
     pub(crate) content: String,
-    pub(crate) ecma_line_map: Vec<TextPos>,
+    pub(crate) ecma_line_map: Vec<u32>,
 }
 
 fn new_fourslash_diagnostic_file(unit_name: &str, content: &str) -> Arc<FourslashDiagnosticFile> {
@@ -5510,9 +5764,9 @@ impl FourslashTest {
 
         let mut related_diagnostics = Vec::new();
         if let Some(related_information) = &lsp_diagnostic.related_information {
-            for info in related_information {
+            related_diagnostics.extend(related_information.iter().filter_map(|info| {
                 let Some(related_script_info) = self.try_get_script_info(&info.location.uri.file_name()) else {
-                    continue;
+                    return None;
                 };
                 let related_diagnostic = FourslashDiagnostic {
                     file: new_fourslash_diagnostic_file(&related_script_info.file_name, &related_script_info.content),
@@ -5524,8 +5778,8 @@ impl FourslashTest {
                     reports_unnecessary: false,
                     reports_deprecated: false,
                 };
-                related_diagnostics.push(related_diagnostic);
-            }
+                Some(related_diagnostic)
+            }));
         }
 
         FourslashDiagnostic {
@@ -5542,43 +5796,46 @@ impl FourslashTest {
 }
 
 // fourslash.go:5647
-fn compare_diagnostics(d1: &FourslashDiagnostic, d2: &FourslashDiagnostic) -> i32 {
-    let mut c = d1.file.file_name.cmp(&d2.file.file_name) as i32;
-    if c != 0 {
+fn compare_diagnostics(d1: &FourslashDiagnostic, d2: &FourslashDiagnostic) -> std::cmp::Ordering {
+    let mut c = d1.file.file_name.cmp(&d2.file.file_name);
+    if !c.is_eq() {
         return c;
     }
-    c = d1.loc.pos() - d2.loc.pos();
-    if c != 0 {
+    c = d1.loc.pos().cmp(&d2.loc.pos());
+    if !c.is_eq() {
         return c;
     }
-    c = d1.loc.end() - d2.loc.end();
-    if c != 0 {
+    c = d1.loc.end().cmp(&d2.loc.end());
+    if !c.is_eq() {
         return c;
     }
-    c = d1.code - d2.code;
-    if c != 0 {
+    c = d1.code.cmp(&d2.code);
+    if !c.is_eq() {
         return c;
     }
-    c = d1.message.cmp(&d2.message) as i32;
-    if c != 0 {
+    c = d1.message.cmp(&d2.message);
+    if !c.is_eq() {
         return c;
     }
     compare_related_diagnostics(&d1.related_diagnostics, &d2.related_diagnostics)
 }
 
 // fourslash.go:5671
-fn compare_related_diagnostics(d1: &[FourslashDiagnostic], d2: &[FourslashDiagnostic]) -> i32 {
-    let c = d2.len() as i32 - d1.len() as i32;
-    if c != 0 {
+fn compare_related_diagnostics(
+    d1: &[FourslashDiagnostic],
+    d2: &[FourslashDiagnostic],
+) -> std::cmp::Ordering {
+    let c = d2.len().cmp(&d1.len());
+    if !c.is_eq() {
         return c;
     }
-    for i in 0..d1.len() {
-        let c = compare_diagnostics(&d1[i], &d2[i]);
-        if c != 0 {
+    for (i, element) in d1.iter().enumerate() {
+        let c = compare_diagnostics(&(*element), &d2[i]);
+        if !c.is_eq() {
             return c;
         }
     }
-    0
+    std::cmp::Ordering::Equal
 }
 
 // fourslash.go:5757
@@ -5586,17 +5843,15 @@ fn verify_exact_symbols(t: &T, actual: &[lsproto::SymbolInformation], expected: 
     if actual.len() != expected.len() {
         t.fatal(&format!("{}: Expected {} symbols, but got {}:\n{:?}\n{:?}", prefix, expected.len(), actual.len(), actual, expected));
     }
-    for i in 0..actual.len() {
-        assert_deep_equal(t, &actual[i], &expected[i], prefix);
+    for (i, element) in actual.iter().enumerate() {
+        assert_deep_equal(t, &(*element), &expected[i], prefix);
     }
 }
 
 // fourslash.go:5771
 fn verify_includes_symbols(t: &T, actual: &[lsproto::SymbolInformation], includes: &[lsproto::SymbolInformation], prefix: &str) {
     let mut name_and_loc_to_actual_symbol: FxHashMap<(String, lsproto::Location), &lsproto::SymbolInformation> = FxHashMap::default();
-    for sym in actual {
-        name_and_loc_to_actual_symbol.insert((sym.name.clone(), sym.location.clone()), sym);
-    }
+    name_and_loc_to_actual_symbol.extend(actual.iter().map(|sym| ((sym.name.clone(), sym.location.clone()), sym)));
 
     for sym in includes {
         let Some(actual_sym) = name_and_loc_to_actual_symbol.get(&(sym.name.clone(), sym.location.clone())) else {
@@ -5819,18 +6074,14 @@ fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>,
     let content = file.content.as_bytes();
 
     // Find the line boundaries - expand to full lines
-    let mut context_start = start_pos as usize;
-    let mut context_end = end_pos as usize;
+    let context_start = start_pos as usize;
+    let context_end = end_pos as usize;
 
     // Expand to start of first line
-    while context_start > 0 && content[context_start - 1] != b'\n' && content[context_start - 1] != b'\r' {
-        context_start -= 1;
-    }
+    let _ = (0..context_start).rev().take_while(|&i| content[i] != b'\n' && content[i] != b'\r').count();
 
     // Expand to end of last line
-    while context_end < content.len() && content[context_end] != b'\n' && content[context_end] != b'\r' {
-        context_end += 1;
-    }
+    let _ = (context_end..content.len()).take_while(|&index| content[index] != b'\n' && content[index] != b'\r').count();
 
     // Get actual line and character positions for the context
     let context_start_line = start_lc.line as usize;
@@ -5904,11 +6155,7 @@ fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>,
 // fourslash.go:3712
 fn compute_line_starts(content: &str) -> Vec<usize> {
     let mut line_starts = vec![0];
-    for (i, ch) in content.char_indices() {
-        if ch == '\n' {
-            line_starts.push(i + 1);
-        }
-    }
+    line_starts.extend(content.char_indices().filter_map(|(i, ch)| if ch == '\n' { Some(i + 1) } else { None }));
     line_starts
 }
 
@@ -5929,8 +6176,11 @@ impl FourslashTest {
         let use_case_sensitive_file_names = self.vfs.use_case_sensitive_file_names();
         let (old_path, new_path) = (old_path.to_string(), new_path.to_string());
         move |path: &str| {
-            let compare_options = tspath::ComparePathsOptions { use_case_sensitive_file_names, ..Default::default() };
-            if tspath::compare_paths(path, &old_path, &compare_options) == 0 {
+            let compare_options = tspath::ComparePathsOptions {
+                use_case_sensitive_file_names,
+                ..Default::default()
+            };
+            if tspath::compare_paths(path, &old_path, &compare_options).is_eq() {
                 return Some(new_path.clone());
             }
             if tspath::starts_with_directory(path, &old_path, use_case_sensitive_file_names) {
@@ -5951,9 +6201,7 @@ impl FourslashTest {
         if self.vfs.read_file(old_path).is_some() {
             old_file_names.insert(old_path.to_string(), ());
         } else {
-            for path in get_accessible_file_paths(&*self.vfs, old_path) {
-                old_file_names.insert(path, ());
-            }
+            old_file_names.extend(get_accessible_file_paths(&*self.vfs, old_path).into_iter().map(|path| (path, ())));
         }
         if old_file_names.is_empty() {
             t.fatal(&format!("rename source {old_path} did not exist in test environment"));
@@ -6032,9 +6280,9 @@ impl FourslashTest {
 // fourslash.go:101
 #[derive(Clone, Copy)]
 struct textEditSpan {
-    start: i32,
-    end: i32,
-    length: i32,
+    start: u32,
+    end: u32,
+    length: u32,
 }
 
 // fourslash.go:2490
@@ -6071,32 +6319,47 @@ fn extract_module_specifier(text: &str) -> String {
 }
 
 // fourslash.go:6013
-fn update_position_for_text_edit(position: i32, edit_start: i32, edit_end: i32, new_text_length: i32) -> i32 {
+fn update_position_for_text_edit(
+    position: TextPos,
+    edit_start: u32,
+    edit_end: u32,
+    new_text_length: u32,
+) -> TextPos {
+    let Some(position) = position.source_offset() else {
+        return TextPos::Synthetic;
+    };
     if position <= edit_start {
-        return position;
+        return position.into();
     }
     if position < edit_end {
-        return -1;
+        return TextPos::Synthetic;
     }
-    position + new_text_length - (edit_end - edit_start)
+    position_after_edit(position, edit_start, edit_end, new_text_length).into()
+}
+
+fn position_after_edit(position: u32, edit_start: u32, edit_end: u32, new_text_length: u32) -> u32 {
+    edit_start
+        .checked_add(new_text_length)
+        .and_then(|new_end| new_end.checked_add(position - edit_end))
+        .expect("source position overflow after edit")
 }
 
 // fourslash.go:6023
 fn remove_whitespace(text: &str) -> String {
     let mut builder = String::new();
-    for ch in text.chars() {
-        if tsrs_core::stringutil::is_white_space_like(ch as i32) {
-            continue;
+    builder.extend(text.chars().filter_map(|ch| {
+        if tsrs_core::stringutil::is_white_space_like(ch as u32) {
+            return None;
         }
-        builder.push(ch);
-    }
+        Some(ch)
+    }));
     builder
 }
 
 // fourslash.go:6034
 fn assert_valid_text_range(t: &T, text_range: TextRange, message: &str) {
     t.helper();
-    if text_range.pos() >= 0 && text_range.end() >= 0 {
+    if !text_range.pos().is_synthetic() && !text_range.end().is_synthetic() {
         return;
     }
     t.fatal(message);

@@ -94,12 +94,17 @@ impl taggedTemplateTransformer {
             let te = template.as_template_expression();
             cooked_strings.push(create_template_cooked(f, te.head.template_literal_like_data().unwrap()));
             raw_strings.push(get_raw_literal(f, te.head));
-            for span in te.template_spans.nodes() {
-                let ts = span.as_template_span();
-                cooked_strings.push(create_template_cooked(f, ts.literal.template_literal_like_data().unwrap()));
-                raw_strings.push(get_raw_literal(f, ts.literal));
-                template_arguments.push(self.visitor().visit_node(Some(ts.expression)));
-            }
+            (cooked_strings, raw_strings, template_arguments) = te.template_spans.nodes().iter().fold(
+                (cooked_strings, raw_strings, template_arguments),
+                |(mut cooked_strings, mut raw_strings, mut template_arguments), span| {
+                    let ts = span.as_template_span();
+                    cooked_strings.push(create_template_cooked(f, ts.literal.template_literal_like_data().unwrap()));
+                    raw_strings.push(get_raw_literal(f, ts.literal));
+                    template_arguments.push(self.visitor().visit_node(Some(ts.expression)));
+
+                    (cooked_strings, raw_strings, template_arguments)
+                },
+            );
         }
 
         let helper_call = f.new_template_object_helper(f.new_array_literal_expression(f.new_node_list(cooked_strings), false), f.new_array_literal_expression(f.new_node_list(raw_strings), false));
@@ -165,10 +170,9 @@ fn has_invalid_escape(template: P<Node>) -> bool {
     if te.head.template_literal_like_data().unwrap().template_flags.intersects(TokenFlags::ContainsInvalidEscape) {
         return true;
     }
-    for span in te.template_spans.nodes() {
-        if span.as_template_span().literal.template_literal_like_data().unwrap().template_flags.intersects(TokenFlags::ContainsInvalidEscape) {
-            return true;
-        }
-    }
-    false
+    te
+        .template_spans
+        .nodes()
+        .iter()
+        .any(|span| span.as_template_span().literal.template_literal_like_data().unwrap().template_flags.intersects(TokenFlags::ContainsInvalidEscape))
 }

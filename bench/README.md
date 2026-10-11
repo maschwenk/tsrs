@@ -6,15 +6,18 @@ open-source applications and libraries (see "Application projects") with tsrs, w
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
 The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main`. It measures every project on the
 fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two (with bun check); `bench/results/<date>-<commit>.md`
-has every table, and the table at the top of `README.md` is the 16-vCPU machine's default-mode one: each compiler at
+has every table, and [the latest results](RESULTS.md) show the 16-vCPU machine's default-mode tables: each compiler at
 its own thread count, tsgo, tsrs and bun check side by side (`run.py --readme-modes wide`).
+
+The [README chart](RESULTS.md#large-project-chart-snapshot) is a static snapshot of those `wide` measurements,
+using the PGO-optimized `dist` build from the recorded CI run.
 
 ```sh
 cargo build --release -p tsrs_cli
 python3 bench/run.py --local                                   # all projects, 3 reps, default/single/checkers8 modes
 python3 bench/run.py --local --projects webpack,Compiler --reps 1
 python3 bench/run.py --local --work-dir ~/bench-cache          # reuse clones across worktrees
-python3 bench/run.py --local --readme README.md                # also rewrite the README block
+python3 bench/run.py --local --readme bench/RESULTS.md         # also rewrite the summary tables
 ```
 
 Results go to `bench/results/<date>-<tsrs commit>[-local].{json,md}`; per-run compiler output to
@@ -192,12 +195,12 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this
 repository is connected to Depot CI; Depot's runners for GitHub Actions only serve organization-owned repositories, and
 a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions stayed queued). It runs on every push to
-`main` except pushes that touch only `README.md` / `bench/results/**`, and on `workflow_dispatch`. Nobody waits on it,
-so it is built for unattended runs: one run per push (the concurrency group is the commit, so a push during a run
+`main` except pushes that touch only `README.md`, `bench/RESULTS.md` or `bench/results/**`, and on `workflow_dispatch`.
+Nobody waits on it, so it is built for unattended runs: one run per push (the concurrency group is the commit, so a push during a run
 starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
 2026-10-07 one shared group let a later push replace the queued bench, and bursts of merges left most commits without
 a results file), never cancelled, network steps retried, and the results commit re-created on top of the latest
-`main` before pushing. Runs overlap and finish in any order, so `README.md` keeps the newest commit's table: a run
+`main` before pushing. Runs overlap and finish in any order, so `bench/RESULTS.md` keeps the newest commit's table: a run
 whose commit is an ancestor of the one the table came from (its last line names it) adds its results file and leaves
 the table alone, and the regression flag compares a run with the nearest earlier benchmarked ancestor of its commit,
 not with the newest file by date. A pull request that changes code must not carry a CI-skip marker in its title, body or commit subjects (CI's
@@ -205,13 +208,15 @@ not with the newest file by date. A pull request that changes code must not carr
 commit lands without CI and without a results file; notes-only pull requests carry the marker on purpose. A commit
 whose bench was skipped or cancelled (before 2026-10-07, most commits of a burst of merges) is backfilled with `depot ci dispatch --repo maschwenk/tsrs --workflow bench.yml --ref main --input
 commit=<sha>`: the build and measuring jobs check out that commit, the merge job runs the current scripts, the results
-file is committed, and the README table is applied only when no newer commit's table is there.
+file is committed, and the summary table is applied only when no newer commit's table is there.
 
 **Noise**: the benchmark machines are shared cloud VMs. Historically, between publishes of the same code vscode's
 64-vCPU wall moved by a median 2% and up to 10% on 2026-10-07 (median of 3). The single-threaded instruction count is
 the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and `measure-wide` 10 for tsrs and
-`bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run), and the README's
-headline is the 20-run mean of `bench-compare.yml`, not one publish's median.
+`bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run).
+[The historical 64-vCPU comparison](RESULTS.md#historical-comparison-on-64-vcpus) uses the 20-run mean of
+`bench-compare.yml`. The README chart is a static snapshot of the PGO-optimized CI benchmark; its
+[date and source](RESULTS.md#large-project-chart-snapshot) stay fixed when CI updates the summary tables.
 
 The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
 Runner vCPUs and checker threads are separate: `cpus=16` with `threads=64` runs 64 software workers on
@@ -243,7 +248,7 @@ once the four application projects were in):
    wide,checkers16`), each with `bun check` from Bun canary as a third column (`--bun`). 16 checker threads would
    oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 16-vCPU job. It
    restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
-   it fails, the results file is published without the 16-vCPU sections and the README table is left as it was.
+   it fails, the results file is published without the 16-vCPU sections and the summary table is left as it was.
 4. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
    and modes in `MODE_FLAGS` order, after checking that the binary, the compilers and flags agree (the rep counts may differ, as the
    `measure` jobs' 5 and `measure-wide`'s 10 do; the result records every mode's in `mode_reps`) and that no

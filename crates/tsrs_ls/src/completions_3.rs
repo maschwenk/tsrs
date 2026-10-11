@@ -3,7 +3,10 @@
 use std::sync::{Mutex, OnceLock};
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_ast::{self as ast, FindAncestorResult, Kind, ModifierFlags, Node, SourceFile, Symbol, SymbolFlags};
+use tsrs_ast::{
+    self as ast, FindAncestorResult, Kind, ModifierFlags, NameTableEntry, Node, SourceFile, Symbol,
+    SymbolFlags,
+};
 use tsrs_checker::{self as checker, Checker, ContextFlags, Type, TypeFlags};
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Comparison};
@@ -19,7 +22,12 @@ use crate::signaturehelp::get_immediately_containing_argument_info;
 use crate::utilities::{position_belongs_to_node, quote};
 
 // completions.go:3468
-pub(crate) fn get_contextual_type(previous_token: P<Node>, position: i32, file: P<SourceFile>, type_checker: &mut Checker) -> Option<P<Type>> {
+pub(crate) fn get_contextual_type(
+    previous_token: P<Node>,
+    position: u32,
+    file: P<SourceFile>,
+    type_checker: &mut Checker,
+) -> Option<P<Type>> {
     let parent = previous_token.parent().unwrap();
     match previous_token.kind() {
         Kind::Identifier => return crate::utilities::get_contextual_type_from_parent(previous_token, type_checker, ContextFlags::None),
@@ -131,17 +139,21 @@ pub(crate) fn is_literal(t: P<Type>) -> bool {
 pub(crate) fn get_recommended_completion(previous_token: P<Node>, contextual_type: P<Type>, type_checker: &mut Checker) -> Option<P<Symbol>> {
     let types: Vec<P<Type>> = if contextual_type.is_union() { contextual_type.types().to_vec() } else { vec![contextual_type] };
     // For a union, return the first one with a recommended completion.
-    for t in types {
+    if let Some(result) = types.into_iter().find_map(|t| {
         let symbol = t.symbol();
         // Don't make a recommended completion for an abstract class.
         if let Some(symbol) = symbol {
             if symbol.flags().intersects(SymbolFlags::EnumMember | SymbolFlags::Enum | SymbolFlags::Class) && !is_abstract_constructor_symbol(symbol) {
                 let result = get_first_symbol_in_chain(symbol, Some(previous_token), type_checker);
                 if result.is_some() {
-                    return result;
+                    return Some(result);
                 }
             }
         }
+
+        None
+    }) {
+        return result;
     }
     None
 }
@@ -228,7 +240,12 @@ pub(crate) fn is_deprecated(symbol: P<Symbol>, type_checker: &mut Checker) -> bo
 
 impl LanguageService {
     // completions.go:3674
-    pub(crate) fn get_replacement_range_for_context_token(&self, file: P<SourceFile>, context_token: Option<P<Node>>, position: i32) -> Option<lsproto::Range> {
+    pub(crate) fn get_replacement_range_for_context_token(
+        &self,
+        file: P<SourceFile>,
+        context_token: Option<P<Node>>,
+        position: u32,
+    ) -> Option<lsproto::Range> {
         let context_token = context_token?;
 
         // !!! ensure range is single line
@@ -245,15 +262,27 @@ impl LanguageService {
     }
 
     // completions.go:3692
-    pub(crate) fn create_range_from_string_literal_like_content(&self, file: P<SourceFile>, node: P<Node>, position: i32) -> Option<lsproto::Range> {
-        let mut replacement_end = node.end() - 1;
+    pub(crate) fn create_range_from_string_literal_like_content(
+        &self,
+        file: P<SourceFile>,
+        node: P<Node>,
+        position: u32,
+    ) -> Option<lsproto::Range> {
+        let mut replacement_end = node
+            .end()
+            .expect_source("parsed literals have source positions")
+            .checked_sub(1)
+            .expect("literal has an opening quote");
         let node_start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/);
         if ast::is_unterminated_literal(node) {
             // we return no replacement range only if unterminated string is empty
             if node_start == replacement_end {
                 return None;
             }
-            replacement_end = position.min(node.end());
+            replacement_end = position.min(
+                node.end()
+                    .expect_source("parsed literals have source positions"),
+            );
         }
         let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(node_start + 1, replacement_end, file);
         if !fidelity.is_exact() {
@@ -317,7 +346,7 @@ pub(crate) fn generate_identifier_for_arbitrary_string(text: &str) -> String {
 
     // Convert "(example, text)" into "_example_text_"
     for (pos, ch) in text.char_indices() {
-        let valid_char = if pos == 0 { scanner::is_identifier_start(ch as i32) } else { scanner::is_identifier_part(ch as i32) };
+        let valid_char = if pos == 0 { scanner::is_identifier_start(ch as u32) } else { scanner::is_identifier_part(ch as u32) };
         if valid_char {
             if needs_underscore {
                 identifier.push('_');
@@ -401,9 +430,10 @@ pub fn compare_completion_entries(a: &lsproto::CompletionItem, b: &lsproto::Comp
 }
 
 // completions.go:3846
-static KEYWORD_COMPLETIONS_CACHE: OnceLock<Mutex<FxHashMap<i32, Vec<lsproto::CompletionItem>>>> = OnceLock::new();
+static KEYWORD_COMPLETIONS_CACHE: OnceLock<Mutex<FxHashMap<u32, Vec<lsproto::CompletionItem>>>> =
+    OnceLock::new();
 
-fn keyword_completions_cache() -> &'static Mutex<FxHashMap<i32, Vec<lsproto::CompletionItem>>> {
+fn keyword_completions_cache() -> &'static Mutex<FxHashMap<u32, Vec<lsproto::CompletionItem>>> {
     KEYWORD_COMPLETIONS_CACHE.get_or_init(Default::default)
 }
 
@@ -412,14 +442,12 @@ pub(crate) fn all_keyword_completions() -> &'static [lsproto::CompletionItem] {
     static ALL_KEYWORD_COMPLETIONS: OnceLock<Vec<lsproto::CompletionItem>> = OnceLock::new();
     ALL_KEYWORD_COMPLETIONS.get_or_init(|| {
         let mut result = Vec::with_capacity((Kind::LastKeyword as i16 - Kind::FirstKeyword as i16 + 1) as usize);
-        for i in Kind::FirstKeyword as i16..=Kind::LastKeyword as i16 {
-            result.push(lsproto::CompletionItem {
-                label: scanner::token_to_string(Kind::from_i16(i)).to_string(),
-                kind: Some(lsproto::CompletionItemKind::Keyword),
-                sort_text: Some(SORT_TEXT_GLOBALS_OR_KEYWORDS.to_string()),
-                ..Default::default()
-            });
-        }
+        result.extend((Kind::FirstKeyword as i16..=Kind::LastKeyword as i16).map(|i| lsproto::CompletionItem {
+            label: scanner::token_to_string(Kind::from_i16(i)).to_string(),
+            kind: Some(lsproto::CompletionItemKind::Keyword),
+            sort_text: Some(SORT_TEXT_GLOBALS_OR_KEYWORDS.to_string()),
+            ..Default::default()
+        }));
         census_scrub_cached_items(&mut result);
         result
     })
@@ -461,7 +489,7 @@ pub(crate) fn get_keyword_completions(keyword_filter: KeywordCompletionFilters, 
         return clone_items(&get_typescript_keyword_completions(keyword_filter));
     }
 
-    let index = keyword_filter as i32 + KeywordCompletionFilters::Last as i32 + 1;
+    let index = keyword_filter as u32 + KeywordCompletionFilters::Last as u32 + 1;
     if let Some(cached) = keyword_completions_cache().lock().unwrap().get(&index) {
         return clone_items(cached);
     }
@@ -474,8 +502,14 @@ pub(crate) fn get_keyword_completions(keyword_filter: KeywordCompletionFilters, 
 }
 
 // completions.go:3892
-fn get_typescript_keyword_completions(keyword_filter: KeywordCompletionFilters) -> Vec<lsproto::CompletionItem> {
-    if let Some(cached) = keyword_completions_cache().lock().unwrap().get(&(keyword_filter as i32)) {
+fn get_typescript_keyword_completions(
+    keyword_filter: KeywordCompletionFilters,
+) -> Vec<lsproto::CompletionItem> {
+    if let Some(cached) = keyword_completions_cache()
+        .lock()
+        .unwrap()
+        .get(&(keyword_filter as u32))
+    {
         return cached.clone();
     }
     let result: Vec<lsproto::CompletionItem> = all_keyword_completions()
@@ -507,7 +541,10 @@ fn get_typescript_keyword_completions(keyword_filter: KeywordCompletionFilters) 
 
     let mut cached = result.clone();
     census_scrub_cached_items(&mut cached);
-    keyword_completions_cache().lock().unwrap().insert(keyword_filter as i32, cached);
+    keyword_completions_cache()
+        .lock()
+        .unwrap()
+        .insert(keyword_filter as u32, cached);
     result
 }
 
@@ -590,7 +627,11 @@ pub(crate) fn is_contextual_keyword_in_auto_importable_expression_space(keyword:
 }
 
 // completions.go:4003
-pub(crate) fn get_contextual_keywords(file: P<SourceFile>, context_token: Option<P<Node>>, position: i32) -> Vec<lsproto::CompletionItem> {
+pub(crate) fn get_contextual_keywords(
+    file: P<SourceFile>,
+    context_token: Option<P<Node>>,
+    position: u32,
+) -> Vec<lsproto::CompletionItem> {
     let mut entries = Vec::new();
     // An `AssertClause` can come after an import declaration:
     //  import * from "foo" |
@@ -600,7 +641,12 @@ pub(crate) fn get_contextual_keywords(file: P<SourceFile>, context_token: Option
     // Source: https://tc39.es/proposal-import-assertions/
     if let Some(context_token) = context_token {
         let parent = context_token.parent().unwrap();
-        let token_line = scanner::get_ecma_line_of_position(&*file, context_token.end());
+        let token_line = scanner::get_ecma_line_of_position(
+            &*file,
+            context_token
+                .end()
+                .expect_source("parsed tokens have source positions"),
+        );
         let current_line = scanner::get_ecma_line_of_position(&*file, position);
         if (ast::is_import_declaration(parent) || ast::is_export_declaration(parent) && parent.module_specifier().is_some())
             && Some(context_token) == parent.module_specifier()
@@ -623,27 +669,29 @@ impl LanguageService {
         &self,
         _ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         unique_names: &mut FxHashSet<String>,
         mut sorted_entries: Vec<CompletionItem>,
     ) -> Vec<CompletionItem> {
         let name_table = file.get_name_table();
-        for (&name, &pos) in name_table {
+        sorted_entries.extend(name_table.into_iter().filter_map(|(&name, &pos)| {
             // Skip identifiers produced only from the current location
-            if pos == position {
-                continue;
+            if matches!(pos, NameTableEntry::Unique(pos) if pos == position ) {
+                return None;
             }
             if !unique_names.contains(name) && scanner::is_identifier_text(name, LanguageVariant::Standard) {
                 unique_names.insert(name.to_string());
-                sorted_entries.push(CompletionItem::new(lsproto::CompletionItem {
+                Some(CompletionItem::new(lsproto::CompletionItem {
                     label: name.to_string(),
                     kind: Some(lsproto::CompletionItemKind::Text),
                     sort_text: Some(SORT_TEXT_JAVASCRIPT_IDENTIFIERS.to_string()),
                     commit_characters: Some(Vec::new()),
                     ..Default::default()
-                }));
+                }))
+            } else {
+                None
             }
-        }
+        }));
         sorted_entries
     }
 
@@ -653,7 +701,13 @@ impl LanguageService {
         if let Some(location) = location {
             if location.kind() == Kind::Identifier || location.kind() == Kind::PrivateIdentifier {
                 let start = astnav::get_start_of_node(location, file, false /*includeJSDoc*/);
-                let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(start, location.end(), file);
+                let (lsp_range, fidelity) = self.create_lsp_range_from_bounds(
+                    start,
+                    location
+                        .end()
+                        .expect_source("parsed names have source positions"),
+                    file,
+                );
                 if fidelity.is_exact() {
                     return Some(lsp_range);
                 }
@@ -686,7 +740,11 @@ pub(crate) fn try_get_function_like_body_completion_container(context_token: Opt
 }
 
 // completions.go:4094
-pub(crate) fn compute_commit_characters_and_is_new_identifier(context_token: Option<P<Node>>, file: P<SourceFile>, position: i32) -> (bool, Vec<String>) {
+pub(crate) fn compute_commit_characters_and_is_new_identifier(
+    context_token: Option<P<Node>>,
+    file: P<SourceFile>,
+    position: u32,
+) -> (bool, Vec<String>) {
     let Some(context_token) = context_token else {
         return (false, strings(&ALL_COMMIT_CHARACTERS));
     };
@@ -701,7 +759,13 @@ pub(crate) fn compute_commit_characters_and_is_new_identifier(context_token: Opt
                 Kind::CallExpression | Kind::NewExpression => {
                     let expression = context_token.parent().unwrap().expression().unwrap();
                     // func\n(a, |
-                    if get_line_of_position(file, expression.end()) != get_line_of_position(file, position) {
+                    if get_line_of_position(
+                        file,
+                        expression
+                            .end()
+                            .expect_source("parsed expressions have source positions"),
+                    ) != get_line_of_position(file, position)
+                    {
                         return (true, strings(&NO_COMMA_COMMIT_CHARACTERS));
                     }
                     (true, strings(&ALL_COMMIT_CHARACTERS))
@@ -724,7 +788,13 @@ pub(crate) fn compute_commit_characters_and_is_new_identifier(context_token: Opt
                 Kind::CallExpression | Kind::NewExpression => {
                     let expression = context_token.parent().unwrap().expression().unwrap();
                     // func\n( |
-                    if get_line_of_position(file, expression.end()) != get_line_of_position(file, position) {
+                    if get_line_of_position(
+                        file,
+                        expression
+                            .end()
+                            .expect_source("parsed expressions have source positions"),
+                    ) != get_line_of_position(file, position)
+                    {
                         return (true, strings(&NO_COMMA_COMMIT_CHARACTERS));
                     }
                     (true, strings(&ALL_COMMIT_CHARACTERS))
@@ -818,7 +888,11 @@ fn keyword_for_node(node: P<Node>) -> Kind {
 // Finds the first node that "embraces" the position, so that one may
 // accurately aggregate locals from the closest containing scope.
 // completions.go:4231
-pub(crate) fn get_scope_node(initial_token: Option<P<Node>>, position: i32, file: P<SourceFile>) -> Option<P<Node>> {
+pub(crate) fn get_scope_node(
+    initial_token: Option<P<Node>>,
+    position: u32,
+    file: P<SourceFile>,
+) -> Option<P<Node>> {
     let mut scope = initial_token;
     while let Some(s) = scope {
         if position_belongs_to_node(s, position, file) {
@@ -922,7 +996,11 @@ pub(crate) fn get_constraint_of_type_argument_property(node: Option<P<Node>>, ty
 }
 
 // completions.go:4338
-pub(crate) fn try_get_object_like_completion_container(context_token: Option<P<Node>>, position: i32, file: P<SourceFile>) -> Option<P<Node>> {
+pub(crate) fn try_get_object_like_completion_container(
+    context_token: Option<P<Node>>,
+    position: u32,
+    file: P<SourceFile>,
+) -> Option<P<Node>> {
     let context_token = context_token?;
 
     let parent = context_token.parent().unwrap();
@@ -950,7 +1028,13 @@ pub(crate) fn try_get_object_like_completion_container(context_token: Option<P<N
             } else {
                 if ast::is_object_literal_expression(parent.parent().unwrap())
                     && (ast::is_spread_assignment(parent)
-                        || ast::is_shorthand_property_assignment(parent) && get_line_of_position(file, context_token.end()) != get_line_of_position(file, position))
+                        || ast::is_shorthand_property_assignment(parent)
+                            && get_line_of_position(
+                                file,
+                                context_token
+                                    .end()
+                                    .expect_source("parsed tokens have source positions"),
+                            ) != get_line_of_position(file, position))
                 {
                     return parent.parent();
                 }
@@ -1049,7 +1133,7 @@ fn get_apparent_properties(t: P<Type>, node: P<Node>, type_checker: &mut Checker
         return type_checker.get_apparent_properties(t);
     }
     let mut filtered: Vec<P<Type>> = Vec::new();
-    for &member_type in t.types() {
+    filtered.extend(t.types().iter().filter_map(|&member_type| {
         let excluded = member_type.flags().intersects(TypeFlags::Primitive)
             || type_checker.is_array_like_type_exported(member_type)
             || type_checker.is_type_invalid_due_to_union_discriminant(member_type, node)
@@ -1058,10 +1142,8 @@ fn get_apparent_properties(t: P<Type>, node: P<Node>, type_checker: &mut Checker
                 let apparent = type_checker.get_apparent_properties(member_type);
                 contains_non_public_properties(&apparent)
             };
-        if !excluded {
-            filtered.push(member_type);
-        }
-    }
+        if !excluded { Some(member_type) } else { None }
+    }));
     type_checker.get_all_possible_properties_of_types(&filtered)
 }
 
@@ -1077,7 +1159,7 @@ pub(crate) fn filter_object_members_list(
     contextual_member_symbols: &[P<Symbol>],
     existing_members: &[P<Node>],
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
     type_checker: &mut Checker,
 ) -> (Vec<P<Symbol>>, FxHashSet<String>) {
     if existing_members.is_empty() {
@@ -1136,9 +1218,13 @@ pub(crate) fn filter_object_members_list(
 }
 
 // completions.go:4545
-pub(crate) fn is_currently_editing_node(node: P<Node>, file: P<SourceFile>, position: i32) -> bool {
+pub(crate) fn is_currently_editing_node(node: P<Node>, file: P<SourceFile>, position: u32) -> bool {
     let start = astnav::get_start_of_node(node, file, false /*includeJSDoc*/);
-    start <= position && position <= node.end()
+    start <= position
+        && position
+            <= node
+                .end()
+                .expect_source("parsed nodes have source positions")
 }
 
 // completions.go:4550
@@ -1155,9 +1241,7 @@ fn set_member_declared_by_spread_assignment(declaration: P<Node>, members: &mut 
             properties = t.as_structured_type().properties();
         }
     }
-    for property in properties {
-        members.insert(property.name().to_string());
-    }
+    members.extend(properties.iter().map(|property| property.name().to_string()));
 }
 
 // Returns the immediate owning class declaration of a context token,
@@ -1195,7 +1279,12 @@ fn is_constructor_parameter_completion(node: P<Node>) -> bool {
 // Returns the immediate owning class declaration of a context token,
 // on the condition that one exists and that the context implies completion should be given.
 // completions.go:4595
-pub(crate) fn try_get_object_type_declaration_completion_container(file: P<SourceFile>, context_token: Option<P<Node>>, location: P<Node>, position: i32) -> Option<P<Node>> {
+pub(crate) fn try_get_object_type_declaration_completion_container(
+    file: P<SourceFile>,
+    context_token: Option<P<Node>>,
+    location: P<Node>,
+    position: u32,
+) -> Option<P<Node>> {
     // class c { method() { } | method2() { } }
     match location.kind() {
         Kind::SyntaxList => {
@@ -1274,7 +1363,13 @@ pub(crate) fn try_get_object_type_declaration_completion_container(file: P<Sourc
             if ast::is_object_type_declaration(location) {
                 // class C extends React.Component { a: () => 1\n| }
                 // class C { prop = ""\n | }
-                if get_line_of_position(file, context_token.end()) != get_line_of_position(file, position) {
+                if get_line_of_position(
+                    file,
+                    context_token
+                        .end()
+                        .expect_source("parsed tokens have source positions"),
+                ) != get_line_of_position(file, position)
+                {
                     return Some(location);
                 }
                 let is_valid_keyword: fn(Kind) -> bool = if ast::is_class_like(context_token.parent().unwrap().parent().unwrap()) {
@@ -1308,35 +1403,37 @@ pub(crate) fn filter_class_members_list(
     existing_members: &[P<Node>],
     class_element_modifier_flags: ModifierFlags,
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
 ) -> Vec<P<Symbol>> {
     let mut existing_member_names: FxHashSet<String> = FxHashSet::default();
-    for &member in existing_members {
+    existing_member_names.extend(existing_members.iter().filter_map(|&member| {
         // Ignore omitted expressions for missing members.
-        if member.kind() != Kind::PropertyDeclaration && member.kind() != Kind::MethodDeclaration && member.kind() != Kind::GetAccessor && member.kind() != Kind::SetAccessor {
-            continue;
+        if member.kind() != Kind::PropertyDeclaration
+            && member.kind() != Kind::MethodDeclaration
+            && member.kind() != Kind::GetAccessor
+            && member.kind() != Kind::SetAccessor
+        {
+            return None;
         }
 
         // If this is the current item we are editing right now, do not filter it out
         if is_currently_editing_node(member, file, position) {
-            continue;
+            return None;
         }
 
         // Don't filter member even if the name matches if it is declared private in the list.
         if member.modifier_flags().intersects(ModifierFlags::Private) {
-            continue;
+            return None;
         }
 
         // Do not filter it out if the static presence doesn't match.
         if ast::is_static(member) != class_element_modifier_flags.intersects(ModifierFlags::Static) {
-            continue;
+            return None;
         }
 
         let existing_name = ast::get_property_name_for_property_name_node(member.name().unwrap());
-        if !existing_name.is_empty() {
-            existing_member_names.insert(existing_name.into_owned());
-        }
-    }
+        if !existing_name.is_empty() { Some(existing_name.into_owned()) } else { None }
+    }));
 
     base_symbols
         .iter()
@@ -1368,8 +1465,15 @@ pub(crate) fn try_get_containing_jsx_element(context_token: Option<P<Node>>, fil
             if let Some(parent) = parent {
                 if parent.kind() == Kind::JsxSelfClosingElement || parent.kind() == Kind::JsxOpeningElement {
                     if context_token.kind() == Kind::GreaterThanToken {
-                        let preceding_token = astnav::find_preceding_token(file, context_token.pos());
-                        if parent.type_arguments().is_empty() || preceding_token.is_some_and(|t| t.kind() == Kind::SlashToken) {
+                        let preceding_token = astnav::find_preceding_token(
+                            file,
+                            context_token
+                                .pos()
+                                .expect_source("parsed tokens have source positions"),
+                        );
+                        if parent.type_arguments().is_empty()
+                            || preceding_token.is_some_and(|t| t.kind() == Kind::SlashToken)
+                        {
                             return None;
                         }
                     }
@@ -1434,7 +1538,7 @@ pub(crate) fn filter_jsx_attributes(
     symbols: &[P<Symbol>],
     attributes: &[P<Node>],
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
     type_checker: &mut Checker,
 ) -> (Vec<P<Symbol>>, FxHashSet<String>) {
     let mut existing_names: FxHashSet<&'static str> = FxHashSet::default();
@@ -1467,7 +1571,7 @@ impl LanguageService {
     pub(crate) fn set_item_defaults(
         &self,
         ctx: &Context,
-        position: i32,
+        position: u32,
         file: P<SourceFile>,
         items: &mut [CompletionItem],
         default_commit_characters: Option<&[String]>,
@@ -1534,7 +1638,7 @@ impl LanguageService {
     pub(crate) fn specific_keyword_completion_info(
         &self,
         ctx: &Context,
-        position: i32,
+        position: u32,
         file: P<SourceFile>,
         mut items: Vec<CompletionItem>,
         is_new_identifier_location: bool,
@@ -1546,7 +1650,13 @@ impl LanguageService {
     }
 
     // completions.go:4937
-    pub(crate) fn get_jsx_closing_tag_completion(&self, ctx: &Context, location: P<Node>, file: P<SourceFile>, position: i32) -> Option<CompletionList> {
+    pub(crate) fn get_jsx_closing_tag_completion(
+        &self,
+        ctx: &Context,
+        location: P<Node>,
+        file: P<SourceFile>,
+        position: u32,
+    ) -> Option<CompletionList> {
         // We wanna walk up the tree till we find a JSX closing element.
         let jsx_closing_element = ast::find_ancestor_or_quit(location, |node| match node.kind() {
             Kind::JsxClosingElement => FindAncestorResult::True,
@@ -1619,7 +1729,7 @@ impl LanguageService {
         commit_characters: Option<Vec<String>>,
         label_details: Option<lsproto::CompletionItemLabelDetails>,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         is_member_completion: bool,
         is_snippet: bool,
         has_action: bool,
@@ -1635,8 +1745,10 @@ impl LanguageService {
         let kind = get_completions_symbol_kind(element_kind);
         let data = lsproto::CompletionItemData {
             file_name: file.original_file_name().to_string(),
-            position,
-            supplemental_file_index: supplemental_file_index(file),
+            position: i32::try_from(position).expect("completion position exceeds protocol i32"),
+            supplemental_file_index: supplemental_file_index(file).map(|index| {
+                i32::try_from(index).expect("supplemental file index exceeds protocol i32")
+            }),
             source: source.to_string(),
             name: name.clone(),
             auto_import: auto_import_fix,
@@ -1656,7 +1768,10 @@ impl LanguageService {
 
         // Ported from vscode ts extension.
         let (word_size, word_start) = get_word_length_and_start(file, position);
-        let dot_accessor = get_dot_accessor(file, position - word_size as i32);
+        let dot_accessor = get_dot_accessor(
+            file,
+            position.saturating_sub(u32::try_from(word_size).expect("word length exceeds u32")),
+        );
         if filter_text.is_empty() {
             filter_text = get_filter_text(file, position, &insert_text, &name, word_start, &dot_accessor);
         }
@@ -1712,7 +1827,7 @@ impl LanguageService {
         ctx: &Context,
         node: P<Node>,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         optional_replacement_span: Option<lsproto::Range>,
     ) -> Option<CompletionList> {
         let mut items = self.get_label_statement_completions(ctx, node, file, position);
@@ -1725,7 +1840,13 @@ impl LanguageService {
     }
 
     // completions.go:5146
-    fn get_label_statement_completions(&self, ctx: &Context, node: P<Node>, file: P<SourceFile>, position: i32) -> Vec<CompletionItem> {
+    fn get_label_statement_completions(
+        &self,
+        ctx: &Context,
+        node: P<Node>,
+        file: P<SourceFile>,
+        position: u32,
+    ) -> Vec<CompletionItem> {
         let mut uniques: FxHashSet<&'static str> = FxHashSet::default();
         let mut items: Vec<CompletionItem> = Vec::new();
         let mut current = Some(node);
@@ -1773,7 +1894,7 @@ pub(crate) fn is_completion_list_blocker(
     previous_token: Option<P<Node>>,
     location: P<Node>,
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
     type_checker: &mut Checker,
 ) -> bool {
     is_in_string_or_regular_expression_or_template_literal(context_token, position)
@@ -1784,18 +1905,34 @@ pub(crate) fn is_completion_list_blocker(
 }
 
 // completions.go:5210
-fn is_in_string_or_regular_expression_or_template_literal(context_token: P<Node>, position: i32) -> bool {
+fn is_in_string_or_regular_expression_or_template_literal(
+    context_token: P<Node>,
+    position: u32,
+) -> bool {
     // To be "in" one of these literals, the position has to be:
     //   1. entirely within the token text.
     //   2. at the end position of an unterminated token.
     //   3. at the end of a regular expression (due to trailing flags like '/foo/g').
-    (ast::is_regular_expression_literal(context_token) || ast::is_string_text_containing_node(context_token)) && context_token.loc().contains_exclusive(position)
-        || position == context_token.end() && (ast::is_unterminated_literal(context_token) || ast::is_regular_expression_literal(context_token))
+    (ast::is_regular_expression_literal(context_token)
+        || ast::is_string_text_containing_node(context_token))
+        && context_token.loc().contains_exclusive(position.into())
+        || position
+            == context_token
+                .end()
+                .expect_source("parsed tokens have source positions")
+            && (ast::is_unterminated_literal(context_token)
+                || ast::is_regular_expression_literal(context_token))
 }
 
 // true if we are certain that the currently edited location must define a new location; false otherwise.
 // completions.go:5222
-fn is_solely_identifier_definition_location(context_token: P<Node>, previous_token: Option<P<Node>>, file: P<SourceFile>, position: i32, type_checker: &mut Checker) -> bool {
+fn is_solely_identifier_definition_location(
+    context_token: P<Node>,
+    previous_token: Option<P<Node>>,
+    file: P<SourceFile>,
+    position: u32,
+    type_checker: &mut Checker,
+) -> bool {
     let parent = context_token.parent().unwrap();
     let containing_node_kind = parent.kind();
     match context_token.kind() {
@@ -1840,8 +1977,16 @@ fn is_solely_identifier_definition_location(context_token: P<Node>, previous_tok
                 // import { type | }
                 return false;
             }
-            let ancestor_variable_declaration = ast::find_ancestor(parent, ast::is_variable_declaration);
-            if ancestor_variable_declaration.is_some() && get_line_end_of_position(file, context_token.end()) < position {
+            let ancestor_variable_declaration =
+                ast::find_ancestor(parent, ast::is_variable_declaration);
+            if ancestor_variable_declaration.is_some()
+                && get_line_end_of_position(
+                    file,
+                    context_token
+                        .end()
+                        .expect_source("parsed tokens have source positions"),
+                ) < position
+            {
                 // let a
                 // |
                 return false;
@@ -1914,10 +2059,16 @@ fn is_solely_identifier_definition_location(context_token: P<Node>, previous_tok
         if Some(context_token) != Some(previous_token)
             && ast::is_class_like(previous_token.parent().unwrap().parent().unwrap())
             // And the cursor is at the token...
-            && position <= previous_token.end()
+            && position <= previous_token.end().expect_source("parsed tokens have source positions")
         {
             // If we are sure that the previous property declaration is terminated according to newline or semicolon...
-            if is_previous_property_declaration_terminated(context_token, file, previous_token.end()) {
+            if is_previous_property_declaration_terminated(
+                context_token,
+                file,
+                previous_token
+                    .end()
+                    .expect_source("parsed tokens have source positions"),
+            ) {
                 // Don't block completions.
                 return false;
             } else if context_token.kind() != Kind::EqualsToken
@@ -1939,7 +2090,8 @@ fn is_solely_identifier_definition_location(context_token: P<Node>, previous_tok
         // because we're *past* the end of the identifier and might want to complete `extends`.
         // If `contextToken !== previousToken`, this is `class C ex/**/`, `interface I ex/**/` or `<T ex/**/>`.
         && !((ast::is_class_like(parent) || ast::is_interface_declaration(parent) || ast::is_type_parameter_declaration(parent))
-            && (Some(context_token) != previous_token || position > previous_token.unwrap().end()))
+            && (Some(context_token) != previous_token
+                || position > previous_token.unwrap().end().expect_source("parsed tokens have source positions")))
 }
 
 // completions.go:5366
@@ -1953,15 +2105,31 @@ fn is_function_like_but_not_constructor(kind: Kind) -> bool {
 }
 
 // completions.go:5375
-fn is_previous_property_declaration_terminated(context_token: P<Node>, file: P<SourceFile>, position: i32) -> bool {
+fn is_previous_property_declaration_terminated(
+    context_token: P<Node>,
+    file: P<SourceFile>,
+    position: u32,
+) -> bool {
     context_token.kind() != Kind::EqualsToken
-        && (context_token.kind() == Kind::SemicolonToken || get_line_of_position(file, context_token.end()) != get_line_of_position(file, position))
+        && (context_token.kind() == Kind::SemicolonToken
+            || get_line_of_position(
+                file,
+                context_token
+                    .end()
+                    .expect_source("parsed tokens have source positions"),
+            ) != get_line_of_position(file, position))
 }
 
 // completions.go:5381
 fn is_dot_of_numeric_literal(context_token: P<Node>, file: P<SourceFile>) -> bool {
     if context_token.kind() == Kind::NumericLiteral {
-        let text = &file.text()[context_token.pos() as usize..context_token.end() as usize];
+        let text = &file.text()[context_token
+            .pos()
+            .expect_source("parsed tokens have source positions")
+            as usize
+            ..context_token
+                .end()
+                .expect_source("parsed tokens have source positions") as usize];
         let r = text.chars().next_back().unwrap_or('\u{FFFD}');
         return r == '.';
     }
@@ -2037,12 +2205,17 @@ pub(crate) fn client_supports_default_edit_range(ctx: &Context) -> bool {
 #[derive(Clone, Copy)]
 pub(crate) struct argumentInfoForCompletions {
     pub(crate) invocation: P<Node>,
-    pub(crate) argument_index: i32,
-    pub(crate) argument_count: i32,
+    pub(crate) argument_index: usize,
+    pub(crate) argument_count: usize,
 }
 
 // completions.go:5453
-pub(crate) fn get_argument_info_for_completions(node: P<Node>, position: i32, file: P<SourceFile>, type_checker: &mut Checker) -> Option<argumentInfoForCompletions> {
+pub(crate) fn get_argument_info_for_completions(
+    node: P<Node>,
+    position: u32,
+    file: P<SourceFile>,
+    type_checker: &mut Checker,
+) -> Option<argumentInfoForCompletions> {
     let info = get_immediately_containing_argument_info(node, position, file, type_checker)?;
     if info.is_type_parameter_list || info.invocation.call_invocation.is_none() {
         return None;

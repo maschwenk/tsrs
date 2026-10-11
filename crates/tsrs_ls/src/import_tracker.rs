@@ -160,12 +160,9 @@ pub(crate) fn for_each_import(program: &'static Program, source_file: P<SourceFi
 
 // importTracker.go:134
 pub(crate) fn for_each_possible_import_or_export_statement(source_file_like: P<Node>, action: &mut dyn FnMut(P<Node>) -> bool) -> bool {
-    for &statement in get_statements_of_source_file_like(source_file_like) {
-        if action(statement) || is_ambient_module_declaration(statement) && for_each_possible_import_or_export_statement(statement, action) {
-            return true;
-        }
-    }
-    false
+    get_statements_of_source_file_like(source_file_like)
+        .iter()
+        .any(|&statement| action(statement) || is_ambient_module_declaration(statement) && for_each_possible_import_or_export_statement(statement, action))
 }
 
 // importTracker.go:143
@@ -731,24 +728,28 @@ pub(crate) fn is_external_module_import_equals(node: P<Node>) -> bool {
 // importTracker.go:668
 pub(crate) fn skip_export_specifier_symbol(symbol: P<Symbol>, checker: &mut Checker) -> Option<P<Symbol>> {
     // For `export { foo } from './bar", there's nothing to skip, because it does not create a new alias. But `export { foo } does.
-    for &declaration in symbol.declarations() {
+    if let Some(result) = symbol.declarations().iter().find_map(|&declaration| {
         if ast::is_export_specifier(declaration)
             && declaration.property_name().is_none()
             && declaration.parent().unwrap().parent().unwrap().module_specifier().is_none()
         {
-            return Some(checker.get_export_specifier_local_target_symbol(declaration).unwrap_or(symbol));
+            return Some(Some(checker.get_export_specifier_local_target_symbol(declaration).unwrap_or(symbol)));
         } else if ast::is_property_access_expression(declaration)
             && ast::is_module_exports_access_expression(declaration.expression().unwrap())
             && !ast::is_private_identifier(declaration.name().unwrap())
         {
             // Export of form 'module.exports.propName = expr';
-            return checker.get_symbol_at_location_exported(declaration);
+            return Some(checker.get_symbol_at_location_exported(declaration));
         } else if ast::is_shorthand_property_assignment(declaration)
             && ast::is_binary_expression(declaration.parent().unwrap().parent().unwrap())
             && ast::get_assignment_declaration_kind(declaration.parent().unwrap().parent().unwrap()) == ast::JSDeclarationKind::ModuleExports
         {
-            return checker.get_export_specifier_local_target_symbol(declaration.name().unwrap());
+            return Some(checker.get_export_specifier_local_target_symbol(declaration.name().unwrap()));
         }
+
+        None
+    }) {
+        return result;
     }
     Some(symbol)
 }
@@ -777,13 +778,17 @@ pub(crate) fn symbol_name_no_default(symbol: P<Symbol>) -> &'static str {
     if symbol.name() != ast::InternalSymbolNameDefault {
         return symbol.name();
     }
-    for &decl in symbol.declarations() {
+    if let Some(result) = symbol.declarations().iter().find_map(|&decl| {
         let name = ast::get_name_of_declaration(Some(decl));
         if let Some(name) = name {
             if ast::is_identifier(name) {
-                return name.text();
+                return Some(name.text());
             }
         }
+
+        None
+    }) {
+        return result;
     }
     ""
 }
@@ -798,21 +803,27 @@ pub(crate) fn find_module_references(program: &'static Program, source_files: &[
         let search_source_file = search_module_symbol.value_declaration();
         if let Some(search_source_file) = search_source_file.filter(|d| d.kind() == Kind::SourceFile) {
             // Check <reference path> directives
-            for &r in referencing_file.referenced_files() {
+            refs.extend(referencing_file.referenced_files().iter().filter_map(|&r| {
                 if program.get_source_file_from_reference(referencing_file, r) == Some(search_source_file.as_source_file_p()) {
-                    refs.push(ModuleReference { kind: ModuleReferenceKind::Reference, literal: None, referencing_file: Some(referencing_file), ref_: Some(r) });
+                    Some(ModuleReference { kind: ModuleReferenceKind::Reference, literal: None, referencing_file: Some(referencing_file), ref_: Some(r) })
+                } else {
+                    None
                 }
-            }
+            }));
 
             // Check <reference types> directives
-            for &r in referencing_file.type_reference_directives() {
+            refs.extend(referencing_file.type_reference_directives().iter().filter_map(|&r| {
                 let referenced = program.get_resolved_type_reference_directive_from_type_reference_directive(r, referencing_file);
                 if let Some(referenced) = referenced {
                     if referenced.resolved_file_name == search_source_file.as_source_file().file_name() {
-                        refs.push(ModuleReference { kind: ModuleReferenceKind::Reference, literal: None, referencing_file: Some(referencing_file), ref_: Some(r) });
+                        Some(ModuleReference { kind: ModuleReferenceKind::Reference, literal: None, referencing_file: Some(referencing_file), ref_: Some(r) })
+                    } else {
+                        None
                     }
+                } else {
+                    None
                 }
-            }
+            }));
         }
 
         // Check all imports (including require() calls)

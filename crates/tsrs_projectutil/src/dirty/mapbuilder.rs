@@ -37,13 +37,11 @@ impl<K: Hash + Eq + Clone, VBase: Clone, VBuilder: Clone> MapBuilder<K, VBase, V
     }
 
     // mapbuilder.go:40
-    #[expect(clippy::iter_over_hash_type, reason = "copies the keys into a set")]
+    // copies the keys into a set
     pub fn clear(&mut self) {
         self.dirty = FxHashMap::default();
         let mut deleted = FxHashSet::with_capacity_and_hasher(self.base.len(), Default::default());
-        for key in self.base.keys() {
-            deleted.insert(key.clone());
-        }
+        deleted.extend(self.base.keys().map(std::clone::Clone::clone));
         self.deleted = Some(deleted);
     }
 
@@ -70,9 +68,7 @@ impl<K: Hash + Eq + Clone, VBase: Clone, VBuilder: Clone> MapBuilder<K, VBase, V
                 result.remove(key);
             }
         }
-        for (key, value) in &self.dirty {
-            result.insert(key.clone(), (self.build)(value.clone()));
-        }
+        result.extend(self.dirty.iter().map(|(key, value)| (key.clone(), (self.build)(value.clone()))));
         Arc::new(result)
     }
 

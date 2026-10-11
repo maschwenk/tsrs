@@ -265,11 +265,7 @@ impl TestSys {
         }
         if let Some(old) = serialized.as_ref() {
             let mut deleted: Vec<String> = Vec::new();
-            for path in old.snap.keys() {
-                if self.map_fs().get_file_info(path).is_none() {
-                    deleted.push(path.clone());
-                }
-            }
+            deleted.extend(old.snap.keys().filter_map(|path| if self.map_fs().get_file_info(path).is_none() { Some(path.clone()) } else { None }));
             for path in deleted {
                 add_fs_entry_diff(&serialized, current_libs.as_ref(), &mut diffs, None, &path);
             }
@@ -277,9 +273,7 @@ impl TestSys {
         *serialized = Some(Snapshot { snap, default_libs: current_libs.unwrap_or_default() });
         let mut keys: Vec<&String> = diffs.keys().collect();
         keys.sort();
-        for path in keys {
-            baseline.push_str(&format!("//// [{}] {}\n", path, diffs[path]));
-        }
+        baseline.extend(keys.into_iter().map(|path| format!("//// [{}] {}\n", path, diffs[path])));
         baseline.push('\n');
     }
 
@@ -566,35 +560,36 @@ impl CommandLineTesting for TestSys {
 
         let p = program.get_program();
         b.push_str("SemanticDiagnostics::\n");
-        for &file in p.get_source_files() {
-            match program.testing_semantic_diagnostics_state(file.path()) {
-                tsrs_incremental::SemanticDiagnosticsState::Refreshed => {
-                    b.push_str("*refresh*    ");
-                    b.push_str(file.file_name());
-                    b.push('\n');
-                }
-                tsrs_incremental::SemanticDiagnosticsState::NotCached => {
-                    b.push_str("*not cached* ");
-                    b.push_str(file.file_name());
-                    b.push('\n');
-                }
-                tsrs_incremental::SemanticDiagnosticsState::Reused => {}
-            }
-        }
+        b.extend(
+            p.get_source_files()
+                .iter()
+                .filter_map(|file| {
+                    let prefix = match program.testing_semantic_diagnostics_state(file.path()) {
+                        tsrs_incremental::SemanticDiagnosticsState::Refreshed => "*refresh*    ",
+                        tsrs_incremental::SemanticDiagnosticsState::NotCached => "*not cached* ",
+                        tsrs_incremental::SemanticDiagnosticsState::Reused => return None,
+                    };
+                    Some([prefix, file.file_name(), "\n"])
+                })
+                .flatten(),
+        );
 
         // Write signature updates
         b.push_str("Signatures::\n");
-        for &file in p.get_source_files() {
-            if let Some(kind) = program.testing_updated_signature_kind(file.path()) {
-                b.push_str(match kind {
-                    tsrs_incremental::SignatureUpdateKind::ComputedDts => "(computed .d.ts) ",
-                    tsrs_incremental::SignatureUpdateKind::StoredAtEmit => "(stored at emit) ",
-                    tsrs_incremental::SignatureUpdateKind::UsedVersion => "(used version)   ",
-                });
-                b.push_str(file.file_name());
-                b.push('\n');
-            }
-        }
+        b.extend(
+            p.get_source_files()
+                .iter()
+                .filter_map(|file| {
+                    let kind = program.testing_updated_signature_kind(file.path())?;
+                    let prefix = match kind {
+                        tsrs_incremental::SignatureUpdateKind::ComputedDts => "(computed .d.ts) ",
+                        tsrs_incremental::SignatureUpdateKind::StoredAtEmit => "(stored at emit) ",
+                        tsrs_incremental::SignatureUpdateKind::UsedVersion => "(used version)   ",
+                    };
+                    Some([prefix, file.file_name(), "\n"])
+                })
+                .flatten(),
+        );
         drop(b);
 
         let include_reasons = p.get_include_reasons();
@@ -610,17 +605,9 @@ impl CommandLineTesting for TestSys {
             let mut b = self.program_include_baselines.lock().unwrap();
             self.write_header_to_baseline(&mut b, program);
             b.push_str("!!! Expected all files to have include reasons\nfilesWithoutIncludeReason::\n");
-            for file in &files_without_include_reason {
-                b.push_str("  ");
-                b.push_str(file);
-                b.push('\n');
-            }
+            b.extend(files_without_include_reason.iter().flat_map(|line| ["  ", line.as_str(), "\n"]));
             b.push_str("filesNotInProgramWithIncludeReason::\n");
-            for file in &file_not_in_program_with_include_reason {
-                b.push_str("  ");
-                b.push_str(file);
-                b.push('\n');
-            }
+            b.extend(file_not_in_program_with_include_reason.iter().flat_map(|line| ["  ", line.as_str(), "\n"]));
         }
     }
 

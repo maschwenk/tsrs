@@ -175,7 +175,7 @@ pub(crate) fn bucket(n: usize) -> u32 {
     if n <= 1 {
         0
     } else {
-        usize::BITS - (n - 1).leading_zeros()
+        (n - 1).bit_width()
     }
 }
 
@@ -384,8 +384,14 @@ pub(crate) fn type_identity(t: P<Type>) -> (Option<P<Symbol>>, u8) {
 }
 
 fn file_and_line(node: P<Node>) -> String {
-    let Some(sf) = ast::get_source_file_of_node(node) else { return "?".to_string() };
-    let pos = if node.pos() >= 0 { tsrs_scanner::get_token_pos_of_node(node, sf, false) } else { 0 };
+    let Some(sf) = ast::get_source_file_of_node(node) else {
+        return "?".to_string();
+    };
+    let pos = if node.pos().is_synthetic() {
+        0
+    } else {
+        tsrs_scanner::get_token_pos_of_node(node, sf, false)
+    };
     let line = tsrs_scanner::get_ecma_line_of_position(&*sf, pos);
     let name = sf.file_name();
     let short: String = match name.find("/node_modules/") {
@@ -408,8 +414,8 @@ fn symbol_label(s: P<Symbol>) -> String {
 }
 
 fn enclosing_declaration_name(node: P<Node>) -> String {
-    let mut n = Some(node);
-    while let Some(cur) = n {
+    let n = Some(node);
+    if let Some(result) = std::iter::successors(n, |cur| cur.parent()).find_map(|cur| {
         if matches!(
             cur.kind(),
             ast::Kind::TypeAliasDeclaration
@@ -423,10 +429,13 @@ fn enclosing_declaration_name(node: P<Node>) -> String {
                 | ast::Kind::PropertyDeclaration
         ) {
             if let Some(name) = ast::get_name_of_declaration(cur) {
-                return tsrs_scanner::get_text_of_node(name);
+                return Some(tsrs_scanner::get_text_of_node(name));
             }
         }
-        n = cur.parent();
+
+        None
+    }) {
+        return result;
     }
     "?".to_string()
 }

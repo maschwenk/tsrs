@@ -163,13 +163,13 @@ impl virtualWriter {
         if to <= from {
             return;
         }
-        let virtual_start = self.virtual_.len() as i32;
+        let virtual_start = self.virtual_.len() as u32;
         self.virtual_.push_str(&content[from..to]);
         self.segments.push(Segment {
             virtual_start,
-            virtual_end: self.virtual_.len() as i32,
-            original_start: from as i32,
-            original_end: to as i32,
+            virtual_end: self.virtual_.len() as u32,
+            original_start: from as u32,
+            original_end: to as u32,
             kind: Kind::Verbatim,
             features: Feature::All,
         });
@@ -177,13 +177,13 @@ impl virtualWriter {
 
     // transforming.go:114
     fn write_atom(&mut self, value: &str, from: usize, to: usize) {
-        let virtual_start = self.virtual_.len() as i32;
+        let virtual_start = self.virtual_.len() as u32;
         self.virtual_.push_str(value);
         self.segments.push(Segment {
             virtual_start,
-            virtual_end: self.virtual_.len() as i32,
-            original_start: from as i32,
-            original_end: to as i32,
+            virtual_end: self.virtual_.len() as u32,
+            original_start: from as u32,
+            original_end: to as u32,
             kind: Kind::Atom,
             features: Feature::All,
         });
@@ -233,15 +233,18 @@ fn diagnostic_directives(content: &str, mappings: &SpanMap) -> Option<Diagnostic
         let trimmed = line.trim();
         let mut policy = DiagnosticDirectivePolicy::default();
         let mut has_policy = false;
-        let mut unused_diagnostic_index: i64 = -1;
+        let mut unused_diagnostic_index: Option<usize> = None;
         if trimmed == IGNORE_PREFIX {
             policy = DiagnosticDirectivePolicy::Ignore;
             has_policy = true;
         } else if let Some(message_text) = trimmed.strip_prefix(EXPECT_PREFIX) {
             policy = DiagnosticDirectivePolicy::Expect;
             has_policy = true;
-            unused_diagnostic_index = unused_diagnostics.len() as i64;
-            unused_diagnostics.push(UnusedExpectDirectiveDiagnostic { code: 2578, message_text: message_text.trim().to_string() });
+            unused_diagnostic_index = Some(unused_diagnostics.len());
+            unused_diagnostics.push(UnusedExpectDirectiveDiagnostic {
+                code: 2578,
+                message_text: message_text.trim().to_string(),
+            });
         }
         if has_policy && line_end < content.len() {
             let affected_start = line_end + 1;
@@ -250,20 +253,36 @@ fn diagnostic_directives(content: &str, mappings: &SpanMap) -> Option<Diagnostic
                 None => content.len() - affected_start,
             };
             let virtual_spans = mappings.original_to_virtual_spans(
-                TextRange::new(affected_start as i32, (affected_start + affected_length) as i32),
+                TextRange::new(
+                    affected_start as u32,
+                    (affected_start + affected_length) as u32,
+                ),
                 Feature::All,
             );
             if virtual_spans.len() == 1 {
                 let mut directive = MappedDiagnosticDirective {
                     original_start: line_start as i64,
                     original_length: (line_end - line_start) as i64,
-                    virtual_start: i64::from(virtual_spans[0].span.pos()),
-                    virtual_end: i64::from(virtual_spans[0].span.end()),
+                    virtual_start: i64::from(
+                        virtual_spans[0]
+                            .span
+                            .pos()
+                            .expect_source("mapped spans have source positions"),
+                    ),
+                    virtual_end: i64::from(
+                        virtual_spans[0]
+                            .span
+                            .end()
+                            .expect_source("mapped spans have source positions"),
+                    ),
                     policy,
                     ..Default::default()
                 };
-                if unused_diagnostic_index >= 0 {
-                    directive.unused_expect_directive_index = Some(unused_diagnostic_index);
+                if let Some(unused_diagnostic_index) = unused_diagnostic_index {
+                    directive.unused_expect_directive_index = Some(
+                        i64::try_from(unused_diagnostic_index)
+                            .expect("unused diagnostic index exceeds protocol i64"),
+                    );
                 }
                 result.push(directive);
             }

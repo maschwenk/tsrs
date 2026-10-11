@@ -1,5 +1,44 @@
 # Node programmatic API (`tsrs --api`)
 
+## JavaScript API (unstable)
+
+Install the package with `pnpm add -D tsrs`. `require("tsrs")` exports `version`, `typescriptVersion` and
+`typescriptCommit`.
+
+The package also ships TypeScript 7's programmatic API, copied from microsoft/TypeScript
+`packages/typescript` at the commit the binary ports (see [`UPSTREAM.json`](../npm/tsrs/UPSTREAM.json)), under the
+same subpaths as the `typescript` 7 package:
+
+| subpath | contents |
+| --- | --- |
+| `tsrs/unstable/sync` | `API` with synchronous calls (MessagePack over the server's stdio) |
+| `tsrs/unstable/async` | `API` with promise-returning calls (JSON-RPC) |
+| `tsrs/unstable/ast` (`/is`, `/factory`, `/utils`, `/scanner`, `/visitor`, `/clone`) | AST types, guards, factory and traversal |
+| `tsrs/unstable/fs`, `/proto` | filesystem callbacks/request filesystems, protocol types |
+
+```js
+import { API } from "tsrs/unstable/sync";
+
+const api = new API({ cwd: process.cwd() });            // spawns `tsrs --api`; tsserverPath overrides the binary
+const snapshot = api.createSnapshot({ openProject: "/abs/path/tsconfig.json" });
+const project = snapshot.getConfiguredProject("/abs/path/tsconfig.json");
+console.log(project.program.getSemanticDiagnostics("/abs/path/src/index.ts"));
+project.program.emit();                                  // follows the project's compiler options
+api.close();
+```
+
+The code is TypeScript's, with one intentional difference: if the server process dies, the async API rejects
+every pending and later request with an error starting `API server connection lost: ` instead of leaving them
+pending forever (see [npm packaging](../npm/README.md)).
+
+These entry points are unstable upstream and here. The API is served by the `tsrs` binary (`tsrs --api`), whose
+coverage of the protocol is still incomplete; [the method inventory](../npm/sdk/METHODS.md) tracks it per method.
+TypeScript consumers need `esnext.disposable` (or a newer lib) for the declarations' `Symbol.dispose` members.
+The JS API runs on the package's minimum Node (16.20; checked on 16.20, 18, 20, 22 and 24). Where Node has no
+`Symbol.dispose` (before 18.18/20.4), call `close()` / `dispose()` instead of `using`.
+
+## Implementation and status
+
 Port of the TypeScript 7 native API at microsoft/TypeScript `b85298b6a81f772d080b0455de0ca9d744cd6fd6`
 (the commit in the workspace `Cargo.toml`): server side `tsc/internal/api` + `tsc/internal/ipc`, client
 side `packages/typescript/src/{api,ast}` exported as `unstable/sync` and `unstable/async`. The wire

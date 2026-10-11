@@ -217,9 +217,12 @@ impl JSXTransformer {
 }
 
 // jsx.go:183
-fn sort_import_specifiers(a: P<Node>, b: P<Node>) -> i32 {
-    let res = stringutil::compare_strings_case_sensitive(a.property_name().unwrap().text(), b.property_name().unwrap().text());
-    if res != 0 {
+fn sort_import_specifiers(a: P<Node>, b: P<Node>) -> std::cmp::Ordering {
+    let res = stringutil::compare_strings_case_sensitive(
+        a.property_name().unwrap().text(),
+        b.property_name().unwrap().text(),
+    );
+    if res != std::cmp::Ordering::Equal {
         return res;
     }
     stringutil::compare_strings_case_sensitive(a.as_import_specifier().name().text(), b.as_import_specifier().name().text())
@@ -228,7 +231,7 @@ fn sort_import_specifiers(a: P<Node>, b: P<Node>) -> i32 {
 // jsx.go:191
 fn get_sorted_specifiers(m: &FxHashMap<String, P<Node>>) -> Vec<P<Node>> {
     let mut res: Vec<P<Node>> = m.values().copied().collect();
-    res.sort_by(|a, b| sort_import_specifiers(*a, *b).cmp(&0));
+    res.sort_by(|a, b| sort_import_specifiers(*a, *b));
     res
 }
 
@@ -260,7 +263,7 @@ impl JSXTransformer {
             if ast::is_external_module(file) {
                 statements_updated = true;
                 let mut new_statements: Vec<P<Node>> = Vec::with_capacity(imports.len());
-                for (import_source, import_specifiers_map) in &imports {
+                new_statements.extend(imports.iter().map(|(import_source, import_specifiers_map)| {
                     let s = f.new_import_declaration(
                         None,
                         Some(f.new_import_clause(Kind::Unknown, None, Some(f.new_named_imports(f.new_node_list(get_sorted_specifiers(import_specifiers_map)))))),
@@ -268,8 +271,8 @@ impl JSXTransformer {
                         None,
                     );
                     ast::set_parent_in_children(s);
-                    new_statements.push(s);
-                }
+                    s
+                }));
                 for e in new_statements {
                     self.insert_statement_after_custom_prologue(&mut statements, Some(e));
                 }
@@ -279,9 +282,9 @@ impl JSXTransformer {
                 for (import_source, import_specifiers_map) in &imports {
                     let sorted = get_sorted_specifiers(import_specifiers_map);
                     let mut as_binding_elems: Vec<P<Node>> = Vec::with_capacity(sorted.len());
-                    for elem in sorted {
-                        as_binding_elems.push(f.new_binding_element(None, elem.property_name(), Some(elem.as_import_specifier().name()), None));
-                    }
+                    as_binding_elems.extend(
+                        sorted.into_iter().map(|elem| f.new_binding_element(None, elem.property_name(), Some(elem.as_import_specifier().name()), None)),
+                    );
                     let s = f.new_variable_statement(
                         None,
                         f.new_variable_declaration_list(
@@ -319,7 +322,17 @@ impl JSXTransformer {
 
     // jsx.go:280
     fn visit_jsx_element(&self, element: P<Node>) -> P<Node> {
-        let location = TextRange::new(scanner::skip_trivia(self.current_source_file().text(), element.pos()), element.end());
+        let location = TextRange::new(
+            scanner::skip_trivia(
+                self.current_source_file().text(),
+                element
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            element
+                .end()
+                .expect_source("parsed nodes have source positions"),
+        );
         let e = element.as_jsx_element();
         if self.should_use_create_element(element) {
             return self.visit_jsx_opening_like_element_create_element(e.opening_element, Some(e.children), location);
@@ -329,7 +342,17 @@ impl JSXTransformer {
 
     // jsx.go:289
     fn visit_jsx_self_closing_element(&self, element: P<Node>) -> P<Node> {
-        let location = TextRange::new(scanner::skip_trivia(self.current_source_file().text(), element.pos()), element.end());
+        let location = TextRange::new(
+            scanner::skip_trivia(
+                self.current_source_file().text(),
+                element
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            element
+                .end()
+                .expect_source("parsed nodes have source positions"),
+        );
         if self.should_use_create_element(element) {
             return self.visit_jsx_opening_like_element_create_element(element, None, location);
         }
@@ -338,7 +361,17 @@ impl JSXTransformer {
 
     // jsx.go:298
     fn visit_jsx_fragment(&self, fragment: P<Node>) -> P<Node> {
-        let location = TextRange::new(scanner::skip_trivia(self.current_source_file().text(), fragment.pos()), fragment.end());
+        let location = TextRange::new(
+            scanner::skip_trivia(
+                self.current_source_file().text(),
+                fragment
+                    .pos()
+                    .expect_source("parsed nodes have source positions"),
+            ),
+            fragment
+                .end()
+                .expect_source("parsed nodes have source positions"),
+        );
         let fr = fragment.as_jsx_fragment();
         if self.import_specifier.borrow().is_empty() {
             return self.visit_jsx_opening_fragment_create_element(fr.opening_fragment, Some(fr.children), location);
@@ -373,13 +406,13 @@ impl JSXTransformer {
         // For multiple children in the children property array, don't set StartOnNewLine
         // on child elements — the array literal is single-line.
         let mut results: Vec<P<Node>> = Vec::with_capacity(non_whitespce_children.len());
-        for child in non_whitespce_children {
+        results.extend(non_whitespce_children.into_iter().filter_map(|child| {
             let Some(res) = self.transform_jsx_child_to_expression(child) else {
-                continue;
+                return None;
             };
             self.emit_context().set_emit_flags(res, self.emit_context().emit_flags(res) & !EmitFlags::StartOnNewLine);
-            results.push(res);
-        }
+            Some(res)
+        }));
         if results.is_empty() {
             return None;
         }
@@ -510,7 +543,7 @@ impl JSXTransformer {
     // jsx.go:465
     fn transform_jsx_attributes_to_props(&self, attrs: &[P<Node>], children_prop: Option<P<Node>>) -> Vec<P<Node>> {
         let mut props: Vec<P<Node>> = Vec::with_capacity(attrs.len());
-        for attr in attrs {
+        props = attrs.iter().fold(props, |mut props, attr| {
             let attr = *attr;
             if attr.kind() == Kind::JsxSpreadAttribute {
                 let res = self.transform_jsx_spread_attributes_to_props(attr);
@@ -518,7 +551,9 @@ impl JSXTransformer {
             } else {
                 props.push(self.transform_jsx_attribute_to_object_literal_element(attr));
             }
-        }
+
+            props
+        });
         if let Some(children_prop) = children_prop {
             props.push(children_prop);
         }
@@ -528,11 +563,13 @@ impl JSXTransformer {
 
 // jsx.go:481
 fn has_proto(obj: P<Node>) -> bool {
-    for p in obj.properties() {
+    if obj.properties().iter().any(|p| {
         let p = *p;
-        if ast::is_property_assignment(p) && (ast::is_string_literal(p.name().unwrap()) || ast::is_identifier(p.name().unwrap())) && p.name().unwrap().text() == "__proto__" {
-            return true;
-        }
+        ast::is_property_assignment(p)
+            && (ast::is_string_literal(p.name().unwrap()) || ast::is_identifier(p.name().unwrap()))
+            && p.name().unwrap().text() == "__proto__"
+    }) {
+        return true;
     }
     false
 }
@@ -636,7 +673,12 @@ impl JSXTransformer {
                     args.push(f.new_false_expression());
                 }
                 // __source development flag
-                let (line, col) = scanner::get_ecma_line_and_utf16_character_of_position(original_file.as_source_file(), location.pos());
+                let (line, col) = scanner::get_ecma_line_and_utf16_character_of_position(
+                    original_file.as_source_file(),
+                    location
+                        .pos()
+                        .expect_source("JSX source map ranges have source positions"),
+                );
                 args.push(f.new_object_literal_expression(
                     f.new_node_list(vec![
                         f.new_property_assignment(None, f.new_identifier("fileName"), None, None, self.get_current_file_name_expression()),
@@ -754,11 +796,7 @@ impl JSXTransformer {
 
         let mut new_children: Vec<P<Node>> = Vec::new();
         if let Some(children) = children {
-            for c in children.nodes() {
-                if let Some(res) = self.transform_jsx_child_to_expression(*c) {
-                    new_children.push(res);
-                }
-            }
+            new_children.extend(children.nodes().iter().filter_map(|&c| self.transform_jsx_child_to_expression(c)));
         }
 
         // Add StartOnNewLine flag only if there are multiple actual children (after filtering)
@@ -790,11 +828,7 @@ impl JSXTransformer {
 
         let mut new_children: Vec<P<Node>> = Vec::new();
         if let Some(children) = children {
-            for c in children.nodes() {
-                if let Some(res) = self.transform_jsx_child_to_expression(*c) {
-                    new_children.push(res);
-                }
-            }
+            new_children.extend(children.nodes().iter().filter_map(|&c| self.transform_jsx_child_to_expression(c)));
         }
 
         // Add StartOnNewLine flag only if there are multiple actual children (after filtering)
@@ -859,32 +893,36 @@ fn fixup_whitespace_and_decode_entities(text: &str) -> String {
     let mut acc = String::new();
     let mut initial = true;
     // First non-whitespace character on this line.
-    let mut first_non_whitespace: isize = 0;
+    let mut first_non_whitespace: Option<usize> = Some(0);
     // End byte position of the last non-whitespace character on this line.
-    let mut last_non_whitespace_end: isize = -1;
+    let mut last_non_whitespace_end: Option<usize> = None;
     // These initial values are special because the first line is:
     // firstNonWhitespace = 0 to indicate that we want leading whitespace,
-    // but lastNonWhitespaceEnd = -1 as a special flag to indicate that we *don't* include the line if it's all whitespace.
+    // but lastNonWhitespaceEnd = None as a special flag to indicate that we *don't* include the line if it's all whitespace.
     let bytes = text.as_bytes();
     let mut i: usize = 0;
     while i < bytes.len() {
         let (c, size) = stringutil::decode_rune(&bytes[i..]);
         if stringutil::is_line_break(c) {
             // If we've seen any non-whitespace characters on this line, add the 'trim' of the line.
-            // (lastNonWhitespaceEnd === -1 is a special flag to detect whether the first line is all whitespace.)
-            if first_non_whitespace != -1 && last_non_whitespace_end != -1 {
-                add_line_of_jsx_text(&mut acc, &text[first_non_whitespace as usize..(last_non_whitespace_end + 1) as usize], initial);
+            // (lastNonWhitespaceEnd being None is a special flag to detect whether the first line is all whitespace.)
+            if let (Some(first_non_whitespace), Some(last_non_whitespace_end)) =
+                (first_non_whitespace, last_non_whitespace_end)
+            {
+                add_line_of_jsx_text(
+                    &mut acc,
+                    &text[first_non_whitespace..last_non_whitespace_end + 1],
+                    initial,
+                );
                 initial = false;
             }
 
             // Reset firstNonWhitespace for the next line.
-            // Don't bother to reset lastNonWhitespaceEnd because we ignore it if firstNonWhitespace = -1.
-            first_non_whitespace = -1;
+            // Don't bother to reset lastNonWhitespaceEnd because we ignore it if firstNonWhitespace is absent.
+            first_non_whitespace = None;
         } else if !stringutil::is_white_space_single_line(c) {
-            last_non_whitespace_end = (i + size - 1) as isize; // Store the end byte position of the character
-            if first_non_whitespace == -1 {
-                first_non_whitespace = i as isize;
-            }
+            last_non_whitespace_end = Some(i + size - 1); // Store the end byte position of the character
+            first_non_whitespace.get_or_insert(i);
         }
 
         if size > 1 {
@@ -893,9 +931,9 @@ fn fixup_whitespace_and_decode_entities(text: &str) -> String {
         i += 1;
     }
 
-    if first_non_whitespace != -1 {
+    if let Some(first_non_whitespace) = first_non_whitespace {
         // Last line had a non-whitespace character. Emit the 'trimLeft', meaning keep trailing whitespace.
-        add_line_of_jsx_text(&mut acc, &text[first_non_whitespace as usize..], initial);
+        add_line_of_jsx_text(&mut acc, &text[first_non_whitespace..], initial);
     }
     acc
 }
@@ -984,16 +1022,20 @@ fn decode_entity(entity: &str) -> Option<stringutil::Rune> {
             return None;
         }
 
-        for c in entity.chars() {
-            if base == 16 && !stringutil::is_hex_digit(c) {
-                return None;
+        if let Some(result) = entity.chars().into_iter().find_map(|c| {
+            if base == 16 && !stringutil::is_hex_digit(c as u32) {
+                return Some(None);
             }
-            if base == 10 && !stringutil::is_digit(c) {
-                return None;
+            if base == 10 && !stringutil::is_digit(c as u32) {
+                return Some(None);
             }
+
+            None
+        }) {
+            return result;
         }
 
-        return i32::from_str_radix(entity, base).ok();
+        return u32::from_str_radix(entity, base).ok();
     }
 
     entities(entity)

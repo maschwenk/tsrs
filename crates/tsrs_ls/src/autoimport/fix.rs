@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::rc::Rc;
 use std::sync::Arc;
 
@@ -55,6 +56,14 @@ pub(crate) struct addToExistingImportFix {
     pub(crate) named_import: Option<newImportBinding>,
 }
 
+fn import_index_from_protocol(import_index: i32) -> usize {
+    usize::try_from(import_index).expect("auto-import protocol index must be nonnegative")
+}
+
+fn import_index_to_protocol(import_index: usize) -> i32 {
+    i32::try_from(import_index).expect("auto-import index exceeds the protocol integer range")
+}
+
 impl Fix {
     // fix.go:55
     // Edits produces the text edits and a human-readable description for the fix. The returned bool is false
@@ -77,7 +86,8 @@ impl Fix {
                 (edits, description, safe)
             }
             lsproto::AutoImportFixKind::AddToExisting => {
-                if file.imports().len() <= self.import_index as usize {
+                let import_index = import_index_from_protocol(self.import_index);
+                if file.imports().len() <= import_index {
                     panic!("import index out of range");
                 }
                 let existing_fix = get_add_to_existing_import_fix(file, self);
@@ -195,7 +205,7 @@ pub(crate) fn get_add_to_existing_import_fix(file: P<SourceFile>, fix: &Fix) -> 
     if fix.kind != lsproto::AutoImportFixKind::AddToExisting {
         panic!("expected add to existing import fix");
     }
-    let module_specifier = file.imports()[fix.import_index as usize];
+    let module_specifier = file.imports()[import_index_from_protocol(fix.import_index)];
     let Some(import_node) = ast::try_get_import_from_module_specifier(module_specifier) else {
         panic!("expected import declaration");
     };
@@ -469,15 +479,10 @@ pub(crate) fn get_new_requires(
     // const { default: foo, bar, etc } = require('./mod');
     if default_import.is_some() || !named_imports.is_empty() {
         let mut binding_elements: Vec<P<Node>> = Vec::new();
-        for named_import in named_imports {
+        binding_elements.extend(named_imports.iter().map(|named_import| {
             let property_name = if named_import.property_name.is_empty() { None } else { Some(f.new_identifier(alloc_str(&named_import.property_name))) };
-            binding_elements.push(f.new_binding_element(
-                None, /*dotDotDotToken*/
-                property_name,
-                Some(f.new_identifier(alloc_str(&named_import.name))),
-                None, /*initializer*/
-            ));
-        }
+            f.new_binding_element(None /*dotDotDotToken*/, property_name, Some(f.new_identifier(alloc_str(&named_import.name))), None /*initializer*/)
+        }));
         if let Some(default_import) = default_import {
             binding_elements.insert(
                 0,
@@ -625,11 +630,11 @@ impl View {
         let add_as_type_only = get_add_as_type_only(is_valid_type_only_use_site, export, &self.program.options());
 
         let mut name = export.name().to_string();
-        let starts_with_upper = tsrs_core::stringutil::unicode_is_upper(name.as_bytes()[0] as i32);
+        let starts_with_upper = tsrs_core::stringutil::unicode_is_upper(u32::from(name.as_bytes()[0]));
         if for_jsx && !starts_with_upper {
             if export.is_renameable() {
-                let first = name.as_bytes()[0] as i32;
-                let upper = char::from_u32(tsrs_core::stringutil::unicode_to_upper(first) as u32).unwrap();
+                let first = u32::from(name.as_bytes()[0]);
+                let upper = char::from_u32(tsrs_core::stringutil::unicode_to_upper(first)).unwrap();
                 name = format!("{}{}", upper, &name[1..]);
             } else {
                 return Vec::new();
@@ -682,25 +687,27 @@ impl View {
 
         let existing_imports = self.get_existing_imports();
         let matching_declarations = existing_imports.get(&export.module_id).map(|v| v.as_slice()).unwrap_or(&[]);
-        for existing_import in matching_declarations {
+        if let Some(result) = matching_declarations.iter().find_map(|existing_import| {
             let namespace_prefix = get_namespace_like_import_text(existing_import.node);
             if namespace_prefix.is_empty() || existing_import.module_specifier.is_empty() {
-                continue;
+                return None;
             }
-            return Some(Fix {
+            Some(Some(Fix {
                 auto_import_fix: lsproto::AutoImportFix {
                     kind: lsproto::AutoImportFixKind::UseNamespace,
                     name: export.name().to_string(),
                     module_specifier: existing_import.module_specifier.clone(),
                     import_kind: lsproto::ImportKind::Namespace,
                     add_as_type_only: lsproto::AddAsTypeOnly::Allowed,
-                    import_index: existing_import.index as i32,
+                    import_index: import_index_to_protocol(existing_import.index),
                     usage_position: Some(usage_position),
                     namespace_prefix,
                     ..Default::default()
                 },
                 ..Default::default()
-            });
+            }))
+        }) {
+            return result;
         }
 
         None
@@ -772,7 +779,7 @@ impl View {
                             kind: lsproto::AutoImportFixKind::AddToExisting,
                             name: export.name().to_string(),
                             import_kind,
-                            import_index: existing_import.index as i32,
+                            import_index: import_index_to_protocol(existing_import.index),
                             module_specifier: existing_import.module_specifier.clone(),
                             add_as_type_only,
                             ..Default::default()
@@ -827,7 +834,7 @@ impl View {
                     kind: lsproto::AutoImportFixKind::AddToExisting,
                     name: export.name().to_string(),
                     import_kind,
-                    import_index: existing_import.index as i32,
+                    import_index: import_index_to_protocol(existing_import.index),
                     module_specifier: existing_import.module_specifier.clone(),
                     add_as_type_only,
                     ..Default::default()
@@ -875,11 +882,15 @@ fn get_import_kind(importing_file: P<SourceFile>, export: &Export, program: &Pro
                 return lsproto::ImportKind::Named;
             }
             // !!! cache this?
-            for &statement in importing_file.statements.nodes() {
+            if let Some(result) = importing_file.statements.nodes().iter().find_map(|&statement| {
                 // `import foo` parses as an ImportEqualsDeclaration even though it could be an ImportDeclaration
                 if ast::is_import_equals_declaration(statement) && !ast::node_is_missing(Some(statement.as_import_equals_declaration().module_reference)) {
-                    return lsproto::ImportKind::CommonJS;
+                    return Some(lsproto::ImportKind::CommonJS);
                 }
+
+                None
+            }) {
+                return result;
             }
             // !!! this logic feels weird; we're basically trying to predict if shouldUseRequire is going to
             //     be true. The meaning of "default import" is different depending on whether we write it as
@@ -993,21 +1004,25 @@ fn detect_syntax_indicators(file: P<SourceFile>, options: &CompilerOptions) -> (
     }
     // Fall back to scanning Imports() for actual import/export declarations
     // (not require() calls or dynamic imports).
-    for &imp in file.imports() {
+    if let Some(result) = file.imports().iter().find_map(|&imp| {
         if imp.flags().intersects(NodeFlags::Synthesized) {
-            continue;
+            return None;
         }
         let Some(parent) = imp.parent() else {
-            continue;
+            return None;
         };
         match parent.kind() {
-            Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => return (true, has_cjs),
+            Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => return Some((true, has_cjs)),
             Kind::ExternalModuleReference => {
                 // import x = require("...") — this is ESM-ish syntax
-                return (true, has_cjs);
+                return Some((true, has_cjs));
             }
             _ => {}
         }
+
+        None
+    }) {
+        return result;
     }
     (false, has_cjs)
 }
@@ -1041,15 +1056,19 @@ impl View {
         }
 
         // 5. Match the first other JS file in the program that's unambiguously CJS or ESM
-        for &other_file in self.program.get_source_files() {
+        if let Some(result) = self.program.get_source_files().iter().find_map(|&other_file| {
             if other_file == self.importing_file || !ast::is_source_file_js(other_file) || self.program.is_source_file_from_external_library(other_file) {
-                continue;
+                return None;
             }
             match detect_syntax(other_file, &self.program.options()) {
-                fileSyntaxKind::CJS => return true,
-                fileSyntaxKind::ESM => return false,
+                fileSyntaxKind::CJS => return Some(true),
+                fileSyntaxKind::ESM => return Some(false),
                 fileSyntaxKind::Ambiguous => {}
             }
+
+            None
+        }) {
+            return result;
         }
 
         // 6. Literally nothing to go on
@@ -1073,21 +1092,21 @@ impl View {
     // Sorting with this comparator will place the best fix first.
     // After rank sorting, fixes will be sorted by arbitrary but stable criteria
     // to ensure a deterministic order.
-    pub fn compare_fixes_for_sorting(&self, a: &Fix, b: &Fix) -> i32 {
+    pub fn compare_fixes_for_sorting(&self, a: &Fix, b: &Fix) -> Ordering {
         let res = self.compare_fixes_for_ranking(a, b);
-        if res != 0 {
+        if !res.is_eq() {
             return res;
         }
         self.compare_module_specifiers_for_sorting(a, b)
     }
 
     // fix.go:1018
-    // CompareFixesForRanking returns negative if `a` is better than `b`.
+    // CompareFixesForRanking returns `Ordering::Less` if `a` is better than `b`.
     // Sorting with this comparator will place the best fix first.
     // Fixes of equal desirability will be considered equal.
-    pub fn compare_fixes_for_ranking(&self, a: &Fix, b: &Fix) -> i32 {
+    pub fn compare_fixes_for_ranking(&self, a: &Fix, b: &Fix) -> Ordering {
         let res = compare_fix_kinds(a.kind, b.kind);
-        if res != 0 {
+        if !res.is_eq() {
             return res;
         }
         self.compare_module_specifiers_for_ranking(a, b)
@@ -1095,20 +1114,23 @@ impl View {
 }
 
 // fix.go:1025
-fn compare_fix_kinds(a: lsproto::AutoImportFixKind, b: lsproto::AutoImportFixKind) -> i32 {
-    a.0 - b.0
+fn compare_fix_kinds(a: lsproto::AutoImportFixKind, b: lsproto::AutoImportFixKind) -> Ordering {
+    a.0.cmp(&b.0)
 }
 
 impl View {
     // fix.go:1029
-    fn compare_module_specifiers_for_ranking(&self, a: &Fix, b: &Fix) -> i32 {
+    fn compare_module_specifiers_for_ranking(&self, a: &Fix, b: &Fix) -> Ordering {
         let comparison = compare_module_specifier_relativity(a, b, &self.preferences);
-        if comparison != 0 {
+        if !comparison.is_eq() {
             return comparison;
         }
-        if a.module_specifier_kind == ResultKind::Ambient && b.module_specifier_kind == ResultKind::Ambient {
-            let comparison = self.compare_node_core_module_specifiers(&a.module_specifier, &b.module_specifier);
-            if comparison != 0 {
+        if a.module_specifier_kind == ResultKind::Ambient
+            && b.module_specifier_kind == ResultKind::Ambient
+        {
+            let comparison =
+                self.compare_node_core_module_specifiers(&a.module_specifier, &b.module_specifier);
+            if !comparison.is_eq() {
                 return comparison;
             }
         }
@@ -1117,62 +1139,65 @@ impl View {
                 is_fix_possibly_re_exporting_importing_file(a, self.importing_file.file_name()),
                 is_fix_possibly_re_exporting_importing_file(b, self.importing_file.file_name()),
             );
-            if comparison != 0 {
+            if !comparison.is_eq() {
                 return comparison;
             }
         }
-        let comparison = tspath::compare_number_of_directory_separators(&a.module_specifier, &b.module_specifier);
-        if comparison != 0 {
+        let comparison = tspath::compare_number_of_directory_separators(
+            &a.module_specifier,
+            &b.module_specifier,
+        );
+        if !comparison.is_eq() {
             return comparison;
         }
-        0
+        Ordering::Equal
     }
 
     // fix.go:1054
-    fn compare_module_specifiers_for_sorting(&self, a: &Fix, b: &Fix) -> i32 {
+    fn compare_module_specifiers_for_sorting(&self, a: &Fix, b: &Fix) -> Ordering {
         let res = self.compare_module_specifiers_for_ranking(a, b);
-        if res != 0 {
+        if !res.is_eq() {
             return res;
         }
         // Sort ./foo before ../foo for equal-length specifiers
         if a.module_specifier.starts_with("./") && !b.module_specifier.starts_with("./") {
-            return -1;
+            return Ordering::Less;
         }
         if b.module_specifier.starts_with("./") && !a.module_specifier.starts_with("./") {
-            return 1;
+            return Ordering::Greater;
         }
         match a.module_specifier.cmp(&b.module_specifier) {
-            std::cmp::Ordering::Less => return -1,
-            std::cmp::Ordering::Greater => return 1,
-            std::cmp::Ordering::Equal => {}
+            Ordering::Less => return Ordering::Less,
+            Ordering::Greater => return Ordering::Greater,
+            Ordering::Equal => {}
         }
         match a.import_kind.0.cmp(&b.import_kind.0) {
-            std::cmp::Ordering::Less => return -1,
-            std::cmp::Ordering::Greater => return 1,
-            std::cmp::Ordering::Equal => {}
+            Ordering::Less => return Ordering::Less,
+            Ordering::Greater => return Ordering::Greater,
+            Ordering::Equal => {}
         }
         // !!! further tie-breakers? In practice this is only called on fixes with the same name
-        0
+        Ordering::Equal
     }
 
     // fix.go:1076
-    fn compare_node_core_module_specifiers(&self, a: &str, b: &str) -> i32 {
+    fn compare_node_core_module_specifiers(&self, a: &str, b: &str) -> Ordering {
         if a.starts_with("node:") && !b.starts_with("node:") {
             if self.should_use_uri_style_node_core_modules.is_true() {
-                return -1;
+                return Ordering::Less;
             } else if self.should_use_uri_style_node_core_modules.is_false() {
-                return 1;
+                return Ordering::Greater;
             }
-            return 0;
+            return Ordering::Equal;
         }
         if b.starts_with("node:") && !a.starts_with("node:") {
             if self.should_use_uri_style_node_core_modules.is_true() {
-                return 1;
+                return Ordering::Greater;
             } else if self.should_use_uri_style_node_core_modules.is_false() {
-                return -1;
+                return Ordering::Less;
             }
         }
-        0
+        Ordering::Equal
     }
 }
 
@@ -1232,9 +1257,10 @@ fn promote_from_type_only(
                             Some(source_file),
                             preferences,
                         );
-                        let insertion_index = lsutil::get_import_specifier_insertion_index(elements, new_specifier, &*specifier_comparer);
-                        let current_index = elements.iter().position(|&e| e == alias_declaration).map_or(-1, |i| i as i64);
-                        if insertion_index as i64 != current_index {
+                        let insertion_index =
+                            lsutil::get_import_specifier_insertion_index(elements, new_specifier, &*specifier_comparer);
+                        let current_index = elements.iter().position(|&e| e == alias_declaration);
+                        if Some(insertion_index) != current_index {
                             changes.delete(source_file, alias_declaration);
                             changes.insert_import_specifier_at_index(source_file, new_specifier, spec_parent, insertion_index);
                             return alias_declaration;
@@ -1278,7 +1304,12 @@ fn promote_from_type_only(
         Kind::ImportEqualsDeclaration => {
             // Remove the 'type' keyword (which is the second token: 'import' 'type' name '=' ...)
             // The type keyword is after 'import' and before the name
-            let mut scan = scanner::get_scanner_for_source_file(source_file, alias_declaration.pos());
+            let mut scan = scanner::get_scanner_for_source_file(
+                source_file,
+                alias_declaration
+                    .pos()
+                    .expect_source("parsed declarations have source positions"),
+            );
             // Skip 'import' keyword to get to 'type'
             scan.scan();
             delete_type_keyword(changes, source_file, scan.token_start());
@@ -1302,7 +1333,13 @@ fn promote_import_clause(
     let import_clause = import_clause_node.as_import_clause();
     // Delete the 'type' keyword
     if import_clause.phase_modifier() == Kind::TypeKeyword {
-        delete_type_keyword(changes, source_file, import_clause_node.pos());
+        delete_type_keyword(
+            changes,
+            source_file,
+            import_clause_node
+                .pos()
+                .expect_source("parsed import clauses have source positions"),
+        );
     }
 
     // Handle .ts extension conversion to .js if necessary
@@ -1363,7 +1400,7 @@ fn promote_import_clause(
 // fix.go:1293
 // deleteTypeKeyword deletes the 'type' keyword token starting at the given position,
 // including any trailing whitespace.
-fn delete_type_keyword(changes: &mut change::Tracker, source_file: P<SourceFile>, start_pos: i32) {
+fn delete_type_keyword(changes: &mut change::Tracker, source_file: P<SourceFile>, start_pos: u32) {
     let scan = scanner::get_scanner_for_source_file(source_file, start_pos);
     if scan.token() != Kind::TypeKeyword {
         return;
@@ -1400,12 +1437,18 @@ fn get_module_specifier_text(promoted_declaration: P<Node>) -> String {
 }
 
 // fix.go:1325
-// returns `-1` if `a` is better than `b`
-fn compare_module_specifier_relativity(a: &Fix, b: &Fix, preferences: &modulespecifiers::UserPreferences) -> i32 {
+// Returns `Ordering::Less` if `a` is better than `b`.
+fn compare_module_specifier_relativity(
+    a: &Fix,
+    b: &Fix,
+    preferences: &modulespecifiers::UserPreferences,
+) -> Ordering {
     match preferences.import_module_specifier_preference {
-        ImportModuleSpecifierPreference::NonRelative | ImportModuleSpecifierPreference::ProjectRelative => {
-            tsrs_core::compare_booleans(a.module_specifier_kind == ResultKind::Relative, b.module_specifier_kind == ResultKind::Relative)
-        }
-        _ => 0,
+        ImportModuleSpecifierPreference::NonRelative
+        | ImportModuleSpecifierPreference::ProjectRelative => tsrs_core::compare_booleans(
+            a.module_specifier_kind == ResultKind::Relative,
+            b.module_specifier_kind == ResultKind::Relative,
+        ),
+        _ => Ordering::Equal,
     }
 }

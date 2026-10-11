@@ -348,10 +348,14 @@ impl Program {
         }
 
         // Only try adding extensions from the first supported group (which should be .ts/.tsx/.d.ts)
-        for ext in &supported_extensions[0] {
+        if let Some(result) = supported_extensions[0].iter().find_map(|ext| {
             if let Some(result) = self.get_source_file_for_resolved_module(&format!("{}{}", file_name, ext)) {
-                return Some(result);
+                return Some(Some(result));
             }
+
+            None
+        }) {
+            return result;
         }
         None
     }
@@ -600,17 +604,21 @@ impl Program {
         if old_supplemental_files.len() != new_supplemental_files.len() {
             return (None, new_file, false);
         }
-        for (i, &old_supplemental) in old_supplemental_files.iter().enumerate() {
+        if let Some(result) = old_supplemental_files.iter().enumerate().find_map(|(i, &old_supplemental)| {
             let new_supplemental = new_supplemental_files[i];
             if old_supplemental.path() != new_supplemental.path() || !self.can_replace_file_in_program(old_supplemental, Some(new_supplemental)) {
-                return (None, new_file, false);
+                return Some((None, new_file, false));
             }
             if self.import_helpers_import_specifiers.contains_key(old_supplemental.path()) || self.needs_import_helpers_import_specifier(new_supplemental) {
-                return (None, new_file, false);
+                return Some((None, new_file, false));
             }
             if self.jsx_runtime_import_specifiers.contains_key(old_supplemental.path()) || !self.jsx_runtime_import_specifier(new_supplemental).is_empty() {
-                return (None, new_file, false);
+                return Some((None, new_file, false));
             }
+
+            None
+        }) {
+            return result;
         }
         // TODO: reverify compiler options when config has changed?
         let mut result = Program {
@@ -809,9 +817,7 @@ impl Program {
 
         for &source_file in self.files {
             let unresolved_imports = self.extract_unresolved_imports_from_source_file(source_file);
-            for imp in unresolved_imports {
-                unresolved_set.add(imp);
-            }
+            unresolved_set.m.extend(unresolved_imports);
         }
 
         unresolved_set
@@ -822,15 +828,17 @@ impl Program {
         let mut unresolved_imports = Vec::new();
 
         if let Some(resolved_modules) = self.resolved_modules.get(file.path()) {
-            #[expect(clippy::iter_over_hash_type, reason = "the only caller adds the names to a hash set")]
-            for (cache_key, resolution) in resolved_modules {
+            // the only caller adds the names to a hash set
+            unresolved_imports.extend(resolved_modules.iter().filter_map(|(cache_key, resolution)| {
                 let resolved = resolution.is_resolved();
                 if (!resolved || !tspath::extension_is_one_of(resolution.extension, tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON_FLAT))
                     && !tspath::is_external_module_name_relative(cache_key.name)
                 {
-                    unresolved_imports.push(cache_key.name.to_string());
+                    Some(cache_key.name.to_string())
+                } else {
+                    None
                 }
-            }
+            }));
         }
 
         unresolved_imports
@@ -1140,9 +1148,7 @@ impl Program {
             self.get_bind_and_check_diagnostics_with_checker(ctx, c, file, true /*includeDeferredGlobals*/)
         });
         let mut result = FxHashMap::default();
-        for (i, diags) in all_diags.into_iter().enumerate() {
-            result.insert(source_files[i], filter_and_sort_diagnostics(&diags));
-        }
+        result.extend(all_diags.into_iter().enumerate().map(|(i, diags)| (source_files[i], filter_and_sort_diagnostics(&diags))));
         result
     }
 
@@ -1445,9 +1451,7 @@ impl Program {
 
         if options.composite.is_true() {
             let mut root_paths: FxHashSet<Path> = FxHashSet::default();
-            for file_name in self.opts.config.file_names() {
-                root_paths.insert(self.to_path(file_name));
-            }
+            root_paths.extend(self.opts.config.file_names().iter().map(|file_name| self.to_path(file_name)));
 
             for &file in self.files.iter() {
                 let mut root_path = file.path();
@@ -2103,12 +2107,12 @@ impl Program {
             }
             let current_globals = file_checker.get_global_diagnostics();
             if current_globals.len() > previous_globals.len() {
-                for diagnostic in current_globals {
-                    let found = previous_globals.binary_search_by(|d| compare_diagnostics(*d, diagnostic).cmp(&0)).is_ok();
-                    if !found {
-                        diags.push(diagnostic);
-                    }
-                }
+                diags.extend(current_globals.into_iter().filter_map(|diagnostic| {
+                    let found = previous_globals
+                        .binary_search_by(|d| compare_diagnostics(*d, diagnostic))
+                        .is_ok();
+                    if !found { Some(diagnostic) } else { None }
+                }));
             }
         }
 
@@ -2126,17 +2130,16 @@ impl Program {
         let (mut filtered, directives_by_line) = self.get_diagnostics_with_preceding_directives(source_file, diags);
         if let Some(directives_by_line) = directives_by_line {
             // Go iterates this map in random order; the result is sorted by the caller.
-            #[expect(
-                clippy::iter_over_hash_type,
-                reason = "every caller sorts and deduplicates (filter_and_sort_diagnostics); each directive has its own location"
-            )]
-            for directive in directives_by_line.values() {
+            // every caller sorts and deduplicates (filter_and_sort_diagnostics); each directive has its own location
+            filtered.extend(directives_by_line.values().filter_map(|directive| {
                 // Above we changed all used directive kinds to @ts-ignore, so any @ts-expect-error directives that
                 // remain are unused and thus errors.
                 if directive.kind == CommentDirectiveKind::ExpectError {
-                    filtered.push(new_diagnostic(Some(source_file), directive.loc, &diagnostics::Unused_ts_expect_error_directive, &[]));
+                    Some(new_diagnostic(Some(source_file), directive.loc, &diagnostics::Unused_ts_expect_error_directive, &[]))
+                } else {
+                    None
                 }
-            }
+            }));
         }
         apply_content_mapper_diagnostic_directives(source_file, filtered)
     }
@@ -2160,10 +2163,16 @@ impl Program {
         }
         // Build map of directives by line number
         let mut directives_by_line: FxHashMap<usize, ast::CommentDirective> = FxHashMap::default();
-        for directive in comment_directives.iter() {
-            let line = tsrs_scanner::get_ecma_line_of_position(&*source_file, directive.loc.pos());
-            directives_by_line.insert(line as usize, *directive);
-        }
+        directives_by_line.extend(comment_directives.iter().map(|directive| {
+            let line = tsrs_scanner::get_ecma_line_of_position(
+                &*source_file,
+                directive
+                    .loc
+                    .pos()
+                    .expect_source("comment directives have source positions"),
+            );
+            (line as usize, *directive)
+        }));
         let line_starts = tsrs_scanner::get_ecma_line_starts(&*source_file);
         let text = source_file.text();
         let mut filtered = Vec::with_capacity(diags.len());
@@ -2173,20 +2182,25 @@ impl Program {
                 filtered.push(diagnostic);
                 continue;
             }
-            let mut line = tsrs_scanner::compute_line_of_position(&line_starts, diagnostic.pos()) as i64 - 1;
-            while line >= 0 {
+            let Some(diagnostic_pos) = diagnostic.pos() else {
+                filtered.push(diagnostic);
+                continue;
+            };
+            let mut line =
+                tsrs_scanner::compute_line_of_position(&line_starts, diagnostic_pos).checked_sub(1);
+            while let Some(current_line) = line {
                 // If line contains a @ts-ignore or @ts-expect-error directive, ignore this diagnostic and change
                 // the directive kind to @ts-ignore to indicate it was used.
-                if let Some(directive) = directives_by_line.get_mut(&(line as usize)) {
+                if let Some(directive) = directives_by_line.get_mut(&current_line) {
                     ignore_diagnostic = true;
                     directive.kind = CommentDirectiveKind::Ignore;
                     break;
                 }
                 // Stop searching backwards when we encounter a line that isn't blank or a comment.
-                if !is_comment_or_blank_line(text, line_starts[line as usize] as usize) {
+                if !is_comment_or_blank_line(text, line_starts[current_line] as usize) {
                     break;
                 }
-                line -= 1;
+                line = current_line.checked_sub(1);
             }
             if !ignore_diagnostic {
                 filtered.push(diagnostic);
@@ -2303,14 +2317,11 @@ impl Program {
         if index < imports.len() {
             return self.get_mode_for_usage_location(source_file, imports[index]);
         }
-        let mut index = index - imports.len();
-        for &augmentation in source_file.module_augmentations.get() {
-            if augmentation.kind() == Kind::StringLiteral {
-                if index == 0 {
-                    return self.get_mode_for_usage_location(source_file, augmentation);
-                }
-                index -= 1;
-            }
+        let index = index - imports.len();
+        if let Some(&augmentation) =
+            source_file.module_augmentations.get().iter().filter(|augmentation| augmentation.kind() == Kind::StringLiteral).nth(index as usize)
+        {
+            return self.get_mode_for_usage_location(source_file, augmentation);
         }
         panic!("resolution index out of range");
     }
@@ -2789,7 +2800,10 @@ fn filter_and_sort_diagnostics(diags: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
             if !diag.reports_unnecessary() || !diag.source().is_empty() {
                 return true;
             }
-            let (_, fidelity) = span_map.virtual_to_original_span(diag.loc());
+            let Some(loc) = diag.loc() else {
+                return true;
+            };
+            let (_, fidelity) = span_map.virtual_to_original_span(loc);
             fidelity != tsrs_spanmap::Fidelity::None
         })
         .collect();
@@ -2807,27 +2821,35 @@ fn apply_content_mapper_diagnostic_directives(source_file: P<SourceFile>, diags:
         if diag.file() != Some(source_file) || !diag.source().is_empty() {
             return false;
         }
-        for (i, directive) in directives.iter().enumerate() {
-            if diag.pos() >= directive.virtual_range.pos() && diag.pos() < directive.virtual_range.end() {
+        let Some(pos) = diag.pos() else {
+            return false;
+        };
+        directives.iter().enumerate().any(|(i, directive)| {
+            if Some(pos) >= directive.virtual_range.source_pos()
+                && Some(pos) < directive.virtual_range.source_end()
+            {
                 used[i] = true;
                 return true;
             }
-        }
-        false
+
+            false
+        })
     };
     let mut filtered: Vec<P<Diagnostic>> = diags.into_iter().filter(|&diag| !mark_used(diag)).collect();
-    for (i, directive) in directives.iter().enumerate() {
+    filtered.extend(directives.iter().enumerate().filter_map(|(i, directive)| {
         if directive.policy == ast::MappedDiagnosticDirectivePolicy::Expect && !used[i] {
-            filtered.push(ast::new_external_diagnostic(
+            Some(ast::new_external_diagnostic(
                 Some(source_file),
                 directive.original_range,
                 directive.source,
                 diagnostics::Category::Error,
                 directive.unused_code,
                 directive.unused_message_text,
-            ));
+            ))
+        } else {
+            None
         }
-    }
+    }));
     filtered
 }
 
@@ -2880,18 +2902,14 @@ fn emit_module_kind_is_non_node_esm(module_kind: ModuleKind) -> bool {
 fn is_comment_or_blank_line(text: &str, pos: usize) -> bool {
     let text = text.as_bytes();
     let mut pos = pos;
-    while pos < text.len() && (text[pos] == b' ' || text[pos] == b'\t') {
-        pos += 1;
-    }
-    pos == text.len()
-        || pos < text.len() && (text[pos] == b'\r' || text[pos] == b'\n')
-        || pos + 1 < text.len() && text[pos] == b'/' && text[pos + 1] == b'/'
+    pos += (pos..text.len()).take_while(|&index| text[index] == b' ' || text[index] == b'\t').count();
+    pos == text.len() || pos < text.len() && (text[pos] == b'\r' || text[pos] == b'\n') || pos + 1 < text.len() && text[pos] == b'/' && text[pos + 1] == b'/'
 }
 
 pub fn sort_and_deduplicate_diagnostics(diagnostics: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
     let mut diagnostics = diagnostics.to_vec();
     // Go's slices.SortFunc is not stable; equal diagnostics are merged below, so stability does not matter.
-    diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+    diagnostics.sort_by(|a, b| compare_diagnostics(*a, *b));
     compact_and_merge_related_infos(diagnostics)
 }
 
@@ -2906,9 +2924,7 @@ fn compact_and_merge_related_infos(diagnostics: Vec<P<Diagnostic>>) -> Vec<P<Dia
     while i < diagnostics.len() {
         let mut d = diagnostics[i];
         let mut n = 1;
-        while i + n < diagnostics.len() && equal_diagnostics_no_related_info(d, diagnostics[i + n]) {
-            n += 1;
-        }
+        n += (i + n..diagnostics.len()).take_while(|&index| equal_diagnostics_no_related_info(d, diagnostics[index])).count();
         if n > 1 {
             let mut related_infos: Vec<P<Diagnostic>> = Vec::new();
             let mut any = false;
@@ -2920,7 +2936,7 @@ fn compact_and_merge_related_infos(diagnostics: Vec<P<Diagnostic>>) -> Vec<P<Dia
                 related_infos.extend_from_slice(r);
             }
             if any {
-                related_infos.sort_by(|a, b| compare_diagnostics(*a, *b).cmp(&0));
+                related_infos.sort_by(|a, b| compare_diagnostics(*a, *b));
                 related_infos.dedup_by(|a, b| equal_diagnostics(*a, *b));
                 d = d.clone_diagnostic().set_related_info(&related_infos);
             }
@@ -2949,9 +2965,7 @@ pub fn get_diagnostics_of_any_program(
         |diagnostics: &mut Vec<P<Diagnostic>>, get_diagnostics: &mut dyn FnMut(&Context, Option<P<SourceFile>>) -> Vec<P<Diagnostic>>| match files {
             None => diagnostics.extend(get_diagnostics(ctx, None)),
             Some(files) => {
-                for &file in files {
-                    diagnostics.extend(get_diagnostics(ctx, Some(file)));
-                }
+                diagnostics.extend(files.iter().flat_map(|&file| get_diagnostics(ctx, Some(file))));
             }
         };
 

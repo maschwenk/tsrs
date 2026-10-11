@@ -100,29 +100,22 @@ pub fn read_reference_extra_baseline(suite: &str, name: &str, ext: &str) -> Opti
 // before `//// [DtsFileErrors]` / `!!!! File`), for the TSRS_TEST_DTS_ONLY metric.
 pub fn extract_dts_block(text: &str) -> String {
     let mut text = text;
-    for marker in ["\r\n\r\n//// [DtsFileErrors]", "\r\n\r\n!!!! File "] {
+    text = (["\r\n\r\n//// [DtsFileErrors]", "\r\n\r\n!!!! File "]).into_iter().fold(text, |mut text, marker| {
         if let Some(i) = text.find(marker) {
             text = &text[..i];
         }
-    }
+
+        text
+    });
     let mut starts: Vec<usize> = Vec::new();
-    let mut pos = 0;
-    while let Some(i) = text[pos..].find("//// [") {
-        let at = pos + i;
-        if at == 0 || text.as_bytes()[at - 1] == b'\n' {
-            starts.push(at);
-        }
-        pos = at + 6;
-    }
+    starts.extend(text.match_indices("//// [").filter_map(|(at, _)| (at == 0 || text.as_bytes()[at - 1] == b'\n').then_some(at)));
     let is_dts = |at: usize| {
         let line_end = text[at..].find("\r\n").map_or(text.len(), |e| at + e);
         let name = &text[at + 6..line_end].trim_end_matches(']');
         tsrs_core::tspath::is_declaration_file_name(name)
     };
     let mut first = starts.len();
-    while first > 0 && is_dts(starts[first - 1]) {
-        first -= 1;
-    }
+    first -= (0..first).rev().take_while(|&i| is_dts(starts[i])).count();
     if first == starts.len() {
         return crate::baseline::NO_CONTENT.to_string();
     }
@@ -269,13 +262,15 @@ pub fn split_units(payload: &TestCaseContent, harness_config: &mut TestConfigura
     let mut ts_config_files = Vec::new();
     if let (Some(file_names), Some(ts_config_unit)) = (ts_config_file_names, payload.ts_config_file_unit_data.as_ref()) {
         ts_config_files.push(create_harness_test_file(ts_config_unit, &current_directory));
-        for unit in units {
+        (other_files, to_be_compiled) = units.iter().fold((other_files, to_be_compiled), |(mut other_files, mut to_be_compiled), unit| {
             if file_names.contains(&tspath::get_normalized_absolute_path(&unit.name, &current_directory)) {
                 to_be_compiled.push(create_harness_test_file(unit, &current_directory));
             } else {
                 other_files.push(create_harness_test_file(unit, &current_directory));
             }
-        }
+
+            (other_files, to_be_compiled)
+        });
     } else {
         if let Some(base_url) = harness_config.get("baseurl").cloned() {
             if !tspath::is_rooted_disk_path(&base_url) {
@@ -292,9 +287,7 @@ pub fn split_units(payload: &TestCaseContent, harness_config: &mut TestConfigura
             || REFERENCES_REGEX.is_match(&last_unit.content)
         {
             to_be_compiled.push(create_harness_test_file(last_unit, &current_directory));
-            for unit in &units[..units.len() - 1] {
-                other_files.push(create_harness_test_file(unit, &current_directory));
-            }
+            other_files.extend(units[..units.len() - 1].iter().map(|unit| create_harness_test_file(unit, &current_directory)));
         } else {
             to_be_compiled = units.iter().map(|unit| create_harness_test_file(unit, &current_directory)).collect();
         }
@@ -320,9 +313,7 @@ mod tests {
         let mut mismatches = Vec::new();
         let mut paths: rustc_hash::FxHashMap<String, String> = Default::default();
         for suite in SUITES {
-            for p in enumerate_test_files(suite) {
-                paths.insert(format!("{suite}/{}", tspath::get_base_file_name(&p)), p);
-            }
+            paths.extend(enumerate_test_files(suite).into_iter().map(|p| (format!("{suite}/{}", tspath::get_base_file_name(&p)), p)));
         }
         for line in diags.lines() {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();

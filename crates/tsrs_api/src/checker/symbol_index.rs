@@ -42,14 +42,7 @@ impl Search {
         if self.add(symbol.parent()) || self.add(symbol.export_symbol()) {
             return true;
         }
-        for table in [symbol.members(), symbol.exports()].into_iter().flatten() {
-            for child in table.values() {
-                if self.add(Some(child)) {
-                    return true;
-                }
-            }
-        }
-        false
+        [symbol.members(), symbol.exports()].into_iter().flatten().any(|table| table.values().into_iter().any(|child| self.add(Some(child))))
     }
 
     fn visit(&mut self, node: P<Node>) -> bool {
@@ -57,10 +50,8 @@ impl Search {
             return true;
         }
         if let Some(locals) = node.locals() {
-            for symbol in locals.values() {
-                if self.add(Some(symbol)) {
-                    return true;
-                }
+            if locals.values().into_iter().any(|symbol| self.add(Some(symbol))) {
+                return true;
             }
         }
         self.visit_children(node)
@@ -75,12 +66,7 @@ impl Search {
         if stop {
             return true;
         }
-        for jsdoc in node.jsdoc(Some(self.file.get())) {
-            if self.visit(*jsdoc) {
-                return true;
-            }
-        }
-        false
+        node.jsdoc(Some(self.file.get())).iter().any(|jsdoc| self.visit(*jsdoc))
     }
 }
 
@@ -92,16 +78,12 @@ pub(crate) fn source_file_symbol(file: P<SourceFile>, id: u64) -> Option<P<Symbo
         return search.found;
     }
     if let Some(globals) = file.global_exports() {
-        for symbol in globals.values() {
-            if search.add(Some(symbol)) {
-                return search.found;
-            }
+        if let Some(result) = globals.values().into_iter().find_map(|symbol| if search.add(Some(symbol)) { Some(search.found) } else { None }) {
+            return result;
         }
     }
-    for module in file.pattern_ambient_modules() {
-        if search.add(Some(module.symbol)) {
-            return search.found;
-        }
+    if let Some(result) = file.pattern_ambient_modules().iter().find_map(|module| if search.add(Some(module.symbol)) { Some(search.found) } else { None }) {
+        return result;
     }
     search.found
 }

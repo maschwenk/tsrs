@@ -392,7 +392,7 @@ impl ProjectCollectionBuilder {
             }
         }
         let mut created_entries = Vec::with_capacity(api_request.create_programs.len());
-        for request in &api_request.create_programs {
+        created_entries.extend(api_request.create_programs.iter().map(|request| {
             let entry = self.update_or_create_synthetic_project(
                 self.next_synthetic_project_id(),
                 request.root_file_names.clone(),
@@ -404,11 +404,11 @@ impl ProjectCollectionBuilder {
                 self.inferred_content_mappers.clone(),
                 logger,
             );
-            created_entries.push(entry);
-        }
+            entry
+        }));
         let mut reconfigured_entries = Vec::with_capacity(api_request.reconfigure_programs.len());
-        for request in &api_request.reconfigure_programs {
-            reconfigured_entries.push(self.update_or_create_synthetic_project(
+        reconfigured_entries.extend(api_request.reconfigure_programs.iter().map(|request| {
+            self.update_or_create_synthetic_project(
                 request.program_id.clone(),
                 request.request.root_file_names.clone(),
                 request.request.compiler_options,
@@ -418,17 +418,17 @@ impl ProjectCollectionBuilder {
                 request.request.module_resolver_id,
                 self.inferred_content_mappers.clone(),
                 logger,
-            ));
-        }
+            )
+        }));
         // Go updates these programs in parallel goroutines; here they run one after another.
         let mut created_programs = Vec::with_capacity(created_entries.len());
-        for entry in &created_entries {
+        created_programs.extend(created_entries.iter().map(|entry| {
             let entry = projectEntry::Synthetic(Arc::clone(entry));
             if self.value_of(&entry).value().unwrap().dirty {
                 self.update_program(&entry, logger);
             }
-            created_programs.push(self.value_of(&entry).value());
-        }
+            self.value_of(&entry).value()
+        }));
         for entry in &reconfigured_entries {
             let entry = projectEntry::Synthetic(Arc::clone(entry));
             if self.value_of(&entry).value().unwrap().dirty {
@@ -650,12 +650,10 @@ impl ProjectCollectionBuilder {
     // projectcollectionbuilder.go:590
     fn collect_inferred_project_roots(&self) -> Vec<String> {
         let mut inferred_project_files: Vec<String> = Vec::new();
-        #[expect(clippy::iter_over_hash_type, reason = "order-independent: collects inferred roots, which update_inferred_project sorts (as Go does); Go ranges the map too")]
-        for (path, overlay) in self.overlays.iter() {
-            if self.find_default_configured_project(&overlay.base.file_name, path).is_none() {
-                inferred_project_files.push(overlay.base.file_name.clone());
-            }
-        }
+        // order-independent: collects inferred roots, which update_inferred_project sorts (as Go does); Go ranges the map too
+        inferred_project_files.extend(self.overlays.iter().filter_map(|(path, overlay)| {
+            if self.find_default_configured_project(&overlay.base.file_name, path).is_none() { Some(overlay.base.file_name.clone()) } else { None }
+        }));
         self.append_api_opened_inferred_roots(inferred_project_files)
     }
 
@@ -665,14 +663,12 @@ impl ProjectCollectionBuilder {
     // roots and persist across snapshots.
     fn append_api_opened_inferred_roots(&self, mut inferred_project_files: Vec<String>) -> Vec<String> {
         let api_open_files: Vec<(Path, apiOpenedFile)> = self.api_state.borrow().open_files.iter().map(|(k, v)| (k.clone(), v.clone())).collect();
-        for (path, file) in &api_open_files {
+        inferred_project_files.extend(api_open_files.iter().filter_map(|(path, file)| {
             if self.is_open_file(path) {
-                continue;
+                return None;
             }
-            if self.find_default_configured_project(&file.file_name, path).is_none() {
-                inferred_project_files.push(file.file_name.clone());
-            }
-        }
+            if self.find_default_configured_project(&file.file_name, path).is_none() { Some(file.file_name.clone()) } else { None }
+        }));
         inferred_project_files
     }
 
@@ -811,9 +807,7 @@ impl ProjectCollectionBuilder {
         // queued first, which `projectTreeWork` reproduces with an explicit stack (the queued functions queue
         // more work on the same group).
         let wg: RefCell<Vec<projectTreeWork>> = RefCell::new(Vec::new());
-        for project_id in current_projects {
-            wg.borrow_mut().push(projectTreeWork::Project(project_id));
-        }
+        wg.borrow_mut().extend(current_projects.into_iter().map(projectTreeWork::Project));
         loop {
             let work = wg.borrow_mut().pop();
             match work {
@@ -883,12 +877,7 @@ impl ProjectCollectionBuilder {
         }
 
         let children = program.get_resolved_project_references();
-        for child_config in children {
-            let Some(child_config) = child_config else {
-                continue;
-            };
-            wg.borrow_mut().push(projectTreeWork::Child(program, child_config));
-        }
+        wg.borrow_mut().extend(children.into_iter().flatten().map(|child_config| projectTreeWork::Child(program, child_config)));
     }
 
     // projectcollectionbuilder.go:815
@@ -1237,9 +1226,7 @@ impl ProjectCollectionBuilder {
             // If we found a project, we retain each project along the BFS path.
             // We don't want to retain everything we visited since BFS can terminate
             // early, and we don't want to retain nondeterministically.
-            for node in &search.path {
-                retain.add((self.to_path)(&node.config_file_name));
-            }
+            retain.m.extend(search.path.iter().map(|node| (self.to_path)(&node.config_file_name)));
         }
 
         if search.stopped {
@@ -1602,19 +1589,19 @@ impl ProjectCollectionBuilder {
                     project.host = Some(new_compiler_host(&project.current_directory.clone(), project, self, logger.fork("CompilerHost")));
                     let result = project.create_program();
                     let mut watched_files: Vec<String> = Vec::new();
-                    for mapper in project.command_line.unwrap().content_mappers() {
+                    watched_files.extend(project.command_line.unwrap().content_mappers().iter().filter_map(|mapper| {
                         if !mapper.definition.package.is_empty() && mapper.contribution_id.is_empty() && !mapper.package_directory.is_empty() {
-                            watched_files.push(tspath::combine_paths(&mapper.package_directory, &["package.json"]));
+                            Some(tspath::combine_paths(&mapper.package_directory, &["package.json"]))
+                        } else {
+                            None
                         }
-                    }
+                    }));
                     // (Content mappers are not ported: no source file is content-mapped, so there are no dynamic
                     // content mapper watched files.)
                     watched_files.sort();
                     watched_files.dedup();
                     let mut content_mapper_watched_files = new_set_with_size_hint(watched_files.len());
-                    for file_name in &watched_files {
-                        content_mapper_watched_files.add((self.to_path)(file_name));
-                    }
+                    content_mapper_watched_files.m.extend(watched_files.iter().map(|file_name| (self.to_path)(file_name)));
                     project.content_mapper_watch = project.content_mapper_watch.as_ref().map(|w| w.clone_with(watched_files.clone()));
                     project.content_mapper_watched_files = Some(Arc::new(content_mapper_watched_files));
                     project.program = Some(result.program);

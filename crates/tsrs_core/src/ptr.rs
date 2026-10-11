@@ -1737,12 +1737,8 @@ pub mod shared_check {
             return;
         }
         let mut ranges = Vec::new();
-        for arena in ARENAS.lock().unwrap().iter() {
-            // The owning threads are idle; the chunk list is only read.
-            for (ptr, len) in arena.0.used_ranges() {
-                ranges.push((ptr, ptr + len));
-            }
-        }
+        // The owning threads are idle; the chunk list is only read.
+        ranges.extend(ARENAS.lock().unwrap().iter().flat_map(|arena| arena.0.used_ranges()).map(|(ptr, len)| (ptr, ptr + len)));
         ranges.sort_unstable();
         *FROZEN.write().unwrap() = ranges;
     }

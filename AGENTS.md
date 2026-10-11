@@ -27,19 +27,22 @@ note gave for revisiting it. Whatever the outcome, add it to that list.
 **Clear the bar.** A change lands only if it gains at least one of:
 
 - 1% of single-threaded instructions on at least one `bench/projects.json` project (`bench/count.py`, deterministic);
-- 2% of wall time in the README benchmark's wall-time table, read across two publishes on the same hardware;
+- 2% of wall time in the wall-time table in [`bench/RESULTS.md`](bench/RESULTS.md), read across two publishes on
+  the same hardware;
 - 5% of peak memory at the default checker count.
 
 A change that adds a thread, a cache, an overlap between phases or an invariant later code must keep needs a clear
 margin over that bar: a sub-percent gain never justifies it, whichever measure it is on (notes/perf-serial-steps.md
 has why). A finding below the bar is still worth keeping: land it as a note in `notes/` and leave the code alone.
 
-## Keep the README capability table current
+## Keep the capability table current
 
-`README.md`'s table "What it does and doesn't do" lists every user-visible capability with its status and evidence.
+[`docs/COMPATIBILITY.md`](docs/COMPATIBILITY.md)'s table "What it does and doesn't do" lists every user-visible
+capability with its status and evidence.
 Update it in the same pull request when a change ports a subsystem or emit wave, adds a feature, makes a capability
 start or stop being supported, become the default or ship in an npm release, changes a pass count the table cites,
-or closes or finds a known gap. How to update it is in a comment above the table.
+or closes or finds a known gap. How to update it is in a comment above the table. Keep the root and npm README
+compatibility summaries consistent with it.
 
 ## Private code
 

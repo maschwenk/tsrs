@@ -33,15 +33,14 @@ pub(crate) struct configuredContentMappers {
 pub(crate) fn collect_configured_content_mappers(command_lines: &[P<ParsedCommandLine>]) -> Arc<configuredContentMappers> {
     let mut seen_extensions: Set<String> = Set::default();
     let mut extensions: Vec<String> = Vec::new();
-    for command_line in command_lines {
-        for mapper in command_line.content_mappers() {
-            for extension in &mapper.definition.extensions {
-                if seen_extensions.add_if_absent(extension.clone()) {
-                    extensions.push(extension.clone());
-                }
-            }
-        }
-    }
+    extensions.extend(
+        command_lines
+            .iter()
+            .flat_map(|command_line| command_line.content_mappers())
+            .flat_map(|mapper| &mapper.definition.extensions)
+            .filter(|extension| seen_extensions.add_if_absent((*extension).clone()))
+            .cloned(),
+    );
     extensions.sort();
     Arc::new(configuredContentMappers { extensions })
 }

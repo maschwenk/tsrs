@@ -52,14 +52,16 @@ pub(crate) fn get_signature_usages(host: &dyn CheckerHost, p: &Params) -> Checke
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     let mut out = Vec::with_capacity(usages.len());
-    for usage in usages {
+    out = usages.into_iter().try_fold(out, |mut out, usage| {
         let mut o = obj();
         o.set("name", Value::String(host.node_handle(usage.name)?));
         if let Some(call) = usage.call {
             o.set("call", Value::String(host.node_handle(call)?));
         }
         out.push(o.build());
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -67,7 +69,7 @@ pub(crate) fn get_referenced_symbols_for_node(host: &dyn CheckerHost, p: &Params
     let sd = snapshot_ctx(host, p)?;
     let program = sd.program()?;
     let node = host.resolve_node_handle(program, p.string("node")?)?;
-    let position = p.i32("position")?;
+    let position = p.u32("position")?;
     let ls = language_service(&sd.scope.snapshot, program, &sd.project, "")?;
     let entries = ls.get_referenced_symbols_for_node_exported(&host.context(), position, node, program.get_source_files());
     if entries.is_empty() {
@@ -77,11 +79,13 @@ pub(crate) fn get_referenced_symbols_for_node(host: &dyn CheckerHost, p: &Params
     for entry in &entries {
         let Some(def) = entry.definition_node() else { continue };
         let mut refs = Vec::new();
-        for r in entry.references() {
+        refs = entry.references().iter().try_fold(refs, |mut refs, r| {
             if let Some(n) = r.node() {
                 refs.push(Value::String(host.node_handle(n)?));
             }
-        }
+
+            Ok::<_, CheckerError>(refs)
+        })?;
         let mut o = obj();
         o.set("definition", Value::String(host.node_handle(def)?));
         if let Some(sym) = entry.definition_symbol() {
@@ -117,7 +121,7 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
             return Ok(Ok(None));
         };
         let ls = language_service(snapshot, program, &sd.project, "")?;
-        let internal = source_file.get_position_map().utf16_to_utf8(i32::try_from(position).unwrap_or(i32::MAX));
+        let internal = source_file.get_position_map().utf16_to_utf8(position);
         // With includeSymbol the language service takes the API checker itself (Go: same).
         let _lease = if include_symbol { Some(super::lease::acquire(program)?) } else { None };
         Ok(ls.get_completions_at_position(ctx, source_file, internal, trigger, include_symbol))
@@ -217,10 +221,10 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
         valid: bool,
     }
     let mut actions: Vec<Action> = Vec::new();
-    for action in p.array("actions")? {
+    actions = (p.array("actions")?).iter().try_fold(actions, |mut actions, action| {
         if matches!(action, Value::Null) {
             actions.push(Action { kind: String::new(), symbol: None, valid: true });
-            continue;
+            return Ok::<_, CheckerError>(actions);
         }
         let a = Params::new(action, "getImportAdderEdits")?;
         let valid = match a.raw("isValidTypeOnlyUseSite") {
@@ -233,12 +237,14 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
             Some(_) => Some(a.symbol_ref("symbol")?),
         };
         actions.push(Action { kind: a.string("kind")?.to_string(), symbol, valid });
-    }
+
+        Ok::<_, CheckerError>(actions)
+    })?;
     // Go `handleGetImportAdderEdits`: the per-action checks run inside the action loop, after the working
     // snapshot (possibly a fresh auto-import clone) exists.
     let validate = |sd: &SnapshotCtx, program: &'static Program| -> CheckerResult<Vec<(P<Symbol>, bool)>> {
         let mut out = Vec::with_capacity(actions.len());
-        for (i, action) in actions.iter().enumerate() {
+        out = actions.iter().enumerate().try_fold(out, |mut out, (i, action)| {
             match action.kind.as_str() {
                 "importSymbol" => {
                     let Some(r) = &action.symbol else {
@@ -248,7 +254,9 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
                 }
                 kind => return Err(CheckerError::client(format!("unknown import adder action kind {kind:?}"))),
             }
-        }
+
+            Ok::<_, CheckerError>(out)
+        })?;
         Ok(out)
     };
 
@@ -332,15 +340,31 @@ fn to_api_text_edits(source_file: P<tsrs_ast::SourceFile>, edits: &[tsrs_lsproto
         (off >= start && off <= original.len() as i64).then_some(off)
     };
     let mut out = Vec::with_capacity(edits.len());
-    for edit in edits {
+    out = match edits.iter().try_fold(out, |mut out, edit| {
         let (Some(start), Some(end)) = (offset(&edit.range.start), offset(&edit.range.end)) else {
-            return Value::Null;
+            return std::ops::ControlFlow::Break(Value::Null);
         };
         let mut o = obj();
-        o.num("pos", position_map.utf8_to_utf16(start as i32) as f64);
-        o.num("end", position_map.utf8_to_utf16(end as i32) as f64);
+        o.num(
+            "pos",
+            f64::from(
+                position_map
+                    .utf8_to_utf16(u32::try_from(start).expect("edit position exceeds u32")),
+            ),
+        );
+        o.num(
+            "end",
+            f64::from(
+                position_map.utf8_to_utf16(u32::try_from(end).expect("edit position exceeds u32")),
+            ),
+        );
         o.set("newText", Value::String(edit.new_text.clone()));
         out.push(o.build());
-    }
+
+        std::ops::ControlFlow::Continue(out)
+    }) {
+        std::ops::ControlFlow::Continue(value) => value,
+        std::ops::ControlFlow::Break(value) => return value,
+    };
     Value::Array(out)
 }

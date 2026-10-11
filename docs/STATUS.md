@@ -1,8 +1,28 @@
 # Status
 
-## Unreleased
+## 2026-10-11: 0.14.0 release
 
-Linux x64/arm64 packages gain explicit `-gnu` and `-musl` suffixes, static musl builds and libc-aware binary selection.
+Linux x64/arm64 packages gain explicit `-gnu` and `-musl` suffixes, static musl builds and libc-aware binary selection
+(#312). All seven packages (`tsrs`, `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64-gnu`, `@ts-rs/linux-arm64-gnu`,
+`@ts-rs/linux-x64-musl`, `@ts-rs/linux-arm64-musl` and `@ts-rs/wasm`) use `0.14.0-ts7.1.0-dev.20260929`.
+Install with `pnpm add -D tsrs`; direct Linux platform-package dependencies need the appropriate libc suffix.
+The TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929).
+
+Checker improvements (#301, #304, #327) reuse contextual types, property lookups and instantiations, reduce
+allocation churn and limit contention in work stealing. The measurements recorded for #327 in
+`notes/perf-icount-round4.md` show 9.4% fewer instructions in locality mode and 10.1% fewer in default mode at
+8 checkers on a large private monorepo, with identical diagnostics. Those compare plain release builds against
+`98d8d60e`, not 0.13.0 or the PGO/BOLT npm binaries. The same note records unchanged conformance pass lists in
+three modes, 29 passing regression cases and matching diagnostics on four public projects; these are the merged
+change's measurements, not new release measurements.
+
+The front end avoids redundant numeric-cache entries, builds transformed scanner text in its arena, searches
+block-comment tails by substring, reuses module path buffers and probes lightweight filesystem metadata
+(#285, #294, #315, #316, #321, #328). Internal integer and enum cleanup and suitable iterator conversions are
+included (#306, #317, #322); measured relation traversal loops are preserved (#325). Rust source builds now
+require 1.99 (#318). PGO instrumentation uses ThinLTO (#298); GNU release builds retain PGO/BOLT, while musl
+builds are static without PGO/BOLT. The shared checker seed remains opt-in with `shared-graph` and
+`TSRS_SHARED_GRAPH=1`.
 
 ## 2026-10-10: 0.13.0 release
 

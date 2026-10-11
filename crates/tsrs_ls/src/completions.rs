@@ -65,9 +65,19 @@ impl LanguageService {
             return Ok(lsproto::CompletionItemsOrListOrNull::default());
         }
         file = positions[0].script;
-        let position = positions[0].position as i32;
-        let completion_list_internal = self.get_completions_at_position_internal(ctx, file, position, trigger_character, false /*includeSymbols*/)?;
-        let mut completion_list = ensure_item_data(file, position, completion_list_internal.map(CompletionList::to_lsp));
+        let position = positions[0].position;
+        let completion_list_internal = self.get_completions_at_position_internal(
+            ctx,
+            file,
+            position,
+            trigger_character,
+            false, /*includeSymbols*/
+        )?;
+        let mut completion_list = ensure_item_data(
+            file,
+            position,
+            completion_list_internal.map(CompletionList::to_lsp),
+        );
         if crate::lsconv::Script::span_map(&file).is_some() {
             self.filter_content_mapped_auto_imports(ctx, program, file, completion_list.as_mut());
         }
@@ -85,20 +95,25 @@ impl LanguageService {
         };
         let items = std::mem::take(&mut list.items);
         let mut filtered = Vec::with_capacity(items.len());
-        for mut item in items {
+        filtered.extend(items.into_iter().filter_map(|mut item| {
             let Some(auto_import) = item.data.as_ref().and_then(|d| d.auto_import.clone()) else {
-                filtered.push(item);
-                continue;
+                return Some(item);
             };
-            let (edits, description, ok) =
-                (autoimport::Fix { auto_import_fix: auto_import, ..Default::default() }).edits(ctx, file, program.options(), self.format_options(), &self.converters, self.user_preferences());
+            let (edits, description, ok) = (autoimport::Fix { auto_import_fix: auto_import, ..Default::default() }).edits(
+                ctx,
+                file,
+                program.options(),
+                self.format_options(),
+                &self.converters,
+                self.user_preferences(),
+            );
             if !ok {
-                continue;
+                return None;
             }
             item.additional_text_edits = Some(edits);
             item.detail = str_ptr_to(&description);
-            filtered.push(item);
-        }
+            Some(item)
+        }));
         list.items = filtered;
     }
 
@@ -107,7 +122,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         trigger_character: Option<&str>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
@@ -151,14 +166,20 @@ pub struct CompletionList {
 }
 
 // completions.go:122
-fn ensure_item_data(file: P<SourceFile>, pos: i32, list: Option<lsproto::CompletionList>) -> Option<lsproto::CompletionList> {
+fn ensure_item_data(
+    file: P<SourceFile>,
+    pos: u32,
+    list: Option<lsproto::CompletionList>,
+) -> Option<lsproto::CompletionList> {
     let mut list = list?;
     for item in &mut list.items {
         if item.data.is_none() {
             item.data = Some(lsproto::CompletionItemData {
                 file_name: file.original_file_name().to_string(),
-                position: pos,
-                supplemental_file_index: supplemental_file_index(file),
+                position: i32::try_from(pos).expect("completion position exceeds protocol i32"),
+                supplemental_file_index: supplemental_file_index(file).map(|index| {
+                    i32::try_from(index).expect("supplemental file index exceeds protocol i32")
+                }),
                 name: item.label.clone(),
                 ..Default::default()
             });
@@ -168,12 +189,14 @@ fn ensure_item_data(file: P<SourceFile>, pos: i32, list: Option<lsproto::Complet
 }
 
 // completions.go:139
-pub(crate) fn supplemental_file_index(file: P<SourceFile>) -> Option<i32> {
+pub(crate) fn supplemental_file_index(file: P<SourceFile>) -> Option<usize> {
     let canonical = file.canonical_source_file()?;
-    for (i, &supplemental) in canonical.supplemental_source_files().iter().enumerate() {
-        if supplemental == file {
-            return Some(i as i32);
-        }
+    if let Some(i) = canonical
+        .supplemental_source_files()
+        .iter()
+        .position(|&supplemental| supplemental == file)
+    {
+        return Some(i);
     }
     panic!("supplemental source file is not linked from its canonical source file");
 }
@@ -184,10 +207,9 @@ pub(crate) fn source_file_for_supplemental_file_index(file: P<SourceFile>, index
         return Some(file);
     };
     let supplemental = file.supplemental_source_files();
-    if index >= 0 && (index as usize) < supplemental.len() {
-        return Some(supplemental[index as usize]);
-    }
-    None
+    usize::try_from(index)
+        .ok()
+        .and_then(|index| supplemental.get(index).copied())
 }
 
 // *completionDataData | *completionDataKeyword | *completionDataJSDocTagName | *completionDataJSDocTag | *completionDataJSDocParameterName
@@ -503,9 +525,7 @@ impl CompletionList {
     // completions.go:384
     pub fn to_lsp(self) -> lsproto::CompletionList {
         let mut items = Vec::with_capacity(self.items.len());
-        for entry in self.items {
-            items.push(entry.completion_item);
-        }
+        items.extend(self.items.into_iter().map(|entry| entry.completion_item));
         lsproto::CompletionList { is_incomplete: self.is_incomplete, item_defaults: self.item_defaults, apply_kind: self.apply_kind, items }
     }
 }
@@ -516,7 +536,7 @@ impl LanguageService {
         &self,
         ctx: &Context,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         trigger_character: Option<&str>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
@@ -603,7 +623,7 @@ impl LanguageService {
         ctx: &Context,
         type_checker: &mut Checker,
         file: P<SourceFile>,
-        position: i32,
+        position: u32,
         preferences: &UserPreferences,
         for_item_resolve: bool,
     ) -> Result<Option<CompletionData>, lsproto::Error> {
@@ -639,13 +659,10 @@ impl LanguageService {
                     //    *         |c|
                     //    */
                     let line_start = format::get_line_start_position_for_position(position, file);
-                    let mut no_comment_prefix = true;
-                    for r in file.text()[line_start as usize..position as usize].chars() {
-                        if !(stringutil::is_white_space_single_line(r) || r == '*' || r == '/' || r == '(' || r == ')' || r == '|') {
-                            no_comment_prefix = false;
-                            break;
-                        }
-                    }
+                    let no_comment_prefix = !(file.text()[line_start as usize..position as usize]
+                        .chars()
+                        .into_iter()
+                        .any(|r| !(stringutil::is_white_space_single_line(r as u32) || r == '*' || r == '/' || r == '(' || r == ')' || r == '|')));
                     if no_comment_prefix {
                         return Ok(Some(CompletionData::JSDocTag));
                     }
@@ -656,7 +673,16 @@ impl LanguageService {
             //     /** @type {number | string} */
             // Completion should work in the brackets
             if let Some(tag) = get_jsdoc_tag_at_position(current_token, position) {
-                if tag.tag_name().pos() <= position && position <= tag.tag_name().end() {
+                let tag_name = tag.tag_name();
+                if tag_name
+                    .pos()
+                    .expect_source("parsed JSDoc tags have source positions")
+                    <= position
+                    && position
+                        <= tag_name
+                            .end()
+                            .expect_source("parsed JSDoc tags have source positions")
+                {
                     return Ok(Some(CompletionData::JSDocTagName));
                 }
                 if ast::is_jsdoc_import_tag(tag) {
@@ -674,7 +700,19 @@ impl LanguageService {
                     }
                     if !inside_jsdoc_tag_type_expression
                         && ast::is_jsdoc_parameter_tag(tag)
-                        && (ast::node_is_missing(tag.name()) || tag.name().unwrap().pos() <= position && position <= tag.name().unwrap().end())
+                        && (ast::node_is_missing(tag.name())
+                            || tag
+                                .name()
+                                .unwrap()
+                                .pos()
+                                .expect_source("parsed JSDoc names have source positions")
+                                <= position
+                                && position
+                                    <= tag
+                                        .name()
+                                        .unwrap()
+                                        .end()
+                                        .expect_source("parsed JSDoc names have source positions"))
                     {
                         return Ok(Some(CompletionData::JSDocParameterName(completionDataJSDocParameterName { tag })));
                     }
@@ -846,7 +884,12 @@ impl LanguageService {
                     Kind::JsxAttribute => {
                         // For `<div className="x" [||] ></div>`, `parent` will be JsxAttribute and `previousToken` will be its initializer.
                         let previous_token = previous_token.unwrap();
-                        if parent.initializer() == Some(previous_token) && previous_token.end() < position {
+                        if parent.initializer() == Some(previous_token)
+                            && previous_token
+                                .end()
+                                .expect_source("parsed tokens have source positions")
+                                < position
+                        {
                             is_jsx_identifier_expected = true;
                         } else {
                             match previous_token.kind() {
@@ -1001,7 +1044,7 @@ impl LanguageService {
 // The locals of Go's getCompletionData that its closures (completions.go:796-1704) read and mutate.
 struct getCompletionDataState {
     file: P<SourceFile>,
-    position: i32,
+    position: u32,
     preferences: UserPreferences,
     for_item_resolve: bool,
     in_checked_file: bool,
@@ -1130,11 +1173,9 @@ impl getCompletionDataState {
             // each individual type has. This is because we're going to add all identifiers
             // anyways. So we might as well elevate the members that were at least part
             // of the individual types to a higher status since we know what they are.
-            for symbol in get_properties_for_completion(t, type_checker) {
-                if type_checker.is_valid_property_access_for_completions_exported(property_access, t, symbol) {
-                    self.symbols.push(symbol);
-                }
-            }
+            self.symbols.extend(get_properties_for_completion(t, type_checker).into_iter().filter_map(|symbol| {
+                if type_checker.is_valid_property_access_for_completions_exported(property_access, t, symbol) { Some(symbol) } else { None }
+            }));
         }
 
         if insert_await {
@@ -1269,9 +1310,7 @@ impl getCompletionDataState {
         let existing_members = get_properties_for_completion(container_actual_type, type_checker);
 
         let mut existing_member_names: FxHashSet<&'static str> = FxHashSet::default();
-        for member in existing_members {
-            existing_member_names.insert(member.name());
-        }
+        existing_member_names.extend(existing_members.into_iter().map(|member| member.name()));
 
         self.symbols.extend(members.into_iter().filter(|member| !existing_member_names.contains(member.name())));
 
@@ -1543,14 +1582,16 @@ impl getCompletionDataState {
         let exports = type_checker.get_exports_and_properties_of_module(module_specifier_symbol);
 
         let mut existing: FxHashSet<&'static str> = FxHashSet::default();
-        for &element in named_imports_or_exports.elements() {
+        existing.extend(named_imports_or_exports.elements().iter().filter_map(|&element| {
             if is_currently_editing_node(element, self.file, self.position) {
-                continue;
+                return None;
             }
-            existing.insert(element.property_name_or_name().unwrap().text());
-        }
-        let uniques: Vec<P<Symbol>> =
-            exports.into_iter().filter(|&symbol| ast::symbol_name(symbol) != ast::InternalSymbolNameDefault && !existing.contains(ast::symbol_name(symbol))).collect();
+            Some(element.property_name_or_name().unwrap().text())
+        }));
+        let uniques: Vec<P<Symbol>> = exports
+            .into_iter()
+            .filter(|&symbol| ast::symbol_name(symbol) != ast::InternalSymbolNameDefault && !existing.contains(ast::symbol_name(symbol)))
+            .collect();
 
         let uniques_is_empty = uniques.is_empty();
         self.symbols.extend(uniques);
@@ -1697,27 +1738,36 @@ impl getCompletionDataState {
                 crate::utilities::get_all_super_type_nodes(decl)
             };
             let mut base_symbols: Vec<P<Symbol>> = Vec::new();
-            for base_type_node in base_type_nodes {
-                let t = type_checker.get_type_at_location(base_type_node);
-                if class_element_modifier_flags.intersects(ModifierFlags::Static) {
-                    if let Some(t_symbol) = t.symbol() {
-                        let type_of_symbol = type_checker.get_type_of_symbol_at_location(t_symbol, Some(decl)).unwrap();
-                        base_symbols.extend_from_slice(type_checker.get_properties_of_type_exported(type_of_symbol));
-                    }
-                } else {
-                    base_symbols.extend_from_slice(type_checker.get_properties_of_type_exported(t));
-                }
-            }
+            base_symbols.extend(
+                base_type_nodes
+                    .into_iter()
+                    .filter_map(|base_type_node| {
+                        let t = type_checker.get_type_at_location(base_type_node);
+                        if class_element_modifier_flags.intersects(ModifierFlags::Static) {
+                            if let Some(t_symbol) = t.symbol() {
+                                let type_of_symbol = type_checker.get_type_of_symbol_at_location(t_symbol, Some(decl)).unwrap();
+                                Some(type_checker.get_properties_of_type_exported(type_of_symbol).iter().copied())
+                            } else {
+                                None
+                            }
+                        } else {
+                            Some(type_checker.get_properties_of_type_exported(t).iter().copied())
+                        }
+                    })
+                    .flatten(),
+            );
 
             self.symbols.extend(filter_class_members_list(&base_symbols, decl.members(), class_element_modifier_flags, file, position));
-            for index in 0..self.symbols.len() {
-                let symbol = self.symbols[index];
+            for (index, element) in self.symbols.iter().enumerate() {
+                let symbol = *element;
                 let declaration = symbol.value_declaration();
                 if let Some(declaration) = declaration {
                     if ast::is_class_element(declaration) && declaration.name().is_some() && ast::is_computed_property_name(declaration.name().unwrap()) {
                         let origin = symbolOriginInfo {
                             kind: symbolOriginInfoKind::ComputedPropertyName,
-                            data: symbolOriginData::ComputedPropertyName(symbolOriginInfoComputedPropertyName { symbol_name: type_checker.symbol_to_string_exported(symbol) }),
+                            data: symbolOriginData::ComputedPropertyName(symbolOriginInfoComputedPropertyName {
+                                symbol_name: type_checker.symbol_to_string_exported(symbol),
+                            }),
                             ..Default::default()
                         };
                         self.symbol_to_origin_info_map.insert(index, origin);
@@ -1819,8 +1869,8 @@ impl getCompletionDataState {
 
         self.symbols.extend(type_checker.get_symbols_in_scope_exported(scope_node, symbol_meanings));
         check_each_defined(&self.symbols, "getSymbolsInScope() should all be defined");
-        for index in 0..self.symbols.len() {
-            let symbol = self.symbols[index];
+        for (index, element) in self.symbols.iter().enumerate() {
+            let symbol = *element;
             let symbol_id = ast::get_symbol_id(symbol);
             if !type_checker.is_arguments_symbol(symbol) && !symbol.declarations().iter().any(|&decl| ast::get_source_file_of_node(decl) == Some(file)) {
                 self.symbol_to_sort_text_map.insert(symbol_id, SORT_TEXT_GLOBALS_OR_KEYWORDS.to_string());

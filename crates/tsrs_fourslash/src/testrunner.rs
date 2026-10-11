@@ -81,12 +81,10 @@ pub fn parse_test_files_and_symlinks_with_options<U, E>(
             }
             if meta_data_name != "filename" {
                 if meta_data_name == "symlink" && !current_file_name.is_empty() {
-                    for link in meta_data_value.split(',') {
+                    symlinks.extend(meta_data_value.split(',').filter_map(|link| {
                         let link = link.trim();
-                        if !link.is_empty() {
-                            symlinks.insert(link.to_string(), current_file_name.clone());
-                        }
-                    }
+                        if !link.is_empty() { Some((link.to_string(), current_file_name.clone())) } else { None }
+                    }));
                 } else if FOURSLASH_DIRECTIVES.contains(&meta_data_name.as_str()) {
                     // File-specific option
                     current_file_options.insert(meta_data_name, meta_data_value);

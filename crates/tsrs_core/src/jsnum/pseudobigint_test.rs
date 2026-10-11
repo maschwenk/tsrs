@@ -3,13 +3,8 @@ use super::*;
 #[test]
 fn test_parse_pseudo_big_int() {
     let mut test_numbers: Vec<Number> = Vec::new();
-    for i in 0..1000i64 {
-        test_numbers.push(Number(i as f64));
-    }
-    for bits in 0..53 {
-        test_numbers.push(Number((1i64 << bits) as f64));
-        test_numbers.push(Number(((1i64 << bits) - 1) as f64));
-    }
+    test_numbers.extend((0..1000i64).map(|i| Number(i as f64)));
+    test_numbers.extend((0..53).flat_map(|bits| [Number((1i64 << bits) as f64), Number(((1i64 << bits) - 1) as f64)]));
 
     // strip base-10 strings
     for test_number in &test_numbers {

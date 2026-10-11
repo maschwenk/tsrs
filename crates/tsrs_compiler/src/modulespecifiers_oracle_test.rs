@@ -44,9 +44,7 @@ fn str_field(v: &Value, name: &str) -> String {
 
 fn object(entries: Vec<(&str, Value)>) -> Value {
     let mut m = OrderedMap::default();
-    for (k, v) in entries {
-        m.insert(k.to_string(), v);
-    }
+    m.extend(entries.into_iter().map(|(k, v)| (k.to_string(), v)));
     Value::Object(m)
 }
 
@@ -59,16 +57,16 @@ fn run(s: &Value) -> Value {
     let case_sensitive = matches!(field(s, "caseSensitive"), Value::Bool(true));
     let mut files: Vec<(String, vfstest::MapFile)> = Vec::new();
     if let Value::Object(m) = field(s, "files") {
-        for (k, v) in m {
+        files.extend(m.into_iter().map(|(k, v)| {
             let Value::String(text) = v else { unreachable!() };
-            files.push((k.clone(), vfstest::MapFile::from(text.as_str())));
-        }
+            (k.clone(), vfstest::MapFile::from(text.as_str()))
+        }));
     }
     if let Value::Object(m) = field(s, "symlinks") {
-        for (k, v) in m {
+        files.extend(m.into_iter().map(|(k, v)| {
             let Value::String(target) = v else { unreachable!() };
-            files.push((k.clone(), vfstest::symlink(target)));
-        }
+            (k.clone(), vfstest::symlink(target))
+        }));
     }
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files, case_sensitive)));
     let host = new_compiler_host(&cwd, fs.clone(), &bundled::lib_path(), None, None, None);
@@ -85,9 +83,7 @@ fn run(s: &Value) -> Value {
 
     let mut symlinks = Vec::new();
     program.get_symlink_cache().directories_by_realpath().range(|realpath, set| {
-        for k in set.to_slice() {
-            symlinks.push(format!("{} <- {}", realpath.as_str(), k));
-        }
+        symlinks.extend(set.to_slice().into_iter().map(|k| format!("{} <- {}", realpath.as_str(), k)));
         true
     });
     symlinks.sort();

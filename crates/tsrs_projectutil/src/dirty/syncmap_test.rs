@@ -18,9 +18,7 @@ impl Cloneable for testValue {
 
 fn base_of(entries: &[(&str, &str)]) -> SharedMap<String, testValue> {
     let mut m = FxHashMap::default();
-    for (k, v) in entries {
-        m.insert(k.to_string(), Shared::new(testValue { data: v.to_string() }));
-    }
+    m.extend(entries.iter().map(|(k, v)| (k.to_string(), Shared::new(testValue { data: v.to_string() }))));
     Arc::new(m)
 }
 

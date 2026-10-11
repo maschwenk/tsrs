@@ -7,7 +7,7 @@ use std::io::{self, Write};
 
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic, SourceFile, SourceFileLike};
 use tsrs_core::tspath::{self, ComparePathsOptions};
-use tsrs_core::{TextPos, TextRange, P};
+use tsrs_core::{P, TextRange};
 use tsrs_diagnostics::{self as diagnostics, Category};
 
 // Go `FileLike`: the file a diagnostic renders against. Go's ASTDiagnostic.File returns the source file itself, or
@@ -48,7 +48,7 @@ impl SourceFileLike for FileLike {
         }
     }
 
-    fn ecma_line_map(&self) -> &[TextPos] {
+    fn ecma_line_map(&self) -> &[u32] {
         match self {
             FileLike::SourceFile(file) | FileLike::Renamed { file, .. } => file.get().ecma_line_map(),
             FileLike::OriginalText(file) => &file.line_map,
@@ -58,6 +58,7 @@ impl SourceFileLike for FileLike {
 
 // diagnosticwriter.go:58 (ASTDiagnostic).File
 pub fn diagnostic_file(d: P<Diagnostic>) -> Option<FileLike> {
+    d.loc()?;
     let file = d.file()?;
     let mut file_name = file.get().file_name();
     if let Some(canonical) = file.canonical_source_file() {
@@ -76,18 +77,27 @@ pub fn diagnostic_file(d: P<Diagnostic>) -> Option<FileLike> {
 }
 
 // diagnosticwriter.go:83
-pub fn diagnostic_pos(d: P<Diagnostic>) -> i32 {
-    resolve(d).loc.pos()
+pub fn diagnostic_pos(d: P<Diagnostic>) -> u32 {
+    resolve(d)
+        .loc
+        .pos()
+        .expect_source("rendered diagnostics have source positions")
 }
 
 // diagnosticwriter.go:84
-pub fn diagnostic_end(d: P<Diagnostic>) -> i32 {
-    resolve(d).loc.end()
+pub fn diagnostic_end(d: P<Diagnostic>) -> u32 {
+    resolve(d)
+        .loc
+        .end()
+        .expect_source("rendered diagnostics have source positions")
 }
 
 // diagnosticwriter.go:85
-pub fn diagnostic_len(d: P<Diagnostic>) -> i32 {
-    resolve(d).loc.len()
+pub fn diagnostic_len(d: P<Diagnostic>) -> u32 {
+    resolve(d)
+        .loc
+        .len()
+        .expect("rendered diagnostics have source positions")
 }
 
 // resolvedLocation describes how a diagnostic on a content-mapped file should be reported.
@@ -104,7 +114,7 @@ struct resolvedLocation {
 // original location, so it is shown against the virtual text and flagged as synthesized.
 // diagnosticwriter.go:98
 fn resolve(d: P<Diagnostic>) -> resolvedLocation {
-    let loc = d.loc();
+    let loc = d.loc().unwrap_or_else(TextRange::synthetic);
     let Some(file) = d.file() else {
         return resolvedLocation { loc, use_original: false, synthesized: false };
     };
@@ -127,7 +137,7 @@ fn resolve(d: P<Diagnostic>) -> resolvedLocation {
 pub struct originalTextFile {
     file_name: &'static str,
     text: &'static str,
-    line_map: Vec<TextPos>,
+    line_map: Vec<u32>,
 }
 
 // diagnosticwriter.go:122
@@ -244,20 +254,27 @@ fn utf16_len(s: &str) -> usize {
 fn write_code_snippet(
     writer: &mut dyn Write,
     source_file: &FileLike,
-    start: i32,
-    length: i32,
+    start: u32,
+    length: u32,
     squiggle_color: &str,
     indent: &str,
     format_opts: &FormattingOptions,
 ) {
-    let (first_line, first_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(source_file, start);
-    let (last_line, mut last_line_char) = tsrs_scanner::get_ecma_line_and_utf16_character_of_position(source_file, start + length);
+    let (first_line, first_line_char) =
+        tsrs_scanner::get_ecma_line_and_utf16_character_of_position(source_file, start);
+    let (last_line, mut last_line_char) =
+        tsrs_scanner::get_ecma_line_and_utf16_character_of_position(
+            source_file,
+            start
+                .checked_add(length)
+                .expect("diagnostic range overflow"),
+        );
     if length == 0 {
         last_line_char += 1; // When length is zero, squiggle the character right after the start position.
     }
 
     let text = source_file.text();
-    let last_line_of_file = tsrs_scanner::get_ecma_line_of_position(source_file, text.len() as i32);
+    let last_line_of_file = tsrs_scanner::get_ecma_line_of_position(source_file, text.len() as u32);
 
     let has_more_than_five_lines = last_line - first_line >= 4;
     let mut gutter_width = (last_line + 1).to_string().len();
@@ -393,7 +410,7 @@ fn write_with_style_and_reset(output: &mut dyn Write, text: &str, format_style: 
 pub fn write_location(
     output: &mut dyn Write,
     file: &FileLike,
-    pos: i32,
+    pos: u32,
     format_opts: Option<&FormattingOptions>,
     write_with_style_and_reset: &FormattedWriter,
 ) {

@@ -130,18 +130,20 @@ pub fn materialize(item: &TestItem, table: &OptionTable, dir: &Path) -> Result<M
         }
     }
     if split.ts_config_files.is_empty() {
-        for file in &split.to_be_compiled {
+        args.extend(split.to_be_compiled.iter().filter_map(|file| {
             let path = tspath::get_normalized_absolute_path(&file.unit_name, &cwd);
             if !tspath::file_extension_is(&path, tspath::EXTENSION_JSON) && !tspath::file_extension_is(&path, tspath::EXTENSION_TS_BUILD_INFO) {
-                args.push(rooted(&path));
+                Some(rooted(&path))
+            } else {
+                None
             }
-        }
-        for lib in &lib_files {
+        }));
+        args.extend(lib_files.iter().filter_map(|lib| {
             if lib == "lib.d.ts" && !no_lib {
-                continue;
+                return None;
             }
-            args.push(rooted(&tspath::combine_paths(TEST_LIB_FOLDER, &[lib])));
-        }
+            Some(rooted(&tspath::combine_paths(TEST_LIB_FOLDER, &[lib])))
+        }));
     }
     args.push("--pretty".to_string());
     args.push("false".to_string());

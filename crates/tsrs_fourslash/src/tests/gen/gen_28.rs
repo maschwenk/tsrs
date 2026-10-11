@@ -1924,7 +1924,7 @@ pub fn test_signature_help_on_type_arguments_with_unresolved_target(t: &T) {
         let (mut f, done) = fourslash::new_fourslash(t, None, content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            f.go_to_each_marker(t, &[], |f: &mut fourslash::FourslashTest, _marker: Arc<fourslash::Marker>, _index: i32| {
+            f.go_to_each_marker(t, &[], |f: &mut fourslash::FourslashTest, _marker: Arc<fourslash::Marker>, _index: usize| {
                 f.verify_no_signature_help(t);
             });
         });
@@ -5073,7 +5073,7 @@ pub fn test_find_all_refs_special_handling_of_localness(t: &T) {
         t.run(format!("TestFindAllRefsSpecialHandlingOfLocalness{}", tc.name.as_str()).as_str(), |t: &T| {
             t.parallel();
             let __defer1 = go::run(|| {
-                let usage_with_marker = format!("{}/*ref*/{}", go::slice_str(&tc.usage, None, Some(go::strings::index(tc.usage.as_str(), tc.reference_term.as_str()) as usize)).as_str(), go::slice_str(&tc.usage, Some(go::strings::index(tc.usage.as_str(), tc.reference_term.as_str()) as usize), None).as_str());
+                let usage_with_marker = format!("{}/*ref*/{}", go::slice_str(&tc.usage, None, Some(go::strings::index(tc.usage.as_str(), tc.reference_term.as_str()).expect("slice bound substring must be present"))).as_str(), go::slice_str(&tc.usage, Some(go::strings::index(tc.usage.as_str(), tc.reference_term.as_str()).expect("slice bound substring must be present")), None).as_str());
                 let content = format!(r#"
 // @stateBaseline: true
 // @Filename: /solution/tsconfig.json

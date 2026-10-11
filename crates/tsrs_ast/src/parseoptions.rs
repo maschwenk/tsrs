@@ -83,10 +83,10 @@ fn get_external_module_indicator(file: &SourceFile, opts: ExternalModuleIndicato
 }
 
 fn is_file_probably_external_module(source_file: &SourceFile) -> Option<P<Node>> {
-    for &statement in source_file.statements.nodes() {
-        if is_an_external_module_indicator_node(statement) {
-            return Some(statement);
-        }
+    if let Some(result) =
+        source_file.statements.nodes().iter().find_map(|&statement| if is_an_external_module_indicator_node(statement) { Some(Some(statement)) } else { None })
+    {
+        return result;
     }
     get_import_meta_if_necessary(source_file)
 }

@@ -23,16 +23,13 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
-  CARGO_INCREMENTAL: "0"
 
 jobs:
   check-and-test:
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read TypeScript reference commit
         id: ts
@@ -75,9 +72,7 @@ jobs:
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
 
       - name: cargo check
-        run: cargo check --workspace --locked
-        env:
-          RUSTFLAGS: -D warnings
+        run: cargo check --workspace --locked --config 'build.warnings="deny"'
 
       # Feature-only tooling must compile too. Check compressed pointers separately: --workspace --all-features
       # also enables plain-ptrs, which overrides them.
@@ -135,16 +130,15 @@ jobs:
       # Node 24 matches release.yml; the build-only TypeScript compiler in npm/package.json needs >=16.20.
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Set up pnpm
         run: bash .github/scripts/setup-pnpm.sh
 
-      # npm/build.mjs compiles the unstable/* JS API with npm/package.json's build-only tools when that manifest
-      # exists; branches without it have nothing to install.
+      # npm/build.mjs compiles the unstable/* JS API with the npm workspace's build-only tools.
       - name: npm packaging smoke test
         run: |
-          if [ -f npm/pnpm-lock.yaml ]; then pnpm --dir npm install --frozen-lockfile; fi
+          pnpm install --frozen-lockfile
           node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack
           dir=$(mktemp -d)
           cd "$dir"
@@ -222,9 +216,7 @@ jobs:
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read TypeScript reference commit
         id: ts
@@ -256,7 +248,7 @@ jobs:
 
           - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
             with:
-              node-version: 24
+              node-version-file: .node-version
 
           # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
           - name: Install binaryen 133
@@ -273,9 +265,7 @@ jobs:
         run: rustup target add wasm32-wasip1
 
       - name: cargo check (wasm32-wasip1)
-        run: cargo check -p tsrs_wasm --target wasm32-wasip1 --locked
-        env:
-          RUSTFLAGS: -D warnings
+        run: cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
 
       - name: Build native binaries
         run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner
@@ -337,9 +327,7 @@ jobs:
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
@@ -387,14 +375,12 @@ jobs:
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       # Node 24 runs the .ts generators directly (type stripping).
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: 24
+          node-version-file: .node-version
 
       - name: Read TypeScript reference commit
         id: ts
@@ -436,9 +422,7 @@ jobs:
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 40
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read TypeScript reference commit
         id: ts

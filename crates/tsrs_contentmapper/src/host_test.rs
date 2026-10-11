@@ -1,6 +1,6 @@
 use std::io::{self, Write};
 use std::sync::atomic::Ordering::SeqCst;
-use std::sync::atomic::{AtomicBool, AtomicI32};
+use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, Once, PoisonError};
 use std::thread;
@@ -129,9 +129,11 @@ impl Handler for fakeMapper {
             }
             METHOD_TRANSFORM => {
                 let p: TransformParams = params(params_)?;
+                let content_len =
+                    u32::try_from(p.content.len()).expect("test content fits in a source position");
                 let mappings = marshal_span_map(&[Segment {
-                    virtual_end: p.content.len() as i32,
-                    original_end: p.content.len() as i32,
+                    virtual_end: content_len,
+                    original_end: content_len,
                     kind: Kind::Verbatim,
                     ..Default::default()
                 }]);
@@ -286,8 +288,8 @@ impl Handler for invalidDiagnosticMapper {
 // host_test.go:190
 #[derive(Default)]
 struct fakeSpawner {
-    spawns: AtomicI32,
-    closes: Arc<AtomicI32>,
+    spawns: AtomicUsize,
+    closes: Arc<AtomicUsize>,
     handler: Option<Arc<dyn testMapper>>,
 }
 
@@ -334,7 +336,7 @@ impl Spawner for fakeSpawner {
 // host_test.go:225
 struct countingReadWriteCloser {
     closer: Arc<dyn Closer>,
-    closes: Arc<AtomicI32>,
+    closes: Arc<AtomicUsize>,
     once: Once,
 }
 
@@ -605,10 +607,10 @@ fn test_runner_transform_diagnostic_directives() {
     .unwrap();
     assert_eq!(result.diagnostic_directives.len(), 1);
     let directive = result.diagnostic_directives[0];
-    assert_eq!(directive.original_range.pos(), 0);
-    assert_eq!(directive.original_range.end(), 9);
-    assert_eq!(directive.virtual_range.pos(), 8);
-    assert_eq!(directive.virtual_range.end(), 14);
+    assert_eq!(directive.original_range.pos().source_offset(), Some(0));
+    assert_eq!(directive.original_range.end().source_offset(), Some(9));
+    assert_eq!(directive.virtual_range.pos().source_offset(), Some(8));
+    assert_eq!(directive.virtual_range.end().source_offset(), Some(14));
     assert_eq!(directive.policy, MappedDiagnosticDirectivePolicy::Expect);
     assert_eq!(directive.unused_code, 2578);
     assert_eq!(directive.unused_message_text, "Unused framework directive.");
@@ -784,7 +786,13 @@ fn test_runner_transform_supplemental_outputs() {
     assert_eq!(result.supplemental[0].virtual_extension, ".ts");
     assert!(result.supplemental[0].mappings.is_some());
     assert_eq!(result.supplemental[0].diagnostic_directives.len(), 1);
-    assert_eq!(result.supplemental[0].diagnostic_directives[0].virtual_range.end(), 7);
+    assert_eq!(
+        result.supplemental[0].diagnostic_directives[0]
+            .virtual_range
+            .end()
+            .source_offset(),
+        Some(7)
+    );
     assert_eq!(result.supplemental[1].virtual_extension, ".mjs");
     assert!(result.supplemental[1].mappings.is_some());
     host.close().unwrap();
@@ -823,7 +831,7 @@ fn test_runner_transform_invalid_supplemental_diagnostic_directive() {
     let directive_error = err.as_diagnostic_directive_error().unwrap_or_else(|| panic!("{err}"));
     assert_eq!(directive_error.kind, DiagnosticDirectiveErrorKind::ExpectMissingUnusedDiagnostic);
     assert_eq!(directive_error.index, 0);
-    assert_eq!(directive_error.supplemental_index, 1);
+    assert_eq!(directive_error.supplemental_index, Some(1));
     host.close().unwrap();
 }
 
@@ -887,12 +895,36 @@ fn test_runner_position_encodings() {
         let (mapped, fidelity) = mappings.virtual_to_original_position(2);
         assert_eq!(mapped, 2);
         assert_eq!(fidelity, Fidelity::Exact);
-        assert_eq!(result.diagnostics[0].pos(), 2);
-        assert_eq!(result.diagnostics[0].end(), 3);
-        assert_eq!(result.diagnostic_directives[0].original_range.pos(), 2);
-        assert_eq!(result.diagnostic_directives[0].original_range.end(), 3);
-        assert_eq!(result.diagnostic_directives[0].virtual_range.pos(), 2);
-        assert_eq!(result.diagnostic_directives[0].virtual_range.end(), 3);
+        assert_eq!(result.diagnostics[0].pos(), Some(2));
+        assert_eq!(result.diagnostics[0].end(), Some(3));
+        assert_eq!(
+            result.diagnostic_directives[0]
+                .original_range
+                .pos()
+                .source_offset(),
+            Some(2)
+        );
+        assert_eq!(
+            result.diagnostic_directives[0]
+                .original_range
+                .end()
+                .source_offset(),
+            Some(3)
+        );
+        assert_eq!(
+            result.diagnostic_directives[0]
+                .virtual_range
+                .pos()
+                .source_offset(),
+            Some(2)
+        );
+        assert_eq!(
+            result.diagnostic_directives[0]
+                .virtual_range
+                .end()
+                .source_offset(),
+            Some(3)
+        );
         r.close().unwrap();
     }
 }

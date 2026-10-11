@@ -505,17 +505,22 @@ impl BuildTask {
         }
 
         let build_options = &orchestrator.opts.command.build_options;
-        for upstream in self.up_stream.lock().unwrap().iter() {
+        let upstream_error = self.up_stream.lock().unwrap().iter().find_map(|upstream| {
             if build_options.stop_build_on_errors.is_true() && upstream.task.status().is_error() {
                 // Upstream project has errors, so we cannot build this project
-                return upToDateStatus::with(
+                return Some(upToDateStatus::with(
                     upToDateStatusType::UpstreamErrors,
                     statusData::UpstreamErrors(upstreamErrors {
                         ref_: resolved.project_references()[upstream.ref_index].path.clone(),
                         ref_has_upstream_errors: upstream.task.status().kind == upToDateStatusType::UpstreamErrors,
                     }),
-                );
+                ));
             }
+
+            None
+        });
+        if let Some(result) = upstream_error {
+            return result;
         }
 
         if build_options.force.is_true() {
@@ -638,24 +643,20 @@ impl BuildTask {
             seen_roots.add(input_path);
         }
 
-        for root in get_build_info_root_info_reader().roots() {
-            if !seen_roots.has(root) {
-                // File was root file when project was built but its not any more
-                return upToDateStatus::with(
-                    upToDateStatusType::OutOfDateRoots,
-                    statusData::InputOutputName(inputOutputName { input: root.to_string(), output: build_info_path }),
-                );
-            }
+        if let Some(root) = get_build_info_root_info_reader().roots().find(|root| !seen_roots.has(root)) {
+            // File was root file when project was built but its not any more
+            return upToDateStatus::with(
+                upToDateStatusType::OutOfDateRoots,
+                statusData::InputOutputName(inputOutputName { input: root.to_string(), output: build_info_path }),
+            );
         }
 
         if build_info.is_incremental() {
             let mut resolved_roots: Set<Path> = Set::default();
-            for root in get_build_info_root_info_reader().roots() {
+            resolved_roots.m.extend(get_build_info_root_info_reader().roots().filter_map(|root| {
                 let (_, resolved) = get_build_info_root_info_reader().get_build_info_file_info(root);
-                if !resolved.is_empty() {
-                    resolved_roots.add(resolved);
-                }
-            }
+                if !resolved.is_empty() { Some(resolved) } else { None }
+            }));
             for (index, build_info_file_info) in build_info.file_infos.iter().enumerate() {
                 let build_info_file_name = &build_info.file_names[index];
                 // Lib files bundled with the compiler can change only with the version of the compiler,
@@ -789,33 +790,45 @@ impl BuildTask {
             return config_status;
         }
 
-        for extended_config in resolved.extended_source_files() {
+        if let Some(result) = resolved.extended_source_files().into_iter().find_map(|extended_config| {
             if let Some(extended_config_status) = check_input_file_time(&extended_config) {
-                return extended_config_status;
+                return Some(extended_config_status);
             }
+
+            None
+        }) {
+            return result;
         }
 
         let package_jsons = build_info.get_package_jsons(&get_build_info_directory());
-        for package_json in &package_jsons {
+        if let Some(result) = package_jsons.iter().find_map(|package_json| {
             let package_json_time = host.get_m_time(package_json);
             if package_json_time.is_none() {
-                return upToDateStatus::with(upToDateStatusType::InputFileMissing, statusData::String(package_json.clone()));
+                return Some(upToDateStatus::with(upToDateStatusType::InputFileMissing, statusData::String(package_json.clone())));
             }
             if after(package_json_time, oldest_output_file_and_time.time) {
-                return upToDateStatus::with(
+                return Some(upToDateStatus::with(
                     upToDateStatusType::InputFileNewer,
                     statusData::InputOutputName(inputOutputName { input: package_json.clone(), output: oldest_output_file_and_time.file.clone() }),
-                );
+                ));
             }
+
+            None
+        }) {
+            return result;
         }
         let missing_package_jsons = build_info.get_missing_package_jsons(&get_build_info_directory());
-        for package_json in &missing_package_jsons {
+        if let Some(result) = missing_package_jsons.iter().find_map(|package_json| {
             if host.get_m_time(package_json).is_some() {
-                return upToDateStatus::with(
+                Some(upToDateStatus::with(
                     upToDateStatusType::InputFileNewer,
                     statusData::InputOutputName(inputOutputName { input: package_json.clone(), output: oldest_output_file_and_time.file.clone() }),
-                );
+                ))
+            } else {
+                None
             }
+        }) {
+            return result;
         }
         let mut all = package_jsons;
         all.extend(missing_package_jsons);
@@ -1084,22 +1097,22 @@ impl BuildTask {
 
 // buildtask.go:621
 pub(crate) fn is_content_mapper_supplemental_build_info_path<'a>(input_path: &Path, roots: impl IntoIterator<Item = &'a Path>) -> bool {
-    for root in roots {
+    if roots.into_iter().any(|root| {
         let Some(suffix) = input_path.as_str().strip_prefix(root.as_str()).and_then(|rest| rest.strip_prefix('.')) else {
-            continue;
+            return false;
         };
         let Some((index, extension)) = suffix.split_once('.') else {
-            continue;
+            return false;
         };
         if extension.is_empty() {
-            continue;
+            return false;
         }
         // Go `strconv.Atoi`: an optional sign and decimal digits.
         let digits = index.strip_prefix(['+', '-']).unwrap_or(index);
         let is_int = !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) && index.parse::<i64>().is_ok();
-        if is_int && tsrs_contentmapper::is_supported_virtual_extension(&format!(".{extension}")) {
-            return true;
-        }
+        is_int && tsrs_contentmapper::is_supported_virtual_extension(&format!(".{extension}"))
+    }) {
+        return true;
     }
     false
 }

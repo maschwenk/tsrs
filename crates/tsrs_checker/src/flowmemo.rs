@@ -26,7 +26,7 @@ use std::sync::OnceLock;
 use crate::*;
 
 /// Go's limit on nested `getTypeAtFlowNode` calls in one walk (TS2563 when reached).
-pub(crate) const FLOW_DEPTH_LIMIT: i32 = 2000;
+pub(crate) const FLOW_DEPTH_LIMIT: u32 = 2000;
 
 /// No taint source.
 pub(crate) const UNTAINTED: u32 = u32::MAX;
@@ -90,7 +90,7 @@ pub(crate) struct ShadowHit {
     pub flow: P<FlowNode>,
     pub hit: MemoHit,
     pub full_key: Option<Box<[u8]>>,
-    pub origin: (Option<P<Node>>, i32),
+    pub origin: (Option<P<Node>>, u32),
 }
 
 /// A memo answer: the type, the height of the sub-walk it stands for, and the cache it was computed with.
@@ -174,8 +174,8 @@ pub struct FlowMemo {
     /// Shadow mode: the full reference key of each slot, to prove that no two references share a hashed key.
     shadow_keys: Vec<Option<Box<[u8]>>>,
     /// Shadow mode: where each slot's value came from (reference node, depth), for reports.
-    pub(crate) shadow_origin: Vec<(Option<P<Node>>, i32)>,
-    pub(crate) shadow_origin_next: (Option<P<Node>>, i32),
+    pub(crate) shadow_origin: Vec<(Option<P<Node>>, u32)>,
+    pub(crate) shadow_origin_next: (Option<P<Node>>, u32),
     serial: u32,
     regs: Regs,
     /// Identifies the current `Checker::flow_type_cache` (a new one per reset, and when an entry changes); saved and

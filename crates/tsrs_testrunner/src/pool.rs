@@ -82,10 +82,12 @@ fn spawn(id: usize, items: &[TestItem], batch: Vec<usize>, opts: &PoolOptions, t
         .spawn()
         .expect("failed to spawn worker");
     let mut input = String::new();
-    for &i in &batch {
+    input = batch.iter().fold(input, |mut input, &i| {
         input.push_str(&format_item_line(&items[i]));
         input.push('\n');
-    }
+
+        input
+    });
     let mut stdin = child.stdin.take().unwrap();
     std::thread::spawn(move || {
         let _ = stdin.write_all(input.as_bytes());
@@ -273,11 +275,13 @@ fn resident_mb(pids: &[u32]) -> rustc_hash::FxHashMap<u32, u64> {
     }
     let list = pids.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
     let Ok(o) = Command::new("ps").args(["-o", "pid=,rss=", "-p", &list]).output() else { return out };
-    for line in tsrs_core::utf8::from_utf8_lossy(&o.stdout).lines() {
+    out.extend(tsrs_core::utf8::from_utf8_lossy(&o.stdout).lines().filter_map(|line| {
         let mut it = line.split_whitespace();
         if let (Some(pid), Some(kb)) = (it.next().and_then(|p| p.parse().ok()), it.next().and_then(|k| k.parse::<u64>().ok())) {
-            out.insert(pid, kb / 1024);
+            Some((pid, kb / 1024))
+        } else {
+            None
         }
-    }
+    }));
     out
 }

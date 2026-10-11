@@ -2,7 +2,7 @@ use std::fmt::Write as _;
 use std::any::Any;
 use std::io::{Read, Write};
 use std::panic::AssertUnwindSafe;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, LazyLock, Mutex, OnceLock, RwLock, Weak};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -62,7 +62,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         stderr: Mutex::new(opts.err),
         logger: Arc::new(new_logger(Weak::clone(weak))),
         init_started: AtomicBool::new(false),
-        client_seq: AtomicI32::new(0),
+        client_seq: AtomicU64::new(0),
         request_queue: new_dynamic_queue(),
         outgoing_queue: new_dynamic_queue(),
         pending_client_requests: Mutex::new(FxHashMap::default()),
@@ -82,7 +82,7 @@ pub fn new_server(opts: ServerOptions) -> Arc<Server> {
         watchers: Mutex::new(FxHashSet::default()),
         content_mapper_registration_mu: Mutex::new(false),
         builtin_watcher: OnceLock::new(),
-        last_request_time_ms: AtomicI64::new(0),
+        last_request_time_ms: AtomicU64::new(0),
         init_complete: Context::background().with_cancel(),
         session: OnceLock::new(),
         compiler_options_for_inferred_projects: Mutex::new(None),
@@ -213,7 +213,7 @@ pub struct Server {
 
     pub(crate) logger: Arc<logger>,
     pub(crate) init_started: AtomicBool,
-    client_seq: AtomicI32,
+    client_seq: AtomicU64,
     request_queue: dynamicQueue<Arc<RequestMessage>>,
     pub(crate) outgoing_queue: dynamicQueue<Message>,
     pending_client_requests: Mutex<FxHashMap<ID, pendingClientRequest>>,
@@ -251,7 +251,7 @@ pub struct Server {
     // (Set once, in handleInitialized.)
     builtin_watcher: OnceLock<Arc<lspwatcher::Watcher>>,
 
-    last_request_time_ms: AtomicI64,
+    last_request_time_ms: AtomicU64,
 
     // initComplete is closed when handleInitialized completes.
     // Used by tests to wait for full initialization. (A context canceled when it is "closed".)
@@ -529,23 +529,19 @@ impl Server {
         }
 
         let mut filters = Vec::with_capacity(extensions.len());
-        for ext in extensions {
-            filters.push(lsproto::TextDocumentFilterLanguageOrSchemeOrPattern {
-                pattern: Some(lsproto::TextDocumentFilterPattern {
-                    pattern: lsproto::PatternOrRelativePattern { pattern: Some(format!("**/*{}", ext)), ..Default::default() },
-                    ..Default::default()
-                }),
+        filters.extend(extensions.iter().map(|ext| lsproto::TextDocumentFilterLanguageOrSchemeOrPattern {
+            pattern: Some(lsproto::TextDocumentFilterPattern {
+                pattern: lsproto::PatternOrRelativePattern { pattern: Some(format!("**/*{}", ext)), ..Default::default() },
                 ..Default::default()
-            });
-        }
+            }),
+            ..Default::default()
+        }));
         let selector = lsproto::DocumentSelectorOrNull { document_selector: Some(filters) };
         let mut content_mapper_file_rename_filters = Vec::with_capacity(extensions.len());
-        for extension in extensions {
-            content_mapper_file_rename_filters.push(lsproto::FileOperationFilter {
-                scheme: Some("file".to_string()),
-                pattern: lsproto::FileOperationPattern { glob: format!("**/*{}", extension), ..Default::default() },
-            });
-        }
+        content_mapper_file_rename_filters.extend(extensions.iter().map(|extension| lsproto::FileOperationFilter {
+            scheme: Some("file".to_string()),
+            pattern: lsproto::FileOperationPattern { glob: format!("**/*{}", extension), ..Default::default() },
+        }));
 
         let registration = |id: &str, register_options: lsproto::RegisterOptions| lsproto::Registration {
             id: id.to_string(),
@@ -922,23 +918,13 @@ impl Server {
             Err(err) => return Err(Error::wrap("configure request failed: ", err)),
         };
         let mut config_map: OrderedMap<String, lsproto::Value> = OrderedMap::default();
-        for (i, config) in configs.into_iter().enumerate() {
-            match i {
-                0 => {
-                    config_map.insert("js/ts".to_string(), config);
-                }
-                1 => {
-                    config_map.insert("typescript".to_string(), config);
-                }
-                2 => {
-                    config_map.insert("javascript".to_string(), config);
-                }
-                3 => {
-                    config_map.insert("editor".to_string(), config);
-                }
-                _ => {}
-            }
-        }
+        config_map.extend(configs.into_iter().enumerate().filter_map(|(i, config)| match i {
+            0 => Some(("js/ts".to_string(), config)),
+            1 => Some(("typescript".to_string(), config)),
+            2 => Some(("javascript".to_string(), config)),
+            3 => Some(("editor".to_string(), config)),
+            _ => None,
+        }));
         let show = |key: &str| config_map.get(key).map(go_sprint_value).unwrap_or_else(|| "<nil>".to_string());
         self.logger.logf(format_args!(
             "received options from workspace/configuration request:\njs/ts: {}\n\ntypescript: {}\n\njavascript: {}\n\neditor: {}\n",
@@ -1846,9 +1832,7 @@ impl Server {
         }
 
         let mut uris = Vec::with_capacity(params.files.len());
-        for file in &params.files {
-            uris.push(file.old_uri.clone());
-        }
+        uris.extend(params.files.iter().map(|file| file.old_uri.clone()));
 
         if uris.is_empty() {
             return Ok(lsproto::WillRenameFilesResponse::default());
@@ -1873,16 +1857,16 @@ impl Server {
                     } else if let Some(text_document_edit) = &change.text_document_edit {
                         let uri = text_document_edit.text_document.uri.clone();
                         let mut deduped: Vec<lsproto::TextEditOrAnnotatedTextEditOrSnippetTextEdit> = Vec::new();
-                        for edit in &text_document_edit.edits {
+                        deduped.extend(text_document_edit.edits.iter().filter_map(|edit| {
                             if let Some(text_edit) = &edit.text_edit {
                                 let key = (uri.clone(), text_edit.range);
                                 if seen_edits.get(&key).is_some_and(|prev| *prev == text_edit.new_text) {
-                                    continue;
+                                    return None;
                                 }
                                 seen_edits.insert(key, text_edit.new_text.clone());
                             }
-                            deduped.push(edit.clone());
-                        }
+                            Some(edit.clone())
+                        }));
                         if !deduped.is_empty() {
                             document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
                                 text_document_edit: Some(lsproto::TextDocumentEdit { text_document: text_document_edit.text_document.clone(), edits: deduped }),
@@ -1895,17 +1879,15 @@ impl Server {
         }
 
         if send_rename_file {
-            for file in &params.files {
-                document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
-                    rename_file: Some(lsproto::RenameFile {
-                        kind: lsproto::StringLiteralRename::default(),
-                        old_uri: file.old_uri.clone(),
-                        new_uri: file.new_uri.clone(),
-                        ..Default::default()
-                    }),
+            document_changes.extend(params.files.iter().map(|file| lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+                rename_file: Some(lsproto::RenameFile {
+                    kind: lsproto::StringLiteralRename::default(),
+                    old_uri: file.old_uri.clone(),
+                    new_uri: file.new_uri.clone(),
                     ..Default::default()
-                });
-            }
+                }),
+                ..Default::default()
+            }));
         }
 
         if document_changes.is_empty() {
@@ -2607,9 +2589,7 @@ impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
     fn get_projects_loading_project_tree(&self, ctx: &Context, requested_project_trees: &Set<Path>) -> Box<dyn Iterator<Item = Arc<dyn tsrs_ls::Project>> + '_> {
         let mut projects = Vec::new();
         self.server.session().with_snapshot_loading_project_tree(ctx, Some(requested_project_trees.clone()), |snapshot| {
-            for p in snapshot.project_collection.language_service_projects() {
-                projects.push(Arc::clone(p.arc()) as Arc<dyn tsrs_ls::Project>);
-            }
+            projects.extend(snapshot.project_collection.language_service_projects().into_iter().map(|p| Arc::clone(p.arc()) as Arc<dyn tsrs_ls::Project>));
         });
         Box::new(projects.into_iter())
     }
@@ -2756,8 +2736,11 @@ impl<F: FnOnce()> Drop for deferCall<F> {
     }
 }
 
-fn unix_millis_now() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0)
+fn unix_millis_now() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
+        .unwrap_or(0)
 }
 
 // locale.Parse: English only (docs/LSP.md); any tag parses and is kept as text.

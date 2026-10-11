@@ -76,7 +76,7 @@ pub fn extra_baselines() -> u8 {
 
 fn parse_baselines(v: &str) -> u8 {
     let mut bits = 0;
-    for part in v.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+    bits = v.split(',').map(str::trim).filter(|p| !p.is_empty()).fold(bits, |mut bits, part| {
         bits |= match part {
             "errors" => 0,
             "types" => EXTRA_TYPES,
@@ -90,23 +90,19 @@ fn parse_baselines(v: &str) -> u8 {
                 std::process::exit(2)
             }
         };
-    }
+
+        bits
+    });
     bits
 }
 
 fn worker_args() -> Vec<String> {
     let mut kinds = Vec::new();
-    for (name, flag) in [
-        ("types", EXTRA_TYPES),
-        ("symbols", EXTRA_SYMBOLS),
-        ("js", EXTRA_JS),
-        ("jsmap", EXTRA_JSMAP),
-        ("sourcemap", EXTRA_SOURCEMAP),
-    ] {
-        if extra_baselines() & flag != 0 {
-            kinds.push(name);
-        }
-    }
+    kinds.extend(
+        ([("types", EXTRA_TYPES), ("symbols", EXTRA_SYMBOLS), ("js", EXTRA_JS), ("jsmap", EXTRA_JSMAP), ("sourcemap", EXTRA_SOURCEMAP)])
+            .into_iter()
+            .filter_map(|(name, flag)| if extra_baselines() & flag != 0 { Some(name) } else { None }),
+    );
     if kinds.is_empty() { Vec::new() } else { vec!["--baselines".to_string(), kinds.join(",")] }
 }
 
@@ -193,20 +189,20 @@ impl Selection {
                         }]
                     }
                 };
-                for item in expanded {
+                items.extend(expanded.into_iter().filter_map(|item| {
                     let id = item.id();
                     if let Some(f) = &self.filter {
                         if !id.contains(f.as_str()) && !re.as_ref().is_some_and(|r| r.is_match(&id)) {
-                            continue;
+                            return None;
                         }
                     }
                     if let Some(list) = &self.list {
                         if !list.contains(&id) && !list.contains(&item.name) && !list.contains(&basename) {
-                            continue;
+                            return None;
                         }
                     }
-                    items.push(item);
-                }
+                    Some(item)
+                }));
             }
         }
         items

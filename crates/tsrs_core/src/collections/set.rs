@@ -81,9 +81,7 @@ impl<T: Hash + Eq> Set<T> {
 
 pub fn new_set_from_items<T: Hash + Eq>(items: impl IntoIterator<Item = T>) -> Set<T> {
     let mut s = Set::new();
-    for item in items {
-        s.add(item);
-    }
+    s.m.extend(items);
     s
 }
 

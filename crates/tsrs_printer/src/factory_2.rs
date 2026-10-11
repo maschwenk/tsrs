@@ -61,9 +61,11 @@ fn flatten_comma_element(node: P<Node>, mut expressions: Vec<P<Node>>) -> Vec<P<
 // factory.go:255
 fn flatten_comma_elements(expressions: &[P<Node>]) -> Vec<P<Node>> {
     let mut result = Vec::new();
-    for &expression in expressions {
+    result = expressions.iter().fold(result, |mut result, &expression| {
         result = flatten_comma_element(expression, result);
-    }
+
+        result
+    });
     result
 }
 
@@ -126,9 +128,11 @@ impl crate::NodeFactory {
         }
         let expressions = flatten_comma_elements(expressions);
         let mut expression = expressions[0];
-        for &next in &expressions[1..] {
+        expression = expressions[1..].iter().fold(expression, |mut expression, &next| {
             expression = self.new_comma_expression(expression, next);
-        }
+
+            expression
+        });
         Some(expression)
     }
 
@@ -232,7 +236,7 @@ impl crate::NodeFactory {
     }
 
     // factory.go:387
-    pub fn new_array_slice_call(&self, array: P<Node>, start: i32) -> P<Node> {
+    pub fn new_array_slice_call(&self, array: P<Node>, start: usize) -> P<Node> {
         let mut args = Vec::new();
         if start != 0 {
             args.push(self.new_numeric_literal(alloc_str(&start.to_string()), TokenFlags::None));
@@ -308,10 +312,12 @@ impl crate::NodeFactory {
     // Splits a slice of statements into two parts: standard prologue statements and the rest of the statements
     // factory.go:462
     pub fn split_standard_prologue<'a>(&self, source: &'a [P<Node>]) -> (&'a [P<Node>], &'a [P<Node>]) {
-        for (i, &statement) in source.iter().enumerate() {
-            if !ast::is_prologue_directive(statement) {
-                return (&source[..i], &source[i..]);
-            }
+        if let Some(result) = source
+            .iter()
+            .enumerate()
+            .find_map(|(i, &statement)| if !ast::is_prologue_directive(statement) { Some((&source[..i], &source[i..])) } else { None })
+        {
+            return result;
         }
         (source, &[])
     }
@@ -319,10 +325,14 @@ impl crate::NodeFactory {
     // Splits a slice of statements into two parts: custom prologue statements (e.g., with `EFCustomPrologue` set) and the rest of the statements
     // factory.go:472
     pub fn split_custom_prologue<'a>(&self, source: &'a [P<Node>]) -> (&'a [P<Node>], &'a [P<Node>]) {
-        for (i, &statement) in source.iter().enumerate() {
+        if let Some(result) = source.iter().enumerate().find_map(|(i, &statement)| {
             if ast::is_prologue_directive(statement) || !self.emit_context().emit_flags(statement).intersects(EmitFlags::CustomPrologue) {
-                return (&source[..i], &source[i..]);
+                Some((&source[..i], &source[i..]))
+            } else {
+                None
             }
+        }) {
+            return result;
         }
         (&[], source)
     }
@@ -481,7 +491,7 @@ impl crate::NodeFactory {
     }
 
     // factory.go:638
-    pub fn new_param_helper(&self, expression: P<Node>, parameter_offset: i32, location: TextRange) -> P<Node> {
+    pub fn new_param_helper(&self, expression: P<Node>, parameter_offset: usize, location: TextRange) -> P<Node> {
         self.emit_context().request_emit_helper(helper(&PARAM_HELPER));
         let helper = self.new_helper_call("__param", vec![self.new_numeric_literal(alloc_str(&parameter_offset.to_string()), TokenFlags::None), expression]);
         helper.set_loc(location);

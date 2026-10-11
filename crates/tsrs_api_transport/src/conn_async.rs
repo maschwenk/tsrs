@@ -3,8 +3,8 @@
 // serialized by a write lock. A thread per request (rather than a bounded pool) is deliberate: a
 // handler blocked in a client callback must never prevent a nested client request from running.
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicI64, Ordering};
+use std::panic::{AssertUnwindSafe, catch_unwind};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::thread::JoinHandle;
@@ -61,7 +61,7 @@ pub struct AsyncConn {
     handler: Arc<dyn Handler>,
     timing: Option<TimingCollector>,
     cancel: CancellationToken,
-    seq: AtomicI64,
+    seq: AtomicU64,
     pending: Mutex<Pending>,
     request_error: Mutex<Option<TransportError>>,
     /// Closes the underlying stream (Go: rwc.Close) after a fatal write error so the reader unblocks.
@@ -88,7 +88,7 @@ impl AsyncConn {
             handler,
             timing: options.collect_timing.then(TimingCollector::default),
             cancel: CancellationToken::new(),
-            seq: AtomicI64::new(0),
+            seq: AtomicU64::new(0),
             pending: Mutex::new(Pending::default()),
             request_error: Mutex::new(None),
             closer,

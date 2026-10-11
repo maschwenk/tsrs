@@ -224,13 +224,9 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
     let mut start = vol_len;
     while start < path.len() {
         let b = path.as_bytes();
-        while start < b.len() && is_sep(b[start]) {
-            start += 1;
-        }
+        start += (start..b.len()).take_while(|&index| is_sep(b[index])).count();
         let mut end = start;
-        while end < b.len() && !is_sep(b[end]) {
-            end += 1;
-        }
+        end += (end..b.len()).take_while(|&index| !is_sep(b[index])).count();
 
         // The next path component is in path[start:end].
         if end == start {
@@ -376,9 +372,7 @@ pub(crate) fn clean(path: &str) -> String {
             if out.len() > dotdot {
                 // can backtrack
                 let mut w = out.len() - 1;
-                while w > dotdot && out[w] != b'/' {
-                    w -= 1;
-                }
+                w -= (dotdot + 1..=w).rev().take_while(|&i| out[i] != b'/').count();
                 out.truncate(w);
             } else if !rooted {
                 // cannot backtrack, but not rooted, so append .. element.
@@ -395,10 +389,9 @@ pub(crate) fn clean(path: &str) -> String {
                 out.push(b'/');
             }
             // copy element
-            while r < n && b[r] != b'/' {
-                out.push(b[r]);
-                r += 1;
-            }
+            let end = r + b[r..n].iter().take_while(|&&byte| byte != b'/').count();
+            out.extend_from_slice(&b[r..end]);
+            r = end;
         }
     }
 
@@ -572,6 +565,12 @@ impl IoFS for DirFS {
         })
     }
 
+    fn file_type(&self, name: &str) -> Result<FileMode, FsError> {
+        let full = self.join(name)?;
+        count(&STAT_CALLS);
+        metadata_file_type(&full)
+    }
+
     fn read_dir(&self, name: &str) -> Result<Vec<IoDirEntry>, FsError> {
         let full = self.join(name)?;
         count(&READ_DIR_CALLS);
@@ -597,6 +596,25 @@ impl IoFS for DirFS {
         count(&READ_FILE_CALLS);
         fs::read(&full).map_err(io_error)
     }
+}
+
+#[cfg(target_os = "linux")]
+fn metadata_file_type(path: &str) -> Result<FileMode, FsError> {
+    use rustix::fs::{AtFlags, CWD, FileType, StatxFlags};
+
+    match rustix::fs::statx(CWD, path, AtFlags::empty(), StatxFlags::TYPE) {
+        Ok(statx) => {
+            let file_type = FileType::from_raw_mode(statx.stx_mode.into());
+            Ok(if file_type.is_dir() { FileMode::Dir } else { FileMode::None })
+        }
+        Err(rustix::io::Errno::NOSYS) => fs::metadata(path).map(|md| file_type_mode(md.file_type())).map_err(io_error),
+        Err(err) => Err(io_error(err.into())),
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
+fn metadata_file_type(path: &str) -> Result<FileMode, FsError> {
+    fs::metadata(path).map(|md| file_type_mode(md.file_type())).map_err(io_error)
 }
 
 #[cfg(test)]

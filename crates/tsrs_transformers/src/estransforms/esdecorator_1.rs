@@ -25,7 +25,7 @@ pub struct lexicalEntry {
     pub saved_pending_expressions: RefCell<Option<Vec<P<Node>>>>,
     pub class_this_data: Cell<Option<P<Node>>>,
     pub class_super_data: Cell<Option<P<Node>>>,
-    pub depth: Cell<i32>,
+    pub depth: Cell<u32>,
 }
 
 // esdecorator.go:70
@@ -658,15 +658,15 @@ impl esDecoratorTransformer {
             // class `static` block. We don't use substitution here because the size of the tree we are visiting
             // is likely to be small and doesn't justify the complexity of introducing substitution.
             self.outer_this.set(None);
-            for expr in pending {
+            leading_block_statements.extend(pending.into_iter().map(|expr| {
                 let mut expr = expr;
                 // If a pending expression contains lexical `this`, capture it
                 if expr.subtree_facts().intersects(SubtreeFacts::ContainsLexicalThis) {
                     expr = self.outer_this_visitor.get().unwrap().clone().visit_node(Some(expr)).unwrap();
                 }
                 let statement = f.new_expression_statement(expr);
-                leading_block_statements.push(statement);
-            }
+                statement
+            }));
             if let Some(outer_this) = self.outer_this.get() {
                 class_definition_statements.insert(0, self.create_let(outer_this, Some(f.new_this_expression())));
             }
@@ -754,11 +754,11 @@ impl esDecoratorTransformer {
         // 12. Static fields are initialized
         let pending_static: Vec<P<Node>> = std::mem::take(&mut *ci.pending_static_initializers.borrow_mut());
         if !pending_static.is_empty() {
-            for initializer in pending_static {
+            trailing_block_statements.extend(pending_static.into_iter().map(|initializer| {
                 let initializer_statement = f.new_expression_statement(initializer);
                 ec.set_source_map_range(initializer_statement, ec.source_map_range(initializer));
-                trailing_block_statements.push(initializer_statement);
-            }
+                initializer_statement
+            }));
         }
 
         // 13. Class extra initializers
@@ -805,12 +805,15 @@ impl esDecoratorTransformer {
             let mut new_members: Vec<P<Node>> = Vec::with_capacity(nodes.len() + 3);
 
             // Find the existing NamedEvaluation helper block index
-            let existing_named_evaluation_helper_block_index: isize = nodes.iter().position(|m| is_class_named_evaluation_helper_block(ec, *m)).map_or(-1, |i| i as isize);
+            let existing_named_evaluation_helper_block_index = nodes
+                .iter()
+                .position(|m| is_class_named_evaluation_helper_block(ec, *m));
 
             // add the leading `static {}` block
             if let Some(leading_static_block) = leading_static_block {
                 // add the `static {}` block after any existing NamedEvaluation helper block, if one exists.
-                let split = (existing_named_evaluation_helper_block_index + 1) as usize;
+                let split =
+                    existing_named_evaluation_helper_block_index.map_or(0, |index| index + 1);
                 new_members.extend_from_slice(&nodes[..split]);
                 new_members.push(leading_static_block);
                 new_members.extend_from_slice(&nodes[split..]);
@@ -881,10 +884,11 @@ impl esDecoratorTransformer {
     pub(crate) fn emit_member_info_declarations(&self, ci: P<classInfo>, is_static: bool) -> Vec<P<Node>> {
         let f = self.base.factory();
         let mut stmts: Vec<P<Node>> = Vec::new();
+        #[expect(clippy::needless_collect, reason = "release the member-info borrow before constructing declarations, as in the original traversal")]
         let entries: Vec<(P<Node>, P<memberInfo>)> = ci.member_infos.borrow().iter().map(|(k, v)| (*k, *v)).collect();
-        for (member, mi) in entries {
+        stmts = entries.into_iter().fold(stmts, |mut stmts, (member, mi)| {
             if ast::is_static(member) != is_static {
-                continue;
+                return stmts;
             }
             stmts.push(self.create_let(mi.member_decorators_name.get().unwrap(), None));
             if let Some(name) = mi.member_initializers_name.get() {
@@ -896,7 +900,9 @@ impl esDecoratorTransformer {
             if let Some(name) = mi.member_descriptor_name.get() {
                 stmts.push(self.create_let(name, None));
             }
-        }
+
+            stmts
+        });
         stmts
     }
 }
@@ -1032,9 +1038,7 @@ impl esDecoratorTransformer {
         let super_statement_index = super_path[super_path_depth];
         // Visit statements before super
         if super_statement_index > statement_offset {
-            for s in &statements_in[statement_offset..super_statement_index] {
-                statements_out.extend(self.base.visitor().visit_node(Some(*s)));
-            }
+            statements_out.extend(statements_in[statement_offset..super_statement_index].iter().flat_map(|s| self.base.visitor().visit_node(Some(*s))));
         }
 
         let super_statement = statements_in[super_statement_index];
@@ -1061,9 +1065,7 @@ impl esDecoratorTransformer {
 
         // Visit statements after super
         if super_statement_index + 1 < statements_in.len() {
-            for s in &statements_in[super_statement_index + 1..] {
-                statements_out.extend(self.base.visitor().visit_node(Some(*s)));
-            }
+            statements_out.extend(statements_in[super_statement_index + 1..].iter().flat_map(|s| self.base.visitor().visit_node(Some(*s))));
         }
         statements_out
     }

@@ -33,12 +33,7 @@ impl Json {
             Json::Array(elements) => elements.iter().any(|e| e.has_duplicate_names()),
             Json::Object(members) => {
                 let mut seen = rustc_hash::FxHashSet::default();
-                for (name, value) in members {
-                    if !seen.insert(name.as_str()) || value.has_duplicate_names() {
-                        return true;
-                    }
-                }
-                false
+                members.iter().any(|(name, value)| !seen.insert(name.as_str()) || value.has_duplicate_names())
             }
             _ => false,
         }

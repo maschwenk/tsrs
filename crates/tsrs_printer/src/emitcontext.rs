@@ -32,7 +32,7 @@ pub struct EmitContext {
 
 bitflags::bitflags! {
     #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
-    pub(crate) struct environmentFlags: i32 {
+    pub(crate) struct environmentFlags: u32 {
         const None = 0;
         const InParameters = 1 << 0; // currently visiting a parameter list
         const VariablesHoistedInParameters = 1 << 1; // a temp variable was hoisted while visiting a parameter list
@@ -361,34 +361,55 @@ impl EmitContext {
 
         // splice other custom prologues from right into left
         if right_custom_prologue_end > right_hoisted_variables_end {
-            left = splice(&left, left_hoisted_variables_end as i32, 0, &declarations[right_hoisted_variables_end..right_custom_prologue_end]).into_owned();
+            left = splice(
+                &left,
+                SpliceStart::FromStart(left_hoisted_variables_end),
+                0,
+                &declarations[right_hoisted_variables_end..right_custom_prologue_end],
+            )
+            .into_owned();
             changed = true;
         }
 
         // splice hoisted variables from right into left
         if right_hoisted_variables_end > right_hoisted_functions_end {
-            left = splice(&left, left_hoisted_functions_end as i32, 0, &declarations[right_hoisted_functions_end..right_hoisted_variables_end]).into_owned();
+            left = splice(
+                &left,
+                SpliceStart::FromStart(left_hoisted_functions_end),
+                0,
+                &declarations[right_hoisted_functions_end..right_hoisted_variables_end],
+            )
+            .into_owned();
             changed = true;
         }
 
         // splice hoisted functions from right into left
         if right_hoisted_functions_end > right_standard_prologue_end {
-            left = splice(&left, left_standard_prologue_end as i32, 0, &declarations[right_standard_prologue_end..right_hoisted_functions_end]).into_owned();
+            left = splice(
+                &left,
+                SpliceStart::FromStart(left_standard_prologue_end),
+                0,
+                &declarations[right_standard_prologue_end..right_hoisted_functions_end],
+            )
+            .into_owned();
             changed = true;
         }
 
         // splice standard prologues from right into left (that are not already in left)
         if right_standard_prologue_end > 0 {
             if left_standard_prologue_end == 0 {
-                left = splice(&left, 0, 0, &declarations[..right_standard_prologue_end]).into_owned();
+                left = splice(
+                    &left,
+                    SpliceStart::FromStart(0),
+                    0,
+                    &declarations[..right_standard_prologue_end],
+                )
+                .into_owned();
                 changed = true;
             } else {
                 let mut left_prologues: FxHashSet<&'static str> = FxHashSet::default();
-                for &left_prologue in &statements[..left_standard_prologue_end] {
-                    left_prologues.insert(left_prologue.expression().unwrap().text());
-                }
-                for i in (0..right_standard_prologue_end).rev() {
-                    let right_prologue = declarations[i];
+                left_prologues.extend(statements[..left_standard_prologue_end].iter().map(|&left_prologue| left_prologue.expression().unwrap().text()));
+                for &right_prologue in declarations[..right_standard_prologue_end].iter().rev() {
                     if !left_prologues.contains(right_prologue.expression().unwrap().text()) {
                         left = concatenate(&[right_prologue], &left).into_owned();
                         changed = true;
@@ -973,14 +994,26 @@ impl EmitContext {
         node
     }
 
-    pub fn add_synthetic_leading_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().leading_comments.push(SynthesizedComment {
-            kind,
-            loc: TextRange::new(-1, -1),
-            has_leading_new_line: false,
-            has_trailing_new_line,
-            text: text.to_string(),
-        });
+    pub fn add_synthetic_leading_comment(
+        &self,
+        node: P<Node>,
+        kind: Kind,
+        text: &str,
+        has_trailing_new_line: bool,
+    ) -> P<Node> {
+        self.emit_nodes
+            .borrow_mut()
+            .entry(node)
+            .or_default()
+            .rare_mut()
+            .leading_comments
+            .push(SynthesizedComment {
+                kind,
+                loc: TextRange::synthetic(),
+                has_leading_new_line: false,
+                has_trailing_new_line,
+                text: text.to_string(),
+            });
         node
     }
 
@@ -996,14 +1029,26 @@ impl EmitContext {
         node
     }
 
-    pub fn add_synthetic_trailing_comment(&self, node: P<Node>, kind: Kind, text: &str, has_trailing_new_line: bool) -> P<Node> {
-        self.emit_nodes.borrow_mut().entry(node).or_default().rare_mut().trailing_comments.push(SynthesizedComment {
-            kind,
-            loc: TextRange::new(-1, -1),
-            has_leading_new_line: false,
-            has_trailing_new_line,
-            text: text.to_string(),
-        });
+    pub fn add_synthetic_trailing_comment(
+        &self,
+        node: P<Node>,
+        kind: Kind,
+        text: &str,
+        has_trailing_new_line: bool,
+    ) -> P<Node> {
+        self.emit_nodes
+            .borrow_mut()
+            .entry(node)
+            .or_default()
+            .rare_mut()
+            .trailing_comments
+            .push(SynthesizedComment {
+                kind,
+                loc: TextRange::synthetic(),
+                has_leading_new_line: false,
+                has_trailing_new_line,
+                text: text.to_string(),
+            });
         node
     }
 
@@ -1075,7 +1120,7 @@ bitflags::bitflags! {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum SnippetKind {
     #[default]
@@ -1085,7 +1130,7 @@ pub enum SnippetKind {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct SnippetElement {
     pub kind: SnippetKind,
-    pub order: i32,
+    pub order: u32,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

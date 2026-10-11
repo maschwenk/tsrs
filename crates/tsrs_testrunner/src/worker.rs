@@ -136,23 +136,17 @@ pub fn run_item(table: &OptionTable, item: &TestItem) -> ItemResult {
         Err(_) => {
             r.class = Class::Crash;
             r.panic = Some(take_panic_info().unwrap_or(PanicInfo { message: "<unknown panic>".into(), location: String::new() }));
-            for (ext, _) in EXTRA_KINDS {
-                extras.push((ext, ExtraResult::plain(Class::Crash, "errors phase panicked".to_string())));
-            }
+            extras.extend(EXTRA_KINDS.into_iter().map(|(ext, _)| (ext, ExtraResult::plain(Class::Crash, "errors phase panicked".to_string()))));
         }
         Ok(Outcome::Skip(reason)) => {
             r.class = Class::Skip;
-            for (ext, _) in EXTRA_KINDS {
-                extras.push((ext, ExtraResult::plain(Class::Skip, reason.clone())));
-            }
+            extras.extend(EXTRA_KINDS.into_iter().map(|(ext, _)| (ext, ExtraResult::plain(Class::Skip, reason.clone()))));
             r.skip = reason;
         }
         Ok(Outcome::Error(e)) => {
             r.class = Class::Fail;
             r.diff = format!("harness error: {e}");
-            for (ext, _) in EXTRA_KINDS {
-                extras.push((ext, ExtraResult::plain(Class::Fail, r.diff.clone())));
-            }
+            extras.extend(EXTRA_KINDS.into_iter().map(|(ext, _)| (ext, ExtraResult::plain(Class::Fail, r.diff.clone()))));
         }
         Ok(Outcome::Baseline(actual, types_and_symbols, js, maps)) => {
             match &js {
@@ -161,20 +155,22 @@ pub fn run_item(table: &OptionTable, item: &TestItem) -> ItemResult {
             }
             // `.js.map` / `.sourcemap.txt`: a test whose generated baseline is `NoContent` and that has no reference
             // passes trivially in Go; it is reported as a skip so the pass counts mean something.
-            for (ext, generated) in [("js.map", maps.as_ref().and_then(|m| m.js_map.as_ref())), ("sourcemap.txt", maps.as_ref().and_then(|m| m.sourcemap.as_ref()))] {
-                match generated {
-                    None => extras.push((ext, ExtraResult::plain(Class::Skip, "no source map baseline".to_string()))),
-                    Some(Ok(actual)) if actual == baseline::NO_CONTENT && compiler_runner::read_reference_extra_baseline(&item.suite, &item.name, ext).is_none() => {
-                        extras.push((ext, ExtraResult::plain(Class::Skip, "no source maps".to_string())))
-                    }
-                    Some(generated) => extras.push((ext, ExtraResult::classify(item, ext, generated))),
-                }
-            }
+            extras.extend(
+                ([("js.map", maps.as_ref().and_then(|m| m.js_map.as_ref())), ("sourcemap.txt", maps.as_ref().and_then(|m| m.sourcemap.as_ref()))])
+                    .into_iter()
+                    .map(|(ext, generated)| match generated {
+                        None => (ext, ExtraResult::plain(Class::Skip, "no source map baseline".to_string())),
+                        Some(Ok(actual))
+                            if actual == baseline::NO_CONTENT && compiler_runner::read_reference_extra_baseline(&item.suite, &item.name, ext).is_none() =>
+                        {
+                            (ext, ExtraResult::plain(Class::Skip, "no source maps".to_string()))
+                        }
+                        Some(generated) => (ext, ExtraResult::classify(item, ext, generated)),
+                    }),
+            );
             match &types_and_symbols {
                 None => {
-                    for ext in ["types", "symbols"] {
-                        extras.push((ext, ExtraResult::plain(Class::Skip, "noTypesAndSymbols".to_string())));
-                    }
+                    extras.extend((["types", "symbols"]).into_iter().map(|ext| (ext, ExtraResult::plain(Class::Skip, "noTypesAndSymbols".to_string()))));
                 }
                 Some(t) => {
                     extras.push(("types", ExtraResult::classify(item, "types", &t.types)));

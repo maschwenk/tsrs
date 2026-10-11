@@ -63,13 +63,9 @@ fn request_filesystem_matches_pinned_go() {
         let case_sensitive = sc["caseSensitive"].as_bool().unwrap();
         let cwd = sc["cwd"].as_str().unwrap();
         let mut host: Vec<(String, MapFile)> = Vec::new();
-        for (k, v) in sc["host"]["files"].as_object().unwrap() {
-            host.push((k.clone(), MapFile::from(v.as_str().unwrap())));
-        }
+        host.extend(sc["host"]["files"].as_object().unwrap().into_iter().map(|(k, v)| (k.clone(), MapFile::from(v.as_str().unwrap()))));
         if let Some(links) = sc["host"]["symlinks"].as_object() {
-            for (k, v) in links {
-                host.push((k.clone(), vfstest::symlink(v.as_str().unwrap())));
-            }
+            host.extend(links.into_iter().map(|(k, v)| (k.clone(), vfstest::symlink(v.as_str().unwrap()))));
         }
         let base: Arc<dyn FS> = Arc::new(vfstest::from_map(host, case_sensitive));
         let mut fs: Option<RequestFileSystem> = None;

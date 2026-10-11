@@ -236,9 +236,7 @@ impl Table {
             let mut lb = vec![0u32; PAGES + 1].into_boxed_slice();
             for (p, slot) in lb.iter_mut().enumerate() {
                 let addr = base + ((p as u64) << PAGE_SHIFT);
-                while i < blocks.len() && blocks[i].start < addr {
-                    i += 1;
-                }
+                i += (i..blocks.len()).take_while(|&index| blocks[index].start < addr).count();
                 *slot = i as u32;
             }
             regions.insert(r, pages.len() as u32);
@@ -491,12 +489,10 @@ fn run_frozen(roots: &[usize]) {
     ranges.sort_unstable();
     let region_blocks_before = would_free.len();
     if !ranges.is_empty() {
-        for b in &blocks {
+        would_free.extend(blocks.iter().filter_map(|b| {
             let i = ranges.partition_point(|&(s, _, _)| s <= b.start);
-            if i > 0 && b.start < ranges[i - 1].0 + ranges[i - 1].1 {
-                would_free.push((b.start, b.size, ranges[i - 1].2));
-            }
-        }
+            if i > 0 && b.start < ranges[i - 1].0 + ranges[i - 1].1 { Some((b.start, b.size, ranges[i - 1].2)) } else { None }
+        }));
     }
     eprintln!("census: {} freed regions' ranges, {} arena blocks in them", ranges.len(), would_free.len() - region_blocks_before);
     let stacks = STACKS.lock().unwrap().take().map_or_else(Vec::new, |t| t.stacks);
@@ -505,16 +501,16 @@ fn run_frozen(roots: &[usize]) {
     for shard in LIVE.iter() {
         if let Some(map) = shard.lock().unwrap().take() {
             blocks.reserve(map.len());
-            for (a, (size, stack, seq)) in map {
+            blocks.extend(map.into_iter().filter_map(|(a, (size, stack, seq))| {
                 if size == 0 {
-                    continue;
+                    return None;
                 }
                 let size = u32::try_from(size).unwrap_or_else(|_| {
                     oversized += 1;
                     u32::MAX
                 });
-                blocks.push(Block { start: a as u64, size, class: arena_classes + stack, seq });
-            }
+                Some(Block { start: a as u64, size, class: arena_classes + stack, seq })
+            }));
         }
     }
     let scan: Vec<bool> = classes
@@ -527,11 +523,7 @@ fn run_frozen(roots: &[usize]) {
     let t_collect = t0.elapsed();
     let mut table = Table::build(blocks);
     let mut overlaps = 0u64;
-    for w in table.blocks.windows(2) {
-        if w[1].start < w[0].start + w[0].size as u64 {
-            overlaps += 1;
-        }
-    }
+    overlaps += table.blocks.windows(2).filter(|w| w[1].start < w[0].start + w[0].size as u64).count() as u64;
     let t_build = t0.elapsed();
 
     let mut work: Vec<u32> = Vec::new();
@@ -565,9 +557,7 @@ fn run_frozen(roots: &[usize]) {
             .blocks
             .iter()
             .map(|b| {
-                while j < w.len() && w[j].0 < b.start {
-                    j += 1;
-                }
+                j += (j..w.len()).take_while(|&index| w[index].0 < b.start).count();
                 j < w.len() && w[j].0 == b.start
             })
             .collect()
@@ -670,12 +660,8 @@ fn run_frozen(roots: &[usize]) {
         })
         .collect();
     let mut ips: Vec<usize> = Vec::new();
-    for &(stack, _) in &heap_aggs {
-        ips.extend(stacks[stack as usize].iter().copied());
-    }
-    for &(_, stack) in sampled.keys() {
-        ips.extend(stacks[stack as usize].iter().copied());
-    }
+    ips.extend(heap_aggs.iter().flat_map(|&(stack, _)| stacks[stack as usize].iter().copied()));
+    ips.extend(sampled.keys().flat_map(|&(_, stack)| stacks[stack as usize].iter().copied()));
     let mut names: FxHashMap<usize, String> = FxHashMap::default();
     atos(&ips, &mut names);
     let frames = |stack: u32, skip: &dyn Fn(&str) -> bool, k: usize| -> Vec<String> {
@@ -1054,11 +1040,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     // mapper and type list are never recycled.)
     let mut ips: Vec<usize> = Vec::new();
     let heap_stack = |r: &str| -> Option<usize> { r.strip_prefix("heap block (stack ")?.split(')').next()?.parse().ok() };
-    for r in strong.values() {
-        if let Some(k) = heap_stack(r) {
-            ips.extend(stacks[k].iter().copied());
-        }
-    }
+    ips.extend(strong.values().filter_map(|r| if let Some(k) = heap_stack(r) { Some(stacks[k].iter().copied()) } else { None }).flatten());
     // Also name the heap blocks on the referrer chains of the reported violations.
     let heap_class_stack = |c: u32| -> Option<usize> {
         match &classes[c as usize] {
@@ -1255,7 +1237,7 @@ pub(super) fn function_name(line: &str) -> String {
         _ => s,
     };
     let mut out = s.to_string();
-    for (from, to) in [
+    out = ([
         ("$LT$", "<"),
         ("$GT$", ">"),
         ("$u20$", " "),
@@ -1269,9 +1251,13 @@ pub(super) fn function_name(line: &str) -> String {
         ("$u5d$", "]"),
         ("$u3b$", ";"),
         ("..", "::"),
-    ] {
+    ])
+    .into_iter()
+    .fold(out, |mut out, (from, to)| {
         out = out.replace(from, to);
-    }
+
+        out
+    });
     while let Some(i) = out.find("_<impl ").or_else(|| out.find("<impl ")) {
         let open = out[i..].find('<').unwrap() + i;
         let mut depth = 0;

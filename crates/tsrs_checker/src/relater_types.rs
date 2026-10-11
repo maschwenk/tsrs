@@ -172,9 +172,9 @@ pub struct TypeDiscriminator<'a> {
 
 /// Go `Discriminator` interface. Implementations delegate to the inherent (generated) methods.
 pub trait Discriminator {
-    fn len(&mut self, c: &mut Checker) -> i32; // Number of discriminant properties
-    fn name(&mut self, c: &mut Checker, index: i32) -> &'static str; // Property name of index-th discriminator
-    fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool; // True if index-th discriminator matches the given type
+    fn len(&mut self, c: &mut Checker) -> usize; // Number of discriminant properties
+    fn name(&mut self, c: &mut Checker, index: usize) -> &'static str; // Property name of index-th discriminator
+    fn matches(&mut self, c: &mut Checker, index: usize, t: P<Type>) -> bool; // True if index-th discriminator matches the given type
 }
 
 #[derive(Default, Clone)]
@@ -189,6 +189,19 @@ pub struct ErrorChain {
     pub args: Vec<String>,
 }
 
+/// An entry of a relater's source or target stack: the type, and the recursion identity of its recursion identity
+/// target once a deeply-nested test has computed it (`is_deeply_nested_on_stack`; 0 before).
+pub struct RelaterStackEntry {
+    pub t: P<Type>,
+    pub(crate) identity_key: Cell<u64>,
+}
+
+impl RelaterStackEntry {
+    pub(crate) fn new(t: P<Type>) -> RelaterStackEntry {
+        RelaterStackEntry { t, identity_key: Cell::new(0) }
+    }
+}
+
 /// Go `Relater`. An arena handle (`P<Relater>`, pooled through `Checker::free_relater` like Go); the `c` field is
 /// dropped and every method takes `c: &mut Checker`.
 #[derive(Default)]
@@ -199,14 +212,16 @@ pub struct Relater {
     pub related_info: RefCell<Vec<P<Diagnostic>>>,
     pub maybe_keys: RefCell<Vec<RelationKey>>,
     pub maybe_keys_set: RefCell<Set<RelationKey>>,
-    pub source_stack: RefCell<Vec<P<Type>>>,
-    pub target_stack: RefCell<Vec<P<Type>>>,
-    pub maybe_count: Cell<i32>,
-    pub source_depth: Cell<i32>,
-    pub target_depth: Cell<i32>,
+    pub source_stack: RefCell<Vec<RelaterStackEntry>>,
+    pub target_stack: RefCell<Vec<RelaterStackEntry>>,
+    pub maybe_count: Cell<usize>,
+    pub source_depth: Cell<usize>,
+    pub target_depth: Cell<usize>,
     pub expanding_flags: Cell<ExpandingFlags>,
     pub overflow: Cell<bool>,
-    pub relation_count: Cell<i32>,
+    // A remaining budget, not a collection length: Go keeps decrementing it
+    // below zero while unwinding a relation and treats every value <= 0 as exhausted.
+    pub relation_count: Cell<isize>,
     pub next: Cell<Option<P<Relater>>>,
     // The `'static` comparers that wrap this relater's methods (Go passes the method values). They capture only the
     // relater handle (and the intersection state), so they are built once per relater instead of leaking one per call.
@@ -237,25 +252,25 @@ impl Relater {
 // The Go `Discriminator` implementations; the method bodies are the inherent methods in relater_1.rs / checker_15.rs.
 
 impl Discriminator for TypeDiscriminator<'_> {
-    fn len(&mut self, c: &mut Checker) -> i32 {
+    fn len(&mut self, c: &mut Checker) -> usize {
         TypeDiscriminator::len(self, c)
     }
-    fn name(&mut self, c: &mut Checker, index: i32) -> &'static str {
+    fn name(&mut self, c: &mut Checker, index: usize) -> &'static str {
         TypeDiscriminator::name(self, c, index)
     }
-    fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
+    fn matches(&mut self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
         TypeDiscriminator::matches(self, c, index, t)
     }
 }
 
 impl Discriminator for ObjectLiteralDiscriminator {
-    fn len(&mut self, c: &mut Checker) -> i32 {
+    fn len(&mut self, c: &mut Checker) -> usize {
         ObjectLiteralDiscriminator::len(self, c)
     }
-    fn name(&mut self, c: &mut Checker, index: i32) -> &'static str {
+    fn name(&mut self, c: &mut Checker, index: usize) -> &'static str {
         ObjectLiteralDiscriminator::name(self, c, index)
     }
-    fn matches(&mut self, c: &mut Checker, index: i32, t: P<Type>) -> bool {
+    fn matches(&mut self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
         ObjectLiteralDiscriminator::matches(self, c, index, t)
     }
 }

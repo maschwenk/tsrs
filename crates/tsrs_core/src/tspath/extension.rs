@@ -74,10 +74,8 @@ static EXTENSIONS_TO_REMOVE: &[&str] = &[
 
 pub fn remove_file_extension(path: &str) -> &str {
     // Remove any known extension even if it has more than one dot
-    for ext in EXTENSIONS_TO_REMOVE {
-        if path.ends_with(ext) {
-            return &path[..path.len() - ext.len()];
-        }
+    if let Some(result) = EXTENSIONS_TO_REMOVE.iter().find_map(|ext| if path.ends_with(ext) { Some(&path[..path.len() - ext.len()]) } else { None }) {
+        return result;
     }
 
     path
@@ -96,10 +94,8 @@ pub fn remove_any_file_extension(path: &str) -> &str {
 }
 
 pub fn try_get_extension_from_path(p: &str) -> &'static str {
-    for ext in EXTENSIONS_TO_REMOVE {
-        if file_extension_is(p, ext) {
-            return ext;
-        }
+    if let Some(result) = EXTENSIONS_TO_REMOVE.iter().find_map(|ext| if file_extension_is(p, ext) { Some(ext) } else { None }) {
+        return result;
     }
     ""
 }
@@ -109,19 +105,13 @@ pub fn remove_extension<'a>(path: &'a str, extension: &str) -> &'a str {
 }
 
 pub fn file_extension_is_one_of(path: &str, extensions: &[&str]) -> bool {
-    for ext in extensions {
-        if file_extension_is(path, ext) {
-            return true;
-        }
-    }
-    false
+    extensions.iter().any(|ext| file_extension_is(path, ext))
 }
 
 pub fn try_extract_ts_extension(file_name: &str) -> &'static str {
-    for ext in SUPPORTED_TS_EXTENSIONS_FOR_EXTRACT_EXTENSION {
-        if file_extension_is(file_name, ext) {
-            return ext;
-        }
+    if let Some(result) = SUPPORTED_TS_EXTENSIONS_FOR_EXTRACT_EXTENSION.iter().find_map(|ext| if file_extension_is(file_name, ext) { Some(ext) } else { None })
+    {
+        return result;
     }
     ""
 }
@@ -152,10 +142,8 @@ pub fn extension_is_one_of(ext: &str, extensions: &[&str]) -> bool {
 
 pub fn get_declaration_file_extension(file_name: &str) -> String {
     let base = get_base_file_name(file_name);
-    for ext in SUPPORTED_DECLARATION_EXTENSIONS {
-        if base.ends_with(ext) {
-            return ext.to_string();
-        }
+    if let Some(result) = SUPPORTED_DECLARATION_EXTENSIONS.iter().find_map(|ext| if base.ends_with(ext) { Some(ext.to_string()) } else { None }) {
+        return result;
     }
     if base.ends_with(EXTENSION_TS) {
         if let Some(index) = base.find(".d.") {

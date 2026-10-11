@@ -77,11 +77,13 @@ pub(crate) fn get_type_at_locations(host: &dyn CheckerHost, p: &Params) -> Check
     let mut s = setup(host, p)?;
     let locations = p.string_array("locations")?;
     let mut out = Vec::with_capacity(locations.len());
-    for loc in locations {
+    out = locations.into_iter().try_fold(out, |mut out, loc| {
         let node = s.resolve_node(loc)?;
         let t = s.c().get_type_at_location(node);
         out.push(s.type_response(t)?);
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -98,11 +100,13 @@ pub(crate) fn get_types_at_positions(host: &dyn CheckerHost, p: &Params) -> Chec
     let file = s.source_file(&p.document("file")?)?;
     let positions = p.u32_array("positions")?;
     let mut out = Vec::with_capacity(positions.len());
-    for pos in positions {
+    out = positions.into_iter().try_fold(out, |mut out, pos| {
         let node = touching_property_name_at_utf16(file, pos);
         let t = s.c().get_type_at_location(node);
         out.push(s.type_response(t)?);
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -335,9 +339,11 @@ pub(crate) fn get_index_infos_of_type(host: &dyn CheckerHost, p: &Params) -> Che
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
     let mut out = Vec::with_capacity(infos.len());
-    for info in infos {
+    out = infos.iter().try_fold(out, |mut out, info| {
         out.push(s.index_info_response(*info)?);
-    }
+
+        Ok::<_, CheckerError>(out)
+    })?;
     Ok(Value::Array(out))
 }
 
@@ -392,7 +398,11 @@ pub(crate) fn node_type_op(host: &dyn CheckerHost, p: &Params, op: NodeTypeOp) -
 pub(crate) fn get_contextual_type_for_argument(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let node = s.resolve_node(p.string("location")?)?;
-    let t = s.c().get_contextual_type_for_argument_at_index_exported(node, p.i32("index")?);
+    let index = usize::try_from(p.i32("index")?)
+        .map_err(|_| CheckerError::client("invalid parameter index"))?;
+    let t = s
+        .c()
+        .get_contextual_type_for_argument_at_index_exported(node, index);
     s.opt_type_response(t)
 }
 
@@ -506,10 +516,8 @@ pub(crate) enum ParameterAt {
 pub(crate) fn signature_parameter_at(host: &dyn CheckerHost, p: &Params, op: ParameterAt) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let sig = s.resolve_signature(p.u64("signature")?)?;
-    let index = p.i32("index")?;
-    if index < 0 {
-        return Err(CheckerError::client("invalid parameter index"));
-    }
+    let index = usize::try_from(p.i32("index")?)
+        .map_err(|_| CheckerError::client("invalid parameter index"))?;
     let t = match op {
         ParameterAt::ParameterType => s.c().get_type_at_position_exported(sig, index),
         ParameterAt::TypeParameter => s.c().get_type_parameter_at_position(sig, index),
@@ -525,7 +533,10 @@ pub(crate) fn get_type_predicate_of_signature(host: &dyn CheckerHost, p: &Params
     };
     let mut o = obj();
     o.num("kind", pred.kind() as i32 as f64);
-    o.num("parameterIndex", pred.parameter_index() as f64);
+    o.num(
+        "parameterIndex",
+        pred.parameter_index().map_or(-1.0, |index| index as f64),
+    );
     o.str_nonempty("parameterName", pred.parameter_name());
     if let Some(t) = pred.type_() {
         o.set("type", s.type_response(t)?);

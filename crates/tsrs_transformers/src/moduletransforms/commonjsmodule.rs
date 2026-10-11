@@ -301,11 +301,9 @@ impl CommonJSModuleTransformer {
         //  exports.a = exports.b = void 0;
         if !info.exported_names.is_empty() {
             const chunkSize: usize = 50;
-            let l = info.exported_names.len();
-            let mut i = 0;
-            while i < l {
+            statements.extend(info.exported_names.chunks(chunkSize).map(|chunk| {
                 let mut right = f.new_void_zero_expression();
-                for &next_id in &info.exported_names[i..std::cmp::min(i + chunkSize, l)] {
+                for &next_id in chunk {
                     let left = if next_id.kind() == Kind::StringLiteral {
                         f.new_element_access_expression(f.new_identifier("exports"), None /*questionDotToken*/, f.new_string_literal_from_node(next_id), NodeFlags::None)
                     } else {
@@ -317,9 +315,8 @@ impl CommonJSModuleTransformer {
                 }
                 let statement = f.new_expression_statement(right);
                 emit_context.add_emit_flags(statement, EmitFlags::CustomPrologue);
-                statements.push(statement);
-                i += chunkSize;
-            }
+                statement
+            }));
         }
 
         // initialize exports for function declarations, e.g.:
