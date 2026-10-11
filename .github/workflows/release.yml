@@ -224,21 +224,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Read the pinned Rust toolchain
-        id: rust
-        run: echo "toolchain=$(sed -n 's/^channel = "\(.*\)"$/\1/p' rust-toolchain.toml)" >> "$GITHUB_OUTPUT"
-      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
-          toolchain: ${{ steps.rust.outputs.toolchain }}
-          targets: ${{ matrix.target }}
+          restore-cache: false
+          tools: cargo-zigbuild@0.23.4
       - uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2.2.1
         with:
           version: 0.13.0
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        with:
-          tool: cargo-zigbuild@0.23.4
       - name: Build and stage musl binary
         run: |
+          rustup target add ${{ matrix.target }}
           cargo zigbuild --profile dist --locked -p tsrs_cli --target ${{ matrix.target }}
           mkdir -p "out/${{ matrix.target }}"
           cp "target/${{ matrix.target }}/dist/tsrs" "out/${{ matrix.target }}/tsrs"
