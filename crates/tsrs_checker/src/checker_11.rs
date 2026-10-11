@@ -99,7 +99,12 @@ impl Checker {
                 };
                 if let Some(prop) = prop {
                     let modifiers = get_declaration_modifier_flags_from_symbol(prop);
-                    let write_modifiers = get_declaration_modifier_flags_from_symbol_ex(prop, true /*isWrite*/);
+                    // tsrs: a declared symbol without a set accessor has its read modifiers for writes.
+                    let write_modifiers = if prop.check_flags.get().intersects(CheckFlags::Synthetic) || prop.flags().intersects(SymbolFlags::SetAccessor) {
+                        get_declaration_modifier_flags_from_symbol_ex(prop, true /*isWrite*/)
+                    } else {
+                        modifiers
+                    };
                     if prop.flags().intersects(SymbolFlags::ClassMember) {
                         if is_union {
                             optional_flag |= prop.flags() & SymbolFlags::Optional;
