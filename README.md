@@ -1,46 +1,27 @@
-# tsrs
+# `tsrs`
 
 [![npm](https://img.shields.io/npm/v/tsrs)](https://www.npmjs.com/package/tsrs)
 [![license](https://img.shields.io/badge/license-Apache--2.0-blue)](LICENSE)
 
-tsrs is a **drop-in replacement for the TypeScript 7 compiler and language server**, written in Rust.
+`tsrs` is a **drop-in replacement for the TypeScript 7 compiler and language server**, written in Rust.
 Our goal is **100% conformance**, with much lower memory use and faster type checking.
 
 ## Get started
 
-Install tsrs and use it in place of `tsc`, with your existing `tsconfig.json`:
-
 ```sh
 pnpm add -D tsrs
-pnpm exec tsrs -p .             # compile your project
-pnpm exec tsrs -p . --noEmit    # type-check only
+pnpm exec tsrs --noEmit
 ```
-
-Like `tsc`, tsrs emits JavaScript by default. To try it without installing, run `pnpm dlx tsrs -p . --noEmit`.
-
-Prebuilt binaries are available for macOS arm64 and Linux x64/arm64 (glibc). See
-[platform support](docs/COMPATIBILITY.md) for the full list, including upcoming musl builds.
-
-## Less waiting. Less memory.
-
-Type-checking three large projects—VS Code, T3 Code and MUI docs—with each compiler's default settings:
 
 [![tsrs versus TypeScript 7: VS Code, 10,427 files, 13.2× faster and 72% less peak memory; T3 Code, 2,945 files, 9.9× faster and 65% less; MUI docs, 16,766 files, 14.4× faster and 79% less.](bench/large-projects.svg)](bench/RESULTS.md#large-project-chart-snapshot)
 
-Snapshot from October 11, 2026, on 16 vCPUs. File counts include dependencies and TypeScript libraries.
-[Measurement details](bench/RESULTS.md#large-project-chart-snapshot)
-and [latest results across 17 projects](bench/RESULTS.md).
-
 ## Compatibility
 
-tsrs follows TypeScript's Go implementation, currently pinned to TypeScript 7.1-dev. Any difference from that
-reference is a bug. On the upstream conformance suite, it matches **13,458 of 13,462 error baselines** and all
-**12,779 type and symbol baselines**; the four remaining error-baseline differences are test-harness artifacts.
+`tsrs` follows TypeScript 7.1-dev. It matches **13,458 of 13,462 error baselines** and all **12,779 type and symbol
+baselines**; the four remaining error-baseline differences are test-harness artifacts.
 
-Type checking, JavaScript and declaration emit, source maps, incremental builds, project references and the
-language server are supported. Some features still have gaps: `--watch`, `--init` and `--showConfig` are not
-supported, and the language server and Node API are still working toward full conformance.
-See [compatibility and evidence](docs/COMPATIBILITY.md) for the complete picture.
+`--watch`, `--init` and `--showConfig` are not supported. See [compatibility and evidence](docs/COMPATIBILITY.md)
+for supported features and known gaps.
 
 ## Learn more
 
@@ -61,6 +42,6 @@ for building from source and running the suites, the [Code of Conduct](CODE_OF_C
 
 Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for transferring the `tsrs` npm package name.
 
-tsrs is a derivative of TypeScript (Copyright Microsoft Corporation), licensed under [Apache-2.0](LICENSE).
+`tsrs` is a derivative of TypeScript (Copyright Microsoft Corporation), licensed under [Apache-2.0](LICENSE).
 The bundled `lib.*.d.ts` files are TypeScript's. See [NOTICE](NOTICE) for attribution.
 Not affiliated with or endorsed by Microsoft.
