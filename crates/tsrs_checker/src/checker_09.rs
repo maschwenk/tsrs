@@ -3077,8 +3077,13 @@ impl Checker {
     pub(crate) fn every_property_of_structured_type(&mut self, t: P<Type>, f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool) -> bool {
         if let Some(lm) = self.get_ready_lazy_member_table(t) {
             self.lazy_member_stats.member_every_property_queries += 1;
-            let mut seen: FxHashSet<&'static str> = FxHashSet::default();
-            return self.every_lazy_property(t, lm, &mut seen, f);
+            let mut seen = self.free_name_sets.pop().unwrap_or_default();
+            let result = self.every_lazy_property(t, lm, &mut seen, f);
+            if seen.capacity() <= 1024 {
+                seen.clear();
+                self.free_name_sets.push(seen);
+            }
+            return result;
         }
         let properties = self.resolve_structured_type_members(t).unwrap().properties();
         properties.iter().all(|&p| f(self, p))
