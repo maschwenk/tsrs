@@ -143,7 +143,7 @@ fn synthetic_source_position(message: &str) -> ! {
 }
 
 #[cold]
-fn source_position_overflow() -> ! {
+const fn source_position_overflow() -> ! {
     panic!("source position exceeds the supported range")
 }
 
