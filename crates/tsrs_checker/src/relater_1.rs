@@ -1134,6 +1134,104 @@ impl Checker {
     }
 }
 
+impl Checker {
+    /// `is_deeply_nested_type` over a relater stack, keeping each entry's recursion identity once a walk has computed
+    /// it: the walks repeat on every push, and an entry's identity never changes once computed (its recursion
+    /// identity target is fixed by the type's structure and its mapped type's modifiers type, which is computed once).
+    /// The first walk to reach an entry computes it exactly as `has_matching_recursion_identity` would, so anything
+    /// that computation resolves is resolved at the same point.
+    #[inline]
+    pub(crate) fn is_deeply_nested_on_stack(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+        stack.len() as i32 >= max_depth && self.is_deeply_nested_on_stack_walk(t, stack, max_depth)
+    }
+
+    fn is_deeply_nested_on_stack_walk(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+        let result = self.is_deeply_nested_on_stack_walk_kept(t, stack, max_depth);
+        if self.deep_nested_shadow {
+            let types: Vec<P<Type>> = stack.iter().map(|e| e.t).collect();
+            let fresh = self.is_deeply_nested_type(t, &types, max_depth);
+            assert!(result == fresh, "TSRS_DEEP_NESTED=shadow: type {} on a stack of {}: kept identities say {result}, a fresh walk {fresh}", t.id.0, stack.len());
+            for e in stack {
+                let kept = e.identity_key.get();
+                if kept != 0 {
+                    let target = get_recursion_identity_target(self, e.t);
+                    let fresh = if target.flags().intersects(TypeFlags::Intersection) { RECURSION_KEY_INTERSECTION | target.pack() } else { recursion_key(get_recursion_identity_from_target(target)) };
+                    assert!(kept == fresh, "TSRS_DEEP_NESTED=shadow: the kept recursion identity of type {} changed", e.t.id.0);
+                }
+            }
+        }
+        result
+    }
+
+    fn is_deeply_nested_on_stack_walk_kept(&mut self, t: P<Type>, stack: &[RelaterStackEntry], max_depth: i32) -> bool {
+        let target = get_recursion_identity_target(self, t);
+        let top = stack.last().filter(|e| e.t == t && e.identity_key.get() == 0);
+        if target.flags().intersects(TypeFlags::Intersection) {
+            if let Some(top) = top {
+                top.identity_key.set(RECURSION_KEY_INTERSECTION | target.pack());
+            }
+            for &t in target.types() {
+                if self.is_deeply_nested_on_stack(t, stack, max_depth) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        let identity = get_recursion_identity_from_target(target);
+        let key = recursion_key(identity);
+        if let Some(top) = top {
+            top.identity_key.set(key);
+        }
+        let mut count = 0;
+        let mut last_type_id = TypeId(0);
+        for e in stack {
+            let mut entry_key = e.identity_key.get();
+            if entry_key == 0 {
+                let target = get_recursion_identity_target(self, e.t);
+                entry_key = if target.flags().intersects(TypeFlags::Intersection) {
+                    RECURSION_KEY_INTERSECTION | target.pack()
+                } else {
+                    recursion_key(get_recursion_identity_from_target(target))
+                };
+                e.identity_key.set(entry_key);
+            }
+            let matches = if entry_key & RECURSION_KEY_TAG == RECURSION_KEY_INTERSECTION {
+                // SAFETY: the low bits are `pack` of the entry's recursion identity target, a live type.
+                intersection_has_matching_recursion_identity(self, unsafe { P::unpack(entry_key) }, identity)
+            } else {
+                entry_key == key
+            };
+            if matches {
+                // We only count occurrences with a higher type id than the previous occurrence, since higher
+                // type ids are an indicator of newer instantiations caused by recursion.
+                if e.t.id >= last_type_id {
+                    count += 1;
+                    if count >= max_depth {
+                        return true;
+                    }
+                }
+                last_type_id = e.t.id;
+            }
+        }
+        false
+    }
+}
+
+const RECURSION_KEY_TAG: u64 = 7 << 48;
+/// A `RelaterStackEntry` identity key for an entry whose recursion identity target is an intersection (the target
+/// packed in the low bits): such an entry matches an identity of one of its constituents.
+const RECURSION_KEY_INTERSECTION: u64 = 4 << 48;
+
+/// A nonzero word for each recursion identity, equal for equal identities.
+#[inline]
+fn recursion_key(identity: RecursionId) -> u64 {
+    match identity {
+        RecursionId::Node(n) => 1 << 48 | n.pack(),
+        RecursionId::Symbol(s) => 2 << 48 | s.pack(),
+        RecursionId::Type(t) => 3 << 48 | t.pack(),
+    }
+}
+
 // relater.go:797
 #[expect(clippy::inline_always, reason = "measured: plain #[inline] lets it be outlined (notes/perf-icount-hillclimb.md, round 3)")]
 #[inline(always)]
