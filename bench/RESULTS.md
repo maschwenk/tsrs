@@ -110,9 +110,6 @@ rather than error-free builds.
 | T3 Code | `9bd1d8009a6b` | 5 → 6 |
 | MUI docs | `6780195595c1` | 0 → 0 |
 
-The separate [historical Hyperfine cross-check](README.md#historical-hyperfine-cross-check) used a plain release
-build and the matching TypeScript nightly. Its raw measurements remain available.
-
 ## Historical comparison on 64 vCPUs
 
 On 2026-10-07, type-checking vscode (10,427 files) on a 64-core Linux machine, each tool with its default settings, averaged over 20

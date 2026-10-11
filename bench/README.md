@@ -164,49 +164,6 @@ tsrs's errors (the table's errors paragraph names such projects).
   differences (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
 
-## Historical Hyperfine cross-check
-
-A separate [Hyperfine 2](https://github.com/sharkdp/hyperfine) run on **2026-10-11 at 14:30 UTC** measured
-VS Code `src`, T3 Code `apps/server` and MUI `docs` at `tsrs` commit `b43a510b2d24`. It used a **plain release
-build without PGO/BOLT**, on a 16-vCPU Depot runner, against the matching TypeScript nightly
-`7.1.0-dev.20260930.4`. Each compiler had 3 warmups and 20 measured runs, at default settings and with `--checkers 4`.
-The [raw metadata](results/hyperfine/2026-10-11-b43a510b2d24/metadata.json) records the hardware, versions and exact
-commands; [all raw exports](results/hyperfine/2026-10-11-b43a510b2d24/) retain every sample and summary statistic.
-
-To repeat this cross-check on Linux x64, check out **`b43a510b2d24`** and use Hyperfine 2.0.0. Build and set up
-the pinned projects:
-
-```sh
-cargo build --release --locked -p tsrs_cli
-python3 bench/run.py --setup-only --projects vscode,t3code-server,mui-docs
-```
-
-For VS Code, run the native binaries directly:
-
-```sh
-benchmark_root="$PWD"
-cd bench/.work/solutions/vscode
-hyperfine -N --warmup 3 --runs 20 \
-  --metrics time_wall_clock,memory_peak_resident \
-  --ignore-failure=2 --export-json /tmp/vscode-default.json \
-  "\"$benchmark_root/bench/.work/tsgo/7.1.0-dev.20260930.4/node_modules/@typescript/typescript-linux-x64/lib/tsc\" -p src --noEmit --incremental false --extendedDiagnostics --pretty false" \
-  "\"$benchmark_root/target/release/tsrs\" -p src --noEmit --incremental false --extendedDiagnostics --pretty false"
-```
-
-Run both compiler commands once before timing to confirm that they finish with matching diagnostic locations,
-codes and file counts. VS Code and T3 Code report diagnostics and exit with code 2; `--ignore-failure=2` accepts
-that expected result. MUI docs exits successfully, so omit that flag for MUI. The recorded run also checked every
-measured exit code and the final diagnostic output against its preflight.
-
-For T3 Code, use `bench/.work/solutions/t3code-server` and `-p apps/server`; for MUI, use
-`bench/.work/solutions/mui-docs` and `-p docs`. Add `--checkers 4` to both compiler commands for the equal-checker
-comparison, and choose a separate output file for each project and setting. The recorded run alternated compiler
-order between project/checker-setting pairs.
-
-The [recorded Depot run](https://depot.dev/orgs/qw3zz3l8cs/workflows/zcnt8kjhsg?job=bnhgggfhml&attempt=wwxgp0xn8z)
-also retains diagnostic logs in its `perf-probe` artifact. These plain-release measurements are separate from
-the PGO-optimized [README chart](RESULTS.md#large-project-chart-snapshot).
-
 ## Regression flag
 
 Wall time on a shared VM moves 2-4% between runs with no code change (2026-10-04, 64 runs: the tsrs/tsgo ratio moved
