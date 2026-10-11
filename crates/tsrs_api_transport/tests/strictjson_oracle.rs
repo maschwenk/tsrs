@@ -42,23 +42,11 @@ fn decoders_match_pinned_go() {
         let go_err = case["error"].as_str().unwrap();
         match case["kind"].as_str().unwrap() {
             "requestfs" => {
-                #[cfg(feature = "requestfs")]
-                {
-                    let ours = tsrs_api_transport::requestfs::RequestFileSystemParams::from_json(&input);
-                    if go_err.is_empty() {
-                        assert!(ours.is_ok(), "{shown}: {ours:?}");
-                    } else {
-                        assert_eq!(ours.unwrap_err(), go_err, "{shown}");
-                    }
-                }
-                #[cfg(not(feature = "requestfs"))]
-                {
-                    let ours = tsrs_api_transport::strictjson::validate(&input);
-                    if go_err.is_empty() {
-                        assert!(ours.is_ok(), "{shown}: {ours:?}");
-                    } else {
-                        assert_eq!(ours.unwrap_err(), go_err, "{shown}");
-                    }
+                let ours = tsrs_api_transport::strictjson::validate(&input);
+                if go_err.is_empty() {
+                    assert!(ours.is_ok(), "{shown}: {ours:?}");
+                } else {
+                    assert_eq!(ours.unwrap_err(), go_err, "{shown}");
                 }
             }
             "readFile" => {

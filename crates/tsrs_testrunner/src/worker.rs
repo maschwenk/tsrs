@@ -11,7 +11,7 @@ use serde_json::json;
 
 use crate::baseline::{self, Class};
 use crate::compiler_runner::{self, Outcome, TestItem};
-use crate::Backend;
+use crate::harnessutil::OptionTable;
 
 pub const WORKER_STACK_SIZE: usize = 256 << 20;
 
@@ -106,16 +106,15 @@ pub const EXTRA_KINDS: [(&str, u8); 5] = [
 pub fn results_dir() -> PathBuf {
     match std::env::var_os("TSRS_TEST_RESULTS") {
         Some(p) => PathBuf::from(p),
-        None if crate::syntax_only() => compiler_runner::repo_root().join("target/test-results-syntax"),
         None => compiler_runner::repo_root().join("target/test-results"),
     }
 }
 
-pub fn run_item(backend: &Backend, item: &TestItem) -> ItemResult {
+pub fn run_item(table: &OptionTable, item: &TestItem) -> ItemResult {
     let start = Instant::now();
     LAST_PANIC.with(|p| *p.borrow_mut() = None);
     *ANY_THREAD_PANIC.lock().unwrap() = None;
-    let outcome = panic::catch_unwind(AssertUnwindSafe(|| backend.run(item)));
+    let outcome = panic::catch_unwind(AssertUnwindSafe(|| crate::compile::run(item, table)));
     let ms = start.elapsed().as_millis();
     let mut r = ItemResult {
         class: Class::Fail,
@@ -271,13 +270,13 @@ pub fn format_item_line(item: &TestItem) -> String {
 }
 
 // `tsrs-test __worker`: items arrive on stdin, one per line; results leave on stdout in the same order.
-pub fn worker_main(backend_spec: crate::BackendSpec) {
+pub fn worker_main() {
     install_panic_hook(true);
     let handle = std::thread::Builder::new()
         .name("tsrs-test-worker".into())
         .stack_size(WORKER_STACK_SIZE)
         .spawn(move || {
-            let backend = Backend::new(&backend_spec);
+            let table = crate::options::tsoptions_option_table();
             let stdin = std::io::stdin();
             let mut stdout = std::io::stdout().lock();
             for (i, line) in stdin.lock().lines().enumerate() {
@@ -288,7 +287,7 @@ pub fn worker_main(backend_spec: crate::BackendSpec) {
                 let item = parse_item_line(&line);
                 let _ = writeln!(stdout, "{}", json!({"start": i}));
                 let _ = stdout.flush();
-                let r = run_item(&backend, &item);
+                let r = run_item(&table, &item);
                 write_artifacts(&item, &r);
                 write_extra_artifacts(&item, &r);
                 let mut v = json!({"i": i, "class": r.class.as_str(), "ms": r.ms as u64});

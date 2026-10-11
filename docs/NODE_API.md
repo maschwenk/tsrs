@@ -299,6 +299,15 @@ Pinned `proto.go` has 172 `Method` constants (core 57, checker 115). Kept in syn
 | 171 | `stopCPUProfile` | core | not implemented |  |
 | 172 | `saveHeapProfile` | core | not implemented |  |
 
+## Request-filesystem regression fixtures
+
+`cargo test -p tsrs_api --test requestfs_differential` runs the production request filesystem against 11
+pinned-Go scenarios (20 updates, 142 filesystem queries and every update's change summary), plus layering over
+real files and symlinks. No Cargo feature is needed. Fixtures and their generator are in
+`crates/tsrs_api/tests/fixtures/`: place `requestfs_gen.go.txt` in the pinned
+`tsc/internal/api/requestfilesystem` package and run
+`GOWORK=off SCENARIOS=<requestfs_scenarios.json> SCENARIOS_OUT=<out> go test -run ZZDump ./internal/api/requestfilesystem/`.
+
 ## Known gaps (core lane, tracked for follow-up)
 
 - Request filesystems are ported (`crates/tsrs_api/src/requestfs.rs`) and enter the project snapshot as Go's

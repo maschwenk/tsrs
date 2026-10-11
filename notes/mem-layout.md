@@ -18,7 +18,9 @@ instructions retired were the stable CPU-work measure.
 Profile build: `CARGO_TARGET_DIR=$PWD/target/prof cargo build --release -p tsrs_cli --features alloc-profile`
 (the binaries' `alloc-profile` feature forwards to `tsrs_core/alloc-profile` and swaps the mimalloc global
 allocator for the counting one, which allocates through mimalloc too). `--features tsrs_core/alloc-profile` alone no
-longer links (two global allocators).
+longer links (two global allocators). This was the behavior at the time of the measurements; since the Cargo-feature
+cleanup, the executables install the counting allocator explicitly and the core feature alone only instruments
+the library (docs/DEBUGGING.md).
 
 ## Steps (single-threaded / 4-checker peak, GB, default mode)
 

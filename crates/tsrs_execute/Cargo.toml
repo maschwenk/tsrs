@@ -29,7 +29,4 @@ similar = "3"
 tsrs_contentmappertest.workspace = true
 
 [features]
-site-counts = ["tsrs_compiler/site-counts"]
-work-census = ["tsrs_compiler/work-census"]
 alloc-profile = ["tsrs_core/alloc-profile"]
-assignment-stats = ["tsrs_compiler/assignment-stats"]

@@ -13,7 +13,6 @@ microsoft/TypeScript at the commit pinned in the workspace `Cargo.toml`
 | `timing.rs` | `tsc/internal/ipc/timing.go` |
 | `transport.rs` | `tsc/internal/ipc/transport*.go`, connection setup in `tsc/internal/api/server.go` |
 | `callbackfs.rs` | `tsc/internal/api/callbackfs.go` |
-| `requestfs/` (feature `requestfs`) | `tsc/internal/api/requestfilesystem/*.go` |
 
 ## Contract with the API session
 
@@ -111,18 +110,11 @@ needing the held lock errors, nested request not needing it succeeds at depth 1,
 closing while a handler waits on a callback returns and releases the lock), all under a 20 s watchdog.
 Handlers that ignore the cancellation token can still delay `run`'s final join (Go also waits).
 
-## Request filesystem (feature `requestfs`)
+## Request filesystem
 
-`requestfs::new_for_update(params, base: &AnyFs, cwd, &mut FileChangeSummary) -> Result<AnyFs, String>`
-is Go `NewForUpdate`: `full` replaces the host, `layer` overlays it, `removedPaths` are negative lookups,
-explicit directory listings, request and host symlinks (cycle-safe), layer-over-layer compaction, and
-file-change summaries with symlink aliases. `RequestFs` implements `FS`, `FileHandleSource`,
-`LayeredFileSystem` (`overlays`) and `FileChangeExpander`, and exposes `base_file_system` /
-`with_base_file_system` (Go `RebasableFileSystem`). The API session uses its own port
-(`crates/tsrs_api/src/requestfs.rs`), which tsrs_project rebases and uses as a `FileChangeExpander`; this module is
-kept as the reference checked by `tests/requestfs_differential.rs`. Decode params with `RequestFileSystemParams::from_json` (or run
-`strictjson::validate` on the whole request): plain serde would keep the last duplicate key, which the
-pinned decoder rejects.
+Request filesystem layering belongs to `tsrs_api::requestfs`, the implementation used by the API session.
+Its Go-fixture differential and real-filesystem tests run without feature flags in
+`crates/tsrs_api/tests/requestfs_differential.rs`. This transport crate validates the raw JSON before dispatch.
 
 ## Strict JSON (`strictjson`)
 
@@ -149,9 +141,6 @@ request params before serde so duplicates are rejected like Go's `unmarshalPaylo
   accept/reject decisions and identical error text for callback responses, JSON-RPC messages and
   request-filesystem params.
 - `tests/reentrancy.rs`: see Re-entrancy.
-- `tests/requestfs_differential.rs` (feature `requestfs`): 142 query results and every step's
-  file-change summary compared with the pinned Go request filesystem over the same scenarios, plus a
-  real-OS-filesystem layering test.
 
 ## Deliberate differences from Go
 
@@ -169,10 +158,6 @@ request params before serde so duplicates are rejected like Go's `unmarshalPaylo
 - External content-mapper spawning (`--runExternalCode`) is not part of this crate.
 
 ## Fixtures
-
-`tests/fixtures/requestfs_go.json` comes from `requestfs_gen.go.txt` placed in the pinned
-`tsc/internal/api/requestfilesystem` package: `GOWORK=off SCENARIOS=<requestfs_scenarios.json>
-SCENARIOS_OUT=<out> go test -run ZZDump ./internal/api/requestfilesystem/`.
 
 `tests/fixtures/go_frames.json` was produced by running `tests/fixtures/go_frames_gen.go.txt` as a Go
 test in a package next to the pinned `protocol_msgpack.go` (renamed package) inside the pinned

@@ -89,7 +89,6 @@ pub fn read_reference_baseline(suite: &str, name: &str) -> Option<String> {
 pub fn read_reference_extra_baseline(suite: &str, name: &str, ext: &str) -> Option<String> {
     let path = testdata_path().join("baselines/reference").join(suite).join(format!("{name}.{ext}"));
     let text = std::fs::read(path).ok().map(|b| tsrs_core::utf8::from_utf8_lossy(&b).into_owned());
-    #[cfg(feature = "compiler")]
     if ext == "js" && crate::compile::dts_only_mode() {
         let block = extract_dts_block(text.as_deref().unwrap_or(""));
         return (block != crate::baseline::NO_CONTENT).then_some(block);
@@ -312,12 +311,11 @@ mod tests {
     #[test]
     fn units_match_go_harness() {
         let scratch = repo_root().join("target/scratch/testrunner");
-        let (Ok(diags), Ok(table)) =
-            (std::fs::read_to_string(scratch.join("diags.jsonl")), crate::oracle::load_option_table(&scratch.join("options.json").to_string_lossy()))
-        else {
+        let Ok(diags) = std::fs::read_to_string(scratch.join("diags.jsonl")) else {
             eprintln!("oracle files missing; skipping");
             return;
         };
+        let table = crate::options::tsoptions_option_table();
         let mut checked = 0;
         let mut mismatches = Vec::new();
         let mut paths: rustc_hash::FxHashMap<String, String> = Default::default();

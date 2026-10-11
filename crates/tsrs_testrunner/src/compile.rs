@@ -121,12 +121,12 @@ pub fn dts_only_mode() -> bool {
 }
 
 fn js_baselines() -> bool {
-    !crate::syntax_only() && crate::extra_baselines() & crate::EXTRA_JS != 0
+    crate::extra_baselines() & crate::EXTRA_JS != 0
 }
 
 // Any emit baseline (`.js`, `.js.map`, `.sourcemap.txt`) switches the compilation to Go's pre-/post-emit programs.
 fn emit_baselines() -> bool {
-    !crate::syntax_only() && crate::extra_baselines() & (crate::EXTRA_JS | crate::EXTRA_JSMAP | crate::EXTRA_SOURCEMAP) != 0
+    crate::extra_baselines() & (crate::EXTRA_JS | crate::EXTRA_JSMAP | crate::EXTRA_SOURCEMAP) != 0
 }
 
 // Go `result.Repeat` / `compileDeclarationFiles` call CompileFilesEx again with the test's harness settings.
@@ -304,14 +304,12 @@ fn compile_files_with_host(host: Arc<dyn CompilerHost>, config: P<ParsedCommandL
     errors.extend(program.get_config_file_parsing_diagnostics());
     errors.extend(program.get_program_diagnostics());
     errors.extend(program.get_syntactic_diagnostics(ctx, None));
-    if !crate::syntax_only() {
-        errors.extend(program.get_semantic_diagnostics(ctx, None));
-        errors.extend(program.get_global_diagnostics(ctx));
-    }
-    if harness_options.capture_suggestions && !crate::syntax_only() {
+    errors.extend(program.get_semantic_diagnostics(ctx, None));
+    errors.extend(program.get_global_diagnostics(ctx));
+    if harness_options.capture_suggestions {
         errors.extend(program.get_suggestion_diagnostics(ctx, None));
     }
-    if program.options().get_emit_declarations() && !crate::syntax_only() {
+    if program.options().get_emit_declarations() {
         errors.extend(program.get_declaration_diagnostics(ctx, None));
     }
     let errors = compiler::sort_and_deduplicate_diagnostics(&errors);
@@ -430,7 +428,7 @@ fn verify_types_and_symbols(
     to_be_compiled: &[TestFile],
     other_files: &[TestFile],
 ) -> Option<compiler_runner::TypesAndSymbols> {
-    if crate::syntax_only() || crate::extra_baselines() == 0 || result.harness_options.no_types_and_symbols {
+    if crate::extra_baselines() == 0 || result.harness_options.no_types_and_symbols {
         return None;
     }
     let program = result.program;

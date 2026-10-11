@@ -79,6 +79,19 @@ jobs:
         env:
           RUSTFLAGS: -D warnings
 
+      # Feature-only tooling must compile too. Check compressed pointers separately: --workspace --all-features
+      # also enables plain-ptrs, which overrides them.
+      - name: cargo check (feature combinations)
+        env:
+          RUSTFLAGS: -D warnings
+        run: |
+          cargo check --workspace --all-targets --all-features --locked
+          cargo check -p tsrs_cli --all-features --features tsrs_core/checked-cells --locked
+          cargo check -p tsrs_cli -p tsrs_testrunner --features tsrs_cli/alloc-profile --locked
+
+      - name: Request filesystem Go fixtures
+        run: cargo test --locked -p tsrs_api --test requestfs_differential
+
       - name: cargo test (fast crates)
         run: >-
           cargo test --locked --no-fail-fast

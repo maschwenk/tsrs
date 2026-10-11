@@ -302,6 +302,7 @@ name = "tsrs_api"
 version = "0.13.0"
 dependencies = [
  "rustc-hash",
+ "serde_json",
  "tsrs_api_codec",
  "tsrs_api_transport",
  "tsrs_ast",
@@ -341,9 +342,6 @@ dependencies = [
  "serde",
  "serde_json",
  "tsrs_core",
- "tsrs_ls",
- "tsrs_lsproto",
- "tsrs_project",
  "tsrs_vfs",
 ]
 

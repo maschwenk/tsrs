@@ -6,10 +6,15 @@
 use std::sync::Arc;
 
 use serde_json::{json, Value};
-use tsrs_api_transport::requestfs::{new_for_update, AnyFs, RequestFileSystemParams};
-use tsrs_project::{FileChangeSummary, FsRef};
+use tsrs_api::requestfs::{new_for_update, RequestFileSystem, RequestParams};
+use tsrs_project::FileChangeSummary;
 use tsrs_vfs::vfstest::{self, MapFile};
 use tsrs_vfs::FS;
+
+fn decode_params(value: &Value) -> Result<RequestParams, String> {
+    let value = tsrs_core::json::unmarshal(&value.to_string())?;
+    RequestParams::parse(&value)
+}
 
 fn sorted_uris(set: &tsrs_core::collections::Set<tsrs_lsproto::DocumentUri>) -> Value {
     let mut v: Vec<String> = set.keys().iter().map(|u| u.0.clone()).collect();
@@ -67,16 +72,16 @@ fn request_filesystem_matches_pinned_go() {
             }
         }
         let base: Arc<dyn FS> = Arc::new(vfstest::from_map(host, case_sensitive));
-        let mut fs = AnyFs::Other(FsRef::Host(base));
+        let mut fs: Option<RequestFileSystem> = None;
         let queries: Vec<&str> = sc["queries"].as_array().unwrap().iter().map(|q| q.as_str().unwrap()).collect();
         let go_steps = expected[name].as_array().unwrap_or_else(|| panic!("no Go result for {name}"));
         for (i, step) in sc["steps"].as_array().unwrap().iter().enumerate() {
-            let params: RequestFileSystemParams = serde_json::from_value(step.clone()).unwrap();
+            let params = decode_params(step);
             let mut changes = FileChangeSummary::default();
             let mut out = json!({"error": "", "changed": null, "created": null, "deleted": null, "includesOutside": false});
-            match new_for_update(Some(&params), &fs, cwd, &mut changes) {
+            match params.and_then(|params| new_for_update(&params, Arc::clone(&base), fs.as_ref(), cwd, &mut changes)) {
                 Ok(next) => {
-                    fs = next;
+                    fs = Some(next);
                     out["changed"] = sorted_uris(&changes.changed);
                     out["created"] = sorted_uris(&changes.created);
                     out["deleted"] = sorted_uris(&changes.deleted);
@@ -84,7 +89,7 @@ fn request_filesystem_matches_pinned_go() {
                 }
                 Err(e) => out["error"] = json!(e),
             }
-            out["queries"] = json!(queries.iter().map(|q| query(fs.fs(), q)).collect::<Vec<_>>());
+            out["queries"] = json!(queries.iter().map(|q| query(fs.as_ref().map_or(base.as_ref(), |fs| fs as &dyn FS), q)).collect::<Vec<_>>());
             let go = &go_steps[i];
             for key in ["error", "changed", "created", "deleted", "includesOutside"] {
                 assert_eq!(normalize(&out[key]), normalize(&go[key]), "{name} step {i}: {key}");
@@ -95,7 +100,9 @@ fn request_filesystem_matches_pinned_go() {
             }
         }
     }
-    assert!(compared >= 100, "only {compared} queries compared");
+    assert_eq!(scenarios.len(), 11);
+    assert_eq!(scenarios.iter().map(|s| s["steps"].as_array().unwrap().len()).sum::<usize>(), 20);
+    assert_eq!(compared, 142);
     eprintln!("request filesystem: {compared} query results match pinned Go");
 }
 
@@ -105,6 +112,8 @@ fn request_filesystem_layers_over_real_os_files() {
     let dir = std::env::temp_dir().join(format!("tsrs-requestfs-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src/lib")).unwrap();
+    // macOS's temporary directory can be reached through /var -> /private/var.
+    let dir = std::fs::canonicalize(dir).unwrap();
     std::fs::write(dir.join("src/a.ts"), "disk a").unwrap();
     std::fs::write(dir.join("src/b.ts"), "disk b").unwrap();
     std::fs::write(dir.join("src/lib/l.ts"), "disk l").unwrap();
@@ -114,16 +123,14 @@ fn request_filesystem_layers_over_real_os_files() {
     let p = |s: &str| format!("{root}/{s}");
 
     let host: Arc<dyn FS> = Arc::new(tsrs_vfs::osvfs::fs());
-    let base = AnyFs::Other(FsRef::Host(host));
-    let params: RequestFileSystemParams = serde_json::from_value(json!({
+    let params = decode_params(&json!({
         "kind": "layer",
         "files": {"src/a.ts": "request a", "src/new.ts": "new"},
         "removedPaths": ["src/b.ts"],
-    }))
-    .unwrap();
+    })).unwrap();
     let mut changes = FileChangeSummary::default();
-    let layered = new_for_update(Some(&params), &base, &root, &mut changes).unwrap();
-    let fs = layered.fs();
+    let layered = new_for_update(&params, Arc::clone(&host), None, &root, &mut changes).unwrap();
+    let fs = &layered;
     assert_eq!(fs.read_file(&p("src/a.ts")).as_deref(), Some("request a"));
     assert_eq!(fs.read_file(&p("src/b.ts")), None, "removed path is a negative lookup");
     assert!(!fs.file_exists(&p("src/b.ts")));
@@ -145,10 +152,10 @@ fn request_filesystem_layers_over_real_os_files() {
     // Layers write through to the host; a full filesystem rejects mutation.
     fs.write_file(&p("src/out.js"), "emitted").unwrap();
     assert_eq!(std::fs::read_to_string(dir.join("src/out.js")).unwrap(), "emitted");
-    let full: RequestFileSystemParams = serde_json::from_value(json!({"kind": "full", "files": {"src/a.ts": "x"}})).unwrap();
-    let full = new_for_update(Some(&full), &layered, &root, &mut FileChangeSummary::default()).unwrap();
-    assert_eq!(full.fs().read_file(&p("src/lib/l.ts")), None, "full replaces the host");
-    assert_eq!(full.fs().write_file(&p("src/out2.js"), "x"), Err("invalid argument".to_string()));
+    let full = decode_params(&json!({"kind": "full", "files": {"src/a.ts": "x"}})).unwrap();
+    let full = new_for_update(&full, host, Some(&layered), &root, &mut FileChangeSummary::default()).unwrap();
+    assert_eq!(full.read_file(&p("src/lib/l.ts")), None, "full replaces the host");
+    assert_eq!(full.write_file(&p("src/out2.js"), "x"), Err("invalid argument".to_string()));
     assert!(!dir.join("src/out2.js").exists());
     std::fs::remove_dir_all(&dir).unwrap();
 }

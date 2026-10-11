@@ -11,7 +11,7 @@ workspace = true
 default = ["compressed-ptrs"]
 # Atomic borrow checking for FrozenCell in release builds (always on with debug_assertions).
 checked-cells = []
-# Per-call-site arena allocation profile and a counting global allocator (src/alloc_profile.rs).
+# Per-call-site arena profile and a counting allocator for executables to install (src/alloc_profile.rs).
 alloc-profile = ["dep:mimalloc-safe"]
 # Creation-site counters for checker objects (src/sitecount.rs).
 site-counts = []

@@ -249,6 +249,11 @@ notes/mem-linux-residency-32.md). `TSRS_MEM_SPLIT=purge` also has mimalloc purge
 (`mi_collect(true)`) and prints the split again. `tools/perf/slackprobe.sh` runs it on the selected Depot runner
 (`.depot/workflows/perf-probe.yml`, 32 vCPU by default) with interleaved timed reps.
 
+The `alloc-profile` feature on `tsrs_cli` or `tsrs_testrunner` enables arena instrumentation and installs
+`tsrs_core::alloc_profile::CountingAllocator` in that executable. Enabling only `tsrs_core/alloc-profile`
+instruments the library without replacing the executable's allocator. This also lets profiling builds coexist
+with the parser oracle, which owns its own allocator.
+
 ## Where checker time goes by source pattern: the work census
 
 A function profile cannot tell which type alias or call site the time belongs to. The work census
@@ -453,3 +458,11 @@ overlay JSON that maps *both* the symlinked and the real path of the file to the
   resolve). It is committed with your work and read by the other agents.
 - Do not stop at the first fix. Work through your cluster until it is done or what remains is blocked on something
   outside your scope — then say exactly what.
+
+## Test-runner backend
+
+`tsrs-test` always uses the Rust compiler and its option tables. The bootstrap `compiler` / `tsoptions` Cargo
+features, `--oracle`, `--options`, `TSRS_TEST_OPTIONS`, and early-port `--syntax-only` mode have been retired.
+Use normal conformance runs for diagnostics and `--baselines types,symbols,js,jsmap,sourcemap` for extra baselines.
+Go-captured diagnostic rendering remains a unit test; the Go oracle's `names` and `diags` commands remain available
+for comparisons. Its bootstrap `options` export has been removed.

@@ -2,6 +2,9 @@
 #[cfg(not(feature = "alloc-profile"))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
+#[cfg(feature = "alloc-profile")]
+#[global_allocator]
+static GLOBAL: tsrs_core::alloc_profile::CountingAllocator = tsrs_core::alloc_profile::CountingAllocator;
 
 /// mimalloc as the global allocator, like `mimalloc_safe::MiMalloc` except that an allocation whose alignment
 /// mimalloc gives every block of its size (at most 16 bytes, and at most the size) takes the plain entry points

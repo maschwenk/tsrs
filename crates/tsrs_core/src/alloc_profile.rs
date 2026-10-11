@@ -18,7 +18,9 @@ use std::sync::{Arc, Mutex};
 pub mod census;
 mod os;
 
-struct Counting;
+/// Counting mimalloc allocator for profiling executables. The executable installs it with
+/// `#[global_allocator]`; enabling library instrumentation does not choose a process-wide allocator.
+pub struct CountingAllocator;
 
 static HEAP_CURRENT: AtomicUsize = AtomicUsize::new(0);
 static HEAP_PEAK: AtomicUsize = AtomicUsize::new(0);
@@ -30,7 +32,7 @@ fn grow(n: usize) {
     HEAP_PEAK.fetch_max(now, Ordering::Relaxed);
 }
 
-unsafe impl GlobalAlloc for Counting {
+unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // SAFETY: the `GlobalAlloc` caller guarantees that `layout` is valid; it is passed through unchanged.
         unsafe {
@@ -426,9 +428,6 @@ mod heap_sample {
         print("allocated (cumulative)", &order, &|i| sites[i].2 as i64, &mut names);
     }
 }
-
-#[global_allocator]
-static GLOBAL: Counting = Counting;
 
 #[derive(Default, Clone, Copy)]
 struct Entry {
