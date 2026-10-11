@@ -742,6 +742,29 @@ impl Scanner {
     }
 
     #[inline]
+    fn scan_ascii_identifier_parts(&mut self) {
+        let text = &self.text.as_bytes()[self.state.pos as usize..self.end as usize];
+        let (batches, tail) = text.as_chunks::<32>();
+        let mut scanned = 0;
+        for batch in batches {
+            for (i, &byte) in batch.iter().enumerate() {
+                if !ASCII_IDENTIFIER_PART[byte as usize] {
+                    self.state.pos += (scanned + i) as u32;
+                    return;
+                }
+            }
+            scanned += batch.len();
+        }
+        for &byte in tail {
+            if !ASCII_IDENTIFIER_PART[byte as usize] {
+                break;
+            }
+            scanned += 1;
+        }
+        self.state.pos += scanned as u32;
+    }
+
+    #[inline]
     fn slice(&self, start: u32, end: u32) -> &'static str {
         &self.text[start as usize..end as usize]
     }
@@ -1337,7 +1360,7 @@ impl Scanner {
         debug_assert!(matches!(self.char(), Some(b'A'..=b'Z' | b'a'..=b'z' | b'$' | b'_')));
         let start = self.state.pos;
         self.state.pos += 1;
-        self.scan_ascii_while(|b| ASCII_IDENTIFIER_PART[b as usize]);
+        self.scan_ascii_identifier_parts();
         let ch = self.char();
         if ch.is_none() || ch.is_some_and(|ch| ch < RUNE_SELF as u8 && ch != b'\\') {
             self.state.token_value = self.slice(start, self.state.pos);
@@ -1968,7 +1991,7 @@ impl Scanner {
             && ch.is_some_and(|ch| stringutil::is_ascii_letter(u32::from(ch)) || ch == b'_' || ch == b'$')
         {
             self.state.pos += 1;
-            self.scan_ascii_while(|b| ASCII_IDENTIFIER_PART[b as usize]);
+            self.scan_ascii_identifier_parts();
             let ch = self.char();
             if ch.is_none_or(|ch| ch < RUNE_SELF as u8 && ch != b'\\') {
                 self.state.token_value = self.slice(start, self.state.pos);
