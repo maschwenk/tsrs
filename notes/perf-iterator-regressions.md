@@ -49,8 +49,8 @@ Peak RSS at the default checker count, medians of three separate runs (bytes):
 These small RSS differences are not a memory improvement claim. On macOS arm64, `--features alloc-profile`
 with one parser/checker reports heap allocation counts of 405,225 → 404,445 for Compiler and
 439,453 → 436,681 for Compiler-Unions (original PR → correction). Arena bytes and peak live heap bytes are
-unchanged. Restoring the outer union loop, type-list comparator, union-worker body, union-capacity folds, or
-union-cache hash fold separately did not recover the remaining Compiler-Unions increase, so those reversions
+unchanged. Restoring the outer union loop together with the type-list comparator, or separately restoring the
+union-worker body, union-capacity folds or union-cache hash fold did not recover the remaining Compiler-Unions increase, so those reversions
 are not retained. The full project comparison below uses current main after resolving the unsigned-position refactor conflicts.
 
 Workspace all-feature checks, required lint scripts, 29 regression cases, formatter cases and the dependency
@@ -78,6 +78,15 @@ Retain loops in the four ancestor walks: `successors` computes the next parent b
 when the search is about to return. Retain the template-literal collector and the measured group of six other
 union helpers. Reverting the union subset search had no effect, and reverting the property-literal collector
 slightly increased instructions, so both retain their iterator forms.
+
+The next probe also restores the template-literal comparison loop in `structured_type_related_to_worker`:
+its recursive `try_fold` increased the hot relation worker's cost. Restoring the mapper or type-list comparator
+alone did not help; keep their iterator forms. The three candidates are recorded
+[here](https://depot.dev/orgs/qw3zz3l8cs/workflows/jd6nzfjj1s).
+
+The last ancestor/collector corrections (`7a1d78e7` → `8f70f6dc`) leave heap allocation counts unchanged:
+401,601 for Compiler and 433,694 for Compiler-Unions, with unchanged arena bytes and peak live heap bytes
+(`--features alloc-profile`, one parser/checker, macOS arm64).
 
 ## Formatter and dependency traversal
 

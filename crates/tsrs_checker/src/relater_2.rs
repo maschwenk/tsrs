@@ -1181,17 +1181,14 @@ impl Relater {
             } else if source.flags().intersects(TypeFlags::TemplateLiteral) {
                 if source.as_template_literal_type().texts() == target.as_template_literal_type().texts() {
                     result = Ternary::True;
-                    result = match source.as_template_literal_type().types().iter().enumerate().try_fold(result, |mut result, (i, &source_type)| {
+                    // A measured hot loop: a recursive try_fold costs more (notes/perf-iterator-regressions.md).
+                    for (i, &source_type) in source.as_template_literal_type().types().iter().enumerate() {
                         let target_type = target.as_template_literal_type().types()[i];
                         result &= self.is_related_to(c, source_type, target_type, RecursionFlags::Both, false /*reportErrors*/);
                         if result == Ternary::False {
-                            return Err(result);
+                            return result;
                         }
-                        Ok(result)
-                    }) {
-                        Ok(value) => value,
-                        Err(value) => return value,
-                    };
+                    }
                     return result;
                 }
             } else if source.flags().intersects(TypeFlags::StringMapping) {
