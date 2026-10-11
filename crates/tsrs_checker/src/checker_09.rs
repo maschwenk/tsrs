@@ -627,8 +627,42 @@ pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias
     get_type_instantiation_key(type_arguments, alias.into(), false)
 }
 
+/// The tags of `packed_type_list_key`'s families (each family keys its own caches).
+const PACKED_INSTANTIATION_KEY_TAG: u64 = 0x1a5e;
+const PACKED_CONDITIONAL_KEY_TAG: u64 = 0xc0d7;
+
+/// A key for a list of at most three types without an alias, computed without the key builder.
+///
+/// Go hashes the key bytes with xxh3-128 and only compares keys for equality, in caches private to one key family.
+/// This encoding is injective: the high word holds the family tag, `flag`, the length and the third type id; the low
+/// word is a bijective mix of the first two ids xored with a function of the high word. So two packed keys are equal
+/// exactly when their inputs are, and a packed key equals an xxh3 key of a longer or aliased list with the same
+/// 2^-128 odds as two xxh3 keys equal each other. The mix spreads every input bit over the low word, which
+/// `PackedMap` uses as the hash.
+#[inline]
+fn packed_type_list_key(tag: u64, types: &[P<Type>], flag: bool) -> Option<CacheHashKey> {
+    if types.len() > 3 {
+        return None;
+    }
+    let id = |i: usize| types.get(i).map_or(0, |t| u64::from(t.id.0));
+    let hi = tag << 48 | u64::from(flag) << 34 | (types.len() as u64) << 32 | id(2);
+    let y = ((id(0) | id(1) << 32) ^ hi.wrapping_mul(0x9e37_79b9_7f4a_7c15)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    Some(CacheHashKey { hi, lo: y ^ y >> 32 })
+}
+
 // checker.go:17910
+#[inline]
 pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
+    if let AliasArg::None = alias {
+        if let Some(key) = packed_type_list_key(PACKED_INSTANTIATION_KEY_TAG, type_arguments, single_signature) {
+            return key;
+        }
+    }
+    get_type_instantiation_key_hashed(type_arguments, alias, single_signature)
+}
+
+#[inline(never)]
+fn get_type_instantiation_key_hashed(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
     b.write_alias_arg(alias);
@@ -664,7 +698,18 @@ pub(crate) fn get_template_type_key(texts: &[&str], types: &[P<Type>]) -> CacheH
 }
 
 // checker.go:17943
+#[inline]
 pub(crate) fn get_conditional_type_key(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey {
+    if alias.is_none() {
+        if let Some(key) = packed_type_list_key(PACKED_CONDITIONAL_KEY_TAG, type_arguments, for_constraint) {
+            return key;
+        }
+    }
+    get_conditional_type_key_hashed(type_arguments, alias, for_constraint)
+}
+
+#[inline(never)]
+fn get_conditional_type_key_hashed(type_arguments: &[P<Type>], alias: Option<P<TypeAlias>>, for_constraint: bool) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(type_arguments);
     b.write_alias(alias);
