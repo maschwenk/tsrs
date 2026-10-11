@@ -764,9 +764,10 @@ impl Relater {
             // important to have well-defined behavior even in cases that shouldn't normally occur.
             return Ternary::False;
         }
-        let is_identity = self.rel() == c.identity_relation;
+        let rel = self.rel();
+        let is_identity = rel == c.identity_relation;
         let (id, constrained) = get_relation_key(c, source, target, intersection_state, is_identity, false /*ignoreConstraints*/);
-        let entry = self.rel().lookup(id);
+        let entry = rel.lookup(id);
         tsrs_core::sitecount::hit("relation cache (recursiveTypeRelatedTo)", if entry != RelationComparisonResult::None { "hit" } else { "miss" });
         if c.census_on() {
             let k = crate::workcensus::rel_kind(c, self.rel()) as usize;
@@ -824,16 +825,18 @@ impl Relater {
         let maybe_start = self.maybe_keys.borrow().len();
         self.maybe_stack_push(id);
         let save_expanding_flags = self.expanding_flags.get();
+        // isDeeplyNestedType never reaches this relater, so a stack borrow is not held across a re-entry.
         if recursion_flags.intersects(RecursionFlags::Source) {
-            self.source_stack.borrow_mut().push(RecursionStackEntry::new(source));
-            // isDeeplyNestedType never reaches this relater, so the stack borrow is not held across a re-entry.
-            if !self.expanding_flags.get().intersects(ExpandingFlags::Source) && c.is_deeply_nested_on_stack(source, &self.source_stack.borrow(), 3) {
+            let mut stack = self.source_stack.borrow_mut();
+            stack.push(RecursionStackEntry::new(source));
+            if !self.expanding_flags.get().intersects(ExpandingFlags::Source) && c.is_deeply_nested_on_stack(source, &stack, 3) {
                 self.expanding_flags.set(self.expanding_flags.get() | ExpandingFlags::Source);
             }
         }
         if recursion_flags.intersects(RecursionFlags::Target) {
-            self.target_stack.borrow_mut().push(RecursionStackEntry::new(target));
-            if !self.expanding_flags.get().intersects(ExpandingFlags::Target) && c.is_deeply_nested_on_stack(target, &self.target_stack.borrow(), 3) {
+            let mut stack = self.target_stack.borrow_mut();
+            stack.push(RecursionStackEntry::new(target));
+            if !self.expanding_flags.get().intersects(ExpandingFlags::Target) && c.is_deeply_nested_on_stack(target, &stack, 3) {
                 self.expanding_flags.set(self.expanding_flags.get() | ExpandingFlags::Target);
             }
         }
@@ -874,7 +877,7 @@ impl Relater {
             // A false result goes straight into global cache (when something is false under
             // assumptions it will also be false without assumptions)
             if record {
-                Relation::set(&self.rel(), id, RelationComparisonResult::Failed | propagating_variance_flags);
+                Relation::set(&rel, id, RelationComparisonResult::Failed | propagating_variance_flags);
                 self.relation_count.set(self.relation_count.get() - 1);
             }
             self.reset_maybe_stack(c, maybe_start as i32, propagating_variance_flags, false);
