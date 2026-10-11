@@ -1028,11 +1028,12 @@ impl Checker {
             None
         } else {
             let key = active_mapper_cache_key(t, alias);
-            if let Some(cached_type) = self.active_type_mappers_caches[index as usize].get(&key) {
+            let cache = &self.active_type_mappers_caches[index as usize];
+            if let Some(cached_type) = cache.get(&key) {
                 tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
                 return cached_type;
             }
-            Some(key)
+            Some((key, cache.len(), self.active_mapper_cache_clears))
         };
         tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", if index == -1 { "miss (new mapper)" } else { "miss (active mapper)" });
         self.total_instantiation_count += 1;
@@ -1042,8 +1043,15 @@ impl Checker {
         let result = self.instantiate_type_worker(t, m, alias);
         match key {
             None => self.pop_active_mapper(),
-            Some(key) => {
-                self.active_type_mappers_caches[index as usize].insert(key, result);
+            Some((key, len, clears)) => {
+                let cache = &mut self.active_type_mappers_caches[index as usize];
+                // The key was absent at the lookup; if the cache is still as it was (nothing stored, nothing cleared),
+                // it is absent now and needs no second search.
+                if cache.len() == len && self.active_mapper_cache_clears == clears {
+                    cache.insert_absent(key, result);
+                } else {
+                    cache.insert(key, result);
+                }
             }
         }
         self.instantiation_stack.pop();
@@ -1133,6 +1141,7 @@ impl Checker {
 
     // checker.go:22600
     pub(crate) fn clear_active_mapper_caches(&mut self) {
+        self.active_mapper_cache_clears = self.active_mapper_cache_clears.wrapping_add(1);
         for cache in self.active_type_mappers_caches[..self.active_mappers.len()].iter_mut() {
             cache.clear();
         }

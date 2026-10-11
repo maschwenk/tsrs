@@ -1344,6 +1344,8 @@ pub struct Checker {
     pub active_mappers: Vec<P<TypeMapper>>,
     /// One cache per active mapper; the caches past `active_mappers.len()` are cleared ones kept for reuse.
     pub active_type_mappers_caches: Vec<PackedMap<CacheHashKey, P<Type>>>,
+    /// Counts `clear_active_mapper_caches` calls (see `instantiate_type_with_alias_worker`).
+    pub(crate) active_mapper_cache_clears: u32,
     // Mappers and inference contexts `getConditionalType` made, recycled when it returns (notes/mem-recycle.md).
     pub scratch_mappers: Vec<P<TypeMapper>>,
     pub scratch_contexts: Vec<P<InferenceContext>>,
@@ -1756,6 +1758,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         ctx: None,
         active_mappers: Vec::new(),
         active_type_mappers_caches: Vec::new(),
+        active_mapper_cache_clears: 0,
         scratch_mappers: Vec::new(),
         scratch_contexts: Vec::new(),
         scratch_mapper_lists: Vec::new(),
@@ -2256,6 +2259,7 @@ impl Checker {
             ctx: None,
             active_mappers: Vec::new(),
             active_type_mappers_caches: Vec::new(),
+            active_mapper_cache_clears: 0,
             scratch_mappers: Vec::new(),
             scratch_contexts: Vec::new(),
             scratch_mapper_lists: Vec::new(),

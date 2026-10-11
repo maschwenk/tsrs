@@ -95,6 +95,13 @@ impl<K: PackedKey, V: Copy> PackedMap<K, V> {
         }
     }
 
+    /// `insert` of a key that is not in the map (the caller knows; checked in debug builds).
+    #[inline]
+    pub fn insert_absent(&mut self, key: K, value: V) {
+        debug_assert!(self.get(&key).is_none());
+        self.table.insert_unique(key.packed_hash(), PackedSlot { key, value }, |slot| ({ slot.key }).packed_hash());
+    }
+
     pub fn len(&self) -> usize {
         self.table.len()
     }
