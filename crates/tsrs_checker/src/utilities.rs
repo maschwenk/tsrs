@@ -1129,12 +1129,23 @@ pub fn get_property_name_from_type(t: P<Type>) -> std::borrow::Cow<'static, str>
         return literal_string_value(t).into();
     }
     if t.flags().intersects(TypeFlags::NumberLiteral) {
-        return literal_number_value(t).string().into();
+        let n = literal_number_value(t);
+        return match small_index_name(n.0) {
+            Some(name) => name.into(),
+            None => n.string().into(),
+        };
     }
     if t.flags().intersects(TypeFlags::UniqueESSymbol) {
         return t.as_unique_es_symbol_type().name.get().into();
     }
     panic!("Unhandled case in getPropertyNameFromType")
+}
+
+/// `Number::string` of an integer in 0..256 (tuple and array indices), without building the string.
+fn small_index_name(n: f64) -> Option<&'static str> {
+    static NAMES: std::sync::LazyLock<Box<[&'static str]>> = std::sync::LazyLock::new(|| (0..256).map(|i: u32| &*i.to_string().leak()).collect());
+    // -0 is named "0", as `Number::string` names it.
+    (n >= 0.0 && n < 256.0 && n.fract() == 0.0).then(|| NAMES[n as usize])
 }
 
 // utilities.go:941

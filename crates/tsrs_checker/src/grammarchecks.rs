@@ -1064,7 +1064,21 @@ impl Checker {
 
     // grammarchecks.go:998
     pub(crate) fn check_grammar_object_literal_expression(&mut self, node: P<Node>, in_destructuring: bool) -> bool {
-        let mut seen: FxHashMap<std::borrow::Cow<'static, str>, DeclarationMeaning> = FxHashMap::default();
+        let mut seen = self.free_meaning_maps.pop().unwrap_or_default();
+        let result = self.check_grammar_object_literal_expression_worker(node, in_destructuring, &mut seen);
+        if seen.capacity() <= 1024 {
+            seen.clear();
+            self.free_meaning_maps.push(seen);
+        }
+        result
+    }
+
+    fn check_grammar_object_literal_expression_worker(
+        &mut self,
+        node: P<Node>,
+        in_destructuring: bool,
+        seen: &mut FxHashMap<std::borrow::Cow<'static, str>, DeclarationMeaning>,
+    ) -> bool {
 
         let properties = node.as_object_literal_expression().properties.nodes();
         for &prop in properties {

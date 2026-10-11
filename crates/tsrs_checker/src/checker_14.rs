@@ -1486,21 +1486,30 @@ impl Checker {
         if types.contains(&self.wildcard_type) {
             return self.wildcard_type;
         }
-        let mut sb = self.free_strings.pop().unwrap_or_default();
-        let result = self.get_template_literal_type_worker(texts, types, &mut sb);
+        let mut state = TemplateSpansState {
+            new_types: self.free_type_lists.pop().unwrap_or_default(),
+            new_texts: self.free_strings.pop().unwrap_or_default(),
+            new_text_ends: self.free_index_lists.pop().unwrap_or_default(),
+            sb: self.free_strings.pop().unwrap_or_default(),
+            text_length: 0,
+            too_large: false,
+        };
+        let result = self.get_template_literal_type_worker(texts, types, &mut state);
+        let TemplateSpansState { new_types, mut new_texts, mut new_text_ends, mut sb, .. } = state;
+        self.free_type_list(new_types);
+        new_texts.clear();
+        self.free_strings.push(new_texts);
+        new_text_ends.clear();
+        self.free_index_lists.push(new_text_ends);
         sb.clear();
         self.free_strings.push(sb);
         result
     }
 
-    /// The rest of `get_template_literal_type`, with the text built in `sb` (an empty buffer).
-    fn get_template_literal_type_worker(&mut self, texts: &[&str], types: &[P<Type>], sb: &mut String) -> P<Type> {
-        let mut state = TemplateSpansState { new_types: Vec::new(), new_texts: Vec::new(), sb: std::mem::take(sb), text_length: 0, too_large: false };
+    /// The rest of `get_template_literal_type`, with `state` made of empty buffers.
+    fn get_template_literal_type_worker(&mut self, texts: &[&str], types: &[P<Type>], state: &mut TemplateSpansState) -> P<Type> {
         state.sb.push_str(texts[0]);
-        let spans_ok = add_template_spans(self, &mut state, texts, types);
-        *sb = std::mem::take(&mut state.sb);
-        let sb: &str = sb;
-        if !spans_ok {
+        if !add_template_spans(self, state, texts, types) {
             if state.too_large {
                 let current_node = self.current_node;
                 self.error(current_node, &diagnostics::Type_instantiation_is_excessively_deep_and_possibly_infinite, &[]);
@@ -1509,12 +1518,11 @@ impl Checker {
             return self.string_type;
         }
         if state.new_types.is_empty() {
-            return self.get_string_literal_type(&stringutil::combine_surrogate_pairs(sb));
+            return self.get_string_literal_type(&stringutil::combine_surrogate_pairs(&state.sb));
         }
-        state.new_texts.push(stringutil::combine_surrogate_pairs(sb).into_owned());
-        let new_texts = state.new_texts;
-        let new_types = state.new_types;
-        if new_texts.iter().all(|t| t.is_empty()) {
+        state.push_new_text();
+        let new_types = &state.new_types;
+        if state.new_texts.is_empty() {
             if new_types.iter().all(|t| t.flags().intersects(TypeFlags::String)) {
                 return self.string_type;
             }
@@ -1523,12 +1531,22 @@ impl Checker {
                 return new_types[0];
             }
         }
-        let new_text_refs: Vec<&str> = new_texts.iter().map(|s| s.as_str()).collect();
-        let key = get_template_type_key(&new_text_refs, &new_types);
+        let mut start = 0;
+        let new_text_refs: Vec<&str> = state
+            .new_text_ends
+            .iter()
+            .map(|&end| {
+                let text = &state.new_texts[start..end];
+                start = end;
+                text
+            })
+            .collect();
+        let new_types = &state.new_types;
+        let key = get_template_type_key(&new_text_refs, new_types);
         let t = match self.template_literal_types.get(&key) {
             Some(t) => t,
             None => {
-                let t = self.new_template_literal_type(&new_text_refs, &new_types);
+                let t = self.new_template_literal_type(&new_text_refs, new_types);
                 self.template_literal_types.insert(key, t);
                 t
             }
@@ -1575,10 +1593,19 @@ impl Checker {
 // Mutable state shared by the recursive `addSpans` closure of getTemplateLiteralType.
 struct TemplateSpansState {
     new_types: Vec<P<Type>>,
-    new_texts: Vec<String>,
+    new_texts: String,         // Go's newTexts, one after the other
+    new_text_ends: Vec<usize>, // where each of them ends in `new_texts`
     sb: String,
     text_length: usize, // combined length of the segments already moved into newTexts
     too_large: bool,
+}
+
+impl TemplateSpansState {
+    /// Go's `newTexts = append(newTexts, sb.String())`.
+    fn push_new_text(&mut self) {
+        self.new_texts.push_str(&stringutil::combine_surrogate_pairs(&self.sb));
+        self.new_text_ends.push(self.new_texts.len());
+    }
 }
 
 // checker.go:29645 (addSpans closure of getTemplateLiteralType)
@@ -1595,7 +1622,7 @@ fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[
             state.sb.push_str(texts[i + 1]);
         } else if c.is_generic_index_type(t) || c.is_pattern_literal_placeholder_type(t) {
             state.new_types.push(t);
-            state.new_texts.push(stringutil::combine_surrogate_pairs(&state.sb).into_owned());
+            state.push_new_text();
             state.text_length += state.sb.len();
             state.sb.clear();
             state.sb.push_str(texts[i + 1]);

@@ -1954,16 +1954,16 @@ impl Checker {
         is_unit_type(t) || t.flags().intersects(TypeFlags::TemplateLiteral) || t.flags().intersects(TypeFlags::StringMapping)
     }
     // relater.go:1317
-    pub(crate) fn get_variances(&mut self, t: P<Type>) -> Vec<VarianceFlags> {
+    pub(crate) fn get_variances(&mut self, t: P<Type>) -> &'static [VarianceFlags] {
         // Arrays and tuples are known to be covariant, no need to spend time computing this.
         if t == self.global_array_type || t == self.global_readonly_array_type || t.object_flags().intersects(ObjectFlags::Tuple) {
-            return self.array_variances.to_vec();
+            return self.array_variances;
         }
         self.get_variances_worker(t.symbol().unwrap(), t.as_interface_type().type_parameters())
     }
 
     // relater.go:1325
-    pub(crate) fn get_alias_variances(&mut self, symbol: P<Symbol>) -> Vec<VarianceFlags> {
+    pub(crate) fn get_alias_variances(&mut self, symbol: P<Symbol>) -> &'static [VarianceFlags] {
         let type_parameters = self.type_alias_links.get(symbol).type_parameters.get();
         self.get_variances_worker(symbol, type_parameters)
     }
@@ -1974,7 +1974,7 @@ impl Checker {
     // generic type are structurally compared. We infer the variance information by comparing
     // instantiations of the generic type for type arguments with known relations. The function
     // returns an empty slice when invoked recursively for the given generic type.
-    pub(crate) fn get_variances_worker(&mut self, symbol: P<Symbol>, type_parameters: &'static [P<Type>]) -> Vec<VarianceFlags> {
+    pub(crate) fn get_variances_worker(&mut self, symbol: P<Symbol>, type_parameters: &'static [P<Type>]) -> &'static [VarianceFlags] {
         let links = self.variance_links.get(symbol);
         let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, |v| v.len());
         if links.variances.get().is_none() {
@@ -2078,7 +2078,7 @@ impl Checker {
                 }
             }
         }
-        links.variances.get().unwrap().to_vec()
+        links.variances.get().unwrap()
     }
 
     // relater.go:1437

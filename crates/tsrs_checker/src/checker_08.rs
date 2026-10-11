@@ -637,7 +637,13 @@ impl Checker {
             return None;
         }
         let globals = self.globals;
-        let symbol = self.get_symbol(Some(globals), &format!("\"{}\"", module_name), SymbolFlags::ValueModule);
+        let mut quoted = self.free_strings.pop().unwrap_or_default();
+        quoted.push('"');
+        quoted.push_str(module_name);
+        quoted.push('"');
+        let symbol = self.get_symbol(Some(globals), &quoted, SymbolFlags::ValueModule);
+        quoted.clear();
+        self.free_strings.push(quoted);
         // merged symbol is module declaration symbol combined with all augmentations
         if with_augmentations {
             return symbol.map(|s| self.get_merged_symbol(s));
@@ -1309,7 +1315,7 @@ impl Checker {
     pub(crate) fn get_exports_of_module_worker(&mut self, module_symbol: Option<P<Symbol>>) -> (P<SymbolTable>, FxHashMap<String, P<Node>>) {
         struct VisitState {
             visited_symbols: Vec<P<Symbol>>,
-            non_type_only_names: collections::Set<String>,
+            non_type_only_names: collections::Set<&'static str>,
             type_only_export_star_map: Option<FxHashMap<String, P<Node>>>,
         }
         // The ES6 spec permits export * declarations in a module to circularly reference the module itself. For example,
@@ -1321,8 +1327,8 @@ impl Checker {
                     // because we might have visited it via an 'export type *', and visiting
                     // again with 'export *' will override the type-onlyness of its exports.
                     if let Some(exports) = symbol.exports() {
-                        for name in exports.keys() {
-                            st.non_type_only_names.add(name.to_string());
+                        for i in 0..exports.len() {
+                            st.non_type_only_names.add(exports.entry(i).0);
                         }
                     }
                 }
@@ -1404,7 +1410,7 @@ impl Checker {
         }
         let mut type_only_export_star_map = st.type_only_export_star_map.unwrap_or_default();
         #[expect(clippy::iter_over_hash_type, reason = "only removes keys from another map")]
-        for name in st.non_type_only_names.keys() {
+        for &name in st.non_type_only_names.keys() {
             type_only_export_star_map.remove(name);
         }
         (exports, type_only_export_star_map)
