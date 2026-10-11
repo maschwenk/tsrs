@@ -631,6 +631,20 @@ fn same_text(a: &str, b: &str) -> bool {
     a.len() == b.len() && (std::ptr::eq(a.as_ptr(), b.as_ptr()) || a.as_bytes() == b.as_bytes())
 }
 
+/// `a == b` for two strings of the same length of at most 16 bytes, with the loads `hash_name` makes (no call).
+#[inline]
+fn short_text_eq(a: &[u8], b: &[u8]) -> bool {
+    let len = a.len();
+    debug_assert!(len == b.len() && len <= 16);
+    if len >= 8 {
+        a.first_chunk::<8>() == b.first_chunk::<8>() && a.last_chunk::<8>() == b.last_chunk::<8>()
+    } else if len >= 4 {
+        a.first_chunk::<4>() == b.first_chunk::<4>() && a.last_chunk::<4>() == b.last_chunk::<4>()
+    } else {
+        len == 0 || a[0] == b[0] && a[len / 2] == b[len / 2] && a[len - 1] == b[len - 1]
+    }
+}
+
 /// The index's hash of an entry: its 32-bit hash spread over 64 bits (hashbrown takes its tag from the top bits).
 #[inline]
 fn index_hash(hash: u32) -> u64 {
@@ -693,13 +707,39 @@ impl SymbolMap {
         self.search(name, hash)
     }
 
-    /// `position` past the filter (`hash` = `hash_name(name)`).
+    /// `position` past the filter (`hash` = `hash_name(name)`): the first entry with the key's fingerprint, returned
+    /// at once when its key has the looked-up text and at most 16 bytes; anything else goes to `search_text`. Nearly
+    /// every search ends here (a miss, or a hit on a short name), and without a call on this path the function saves
+    /// no registers.
     #[inline(never)]
     fn search(&self, name: &str, hash: u32) -> Option<usize> {
         let print = KeyPrint::of(name, hash);
+        let i = match self.index() {
+            None => (0..self.entries.len()).find(|&i| self.entries[i].print() == print)?,
+            Some(index) => *index.find(index_hash(hash), |&i| self.entries[i as usize].print() == print)? as usize,
+        };
+        let e = self.entries[i];
+        if !e.is_odd() {
+            let key = e.symbol().name();
+            if key.len() == name.len() && (std::ptr::eq(key.as_ptr(), name.as_ptr()) || name.len() <= 16 && short_text_eq(key.as_bytes(), name.as_bytes())) {
+                return Some(i);
+            }
+        }
+        self.search_text(name, hash, i)
+    }
+
+    /// `search` from candidate `i` (the first entry with the key's fingerprint) on, comparing the text. Keys are
+    /// unique, so a candidate with the same text is the answer; after a fingerprint collision the linear scan goes on
+    /// past `i` and the index is probed again.
+    #[inline(never)]
+    fn search_text(&self, name: &str, hash: u32, i: usize) -> Option<usize> {
+        let print = KeyPrint::of(name, hash);
+        if same_text(self.key(i), name) {
+            return Some(i);
+        }
         match self.index() {
-            None => (0..self.entries.len()).find(|&i| self.entry_matches(i, name, print)),
-            Some(index) => index.find(index_hash(hash), |&i| self.entry_matches(i as usize, name, print)).map(|&i| i as usize),
+            None => (i + 1..self.entries.len()).find(|&j| self.entry_matches(j, name, print)),
+            Some(index) => index.find(index_hash(hash), |&j| self.entry_matches(j as usize, name, print)).map(|&j| j as usize),
         }
     }
 
