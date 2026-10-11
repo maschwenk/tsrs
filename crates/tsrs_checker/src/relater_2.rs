@@ -796,7 +796,7 @@ impl Relater {
                 return Ternary::False;
             }
         }
-        if self.relation_count.get() == 0 {
+        if self.relation_count.get() <= 0 {
             self.overflow.set(true);
             return Ternary::False;
         }
@@ -875,7 +875,7 @@ impl Relater {
             // assumptions it will also be false without assumptions)
             if record {
                 Relation::set(&self.rel(), id, RelationComparisonResult::Failed | propagating_variance_flags);
-                self.relation_count.set(self.relation_count.get().saturating_sub(1));
+                self.relation_count.set(self.relation_count.get() - 1);
             }
             self.reset_maybe_stack(c, maybe_start, propagating_variance_flags, false);
         }
@@ -895,7 +895,7 @@ impl Relater {
             for i in maybe_start..len {
                 let key = self.maybe_keys.borrow()[i];
                 Relation::set(&self.rel(), key, RelationComparisonResult::Succeeded | propagating_variance_flags);
-                self.relation_count.set(self.relation_count.get().saturating_sub(1));
+                self.relation_count.set(self.relation_count.get() - 1);
             }
         }
         // `maybe_keys_set` mirrors the stack only while it is longer than MAYBE_STACK_SCAN_MAX (`maybe_stack_has`).

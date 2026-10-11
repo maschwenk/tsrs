@@ -486,7 +486,7 @@ impl Checker {
         r.relation.set(Some(relation));
         r.error_node.set(error_node);
         r.relation_count
-            .set(16_000_000usize.saturating_sub(relation.size()) / 8);
+            .set((16_000_000 - isize::try_from(relation.size()).expect("relation size exceeds signed budget range")) / 8);
         let result = r.is_related_to_ex(
             self,
             source,

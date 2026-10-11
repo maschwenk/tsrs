@@ -206,7 +206,9 @@ pub struct Relater {
     pub target_depth: Cell<usize>,
     pub expanding_flags: Cell<ExpandingFlags>,
     pub overflow: Cell<bool>,
-    pub relation_count: Cell<usize>,
+    // A remaining budget, not a collection length: Go keeps decrementing it
+    // below zero while unwinding a relation and treats every value <= 0 as exhausted.
+    pub relation_count: Cell<isize>,
     pub next: Cell<Option<P<Relater>>>,
     // The `'static` comparers that wrap this relater's methods (Go passes the method values). They capture only the
     // relater handle (and the intersection state), so they are built once per relater instead of leaking one per call.

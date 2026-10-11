@@ -14,12 +14,10 @@ impl SourcePos {
 
     #[inline]
     pub const fn new(offset: u32) -> SourcePos {
-        if offset > Self::MAX {
-            source_position_overflow();
+        match NonZeroU32::new(offset.wrapping_add(1)) {
+            Some(encoded) => SourcePos(encoded),
+            None => source_position_overflow(),
         }
-        // SAFETY: `offset <= u32::MAX - 1`, so adding one is non-zero and
-        // cannot overflow.
-        SourcePos(unsafe { NonZeroU32::new_unchecked(offset + 1) })
     }
 
     #[inline]
@@ -227,9 +225,18 @@ impl TextRange {
 
     #[inline]
     pub fn len(self) -> Option<u32> {
+        let TextPos::Source(pos) = self.pos else {
+            return None;
+        };
+        let TextPos::Source(end) = self.end else {
+            return None;
+        };
+        // The +1 encoding cancels in the difference; decoding both positions
+        // first needlessly adjusts the operands of the checked subtraction.
         Some(
-            self.source_end()?
-                .checked_sub(self.source_pos()?)
+            end.0
+                .get()
+                .checked_sub(pos.0.get())
                 .expect("text range ends before it starts"),
         )
     }
@@ -332,5 +339,37 @@ mod tests {
         assert_eq!(range.source_end(), None);
         assert_eq!(range.len(), None);
         assert!(!range.is_valid());
+    }
+
+    #[test]
+    fn lengths_cover_source_boundaries_and_mixed_ranges() {
+        assert_eq!(
+            TextRange::new(0, SourcePos::MAX).len(),
+            Some(SourcePos::MAX)
+        );
+        assert_eq!(
+            TextRange::new(SourcePos::MAX, SourcePos::MAX).len(),
+            Some(0)
+        );
+        assert_eq!(
+            TextRange::from_text_pos(TextPos::Synthetic, TextPos::source(1)).len(),
+            None
+        );
+        assert_eq!(
+            TextRange::from_text_pos(TextPos::source(1), TextPos::Synthetic).len(),
+            None
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "source position exceeds the supported range")]
+    fn source_position_rejects_unrepresentable_offset() {
+        SourcePos::new(u32::MAX);
+    }
+
+    #[test]
+    #[should_panic(expected = "text range ends before it starts")]
+    fn range_length_rejects_reversed_source_range() {
+        TextRange::new(2, 1).len();
     }
 }
