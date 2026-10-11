@@ -1,4 +1,5 @@
 use crate::*;
+use std::borrow::Cow;
 use tsrs_ast as ast;
 
 // Non-function declarations of inference.go (InferenceKey, InferenceState) are in inference_types.rs.
@@ -96,10 +97,11 @@ impl Checker {
             return;
         }
         if target.flags().intersects(TypeFlags::Union) {
-            let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Union) { source.types().to_vec() } else { vec![source] };
+            let single_source = [source];
+            let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Union) { source.types() } else { &single_source };
             // First, infer between identically matching source and target constituents and remove the
             // matching types.
-            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
+            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, source_types, target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
             // Next, infer between closely matching source and target constituents and remove
             // the matching types. Types closely match when they are instantiations of the same
             // object type or instantiations of the same type alias.
@@ -124,9 +126,10 @@ impl Checker {
             // infer { extra: any } for T. But when inferring to 'string[] & Iterable<T>' we want to keep the
             // string[] on the source side and infer string for T.
             if !source.flags().intersects(TypeFlags::Union) {
-                let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Intersection) { source.types().to_vec() } else { vec![source] };
+                let single_source = [source];
+                let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { &single_source };
                 // Infer between identically matching source and target constituents and remove the matching types.
-                let (sources, targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
+                let (sources, targets) = self.infer_from_matching_types(n, source_types, target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
                 if sources.is_empty() || targets.is_empty() {
                     return;
                 }
@@ -379,7 +382,8 @@ impl Checker {
     }
 
     // inference.go:370
-    pub(crate) fn infer_from_matching_types(&mut self, n: P<InferenceState>, sources: &[P<Type>], targets: &[P<Type>], mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool, sort: bool) -> (Vec<P<Type>>, Vec<P<Type>>) {
+    /// tsrs: the unmatched sources and targets are the inputs themselves (not copies) when none matched.
+    pub(crate) fn infer_from_matching_types<'a>(&mut self, n: P<InferenceState>, sources: &'a [P<Type>], targets: &'a [P<Type>], mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool, sort: bool) -> (Cow<'a, [P<Type>]>, Cow<'a, [P<Type>]>) {
         let mut matched_sources: Vec<P<Type>> = Vec::new();
         let mut matched_targets: Vec<P<Type>> = Vec::new();
         for &t in targets {
@@ -415,14 +419,8 @@ impl Checker {
                 }
             }
         }
-        let mut sources = sources.to_vec();
-        let mut targets = targets.to_vec();
-        if !matched_sources.is_empty() {
-            sources.retain(|t| !matched_sources.contains(t));
-        }
-        if !matched_targets.is_empty() {
-            targets.retain(|t| !matched_targets.contains(t));
-        }
+        let sources = if matched_sources.is_empty() { Cow::Borrowed(sources) } else { sources.iter().copied().filter(|t| !matched_sources.contains(t)).collect() };
+        let targets = if matched_targets.is_empty() { Cow::Borrowed(targets) } else { targets.iter().copied().filter(|t| !matched_targets.contains(t)).collect() };
         (sources, targets)
     }
 }
