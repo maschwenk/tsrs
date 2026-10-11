@@ -562,7 +562,18 @@ pub(crate) fn get_alias_key(alias: AliasArg<'_>) -> CacheHashKey {
 }
 
 // checker.go:17848
+#[inline]
 pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> CacheHashKey {
+    if let (None, AliasArg::None) = (origin, alias) {
+        if let Some(key) = packed_type_list_key(PACKED_UNION_KEY_TAG, types, false) {
+            return key;
+        }
+    }
+    get_union_key_hashed(types, origin, alias)
+}
+
+#[inline(never)]
+fn get_union_key_hashed(types: &[P<Type>], origin: Option<P<Type>>, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     match origin {
         None => b.write_types(types),
@@ -588,7 +599,20 @@ pub(crate) fn get_union_key(types: &[P<Type>], origin: Option<P<Type>>, alias: A
 }
 
 // checker.go:17872
+#[inline]
 pub(crate) fn get_intersection_key(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> CacheHashKey {
+    // Without constraint reduction the alias is not part of the key.
+    let no_constraint_reduction = flags.intersects(IntersectionFlags::NoConstraintReduction);
+    if no_constraint_reduction || matches!(alias, AliasArg::None) {
+        if let Some(key) = packed_type_list_key(PACKED_INTERSECTION_KEY_TAG, types, no_constraint_reduction) {
+            return key;
+        }
+    }
+    get_intersection_key_hashed(types, flags, alias)
+}
+
+#[inline(never)]
+fn get_intersection_key_hashed(types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_types(types);
     if !flags.intersects(IntersectionFlags::NoConstraintReduction) {
@@ -627,27 +651,36 @@ pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias
     get_type_instantiation_key(type_arguments, alias.into(), false)
 }
 
-/// The tags of `packed_type_list_key`'s families (each family keys its own caches).
+/// The tags of the packed key families (each family keys its own caches).
 const PACKED_INSTANTIATION_KEY_TAG: u64 = 0x1a5e;
 const PACKED_CONDITIONAL_KEY_TAG: u64 = 0xc0d7;
+const PACKED_UNION_KEY_TAG: u64 = 0x5a17;
+const PACKED_INTERSECTION_KEY_TAG: u64 = 0x2e3c;
+const PACKED_INDEXED_ACCESS_KEY_TAG: u64 = 0x91d4;
 
-/// A key for a list of at most three types without an alias, computed without the key builder.
+/// A cache key computed without the key builder, for the common short inputs of a key family.
 ///
 /// Go hashes the key bytes with xxh3-128 and only compares keys for equality, in caches private to one key family.
-/// This encoding is injective: the high word holds the family tag, `flag`, the length and the third type id; the low
-/// word is a bijective mix of the first two ids xored with a function of the high word. So two packed keys are equal
-/// exactly when their inputs are, and a packed key equals an xxh3 key of a longer or aliased list with the same
-/// 2^-128 odds as two xxh3 keys equal each other. The mix spreads every input bit over the low word, which
+/// This encoding is injective: the high word holds the family tag, `meta` (at most 16 bits) and `third`; the low
+/// word is a bijective mix of `pair` xored with a function of the high word. So two packed keys of a family are
+/// equal exactly when their inputs are, and a packed key equals an xxh3 key of the family's other inputs with the
+/// same 2^-128 odds as two xxh3 keys equal each other. The mix spreads every input bit over the low word, which
 /// `PackedMap` uses as the hash.
+#[inline]
+fn packed_key(tag: u64, pair: u64, third: u32, meta: u64) -> CacheHashKey {
+    let hi = tag << 48 | meta << 32 | u64::from(third);
+    let y = (pair ^ hi.wrapping_mul(0x9e37_79b9_7f4a_7c15)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    CacheHashKey { hi, lo: y ^ y >> 32 }
+}
+
+/// `packed_key` of a list of at most three types and a flag.
 #[inline]
 fn packed_type_list_key(tag: u64, types: &[P<Type>], flag: bool) -> Option<CacheHashKey> {
     if types.len() > 3 {
         return None;
     }
-    let id = |i: usize| types.get(i).map_or(0, |t| u64::from(t.id.0));
-    let hi = tag << 48 | u64::from(flag) << 34 | (types.len() as u64) << 32 | id(2);
-    let y = ((id(0) | id(1) << 32) ^ hi.wrapping_mul(0x9e37_79b9_7f4a_7c15)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    Some(CacheHashKey { hi, lo: y ^ y >> 32 })
+    let id = |i: usize| types.get(i).map_or(0, |t| t.id.0);
+    Some(packed_key(tag, u64::from(id(0)) | u64::from(id(1)) << 32, id(2), u64::from(flag) << 2 | types.len() as u64))
 }
 
 // checker.go:17910
@@ -673,7 +706,16 @@ fn get_type_instantiation_key_hashed(type_arguments: &[P<Type>], alias: AliasArg
 }
 
 // checker.go:17920
+#[inline]
 pub(crate) fn get_indexed_access_key(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> CacheHashKey {
+    if let AliasArg::None = alias {
+        return packed_key(PACKED_INDEXED_ACCESS_KEY_TAG, u64::from(object_type.id.0) | u64::from(index_type.id.0) << 32, access_flags.bits(), 0);
+    }
+    get_indexed_access_key_hashed(object_type, index_type, access_flags, alias)
+}
+
+#[inline(never)]
+fn get_indexed_access_key_hashed(object_type: P<Type>, index_type: P<Type>, access_flags: AccessFlags, alias: AliasArg<'_>) -> CacheHashKey {
     let mut b = keyBuilder::default();
     b.write_type(object_type);
     b.write_type(index_type);
