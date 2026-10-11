@@ -1,0 +1,16 @@
+use.ts(6,39): error TS2322: Type 'number' is not assignable to type 'string'.
+use.ts(6,47): error TS2322: Type 'number' is not assignable to type 'string'.
+use.ts(10,14): error TS2322: Type '{ p40: number; p2: boolean; extra: string; }' is not assignable to type 'Options'.
+  Types of property 'p2' are incompatible.
+    Type 'boolean' is not assignable to type 'string'.
+use.ts(19,14): error TS2322: Type 'Settings' is not assignable to type 'Options'.
+  Types of property 'p1' are incompatible.
+    Type 'number' is not assignable to type 'string'.
+use.ts(22,32): error TS2353: Object literal may only specify known properties, and 'zzz' does not exist in type 'Options'.
+use.ts(25,14): error TS2322: Type '{ p1: string; }' is not assignable to type 'MappedOptions'.
+  Type '{ p1: string; }' is not assignable to type '{ toString?: number | undefined; }'.
+    Types of property 'toString' are incompatible.
+      Type '() => string' is not assignable to type 'number'.
+use.ts(31,14): error TS2322: Type '{ q1: string; }' is not assignable to type 'WithValueOf'.
+  Types of property 'valueOf' are incompatible.
+    Type '() => Object' is not assignable to type 'string'.

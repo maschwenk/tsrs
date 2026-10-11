@@ -126,6 +126,12 @@ work under `--maxMemory` (`TSRS_SHARED_GRAPH_SEED_PERCENT`). On a large private 
 diagnostics identical (notes/spike-shared-graph.md sections 10-10.2). The feature compiled in costs +3.6% instructions
 with the switch off, which is why it is not in the default build.
 
+## Source-keyed property walk (landed; notes/perf-source-keyed-properties.md)
+
+`propertiesRelatedTo` against a target with many more properties than the source walks only the positions the
+source lookup can match, in target order: mui-docs -2.5% single-threaded instructions, a large private monorepo -1.0%
+at 8 checkers, vscode and xstate-main unchanged; output byte-identical.
+
 ## Measured and rejected (do not redo)
 
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches

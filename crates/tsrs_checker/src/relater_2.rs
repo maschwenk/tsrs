@@ -2132,26 +2132,116 @@ impl Relater {
         let numeric_names_only = is_tuple_type(source) && is_tuple_type(target);
         // `found` is by position in `properties` when it covers them all and nothing is excluded.
         let found = if found.len() == properties.len() && excluded_properties.len() == 0 { found } else { &[] };
+        // tsrs-only: a target with many more properties than the source (an options bag such as CSS properties or
+        // log data) is walked only at the positions where the source lookup below can find something, in the same
+        // order, so the same properties are related in the same order and report the same first failure.
+        if excluded_properties.len() == 0 && !numeric_names_only && properties.len() >= SOURCE_KEYED_MIN_TARGET_PROPERTIES {
+            let mut positions = c.source_keyed_pool.pop().unwrap_or_default();
+            if self.source_keyed_positions(c, source, target, properties, &mut positions) {
+                for &i in &positions {
+                    let related = self.target_property_related_to(c, source, target, properties[i as usize], found.get(i as usize).copied().flatten(), report_errors, optionals_only, false, intersection_state);
+                    if related == Ternary::False {
+                        result = Ternary::False;
+                        break;
+                    }
+                    result &= related;
+                }
+                c.source_keyed_pool.push(positions);
+                return result;
+            }
+            c.source_keyed_pool.push(positions);
+        }
         for (i, target_prop) in exclude_properties(&properties, excluded_properties).iter().copied().enumerate() {
-            let name = target_prop.name();
-            if !target_prop.flags().intersects(SymbolFlags::Prototype) && (!numeric_names_only || is_numeric_literal_name(name) || name == "length") && (!optionals_only || target_prop.flags().intersects(SymbolFlags::Optional)) {
-                let source_prop = match found.get(i) {
-                    Some(&Some(source_prop)) => source_prop,
-                    _ => c.get_property_of_type(source, name),
-                };
-                if let Some(source_prop) = source_prop {
-                    if source_prop != target_prop {
-                        let skip_optional = self.rel() == c.comparable_relation;
-                        let related = self.property_related_to(c, source, target, source_prop, target_prop, |c, s| c.get_non_missing_type_of_symbol(s), report_errors, intersection_state, skip_optional);
-                        if related == Ternary::False {
-                            return Ternary::False;
+            let related = self.target_property_related_to(c, source, target, target_prop, found.get(i).copied().flatten(), report_errors, optionals_only, numeric_names_only, intersection_state);
+            if related == Ternary::False {
+                return Ternary::False;
+            }
+            result &= related;
+        }
+        result
+    }
+
+    /// One step of `propertiesRelatedTo`'s loop over the target's properties: relates `target_prop` to the source's
+    /// property of that name, if any (`found`: the source lookup `getUnmatchedProperty` already made, if it made one).
+    #[expect(clippy::too_many_arguments, reason = "the loop body of properties_related_to_rest, shared by its two walks")]
+    fn target_property_related_to(&self, c: &mut Checker, source: P<Type>, target: P<Type>, target_prop: P<Symbol>, found: Option<Option<P<Symbol>>>, report_errors: bool, optionals_only: bool, numeric_names_only: bool, intersection_state: IntersectionState) -> Ternary {
+        let name = target_prop.name();
+        if !target_prop.flags().intersects(SymbolFlags::Prototype) && (!numeric_names_only || is_numeric_literal_name(name) || name == "length") && (!optionals_only || target_prop.flags().intersects(SymbolFlags::Optional)) {
+            let source_prop = match found {
+                Some(source_prop) => source_prop,
+                None => c.get_property_of_type(source, name),
+            };
+            if let Some(source_prop) = source_prop {
+                if source_prop != target_prop {
+                    let skip_optional = self.rel() == c.comparable_relation;
+                    return self.property_related_to(c, source, target, source_prop, target_prop, |c, s| c.get_non_missing_type_of_symbol(s), report_errors, intersection_state, skip_optional);
+                }
+            }
+        }
+        Ternary::True
+    }
+
+    /// tsrs-only: fills `positions` with the positions in `properties` (the target's) at which
+    /// `get_property_of_type(source, name)` can return a property, sorted; false (and `positions` untouched or
+    /// partly filled) when `source` is not a resolved object type with few enough members. For such
+    /// a source the lookup finds either one of its members or, for a name `may_be_augment_member` lets through, a
+    /// member of `Object` or `Function` (checker_09.rs `get_property_of_type_worker`), so every other position is a
+    /// miss the full walk would skip after the lookup.
+    fn source_keyed_positions(&self, c: &mut Checker, source: P<Type>, target: P<Type>, properties: &'static [P<Symbol>], positions: &mut Vec<u32>) -> bool {
+        if !source.flags().intersects(TypeFlags::Object) || !source.object_flags_lazy().intersects(ObjectFlags::MembersResolved) || c.get_reduced_apparent_type(source) != source {
+            return false;
+        }
+        let Some(members) = source.as_structured_type().members() else {
+            return false;
+        };
+        if members.len() * SOURCE_KEYED_RATIO > properties.len() {
+            return false;
+        }
+        let target_members = if target.flags().intersects(TypeFlags::Object) && target.object_flags_lazy().intersects(ObjectFlags::MembersResolved) { target.as_structured_type().members() } else { None };
+        let member_count = target_members.map_or(0, |m| m.len());
+        let stale = c.target_property_positions.get(&target).is_none_or(|p| p.member_count != member_count || !std::ptr::eq(p.properties, properties) && p.properties != properties);
+        if stale {
+            let table = TargetPropertyPositions::new(c, target_members, properties);
+            c.target_property_positions.insert(target, Box::new(table));
+        }
+        let table = &c.target_property_positions[&target];
+        positions.clear();
+        positions.extend_from_slice(&table.augment);
+        for i in 0..members.len() {
+            let (name, _) = members.entry(i);
+            match &table.lookup {
+                PositionLookup::Slots(by_member) => {
+                    // `by_member` was built from the same property list and a member table of the same size; a slot
+                    // whose property has another name means the table changed some other way: walk everything.
+                    let Some(slot) = target_members.and_then(|m| m.position_of(name)) else { continue };
+                    match by_member.get(slot) {
+                        Some(&position) if position == u32::MAX => {}
+                        Some(&position) if properties[position as usize].name() == name => positions.push(position),
+                        _ => return false,
+                    }
+                }
+                PositionLookup::Names(by_hash) => {
+                    let hash = name_hash(name);
+                    let start = by_hash.partition_point(|&(h, _)| h < hash);
+                    for &(h, position) in &by_hash[start..] {
+                        if h != hash {
+                            break;
                         }
-                        result &= related;
+                        if properties[position as usize].name() == name {
+                            positions.push(position);
+                        }
                     }
                 }
             }
         }
-        result
+        positions.sort_unstable();
+        positions.dedup();
+        // Debug builds check the claim: every position whose lookup finds a property is in `positions`.
+        #[cfg(debug_assertions)]
+        for (i, prop) in properties.iter().enumerate() {
+            debug_assert!(c.get_property_of_type(source, prop.name()).is_none() || positions.binary_search(&(i as u32)).is_ok(), "source-keyed walk skipped {} (position {i})", prop.name());
+        }
+        true
     }
 
     // relater.go:4302
@@ -3018,5 +3108,64 @@ impl Relater {
     // relater.go:5030
     pub(crate) fn trace_unions_or_intersections_too_large(&self, _c: &mut Checker, _source: P<Type>, _target: P<Type>) {
         // Only reports to the tracer, which is not ported.
+    }
+}
+
+/// `properties_related_to_rest` walks a target by the source's members only when the target has at least this many
+/// properties, and at least `SOURCE_KEYED_RATIO` times as many as the source has members.
+const SOURCE_KEYED_MIN_TARGET_PROPERTIES: usize = 64;
+const SOURCE_KEYED_RATIO: usize = 4;
+
+/// tsrs-only: for a target type, how to find the position of a property in its property list
+/// (`get_properties_of_type`) by name, and the positions of the properties whose name `may_be_augment_member` lets
+/// through. Kept with the property list it was built from: a different list (members reset) builds it again.
+pub(crate) struct TargetPropertyPositions {
+    properties: &'static [P<Symbol>],
+    /// The size of the target's member table when this was built (0 without one).
+    member_count: usize,
+    lookup: PositionLookup,
+    augment: Vec<u32>,
+}
+
+enum PositionLookup {
+    /// The position of each slot of the target's member table (`u32::MAX`: not a listed property); the table itself
+    /// finds the name. Used when every listed property is in the table.
+    Slots(Vec<u32>),
+    /// Otherwise (an interface's inherited properties, a type without a member table): (name hash, position),
+    /// sorted.
+    Names(Vec<(u32, u32)>),
+}
+
+fn name_hash(name: &str) -> u32 {
+    use std::hash::{Hash, Hasher};
+    let mut h = rustc_hash::FxHasher::default();
+    name.hash(&mut h);
+    h.finish() as u32
+}
+
+impl TargetPropertyPositions {
+    fn new(c: &mut Checker, members: Option<P<SymbolTable>>, properties: &'static [P<Symbol>]) -> TargetPropertyPositions {
+        let mut augment = Vec::new();
+        for (i, prop) in properties.iter().enumerate() {
+            if c.may_be_augment_member(HashedName::new(prop.name())) {
+                augment.push(i as u32);
+            }
+        }
+        let slots = members.and_then(|members| {
+            let mut by_member = vec![u32::MAX; members.len()];
+            for (i, prop) in properties.iter().enumerate() {
+                by_member[members.position_of(prop.name())?] = i as u32;
+            }
+            Some(by_member)
+        });
+        let lookup = match slots {
+            Some(by_member) => PositionLookup::Slots(by_member),
+            None => {
+                let mut by_hash: Vec<(u32, u32)> = properties.iter().enumerate().map(|(i, prop)| (name_hash(prop.name()), i as u32)).collect();
+                by_hash.sort_unstable();
+                PositionLookup::Names(by_hash)
+            }
+        };
+        TargetPropertyPositions { properties, member_count: members.map_or(0, |m| m.len()), lookup, augment }
     }
 }

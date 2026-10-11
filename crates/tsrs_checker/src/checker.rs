@@ -1126,6 +1126,11 @@ pub struct Checker {
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
     /// Reused buffers for `get_unmatched_property_recording` (relater_1.rs), one per nested `propertiesRelatedTo`.
     pub(crate) unmatched_found_pool: Vec<Vec<Option<Option<P<Symbol>>>>>,
+    /// `properties_related_to_rest` (relater_2.rs): per large target type, the positions of its properties by name
+    /// and the positions of those that `may_be_augment_member` lets through.
+    pub(crate) target_property_positions: FxHashMap<P<Type>, Box<crate::relater_2::TargetPropertyPositions>>,
+    /// Reused position buffers for `properties_related_to_rest`'s source-keyed walk, one per nested relation.
+    pub(crate) source_keyed_pool: Vec<Vec<u32>>,
     /// `contextual_property_type_of_large_union` (checker_15.rs): per (union, name hash), the name, the
     /// `members_reset_epoch` it was computed in and the positions of the constituents that can contribute.
     pub(crate) contextual_relevant: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[u32]>)>>,
@@ -1540,6 +1545,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_member_stats: Default::default(),
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
+        target_property_positions: FxHashMap::default(),
+        source_keyed_pool: Vec::new(),
         contextual_relevant: FxHashMap::default(),
         discriminant_property_types: FxHashMap::default(),
         members_reset_epoch: 0,
@@ -2031,6 +2038,8 @@ impl Checker {
             lazy_member_stats: base.lazy_member_stats.clone(),
             augment_filter: base.augment_filter.clone(),
             unmatched_found_pool: Vec::new(),
+        target_property_positions: FxHashMap::default(),
+        source_keyed_pool: Vec::new(),
             contextual_relevant: FxHashMap::default(),
             discriminant_property_types: FxHashMap::default(),
             members_reset_epoch: 0,
