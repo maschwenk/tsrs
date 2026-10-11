@@ -1876,8 +1876,8 @@ get_union_type_ex_uncached | pub(crate) fn get_union_type_ex_uncached(&mut self,
 get_union_type_exported | pub fn get_union_type_exported(&mut self, types: &[P<Type>]) -> P<Type> | exports.go:80 | Checker
 get_union_type_from_set | fn get_union_type_from_set(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>, type_set: &mut Vec<P<Type>>) -> P<Type> | rust:checker_13.rs:49 | Checker
 get_union_type_from_sorted_list | pub(crate) fn get_union_type_from_sorted_list(&mut self, types: &[P<Type>], precomputed_object_flags: ObjectFlags, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> | checker.go:26206 | Checker
-get_union_type_front_cached | pub(crate) fn get_union_type_front_cached(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>) -> P<Type> | rust:unioncache.rs:299 | Checker
-get_union_type_long_cached | fn get_union_type_long_cached(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>) -> P<Type> | rust:unioncache.rs:240 | Checker
+get_union_type_front_cached | pub(crate) fn get_union_type_front_cached(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>) -> P<Type> | rust:unioncache.rs:309 | Checker
+get_union_type_long_cached | fn get_union_type_long_cached(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>) -> P<Type> | rust:unioncache.rs:250 | Checker
 get_union_type_worker | pub(crate) fn get_union_type_worker(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> | checker.go:26123 | Checker
 get_union_type_worker_inner | fn get_union_type_worker_inner(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>, origin: Option<P<Type>>) -> P<Type> | rust:checker_13.rs:41 | Checker
 get_uniq_associated_names_from_tuple_type | fn get_uniq_associated_names_from_tuple_type(c: &mut Checker, t: P<Type>, rest_symbol: P<Symbol>) -> Vec<String> | rust:nodebuilderimpl_2.rs:152 | -
@@ -2634,8 +2634,8 @@ lookup_type_parameter_nodes | pub(crate) fn lookup_type_parameter_nodes(&self, c
 make | pub fn make(&self) | rust:types.rs:30 | GoMap
 make | pub fn make(&self) | rust:packedmap.rs:136 | GoPackedMap
 make | pub fn make(&self) | rust:types.rs:2376 | ReferenceInstantiations
-make_key | fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, shift: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> | rust:unioncache.rs:183 | -
-make_long_key | fn make_long_key(words: &mut Vec<PKey>, types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>) -> Option<(u16, u64)> | rust:unioncache.rs:217 | -
+make_key | fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, shift: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> | rust:unioncache.rs:193 | -
+make_long_key | fn make_long_key(words: &mut Vec<PKey>, types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>) -> Option<(u16, u64)> | rust:unioncache.rs:227 | -
 map | pub fn map(&self, c: &mut Checker, t: P<Type>) -> P<Type> | rust:mapper.rs:253 | TypeMapper
 map_to_type_nodes | pub(crate) fn map_to_type_nodes(&self, c: &mut Checker, list: &[P<Type>], is_bare_list: bool) -> Option<P<NodeList>> | nodebuilderimpl.go:349 | NodeBuilderImpl
 map_type | pub(crate) fn map_type(&mut self, t: P<Type>, f: impl FnMut(&mut Checker, P<Type>) -> Option<P<Type>>) -> Option<P<Type>> | checker.go:26031 | Checker
@@ -3104,6 +3104,7 @@ row | pub fn row(&mut self, name: &str, stat: HeapStat) | rust:heapcensus.rs:90 
 run_deferred_type_argument_checks | fn run_deferred_type_argument_checks(&mut self, source_file: P<SourceFile>) | rust:checker_02.rs:1062 | Checker
 run_with_inference_blocked_from_source_node | pub(crate) fn run_with_inference_blocked_from_source_node<T>(&mut self, node: P<Node>, f: impl FnOnce(&mut Checker) -> T) -> T | services.go:334 | Checker
 run_without_resolved_signature_caching | pub(crate) fn run_without_resolved_signature_caching<T>(&mut self, node: P<Node>, f: impl FnOnce(&mut Checker) -> T) -> T | services.go:367 | Checker
+same_key | fn same_key(a: &[PKey; MAX_WORDS], b: &[PKey; MAX_WORDS]) -> bool | rust:unioncache.rs:182 | -
 save_height | pub(crate) fn save_height(&mut self) -> u16 | rust:flowmemo.rs:300 | FlowMemo
 save_restore_flags | pub(crate) fn save_restore_flags(&self, _c: &mut Checker) -> Box<dyn FnMut(&mut Checker)> | nodebuilderimpl.go:134 | NodeBuilderImpl
 serialize_constructors | pub(crate) fn serialize_constructors(&self, c: &mut Checker, static_type: P<Type>, static_base_type: Option<P<Type>>, is_class: bool, symbol: P<Symbol>) -> Vec<P<Node>> | nodebuilder_hover.go:317 | NodeBuilderImpl
@@ -3422,7 +3423,7 @@ types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:1773 | Type
 types | pub fn types(&self) -> &'static [P<Type>] | rust:types.rs:2651 | UnionOrIntersectionType
 types_are_same_reference | pub(crate) fn types_are_same_reference(a: P<Type>, b: P<Type>) -> bool | nodebuilderimpl.go:481 | -
 types_definitely_unrelated | pub(crate) fn types_definitely_unrelated(&mut self, source: P<Type>, target: P<Type>) -> bool | inference.go:1185 | Checker
-union_cache_finish | pub fn union_cache_finish() | rust:unioncache.rs:353 | Checker
+union_cache_finish | pub fn union_cache_finish() | rust:unioncache.rs:363 | Checker
 union_cache_mode | pub(crate) fn union_cache_mode() -> UnionCacheMode | rust:unioncache.rs:72 | -
 union_contains_type | pub(crate) fn union_contains_type(&mut self, union: P<Type>, t: P<Type>, match_symbol: bool) -> bool | checker.go:26875 | Checker
 union_object_and_array_literal_candidates | pub(crate) fn union_object_and_array_literal_candidates(&mut self, candidates: &[P<Type>]) -> Vec<P<Type>> | inference.go:1470 | Checker

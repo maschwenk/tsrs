@@ -177,6 +177,16 @@ fn count(on: bool, counter: &AtomicU64) {
     }
 }
 
+/// `a == b` without a call to `bcmp` (the array compare calls it; this folds to a few vector instructions).
+#[inline]
+fn same_key(a: &[PKey; MAX_WORDS], b: &[PKey; MAX_WORDS]) -> bool {
+    let mut diff = 0;
+    for i in 0..MAX_WORDS {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
+
 /// The key of a call, or None when it does not fit in `MAX_WORDS`.
 #[inline(always)]
 #[expect(clippy::inline_always, reason = "on the getUnionType path; out of line the key is built in memory and copied")]
@@ -306,7 +316,7 @@ impl Checker {
         }
         count(cache.stats, &LOOKUPS);
         let slot = cache.slots[index];
-        if slot.meta == meta && slot.key == key {
+        if slot.meta == meta && same_key(&slot.key, &key) {
             count(cache.stats, &HITS);
             let cached = slot.result.unwrap();
             if cache.mode == UnionCacheMode::Shadow {
