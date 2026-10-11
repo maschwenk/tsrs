@@ -564,9 +564,18 @@ impl Checker {
 
     // checker.go:26526
     pub(crate) fn get_intersection_type_ex(&mut self, types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>) -> P<Type> {
-        let mut ordered_types: orderedSet<P<Type>> = orderedSet { values_by_key: None, values: Vec::with_capacity(types.len()) };
+        let mut type_set = self.free_type_lists.pop().unwrap_or_default();
+        let result = self.get_intersection_type_worker(types, flags, alias, &mut type_set);
+        self.free_type_list(type_set);
+        result
+    }
+
+    /// `get_intersection_type_ex` with the type set built in `type_set` (an empty buffer).
+    fn get_intersection_type_worker(&mut self, types: &[P<Type>], flags: IntersectionFlags, alias: AliasArg<'_>, type_set: &mut Vec<P<Type>>) -> P<Type> {
+        type_set.reserve(types.len());
+        let mut ordered_types: orderedSet<P<Type>> = orderedSet { values_by_key: None, values: std::mem::take(type_set) };
         let includes = self.add_types_to_intersection(&mut ordered_types, TypeFlags::empty(), types);
-        let mut type_set = ordered_types.values;
+        *type_set = ordered_types.values;
         let mut object_flags = ObjectFlags::None;
         // An intersection type is considered empty if it contains
         // the type never, or
@@ -594,8 +603,8 @@ impl Checker {
             return self.never_type;
         }
         if includes.intersects(TypeFlags::TemplateLiteral | TypeFlags::StringMapping) && includes.intersects(TypeFlags::StringLiteral) {
-            let (ts, is_empty_set) = self.extract_redundant_template_literals(&type_set);
-            type_set = ts;
+            let (ts, is_empty_set) = self.extract_redundant_template_literals(type_set);
+            *type_set = ts;
             if is_empty_set {
                 return self.never_type;
             }
@@ -624,7 +633,7 @@ impl Checker {
             || includes.intersects(TypeFlags::IncludesEmptyObject) && includes.intersects(TypeFlags::DefinitelyNonNullable)
         {
             if !flags.intersects(IntersectionFlags::NoSupertypeReduction) {
-                type_set = self.remove_redundant_supertypes(&type_set, includes);
+                self.remove_redundant_supertypes(type_set, includes);
             }
         }
         if includes.intersects(TypeFlags::IncludesMissingType) {
@@ -671,30 +680,30 @@ impl Checker {
                 }
             }
         }
-        let key = get_intersection_key(&type_set, flags, alias);
+        let key = get_intersection_key(type_set, flags, alias);
         let mut result = self.intersection_types.get(&key);
         if result.is_none() {
             let too_complex_before = self.too_complex_reports;
             let r;
             if includes.intersects(TypeFlags::Union) {
-                let (ts, reduced) = self.intersect_unions_of_primitive_types(&mut type_set);
-                type_set = ts;
+                let (ts, reduced) = self.intersect_unions_of_primitive_types(type_set);
+                *type_set = ts;
                 if reduced {
                     // When the intersection creates a reduced set (which might mean that *all* union types have
                     // disappeared), we restart the operation to get a new set of combined flags. Once we have
                     // reduced we'll never reduce again, so this occurs at most once.
-                    r = self.get_intersection_type_ex(&type_set, flags, alias);
+                    r = self.get_intersection_type_ex(type_set, flags, alias);
                 } else if type_set.iter().all(|&t| is_union_with_undefined(t)) {
                     let mut contained_undefined_type = self.undefined_type;
                     if type_set.iter().any(|&t| self.contains_missing_type(t)) {
                         contained_undefined_type = self.missing_type;
                     }
-                    self.filter_types(&mut type_set, |_, t| is_not_undefined_type(t));
-                    let intersection = self.get_intersection_type_ex(&type_set, flags, AliasArg::None /*alias*/);
+                    self.filter_types(type_set, |_, t| is_not_undefined_type(t));
+                    let intersection = self.get_intersection_type_ex(type_set, flags, AliasArg::None /*alias*/);
                     r = self.get_union_type_ex(&[intersection, contained_undefined_type], UnionReduction::Literal, alias, None /*origin*/);
                 } else if type_set.iter().all(|&t| is_union_with_null(t)) {
-                    self.filter_types(&mut type_set, |_, t| is_not_null_type(t));
-                    let intersection = self.get_intersection_type_ex(&type_set, flags, AliasArg::None /*alias*/);
+                    self.filter_types(type_set, |_, t| is_not_null_type(t));
+                    let intersection = self.get_intersection_type_ex(type_set, flags, AliasArg::None /*alias*/);
                     let null_type = self.null_type;
                     r = self.get_union_type_ex(&[intersection, null_type], UnionReduction::Literal, alias, None /*origin*/);
                 } else if type_set.len() >= 3 && types.len() > 2 {
@@ -710,22 +719,22 @@ impl Checker {
                     // We are attempting to construct a type of the form X & (A | B) & (C | D). Transform this into a type of
                     // the form X & A & C | X & A & D | X & B & C | X & B & D. If the estimated size of the resulting union type
                     // exceeds 100000 constituents, report an error.
-                    if !self.check_cross_product_union(&type_set, Self::too_complex_key(&key)) {
+                    if !self.check_cross_product_union(type_set, Self::too_complex_key(&key)) {
                         return self.error_type;
                     }
-                    let constituents = self.get_cross_product_intersections(&type_set, flags);
+                    let constituents = self.get_cross_product_intersections(type_set, flags);
                     // We attach a denormalized origin type when at least one constituent of the cross-product union is an
                     // intersection (i.e. when the intersection didn't just reduce one or more unions to smaller unions) and
                     // the denormalized origin has fewer constituents than the union itself.
                     let mut origin = None;
-                    if constituents.iter().any(|&t| is_intersection_type(t)) && get_constituent_count_of_types(&constituents) > get_constituent_count_of_types(&type_set) {
-                        origin = Some(self.new_intersection_type(ObjectFlags::None, &type_set));
+                    if constituents.iter().any(|&t| is_intersection_type(t)) && get_constituent_count_of_types(&constituents) > get_constituent_count_of_types(type_set) {
+                        origin = Some(self.new_intersection_type(ObjectFlags::None, type_set));
                     }
                     r = self.get_union_type_ex(&constituents, UnionReduction::Literal, alias, origin);
                 }
             } else {
                 let propagated = self.get_propagating_flags_of_types(types, TypeFlags::Nullable /*excludeKinds*/);
-                r = self.new_intersection_type(object_flags | propagated, &type_set);
+                r = self.new_intersection_type(object_flags | propagated, type_set);
                 r.set_alias(alias.alias());
             }
             // tsrs-only: not cached when a TS2590 was reported below (a split, a restart or an inner intersection
@@ -823,8 +832,7 @@ impl Checker {
     }
 
     // checker.go:26765
-    pub(crate) fn remove_redundant_supertypes(&mut self, types: &[P<Type>], includes: TypeFlags) -> Vec<P<Type>> {
-        let mut types = types.to_vec();
+    pub(crate) fn remove_redundant_supertypes(&mut self, types: &mut Vec<P<Type>>, includes: TypeFlags) {
         let mut i = types.len();
         while i > 0 {
             i -= 1;
@@ -839,7 +847,6 @@ impl Checker {
                 types.remove(i);
             }
         }
-        types
     }
 
     // Returns true if the intersection of the template literals and string literals is the empty set,
