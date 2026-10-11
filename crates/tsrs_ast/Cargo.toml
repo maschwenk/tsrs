@@ -12,7 +12,6 @@ tsrs_core.workspace = true
 tsrs_diagnostics.workspace = true
 tsrs_spanmap.workspace = true
 rustc-hash.workspace = true
-hashbrown.workspace = true
 bitflags.workspace = true
 memchr.workspace = true
 

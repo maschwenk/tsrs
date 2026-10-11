@@ -350,7 +350,6 @@ name = "tsrs_ast"
 version = "0.13.0"
 dependencies = [
  "bitflags",
- "hashbrown",
  "memchr",
  "rustc-hash",
  "tsrs_core",
