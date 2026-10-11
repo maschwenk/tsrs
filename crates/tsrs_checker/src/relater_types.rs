@@ -189,6 +189,19 @@ pub struct ErrorChain {
     pub args: Vec<String>,
 }
 
+/// An entry of a relater's source or target stack: the type, and the recursion identity of its recursion identity
+/// target once a deeply-nested test has computed it (`is_deeply_nested_on_stack`; 0 before).
+pub struct RelaterStackEntry {
+    pub t: P<Type>,
+    pub(crate) identity_key: Cell<u64>,
+}
+
+impl RelaterStackEntry {
+    pub(crate) fn new(t: P<Type>) -> RelaterStackEntry {
+        RelaterStackEntry { t, identity_key: Cell::new(0) }
+    }
+}
+
 /// Go `Relater`. An arena handle (`P<Relater>`, pooled through `Checker::free_relater` like Go); the `c` field is
 /// dropped and every method takes `c: &mut Checker`.
 #[derive(Default)]
@@ -199,8 +212,8 @@ pub struct Relater {
     pub related_info: RefCell<Vec<P<Diagnostic>>>,
     pub maybe_keys: RefCell<Vec<RelationKey>>,
     pub maybe_keys_set: RefCell<Set<RelationKey>>,
-    pub source_stack: RefCell<Vec<P<Type>>>,
-    pub target_stack: RefCell<Vec<P<Type>>>,
+    pub source_stack: RefCell<Vec<RelaterStackEntry>>,
+    pub target_stack: RefCell<Vec<RelaterStackEntry>>,
     pub maybe_count: Cell<i32>,
     pub source_depth: Cell<i32>,
     pub target_depth: Cell<i32>,

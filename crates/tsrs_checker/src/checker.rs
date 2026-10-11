@@ -1108,6 +1108,9 @@ pub struct Checker {
     pub(crate) lazy_mapped_tables: crate::basedmap::Based<FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>, P<Type>>,
     /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
     pub lazy_members: bool,
+    /// `TSRS_DEEP_NESTED=shadow`: every deeply-nested test on a relater stack is also made without the stack's kept
+    /// recursion identities, and the kept identities are recomputed; any difference panics (relater_1.rs).
+    pub(crate) deep_nested_shadow: bool,
     /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
     pub lazy_tuples: bool,
     /// site-counts profile: creation site of each instantiated symbol until its type is resolved.
@@ -1550,6 +1553,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         object_type_instantiations: Default::default(),
         lazy_mapped_tables: Default::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
+        deep_nested_shadow: std::env::var("TSRS_DEEP_NESTED").is_ok_and(|v| v == "shadow"),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         #[cfg(feature = "site-counts")]
         inst_symbol_sites: FxHashMap::default(),
@@ -2052,6 +2056,7 @@ impl Checker {
             object_type_instantiations: crate::basedmap::Based::over(&base.object_type_instantiations),
             lazy_mapped_tables: crate::basedmap::Based::over(&base.lazy_mapped_tables),
             lazy_members: base.lazy_members.clone(),
+            deep_nested_shadow: base.deep_nested_shadow,
             lazy_tuples: base.lazy_tuples.clone(),
             #[cfg(feature = "site-counts")]
             inst_symbol_sites: base.inst_symbol_sites.clone(),

@@ -356,6 +356,16 @@ notes/perf-heavy-files-infer-memo.md).
 | `TSRS_INFER_MEMO_STATS` | `1` | at exit, one line on stderr: lookups, hits, the `inferFromTypes` steps the hits skipped, stores, and why long walks were not stored (shadow mode prints it too) |
 | `TSRS_INFER_MEMO_MIN_STEPS` | default `16` | the shortest walk (in `inferFromTypes` steps) that is stored; lower stores more walks (more memory, more lookups that pay) |
 
+## The relater stacks' recursion identities and their shadow mode: `TSRS_DEEP_NESTED`
+
+Each entry of a relater's source and target stacks keeps its recursion identity once a deeply-nested test has
+computed it (`RelaterStackEntry`, `is_deeply_nested_on_stack` in `crates/tsrs_checker/src/relater_1.rs`); the first
+walk to reach an entry computes it as `hasMatchingRecursionIdentity` would.
+
+| variable | values | effect |
+| --- | --- | --- |
+| `TSRS_DEEP_NESTED` | unset, `shadow` | `shadow` also makes every such test with a fresh walk (`is_deeply_nested_type`) and recomputes every kept identity, and panics on a difference (the panic names the type id and the stack length) |
+
 ## Freeing checked leaf files: `TSRS_FREE_LEAVES`
 
 A CLI `--noEmit` check with at most 16 checkers (`MAX_DEFAULT_CHECKERS`: above that it costs vscode 2.4-3.9% wall time,
