@@ -1708,7 +1708,7 @@ impl Checker {
         writing: bool,
         no_reductions: bool,
     ) -> Option<P<Type>> {
-        let length = self.get_type_reference_arity(t) - end_skip_count;
+        let length = self.get_type_reference_arity(t).saturating_sub(end_skip_count);
         let element_infos = t.target_tuple_type().element_infos.get();
         if index < length {
             let type_arguments = self.get_type_arguments(t);

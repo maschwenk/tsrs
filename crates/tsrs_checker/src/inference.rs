@@ -801,7 +801,7 @@ impl Checker {
                     let s = self.get_type_arguments(source)[i];
                     self.infer_from_types(n, s, element_types[i]);
                 }
-                if !is_tuple_type(source) || source_arity - start_length - end_length == 1 && source.target_tuple_type().element_infos()[start_length as usize].flags.intersects(ElementFlags::Rest) {
+                if !is_tuple_type(source) || source_arity == start_length + end_length + 1 && source.target_tuple_type().element_infos()[start_length].flags.intersects(ElementFlags::Rest) {
                     // Single rest element remains in source, infer from that to every element in target
                     let rest_type = self.get_type_arguments(source)[start_length];
                     for i in start_length..target_arity - end_length {
@@ -812,9 +812,9 @@ impl Checker {
                         self.infer_from_types(n, t, element_types[i]);
                     }
                 } else {
-                    let middle_length = target_arity - start_length - end_length;
+                    let middle_length = target_arity.checked_sub(start_length + end_length);
                     let sl = start_length;
-                    if middle_length == 2 {
+                    if middle_length == Some(2) {
                         if (element_infos[sl].flags & element_infos[sl + 1].flags).intersects(ElementFlags::Variadic) {
                             // Middle of target is [...T, ...U] and source is tuple type
                             let target_info = get_inference_info_for_type(n, element_types[sl]);
@@ -824,7 +824,7 @@ impl Checker {
                                     let slice = self.slice_tuple_type(
                                         source,
                                         start_length,
-                                        end_length + source_arity - implied_arity,
+                                        (end_length + source_arity).saturating_sub(implied_arity),
                                     );
                                     self.infer_from_types(n, slice, element_types[sl]);
                                     let slice = self.slice_tuple_type(source, start_length + implied_arity, end_length);
@@ -839,7 +839,7 @@ impl Checker {
                                 if let Some(constraint) = constraint {
                                     if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.target_tuple_type().fixed_length();
-                                        let slice = self.slice_tuple_type(source, start_length, source_arity - (start_length + implied_arity));
+                                        let slice = self.slice_tuple_type(source, start_length, source_arity.saturating_sub(start_length + implied_arity));
                                         self.infer_from_types(n, slice, element_types[sl]);
                                         if let Some(rest_type) = self.get_element_type_of_slice_of_tuple_type(source, start_length + implied_arity, end_length, false, false) {
                                             self.infer_from_types(n, rest_type, element_types[sl + 1]);
@@ -855,26 +855,26 @@ impl Checker {
                                 if let Some(constraint) = constraint {
                                     if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.target_tuple_type().fixed_length();
-                                        let end_index = source_arity - get_end_element_count(target.target_tuple_type(), ElementFlags::Fixed);
-                                        let start_index = end_index - implied_arity;
-                                        if start_index >= start_length {
-                                            let source_type_arguments = self.get_type_arguments(source);
-                                            let trailing_slice = self.create_tuple_type_ex(
-                                                &source_type_arguments[start_index..end_index],
-                                                &source.target_tuple_type().element_infos()
-                                                    [start_index..end_index],
-                                                false, /*readonly*/
-                                            );
-                                            if let Some(rest_type) = self.get_element_type_of_slice_of_tuple_type(source, start_length, end_length + implied_arity, false, false) {
-                                                self.infer_from_types(n, rest_type, element_types[sl]);
+                                        if let Some(end_index) = source_arity.checked_sub(get_end_element_count(target.target_tuple_type(), ElementFlags::Fixed)) {
+                                            if let Some(start_index) = end_index.checked_sub(implied_arity).filter(|&index| index >= start_length) {
+                                                let source_type_arguments = self.get_type_arguments(source);
+                                                let trailing_slice = self.create_tuple_type_ex(
+                                                    &source_type_arguments[start_index..end_index],
+                                                    &source.target_tuple_type().element_infos()
+                                                        [start_index..end_index],
+                                                    false, /*readonly*/
+                                                );
+                                                if let Some(rest_type) = self.get_element_type_of_slice_of_tuple_type(source, start_length, end_length + implied_arity, false, false) {
+                                                    self.infer_from_types(n, rest_type, element_types[sl]);
+                                                }
+                                                self.infer_from_types(n, trailing_slice, element_types[sl + 1]);
                                             }
-                                            self.infer_from_types(n, trailing_slice, element_types[sl + 1]);
                                         }
                                     }
                                 }
                             }
                         }
-                    } else if middle_length == 1 && element_infos[sl].flags.intersects(ElementFlags::Variadic) {
+                    } else if middle_length == Some(1) && element_infos[sl].flags.intersects(ElementFlags::Variadic) {
                         // Middle of target is exactly one variadic element. Infer the slice between the fixed parts in the source.
                         // If target ends in optional element(s), make a lower priority a speculative inference.
                         let priority = if element_infos[target_arity - 1]
@@ -887,7 +887,7 @@ impl Checker {
                         };
                         let source_slice = self.slice_tuple_type(source, start_length, end_length);
                         self.infer_with_priority(n, source_slice, element_types[sl], priority);
-                    } else if middle_length == 1 && element_infos[sl].flags.intersects(ElementFlags::Rest) {
+                    } else if middle_length == Some(1) && element_infos[sl].flags.intersects(ElementFlags::Rest) {
                         // Middle of target is exactly one rest element. If middle of source is not empty, infer union of middle element types.
                         let rest_type = self.get_element_type_of_slice_of_tuple_type(source, start_length, end_length, false, false);
                         if let Some(rest_type) = rest_type {

@@ -2233,11 +2233,7 @@ impl Checker {
             source_count.max(target_count)
         };
         let rest_index = if source_rest_type.is_some() || target_rest_type.is_some() {
-            Some(
-                param_count
-                    .checked_sub(1)
-                    .expect("rest signature has a parameter"),
-            )
+            param_count.checked_sub(1)
         } else {
             None
         };
@@ -2719,7 +2715,7 @@ impl Checker {
         end_skip_count: usize,
     ) -> P<Type> {
         let target = t.target_tuple_type();
-        let end_index = self.get_type_reference_arity(t) - end_skip_count;
+        let end_index = self.get_type_reference_arity(t).saturating_sub(end_skip_count);
         if index > target.fixed_length() {
             if let Some(rest_array_type) = self.get_rest_array_type_of_tuple_type(t) {
                 return rest_array_type;
