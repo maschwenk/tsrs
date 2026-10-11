@@ -1091,18 +1091,16 @@ impl Scanner {
                         self.error(&diagnostics::Hexadecimal_digit_expected);
                         digits = "0";
                     }
-                    if let Some(&cached_value) = self.hex_number_cache.get(digits) {
+                    let raw_text = self.slice(start, self.state.pos);
+                    if raw_text.starts_with("0x") && &raw_text[2..] == digits {
+                        self.state.token_value = raw_text;
+                    } else if let Some(&cached_value) = self.hex_number_cache.get(digits) {
                         self.state.token_value = cached_value;
                     } else {
-                        let raw_text = self.slice(start, self.state.pos);
-                        if raw_text.starts_with("0x") && &raw_text[2..] == digits {
-                            self.state.token_value = raw_text;
-                        } else {
-                            let mut value = ArenaStringBuilder::with_capacity(2 + digits.len());
-                            value.push_str("0x");
-                            value.push_str(digits);
-                            self.state.token_value = value.into_str();
-                        }
+                        let mut value = ArenaStringBuilder::with_capacity(2 + digits.len());
+                        value.push_str("0x");
+                        value.push_str(digits);
+                        self.state.token_value = value.into_str();
                         self.pin_unless_source(digits, self.state.token_value);
                         self.hex_number_cache.insert(digits, self.state.token_value);
                     }
@@ -2566,6 +2564,13 @@ impl Scanner {
 
     /// Go `jsnum.FromString(v).String()`, reusing `v` when it is already canonical.
     fn canonical_number(&self, v: &'static str) -> &'static str {
+        // Every decimal integer with at most 15 digits is a safe integer. Its scanner spelling is canonical when it
+        // has no leading zero, so neither conversion nor a temporary formatting String is needed. Longer integers,
+        // fractions and exponents still go through Number::string for ECMAScript rounding and formatting.
+        let bytes = v.as_bytes();
+        if bytes == b"0" || bytes.len() <= 15 && matches!(bytes.first(), Some(b'1'..=b'9')) && bytes[1..].iter().all(u8::is_ascii_digit) {
+            return v;
+        }
         let s = crate::number::parse_literal(v).unwrap_or_else(|| jsnum::from_string(v)).string();
         if s == v {
             return v;
@@ -2662,6 +2667,11 @@ impl Scanner {
             return "";
         }
         let digits = self.slice(start, self.state.pos);
+        let has_separator = memchr::memchr(b'_', digits.as_bytes()).is_some();
+        let has_uppercase = digits.bytes().any(|b| b.is_ascii_uppercase());
+        if !has_separator && !has_uppercase {
+            return digits;
+        }
         if let Some(&cached) = self.hex_digit_cache.get(digits) {
             cached
         } else {
@@ -2734,9 +2744,12 @@ impl Scanner {
         if let Some(&cached) = self.number_cache.get(self.state.token_value) {
             self.state.token_value = cached;
         } else {
-            let token_value = self.canonical_number(self.state.token_value);
-            self.pin_unless_source(self.state.token_value, token_value);
-            self.number_cache.insert(self.state.token_value, token_value);
+            let original = self.state.token_value;
+            let token_value = self.canonical_number(original);
+            if token_value != original {
+                self.pin_unless_source(original, token_value);
+                self.number_cache.insert(original, token_value);
+            }
             self.state.token_value = token_value;
         }
         Kind::NumericLiteral
