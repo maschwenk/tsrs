@@ -330,7 +330,7 @@ pub(crate) fn try_parse_base64_url(url: &str) -> (&str, bool) {
     if let Some(result) = url
         .chars()
         .into_iter()
-        .find_map(|r| if !(stringutil::is_ascii_letter(r) || stringutil::is_digit(r) || r == '+' || r == '/' || r == '=') { Some(("", true)) } else { None })
+        .find_map(|r| if !(stringutil::is_ascii_letter(r as u32) || stringutil::is_digit(r as u32) || r == '+' || r == '/' || r == '=') { Some(("", true)) } else { None })
     {
         return result;
     }

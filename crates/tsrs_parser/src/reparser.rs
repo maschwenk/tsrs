@@ -237,7 +237,7 @@ impl Parser {
                     // drop invalid chars for _, if empty, write _0, etc., so we have a valid param name to emit later
                     let mut result = String::new();
                     result.extend(name.as_identifier().text().char_indices().map(|(i, ch)| {
-                        if if i == 0 { scanner::is_identifier_start(ch as i32) } else { scanner::is_identifier_part(ch as i32) } { ch } else { '_' }
+                        if if i == 0 { scanner::is_identifier_start(ch as u32) } else { scanner::is_identifier_part(ch as u32) } { ch } else { '_' }
                     }));
                     if result.is_empty() {
                         result.push('_');

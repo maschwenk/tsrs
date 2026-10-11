@@ -263,7 +263,7 @@ pub fn get_leftmost_expression(mut node: P<Node>, stop_at_call_expressions: bool
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum TypePrecedence {
     // Conditional precedence (lowest)

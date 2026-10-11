@@ -308,7 +308,7 @@ impl Printer {
 // Low-level writing
 //
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum WriteKind {
     #[default]

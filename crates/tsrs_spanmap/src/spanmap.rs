@@ -77,7 +77,7 @@ pub(crate) const FEATURE_MASK: Feature = Feature::All;
 
 // Fidelity describes how faithfully a mapped span reflects the original.
 // spanmap.go:71
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum Fidelity {
     // FidelityExact means the span fell entirely within a single verbatim segment and maps precisely.

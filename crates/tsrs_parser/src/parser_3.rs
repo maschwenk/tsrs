@@ -3182,7 +3182,7 @@ fn skip_to(text: &str, pos: usize, s: &str) -> Option<usize> {
 }
 
 fn line_end_pos(text: &str, pos: usize) -> usize {
-    if let Some((offset, _)) = text[pos..].char_indices().find(|&(_, ch)| tsrs_core::stringutil::is_line_break(ch)) {
+    if let Some((offset, _)) = text[pos..].char_indices().find(|&(_, ch)| tsrs_core::stringutil::is_line_break(ch as u32)) {
         return pos + offset;
     }
     text.len()

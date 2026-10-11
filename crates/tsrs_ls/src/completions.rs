@@ -662,7 +662,7 @@ impl LanguageService {
                     let no_comment_prefix = !(file.text()[line_start as usize..position as usize]
                         .chars()
                         .into_iter()
-                        .any(|r| !(stringutil::is_white_space_single_line(r) || r == '*' || r == '/' || r == '(' || r == ')' || r == '|')));
+                        .any(|r| !(stringutil::is_white_space_single_line(r as u32) || r == '*' || r == '/' || r == '(' || r == ')' || r == '|')));
                     if no_comment_prefix {
                         return Ok(Some(CompletionData::JSDocTag));
                     }

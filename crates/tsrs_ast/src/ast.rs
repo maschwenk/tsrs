@@ -1608,7 +1608,7 @@ fn reverse_access_kind(a: AccessKind) -> AccessKind {
     }
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum AccessKind {
     Read,      // Only reads from a variable
@@ -1686,7 +1686,7 @@ pub struct PatternAmbientModule {
     pub symbol: P<Symbol>,
 }
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum CommentDirectiveKind {
     #[default]

@@ -96,7 +96,7 @@ bitflags! {
 
 // printer/emitresolver.go
 
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub enum SymbolAccessibility {
     #[default]
@@ -107,7 +107,7 @@ pub enum SymbolAccessibility {
 }
 
 /// Go `printer.TypeReferenceSerializationKind` (printer/emitresolver.go).
-#[repr(i32)]
+#[repr(u32)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
 pub enum TypeReferenceSerializationKind {
     // The TypeReferenceNode could not be resolved.
