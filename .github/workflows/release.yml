@@ -42,9 +42,7 @@ jobs:
       version: ${{ steps.v.outputs.version }}
       ts_commit: ${{ steps.v.outputs.ts_commit }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
       - id: v
         run: |
           if [ "$GITHUB_REF_TYPE" = tag ]; then node npm/build.mjs --check-tag "$GITHUB_REF_NAME"; fi
@@ -74,9 +72,7 @@ jobs:
           # Not built yet (npm/README.md TODO): win32-x64. The main package lists only the platforms built here.
           # - { target: x86_64-pc-windows-msvc, os: windows-latest, experimental: true, run: true }
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
       # The conformance suite (part of the training workload) reads its tests from ts-ref/tsc/testdata.
       - name: Check out TypeScript testdata
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -197,9 +193,7 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
         shell: bash
@@ -219,9 +213,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
         shell: bash
@@ -285,9 +277,7 @@ jobs:
       contents: read
       id-token: write # npm trusted publishing and provenance
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           # Same Node as ci.yml's packaging smoke test, which builds the unstable/* JS API with these tools.
