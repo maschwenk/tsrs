@@ -9,11 +9,13 @@ use tsrs_core::{
 };
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
+use tsrs_vfs::FS;
 
 use crate::cache::{
     get_redirect_config_name, new_resolution_data, ModuleResolutionCache, ModuleResolutionCacheKey, ParsedPatternsCache, ResolutionData,
     TypeRefDirectiveResolutionCache, TypeRefDirectiveResolutionCacheKey,
 };
+use crate::fsstats::ObservedFS;
 use crate::packagejson::{self, with_package_directory, InfoCache, InfoCacheEntry, InfoCacheEntryExt, JSONValueType, PackageJson, TypeValidatedField, VersionPaths};
 use crate::scratch::{with_path_buffer, PathBuffer};
 use crate::types::{
@@ -591,8 +593,9 @@ impl<'r> ResolutionState<'r> {
         }
     }
 
-    fn fs(&self) -> &'r dyn tsrs_vfs::FS {
-        self.resolver.host.fs()
+    #[inline]
+    fn fs(&self, site: &'static str) -> ObservedFS<'r> {
+        ObservedFS::new(self.resolver.host.fs(), site)
     }
 
     fn current_directory(&self) -> &'r str {
@@ -605,7 +608,7 @@ impl<'r> ResolutionState<'r> {
             trace!(self.tracer, diagnostics::Resolving_with_primary_search_path_0, type_roots.join(", "));
             for type_root in type_roots {
                 let candidate = self.get_candidate_from_type_root(type_root);
-                let directory_exists = self.fs().directory_exists(type_root);
+                let directory_exists = self.fs("type_root.primary").directory_exists(type_root);
                 if !directory_exists {
                     trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, type_root);
                     continue;
@@ -674,7 +677,7 @@ impl<'r> ResolutionState<'r> {
         };
         for type_root in type_roots {
             let candidate = self.get_candidate_from_type_root(type_root);
-            let directory_exists = self.fs().directory_exists(type_root);
+            let directory_exists = self.fs("type_root.secondary").directory_exists(type_root);
             if !directory_exists {
                 trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, type_root);
                 continue;
@@ -1122,7 +1125,7 @@ impl<'r> ResolutionState<'r> {
                     &tspath::get_directory_path(package_path),
                     &compiler_options.config_file_path,
                     &ComparePathsOptions {
-                        use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(),
+                        use_case_sensitive_file_names: self.fs("project_reference.input").use_case_sensitive_file_names(),
                         current_directory: self.current_directory().to_string(),
                     },
                 ))
@@ -1160,7 +1163,7 @@ impl<'r> ResolutionState<'r> {
                     candidate_dir,
                     final_path,
                     &ComparePathsOptions {
-                        use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(),
+                        use_case_sensitive_file_names: self.fs("project_reference.input").use_case_sensitive_file_names(),
                         current_directory: self.current_directory().to_string(),
                     },
                 ) {
@@ -1188,7 +1191,7 @@ impl<'r> ResolutionState<'r> {
                                     return None;
                                 }
                                 let possible_input_with_input_extension = tspath::change_extension(&possible_input_base, possible_ext);
-                                if self.fs().file_exists(&possible_input_with_input_extension) {
+                                if self.fs("project_reference.input").file_exists(&possible_input_with_input_extension) {
                                     let resolved = self.load_file_name_from_package_json_field(self.extensions, &possible_input_with_input_extension, "");
                                     if !resolved.should_continue_searching() {
                                         return Some(resolved);
@@ -1265,7 +1268,7 @@ impl<'r> ResolutionState<'r> {
 
     fn load_module_from_immediate_node_modules_directory(&mut self, extensions: Extensions, directory: &str, types_scope_only: bool) -> Option<Resolved> {
         let node_modules_folder = tspath::combine_paths(directory, &["node_modules"]);
-        if !self.fs().directory_exists(&node_modules_folder) {
+        if !self.fs("node_modules.directory").directory_exists(&node_modules_folder) {
             trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, node_modules_folder);
             return continue_searching();
         }
@@ -1280,7 +1283,7 @@ impl<'r> ResolutionState<'r> {
 
         if extensions.intersects(Extensions::Declaration) {
             let node_modules_at_types = tspath::combine_paths(&node_modules_folder, &["@types"]);
-            if !self.fs().directory_exists(&node_modules_at_types) {
+            if !self.fs("node_modules.types").directory_exists(&node_modules_at_types) {
                 trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, node_modules_at_types);
                 return continue_searching();
             }
@@ -1311,7 +1314,7 @@ impl<'r> ResolutionState<'r> {
         }
 
         if self.resolve_package_directory_only {
-            if self.fs().directory_exists(&package_directory) {
+            if self.fs("node_modules.package").directory_exists(&package_directory) {
                 return Some(Resolved { path: package_directory, ..Default::default() });
             }
             return continue_searching();
@@ -1465,7 +1468,7 @@ impl<'r> ResolutionState<'r> {
     fn get_original_and_resolved_file_name(&mut self, file_name: &str) -> (String, String) {
         let resolved_file_name = self.real_path(file_name);
         let compare_paths_options = ComparePathsOptions {
-            use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(),
+            use_case_sensitive_file_names: self.fs("resolution.original_path").use_case_sensitive_file_names(),
             current_directory: self.current_directory().to_string(),
         };
         if tspath::compare_paths(file_name, &resolved_file_name, &compare_paths_options).is_eq() {
@@ -1627,7 +1630,7 @@ impl<'r> ResolutionState<'r> {
         trace!(self.tracer, diagnostics::Loading_module_as_file_Slash_folder_candidate_module_location_0_target_file_types_Colon_1, candidate, extensions);
         if !tspath::has_trailing_directory_separator(candidate) {
             let parent_of_candidate = tspath::get_directory_path(candidate);
-            if !self.fs().directory_exists(&parent_of_candidate) {
+            if !self.fs("relative.parent").directory_exists(&parent_of_candidate) {
                 trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, parent_of_candidate);
                 return continue_searching();
             }
@@ -1643,7 +1646,7 @@ impl<'r> ResolutionState<'r> {
                 return resolved_from_file;
             }
         }
-        if !self.fs().directory_exists(candidate) {
+        if !self.fs("relative.candidate").directory_exists(candidate) {
             trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, candidate);
             return continue_searching();
         }
@@ -1694,7 +1697,7 @@ impl<'r> ResolutionState<'r> {
 
     fn try_adding_extensions(&mut self, extensionless: &str, extensions: Extensions, original_extension: &str) -> Option<Resolved> {
         let directory = tspath::get_directory_path(extensionless);
-        if !directory.is_empty() && !self.fs().directory_exists(&directory) {
+        if !directory.is_empty() && !self.fs("extension.parent").directory_exists(&directory) {
             return continue_searching();
         }
 
@@ -1920,7 +1923,7 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn try_file_lookup(&mut self, file_name: &str) -> bool {
-        if self.fs().file_exists(file_name) {
+        if self.fs("candidate.file").file_exists(file_name) {
             trace!(self.tracer, diagnostics::File_0_exists_use_it_as_a_name_resolution_result, file_name);
             return true;
         } else {
@@ -1948,7 +1951,7 @@ impl<'r> ResolutionState<'r> {
                 candidate,
                 info.package_directory,
                 &ComparePathsOptions {
-                    use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(),
+                    use_case_sensitive_file_names: self.fs("package.directory").use_case_sensitive_file_names(),
                     current_directory: String::new(),
                 },
             ) == std::cmp::Ordering::Equal
@@ -2033,7 +2036,7 @@ impl<'r> ResolutionState<'r> {
 
         // ESM mode resolutions don't do package 'index' lookups
         if !self.esm_mode {
-            if !self.fs().directory_exists(candidate) {
+            if !self.fs("package.index").directory_exists(candidate) {
                 return continue_searching();
             }
             return self.load_module_from_file(ext, &index_path);
@@ -2110,10 +2113,10 @@ impl<'r> ResolutionState<'r> {
             }
         }
 
-        let directory_exists = self.fs().directory_exists(package_directory);
-        if directory_exists && self.fs().file_exists(&package_json_path) {
+        let directory_exists = self.fs("package_json.parent").directory_exists(package_directory);
+        if directory_exists && self.fs("package_json.file").file_exists(&package_json_path) {
             // Ignore error
-            let contents = self.fs().read_file(&package_json_path).unwrap_or_default();
+            let contents = self.fs("package_json.read").read_file(&package_json_path).unwrap_or_default();
             let parsed = packagejson::parse(&contents);
             trace!(self.tracer, diagnostics::Found_package_json_at_0, package_json_path);
             let parseable = parsed.is_ok();
@@ -2192,7 +2195,7 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn real_path(&mut self, path: &str) -> String {
-        let rp = tspath::normalize_path(&self.fs().realpath(path));
+        let rp = tspath::normalize_path(&self.fs("resolution.realpath").realpath(path));
         trace!(self.tracer, diagnostics::Resolving_real_path_for_0_result_1, path, rp);
         rp
     }
@@ -2441,13 +2444,13 @@ pub fn get_automatic_type_directive_names(options: &CompilerOptions, host: &dyn 
     let mut wildcard_matches = Vec::new();
     let (type_roots, _) = options.get_effective_type_roots(host.get_current_directory());
     for root in &type_roots {
-        if host.fs().directory_exists(root) {
-            wildcard_matches.extend(host.fs().get_accessible_entries(root).directories.into_iter().filter_map(|type_directive_path| {
+        if ObservedFS::new(host.fs(), "automatic_types.root").directory_exists(root) {
+            wildcard_matches.extend(ObservedFS::new(host.fs(), "automatic_types.entries").get_accessible_entries(root).directories.into_iter().filter_map(|type_directive_path| {
                 let normalized = tspath::normalize_path(&type_directive_path);
                 let package_json_path = tspath::combine_paths(root, &[&normalized, "package.json"]);
                 let mut is_not_needed_package = false;
-                if host.fs().file_exists(&package_json_path) {
-                    let contents = host.fs().read_file(&package_json_path).unwrap_or_default();
+                if ObservedFS::new(host.fs(), "automatic_types.package_json").file_exists(&package_json_path) {
+                    let contents = ObservedFS::new(host.fs(), "automatic_types.package_json").read_file(&package_json_path).unwrap_or_default();
                     let package_json_content = packagejson::parse(&contents).unwrap_or_default();
                     // `types-publisher` sometimes creates packages with `"typings": null` for packages that don't provide their own types.
                     // See `createNotNeededPackageJSON` in the types-publisher` repo.
@@ -2575,7 +2578,7 @@ impl DefaultResolver {
 
         if enable_directory_search {
             let other_files = tsrs_vfs::vfsmatch::read_directory(
-                self.host.fs(),
+                ObservedFS::new(self.host.fs(), "package_entrypoints.walk").as_fs(),
                 self.host.get_current_directory(),
                 package_json.package_directory,
                 &extensions.array(),
@@ -2585,7 +2588,7 @@ impl DefaultResolver {
             );
 
             let compare_paths_options =
-                ComparePathsOptions { use_case_sensitive_file_names: self.host.fs().use_case_sensitive_file_names(), ..Default::default() };
+                ComparePathsOptions { use_case_sensitive_file_names: ObservedFS::new(self.host.fs(), "package_entrypoints.compare").use_case_sensitive_file_names(), ..Default::default() };
             result.extend(other_files.iter().filter_map(|file| {
                 if main_resolution.is_resolved()
                     && tspath::compare_paths(
@@ -2625,7 +2628,7 @@ impl DefaultResolver {
     ) -> ResolvedEntrypoint {
         let mut original_file_name = String::new();
         let mut resolved_file_name = file_name.to_string();
-        let real_path = self.host.fs().realpath(file_name);
+        let real_path = ObservedFS::new(self.host.fs(), "package_entrypoints.realpath").realpath(file_name);
         if real_path != file_name {
             original_file_name = file_name.to_string();
             resolved_file_name = real_path;
@@ -2691,9 +2694,9 @@ impl ResolutionState<'_> {
                 }
                 let pattern_path = tspath::resolve_path(package_json.package_directory, &[exports_str]);
                 let (leading_slice, trailing_slice) = pattern_path.split_once('*').unwrap_or((&pattern_path, ""));
-                let case_sensitive = self.resolver.host.fs().use_case_sensitive_file_names();
+                let case_sensitive = self.fs("export_entrypoints.compare").use_case_sensitive_file_names();
                 let files = tsrs_vfs::vfsmatch::read_directory(
-                    self.resolver.host.fs(),
+                    self.fs("export_entrypoints.walk").as_fs(),
                     self.resolver.host.get_current_directory(),
                     package_json.package_directory,
                     &self.extensions.array(),

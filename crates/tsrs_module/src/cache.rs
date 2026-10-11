@@ -4,7 +4,9 @@ use rustc_hash::FxHashMap;
 use tsrs_core::collections::{OrderedMap, SyncMap};
 use tsrs_core::tspath::Path;
 use tsrs_core::{CompilerOptions, ResolutionMode, P};
+use tsrs_vfs::FS;
 
+use crate::fsstats::ObservedFS;
 use crate::packagejson::{self, InfoCache, InfoCacheEntry};
 use crate::resolver::{try_parse_patterns, DefaultResolver, ParsedPatterns, ResolverOptions};
 use crate::types::{ModeAwareCacheKey, ResolutionHost, ResolvedModule, ResolvedProjectReference, ResolvedTypeReferenceDirective};
@@ -101,7 +103,10 @@ pub struct ResolutionData {
 pub(crate) fn new_resolution_data(opts: ResolverOptions) -> P<ResolutionData> {
     let package_json_info_cache = match opts.package_json_cache {
         Some(cache) => cache,
-        None => P::new(packagejson::new_info_cache(opts.host.get_current_directory(), opts.host.fs().use_case_sensitive_file_names())),
+        None => P::new(packagejson::new_info_cache(
+            opts.host.get_current_directory(),
+            ObservedFS::new(opts.host.fs(), "resolution_data.case_sensitive").use_case_sensitive_file_names(),
+        )),
     };
     P::new(ResolutionData {
         compiler_options: opts.compiler_options,

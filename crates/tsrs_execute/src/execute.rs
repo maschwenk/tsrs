@@ -4,7 +4,7 @@
 use std::sync::Arc;
 
 use tsrs_ast::new_compiler_diagnostic;
-use tsrs_compiler::{new_cached_fs_compiler_host, new_program, ProgramOptions};
+use tsrs_compiler::{new_cached_fs_compiler_host, new_compiler_host, new_program, ProgramOptions};
 use tsrs_core::tspath;
 use tsrs_core::P;
 use tsrs_diagnostics as diagnostics;
@@ -314,13 +314,22 @@ fn perform_compilation(
     mut compile_times: CompileTimes,
     testing: Option<&'static dyn tsc::CommandLineTesting>,
 ) -> CommandLineResult {
-    let content_mapper_host = tsc::new_content_mapper_host(sys, &config.compiler_options().unwrap());
+    let options = config.compiler_options().unwrap();
+    let content_mapper_host = tsc::new_content_mapper_host(sys, &options);
     let content_mapper_project = get_content_mapper_project(content_mapper_host.as_ref(), config);
     let _close_content_mappers =
         tsc::contentMapperCloser { host: content_mapper_host.clone(), project: content_mapper_project.clone() };
-    let host = new_cached_fs_compiler_host(
+    // External content mappers can change files during compilation; only an ordinary one-shot check uses the
+    // native path cache. It already caches FS operations, so it does not need another cachedvfs layer.
+    let type_check_fs = if testing.is_none() && options.no_emit.is_true() && !options.is_incremental() && !options.run_external_code.is_true() {
+        sys.new_type_check_fs()
+    } else {
+        None
+    };
+    let new_host = if type_check_fs.is_some() { new_compiler_host } else { new_cached_fs_compiler_host };
+    let host = new_host(
         sys.get_current_directory(),
-        sys.fs(),
+        type_check_fs.unwrap_or_else(|| sys.fs()),
         sys.default_library_path(),
         Some(extended_config_cache),
         Some(get_trace_from_sys(sys, testing)),
@@ -331,7 +340,6 @@ fn perform_compilation(
     // refers to once it is checked. Not when anything reads the trees after the check pass: declaration
     // diagnostics (`declaration`, `composite`), `--explainFiles` (the import nodes of each file), the tsctests harness,
     // or Go's check history (`--checkerAssignment go`, a per-name cache that keeps another file's declarations).
-    let options = config.compiler_options().unwrap();
     let leaf_freeing_allowed = testing.is_none()
         && options.no_emit.is_true()
         && !options.get_emit_declarations()
@@ -520,4 +528,110 @@ fn tsc_build_compilation(
 // tsc.go getTraceFromSys / tsc.GetTraceWithWriterFromSys
 fn get_trace_from_sys(sys: &'static dyn System, testing: Option<&'static dyn tsc::CommandLineTesting>) -> Box<tsrs_compiler::TraceFn> {
     tsc::get_trace_with_writer_from_sys(std::sync::Arc::new(move |t: &str| sys.write(t)), true, testing)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Mutex;
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    struct FsSelectionSystem {
+        fs: Arc<dyn FS>,
+        type_check_fs: Option<Arc<dyn FS>>,
+        factory_calls: AtomicUsize,
+        output: Mutex<String>,
+    }
+
+    impl System for FsSelectionSystem {
+        fn fs(&self) -> Arc<dyn FS> {
+            Arc::clone(&self.fs)
+        }
+
+        fn new_type_check_fs(&self) -> Option<Arc<dyn FS>> {
+            self.factory_calls.fetch_add(1, Ordering::SeqCst);
+            self.type_check_fs.clone()
+        }
+
+        fn default_library_path(&self) -> &str {
+            "/lib"
+        }
+
+        fn get_current_directory(&self) -> &str {
+            "/project"
+        }
+
+        fn write(&self, text: &str) {
+            self.output.lock().unwrap().push_str(text);
+        }
+
+        fn flush(&self) {}
+
+        fn write_output_is_tty(&self) -> bool {
+            false
+        }
+
+        fn get_environment_variable(&self, _name: &str) -> Option<String> {
+            None
+        }
+
+        fn spawn(&self, _command: &[String], _dir: &str, _stderr: Option<Box<dyn std::io::Write + Send>>) -> Result<tsc::ReadWriteCloser, String> {
+            panic!("no content mapper is configured")
+        }
+
+        fn now(&self) -> Instant {
+            Instant::now()
+        }
+
+        fn since_start(&self) -> Duration {
+            Duration::ZERO
+        }
+    }
+
+    struct Testing;
+
+    impl tsc::CommandLineTesting for Testing {
+        fn get_trace(&'static self, w: tsc::SyncWriter, _is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn> {
+            tsc::get_trace_with_writer_from_sys(w, true, None)
+        }
+    }
+
+    #[test]
+    fn command_line_selects_the_type_check_filesystem_only_for_stable_checks() {
+        for (name, extra_args, testing, offered, want_snapshot, want_calls) in [
+            ("no emit", vec![], false, true, true, 1),
+            ("resolution trace", vec!["--traceResolution"], false, true, true, 1),
+            ("emit", vec!["--noEmit", "false"], false, true, false, 0),
+            ("incremental", vec!["--incremental", "--tsBuildInfoFile", "/project/cache.tsbuildinfo"], false, true, false, 0),
+            ("external code", vec!["--runExternalCode"], false, true, false, 0),
+            ("testing hooks", vec![], true, true, false, 0),
+            ("custom filesystem fallback", vec![], false, false, false, 1),
+        ] {
+            let fs = Arc::new(tsrs_vfs::vfstest::from_map(
+                [("/project/main.ts", "import './ordinary';"), ("/project/ordinary.ts", "export {}; ")],
+                true,
+            ));
+            let type_check_fs: Option<Arc<dyn FS>> = offered.then(|| {
+                Arc::new(tsrs_vfs::vfstest::from_map(
+                    [("/project/main.ts", "import './snapshot';"), ("/project/snapshot.ts", "export {}; ")],
+                    true,
+                )) as Arc<dyn FS>
+            });
+            let sys = Box::leak(Box::new(FsSelectionSystem { fs, type_check_fs, factory_calls: AtomicUsize::new(0), output: Mutex::new(String::new()) }));
+            let mut args: Vec<String> = ["--noEmit", "--noCheck", "--noLib", "--listFilesOnly", "--singleThreaded", "/project/main.ts"]
+                .into_iter()
+                .map(str::to_string)
+                .collect();
+            args.extend(extra_args.into_iter().map(str::to_string));
+            let testing = testing.then_some(&Testing as &'static dyn tsc::CommandLineTesting);
+            let result = command_line_with_testing(sys, args, testing);
+            let output = sys.output.lock().unwrap();
+            assert!(result.status == ExitStatus::Success, "{name}: {output}");
+            assert_eq!(sys.factory_calls.load(Ordering::SeqCst), want_calls, "{name}");
+            assert_eq!(output.contains("/project/snapshot.ts"), want_snapshot, "{name}: {output}");
+            assert_eq!(output.contains("/project/ordinary.ts"), !want_snapshot, "{name}: {output}");
+        }
+    }
 }

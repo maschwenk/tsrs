@@ -30,6 +30,11 @@ impl System for osSys {
         Arc::clone(&self.fs)
     }
 
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn new_type_check_fs(&self) -> Option<Arc<dyn FS>> {
+        Some(Arc::new(bundled::wrap_fs(osvfs::for_compilation())))
+    }
+
     fn default_library_path(&self) -> &str {
         &self.default_library_path
     }

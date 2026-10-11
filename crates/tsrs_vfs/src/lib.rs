@@ -6,6 +6,7 @@ pub use walkdir::*;
 
 pub mod bundled;
 pub mod cachedvfs;
+pub mod fsstats;
 pub mod internal;
 pub mod iovfs;
 pub mod osvfs;

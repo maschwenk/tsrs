@@ -9,6 +9,11 @@ use tsrs_vfs::FS;
 
 pub trait System: Sync {
     fn fs(&self) -> Arc<dyn FS>;
+    // tsrs-only: a fresh, already-cached file system for one read-only compilation. Custom systems keep their
+    // existing FS behavior unless they opt in; the caller excludes incremental builds and external code.
+    fn new_type_check_fs(&self) -> Option<Arc<dyn FS>> {
+        None
+    }
     fn default_library_path(&self) -> &str;
     fn get_current_directory(&self) -> &str;
     fn write(&self, text: &str);

@@ -55,6 +55,123 @@ fn test_realpath_relative_symlink_and_missing() {
     assert_eq!(fs.realpath(&missing), missing);
 }
 
+#[cfg(not(windows))]
+#[test]
+fn test_walk_symlinks_callbacks_preserve_physical_parent() {
+    let mut probed = Vec::new();
+    let actual = walk_symlinks_with(
+        "/repo/link/../file.ts",
+        |path| {
+            probed.push(path.to_string());
+            Ok(match path {
+                "/repo/link" => FileMode::Symlink,
+                "/repo/real/file.ts" => FileMode::None,
+                "/repo" | "/repo/real" | "/repo/real/sub" => FileMode::Dir,
+                _ => return Err(io::Error::from(io::ErrorKind::NotFound)),
+            })
+        },
+        |path| {
+            assert_eq!(path, "/repo/link");
+            Ok("real/sub".to_string())
+        },
+    )
+    .unwrap();
+    assert_eq!(actual, "/repo/real/file.ts");
+    assert_eq!(probed, ["/repo", "/repo/link", "/repo/real", "/repo/real/sub", "/repo/real/file.ts"]);
+}
+
+#[cfg(not(windows))]
+#[test]
+fn test_walk_symlinks_callbacks_keep_link_limit_and_errors() {
+    let mut metadata_calls = 0;
+    let mut link_calls = 0;
+    let err = walk_symlinks_with(
+        "/loop",
+        |_| {
+            metadata_calls += 1;
+            Ok(FileMode::Symlink)
+        },
+        |_| {
+            link_calls += 1;
+            Ok("loop".to_string())
+        },
+    )
+    .unwrap_err();
+    assert_eq!(err.to_string(), "EvalSymlinks: too many links");
+    assert_eq!(metadata_calls, 256);
+    assert_eq!(link_calls, 255);
+
+    for path in ["/file/child", "/file/"] {
+        let err = walk_symlinks_with(path, |_| Ok(FileMode::None), |_| panic!("not a symlink")).unwrap_err();
+        assert_eq!(err.raw_os_error(), Some(20));
+    }
+    let err = walk_symlinks_with("/missing", |_| Err(io::Error::from(io::ErrorKind::NotFound)), |_| panic!("missing entry")).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::NotFound);
+}
+
+#[cfg(unix)]
+#[test]
+fn test_realpath_file_links_and_broken_links() {
+    let tmp = temp_dir();
+    let target = format!("{tmp}/file.ts");
+    fs::write(&target, "").unwrap();
+    let link = format!("{tmp}/link.ts");
+    mklink("file.ts", &link, false);
+    assert_eq!(fs().realpath(&link), fs().realpath(&target));
+
+    let missing_link = format!("{tmp}/missing.ts");
+    mklink("does-not-exist.ts", &missing_link, false);
+    assert_eq!(fs().realpath(&missing_link), missing_link);
+
+    let loop_link = format!("{tmp}/loop.ts");
+    mklink("loop.ts", &loop_link, false);
+    assert_eq!(fs().realpath(&loop_link), loop_link);
+    fs::remove_dir_all(tmp).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_linux_realpath_long_path_and_procfs_fallback() {
+    let tmp = temp_dir();
+    let mut directory = std::path::PathBuf::from(&tmp);
+    for i in 0..6 {
+        directory.push(format!("{i}{}", "a".repeat(49)));
+    }
+    fs::create_dir_all(&directory).unwrap();
+    let target = directory.join("file.ts");
+    fs::write(&target, "").unwrap();
+    let link = format!("{tmp}/link.ts");
+    mklink(target.to_str().unwrap(), &link, false);
+    let expected = fs::canonicalize(&target).unwrap().to_string_lossy().into_owned();
+    assert!(expected.len() > 256);
+
+    // Exercise the no-procfs branch without requiring a privileged chroot.
+    for has_proc in [false, true] {
+        if has_proc && fs::metadata("/proc/self/fd/").is_err() {
+            continue;
+        }
+        assert_eq!(linux_realpath(&link, has_proc).unwrap(), expected);
+        assert_eq!(linux_realpath(target.to_str().unwrap(), has_proc).unwrap(), expected);
+        let missing = format!("{tmp}/missing.ts");
+        assert_eq!(linux_realpath(&missing, has_proc).unwrap_err().kind(), io::ErrorKind::NotFound);
+    }
+    fs::remove_dir_all(tmp).unwrap();
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn test_linux_realpath_retries_interrupted_syscalls() {
+    let mut calls = 0;
+    let result = ignoring_eintr(|| {
+        calls += 1;
+        if calls < 3 { Err(rustix::io::Errno::INTR) } else { Ok(42) }
+    });
+    assert_eq!(result.unwrap(), 42);
+    assert_eq!(calls, 3);
+    let err = ignoring_eintr::<()>(|| Err(rustix::io::Errno::NOENT)).unwrap_err();
+    assert_eq!(err.kind(), io::ErrorKind::NotFound);
+}
+
 #[test]
 fn test_get_accessible_entries() {
     let tmp = temp_dir();

@@ -145,6 +145,33 @@ with the switch off, which is why it is not in the default build.
   chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);
   root names instead of reference paths (a quarter of the skips).
 
+- Shared resolver path cache (`notes/perf-resolver-path-cache.md`, 2026-10-11): the owner-requested Oxc-style
+  redesign shares metadata, canonical paths, and raw package reads for native Linux/macOS one-shot CLI checks.
+  Mac screening cuts stat/lstat probes 33.3% on xstate and 5.1% on vscode, but single-threaded instructions change
+  -0.767% / +0.060% and default RSS +0.603% / -0.723%. That does not establish the required margin for an added
+  cache. The implementation is a draft experiment for review, not qualified to land. Initially Linux runtime,
+  deterministic instructions, and syscall traces were outstanding; later evidence is below. Both full conformance
+  modes, native CLI output/traces, and lint gates match/pass locally.
+  Follow-up instrumentation identifies distinct cold misses, mostly candidate extensions and package.json,
+  rather than duplicate metadata calls. Adaptive complete-name snapshots after eight misses, guarded by
+  filesystem type, further cut metadata 24.95% / 6.06%; total reductions versus original are 49.93% / 10.81%.
+  Fresh three-way Mac screening still fails the margin: refined single-threaded instructions -0.356% / +0.319%
+  versus original, default RSS +0.620% / +0.100%. It also fixes the initial cache's macOS symlink-limit behavior,
+  so refined/initial CPU deltas cannot isolate the name snapshot. All final parity and lint gates pass. Keep the
+  opt-in profiler/analyzer; qualify the cache on Linux before landing it, or retain only the finding if it fails.
+  Redirecting child probes to a canonical parent is rejected: it resets the kernel's symlink traversal budget
+  and can turn a failed original lookup into a successful one. Higher directory-scan thresholds were estimated
+  from the profiles, not adopted: large scans remain while much of the metadata saving disappears.
+  Those figures predate the PR's scope cleanup. Resolver-only Linux CI subsequently passes runtime checks but
+  shows single-threaded user instructions +0.029% / +0.015% on xstate / vscode; no project clears the gate.
+  The instruction metric excludes kernel work, and CodSpeed warns that syscall costs are excluded. After rebasing
+  onto `1e62e144`, seven paired Mac runs show full-check single instructions -0.403% / -0.079%, default RSS
+  +0.751% / +0.039%, and inconsistent wall changes. `noCheck` instructions change -4.693% / +1.787% single,
+  with broad overlapping ranges: removing checking does not expose a consistent frontend win. Cache overhead
+  is a hypothesis to isolate, not a cost proved by call counts. Before more tuning, capture Linux physical calls
+  and system/user CPU with and without the cache, then isolate directory snapshots. Linux snapshot activation
+  is not established by current reports. Keep the cache a draft pending a qualifying improvement.
+
 - Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
   0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic
   search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone

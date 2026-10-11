@@ -8,11 +8,16 @@ license.workspace = true
 [lints]
 workspace = true
 
+[features]
+resolver-fs-stats = ["dep:serde_json"]
+
 [dependencies]
 tsrs_core.workspace = true
 rustc-hash.workspace = true
 rayon.workspace = true
 bitflags.workspace = true
+hashbrown.workspace = true
+serde_json = { version = "1", optional = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 rustix = { version = "1.1.4", features = ["fs"] }

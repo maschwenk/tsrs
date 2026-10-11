@@ -2,6 +2,7 @@ pub mod packagejson;
 pub mod symlinks;
 
 mod cache;
+mod fsstats;
 mod resolver;
 mod scratch;
 mod types;

@@ -849,9 +849,11 @@ name = "tsrs_vfs"
 version = "0.13.0"
 dependencies = [
  "bitflags",
+ "hashbrown",
  "rayon",
  "rustc-hash",
  "rustix",
+ "serde_json",
  "tsrs_core",
 ]
 

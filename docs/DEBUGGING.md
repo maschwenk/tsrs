@@ -447,6 +447,38 @@ on a `--release` build with symbols (`CARGO_PROFILE_RELEASE_STRIP=none`), then
 `callgrind_annotate --inclusive=no --tree=none cg.out` (`--tree=none`, or call-graph lines are counted twice). The
 bench flags regressions on main by itself (`bench/README.md`, "Regression flag").
 
+### Resolver filesystem calls
+
+Build the optional filesystem profiler, then choose an absolute JSON report path and request extended diagnostics:
+
+```sh
+CARGO_TARGET_DIR=target/resolver-fs cargo build --release -p tsrs_cli --features tsrs_vfs/resolver-fs-stats
+TSRS_RESOLVER_FS_STATS=/tmp/resolver-fs.json ./target/resolver-fs/release/tsrs \
+  -p <project> --noEmit --incremental false --singleThreaded --extendedDiagnostics
+```
+
+The report's `rows` aggregate `count` by `layer`, `site`, `logical_operation`, `operation`, `path`, and `result`:
+
+- `logical`: every resolver FS method, including indirect directory scans and case-sensitivity queries.
+- `cache`: path interning, positive/negative metadata and canonicalization, package reads, stat, and listings.
+  Its `path` is the enclosing logical request, not the actual interned key or shared prefix; outside the resolver
+  it is empty. Physical rows carry the actual filesystem argument.
+- `physical`: OS filesystem API calls attributed to the resolver operation that caused them. `site=nonresolver`
+  identifies other compiler/config work. Directory iteration, entry type queries, and metadata fallbacks are
+  separate operations.
+
+Physical counts are API calls, not a complete syscall trace: `fs::read` contains open/read/close work, while
+`DirEntry::file_type` can use cached directory data without a syscall. Rustix wrapper attempts include explicit
+retries. An identity realpath result can also mean failure; empty accessible entries can also mean an error.
+The report records paths, not source contents, and accumulates across the process. Use an uninstrumented build
+for instruction, wall-time, and memory comparisons: the profiler keeps path records and serializes counters.
+Without the Cargo feature, the instrumentation compiles out.
+
+Summarize a report or compare two runs with `python3 tools/perf/resolver-fs.py before.json [after.json]`.
+The summary separates physical operations, resolver sites, cache outcomes, and duplicate metadata probes.
+Add `--paths` to include the busiest missing-parent directories. Comparisons check logical operation/path/result
+sets and report concurrent call-count differences separately.
+
 ## Where Go reports an error: an instrumented reference with `go build -overlay`
 
 Build the Go reference with a patched copy of one Go file, without editing `ts-ref`: copy the file (e.g.

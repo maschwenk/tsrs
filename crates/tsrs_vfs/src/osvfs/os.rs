@@ -5,14 +5,24 @@ use std::time::SystemTime;
 
 use tsrs_core::{stringutil, tspath};
 
+use crate::fsstats;
 use crate::internal::{self, Common, IoDirEntry, IoFS};
-use crate::{Entries, FileInfo, FileMode, FsError, FS};
+use crate::{Entries, FS, FileInfo, FileMode, FsError};
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[path = "resolvercache.rs"]
+mod resolvercache;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub use resolvercache::for_compilation;
 
 // tsrs-only: file system calls made through this FS, printed as `--extendedDiagnostics` rows.
 static STAT_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static READ_FILE_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static READ_DIR_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 static LSTAT_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static READLINK_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static REALPATH_OPEN_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+static STATFS_CALLS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 fn count(c: &std::sync::atomic::AtomicU64) {
     c.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -39,13 +49,17 @@ pub fn record_call_counts() {
         ("FS: stat", &STAT_CALLS),
         ("FS: read file", &READ_FILE_CALLS),
         ("FS: read dir", &READ_DIR_CALLS),
-        ("FS: realpath lstat", &LSTAT_CALLS),
+        ("FS: lstat", &LSTAT_CALLS),
+        ("FS: readlink", &READLINK_CALLS),
+        ("FS: realpath open", &REALPATH_OPEN_CALLS),
+        ("FS: statfs", &STATFS_CALLS),
     ] {
         let n = c.swap(0, Relaxed);
         if n > 0 {
             tsrs_core::phases::count(name, n);
         }
     }
+    fsstats::write_report();
 }
 
 // FS creates a new FS from the OS file system.
@@ -79,7 +93,7 @@ static IS_FILE_SYSTEM_CASE_SENSITIVE: LazyLock<bool> = LazyLock::new(|| {
     // As a proxy for case-insensitivity, we check if the current executable exists under a different case.
     // This is not entirely correct, since different OSs can have differing case sensitivity in different paths,
     // but this is largely good enough for our purposes (and what sys.ts used to do with __filename).
-    let exe = match std::env::current_exe() {
+    let exe = match fsstats::physical("api.current_exe", "", std::env::current_exe, io_result) {
         Ok(exe) => exe,
         Err(err) => panic!("vfs: failed to get executable path: {}", err),
     };
@@ -87,7 +101,7 @@ static IS_FILE_SYSTEM_CASE_SENSITIVE: LazyLock<bool> = LazyLock::new(|| {
 
     // If the current executable exists under a different case, we must be case-insensitive.
     let swapped = swap_case(&exe);
-    if let Err(err) = fs::metadata(&swapped) {
+    if let Err(err) = fsstats::physical("api.metadata.case_probe", &swapped, || fs::metadata(&swapped), metadata_result) {
         if err.kind() == io::ErrorKind::NotFound {
             return true;
         }
@@ -154,8 +168,16 @@ impl FS for OsFS {
     }
 
     fn chtimes(&self, path: &str, a_time: SystemTime, m_time: SystemTime) -> Result<(), String> {
-        let file = fs::File::options().write(true).open(path).or_else(|_| fs::File::open(path)).map_err(|e| e.to_string())?;
-        file.set_times(fs::FileTimes::new().set_accessed(a_time).set_modified(m_time)).map_err(|e| e.to_string())
+        let file = fsstats::physical("api.open.write", path, || fs::File::options().write(true).open(path), io_result)
+            .or_else(|_| fsstats::physical("api.open.read", path, || fs::File::open(path), io_result))
+            .map_err(|e| e.to_string())?;
+        fsstats::physical(
+            "api.File.set_times",
+            path,
+            || file.set_times(fs::FileTimes::new().set_accessed(a_time).set_modified(m_time)),
+            io_result,
+        )
+        .map_err(|e| e.to_string())
     }
 }
 
@@ -176,24 +198,73 @@ fn os_fs_realpath(path: &str) -> String {
 }
 
 fn from_slash(path: &str) -> String {
-    if cfg!(windows) {
-        path.replace('/', "\\")
-    } else {
-        path.to_string()
+    if cfg!(windows) { path.replace('/', "\\") } else { path.to_string() }
+}
+
+// nativepath.Realpath: Linux lets the kernel resolve the whole path with O_PATH,
+// then reads it through /proc/self/fd. Elsewhere Go uses filepath.EvalSymlinks,
+// which resolves symlinks without correcting case.
+#[cfg(target_os = "linux")]
+fn native_realpath(path: &str) -> io::Result<String> {
+    static HAS_PROC_SELF_FD: LazyLock<bool> = LazyLock::new(|| {
+        fsstats::physical("api.metadata.proc_probe", "/proc/self/fd/", || fs::metadata("/proc/self/fd/"), metadata_result).is_ok()
+    });
+    linux_realpath(path, *HAS_PROC_SELF_FD)
+}
+
+#[cfg(target_os = "linux")]
+fn linux_realpath(path: &str, has_proc_self_fd: bool) -> io::Result<String> {
+    use rustix::fs::{CWD, Mode, OFlags};
+    use std::os::fd::AsRawFd;
+
+    if !has_proc_self_fd {
+        return walk_symlinks(path);
+    }
+
+    // OwnedFd closes on every return, including readlink errors. As in Go, only
+    // the absence of procfs selects the fallback; open/readlink errors propagate.
+    let fd = ignoring_eintr(|| {
+        count(&REALPATH_OPEN_CALLS);
+        fsstats::physical(
+            "rustix.open.O_PATH",
+            path,
+            || rustix::fs::open(path, OFlags::PATH | OFlags::CLOEXEC, Mode::empty()),
+            rustix_result,
+        )
+    })?;
+    let proc_path = format!("/proc/self/fd/{}", fd.as_raw_fd());
+    let mut buf = vec![0; 256];
+    loop {
+        let n = ignoring_eintr(|| {
+            count(&READLINK_CALLS);
+            fsstats::physical(
+                "rustix.readlinkat_raw",
+                &proc_path,
+                || rustix::fs::readlinkat_raw(CWD, proc_path.as_str(), buf.as_mut_slice()),
+                rustix_result,
+            )
+        })?;
+        if n < buf.len() {
+            buf.truncate(n);
+            return Ok(String::from_utf8_lossy(&buf).into_owned());
+        }
+        buf.resize(buf.len() * 2, 0);
     }
 }
 
-// nativepath.Realpath: on Linux the kernel-resolved path (Go reads /proc/self/fd
-// after an O_PATH open, which is what realpath(3) computes); elsewhere
-// filepath.EvalSymlinks, which resolves symlinks without correcting case.
 #[cfg(target_os = "linux")]
-fn native_realpath(path: &str) -> io::Result<String> {
-    Ok(fs::canonicalize(path)?.to_string_lossy().into_owned())
+fn ignoring_eintr<T>(mut operation: impl FnMut() -> rustix::io::Result<T>) -> io::Result<T> {
+    loop {
+        match operation() {
+            Err(rustix::io::Errno::INTR) => {}
+            result => return result.map_err(Into::into),
+        }
+    }
 }
 
 #[cfg(windows)]
 fn native_realpath(path: &str) -> io::Result<String> {
-    let p = fs::canonicalize(path)?.to_string_lossy().into_owned();
+    let p = fsstats::physical("api.canonicalize", path, || fs::canonicalize(path), io_result)?.to_string_lossy().into_owned();
     if let Some(rest) = p.strip_prefix(r"\\?\UNC\") {
         return Ok(format!(r"\\{}", rest));
     }
@@ -209,8 +280,110 @@ fn native_realpath(path: &str) -> io::Result<String> {
 }
 
 // filepath.walkSymlinks (the Unix variant, used by filepath.EvalSymlinks).
-#[cfg(not(any(target_os = "linux", windows)))]
+#[cfg(not(windows))]
 fn walk_symlinks(path: &str) -> io::Result<String> {
+    walk_symlinks_with(path, symlink_file_type, read_link)
+}
+
+#[cfg(not(windows))]
+pub(crate) fn symlink_file_type(path: &str) -> io::Result<FileMode> {
+    count(&LSTAT_CALLS);
+    #[cfg(target_os = "linux")]
+    {
+        use rustix::fs::{AtFlags, CWD, FileType, StatxFlags};
+
+        match fsstats::physical(
+            "rustix.statx.link",
+            path,
+            || rustix::fs::statx(CWD, path, AtFlags::SYMLINK_NOFOLLOW, StatxFlags::TYPE),
+            rustix_result,
+        ) {
+            Ok(statx) => Ok(match FileType::from_raw_mode(statx.stx_mode.into()) {
+                FileType::RegularFile => FileMode::None,
+                FileType::Directory => FileMode::Dir,
+                FileType::Symlink => FileMode::Symlink,
+                FileType::Fifo => FileMode::NamedPipe,
+                FileType::Socket => FileMode::Socket,
+                FileType::CharacterDevice => FileMode::Device | FileMode::CharDevice,
+                FileType::BlockDevice => FileMode::Device,
+                FileType::Unknown => FileMode::Irregular,
+            }),
+            Err(rustix::io::Errno::NOSYS) => {
+                fsstats::physical("api.symlink_metadata", path, || fs::symlink_metadata(path), metadata_result)
+                    .map(|metadata| file_type_mode(metadata.file_type()))
+            }
+            Err(err) => Err(err.into()),
+        }
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        fsstats::physical("api.symlink_metadata", path, || fs::symlink_metadata(path), metadata_result)
+            .map(|metadata| file_type_mode(metadata.file_type()))
+    }
+}
+
+#[cfg(not(windows))]
+pub(crate) fn read_link(path: &str) -> io::Result<String> {
+    count(&READLINK_CALLS);
+    fsstats::physical("api.read_link", path, || fs::read_link(path), io_result).map(|target| target.to_string_lossy().into_owned())
+}
+
+// Unlike accessible entries, this keeps dangling links and special nodes. Only ordinary
+// filesystems are eligible: procfs, for example, has lookup-visible TIDs absent from readdir.
+// Any filesystem-query/listing error or non-ASCII name disables negative inference.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+pub(crate) fn directory_names(path: &str) -> Option<Vec<Box<str>>> {
+    count(&STATFS_CALLS);
+    let filesystem = fsstats::physical("rustix.statfs", path, || rustix::fs::statfs(path), rustix_result).ok()?;
+    if !has_enumerated_names(&filesystem) {
+        return None;
+    }
+    count(&READ_DIR_CALLS);
+    let mut directory = fsstats::physical("api.read_dir", path, || fs::read_dir(path), io_result).ok()?;
+    let mut names = Vec::new();
+    loop {
+        let entry = fsstats::physical("api.ReadDir.next", path, || directory.next(), |result| match result {
+            Some(result) => io_result(result),
+            None => "end",
+        });
+        let Some(entry) = entry else {
+            return Some(names);
+        };
+        let name = entry.ok()?.file_name().into_string().ok()?;
+        if !name.is_ascii() {
+            return None;
+        }
+        names.push(name.into_boxed_str());
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn has_enumerated_names(filesystem: &rustix::fs::StatFs) -> bool {
+    // Linux include/uapi/linux/magic.h. Unknown types, including overlay/FUSE with arbitrary
+    // underlying lookup semantics, must retain individual metadata probes.
+    const EXT_SUPER_MAGIC: u32 = 0xef53;
+    const XFS_SUPER_MAGIC: u32 = 0x5846_5342;
+    const BTRFS_SUPER_MAGIC: u32 = 0x9123_683e;
+    const TMPFS_MAGIC: u32 = 0x0102_1994;
+    matches!(filesystem.f_type as u32, EXT_SUPER_MAGIC | XFS_SUPER_MAGIC | BTRFS_SUPER_MAGIC | TMPFS_MAGIC)
+}
+
+#[cfg(target_os = "macos")]
+fn has_enumerated_names(filesystem: &rustix::fs::StatFs) -> bool {
+    // f_fstypename is a fixed NUL-terminated C array; compare only complete known names,
+    // without allocating or requiring zero padding after the terminator.
+    let name = &filesystem.f_fstypename;
+    name.starts_with(&[b'a' as _, b'p' as _, b'f' as _, b's' as _, 0]) || name.starts_with(&[b'h' as _, b'f' as _, b's' as _, 0])
+}
+
+// The invocation-scoped resolver cache supplies the same lstat/readlink views;
+// path traversal and error handling remain the Go walk for both callers.
+#[cfg(not(windows))]
+pub(crate) fn walk_symlinks_with(
+    path: &str,
+    mut metadata: impl FnMut(&str) -> io::Result<FileMode>,
+    mut read_link: impl FnMut(&str) -> io::Result<String>,
+) -> io::Result<String> {
     let is_sep = |b: u8| b == b'/';
     let mut path = path.to_string();
     let mut vol_len = 0usize;
@@ -277,11 +450,10 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
 
         // Resolve symlink.
 
-        count(&LSTAT_CALLS);
-        let fi = fs::symlink_metadata(&dest)?;
+        let mode = metadata(&dest)?;
 
-        if !fi.file_type().is_symlink() {
-            if !fi.is_dir() && end < path.len() {
+        if !mode.intersects(FileMode::Symlink) {
+            if !mode.is_dir() && end < path.len() {
                 return Err(io::Error::from_raw_os_error(20 /* ENOTDIR */));
             }
             start = end;
@@ -295,7 +467,7 @@ fn walk_symlinks(path: &str) -> io::Result<String> {
             return Err(io::Error::other("EvalSymlinks: too many links"));
         }
 
-        let link = fs::read_link(&dest)?.to_string_lossy().into_owned();
+        let link = read_link(&dest)?;
 
         path = format!("{}{}", link, &path[end..]);
 
@@ -333,7 +505,7 @@ fn abs(path: &str) -> io::Result<String> {
     if std::path::Path::new(path).is_absolute() {
         return Ok(clean(path));
     }
-    let wd = std::env::current_dir()?.to_string_lossy().into_owned();
+    let wd = fsstats::physical("api.current_dir", "", std::env::current_dir, io_result)?.to_string_lossy().into_owned();
     Ok(clean(&format!("{}/{}", wd, path)))
 }
 
@@ -404,18 +576,19 @@ pub(crate) fn clean(path: &str) -> String {
 }
 
 fn is_reparse_point(path: &str) -> bool {
-    match fs::symlink_metadata(from_slash(path)) {
+    let path = from_slash(path);
+    match fsstats::physical("api.symlink_metadata.reparse", &path, || fs::symlink_metadata(&path), metadata_result) {
         Ok(info) => info.file_type().is_symlink(),
         Err(_) => false,
     }
 }
 
 fn remove_all(path: &str) -> io::Result<()> {
-    match fs::symlink_metadata(path) {
+    match fsstats::physical("api.symlink_metadata", path, || fs::symlink_metadata(path), metadata_result) {
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(()),
         Err(e) => Err(e),
-        Ok(md) if md.is_dir() => fs::remove_dir_all(path),
-        Ok(_) => fs::remove_file(path),
+        Ok(md) if md.is_dir() => fsstats::physical("api.remove_dir_all", path, || fs::remove_dir_all(path), io_result),
+        Ok(_) => fsstats::physical("api.remove_file", path, || fs::remove_file(path), io_result),
     }
 }
 
@@ -429,12 +602,12 @@ impl OsFS {
         } else {
             options.truncate(true);
         }
-        let mut file = options.open(path)?;
-        file.write_all(content.as_bytes())
+        let mut file = fsstats::physical("api.OpenOptions.open", path, || options.open(path), io_result)?;
+        fsstats::physical("api.Write.write_all", path, || file.write_all(content.as_bytes()), io_result)
     }
 
     fn ensure_directory_exists(&self, directory_path: &str) -> io::Result<()> {
-        fs::create_dir_all(directory_path)
+        fsstats::physical("api.create_dir_all", directory_path, || fs::create_dir_all(directory_path), io_result)
     }
 
     fn write_file_ensuring_dir(&self, path: &str, content: &str, append: bool) -> Result<(), String> {
@@ -473,6 +646,52 @@ impl DirFS {
             full.push_str(name);
         }
         Ok(full)
+    }
+}
+
+fn error_result(error: &io::Error) -> &'static str {
+    match error.kind() {
+        io::ErrorKind::NotFound => "error.not_found",
+        io::ErrorKind::PermissionDenied => "error.permission_denied",
+        io::ErrorKind::NotADirectory => "error.not_directory",
+        io::ErrorKind::IsADirectory => "error.is_directory",
+        io::ErrorKind::AlreadyExists => "error.already_exists",
+        io::ErrorKind::InvalidInput => "error.invalid_input",
+        io::ErrorKind::Interrupted => "error.interrupted",
+        io::ErrorKind::Unsupported => "error.unsupported",
+        _ => "error.other",
+    }
+}
+
+fn io_result<T>(result: &io::Result<T>) -> &'static str {
+    match result {
+        Ok(_) => "ok",
+        Err(error) => error_result(error),
+    }
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn rustix_result<T>(result: &rustix::io::Result<T>) -> &'static str {
+    match result {
+        Ok(_) => "ok",
+        Err(error) => error_result(&(*error).into()),
+    }
+}
+
+fn file_type_result(result: &io::Result<fs::FileType>) -> &'static str {
+    match result {
+        Ok(file_type) if file_type.is_dir() => "directory",
+        Ok(file_type) if file_type.is_file() => "file",
+        Ok(file_type) if file_type.is_symlink() => "symlink",
+        Ok(_) => "special",
+        Err(error) => error_result(error),
+    }
+}
+
+fn metadata_result(result: &io::Result<fs::Metadata>) -> &'static str {
+    match result {
+        Ok(metadata) => file_type_result(&Ok(metadata.file_type())),
+        Err(error) => error_result(error),
     }
 }
 
@@ -556,13 +775,8 @@ impl IoFS for DirFS {
     fn stat(&self, name: &str) -> Result<FileInfo, FsError> {
         let full = self.join(name)?;
         count(&STAT_CALLS);
-        let md = fs::metadata(&full).map_err(io_error)?;
-        Ok(FileInfo {
-            name: base(&full),
-            size: md.len() as i64,
-            mode: metadata_mode(&md),
-            mod_time: md.modified().ok(),
-        })
+        let md = fsstats::physical("api.metadata", &full, || fs::metadata(&full), metadata_result).map_err(io_error)?;
+        Ok(FileInfo { name: base(&full), size: md.len() as i64, mode: metadata_mode(&md), mod_time: md.modified().ok() })
     }
 
     fn file_type(&self, name: &str) -> Result<FileMode, FsError> {
@@ -575,17 +789,33 @@ impl IoFS for DirFS {
         let full = self.join(name)?;
         count(&READ_DIR_CALLS);
         let mut entries = Vec::new();
-        for entry in fs::read_dir(&full).map_err(io_error)? {
+        let mut directory = fsstats::physical("api.read_dir", &full, || fs::read_dir(&full), io_result).map_err(io_error)?;
+        loop {
+            let next = fsstats::physical(
+                "api.ReadDir.next",
+                &full,
+                || directory.next(),
+                |result| match result {
+                    Some(result) => io_result(result),
+                    None => "end",
+                },
+            );
+            let Some(entry) = next else {
+                break;
+            };
             let entry = entry.map_err(io_error)?;
-            let type_ = match entry.file_type() {
+            // file_type may use the directory entry's type without any syscall. Construct its
+            // diagnostic path only in profiling builds; it is not needed by the normal reader.
+            #[cfg(feature = "resolver-fs-stats")]
+            let entry_path = entry.path().to_string_lossy().into_owned();
+            #[cfg(not(feature = "resolver-fs-stats"))]
+            let entry_path = "";
+            let type_ = match fsstats::physical("api.DirEntry.file_type", &entry_path, || entry.file_type(), file_type_result) {
                 Ok(ft) => file_type_mode(ft),
                 Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
                 Err(e) => return Err(io_error(e)),
             };
-            entries.push(IoDirEntry {
-                name: entry.file_name().to_string_lossy().into_owned(),
-                type_,
-            });
+            entries.push(IoDirEntry { name: entry.file_name().to_string_lossy().into_owned(), type_ });
         }
         entries.sort_by(|a, b| a.name.cmp(&b.name));
         Ok(entries)
@@ -594,7 +824,7 @@ impl IoFS for DirFS {
     fn read_file(&self, name: &str) -> Result<Vec<u8>, FsError> {
         let full = self.join(name)?;
         count(&READ_FILE_CALLS);
-        fs::read(&full).map_err(io_error)
+        fsstats::physical("api.read", &full, || fs::read(&full), io_result).map_err(io_error)
     }
 }
 
@@ -602,19 +832,24 @@ impl IoFS for DirFS {
 fn metadata_file_type(path: &str) -> Result<FileMode, FsError> {
     use rustix::fs::{AtFlags, CWD, FileType, StatxFlags};
 
-    match rustix::fs::statx(CWD, path, AtFlags::empty(), StatxFlags::TYPE) {
+    match fsstats::physical("rustix.statx.follow", path, || rustix::fs::statx(CWD, path, AtFlags::empty(), StatxFlags::TYPE), rustix_result)
+    {
         Ok(statx) => {
             let file_type = FileType::from_raw_mode(statx.stx_mode.into());
             Ok(if file_type.is_dir() { FileMode::Dir } else { FileMode::None })
         }
-        Err(rustix::io::Errno::NOSYS) => fs::metadata(path).map(|md| file_type_mode(md.file_type())).map_err(io_error),
+        Err(rustix::io::Errno::NOSYS) => fsstats::physical("api.metadata", path, || fs::metadata(path), metadata_result)
+            .map(|md| file_type_mode(md.file_type()))
+            .map_err(io_error),
         Err(err) => Err(io_error(err.into())),
     }
 }
 
 #[cfg(not(target_os = "linux"))]
 fn metadata_file_type(path: &str) -> Result<FileMode, FsError> {
-    fs::metadata(path).map(|md| file_type_mode(md.file_type())).map_err(io_error)
+    fsstats::physical("api.metadata", path, || fs::metadata(path), metadata_result)
+        .map(|md| file_type_mode(md.file_type()))
+        .map_err(io_error)
 }
 
 #[cfg(test)]
