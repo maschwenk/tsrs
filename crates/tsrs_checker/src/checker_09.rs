@@ -653,6 +653,7 @@ pub(crate) fn get_type_alias_instantiation_key(type_arguments: &[P<Type>], alias
 
 /// The tags of the packed key families (each family keys its own caches).
 const PACKED_INSTANTIATION_KEY_TAG: u64 = 0x1a5e;
+const PACKED_ALIASED_INSTANTIATION_KEY_TAG: u64 = 0x1a5f;
 const PACKED_CONDITIONAL_KEY_TAG: u64 = 0xc0d7;
 const PACKED_UNION_KEY_TAG: u64 = 0x5a17;
 const PACKED_INTERSECTION_KEY_TAG: u64 = 0x2e3c;
@@ -690,8 +691,31 @@ pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: Alia
         if let Some(key) = packed_type_list_key(PACKED_INSTANTIATION_KEY_TAG, type_arguments, single_signature) {
             return key;
         }
+    } else if let Some(key) = packed_aliased_instantiation_key(type_arguments, alias, single_signature) {
+        return key;
     }
     get_type_instantiation_key_hashed(type_arguments, alias, single_signature)
+}
+
+/// `packed_key` of an instantiation key with an alias whose type arguments, alias symbol and alias type arguments
+/// are at most three ids in all (the alias symbol's id as one of them; `meta` says where the lists split).
+#[inline(never)]
+fn packed_aliased_instantiation_key(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> Option<CacheHashKey> {
+    let (symbol, alias_arguments) = match alias {
+        AliasArg::None => return None,
+        AliasArg::Some(alias) => (alias.symbol.get(), alias.type_arguments.get()),
+        AliasArg::Pending(pending) => (pending.symbol, pending.type_arguments.as_slice()),
+    };
+    if type_arguments.len() + 1 + alias_arguments.len() > 3 {
+        return None;
+    }
+    let symbol_id = u32::try_from(get_symbol_id(symbol.unwrap()).0).ok()?;
+    let mut ids = [0u32; 3];
+    for (i, id) in type_arguments.iter().map(|t| t.id.0).chain(std::iter::once(symbol_id)).chain(alias_arguments.iter().map(|t| t.id.0)).enumerate() {
+        ids[i] = id;
+    }
+    let meta = u64::from(single_signature) << 4 | (type_arguments.len() as u64) << 2 | alias_arguments.len() as u64;
+    Some(packed_key(PACKED_ALIASED_INSTANTIATION_KEY_TAG, u64::from(ids[0]) | u64::from(ids[1]) << 32, ids[2], meta))
 }
 
 #[inline(never)]
