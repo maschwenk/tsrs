@@ -2319,7 +2319,12 @@ impl StructuredType {
 // EvolvingArrayType:
 // ObjectFlagsEvolvingArray: Evolving array type
 
+/// `repr(C)` here and on the other object, union and intersection data structs (each embedding its parent as its
+/// first field) puts the `ObjectType` / `StructuredType` of every such type at one offset from the header, so
+/// `TypeData::as_object_type` and `as_structured_type` compile to one range test of the data tag instead of a
+/// switch over per-struct field offsets.
 #[derive(Default)]
+#[repr(C)]
 pub struct ObjectType {
     pub structured_type: StructuredType,
     pub target: Cell<Option<P<Type>>>, // Target of instantiated type
@@ -2334,6 +2339,7 @@ embeds!(ObjectType, structured_type, StructuredType);
 // TypeReference (instantiation of an InterfaceType)
 
 #[derive(Default)]
+#[repr(C)]
 pub struct TypeReference {
     pub object_type: ObjectType,
     pub node: Cell<Option<P<Node>>>, // TypeReferenceNode | ArrayTypeNode | TupleTypeNode when deferred, else nil
@@ -2409,20 +2415,21 @@ impl ReferenceInstantiations {
 }
 
 #[derive(Default)]
+#[repr(C)]
 pub struct InterfaceType {
     pub type_reference: TypeReference,
-    pub instantiations: ReferenceInstantiations, // Map of type instantiations (Go: in ObjectType)
     pub all_type_parameters: Cell<&'static [P<Type>]>, // Type parameters (outer + local + thisType)
-    pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
-    pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)
-    pub base_types_resolved: OvCell<bool>,
-    pub declared_members_resolved: OvCell<bool>,
-    pub resolved_base_constructor_type: OvCell<Option<P<Type>>>,
     pub resolved_base_types: OvCell<&'static [P<Type>]>,
-    pub declared_members: OvCell<Option<P<SymbolTable>>>, // Declared members
     pub declared_call_signatures: OvCell<&'static [P<Signature>]>, // Declared call signatures
     pub declared_construct_signatures: OvCell<&'static [P<Signature>]>, // Declared construct signatures
     pub declared_index_infos: OvCell<&'static [P<IndexInfo>]>, // Declared index signatures
+    pub outer_type_parameter_count: Cell<i32>, // Count of outer type parameters
+    pub this_type: Cell<Option<P<Type>>>, // The "this" type (nil if none)
+    pub resolved_base_constructor_type: OvCell<Option<P<Type>>>,
+    pub declared_members: OvCell<Option<P<SymbolTable>>>, // Declared members
+    pub instantiations: ReferenceInstantiations, // Map of type instantiations (Go: in ObjectType)
+    pub base_types_resolved: OvCell<bool>,
+    pub declared_members_resolved: OvCell<bool>,
 }
 embeds!(InterfaceType, type_reference, TypeReference);
 
@@ -2495,6 +2502,7 @@ impl TupleElementInfo {
 }
 
 #[derive(Default)]
+#[repr(C)]
 pub struct TupleType {
     pub interface_type: InterfaceType,
     pub element_infos: Cell<&'static [TupleElementInfo]>,
@@ -2527,6 +2535,7 @@ impl TupleType {
 // InstantiationExpressionType
 
 #[derive(Default)]
+#[repr(C)]
 pub struct InstantiationExpressionType {
     pub object_type: ObjectType,
     pub node: Cell<Option<P<Node>>>,
@@ -2536,6 +2545,7 @@ embeds!(InstantiationExpressionType, object_type, ObjectType);
 // MappedType
 
 #[derive(Default)]
+#[repr(C)]
 pub struct MappedType {
     pub object_type: ObjectType,
     pub declaration: Cell<Option<P<Node>>>, // MappedTypeNode
@@ -2578,6 +2588,7 @@ impl MappedType {
 // ReverseMappedType
 
 #[derive(Default)]
+#[repr(C)]
 pub struct ReverseMappedType {
     pub object_type: ObjectType,
     pub source: Cell<Option<P<Type>>>,
@@ -2589,6 +2600,7 @@ embeds!(ReverseMappedType, object_type, ObjectType);
 // EvolvingArrayType
 
 #[derive(Default)]
+#[repr(C)]
 pub struct EvolvingArrayType {
     pub object_type: ObjectType,
     pub element_type: Cell<Option<P<Type>>>,
@@ -2606,6 +2618,7 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 /// Reads of an absent tail return the zero value, like the unset Go field. The tail word keeps the kind in bit 0
 /// (set at construction) so the shared accessors allocate the right tail.
 #[derive(Default)]
+#[repr(C)]
 pub struct UnionOrIntersectionType {
     pub structured_type: StructuredType,
     pub types: ThinSliceCell<P<Type>>,
@@ -2710,6 +2723,7 @@ impl UnionOrIntersectionType {
 // UnionType
 
 #[derive(Default)]
+#[repr(C)]
 pub struct UnionType {
     pub union_or_intersection_type: UnionOrIntersectionType,
 }
@@ -2787,6 +2801,7 @@ impl UnionType {
 
 // IntersectionType
 
+#[repr(C)]
 pub struct IntersectionType {
     pub union_or_intersection_type: UnionOrIntersectionType,
 }
