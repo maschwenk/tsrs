@@ -995,7 +995,7 @@ impl LegacyDecoratorsTransformer {
         for (i, decorators) in parameters.iter().enumerate() {
             if !decorators.is_empty() {
                 for decorator in decorators {
-                    let helper = self.factory().new_param_helper(self.visitor().visit_node(decorator.expression()).unwrap(), i as i32, decorator.expression().unwrap().loc());
+                    let helper = self.factory().new_param_helper(self.visitor().visit_node(decorator.expression()).unwrap(), i, decorator.expression().unwrap().loc());
                     self.emit_context().set_emit_flags(helper, EmitFlags::NoComments);
                     results.push(helper);
                 }

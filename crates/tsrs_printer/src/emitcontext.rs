@@ -1133,7 +1133,7 @@ pub enum SnippetKind {
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub struct SnippetElement {
     pub kind: SnippetKind,
-    pub order: i32,
+    pub order: u32,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]

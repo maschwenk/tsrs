@@ -426,9 +426,9 @@ pub fn compare_completion_entries(a: &lsproto::CompletionItem, b: &lsproto::Comp
 }
 
 // completions.go:3846
-static KEYWORD_COMPLETIONS_CACHE: OnceLock<Mutex<FxHashMap<i32, Vec<lsproto::CompletionItem>>>> = OnceLock::new();
+static KEYWORD_COMPLETIONS_CACHE: OnceLock<Mutex<FxHashMap<u32, Vec<lsproto::CompletionItem>>>> = OnceLock::new();
 
-fn keyword_completions_cache() -> &'static Mutex<FxHashMap<i32, Vec<lsproto::CompletionItem>>> {
+fn keyword_completions_cache() -> &'static Mutex<FxHashMap<u32, Vec<lsproto::CompletionItem>>> {
     KEYWORD_COMPLETIONS_CACHE.get_or_init(Default::default)
 }
 
@@ -486,7 +486,7 @@ pub(crate) fn get_keyword_completions(keyword_filter: KeywordCompletionFilters, 
         return clone_items(&get_typescript_keyword_completions(keyword_filter));
     }
 
-    let index = keyword_filter as i32 + KeywordCompletionFilters::Last as i32 + 1;
+    let index = keyword_filter as u32 + KeywordCompletionFilters::Last as u32 + 1;
     if let Some(cached) = keyword_completions_cache().lock().unwrap().get(&index) {
         return clone_items(cached);
     }
@@ -500,7 +500,7 @@ pub(crate) fn get_keyword_completions(keyword_filter: KeywordCompletionFilters, 
 
 // completions.go:3892
 fn get_typescript_keyword_completions(keyword_filter: KeywordCompletionFilters) -> Vec<lsproto::CompletionItem> {
-    if let Some(cached) = keyword_completions_cache().lock().unwrap().get(&(keyword_filter as i32)) {
+    if let Some(cached) = keyword_completions_cache().lock().unwrap().get(&(keyword_filter as u32)) {
         return cached.clone();
     }
     let result: Vec<lsproto::CompletionItem> = all_keyword_completions()
@@ -532,7 +532,7 @@ fn get_typescript_keyword_completions(keyword_filter: KeywordCompletionFilters) 
 
     let mut cached = result.clone();
     census_scrub_cached_items(&mut cached);
-    keyword_completions_cache().lock().unwrap().insert(keyword_filter as i32, cached);
+    keyword_completions_cache().lock().unwrap().insert(keyword_filter as u32, cached);
     result
 }
 

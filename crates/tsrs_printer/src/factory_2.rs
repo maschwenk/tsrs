@@ -232,7 +232,7 @@ impl crate::NodeFactory {
     }
 
     // factory.go:387
-    pub fn new_array_slice_call(&self, array: P<Node>, start: i32) -> P<Node> {
+    pub fn new_array_slice_call(&self, array: P<Node>, start: usize) -> P<Node> {
         let mut args = Vec::new();
         if start != 0 {
             args.push(self.new_numeric_literal(alloc_str(&start.to_string()), TokenFlags::None));
@@ -481,7 +481,7 @@ impl crate::NodeFactory {
     }
 
     // factory.go:638
-    pub fn new_param_helper(&self, expression: P<Node>, parameter_offset: i32, location: TextRange) -> P<Node> {
+    pub fn new_param_helper(&self, expression: P<Node>, parameter_offset: usize, location: TextRange) -> P<Node> {
         self.emit_context().request_emit_helper(helper(&PARAM_HELPER));
         let helper = self.new_helper_call("__param", vec![self.new_numeric_literal(alloc_str(&parameter_offset.to_string()), TokenFlags::None), expression]);
         helper.set_loc(location);

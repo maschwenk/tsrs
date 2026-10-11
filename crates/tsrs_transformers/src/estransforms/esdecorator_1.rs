@@ -25,7 +25,7 @@ pub struct lexicalEntry {
     pub saved_pending_expressions: RefCell<Option<Vec<P<Node>>>>,
     pub class_this_data: Cell<Option<P<Node>>>,
     pub class_super_data: Cell<Option<P<Node>>>,
-    pub depth: Cell<i32>,
+    pub depth: Cell<u32>,
 }
 
 // esdecorator.go:70

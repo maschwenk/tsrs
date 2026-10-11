@@ -61,7 +61,7 @@ const TOKEN_MODIFIERS: [SemanticTokenModifier; 11] = [
 ];
 
 // semantictokens.go:62 (only the values this file produces; the others are positions in TOKEN_TYPES)
-type TokenType = i32;
+type TokenType = u32;
 
 const TOKEN_TYPE_NAMESPACE: TokenType = 0;
 const TOKEN_TYPE_CLASS: TokenType = 1;
@@ -77,7 +77,7 @@ const TOKEN_TYPE_FUNCTION: TokenType = 13;
 const TOKEN_TYPE_METHOD: TokenType = 14; // Previously called "member" in TypeScript
 
 // semantictokens.go:90 (bit i is TOKEN_MODIFIERS[i]; only the bits this file sets are named)
-type TokenModifier = i32;
+type TokenModifier = u32;
 
 const TOKEN_MODIFIER_DECLARATION: TokenModifier = 1 << 0;
 const TOKEN_MODIFIER_READONLY: TokenModifier = 1 << 2;
