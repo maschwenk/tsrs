@@ -1474,16 +1474,33 @@ impl Checker {
                 return self.error_type;
             }
             let union_index = union_index as usize;
+            // One copy of `types` for every constituent (Go copies it per constituent with `core.ReplaceElement`).
+            let mut replaced = types.to_vec();
             return self
-                .map_type(types[union_index], |c, t| Some(c.get_template_literal_type(texts, &replace_element(types, union_index, t))))
+                .map_type(types[union_index], |c, t| {
+                    replaced[union_index] = t;
+                    Some(c.get_template_literal_type(texts, &replaced))
+                })
                 .unwrap();
         }
         if types.contains(&self.wildcard_type) {
             return self.wildcard_type;
         }
-        let mut state = TemplateSpansState { new_types: Vec::new(), new_texts: Vec::new(), sb: String::new(), text_length: 0, too_large: false };
+        let mut sb = self.free_strings.pop().unwrap_or_default();
+        let result = self.get_template_literal_type_worker(texts, types, &mut sb);
+        sb.clear();
+        self.free_strings.push(sb);
+        result
+    }
+
+    /// The rest of `get_template_literal_type`, with the text built in `sb` (an empty buffer).
+    fn get_template_literal_type_worker(&mut self, texts: &[&str], types: &[P<Type>], sb: &mut String) -> P<Type> {
+        let mut state = TemplateSpansState { new_types: Vec::new(), new_texts: Vec::new(), sb: std::mem::take(sb), text_length: 0, too_large: false };
         state.sb.push_str(texts[0]);
-        if !add_template_spans(self, &mut state, texts, types) {
+        let spans_ok = add_template_spans(self, &mut state, texts, types);
+        *sb = std::mem::take(&mut state.sb);
+        let sb: &str = sb;
+        if !spans_ok {
             if state.too_large {
                 let current_node = self.current_node;
                 self.error(current_node, &diagnostics::Type_instantiation_is_excessively_deep_and_possibly_infinite, &[]);
@@ -1492,9 +1509,9 @@ impl Checker {
             return self.string_type;
         }
         if state.new_types.is_empty() {
-            return self.get_string_literal_type(&stringutil::combine_surrogate_pairs(&state.sb));
+            return self.get_string_literal_type(&stringutil::combine_surrogate_pairs(sb));
         }
-        state.new_texts.push(stringutil::combine_surrogate_pairs(&state.sb).into_owned());
+        state.new_texts.push(stringutil::combine_surrogate_pairs(sb).into_owned());
         let new_texts = state.new_texts;
         let new_types = state.new_types;
         if new_texts.iter().all(|t| t.is_empty()) {
