@@ -140,27 +140,6 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
-- Whole block-comment terminator search (`notes/perf-comment-search.md`, 2026-10-11): retained the stateless
-  Oxc-inspired search after the first actual line break, with a reverse search for tsrs's final-line directives.
-  Linux Formbricks instructions fall 3.116% (41.973G to 40.666G), repeated with identical diagnostics. This is a
-  whole-comment search, not the previously rejected line-oriented `memchr3` substitution. A per-scanner cached
-  `Finder` showed no clear extra instruction gain in the direct macOS comparison and was dropped; revisit only
-  with target-specific whole-program evidence that earns its extra scanner state. See the note for RSS and gates.
-
-- Binder child-visitor specialization and identifier leaf finishing (`notes/perf-nonchecker-traversal.md`,
-  2026-10-11): separate macOS A/B screens on VS Code / Formbricks / t3code, five pairs per cell. Whole-project
-  single-threaded paired instruction medians were -0.053% / -0.202% / -0.283% for the binder visitor and
-  -0.126% / -0.467% / -0.106% for the identifier shortcut; default peak RSS had no qualifying reduction.
-  Binder hashes matched on 12,760 inputs and AST hashes on 17,961. Both changes reverted: no qualifying gain
-  established; macOS counters are noisy and the deterministic Linux gate was not run. Revisit with new workload
-  or code-generation evidence, not the same sampled hotspot alone.
-- Non-checker macOS profiling (`notes/perf-nonchecker-xctrace.md`, 2026-10-11): xctrace still dies with SIGKILL
-  before recording; working Instruments is required. Separate phase counters and checker-free `sample` captures
-  locate Formbricks' multiline-comment scan loop and file-open/directory-enumeration costs, plus VS Code's
-  identifier construction and binding. These are hotspot observations, not measured savings. No compiler change
-  or qualifying optimization was established. Do not repeat the rejected blanket comment `memchr3`, scanner
-  allocation, resolver scratch-buffer or serial-helper-thread changes from aggregate hotspot shares alone.
-
 - Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
   0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic
   search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone
