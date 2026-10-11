@@ -2860,6 +2860,22 @@ pub(crate) struct LazyMembers {
     pub(crate) base_types: ThinSlice<P<Type>>,
 }
 
+/// What `lazy_unaffected_members` keeps per generic target: the declared-member table it describes, the sorted
+/// names answered true for good, and the named members whose answers may still change.
+pub(crate) struct LazyUnaffected {
+    table: P<SymbolTable>,
+    len: usize,
+    maps_this_only: bool,
+    named: u64,
+    settled: &'static [&'static str],
+    pending: Vec<(&'static str, P<Symbol>)>,
+}
+
+fn lazy_unaffected_shadow() -> bool {
+    static SHADOW: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
+    *SHADOW.get_or_init(|| std::env::var("TSRS_LAZY_UNAFFECTED").as_deref() == Ok("shadow"))
+}
+
 pub(crate) fn may_have_lazy_members(t: P<Type>) -> bool {
     t.object_flags_lazy() & (ObjectFlags::MembersResolved | ObjectFlags::Reference) == ObjectFlags::Reference
 }
@@ -2954,25 +2970,97 @@ impl Checker {
         Some(lm)
     }
 
+    /// The sorted names of the named members in `declared_members` (the declared members of `source`) that
+    /// `instantiateSymbol` with `mapper` returns unchanged now (`isSymbolUnaffectedByInstantiation`).
+    ///
+    /// Reuse: an answer settles once the member's type (and a setter's write type) is resolved. The links set those
+    /// once, the type-variable test of a type never changes, and `maps_this_only` of a lazy table's mapper depends
+    /// only on the target's type parameters (it is checked anyway). So each target keeps the names answered true
+    /// for good and the members whose types were not resolved yet, and asks again only about those; members
+    /// answered false for good are dropped. `TSRS_LAZY_UNAFFECTED=shadow` recomputes every list and panics on a
+    /// difference.
+    fn lazy_unaffected_members(&mut self, source: P<Type>, declared_members: P<SymbolTable>, mapper: P<TypeMapper>) -> &'static [&'static str] {
+        let maps_this_only = mapper.maps_this_only();
+        let memo = self.lazy_unaffected.get_mut(&source).filter(|memo| memo.table == declared_members && memo.len == declared_members.len() && memo.maps_this_only == maps_this_only);
+        let result = match memo {
+            Some(memo) => {
+                self.lazy_member_stats.member_table_declared_members += memo.named;
+                if memo.pending.is_empty() {
+                    memo.settled
+                } else {
+                    let pending = std::mem::take(&mut memo.pending);
+                    let settled = memo.settled;
+                    let mut added: Vec<&'static str> = Vec::new();
+                    let mut still_pending = Vec::new();
+                    for (name, symbol) in pending {
+                        match self.settled_unaffected(symbol, mapper) {
+                            Some(true) => added.push(name),
+                            Some(false) => {}
+                            None => still_pending.push((name, symbol)),
+                        }
+                    }
+                    let memo = self.lazy_unaffected.get_mut(&source).unwrap();
+                    memo.pending = still_pending;
+                    if !added.is_empty() {
+                        added.extend_from_slice(settled);
+                        added.sort_unstable();
+                        memo.settled = alloc_vec(added);
+                    }
+                    memo.settled
+                }
+            }
+            None => {
+                let mut settled: Vec<&'static str> = Vec::new();
+                let mut pending = Vec::new();
+                let mut named = 0;
+                for (name, symbol) in declared_members.entries() {
+                    if self.is_named_member(symbol, name) {
+                        named += 1;
+                        match self.settled_unaffected(symbol, mapper) {
+                            Some(true) => settled.push(name),
+                            Some(false) => {}
+                            None => pending.push((name, symbol)),
+                        }
+                    }
+                }
+                self.lazy_member_stats.member_table_declared_members += named;
+                settled.sort_unstable();
+                let settled = alloc_vec(settled);
+                self.lazy_unaffected.insert(source, LazyUnaffected { table: declared_members, len: declared_members.len(), maps_this_only, named, settled, pending });
+                settled
+            }
+        };
+        if lazy_unaffected_shadow() {
+            let mut fresh: Vec<&'static str> = Vec::new();
+            for (name, symbol) in declared_members.entries() {
+                if self.is_named_member(symbol, name) && self.is_symbol_unaffected_by_instantiation(symbol, Some(mapper)) {
+                    fresh.push(name);
+                }
+            }
+            fresh.sort_unstable();
+            assert!(fresh == result, "TSRS_LAZY_UNAFFECTED=shadow: target {}: reused {:?}, fresh {:?}", source.id.0, result, fresh);
+        }
+        result
+    }
+
+    /// `is_symbol_unaffected_by_instantiation(symbol, mapper)` if that answer cannot change any more (see
+    /// `lazy_unaffected_members`), else `None`.
+    fn settled_unaffected(&mut self, symbol: P<Symbol>, mapper: P<TypeMapper>) -> Option<bool> {
+        if self.is_symbol_unaffected_by_instantiation(symbol, Some(mapper)) {
+            return Some(true);
+        }
+        let links = self.value_symbol_links.get(symbol);
+        (links.resolved_type.get().is_some() && (!symbol.flags().intersects(SymbolFlags::SetAccessor) || links.write_type().is_some())).then_some(false)
+    }
+
     // Mirrors resolveObjectTypeMembers without creating member symbols.
     pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>, this_argument: Option<P<Type>>) {
         let source = t.target().unwrap();
         let resolved = self.resolve_declared_members(source).unwrap();
-        // Whether instantiateSymbol returns a member itself depends on what is resolved now.
-        let mut unaffected: Vec<&'static str> = Vec::new();
-        if let Some(declared_members) = resolved.declared_members.get() {
-            // By position instead of a snapshot: the tests below add no member to a table and delete none.
-            for i in 0..declared_members.len() {
-                let (id, symbol) = declared_members.entry(i);
-                if self.is_named_member(symbol, id) {
-                    self.lazy_member_stats.member_table_declared_members += 1;
-                    if self.is_symbol_unaffected_by_instantiation(symbol, Some(lm.mapper)) {
-                        unaffected.push(id);
-                    }
-                }
-            }
-        }
-        unaffected.sort_unstable();
+        let unaffected = match resolved.declared_members.get() {
+            Some(declared_members) => self.lazy_unaffected_members(source, declared_members, lm.mapper),
+            None => &[],
+        };
         let mut call_signatures = self.instantiate_signatures(resolved.declared_call_signatures.get(), lm.mapper);
         let mut construct_signatures = self.instantiate_signatures(resolved.declared_construct_signatures.get(), lm.mapper);
         let mut index_infos = self.instantiate_index_infos(resolved.declared_index_infos.get(), lm.mapper);
@@ -2991,7 +3079,7 @@ impl Checker {
             self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
         }
         let _ = lm.ready.set(LazyMembers {
-            unaffected: ThinSlice::new(alloc_vec(unaffected)),
+            unaffected: ThinSlice::new(unaffected),
             call_signatures: ThinSlice::new(alloc_vec(call_signatures)),
             construct_signatures: ThinSlice::new(alloc_vec(construct_signatures)),
             index_infos: ThinSlice::new(alloc_vec(index_infos)),

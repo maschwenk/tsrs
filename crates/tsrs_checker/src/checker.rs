@@ -1095,6 +1095,9 @@ pub struct Checker {
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
     pub(crate) lazy_member_tables: crate::basedmap::Based<FxHashMap<P<Type>, P<LazyMemberTable>>, P<Type>>,
+    /// Per generic target, what `prepare_lazy_members` learned about its declared members for good
+    /// (`lazy_unaffected_members`).
+    pub(crate) lazy_unaffected: FxHashMap<P<Type>, crate::checker_09::LazyUnaffected>,
     // Go `StructuredType.objectTypeWithoutAbstractConstructSignatures`: set only by the node builder, for few types,
     // so kept here instead of in every object, union and intersection type.
     pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
@@ -1536,6 +1539,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
         lazy_member_tables: Default::default(),
+        lazy_unaffected: FxHashMap::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
         object_type_instantiations: Default::default(),
@@ -2036,6 +2040,7 @@ impl Checker {
             reg_exp_scanner: None,
             pattern_for_type: base.pattern_for_type.clone(),
             lazy_member_tables: crate::basedmap::Based::over(&base.lazy_member_tables),
+            lazy_unaffected: FxHashMap::default(),
             object_types_without_abstract_construct_signatures: base.object_types_without_abstract_construct_signatures.clone(),
             structured_type_base_constraints: base.structured_type_base_constraints.clone(),
             object_type_instantiations: crate::basedmap::Based::over(&base.object_type_instantiations),
