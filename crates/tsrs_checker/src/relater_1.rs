@@ -229,12 +229,11 @@ impl Checker {
     }
 
     // relater.go:205
+    /// Two structured or instantiable types (most calls, from is_type_related_to and is_related_to_ex) pass none of
+    /// the flag tests of `is_simple_type_related_to_worker`; only the last one, a target union of undefined, null and
+    /// {}, can answer true. That case is answered here, inline, without the worker's frame.
+    #[inline]
     pub(crate) fn is_simple_type_related_to(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_reporter: Option<ErrorReporter<'_>>) -> bool {
-        let mut error_reporter = error_reporter;
-        let s = source.flags();
-        let t = target.flags();
-        // Two structured or instantiable types (most calls, from is_type_related_to and is_related_to_ex) pass none
-        // of the flag tests below; only the last one, a target union of undefined, null and {}, can answer true.
         const STRUCTURED: TypeFlags = TypeFlags::Object
             .union(TypeFlags::Union)
             .union(TypeFlags::Intersection)
@@ -243,11 +242,20 @@ impl Checker {
             .union(TypeFlags::IndexedAccess)
             .union(TypeFlags::Conditional)
             .union(TypeFlags::Substitution);
-        if STRUCTURED.contains(s | t) {
+        let t = target.flags();
+        if STRUCTURED.contains(source.flags() | t) {
             return t.intersects(TypeFlags::Union)
                 && (relation == self.assignable_relation || relation == self.comparable_relation)
                 && self.is_unknown_like_union_type(target);
         }
+        self.is_simple_type_related_to_worker(source, target, relation, error_reporter)
+    }
+
+    #[inline(never)]
+    fn is_simple_type_related_to_worker(&mut self, source: P<Type>, target: P<Type>, relation: P<Relation>, error_reporter: Option<ErrorReporter<'_>>) -> bool {
+        let mut error_reporter = error_reporter;
+        let s = source.flags();
+        let t = target.flags();
         if t.intersects(TypeFlags::Any) || s.intersects(TypeFlags::Never) || source == self.wildcard_type {
             return true;
         }
