@@ -30,7 +30,7 @@ Updating this table (../AGENTS.md says when; commands and paths below are relati
 | feature | status | evidence and notes |
 | --- | --- | --- |
 | Type checking (`--noEmit`) | yes | 13,458 of 13,462 error baselines and all 12,779 `.types` / `.symbols` baselines match |
-| Multithreaded checking, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | every core up to 16, then at least 16 or half the cores, at most 32 checkers, capped for small programs; build mode uses four; 0.13.0 enables module affinity from 8 checkers on programs with at least 24,000 checked files ([experiment note](../notes/perf-icount-hillclimb.md)) |
+| Multithreaded checking, `--singleThreaded`, `--pretty`, `--extendedDiagnostics`, `--listFiles`, `--listFilesOnly` | yes | every core up to 8, then at least 8 or half the cores, at most 32 checkers, capped for small programs; build mode uses four; 0.13.0 enables module affinity from 8 checkers on programs with at least 24,000 checked files ([experiment note](../notes/perf-icount-hillclimb.md)) |
 | Memory target (`--maxMemory <size>`) | `--noEmit` checks, opt-in | Replaces the largest checker after crossing the target, trading CPU for memory; testdata/regressions identical with a checker retired after nearly every file, also in poison mode ([experiment note](../notes/mem-recycle-checkers.md)) |
 | Same output regardless of thread count | yes, with known exceptions (tsgo: no) | a few projects still depend on file order through tsgo's own logic ([experiment note](../notes/open-history-dependence.md)); `--checkerAssignment go` reproduces tsgo exactly |
 | JavaScript emit | yes | all of tsgo's transforms; 13,392 `.js` baselines pass, 0 fail |

@@ -376,7 +376,7 @@ def tsrs_default_checkers(machine: dict) -> int:
     limit is not applied, so this overstates projects with fewer than 32 type-checked files per checker, e.g.
     Compiler, Compiler-Unions and xstate-main)."""
     cpus = machine.get("cpus") or 1
-    return max(4, min(32, max(cpus // 2, min(cpus, 16))))
+    return max(4, min(32, max(cpus // 2, min(cpus, 8))))
 
 
 def mode_reps(result: dict, mode: str) -> tuple[int, int | None]:
@@ -501,7 +501,7 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
         mm = mode_machine(mode)
         with_bun = has_bun(mode)
         default_flags = (f"No thread flags: tsgo runs 4 checker threads; tsrs runs {tsrs_default_checkers(mm)} (its "
-                         f"default: all cores up to 16, then half the cores, at most 32; fewer on small projects)"
+                         f"default: all cores up to 8, then half the cores, at most 32; fewer on small projects)"
                          + ("; bun check runs one thread per core." if with_bun else "."))
         n = {"checkers8": 8, "checkers16": 16, "checkers64": 64}.get(mode)
         titles = {"default": ("Default settings", default_flags),

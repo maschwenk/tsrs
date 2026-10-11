@@ -140,6 +140,13 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Using every core through 16 as the ordinary default (notes/perf-default-checkers-16.md,
+  notes/mem-default-checkers-8.md): the speed-first rule made the 16-vCPU public projects 8-43% faster for 8-35%
+  more peak RSS. The owner later prioritized ordinary peak memory. On the 12-core Mac, 8 instead of 12 checkers saved
+  5.02-21.83% RSS on every affected public project, with median wall -0.20% and median instructions -9.30%, so the
+  default returned to every core through 8 and half above it. Keep 16 available explicitly; do not restore it as the
+  default without a changed memory priority or a way to avoid per-checker duplication.
+
 - Within the flow-walk skip (notes/perf-flow-skip-unnarrowed.md, landed): computing an assertion candidate's effects
   signature in the skip check instead of peeking at it (overflowed the 512 MB stack on vscode: it starts resolution
   chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);

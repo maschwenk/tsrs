@@ -21,7 +21,7 @@ commands such as `--watch`, `--init` and `--showConfig`.
 
 Alongside the supported `tsc` flags, tsrs offers options to control performance:
 
-- `--checkers N` sets the number of checker threads. By default tsrs uses one per core up to 16 cores, then half the
+- `--checkers N` sets the number of checker threads. By default tsrs uses one per core up to 8 cores, then half the
   cores, from 4 to 32; a program with fewer than 32 type-checked files per checker gets fewer, down to 4, and never
   more checkers than files. `--build` uses 4 per project. More threads are faster but use more memory. The thread
   count doesn't change the diagnostics, apart from the known exceptions in the

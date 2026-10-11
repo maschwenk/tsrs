@@ -1,5 +1,9 @@
 # perf-default-checkers-16: every core gets a checker up to 16
 
+Status (2026-10-12): superseded by `notes/mem-default-checkers-8.md`. The 16-checker rule favored the shorter wall
+times measured below; the default returned to an eight-checker small-machine ceiling to lower ordinary peak RSS.
+Explicit `--checkers 16` is unchanged.
+
 Without `--checkers`, tsrs ran `clamp(max(cores / 2, min(cores, 8)), 4, 32)` checker threads
 (notes/perf-default-checkers-small-machines.md): every core up to 8, then half the cores. The comment justified the
 halving with "the other half parse", but parsing and checking are sequential phases: by the time the checkers start,
