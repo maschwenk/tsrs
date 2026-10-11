@@ -1209,7 +1209,7 @@ impl Checker {
                     let Some(new_type_arguments) = self.instantiate_types_changed(resolved_type_arguments, m) else {
                         return t;
                     };
-                    let result = self.create_normalized_type_reference(t.target().unwrap(), &new_type_arguments);
+                    let result = self.create_normalized_type_reference(t.object_target().unwrap(), &new_type_arguments);
                     self.free_type_list(new_type_arguments);
                     return result;
                 }
@@ -1318,7 +1318,7 @@ impl Checker {
             // Deferred type reference
             links.resolved_type.get().unwrap()
         } else if t.object_flags().intersects(ObjectFlags::Instantiated) {
-            t.target().unwrap()
+            t.object_target().unwrap()
         } else {
             t
         };
