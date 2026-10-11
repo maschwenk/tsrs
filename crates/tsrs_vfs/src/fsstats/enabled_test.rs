@@ -52,7 +52,7 @@ fn nested_scopes_and_unwinding_restore_attribution() {
 
 #[test]
 fn concurrent_threads_aggregate_without_leaking_scopes() {
-    let collector = Arc::new(Collector::default());
+    let collector = Arc::new(Collector { physical_events: Some(Mutex::new(Vec::new())), ..Collector::default() });
     std::thread::scope(|scope| {
         for index in 0..8 {
             let collector = Arc::clone(&collector);
@@ -66,8 +66,8 @@ fn concurrent_threads_aggregate_without_leaking_scopes() {
             });
         }
     });
-    let rows = collector.json();
-    let rows = rows["rows"].as_array().unwrap();
+    let report = collector.json();
+    let rows = report["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 7);
     for row in rows {
         if row["site"] == "nonresolver" {
@@ -77,6 +77,23 @@ fn concurrent_threads_aggregate_without_leaking_scopes() {
             assert_eq!(row["logical_operation"], "read_file");
         }
     }
+    let events = report["physical_events"].as_array().unwrap();
+    assert_eq!(events.len(), 176);
+    let mut completed = 0;
+    for (index, event) in events.iter().enumerate() {
+        assert_eq!(event["sequence"], index + 1);
+        if event["phase"] == "end" {
+            completed += 1;
+            let call = usize::try_from(event["call"].as_u64().unwrap()).unwrap();
+            assert!(call <= index);
+            let start = &events[call - 1];
+            assert_eq!(start["phase"], "start");
+            for field in ["thread", "site", "logical_operation", "logical_path", "operation", "path"] {
+                assert_eq!(start[field], event[field]);
+            }
+        }
+    }
+    assert_eq!(completed, 88);
 }
 
 #[test]
@@ -111,4 +128,35 @@ fn os_operations_keep_the_logical_scope_through_common() {
     assert!(physical.iter().any(|row| row["operation"] == "api.ReadDir.next" && row["result"] == "end"));
     assert!(physical.iter().any(|row| row["operation"] == "api.DirEntry.file_type" && row["result"] == "file" && row["path"] == file));
     std::fs::remove_dir_all(temporary).unwrap();
+}
+
+#[test]
+fn physical_trace_keeps_call_boundaries_and_logical_paths() {
+    let collector = Arc::new(Collector { physical_events: Some(Mutex::new(Vec::new())), ..Collector::default() });
+    let _root = Scope::enter(Context::root(Arc::clone(&collector)));
+    logical("trace", "realpath", "/logical/link/file.ts", || {
+        physical("api.symlink_metadata", "/physical/parent", || {
+            physical("api.read_link", "/physical/link", || (), |_| "ok");
+        }, |_| "directory");
+    }, |_| "changed");
+    let report = collector.json();
+    let events = report["physical_events"].as_array().unwrap();
+    assert_eq!(events.len(), 4);
+    for (index, event) in events.iter().enumerate() {
+        assert_eq!(event["sequence"], index + 1);
+        assert_eq!(event["logical_path"], "/logical/link/file.ts");
+        assert_eq!(event["site"], "trace");
+        assert_eq!(event["logical_operation"], "realpath");
+        assert_eq!(event["thread"], events[0]["thread"]);
+    }
+    assert_eq!(events[0]["call"], 1);
+    assert_eq!(events[0]["phase"], "start");
+    assert_eq!(events[1]["call"], 2);
+    assert_eq!(events[2]["call"], 2);
+    assert_eq!(events[2]["phase"], "end");
+    assert_eq!(events[2]["result"], "ok");
+    assert_eq!(events[3]["call"], 1);
+    assert_eq!(events[3]["result"], "directory");
+    assert_eq!(events[3]["path"], "/physical/parent");
+    assert!(Collector::default().json().get("physical_events").is_none());
 }

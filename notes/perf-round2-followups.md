@@ -171,6 +171,14 @@ with the switch off, which is why it is not in the default build.
   is a hypothesis to isolate, not a cost proved by call counts. Before more tuning, capture Linux physical calls
   and system/user CPU with and without the cache, then isolate directory snapshots. Linux snapshot activation
   is not established by current reports. Keep the cache a draft pending a qualifying improvement.
+  Ordered Oxc/tsrs audit: Oxc has no directory-listing cache; the core shared-metadata design is already present.
+  Single-threaded resolver metadata has zero repeated operation/path pairs. Only 35 / 34 child probes follow
+  known-missing ancestors. New evidence for a targeted follow-up: 94 / 4,036 failed resolver probes follow complete
+  nonresolver listings (44 / 2,557 parents). Investigate carrying complete raw negative-name snapshots across
+  config/compiler setup, accounting for filesystem guards and retained-memory cost. Do not seed positive metadata
+  from directory entry types: a mode-0400 repro enumerates entries but all child stats fail EACCES. Raw names,
+  successful completion, encoding/case guards and final invocation eligibility must be preserved. No new cache
+  change is justified by these API counts alone; the note has ordered traces and the full Oxc comparison.
 
 - Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
   0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic

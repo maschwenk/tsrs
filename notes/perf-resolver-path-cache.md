@@ -388,3 +388,181 @@ and remove the optimization.
 
 Raw distributions, phases, and workload comparisons are in `/private/tmp/tsrs-resolver-rebased-results`;
 the driver is `/private/tmp/tsrs-resolver-rebased-measure.py`.
+
+## Oxc source audit and ordered filesystem traces
+
+Study Oxc `2e976e6489ff902f315d0179a667f8d0465dcee7` again, then trace this branch's actual call ordering.
+The new evidence is completion-before-start ordering, including work before the compilation cache exists;
+the previous aggregate counts could only identify intersections. This changes no resolution/cache behavior.
+The optional profiler now records physical API start/end events, paired call IDs, thread IDs, the physical path,
+and the enclosing logical request path when `TSRS_RESOLVER_FS_TRACE=1` accompanies `TSRS_RESOLVER_FS_STATS`.
+Normal builds still compile the profiler out. An earlier end proves a result was observed before the next call
+started; it does not prove the result was published into a shared cache. API intervals include instrumentation
+overhead and must not be used as kernel timings.
+
+### What Oxc actually caches and calls
+
+Oxc's source has these direct filesystem routes (paths below are relative to the Oxc checkout):
+
+| Route | Source | Physical API on a cold path |
+| --- | --- | --- |
+| File/directory classification | `src/cache/cached_path.rs:230`, `src/cache/cache_impl.rs:130` | `symlink_metadata`; symlink fallback `metadata` at line 149 |
+| Nearest package lookup | `src/cache/cache_impl.rs:215` | Read `package.json` directly, without a preliminary file-exists probe |
+| Config classification/loading | `src/cache/cache_impl.rs:278`, `:290` | Followed metadata for a symlink; `read_to_string` for raw/built config misses |
+| Canonicalization | `src/cache/cache_impl.rs:384`, `:448` | Cached component metadata plus `read_link`; native `canonicalize` fallback on error |
+| Invalid package JSON diagnostic | `src/package_json/simd.rs:135` | Re-read original bytes after the SIMD parser mutated its input |
+| Package map | `src/package_map/resolver.rs:163` | Read the map, memoizing its result including errors |
+| Optional Yarn PnP | `src/cache/cache_impl.rs:340`, `src/file_system.rs` | External manifest discovery and zip/virtual filesystem access; not exercised here |
+
+Native macOS metadata uses Rust stat/lstat APIs; Linux uses type-only `statx`, with a separately attempted Rust
+fallback on ENOSYS. Windows metadata may perform reparse-point handling. These backends, whole-file reads, and
+native canonicalization encapsulate additional OS work; a FileSystem wrapper does not count every syscall.
+Oxc has **no `read_dir` API or directory snapshot cache**. Its tsconfig glob matching compares queried paths;
+it does not perform a filesystem glob scan like the compiler's config loader.
+
+The intern table shares one path identity and two atomic link/followed metadata bytes. Missing results are cached.
+Non-symlink lstat supplies followed classification; symlinks can reuse canonical target metadata. Canonical
+success is memoized along the parent chain; package cells memoize the nearest parsed ancestor package, not just
+its raw text. Cloned resolvers normally share this cache. Metadata initialization permits cold races, while
+successful package initialization coalesces reads. There is no general child-absence inference from cached
+parent absence. Package-root guards in `src/lib.rs:1033–1047` prune missing package subpaths; tsrs already has
+relative-parent and extension-parent guards too (`resolver.rs:1633`, `:1700`).
+
+Run a standalone FileSystem wrapper over FileSystemOs, recording every delegated filesystem operation: 35 sequential resolutions
+cover existing/missing relative paths, packages, subpaths, symlinks, tsconfigs, invalid JSON, and a public xstate
+package. Cold/warm examples below count delegated filesystem APIs, not calls to cached `is_file` or kernel syscalls:
+
+| Oxc scenario | Cold calls | Subsequent call |
+| --- | ---: | ---: |
+| Existing relative file | 10 lstat + 2 reads | Same request: 0 |
+| Existing package | 12 lstat + 4 reads | Same request: 0; another package in the directory: 2 lstat + 1 read |
+| Previously missing relative parent | 4 lstat | Each new child: 4 lstat; repeated child: 0 |
+| Missing package with subpath | 22 lstat + 3 reads | Another subpath in that missing package: 0 |
+| Public xstate `typescript` package | 13 lstat + 3 reads + 1 readlink | Same request: 0 |
+
+Oxc itself has some repeated I/O: the auto-tsconfig scenario reads one config twice because raw and built caches
+are distinct; malformed package JSON reads twice per attempt and repeats those reads on the next resolution.
+Parse errors do not initialize the package cell. These are not evidence that successful ordinary warm lookups
+are uncached. Artifacts and the standalone harness are in `/private/tmp/oxc-resolver-fs-trace`; the complete
+source inventory with absolute line references is `/private/tmp/oxc-resolver-fs-audit.json`.
+
+Important differences prevent copying Oxc wholesale. Its `is_file` accepts regular files; Go/tsrs accepts
+existing non-directories. Its manual canonicalizer has different missing-path and symlink-limit behavior.
+Read-first package loading treats read errors as absence, while tsrs's successful existence check followed by
+a read error produces an empty, unparseable package and corresponding trace behavior (`resolver.rs:2116–2127`).
+The shared metadata architecture is already in this PR. Oxc also carries interned path handles through resolver
+algorithms, whereas tsrs's FS adapter re-interns string paths; this is a possible CPU difference, not another
+source of repeated physical calls.
+
+### Fresh tsrs call inventory
+
+Rebuild resolver-only `527eb51a` with profiling, then repeat the two public fixtures in single/default modes with
+and without ordered events. The ordered run adds only profiler changes. All eight diagnostic/exit comparisons
+match the saved rebased full-check runs. Both single-thread aggregate call/path/result sets match the earlier
+refined-cache profiles apart from the startup executable path. Ordered events have contiguous sequences,
+balanced pairs, and end-event counts exactly equal physical aggregates in all four runs.
+
+Every direct built-in resolver FS call goes through `ObservedFS`; its indirect matcher calls enter a scope in each Rayon
+worker. Explicit OS operations in `osvfs/os.rs` are wrapped: stat/lstat/statx, reads, directory opening/iteration/
+entry types, statfs, readlink, canonicalization, Linux O_PATH/proc readlink and retries, plus write/remove/time
+operations (unused by ordinary resolution). The latter inventory does not imply hidden read/open/close calls
+inside Rust APIs or RAII closes are individually recorded. Initial CLI cwd discovery, custom/WASM host internals,
+and report-file output are outside native physical coverage. Detailed routes are recorded in
+`/private/tmp/tsrs-resolver-fs-audit.md`.
+
+Package-style config `extends` also invokes the built-in resolver before the compilation cache exists. A resolver
+site label therefore identifies the caller, not necessarily a cache-enabled backend. Direct config and source
+work share the nonresolver label; the report does not yet identify every compiler phase or cache instance.
+
+Single-threaded physical API counts, whole process:
+
+| Operation | xstate | vscode |
+| --- | ---: | ---: |
+| lstat (`api.symlink_metadata`) | 5,545 | 18,859 |
+| stat (`api.metadata`) | 273 | 3 |
+| Read contents | 1,791 | 10,511 |
+| Open directory iterator | 153 | 2,756 |
+| Advance directory iterator | 4,051 | 19,872 |
+| Query directory-entry type | 630 | 14,253 |
+| readlink | 204 | 0 |
+| statfs | 78 | 63 |
+| Startup executable query + case-probe metadata | 2 | 2 |
+| Total instrumented API calls | 12,727 | 66,319 |
+
+Resolver scopes account for 5,412 / 9,187 of the 5,818 / 18,862 ordinary metadata calls. Single-threaded
+resolver-only repeated `(operation, physical path)` metadata calls are **zero on both projects**. Across the
+whole process, only 4 / 5 repeated lstat calls and 2 / 8 repeated directory opens remain, crossing nonresolver
+and resolver attribution. Iterator advancement is intentional repetition, not duplicate directory opening.
+No physical lexical-path aliases were found; logical trailing-slash variants are already collapsed.
+Default-mode cold races remain small and vary between instrumented runs; adding per-path synchronization needs
+a measured benefit, not just elimination of those few calls.
+
+### Redundancy candidates established by ordering
+
+The table counts a later metadata call only when the prior evidence's end precedes that call's start.
+Categories overlap and must not be added together. These are opportunities to investigate, not proven safe skips.
+
+| Prior evidence, then later metadata | xstate | vscode | Interpretation |
+| --- | ---: | ---: | --- |
+| Ancestor returned NotFound | 35 | 34 | All later probes also fail; 31 / 34 have an immediate missing parent |
+| Completed parent listing, later NotFound | 94 | 4,036 | All are resolver calls after nonresolver listings |
+| Matching nonsymlink directory-entry type | 395 | 12,613 | Includes 109 / 3,015 resolver calls; cannot prove metadata accessibility |
+| Successful followed stat of same path | 2 | 2 | Initial cwd stat before later lstat; not repeated symlink-entry stats |
+| Successful source-file read of same path | 0 | 0 | No read-before-metadata opportunity in these runs |
+
+**The substantial lead is complete negative-name snapshots from config scanning.** Vscode's 4,036 later misses
+span 2,557 previously listed parents: 2,426 package.json checks, 1,187 node_modules directory checks, 422 candidate
+file checks, and one relative candidate. Xstate's 94 span 44 parents: 39 package.json, 23 node_modules, and 32
+candidate files. No directory opening/iteration/type errors occur in these four traces. Default runs have the
+same unique miss sets with minor racing duplication. Existing adaptive scans also reopen 2 / 8 directories
+already fully listed, each with another statfs call.
+
+Initial config loading uses `sys.fs()` before `execute.rs:324` constructs the eligible compilation cache.
+Common filters raw entries, the matcher consumes its temporary listings, and parsed config keeps file names;
+the later resolver cannot reuse the original complete name set. A narrowly scoped observation buffer could
+retain raw names during those existing scans and be adopted only after final cache eligibility is known.
+Capture must remain observational until then; adoption extends the stable-input snapshot contract back to
+config scanning rather than starting at compilation-cache creation.
+Keep all raw names, including special files/dangling links, require successful completion and the existing
+filesystem/case/Unicode safeguards, and discard observations for ineligible invocations. Filtered `Entries`
+cannot establish absence. The 4,036 count is a ceiling: it does not establish raw-name eligibility, and up to
+2,557 directory filesystem guards plus storage/hash costs could consume much of the gain. This is new evidence
+for a measured follow-up, not justification to enable another cache without CPU/RSS qualification.
+Later ENOENT also does not prove the basename was absent from the listing: a listed dangling link can fail.
+The adopted complete raw set must actually exclude the queried name before it can answer negatively.
+
+**Do not seed positive metadata from directory-entry types.** A native macOS reproduction with a readable but
+unsearchable directory (mode 0400) successfully enumerates a file, subdirectory, and symlink and obtains their
+types, while every child stat/lstat fails EACCES. A successful parent stat does not solve this; neither does the
+filesystem whitelist. Per-path access controls also prevent treating a successful sibling as universal proof.
+The fixture was cleaned up; evidence is `/private/tmp/tsrs-dirent-permission-repro.json`. The 12,613 overlapping
+vscode probes therefore are not a safe 67% metadata reduction. Xstate's 33 listing symlinks correctly trigger
+followed stat; no repeated actual followed-stat calls were observed in either single-threaded project.
+
+**Missing-parent pruning is real but small.** The 35 / 34 probes are about 0.60% / 0.18% of remaining metadata.
+Most are package-parent/type-root probes; the resolver already skips missing parents in common candidate loops.
+Any further inference must retain actual NotFound/NotADirectory provenance instead of treating the compact
+cache's generic negative result as proof, and must exclude raw symlink-sensitive spellings. Adding state and
+checks to every lookup solely for these counts is not yet justified.
+
+Cold successful package loads still perform 346 / 136 lstat-plus-read pairs. Oxc's read-first approach is a
+specific experiment to consider only if the native implementation preserves tsrs's unreadable-file, special-file,
+custom-host, and trace behavior; blindly replacing exists-then-read is incorrect. On Linux, separately profile
+the current eager symlink canonicalization: lstat → O_PATH → proc readlink → target lstat can cost more than
+a followed stat when no subsequent realpath is needed. Mac traces cannot establish that Linux opportunity.
+
+The current audit adds tooling and findings, **no new runtime cache optimization or speedup claim**. Prefer the
+config-listing negative-snapshot experiment over another exact-path cache or blanket positive entry seeding.
+Use uninstrumented before/after instructions and peak RSS, and retain the existing landing bar.
+
+Validation: four profiler unit cases (including concurrent/nested event pairing), feature-enabled VFS Clippy,
+workspace/WASM checks, and both lint gates pass. Original report rows and comparison behavior remain supported;
+the analyzer reports ordered overlaps when events are present and keeps path details behind `--paths`.
+Fourteen synthetic analyzer checks cover ordering, errors, pairing, concurrency, path guards, and legacy behavior;
+all four real traces reproduce the independent audit's listing counts. The restored uninstrumented release
+binary is byte-identical to the pre-audit binary (`6b503747…`), so these changes introduce no production cache cost.
+Current aggregate reports are under `/private/tmp/tsrs-resolver-call-audit-current/profile`; ordered reports under
+`/private/tmp/tsrs-resolver-call-audit-ordered/profile`; independent analyses and the listing breakdown under
+`/private/tmp/tsrs-resolver-trace-audit-ordered`. The independent audit script is
+`/private/tmp/tsrs-resolver-trace-audit.py`. Reproduce ordered reports with the command in `docs/DEBUGGING.md`,
+adding `TSRS_RESOLVER_FS_TRACE=1`, then run `python3 tools/perf/resolver-fs.py report.json`.

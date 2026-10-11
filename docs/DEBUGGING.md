@@ -474,6 +474,14 @@ The report records paths, not source contents, and accumulates across the proces
 for instruction, wall-time, and memory comparisons: the profiler keeps path records and serializes counters.
 Without the Cargo feature, the instrumentation compiles out.
 
+Also set `TSRS_RESOLVER_FS_TRACE=1` to include ordered `physical_events` in the same JSON report. Every physical
+API call records start/end events with sequence numbers, a shared call ID, thread ID, result, physical path,
+and enclosing resolver request path. An end event preceding another call's start proves the first result was
+available before that call, including concurrent runs. An unmatched start means the call did not return normally.
+These events expose ordering around directory listings and repeated probes; they do not trace hidden syscalls
+inside Rust APIs or cache publication, and nonresolver requests have no logical path. Tracing adds substantial
+memory and synchronization overhead; use it only for filesystem-call analysis.
+
 Summarize a report or compare two runs with `python3 tools/perf/resolver-fs.py before.json [after.json]`.
 The summary separates physical operations, resolver sites, cache outcomes, and duplicate metadata probes.
 Add `--paths` to include the busiest missing-parent directories. Comparisons check logical operation/path/result

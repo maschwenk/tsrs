@@ -17,6 +17,9 @@ struct Row {
 struct Collector {
     destination: Option<PathBuf>,
     rows: Mutex<BTreeMap<Row, u64>>,
+    // Kept separate from aggregates and absent unless explicitly requested. Instrumented runs
+    // are for call analysis only; recording paths and taking these locks perturbs timing.
+    physical_events: Option<Mutex<Vec<serde_json::Value>>>,
 }
 
 impl Collector {
@@ -40,11 +43,15 @@ impl Collector {
                 })
             })
             .collect();
-        serde_json::json!({
+        let mut report = serde_json::json!({
             "version": 1,
             "physical_unit": "Rust API or rustix wrapper calls; not a complete syscall trace",
             "rows": rows,
-        })
+        });
+        if let Some(events) = &self.physical_events {
+            report["physical_events"] = serde_json::Value::Array(events.lock().unwrap().clone());
+        }
+        report
     }
 }
 
@@ -54,7 +61,8 @@ static COLLECTOR: LazyLock<Option<Arc<Collector>>> = LazyLock::new(|| {
         eprintln!("TSRS_RESOLVER_FS_STATS requires an absolute report path");
         return None;
     }
-    Some(Arc::new(Collector { destination: Some(destination), ..Collector::default() }))
+    let physical_events = (std::env::var("TSRS_RESOLVER_FS_TRACE").as_deref() == Ok("1")).then(|| Mutex::new(Vec::new()));
+    Some(Arc::new(Collector { destination: Some(destination), physical_events, ..Collector::default() }))
 });
 
 #[derive(Clone)]
@@ -72,6 +80,25 @@ impl Context {
 
     fn record(&self, layer: &'static str, operation: &'static str, path: &str, result: &'static str) {
         self.collector.record(Row { layer, site: self.site, logical_operation: self.operation, operation, path: path.to_string(), result });
+    }
+
+    fn physical_event(&self, operation: &'static str, path: &str, completed: Option<(usize, &'static str)>) -> Option<usize> {
+        let events = self.collector.physical_events.as_ref()?;
+        let mut events = events.lock().unwrap();
+        let sequence = events.len() + 1;
+        events.push(serde_json::json!({
+            "sequence": sequence,
+            "call": completed.map_or(sequence, |(call, _)| call),
+            "phase": if completed.is_some() { "end" } else { "start" },
+            "thread": format!("{:?}", std::thread::current().id()),
+            "site": self.site,
+            "logical_operation": self.operation,
+            "logical_path": self.path.as_deref(),
+            "operation": operation,
+            "path": path,
+            "result": completed.map(|(_, result)| result),
+        }));
+        Some(sequence)
     }
 }
 
@@ -124,8 +151,13 @@ pub fn physical<T>(operation: &'static str, path: &str, f: impl FnOnce() -> T, r
     let Some(context) = context() else {
         return f();
     };
+    let call = context.physical_event(operation, path, None);
     let value = f();
-    context.record("physical", operation, path, result(&value));
+    let result = result(&value);
+    context.record("physical", operation, path, result);
+    if let Some(call) = call {
+        context.physical_event(operation, path, Some((call, result)));
+    }
     value
 }
 
