@@ -96,7 +96,7 @@ impl Checker {
             return;
         }
         if target.flags().intersects(TypeFlags::Union) {
-            let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Union) { source.types().to_vec() } else { vec![source] };
+            let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Union) { source.types() } else { std::slice::from_ref(&source) };
             // First, infer between identically matching source and target constituents and remove the
             // matching types.
             let (temp_sources, temp_targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
@@ -124,7 +124,7 @@ impl Checker {
             // infer { extra: any } for T. But when inferring to 'string[] & Iterable<T>' we want to keep the
             // string[] on the source side and infer string for T.
             if !source.flags().intersects(TypeFlags::Union) {
-                let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Intersection) { source.types().to_vec() } else { vec![source] };
+                let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { std::slice::from_ref(&source) };
                 // Infer between identically matching source and target constituents and remove the matching types.
                 let (sources, targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
                 if sources.is_empty() || targets.is_empty() {
@@ -379,7 +379,14 @@ impl Checker {
     }
 
     // inference.go:370
-    pub(crate) fn infer_from_matching_types(&mut self, n: P<InferenceState>, sources: &[P<Type>], targets: &[P<Type>], mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool, sort: bool) -> (Vec<P<Type>>, Vec<P<Type>>) {
+    pub(crate) fn infer_from_matching_types<'a, 'b>(
+        &mut self,
+        n: P<InferenceState>,
+        sources: &'a [P<Type>],
+        targets: &'b [P<Type>],
+        mut matches: impl FnMut(&mut Checker, P<Type>, P<Type>) -> bool,
+        sort: bool,
+    ) -> (std::borrow::Cow<'a, [P<Type>]>, std::borrow::Cow<'b, [P<Type>]>) {
         let mut matched_sources: Vec<P<Type>> = Vec::new();
         let mut matched_targets: Vec<P<Type>> = Vec::new();
         for &t in targets {
@@ -415,14 +422,8 @@ impl Checker {
                 }
             }
         }
-        let mut sources = sources.to_vec();
-        let mut targets = targets.to_vec();
-        if !matched_sources.is_empty() {
-            sources.retain(|t| !matched_sources.contains(t));
-        }
-        if !matched_targets.is_empty() {
-            targets.retain(|t| !matched_targets.contains(t));
-        }
+        let sources = if matched_sources.is_empty() { sources.into() } else { sources.iter().copied().filter(|t| !matched_sources.contains(t)).collect() };
+        let targets = if matched_targets.is_empty() { targets.into() } else { targets.iter().copied().filter(|t| !matched_targets.contains(t)).collect() };
         (sources, targets)
     }
 }
@@ -478,7 +479,7 @@ impl Checker {
         let mut type_variable_count = 0;
         if target_flags.intersects(TypeFlags::Union) {
             let mut naked_type_variable: Option<P<Type>> = None;
-            let sources: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Union) { source.types().to_vec() } else { vec![source] };
+            let sources: &[P<Type>] = if source.flags().intersects(TypeFlags::Union) { source.types() } else { std::slice::from_ref(&source) };
             let mut matched = vec![false; sources.len()];
             let mut inference_circularity = false;
             // First infer to types that are not naked type variables. For each source type we

@@ -2396,7 +2396,7 @@ impl Checker {
 
     // checker.go:17390
     pub(crate) fn has_non_circular_base_constraint(&mut self, t: P<Type>) -> bool {
-        self.get_resolved_base_constraint(t, &[]) != self.circular_constraint_type
+        self.get_resolved_base_constraint(t, crate::checker_13::BaseConstraintStack::default()) != self.circular_constraint_type
     }
 
     // This is a worker function. Use getConstraintOfTypeParameter which guards against circular constraints

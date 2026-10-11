@@ -979,7 +979,7 @@ impl Relater {
             // the type param can be compared with itself in the target (with the influence of its constraint to match other parts)
             // For example, if `T extends 1 | 2` and `U extends 2 | 3` and we compare `T & U` to `T & U & (1 | 2 | 3)`
             if result == Ternary::False && (source.flags().intersects(TypeFlags::Intersection) || source.flags().intersects(TypeFlags::TypeParameter) && target.flags().intersects(TypeFlags::Union)) {
-                let source_types: Vec<P<Type>> = if source.flags().intersects(TypeFlags::Intersection) { source.types().to_vec() } else { vec![source] };
+                let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { std::slice::from_ref(&source) };
                 let constraint = c.get_effective_constraint_of_intersection(&source_types, target.flags().intersects(TypeFlags::Union));
                 if let Some(constraint) = constraint {
                     if every_type(c, constraint, |_, t| t != source) {

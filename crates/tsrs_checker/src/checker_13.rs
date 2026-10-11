@@ -748,6 +748,27 @@ impl Checker {
     }
 }
 
+/// Go's `stack` of `getResolvedBaseConstraint`: the recursion identities of the enclosing calls, as a list through
+/// their frames (Go appends to a slice; this needs no copy per level).
+#[derive(Clone, Copy, Default)]
+pub(crate) struct BaseConstraintStack<'a> {
+    len: usize,
+    top: Option<&'a (RecursionId, BaseConstraintStack<'a>)>,
+}
+
+impl BaseConstraintStack<'_> {
+    fn contains(self, identity: RecursionId) -> bool {
+        let mut at = self.top;
+        while let Some((id, rest)) = at {
+            if *id == identity {
+                return true;
+            }
+            at = rest.top;
+        }
+        false
+    }
+}
+
 // checker.go:26695
 pub(crate) fn is_union_with_undefined(t: P<Type>) -> bool {
     t.flags().intersects(TypeFlags::Union) && t.types()[0].flags().intersects(TypeFlags::Undefined)
@@ -2443,7 +2464,7 @@ impl Checker {
     // checker.go:27906
     pub fn get_base_constraint_of_type(&mut self, t: P<Type>) -> Option<P<Type>> {
         if t.flags().intersects(TypeFlags::InstantiableNonPrimitive | TypeFlags::UnionOrIntersection | TypeFlags::TemplateLiteral | TypeFlags::StringMapping | TypeFlags::Index) || self.is_generic_tuple_type(t) {
-            let constraint = self.get_resolved_base_constraint(t, &[]);
+            let constraint = self.get_resolved_base_constraint(t, BaseConstraintStack::default());
             if constraint != self.no_constraint_type && constraint != self.circular_constraint_type {
                 return Some(constraint);
             }
@@ -2453,7 +2474,7 @@ impl Checker {
     }
 
     // checker.go:27917
-    pub(crate) fn get_resolved_base_constraint(&mut self, t: P<Type>, stack: &[RecursionId]) -> P<Type> {
+    pub(crate) fn get_resolved_base_constraint(&mut self, t: P<Type>, stack: BaseConstraintStack<'_>) -> P<Type> {
         if t.try_as_constrained_type().is_none() && t.try_as_structured_type().is_none() {
             return t;
         }
@@ -2471,11 +2492,10 @@ impl Checker {
         // yet triggered the deeply nested limiter. We have no test cases that actually get to 50 levels of
         // nesting, so it is effectively just a safety stop.
         let identity = get_recursion_identity(self, t);
-        if stack.len() < 10 || stack.len() < 50 && !stack.contains(&identity) {
+        if stack.len < 10 || stack.len < 50 && !stack.contains(identity) {
             let simplified = self.get_simplified_type(t, false /*writing*/);
-            let mut new_stack = stack.to_vec();
-            new_stack.push(identity);
-            constraint = self.compute_base_constraint(simplified, &new_stack);
+            let frame = (identity, stack);
+            constraint = self.compute_base_constraint(simplified, BaseConstraintStack { len: stack.len + 1, top: Some(&frame) });
         }
         if !self.pop_type_resolution() {
             if t.flags().intersects(TypeFlags::TypeParameter) {
@@ -2515,7 +2535,7 @@ impl Checker {
     }
 
     // checker.go:27960
-    pub(crate) fn compute_base_constraint(&mut self, t: P<Type>, stack: &[RecursionId]) -> Option<P<Type>> {
+    pub(crate) fn compute_base_constraint(&mut self, t: P<Type>, stack: BaseConstraintStack<'_>) -> Option<P<Type>> {
         let flags = t.flags();
         if flags.intersects(TypeFlags::TypeParameter) {
             let constraint = self.get_constraint_from_type_parameter(t);
@@ -2628,7 +2648,7 @@ impl Checker {
 
     // Go passes nil (e.g. a missing type parameter constraint) and checks `t == nil` here.
     // checker.go:28063
-    pub(crate) fn get_next_base_constraint(&mut self, t: Option<P<Type>>, stack: &[RecursionId]) -> Option<P<Type>> {
+    pub(crate) fn get_next_base_constraint(&mut self, t: Option<P<Type>>, stack: BaseConstraintStack<'_>) -> Option<P<Type>> {
         let t = t?;
         let constraint = self.get_resolved_base_constraint(t, stack);
         if constraint == self.no_constraint_type || constraint == self.circular_constraint_type {

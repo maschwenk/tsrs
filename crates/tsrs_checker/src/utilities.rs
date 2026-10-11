@@ -1811,7 +1811,7 @@ impl Checker {
             return t.as_intersection_type().types.get().iter().any(|&t| self.is_js_literal_type(t));
         }
         if t.flags().intersects(TypeFlags::Instantiable) {
-            let constraint = self.get_resolved_base_constraint(t, &[]);
+            let constraint = self.get_resolved_base_constraint(t, crate::checker_13::BaseConstraintStack::default());
             return constraint != t && self.is_js_literal_type(constraint);
         }
         false
