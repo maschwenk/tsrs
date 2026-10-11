@@ -73,63 +73,45 @@ Shared CI machines vary by a few percent between runs of the same code; the sing
 
 ## Large-project chart snapshot
 
-The [README chart](large-projects.svg) uses **Hyperfine 2.0.0** measurements completed on
-**2026-10-11 at 14:30 UTC**, at `tsrs` commit `b43a510b2d24`. Each compiler had **3 warmup runs and
-20 measured runs** for each project and checker setting. The chart shows the **median wall time and peak RSS**
-at default settings. It is a static snapshot; CI does not regenerate the SVG.
+The [README chart](large-projects.svg) is a static snapshot of the **2026-10-11 14:32 UTC** CI benchmark at
+`tsrs` commit `b8bdd76bf789`, using each project's `wide` results. It shows **median wall time and peak RSS**
+at default settings. CI does not regenerate the SVG.
 
-[Raw metadata and exact commands](results/hyperfine/2026-10-11-b43a510b2d24/metadata.json) ·
-[Reproduction instructions](README.md#readme-measurements-with-hyperfine) ·
-[Depot run](https://depot.dev/orgs/qw3zz3l8cs/workflows/zcnt8kjhsg?job=bnhgggfhml&attempt=wwxgp0xn8z)
+[Raw measurements](results/2026-10-11-b8bdd76bf789.json) ·
+[All settings](results/2026-10-11-b8bdd76bf789.md) · [Methodology](README.md#what-is-measured)
 
-- **Machine:** Depot `depot-ubuntu-24.04-16`, 16 vCPUs, 63 GiB RAM, Linux x86_64, AMD EPYC 9R45 96-Core Processor.
-- **TypeScript:** `typescript@7.1.0-dev.20260930.4`, the native Go compiler built from the
-  TypeScript revision `tsrs` ports (`b85298b6a81f`, plus an upstream CI-only commit).
-- **`tsrs`:** `0.13.0-ts7.1.0-dev.20260929`; clean `cargo build --release --locked -p tsrs_cli`, with
-  `rustc 1.99.0 (b940084d7 2026-09-28)`. This run uses the release profile without the PGO/BOLT optimization of the
-  earlier CI snapshot.
-- **Settings:** no checker flag in the chart. TypeScript defaults to 4 checker threads; `tsrs` chooses up to 16 on
-  this machine, capped by the number of files to check. Both binaries run directly, without a shell or Node launcher.
+- **Machine:** Depot `depot-ubuntu-24.04-16`, 16 vCPUs, 63 GiB RAM, Linux x86_64, AMD EPYC 9R45.
+- **TypeScript:** `typescript@7.0.2`, the native Go compiler, 4 checker threads, median of 3 runs.
+- **`tsrs`:** `0.13.0-ts7.1.0-dev.20260929`, PGO-optimized `dist` build with BOLT, built like the npm release;
+  up to 16 checker threads, median of 10 runs. Rust compiler: `rustc 1.99.0 (b940084d7 2026-09-28)`.
+
+The harness interleaves compiler runs, measures process wall time and maximum resident set size, and disables
+incremental compilation. Both native binaries run directly, without a Node launcher.
 
 | Repository and measured project | Files | Time: TypeScript 7 → `tsrs` | Peak memory: TypeScript 7 → `tsrs` | Speedup | Less peak memory |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| [VS Code](https://github.com/microsoft/vscode), `src` | 10,427 | 9.08 s → 1.03 s | 7.03 GiB → 2.09 GiB | **8.8×** | **70%** |
-| [T3 Code](https://github.com/pingdotgg/t3code), `apps/server` | 2,945 | 8.63 s → 1.58 s | 4.72 GiB → 2.13 GiB | **5.5×** | **55%** |
-| [MUI docs](https://github.com/mui/material-ui), `docs` | 16,766 | 6.01 s → 1.02 s | 4.11 GiB → 1.60 GiB | **5.9×** | **61%** |
+| [VS Code](https://github.com/microsoft/vscode), `src` | 10,427 | 10.96 s → 0.86 s | 7.63 GiB → 2.09 GiB | **12.7×** | **73%** |
+| [T3 Code](https://github.com/pingdotgg/t3code), `apps/server` | 2,945 | 13.66 s → 1.37 s | 6.19 GiB → 2.14 GiB | **10.0×** | **65%** |
+| [MUI docs](https://github.com/mui/material-ui), `docs` | 16,766 | 12.24 s → 0.86 s | 7.50 GiB → 1.60 GiB | **14.2×** | **79%** |
 
-File counts are the compiled program files, including dependencies and TypeScript libraries, for the named project
-within each repository. Both compilers load the same number of files. Ratios use unrounded medians; GiB means bytes
-divided by 2³⁰. All three chart rows share a 0–16 second time scale and a 0–8 GiB memory scale.
+File counts are `tsrs`'s compiled program files, including dependencies and TypeScript libraries, for the named
+project within each repository. TypeScript 7.0.2 loads 2,941 files for T3 Code; `tsrs` loads 2,945. The other two
+counts agree. Ratios use unrounded medians; GiB means bytes divided by 2³⁰. All three rows share a 0–16 second
+time scale and a 0–8 GiB memory scale.
 
-Both compilers completed every preflight and reported the same diagnostic locations and codes in both settings.
-VS Code and T3 Code contain diagnostics; these runs measure completed type checks, not error-free builds.
-Every measured exit code and the final run's diagnostics/file count were checked against the preflight.
+The compilers follow different TypeScript revisions: `tsrs` ports 7.1-dev commit `b85298b6a81f`. For VS Code and
+T3 Code, the matching nightly `typescript@7.1.0-dev.20260930.4` reports exactly `tsrs`'s diagnostic locations and
+codes. All timed runs completed; VS Code and T3 Code contain diagnostics, so these are completed type checks
+rather than error-free builds.
 
-| Project | Pinned repository commit | Diagnostics from each compiler |
+| Project | Pinned repository commit | Diagnostics: TypeScript 7.0.2 → `tsrs` |
 | --- | --- | ---: |
-| VS Code | `9cf0128b9822` | 371 |
-| T3 Code | `9bd1d8009a6b` | 6 |
-| MUI docs | `6780195595c1` | 0 |
+| VS Code | `9cf0128b9822` | 359 → 371 |
+| T3 Code | `9bd1d8009a6b` | 5 → 6 |
+| MUI docs | `6780195595c1` | 0 → 0 |
 
-For comparison, the same Hyperfine run also measured **both compilers with `--checkers 4`**:
-
-| Project | Median time: TypeScript 7 → `tsrs` | Median peak RSS: TypeScript 7 → `tsrs` | Speedup | Less peak memory |
-| --- | ---: | ---: | ---: | ---: |
-| VS Code | 8.76 s → 2.74 s | 7.05 GiB → 1.80 GiB | 3.2× | 74% |
-| T3 Code | 8.93 s → 1.92 s | 4.72 GiB → 1.19 GiB | 4.7× | 75% |
-| MUI docs | 6.12 s → 1.48 s | 4.09 GiB → 1.05 GiB | 4.1× | 74% |
-
-Default-setting medians and raw exports (TypeScript 7 → `tsrs`):
-
-| Project | Wall time (seconds) | Peak RSS (bytes) | All 20 samples |
-| --- | ---: | ---: | --- |
-| VS Code | 9.084638695 → 1.032125608 | 7,549,702,144 → 2,241,908,736 | [default](results/hyperfine/2026-10-11-b43a510b2d24/vscode-default.json) · [4 checkers](results/hyperfine/2026-10-11-b43a510b2d24/vscode-checkers4.json) |
-| T3 Code | 8.634867123 → 1.584056371 | 5,072,150,528 → 2,290,782,208 | [default](results/hyperfine/2026-10-11-b43a510b2d24/t3code-server-default.json) · [4 checkers](results/hyperfine/2026-10-11-b43a510b2d24/t3code-server-checkers4.json) |
-| MUI docs | 6.011063062 → 1.018479178 | 4,416,659,456 → 1,714,771,968 | [default](results/hyperfine/2026-10-11-b43a510b2d24/mui-docs-default.json) · [4 checkers](results/hyperfine/2026-10-11-b43a510b2d24/mui-docs-checkers4.json) |
-
-Hyperfine measures each compiler in a sequential batch. Compiler order alternates between project/checker-setting
-pairs. The raw files retain every sample, mean, standard deviation, median, minimum and maximum. OS file caches are
-warm; incremental compilation is disabled with `--incremental false`.
+The separate [historical Hyperfine cross-check](README.md#historical-hyperfine-cross-check) used a plain release
+build and the matching TypeScript nightly. Its raw measurements remain available.
 
 ## Historical comparison on 64 vCPUs
 

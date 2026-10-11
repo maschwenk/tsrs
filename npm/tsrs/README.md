@@ -13,7 +13,7 @@ pnpm add -D tsrs
 pnpm exec tsrs --noEmit
 ```
 
-[![tsrs versus TypeScript 7: VS Code, 10,427 files, 8.8× faster and 70% less peak memory; T3 Code, 2,945 files, 5.5× faster and 55% less peak memory; MUI docs, 16,766 files, 5.9× faster and 61% less peak memory.](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#large-project-chart-snapshot)
+[![tsrs versus TypeScript 7: VS Code, 10,427 files, 12.7× faster and 73% less peak memory; T3 Code, 2,945 files, 10.0× faster and 65% less peak memory; MUI docs, 16,766 files, 14.2× faster and 79% less peak memory.](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md#large-project-chart-snapshot)
 
 ## Compatibility
 

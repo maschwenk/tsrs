@@ -9,6 +9,9 @@ fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two (with b
 has every table, and [the latest results](RESULTS.md) show the 16-vCPU machine's default-mode tables: each compiler at
 its own thread count, tsgo, tsrs and bun check side by side (`run.py --readme-modes wide`).
 
+The [README chart](RESULTS.md#large-project-chart-snapshot) is a static snapshot of those `wide` measurements,
+using the PGO-optimized `dist` build from the recorded CI run.
+
 ```sh
 cargo build --release -p tsrs_cli
 python3 bench/run.py --local                                   # all projects, 3 reps, default/single/checkers8 modes
@@ -161,16 +164,17 @@ tsrs's errors (the table's errors paragraph names such projects).
   differences (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
 
-## README measurements with Hyperfine
+## Historical Hyperfine cross-check
 
-The README chart uses a separate, manually run [Hyperfine 2](https://github.com/sharkdp/hyperfine) measurement of
-VS Code `src`, T3 Code `apps/server` and MUI `docs`. It compares `tsrs` with the TypeScript nightly built from the
-source revision it ports. Each compiler gets 3 warmup runs and 20 measured runs, at default settings and with
-`--checkers 4`. The chart uses the default-setting medians for wall time and peak RSS; the raw exports also retain
-the individual measurements and their spread.
+A separate [Hyperfine 2](https://github.com/sharkdp/hyperfine) run on **2026-10-11 at 14:30 UTC** measured
+VS Code `src`, T3 Code `apps/server` and MUI `docs` at `tsrs` commit `b43a510b2d24`. It used a **plain release
+build without PGO/BOLT**, on a 16-vCPU Depot runner, against the matching TypeScript nightly
+`7.1.0-dev.20260930.4`. Each compiler had 3 warmups and 20 measured runs, at default settings and with `--checkers 4`.
+The [raw metadata](results/hyperfine/2026-10-11-b43a510b2d24/metadata.json) records the hardware, versions and exact
+commands; [all raw exports](results/hyperfine/2026-10-11-b43a510b2d24/) retain every sample and summary statistic.
 
-To repeat the measurements on Linux x64, use Hyperfine 2.0.0 and the compiler commit recorded in the
-[chart snapshot](RESULTS.md#large-project-chart-snapshot). Build and set up the pinned projects:
+To repeat this cross-check on Linux x64, check out **`b43a510b2d24`** and use Hyperfine 2.0.0. Build and set up
+the pinned projects:
 
 ```sh
 cargo build --release --locked -p tsrs_cli
@@ -197,12 +201,11 @@ measured exit code and the final diagnostic output against its preflight.
 For T3 Code, use `bench/.work/solutions/t3code-server` and `-p apps/server`; for MUI, use
 `bench/.work/solutions/mui-docs` and `-p docs`. Add `--checkers 4` to both compiler commands for the equal-checker
 comparison, and choose a separate output file for each project and setting. The recorded run alternated compiler
-order between project/checker-setting pairs. This procedure uses the release profile without the regression
-benchmark's PGO optimization.
+order between project/checker-setting pairs.
 
-The recorded run's `perf-probe` artifact contains `hyperfine/metadata.json`, the exact commands, diagnostic logs and a raw
-Hyperfine JSON export for each project and checker setting. The [chart snapshot](RESULTS.md#large-project-chart-snapshot)
-records the measured commit, hardware and results. The SVG is updated by hand.
+The [recorded Depot run](https://depot.dev/orgs/qw3zz3l8cs/workflows/zcnt8kjhsg?job=bnhgggfhml&attempt=wwxgp0xn8z)
+also retains diagnostic logs in its `perf-probe` artifact. These plain-release measurements are separate from
+the PGO-optimized [README chart](RESULTS.md#large-project-chart-snapshot).
 
 ## Regression flag
 
@@ -255,7 +258,7 @@ file is committed, and the summary table is applied only when no newer commit's 
 the deterministic measure (repeats to 0.001%). The `measure` jobs run 5 reps and `measure-wide` 10 for tsrs and
 `bun check`, both with 3 for tsgo (`--reps N --tsgo-reps M`: tsgo takes 10-20x longer per run).
 [The historical 64-vCPU comparison](RESULTS.md#historical-comparison-on-64-vcpus) uses the 20-run mean of
-`bench-compare.yml`. The README chart is a one-time [Hyperfine measurement](#readme-measurements-with-hyperfine); its
+`bench-compare.yml`. The README chart is a static snapshot of the PGO-optimized CI benchmark; its
 [date and source](RESULTS.md#large-project-chart-snapshot) stay fixed when CI updates the summary tables.
 
 The Bun comparison uses 16 vCPU by default; 32 and 64 vCPU remain explicit choices in `bench-compare.yml`.
