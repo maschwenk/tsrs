@@ -584,6 +584,15 @@ pub fn compare_types(c: &mut Checker, t1: Option<P<Type>>, t2: Option<P<Type>>) 
     if r != 0 {
         return r;
     }
+    // Two string literals without aliases (no name symbol): by value, then id, as compare_types_same_flags orders
+    // them. Large unions of string literals are built by binary insertion with this.
+    if t1.flags() == TypeFlags::StringLiteral && t1.alias().is_none() && t2.alias().is_none() {
+        let r = literal_string_value(t1).cmp(literal_string_value(t2)) as i32;
+        if r != 0 {
+            return r;
+        }
+        return (t1.id().0 as i64 - t2.id().0 as i64) as i32;
+    }
     compare_types_same_flags(c, t1, t2)
 }
 
