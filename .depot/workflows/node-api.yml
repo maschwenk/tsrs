@@ -157,8 +157,6 @@ jobs:
         include:
           - { target: x86_64-unknown-linux-gnu, os: depot-ubuntu-24.04-4 }
           - { target: aarch64-unknown-linux-gnu, os: depot-ubuntu-24.04-arm-4 }
-          - { target: x86_64-unknown-linux-musl, os: depot-ubuntu-24.04-4 }
-          - { target: aarch64-unknown-linux-musl, os: depot-ubuntu-24.04-arm-4 }
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
@@ -176,30 +174,13 @@ jobs:
           save-cache: true
           cache-key: node-api-${{ matrix.target }}
 
-      - name: Add Rust target
-        run: rustup target add ${{ matrix.target }}
-
-      - uses: goto-bus-stop/setup-zig@abea47f85e598557f500fa1fd2ab7464fcb39406 # v2.2.1
-        if: endsWith(matrix.target, 'musl')
-        with:
-          version: 0.13.0
-      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
-        if: endsWith(matrix.target, 'musl')
-        with:
-          tool: cargo-zigbuild@0.23.4
-
       - name: Build tsrs
-        run: ${{ endsWith(matrix.target, 'musl') && 'cargo zigbuild' || 'cargo build' }} --release --locked -p tsrs_cli --target ${{ matrix.target }}
+        run: cargo build --release --locked -p tsrs_cli
 
       - name: Pack (no publish)
         run: |
           pnpm --dir npm install --frozen-lockfile
-          node npm/build.mjs --binary ${{ matrix.target }}=target/${{ matrix.target }}/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+          node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
 
       - name: Installed-package smoke (CLI, sync, async, declarations)
-        if: endsWith(matrix.target, 'gnu')
         run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"
-
-      - name: Installed-package smoke (musl Node in Alpine)
-        if: endsWith(matrix.target, 'musl')
-        run: bash .github/scripts/musl-package-smoke.sh "$RUNNER_TEMP/pack"

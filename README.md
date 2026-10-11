@@ -18,8 +18,7 @@ pnpm dlx tsrs -p path/to/project --noEmit   # type check only
 ```
 
 Or install it with `pnpm add -D tsrs` and run `tsrs` in place of `tsc`. Prebuilt binaries are available for
-macOS arm64 and Linux x64/arm64. There is also a [WebAssembly build](#webassembly) for Node and browsers.
-The next release adds musl Linux packages alongside GNU packages, with explicit `-gnu` and `-musl` names.
+macOS arm64 and Linux x64/arm64 (GNU; musl in the next release). There is also a [WebAssembly build](#webassembly) for Node and browsers.
 
 ## Performance
 
@@ -161,14 +160,14 @@ Updating this table (AGENTS.md says when):
 | Language server (`--lsp -stdio`) | yes | 4,066 of 4,546 fourslash tests pass; 13,869 of 13,869 responses identical in a recorded editor session |
 | Automatic type acquisition, telemetry, profiling (language server) | no | not ported |
 | Node API server (`--api`) | yes, with gaps | upstream client test suites pass; no profiling requests, no Windows named pipes ([`docs/NODE_API.md`](docs/NODE_API.md)) |
-| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | since 0.12.0; macOS arm64 and Linux x64/arm64; next release uses explicit GNU/musl Linux packages and checks both libc variants; earlier releases used `@maschwenk` |
+| npm packages (`tsrs`, `@ts-rs/<os>-<arch>[-<libc>]`) | yes | since 0.12.0; macOS arm64 and Linux x64/arm64; next release adds GNU/musl suffixes and musl builds; earlier releases used `@maschwenk` |
 | WebAssembly (`@ts-rs/wasm`) | yes | single-threaded; renamed in 0.12.0; byte-identical to native `--singleThreaded` on a 2,000-case conformance sample (notes/wasm-build.md) |
 | Options TypeScript 7 removed (ES5 target, AMD/UMD/System, `baseUrl`, …) | rejected, as in tsgo | same TS5102 / TS5108 errors |
 | `--watch` | no | exits with "not supported" |
 | `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage |
 | `--locale` | ignored | messages are English only |
 | `--generateTrace` | no | warns "Failed to start tracing" (tsgo's message when it can't write a trace) and type-checks as without the flag |
-| Prebuilt binaries | yes | macOS arm64, Linux x64/arm64 (glibc; musl in the next release); release gates cover both Linux libc variants; no Windows or Intel macOS |
+| Prebuilt binaries | yes | macOS arm64, Linux x64/arm64 (glibc; musl in the next release); no Windows or Intel macOS |
 
 ## Options
 

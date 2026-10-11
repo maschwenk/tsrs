@@ -127,9 +127,6 @@ jobs:
       - name: Set up pnpm
         run: bash .github/scripts/setup-pnpm.sh
 
-      - name: npm platform packaging checks
-        run: node --test npm/test/*.test.mjs
-
       # npm/build.mjs compiles the unstable/* JS API with npm/package.json's build-only tools when that manifest
       # exists; branches without it have nothing to install.
       - name: npm packaging smoke test

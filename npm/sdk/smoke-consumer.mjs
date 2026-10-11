@@ -17,7 +17,6 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { installConsumer } from "./install-consumer.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
@@ -27,17 +26,19 @@ const keep = args.includes("--keep");
 const nodes = args.flatMap((a, i) => a === "--node" ? [path.resolve(args[i + 1])] : []);
 if (nodes.length === 0) nodes.push(process.execPath);
 
+const manifest = JSON.parse(fs.readFileSync(path.join(dist, "packages.json"), "utf8"));
+const tarballs = manifest.packages.map(p => p.tarball);
+if (tarballs.some(t => !t)) throw new Error("packages.json has no tarballs; run npm/build.mjs with --pack");
+
 const failures = [];
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tsrs-consumer-"));
-const env = { ...process.env };
-delete env.TSRS_BINARY; // Exercise the installed optional dependency, even when the caller uses a local override.
 const run = (cmd, argv, opts = {}) => {
     console.log(`$ ${[cmd, ...argv].join(" ")}`);
-    return execFileSync(cmd, argv, { cwd: dir, stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", env, ...opts });
+    return execFileSync(cmd, argv, { cwd: dir, stdio: ["ignore", "pipe", "inherit"], encoding: "utf8", ...opts });
 };
 try {
     fs.writeFileSync(path.join(dir, "package.json"), JSON.stringify({ name: "tsrs-consumer", private: true, type: "module" }));
-    installConsumer(dist, dir, env);
+    run("pnpm", ["add", "--offline", ...tarballs], { shell: process.platform === "win32" });
 
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, "node_modules/tsrs/package.json"), "utf8"));
     for (const sub of Object.keys(pkg.exports)) {
@@ -65,10 +66,10 @@ try {
         // The CLI launcher under this Node: --version, and a type error must exit 2 (the binary's own code).
         run(node, [path.join(dir, "node_modules/tsrs/bin/tsrs"), "--version"]);
         fs.writeFileSync(path.join(dir, "bad.ts"), 'const x: number = "no";\n');
-        const bad = spawnSync(node, [path.join(dir, "node_modules/tsrs/bin/tsrs"), "--noEmit", "--ignoreConfig", "bad.ts"], { cwd: dir, encoding: "utf8", env });
+        const bad = spawnSync(node, [path.join(dir, "node_modules/tsrs/bin/tsrs"), "--noEmit", "--ignoreConfig", "bad.ts"], { cwd: dir, encoding: "utf8" });
         if (bad.status !== 2 || !bad.stdout.includes("TS2322")) throw new Error(`launcher under node ${version}: expected exit 2 with TS2322, got ${bad.status}\n${bad.stdout}${bad.stderr}`);
         // The consumer runs every step and reports each; a failing step does not stop the other Node versions.
-        const consumer = spawnSync(node, ["consumer.mjs", path.join(dir, "project")], { cwd: dir, encoding: "utf8", env, timeout: 300_000 });
+        const consumer = spawnSync(node, ["consumer.mjs", path.join(dir, "project")], { cwd: dir, encoding: "utf8", timeout: 300_000 });
         for (const line of `${consumer.stdout}`.split("\n").filter(Boolean)) console.log(`[node ${version}] ${line}`);
         if (consumer.stderr) process.stderr.write(consumer.stderr.split("\n").map(l => l && `[node ${version}] stderr: ${l}`).join("\n"));
         if (consumer.status !== 0 || !consumer.stdout.includes("smoke ok")) {

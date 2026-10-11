@@ -12,8 +12,7 @@
 // copied from microsoft/TypeScript packages/typescript by npm/sdk/sync-upstream.mjs. It is compiled here with the
 // build-only compiler in npm/package.json (`pnpm --dir npm install --frozen-lockfile` first; `--tsc <path>` to use another TypeScript 7 tsc).
 //
-// The package name comes from npm/tsrs/package.json; platform packages are `@ts-rs/<os>-<cpu>` with a GNU/musl suffix
-// on Linux. The version is
+// The package name comes from npm/tsrs/package.json; Linux platform packages have a `-gnu` or `-musl` suffix. The version is
 // `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml, for every package
 // including `@ts-rs/wasm` (npm/tsrs-wasm). The main package lists exactly the platforms given here, so a
 // release never points at a platform package that was not published.
@@ -22,10 +21,20 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { TARGETS, platformName } from "./tsrs/lib/platform.js";
 
 const npmDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(npmDir, "..");
+
+// Rust target triple -> Node's process.platform / process.arch.
+const TARGETS = {
+    "aarch64-apple-darwin": { os: "darwin", cpu: "arm64" },
+    "x86_64-apple-darwin": { os: "darwin", cpu: "x64" },
+    "x86_64-unknown-linux-gnu": { os: "linux", cpu: "x64", libc: "glibc" },
+    "aarch64-unknown-linux-gnu": { os: "linux", cpu: "arm64", libc: "glibc" },
+    "x86_64-unknown-linux-musl": { os: "linux", cpu: "x64", libc: "musl" },
+    "aarch64-unknown-linux-musl": { os: "linux", cpu: "arm64", libc: "musl" },
+    "x86_64-pc-windows-msvc": { os: "win32", cpu: "x64" },
+};
 
 function usage(message) {
     if (message) console.error(`error: ${message}\n`);
@@ -263,8 +272,8 @@ function main() {
     for (const [triple, binary] of [...opts.binaries].sort()) {
         if (!fs.existsSync(binary)) throw new Error(`binary for ${triple} not found: ${binary}`);
         const { os, cpu, libc } = TARGETS[triple];
-        const platform = platformName(TARGETS[triple]);
-        const packageName = `@ts-rs/${platform}`;
+        const platform = `${os}-${cpu}${libc ? `-${libc === "glibc" ? "gnu" : libc}` : ""}`;
+        const platformName = `@ts-rs/${platform}`;
         const dir = path.join(opts.out, `${baseName}-${platform}`);
         fs.mkdirSync(dir, { recursive: true });
 
@@ -274,14 +283,14 @@ function main() {
         fs.writeFileSync(path.join(dir, "LICENSE"), license);
         fs.writeFileSync(path.join(dir, "NOTICE.txt"), notice);
         const readme = fs.readFileSync(path.join(npmDir, "platform", "README.md"), "utf8")
-            .replaceAll("{{name}}", packageName)
+            .replaceAll("{{name}}", platformName)
             .replaceAll("{{mainName}}", name)
             .replaceAll("{{platform}}", platform)
             .replaceAll("{{version}}", version)
             .replaceAll("{{commit}}", versions.typescriptCommit.slice(0, 12));
         fs.writeFileSync(path.join(dir, "README.md"), readme);
         writeJson(path.join(dir, "package.json"), {
-            name: packageName,
+            name: platformName,
             ...common,
             description: `The ${platform} binary for ${name}`,
             preferUnplugged: true,
@@ -291,7 +300,7 @@ function main() {
             cpu: [cpu],
             ...(libc ? { libc: [libc] } : {}),
         });
-        optionalDependencies[packageName] = version;
+        optionalDependencies[platformName] = version;
         packageDirs.push(dir);
     }
 
