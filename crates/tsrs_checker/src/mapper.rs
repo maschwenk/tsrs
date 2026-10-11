@@ -274,15 +274,6 @@ impl TypeMapper {
                     t
                 }
             }
-            TypeMapperData::Deferred { data } => {
-                for (i, s) in data.sources.iter().enumerate() {
-                    if t == *s {
-                        return data.targets[i](c);
-                    }
-                }
-                t
-            }
-            TypeMapperData::Function { f } => f(c, t),
             TypeMapperData::Merged { m1, m2 } => {
                 let t1 = m1.map(c, t);
                 m2.map(c, t1)
@@ -294,6 +285,23 @@ impl TypeMapper {
                 }
                 m2.map(c, t)
             }
+            data => Self::map_rare(data, c, t),
+        }
+    }
+
+    /// `map` for the kinds that run arbitrary code (out of line, so the common kinds need few saved registers).
+    #[inline(never)]
+    fn map_rare(data: TypeMapperData, c: &mut Checker, t: P<Type>) -> P<Type> {
+        match data {
+            TypeMapperData::Deferred { data } => {
+                for (i, s) in data.sources.iter().enumerate() {
+                    if t == *s {
+                        return data.targets[i](c);
+                    }
+                }
+                t
+            }
+            TypeMapperData::Function { f } => f(c, t),
             TypeMapperData::Inference { n, fixing } => {
                 let inferences = n.inferences.get();
                 for (i, inference) in inferences.iter().enumerate() {
@@ -310,6 +318,11 @@ impl TypeMapper {
                 }
                 t
             }
+            TypeMapperData::Simple { .. }
+            | TypeMapperData::Array { .. }
+            | TypeMapperData::ArrayToSingle { .. }
+            | TypeMapperData::Merged { .. }
+            | TypeMapperData::Composite { .. } => unreachable!("map_rare of a common mapper kind"),
         }
     }
 
