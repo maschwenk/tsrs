@@ -1431,16 +1431,29 @@ impl Checker {
             Some(compare_types) => compare_types,
             None => self.compare_types_assignable_comparer(),
         };
-        let inferences: Vec<P<InferenceInfo>> = type_parameters.iter().map(|&tp| new_inference_info(tp)).collect();
-        self.new_inference_context_worker(&inferences, signature, flags, compare_types)
+        let mut inferences = self.free_inference_lists.pop().unwrap_or_default();
+        inferences.extend(type_parameters.iter().map(|&tp| new_inference_info(tp)));
+        let n = self.new_inference_context_worker(&inferences, signature, flags, compare_types);
+        self.free_inference_list(inferences);
+        n
+    }
+
+    fn free_inference_list(&mut self, mut list: Vec<P<InferenceInfo>>) {
+        if list.capacity() <= 256 {
+            list.clear();
+            self.free_inference_lists.push(list);
+        }
     }
 
     // inference.go:1258
     // n and the result are Option (Go checks n for nil; callers pass getInferenceContext results).
     pub(crate) fn clone_inference_context(&mut self, n: Option<P<InferenceContext>>, extra_flags: InferenceFlags) -> Option<P<InferenceContext>> {
         let n = n?;
-        let inferences: Vec<P<InferenceInfo>> = n.inferences.get().iter().map(|&info| clone_inference_info(info)).collect();
-        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get() | extra_flags, n.compare_types.get().unwrap()))
+        let mut inferences = self.free_inference_lists.pop().unwrap_or_default();
+        inferences.extend(n.inferences.get().iter().map(|&info| clone_inference_info(info)));
+        let result = self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get() | extra_flags, n.compare_types.get().unwrap());
+        self.free_inference_list(inferences);
+        Some(result)
     }
 
     // inference.go:1265

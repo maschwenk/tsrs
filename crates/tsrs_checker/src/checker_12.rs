@@ -1220,12 +1220,17 @@ impl Checker {
                 if !new_root.outer_type_parameters.get().is_empty() {
                     let conditional_mapper = new_type.as_conditional_type().mapper.get();
                     let type_param_mapper = self.combine_type_mappers(conditional_mapper, new_mapper);
-                    let type_arguments: Vec<P<Type>> = new_root.outer_type_parameters.get().iter().map(|&t| type_param_mapper.map(self, t)).collect();
+                    let mut type_arguments = self.free_type_lists.pop().unwrap_or_default();
+                    for &t in new_root.outer_type_parameters.get() {
+                        let mapped = type_param_mapper.map(self, t);
+                        type_arguments.push(mapped);
+                    }
                     if conditional_mapper.is_some() {
                         // SAFETY: the composite made above, used only by those `map` calls.
                         unsafe { recycle_mapper(type_param_mapper) };
                     }
                     let type_argument_list = tsrs_core::alloc_slice_recycled(&type_arguments);
+                    self.free_type_list(type_arguments);
                     let new_root_mapper = new_type_mapper(new_root.outer_type_parameters.get(), type_argument_list);
                     let mut new_check_type = None;
                     if new_root.is_distributive.get() {

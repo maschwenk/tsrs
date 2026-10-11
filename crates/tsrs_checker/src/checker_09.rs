@@ -2986,6 +2986,8 @@ impl Checker {
         let mut members: Option<P<SymbolTable>> = None;
         if let Some(declared_members) = resolved.declared_members.get().filter(|m| !m.is_empty()) {
             let table = SymbolTable::with_capacity(declared_members.len());
+            // The loop gets every declared member, so `lm.declared` (dropped below) grows to about this size.
+            lm.declared.reserve(declared_members.len().saturating_sub(lm.declared.len()));
             for (id, symbol) in declared_members.entries() {
                 if self.is_named_member(symbol, id) {
                     let member = self.get_lazy_declared_member(lm, symbol, id);

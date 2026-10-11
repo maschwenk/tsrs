@@ -1349,6 +1349,7 @@ pub struct Checker {
     pub free_type_lists: Vec<Vec<P<Type>>>, // Rust-only: empty buffers for `instantiate_types_changed`
     pub free_signature_lists: Vec<Vec<P<Signature>>>, // Rust-only: empty buffers for `reorder_candidates`
     pub free_index_lists: Vec<Vec<usize>>, // Rust-only: empty buffers for the run bounds of union construction
+    pub free_inference_lists: Vec<Vec<P<InferenceInfo>>>, // Rust-only: empty buffers for inference lists copied into the arena
     pub free_meaning_maps: Vec<FxHashMap<std::borrow::Cow<'static, str>, DeclarationMeaning>>, // Rust-only: empty maps for `check_grammar_object_literal_expression`
     pub free_strings: Vec<String>, // Rust-only: empty buffers for text built and dropped in one call
     pub free_name_sets: Vec<FxHashSet<&'static str>>, // Rust-only: empty sets for names seen during one walk
@@ -1758,6 +1759,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         free_type_lists: Vec::new(),
         free_signature_lists: Vec::new(),
         free_index_lists: Vec::new(),
+        free_inference_lists: Vec::new(),
         free_meaning_maps: Vec::new(),
         free_strings: Vec::new(),
         free_name_sets: Vec::new(),
@@ -2257,6 +2259,7 @@ impl Checker {
             free_type_lists: Vec::new(),
             free_signature_lists: Vec::new(),
             free_index_lists: Vec::new(),
+            free_inference_lists: Vec::new(),
             free_meaning_maps: Vec::new(),
             free_strings: Vec::new(),
             free_name_sets: Vec::new(),

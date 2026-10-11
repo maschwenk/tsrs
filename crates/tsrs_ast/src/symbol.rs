@@ -877,6 +877,11 @@ impl SymbolTable {
         self.0.borrow_mut().insert(name, symbol);
     }
 
+    /// Makes room for `additional` more entries (for a table about to be filled), allocating exactly that much.
+    pub fn reserve(&self, additional: usize) {
+        self.0.borrow_mut().entries.reserve_exact(additional);
+    }
+
     pub fn delete(&self, name: &str) {
         self.0.borrow_mut().shift_remove(name);
     }

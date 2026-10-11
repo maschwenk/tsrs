@@ -1933,7 +1933,7 @@ impl Checker {
         // skipping straight to getPropertyTypeForIndexType gives errors with 'boolean' instead of 'true'.
         let apparent_object_type = self.get_reduced_apparent_type(object_type);
         if index_type.flags().intersects(TypeFlags::Union) && !index_type.flags().intersects(TypeFlags::Boolean) {
-            let mut prop_types: Vec<P<Type>> = Vec::new();
+            let mut prop_types = self.free_type_lists.pop().unwrap_or_default();
             let mut was_missing_prop = false;
             for &t in index_type.types() {
                 let prop_type = self.get_property_type_for_index_type(
@@ -1948,19 +1948,22 @@ impl Checker {
                     prop_types.push(prop_type);
                 } else if access_node.is_none() {
                     // If there's no error node, we can immediately stop, since error reporting is off
+                    self.free_type_list(prop_types);
                     return None;
                 } else {
                     // Otherwise we set a flag and return at the end of the loop so we still mark all errors
                     was_missing_prop = true;
                 }
             }
-            if was_missing_prop {
-                return None;
-            }
-            if access_flags.intersects(AccessFlags::Writing) {
-                return Some(self.get_intersection_type_ex(&prop_types, IntersectionFlags::None, alias));
-            }
-            return Some(self.get_union_type_ex(&prop_types, UnionReduction::Literal, alias, None));
+            let result = if was_missing_prop {
+                None
+            } else if access_flags.intersects(AccessFlags::Writing) {
+                Some(self.get_intersection_type_ex(&prop_types, IntersectionFlags::None, alias))
+            } else {
+                Some(self.get_union_type_ex(&prop_types, UnionReduction::Literal, alias, None))
+            };
+            self.free_type_list(prop_types);
+            return result;
         }
         self.get_property_type_for_index_type(object_type, apparent_object_type, index_type, index_type, access_node, access_flags | AccessFlags::CacheSymbol | AccessFlags::ReportDeprecated)
     }
