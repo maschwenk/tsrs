@@ -133,6 +133,10 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Walking a large target in `propertiesRelatedTo` only at the positions the source can match
+  (notes/perf-source-keyed-properties.md, #305 closed): exact, -5.5% / -2.9% / -1.9% single-threaded instructions on
+  supabase-studio / mui-docs / cal-diy, but wall unchanged everywhere (the skipped lookups were cheap L1 hits).
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.
