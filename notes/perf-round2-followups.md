@@ -393,7 +393,14 @@ with the switch off, which is why it is not in the default build.
   (58 callers). The heap profile's `TSRS_HEAP_PROFILE=count` names the caller's caller of each allocation as built
   (the note has the fix used); check a site's attribution before trusting it. Measured and not landed there:
   `somePropertyReducesToNever`'s count map from a per-checker pool, -0.88% mui-docs / -0.83% mikro-orm instructions
-  (branch `perf/property-count-pool`).
+  (branch `perf/property-count-pool`; landed later with notes/perf-icount-alloc.md, -0.78% there with other pools).
+- From notes/perf-icount-alloc.md (exact VM counts, locality mode, a large private monorepo at 8 checkers): the
+  arguments of a pending type alias held as a `Cow` (the alias's own list when unchanged, a pooled buffer when
+  changed), together with pooled lists for template-literal instantiation: +0.20%, and +0.26% with the helpers out
+  of line (not explained). Pools for symbol and signature lists that are copied straight into the arena,
+  `getNamedMembers` into a pooled buffer, and object-literal all-properties tables presized: -0.012%, inside the
+  spread. A pool's push and pop cost about what mimalloc's fast path does. Pooling paid for hash tables and for
+  growth chains (realloc and copy), not for one short-lived Vec.
 
 ## The lint ratchet
 
