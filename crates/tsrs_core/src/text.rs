@@ -1,4 +1,5 @@
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::num::NonZeroU32;
 
 /// A byte offset in source text.
@@ -13,10 +14,9 @@ impl SourcePos {
 
     #[inline]
     pub const fn new(offset: u32) -> SourcePos {
-        assert!(
-            offset <= Self::MAX,
-            "source position exceeds the supported range"
-        );
+        if offset > Self::MAX {
+            source_position_overflow();
+        }
         // SAFETY: `offset <= u32::MAX - 1`, so adding one is non-zero and
         // cannot overflow.
         SourcePos(unsafe { NonZeroU32::new_unchecked(offset + 1) })
@@ -50,13 +50,24 @@ impl From<SourcePos> for u32 {
 ///
 /// Keep `Synthetic` first: it preserves the useful ordering of the old `-1`
 /// sentinel before every real source offset.
-#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum TextPos {
     Synthetic,
     Source(SourcePos),
 }
 
 impl TextPos {
+    // The niche encoding already has the required order: synthetic = 0,
+    // source = offset + 1. Comparing enum discriminants separately adds work
+    // to every position comparison.
+    #[inline]
+    const fn order_key(self) -> u32 {
+        match self {
+            Self::Synthetic => 0,
+            Self::Source(pos) => pos.0.get(),
+        }
+    }
+
     #[inline]
     pub const fn source(offset: u32) -> TextPos {
         TextPos::Source(SourcePos::new(offset))
@@ -73,7 +84,7 @@ impl TextPos {
     #[inline]
     pub fn expect_source(self, message: &str) -> u32 {
         match self {
-            TextPos::Synthetic => panic!("{message}"),
+            TextPos::Synthetic => synthetic_source_position(message),
             TextPos::Source(pos) => pos.get(),
         }
     }
@@ -94,6 +105,46 @@ impl TextPos {
             ),
         }
     }
+}
+
+impl Ord for TextPos {
+    #[inline]
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.order_key().cmp(&other.order_key())
+    }
+}
+
+impl PartialEq for TextPos {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.order_key() == other.order_key()
+    }
+}
+
+impl Eq for TextPos {}
+
+impl Hash for TextPos {
+    #[inline]
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.order_key().hash(state);
+    }
+}
+
+impl PartialOrd for TextPos {
+    #[inline]
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+#[cold]
+fn synthetic_source_position(message: &str) -> ! {
+    panic!("{message}")
+}
+
+#[cold]
+fn source_position_overflow() -> ! {
+    panic!("source position exceeds the supported range")
 }
 
 impl std::fmt::Display for TextPos {
@@ -256,6 +307,22 @@ mod tests {
             TextPos::source(SourcePos::MAX).source_offset(),
             Some(SourcePos::MAX)
         );
+
+        let ordered = [
+            TextPos::Synthetic,
+            TextPos::source(0),
+            TextPos::source(1),
+            TextPos::source(i32::MAX as u32),
+            TextPos::source(SourcePos::MAX),
+        ];
+        for (i, a) in ordered.iter().enumerate() {
+            for (j, b) in ordered.iter().enumerate() {
+                assert_eq!(a.cmp(b), i.cmp(&j));
+                assert_eq!(a.partial_cmp(b), Some(i.cmp(&j)));
+                assert_eq!(a == b, i == j);
+                assert_eq!(a < b, i < j);
+            }
+        }
     }
 
     #[test]
