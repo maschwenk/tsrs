@@ -166,6 +166,19 @@ against the branch, same command and machine as above, diagnostics identical:
 | peak RSS | 16.99-17.08 GB | 16.79-16.90 GB | -1.3% (medians) |
 | `--maxMemory 6G`: wall / peak RSS (one run) | 73.3 s / 7.69 GB | 71.8 s / 7.69 GB | -2.0% / 0% |
 
+After merging main at a7eb62be (with #327, a separate round on another workload that made the same pooled-list and
+borrowed-list changes and its own symbol-table search; the merge keeps main's versions of those, so this branch's
+linear-probing symbol-table index is not in it), the same comparison:
+
+| | main | branch | change |
+|---|---|---|---|
+| instructions, default mode (2 runs each) | 1.2746-1.2780T | 1.2409-1.2438T | -2.7% |
+| instructions, `--checkerAssignment locality` | 1.2596T | 1.2262T | -2.6% |
+| wall, native, 3 runs each | 29.05-29.91 s | 28.87-29.13 s | -1.1% (medians) |
+| user CPU | 212.7-213.4 s | 209.5-209.9 s | -1.5% |
+| peak RSS | 17.00-17.05 GB | 17.00-17.03 GB | -0.2% (medians) |
+| `--maxMemory 6G`: wall / peak RSS (one run) | 70.3 s / 7.74 GB | 70.9 s / 7.73 GB | +0.9% / -0.2% |
+
 Conformance pass lists (three modes and the gate), `tools/regressions.sh` and `--maxMemory 6G` diagnostics as in the
 first round: unchanged. Per-commit numbers (static assignment, profiling builds) are in the commit messages; the round
 went from 1.38165T to 1.33103T (-3.7%) there, before the rebase onto c21a36ef.
