@@ -190,7 +190,8 @@ went from 1.38165T to 1.33103T (-3.7%) there, before the rebase onto c21a36ef.
   change (-0.12%).
 - Smaller: one shared empty excluded-properties set (-0.07%); `getUnmatchedProperty` records only looked-up positions
   (-0.08%); the constituent-flags cache only for unions of 8 or more and a pooled store of intersection recursion
-  identities (peak RSS -0.26%, instructions unchanged).
+  identities (peak RSS -0.26%, instructions unchanged). After the merge with #327 the pooled store gave way to #320's
+  arena slices of identity keys: 0.12% fewer instructions, the same peak RSS.
 
 What the new equivalences rely on, each shadow-checked (the original computation run alongside, panicking on a
 difference) on the 38k-file codebase and the conformance suite in three modes: accessibility is dropped for
