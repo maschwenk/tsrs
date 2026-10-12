@@ -24,11 +24,11 @@ on:
         type: number
         default: 400
       rerun_run_id:
-        description: Rerun shards of this earlier run with its manifest, compilers and repository commits
+        description: Rerun shards of this earlier run with its manifest, compilers and repository commits (requires rerun_shards)
         type: string
         default: ""
       rerun_shards:
-        description: Comma-separated shard indexes to rerun (with rerun_run_id)
+        description: Comma-separated shard indexes to rerun (requires rerun_run_id)
         type: string
         default: ""
 
@@ -53,9 +53,20 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
+      - name: Check the rerun inputs
+        env:
+          RUN_ID: ${{ inputs.rerun_run_id }}
+          SHARDS: ${{ inputs.rerun_shards }}
+        run: python3 tools/repo-conformance/run.py dispatch --run-id "$RUN_ID" --shards "$SHARDS"
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
+      - name: Read the earlier run
+        if: inputs.rerun_run_id
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.rerun_run_id }}
+        run: gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > "$RUNNER_TEMP/earlier-run.json"
       - name: Read the earlier run's manifest and compilers
         if: inputs.rerun_run_id
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
@@ -70,7 +81,8 @@ jobs:
         env:
           SHARDS: ${{ inputs.rerun_shards }}
         run: |
-          python3 tools/repo-conformance/run.py rerun --manifest repo-conformance/manifest.json --shards "$SHARDS"
+          python3 tools/repo-conformance/run.py rerun --manifest repo-conformance/manifest.json --shards "$SHARDS" \
+            --run "$RUNNER_TEMP/earlier-run.json"
           echo "harness=$(jq -r .tsrs_commit repo-conformance/manifest.json)" >> "$GITHUB_OUTPUT"
       - name: Read TypeScript reference commit
         id: ts
@@ -177,6 +189,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
+          ref: ${{ needs.build.outputs.harness }}
           persist-credentials: false
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:

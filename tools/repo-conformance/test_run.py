@@ -139,6 +139,49 @@ class InstallTests(unittest.TestCase):
             self.plan({"package.json": {"packageManager": "utoo@1.0.0"}})
 
 
+class RerunTests(unittest.TestCase):
+    def run_cli(self, *args):
+        return subprocess.run([sys.executable, str(Path(__file__).with_name("run.py")), *args], capture_output=True,
+                              text=True)
+
+    def test_rerun_inputs_must_come_as_a_valid_pair(self):
+        for run_id, shards, ok in (("", "", True), ("38278199589", "1, 4", True), ("", "1", False),
+                                   ("38278199589", "", False), ("latest", "1", False), ("38278199589", "20", False),
+                                   ("38278199589", "1;2", False)):
+            with self.subTest(run_id=run_id, shards=shards):
+                result = self.run_cli("dispatch", "--run-id", run_id, "--shards", shards)
+                self.assertEqual(result.returncode == 0, ok, result.stderr)
+
+    def test_a_rerun_needs_a_pinned_manifest_from_the_named_run(self):
+        sha = "0123456789abcdef0123456789abcdef01234567"
+        manifest = {"harness": 2, "tsrs_commit": sha, "typescript_commit": sha, "shards": 3,
+                    "repositories": [{"repository": "a/one", "commit": sha}]}
+        run = {"id": 7, "path": ".github/workflows/repo-conformance.yml", "event": "workflow_dispatch", "head_sha": sha}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name in ("tsgo", "tsrs"):
+                write_json(root / "inputs" / "bin" / name, {})
+            cases = [({}, {}, "2,0", True), ({"harness": None}, {}, "1", False),
+                     ({"repositories": [{"repository": "a/one"}]}, {}, "1", False),
+                     ({}, {"head_sha": "f" * 40}, "1", False), ({}, {"path": ".github/workflows/ci.yml"}, "1", False),
+                     ({}, {}, "3", False)]
+            for manifest_change, run_change, shards, ok in cases:
+                with self.subTest(manifest=manifest_change, run=run_change, shards=shards):
+                    write_json(root / "inputs" / "manifest.json", dict(manifest, **manifest_change))
+                    write_json(root / "run.json", dict(run, **run_change))
+                    result = self.run_cli("rerun", "--manifest", str(root / "inputs" / "manifest.json"),
+                                          "--shards", shards, "--run", str(root / "run.json"))
+                    self.assertEqual(result.returncode == 0, ok, result.stderr)
+                    if ok:
+                        self.assertEqual(json.loads(result.stdout), {"shard": [0, 2]})
+            (root / "inputs" / "bin" / "tsrs").unlink()
+            write_json(root / "inputs" / "manifest.json", manifest)
+            write_json(root / "run.json", run)
+            result = self.run_cli("rerun", "--manifest", str(root / "inputs" / "manifest.json"), "--shards", "1",
+                                  "--run", str(root / "run.json"))
+            self.assertIn("no tsrs binary", result.stderr)
+
+
 class ReportTests(unittest.TestCase):
     def test_missing_duplicate_or_wrong_revision_results_fail_the_report(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 2,
@@ -165,25 +208,54 @@ class ReportTests(unittest.TestCase):
             write_json(results / "shard-1.json", wrong)
             self.assertFalse(summarize(manifest, results, out))
 
-    def test_a_rerun_shard_fills_a_lost_one_only_at_the_pinned_commits(self):
+    def test_a_rerun_shard_fills_a_lost_one_only_with_matching_provenance(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 2,
-                    "repositories": [{"repository": "a/one", "commit": "c1"}, {"repository": "a/two", "commit": "c2"}]}
-        def shard(index, name, commit, status="match"):
-            return {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": index,
-                    "results": [{"repository": name, "commit": commit, "status": status, "available_configs": 1,
-                                 "configs": [{"config": "tsconfig.json", "status": status, "tsgo": {"exit": 0}}]}]}
+                    "repositories": [{"repository": "a/one", "commit": "c1"}, {"repository": "a/two", "commit": "c2"},
+                                     {"repository": "a/three", "commit": "c3"}]}
+        def shard(index, *results, **settings):
+            return {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": index, "check_timeout": 120,
+                    "modes": ["default", "go"], **settings, "results": [
+                        {"repository": name, "commit": commit, "status": status, "available_configs": 1,
+                         "configs": [{"config": "tsconfig.json", "status": status, "tsgo": {"exit": 0}}]}
+                        for name, commit, status in results]}
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
-            write_json(root / "previous" / "shard-0.json", shard(0, "a/one", "c1"))
-            write_json(root / "previous" / "shard-1.json", shard(1, "a/two", "c2", "mismatch"))
-            write_json(root / "rerun" / "shard-1.json", shard(1, "a/two", "c2"))
-            self.assertTrue(summarize(manifest, root / "rerun", root / "report.md", root / "previous"))
-            report = (root / "report.md").read_text()
-            self.assertIn("2 of 2 repositories have a result; 2 had at least one project", report)
-            self.assertIn("2 identical (2 without errors, 0 with the same errors), 0 different", report)
-            write_json(root / "rerun" / "shard-1.json", shard(1, "a/two", "newer-commit"))
-            self.assertFalse(summarize(manifest, root / "rerun", root / "report.md", root / "previous"))
-            self.assertIn("a/two: checked newer-commit, manifest pins c2", (root / "report.md").read_text())
+            def report(previous=True):
+                ok = summarize(manifest, root / "rerun", root / "report.md", root / "previous" if previous else None)
+                return ok, (root / "report.md").read_text()
+            write_json(root / "previous" / "shard-0.json", shard(0, ("a/one", "c1", "match"), ("a/three", "c3", "match")))
+            write_json(root / "previous" / "shard-1.json", shard(1, ("a/two", "c2", "mismatch")))
+            write_json(root / "rerun" / "shard-1.json", shard(1, ("a/two", "c2", "match")))
+            ok, text = report()
+            self.assertTrue(ok, text)
+            self.assertIn("3 of 3 repositories have a result; 3 had at least one project", text)
+            # A result needs the pinned commit; only a clone that failed before any checkout has none.
+            for commit, status, configs, accepted in (("newer", "match", True, False), (None, "match", True, False),
+                                                      (None, "setup_failed", False, True)):
+                with self.subTest(commit=commit, status=status):
+                    rerun = shard(1, ("a/two", commit, status))
+                    if not configs:
+                        rerun["results"][0]["configs"] = []
+                    write_json(root / "rerun" / "shard-1.json", rerun)
+                    ok, text = report()
+                    self.assertEqual(ok, accepted, text)
+                    self.assertEqual("manifest pins c2" in text, not accepted)
+            # A report for the wrong shard can't stand in for the lost one.
+            write_json(root / "rerun" / "shard-1.json", shard(1, ("a/one", "c1", "match"), ("a/three", "c3", "match")))
+            ok, text = report(previous=False)
+            self.assertFalse(ok)
+            self.assertIn("results for repositories outside shard 1: a/one, a/three", text)
+            self.assertIn("Missing repository result: a/two", text)
+            # Shards checked with other settings or modes are not merged, including reports from before Go mode.
+            write_json(root / "rerun" / "shard-1.json", shard(1, ("a/two", "c2", "match")))
+            for settings in ({"check_timeout": 60}, {"modes": ["default"]}):
+                with self.subTest(settings=settings):
+                    write_json(root / "previous" / "shard-0.json",
+                               shard(0, ("a/one", "c1", "match"), ("a/three", "c3", "match"), **settings))
+                    ok, text = report()
+                    self.assertFalse(ok)
+                    self.assertIn("Shard 0 used other settings", text)
+                    self.assertIn("Missing repository result: a/one", text)
 
     def test_empty_projects_fail_a_run_with_no_comparisons(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 1,

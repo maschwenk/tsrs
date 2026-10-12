@@ -32,6 +32,12 @@ REFERENCE = ["--checkers", "4"]
 GO_MODE = ["--checkerAssignment", "go", "--checkers", "4"]
 COMPARED = ("match", "mismatch", "tsrs_failed")
 NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
+SHA = re.compile(r"[0-9a-f]{40}\Z")
+WORKFLOW = ".github/workflows/repo-conformance.yml"
+MAX_SHARDS = 20
+# Recorded in manifests. A rerun's workflow comes from the dispatch commit but runs the manifest's harness, so bump
+# this when the workflow's arguments to run.py change; reruns of other versions are refused.
+HARNESS = 2
 
 
 def write_json(path: Path, data: object) -> None:
@@ -126,7 +132,7 @@ def discover(count: int, shards: int, out: Path) -> dict:
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(), "query": QUERY,
         "tsrs_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "typescript_commit": subprocess.check_output(["node", "npm/build.mjs", "--print-typescript-commit"], cwd=ROOT, text=True).strip(),
-        "shards": min(shards, count), "repositories": selected,
+        "harness": HARNESS, "shards": min(shards, count), "repositories": selected,
     }
     write_json(out, manifest)
     return manifest
@@ -459,16 +465,29 @@ def run_shard(args: argparse.Namespace, manifest: dict) -> None:
         print(f"{name}: {result['status']}", flush=True)
 
 
+# Settings every merged shard report must share. Reports from before Go mode have no "modes" and compared default
+# mode only; merging them with newer reports is rejected like any other settings change.
+SETTINGS = ("setup_timeout", "check_timeout", "max_configs", "modes")
+
+
 def load_shards(directory: Path, manifest: dict, errors: list[str]) -> dict[int, dict]:
+    """Shard reports by index, keeping only results for repositories the manifest assigns to that shard."""
     reports = {}
     for path in sorted(directory.rglob("shard-*.json")):
         report = json.loads(path.read_text())
+        report.setdefault("modes", ["default"])
         shard = report["shard"]
         if shard in reports or not 0 <= shard < manifest["shards"]:
-            errors.append(f"Duplicate or unexpected shard {shard}")
+            errors.append(f"{path}: duplicate or unexpected shard {shard}")
+            continue
         for key in ("tsrs_commit", "typescript_commit"):
             if report[key] != manifest[key]:
-                errors.append(f"{path.name}: {key} does not match the manifest")
+                errors.append(f"{path}: {key} does not match the manifest")
+        expected = {r["repository"] for r in manifest["repositories"][shard::manifest["shards"]]}
+        outside = [r["repository"] for r in report["results"] if r["repository"] not in expected]
+        if outside:
+            errors.append(f"{path}: results for repositories outside shard {shard}: {', '.join(outside)}")
+        report["results"] = [r for r in report["results"] if r["repository"] in expected]
         reports[shard] = report
     return reports
 
@@ -501,18 +520,30 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
     pinned = {r["repository"]: r.get("commit") for r in manifest["repositories"]}
     errors: list[str] = []
     reports = load_shards(directory, manifest, errors)
+    current = dict(reports)
     if previous:
         recovered = load_shards(previous, manifest, errors)
         reports.update((shard, report) for shard, report in recovered.items() if shard not in reports)
+    if reports:
+        base = min(current or reports)
+        for shard, report in sorted(reports.items()):
+            changed = [f"{k} {report.get(k)} (shard {base}: {reports[base].get(k)})" for k in SETTINGS
+                       if report.get(k) != reports[base].get(k)]
+            if changed:
+                errors.append(f"Shard {shard} used other settings: {', '.join(changed)}; its results are left out")
+                del reports[shard]
     results = {}
     for report in reports.values():
         for result in report["results"]:
             name = result["repository"]
-            if name in results or name not in pinned:
-                errors.append(f"Duplicate or unexpected repository {name}")
-            elif pinned[name] and result.get("commit") not in (None, pinned[name]):
-                errors.append(f"{name}: checked {result['commit']}, manifest pins {pinned[name]}")
-            results[name] = result
+            # A clone that failed before checking anything out is the only result without the pinned commit.
+            unchecked = result.get("commit") is None and result["status"] == "setup_failed" and not result["configs"]
+            if name in results:
+                errors.append(f"Duplicate result for {name}")
+            elif pinned[name] and result.get("commit") != pinned[name] and not unchecked:
+                errors.append(f"{name}: checked {result.get('commit')}, manifest pins {pinned[name]}")
+            else:
+                results[name] = result
     errors.extend(f"Missing repository result: {name}" for name in sorted(pinned.keys() - results.keys()))
     if set(reports) != set(range(manifest["shards"])):
         errors.append("Some shard reports are missing")
@@ -575,6 +606,46 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
     return not errors and not any(counter[s] for counter in (projects, go) for s in ("mismatch", "tsrs_failed"))
 
 
+def parse_shards(text: str, count: int) -> list[int]:
+    if not re.fullmatch(r"\s*\d+\s*(,\s*\d+\s*)*", text):
+        raise ValueError(f"Shards must be comma-separated indexes, not {text!r}")
+    shards = sorted({int(s) for s in text.split(",")})
+    if shards[-1] >= count:
+        raise ValueError(f"Shards must be between 0 and {count - 1}")
+    return shards
+
+
+def check_dispatch(run_id: str, shards: str) -> None:
+    """Rerun inputs come as a pair, so a malformed recovery request fails instead of starting a full run."""
+    if bool(run_id) != bool(shards):
+        raise ValueError("Set rerun_run_id and rerun_shards together")
+    if run_id and not re.fullmatch(r"[1-9]\d{0,19}", run_id):
+        raise ValueError(f"rerun_run_id must be a workflow run id, not {run_id!r}")
+    if shards:
+        parse_shards(shards, MAX_SHARDS)
+
+
+def check_rerun(manifest: dict, shards: str, run: dict, inputs: Path) -> list[int]:
+    """The shards to rerun, once the manifest is known to reproduce them: written by this harness version for that
+    run, with pinned repository and compiler commits and the run's compilers."""
+    if manifest.get("harness") != HARNESS:
+        raise ValueError(f"The manifest is from harness version {manifest.get('harness')}, not {HARNESS}; older "
+                         "manifests may not pin repository commits")
+    if not all(SHA.fullmatch(str(r.get("commit"))) for r in manifest["repositories"]):
+        raise ValueError("The manifest does not pin every repository commit")
+    if not all(SHA.fullmatch(str(manifest.get(key))) for key in ("tsrs_commit", "typescript_commit")):
+        raise ValueError("The manifest does not pin the compiler commits")
+    if str(run.get("path", "")).split("@")[0] != WORKFLOW:
+        raise ValueError(f"Run {run.get('id')} is not a {WORKFLOW} run")
+    # A pull request run's manifest names the merge commit it checked out, not the run's head.
+    if run.get("event") != "pull_request" and run.get("head_sha") != manifest["tsrs_commit"]:
+        raise ValueError(f"Run {run.get('id')} is at {run.get('head_sha')}, the manifest at {manifest['tsrs_commit']}")
+    for name in ("tsgo", "tsrs"):
+        if not (inputs / "bin" / name).is_file():
+            raise ValueError(f"The run's inputs have no {name} binary")
+    return parse_shards(shards, manifest["shards"])
+
+
 def write_matrix(shards: list[int]) -> None:
     matrix = json.dumps({"shard": shards})
     if os.environ.get("GITHUB_OUTPUT"):
@@ -615,20 +686,27 @@ def main() -> int:
     rerun = commands.add_parser("rerun", help="print the matrix for shards to rerun from a saved manifest")
     rerun.add_argument("--manifest", type=Path, required=True)
     rerun.add_argument("--shards", required=True, help="comma-separated shard indexes")
+    rerun.add_argument("--run", type=Path, required=True, help="the earlier run's GitHub API object")
+    dispatch = commands.add_parser("dispatch", help="check the workflow_dispatch rerun inputs")
+    dispatch.add_argument("--run-id", default="")
+    dispatch.add_argument("--shards", default="")
     args = parser.parse_args()
     if args.command == "plan":
-        if args.count > 400 or args.shards > 20:
+        if args.count > 400 or args.shards > MAX_SHARDS:
             parser.error("At most 400 repositories and 20 shards")
         manifest = discover(args.count, args.shards, args.out)
         write_matrix(list(range(manifest["shards"])))
+    elif args.command == "dispatch":
+        try:
+            check_dispatch(args.run_id, args.shards)
+        except ValueError as error:
+            parser.error(str(error))
     elif args.command == "rerun":
-        manifest = json.loads(args.manifest.read_text())
-        shards = sorted({int(s) for s in args.shards.split(",") if s.strip()})
-        if not shards or not all(0 <= s < manifest["shards"] for s in shards):
-            parser.error(f"Shards must be between 0 and {manifest['shards'] - 1}")
-        if not all(r.get("commit") for r in manifest["repositories"]):
-            parser.error("The manifest does not pin repository commits, so a rerun would check different code")
-        write_matrix(shards)
+        try:
+            write_matrix(check_rerun(json.loads(args.manifest.read_text()), args.shards,
+                                     json.loads(args.run.read_text()), args.manifest.parent))
+        except ValueError as error:
+            parser.error(str(error))
     elif args.command == "run":
         run_shard(args, json.loads(args.manifest.read_text()))
     else:

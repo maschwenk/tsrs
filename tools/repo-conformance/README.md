@@ -41,9 +41,14 @@ only other output, such as `traceResolution` traces, differ; either is a differe
 not the same as a project without type errors; the report counts both. Emit and build graphs are outside this check.
 
 If a shard is lost (for example, its runner shuts down), dispatch the workflow with `rerun_run_id` set to that
-run and `rerun_shards` to the lost shard indexes, within the 14-day artifact window. The rerun reuses that run's
-manifest, compiler binaries and harness commit, checks the same repository commits, and reports the rerun shards
-together with the earlier run's other shards. Runs whose manifest predates commit pinning cannot be rerun this way.
+run and `rerun_shards` to the lost shard indexes, within the 14-day artifact window. The two inputs are checked as a
+pair before anything is built, so a malformed request fails rather than starting a full run. The rerun reuses that
+run's manifest, compiler binaries and harness commit (for both checking and the report), checks the same repository
+commits, and reports the rerun shards together with the earlier run's other shards. The manifest must come from that
+run of this workflow and record the same harness version (`HARNESS` in `run.py`); older manifests are refused,
+including those without repository commits. The report only merges shard reports with the same compiler commits, limits and modes,
+keeps each shard's results to the repositories the manifest assigns it, and accepts a result only at the pinned
+commit; a clone that failed before any checkout is reported as a setup failure without one.
 
 For a local run, install `corepack@0.36.0`, set `GH_TOKEN` or `GITHUB_TOKEN` for discovery, and build both compilers
 at the manifest's commits. A saved manifest can be reused, and `--previous` adds shards from an earlier run:
