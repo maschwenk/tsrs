@@ -168,11 +168,10 @@ From notes/perf-excalidraw-typefest.md (PR #212): rxjs prints its 6,158 errors i
 `merge-all.spec.ts(45,48)`) elaborate differently, for example "The types returned by '[bufferTime](...)[groupBy]'"
 against "'[bufferTime](...)[bufferTime](...)[groupBy]'". On main, `random:1`, `random:2` and `random:3` at 2 and 4
 checkers each differ from the single-threaded output; at one checker in a random visit order they do not, so it depends
-on which files share a checker. tsgo-ref also prints different text at 1 and 4 checkers. #212 traces it to the relation
-cache: which elaboration path the relater reports depends on what the cache already holds. Not investigated further
-here; the base constraint experiments above leave its output byte-identical to main in all of these runs.
+on which files share a checker. tsgo-ref also prints different text at 1 and 4 checkers. The base constraint
+experiments above leave its output byte-identical to main in all of these runs.
 
-**Cause (2026-10-12):** not the relation cache. `createTypeReferenceEx` interns a reference and keeps the flags of its
+**Cause (2026-10-12):** `createTypeReferenceEx` interns a reference and keeps the flags of its
 first creation, and a reference first written in a type annotation has `ObjectFlagsFromTypeNode`, which gives it its
 own recursion identity (`getRecursionIdentityFromTarget`). Whether `Observable<number>` counts towards
 `isDeeplyNestedType`'s limit of 3 therefore depends on whether that checker met an annotation `Observable<number>`
