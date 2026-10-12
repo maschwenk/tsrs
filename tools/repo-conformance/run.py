@@ -26,10 +26,16 @@ ROOT = Path(__file__).resolve().parents[2]
 QUERY = "language:TypeScript stars:>100 archived:false fork:false"
 FILES = re.compile(r"^Files:\s+(\d+)\s*$", re.MULTILINE)
 DIAGNOSTIC = re.compile(r"^(?:.+\(\d+,\d+\): )?(?:error|warning|message) TS\d+: ")
-# tsgo's checker count when none is given (newCheckerPoolWithTracing, internal/compiler/checkerpool.go), passed
-# explicitly so a tsconfig "checkers" can't make the shared reference differ between modes.
-REFERENCE = ["--checkers", "4"]
-GO_MODE = ["--checkerAssignment", "go", "--checkers", "4"]
+# Extra flags per comparison mode, recorded in shard reports. Default runs both compilers as users do, with the
+# project's own options. Strict pins tsgo to its default 4 checkers (newCheckerPoolWithTracing,
+# internal/compiler/checkerpool.go: 1 under singleThreaded, never more than the file count) and has tsrs reproduce
+# Go's checker assignment, history and caches; lazy members change which instantiations a checker has cached and so
+# where depth limits are hit (docs/DEBUGGING.md).
+MODES = {"default": {"tsgo": [], "tsrs": []},
+         "strict": {"tsgo": ["--checkers", "4"],
+                    "tsrs": ["--checkerAssignment", "go", "--checkers", "4", "--noLazyMembers"]}}
+# Shard reports without "modes" predate strict mode and ran the default commands only.
+LEGACY_MODES = {"default": MODES["default"]}
 COMPARED = ("match", "mismatch", "tsrs_failed")
 NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
@@ -285,7 +291,7 @@ def compile_project(root: Path, config: str, ctx: Context, out: Path, label: str
     info.unlink(missing_ok=True)
     result = execute(command, root, out / (label + ".log"), timeout, ctx.env)
     info.unlink(missing_ok=True)
-    return read_compilation(result, out / (label + ".log"), root, binary)
+    return dict(read_compilation(result, out / (label + ".log"), root, binary), limit=round(timeout, 1))
 
 
 def outcome(go: dict, rust: dict | None, diff: Path) -> dict:
@@ -303,24 +309,29 @@ def summary(run: dict) -> dict:
 
 
 def check_config(root: Path, config: str, ctx: Context, out: Path, timeout: float) -> dict:
-    """Default mode: tsrs as users run it against tsgo with its default 4 checkers."""
+    """Default mode: both compilers as users run them, with the project's own options."""
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    go = compile_project(root, config, ctx, out, "tsgo", ctx.tsgo, REFERENCE, timeout)
-    rust = None if failed(go) else compile_project(root, config, ctx, out, "tsrs", ctx.tsrs, [], timeout)
+    flags = MODES["default"]
+    go = compile_project(root, config, ctx, out, "tsgo", ctx.tsgo, flags["tsgo"], timeout)
+    rust = None if failed(go) else compile_project(root, config, ctx, out, "tsrs", ctx.tsrs, flags["tsrs"], timeout)
     return {"config": config, **outcome(go, rust, out / "diagnostics.diff"), "limit": round(timeout, 1),
             "tsgo": summary(go), **({"tsrs": summary(rust)} if rust else {})}
 
 
-def check_go_mode(root: Path, default: dict, ctx: Context, out: Path, timeout: float) -> dict:
-    """tsrs --checkerAssignment go --checkers 4 against the default comparison's tsgo output, whose command is the
-    same. tsrs gets the time left, so a timeout is a tsrs failure only when it had the default run's limit."""
+def check_strict(root: Path, default: dict, ctx: Context, out: Path, budget: float) -> dict:
+    """Strict mode with its own tsgo run: its reference command differs from the default one whenever the project
+    sets "checkers", which no tsgo output reports. tsgo gets half of budget and tsrs the rest. A timeout with less
+    time than the default run's limit is budget_exhausted (not compared), not a failure."""
     out = out.resolve()
-    go = read_compilation({k: default["tsgo"][k] for k in ("exit", "timeout", "seconds")}, out / "tsgo.log", root,
-                          ctx.tsgo)
-    rust = compile_project(root, default["config"], ctx, out, "tsrs-go", ctx.tsrs, GO_MODE, timeout)
-    result = {**outcome(go, rust, out / "diagnostics-go.diff"), "limit": round(timeout, 1), "tsrs": summary(rust)}
-    if result["status"] == "tsrs_failed" and rust["timeout"] and result["limit"] < default["limit"]:
+    end = time.monotonic() + budget
+    flags = MODES["strict"]
+    go = compile_project(root, default["config"], ctx, out, "tsgo-strict", ctx.tsgo, flags["tsgo"], min(60, budget / 2))
+    rust = None if failed(go) else compile_project(root, default["config"], ctx, out, "tsrs-strict", ctx.tsrs,
+                                                   flags["tsrs"], min(60, max(0.01, end - time.monotonic())))
+    result = {**outcome(go, rust, out / "diagnostics-strict.diff"), "tsgo": summary(go),
+              **({"tsrs": summary(rust)} if rust else {})}
+    if any(run and run["timeout"] and run["limit"] < default["limit"] for run in (go, rust)):
         result["status"] = "budget_exhausted"
     return result
 
@@ -376,20 +387,20 @@ def check_projects(root: Path, configs: list[str], ctx: Context, out: Path, chec
         status = "match" if not queue and set(counts) <= {"match", "references"} else "partial"
     else:
         status = "not_checked"
-    # Go mode runs after every default comparison so that it never takes their time, and splits what is left.
+    # Strict mode runs after every default comparison so that it never takes their time, and splits what is left.
     pending = [(i, c) for i, c in enumerate(checked) if c["status"] in COMPARED]
     for n, (i, config) in enumerate(pending):
         remaining = deadline - time.monotonic()
-        config["go"] = (check_go_mode(root, config, ctx, out / str(i), min(60, remaining / (len(pending) - n)))
-                        if remaining >= 1 else {"status": "budget_exhausted"})
-    go = Counter(c["go"]["status"] for _, c in pending)
-    if go["mismatch"] or go["tsrs_failed"]:
-        go_status = "mismatch" if go["mismatch"] else "tsrs_failed"
-    elif go["match"]:
-        go_status = "match" if go["match"] == len(pending) else "partial"
+        config["strict"] = (check_strict(root, config, ctx, out / str(i), remaining / (len(pending) - n))
+                            if remaining >= 1 else {"status": "budget_exhausted"})
+    strict = Counter(c["strict"]["status"] for _, c in pending)
+    if strict["mismatch"] or strict["tsrs_failed"]:
+        strict_status = "mismatch" if strict["mismatch"] else "tsrs_failed"
+    elif strict["match"]:
+        strict_status = "match" if strict["match"] == len(pending) else "partial"
     else:
-        go_status = "not_checked"
-    return {"status": status, "go_status": go_status, "configs": checked}
+        strict_status = "not_checked"
+    return {"status": status, "strict_status": strict_status, "configs": checked}
 
 
 def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, cache: Path, setup_timeout: int,
@@ -454,7 +465,7 @@ def run_shard(args: argparse.Namespace, manifest: dict) -> None:
     path = args.out / f"shard-{args.shard}.json"
     report = {"tsrs_commit": manifest["tsrs_commit"], "typescript_commit": manifest["typescript_commit"],
               "shard": args.shard, "setup_timeout": args.setup_timeout, "check_timeout": args.check_timeout,
-              "max_configs": args.max_configs, "modes": ["default", "go"], "results": results}
+              "max_configs": args.max_configs, "modes": MODES, "results": results}
     write_json(path, report)
     for repo in manifest["repositories"][args.shard::manifest["shards"]]:
         name = repo["repository"]
@@ -465,17 +476,17 @@ def run_shard(args: argparse.Namespace, manifest: dict) -> None:
         print(f"{name}: {result['status']}", flush=True)
 
 
-# Settings every merged shard report must share. Reports from before Go mode have no "modes" and compared default
-# mode only; merging them with newer reports is rejected like any other settings change.
+# Settings every merged shard report must share, including the modes and their flags.
 SETTINGS = ("setup_timeout", "check_timeout", "max_configs", "modes")
 
 
 def load_shards(directory: Path, manifest: dict, errors: list[str]) -> dict[int, dict]:
-    """Shard reports by index, keeping only results for repositories the manifest assigns to that shard."""
+    """Shard reports by index, keeping only results for repositories the manifest assigns to that shard. Reports with
+    unknown modes are left out, so their repositories count as missing."""
     reports = {}
     for path in sorted(directory.rglob("shard-*.json")):
         report = json.loads(path.read_text())
-        report.setdefault("modes", ["default"])
+        report.setdefault("modes", LEGACY_MODES)
         shard = report["shard"]
         if shard in reports or not 0 <= shard < manifest["shards"]:
             errors.append(f"{path}: duplicate or unexpected shard {shard}")
@@ -483,6 +494,9 @@ def load_shards(directory: Path, manifest: dict, errors: list[str]) -> dict[int,
         for key in ("tsrs_commit", "typescript_commit"):
             if report[key] != manifest[key]:
                 errors.append(f"{path}: {key} does not match the manifest")
+        if report["modes"] not in (MODES, LEGACY_MODES):
+            errors.append(f"{path}: unknown comparison modes {json.dumps(report['modes'])}; its results are left out")
+            continue
         expected = {r["repository"] for r in manifest["repositories"][shard::manifest["shards"]]}
         outside = [r["repository"] for r in report["results"] if r["repository"] not in expected]
         if outside:
@@ -500,19 +514,24 @@ def detail(result: dict) -> str:
         status = config["status"]
         if status == "reference_failed":
             go = config["tsgo"]
-            status += f" (tsgo {'timed out at ' + str(config.get('limit')) + 's' if go['timeout'] else 'exit ' + str(go['exit'])})"
+            limit = go.get("limit", config.get("limit"))
+            status += f" (tsgo {'timed out at ' + str(limit) + 's' if go['timeout'] else 'exit ' + str(go['exit'])})"
         elif config.get("difference"):
             status += f" ({', '.join(config['difference'])})"
         note = status if status not in ("match", "references") else ""
-        go = config.get("go")
-        if go and (go["status"] != "match" or note):
-            note = f"{note or 'match'}; Go mode {go['status']}" + (
-                f" ({', '.join(go['difference'])})" if go.get("difference") else "")
+        strict = config.get("strict")
+        if strict and (strict["status"] != "match" or note):
+            note = f"{note or 'match'}; strict {strict['status']}" + (
+                f" ({', '.join(strict['difference'])})" if strict.get("difference") else "")
         if note:
             notes.append(f"{config['config']}: {note}")
     if result.get("dependencies") == "unpinned":
         notes.append("no lockfile; dependencies unpinned")
     return ", ".join(notes)
+
+
+def command(flags: list[str]) -> str:
+    return " ".join(flags) or "no extra flags"
 
 
 def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None = None) -> bool:
@@ -527,11 +546,12 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
     if reports:
         base = min(current or reports)
         for shard, report in sorted(reports.items()):
-            changed = [f"{k} {report.get(k)} (shard {base}: {reports[base].get(k)})" for k in SETTINGS
-                       if report.get(k) != reports[base].get(k)]
+            changed = [f"{k} {json.dumps(report.get(k))} (shard {base}: {json.dumps(reports[base].get(k))})"
+                       for k in SETTINGS if report.get(k) != reports[base].get(k)]
             if changed:
                 errors.append(f"Shard {shard} used other settings: {', '.join(changed)}; its results are left out")
                 del reports[shard]
+    modes = reports[min(reports)]["modes"] if reports else MODES
     results = {}
     for report in reports.values():
         for result in report["results"]:
@@ -550,60 +570,64 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
     counts = Counter(r["status"] for r in results.values())
     configs = [c for r in results.values() for c in r["configs"]]
     projects = Counter(c["status"] for c in configs)
-    compared = [c for c in configs if c["status"] in COMPARED]
+    completed = projects["match"] + projects["mismatch"]
     clean = sum(c["status"] == "match" and c["tsgo"]["exit"] == 0 for c in configs)
-    repositories = sum(any(c["status"] in COMPARED for c in r["configs"]) for r in results.values())
-    go = Counter(c["go"]["status"] for c in compared if "go" in c)
-    go_only = sum(c["status"] != "match" and c.get("go", {}).get("status") == "match" for c in compared)
-    if not projects["match"] and not projects["mismatch"]:
-        errors.append("No project completed a diagnostic comparison")
-    if any("go" in report.get("modes", ["default"]) for report in reports.values()):
-        go_lines = [
-            f"{sum(go.values()) - go['budget_exhausted']} of the {len(compared)} projects compared in default mode were "
-            f"also compared in Go mode: {go['match']} identical, {go['mismatch']} different, {go['tsrs_failed']} tsrs "
-            f"failures. {go['budget_exhausted']} were not, for lack of time. {go_only} projects that differ or fail in "
-            "default mode are identical in Go mode.", "",
-            "Go mode is `tsrs --checkerAssignment go --checkers 4`, compared with the same tsgo output. Where tsgo's "
-            "output depends on which checker saw a file first, tsrs's default mode can differ "
-            "(docs/COMPATIBILITY.md in tsrs); Go mode reproduces tsgo's assignment and caches. "
-            "It runs after the default comparisons, in the time they leave. Go mode does not excuse a default-mode "
-            "difference: a difference in either mode fails the report."]
+    repositories = sum(any(c["status"] in ("match", "mismatch") for c in r["configs"]) for r in results.values())
+    eligible = [c for c in configs if c["status"] in COMPARED]
+    strict = Counter(c["strict"]["status"] for c in eligible if "strict" in c)
+    strict_only = sum(c["status"] != "match" and c.get("strict", {}).get("status") == "match" for c in eligible)
+    if not completed:
+        errors.append("No project completed a comparison")
+    if "strict" in modes:
+        strict_lines = [
+            f"tsgo `{command(modes['strict']['tsgo'])}` vs tsrs `{command(modes['strict']['tsrs'])}`, both run again "
+            "after all default comparisons, in the time they leave. A difference here fails the report too, and "
+            "strict-mode identity does not excuse a default-mode difference.", "",
+            f"Of the {len(eligible)} projects where tsgo completed in default mode: {strict['match']} identical, "
+            f"{strict['mismatch']} different, {strict['tsrs_failed']} tsrs failures in strict mode; strict tsgo failed "
+            f"on {strict['reference_failed']} and {strict['budget_exhausted']} were not run for lack of time. "
+            f"{strict_only} projects that differ or fail in default mode are identical in strict mode."]
     else:
-        go_lines = ["These shard reports predate Go mode; only the default mode was compared."]
+        strict_lines = ["These shard reports predate strict mode; only default mode was compared."]
     lines = ["# Top repository conformance", "",
-             f"tsrs `{manifest['tsrs_commit']}` vs TypeScript `{manifest['typescript_commit']}`. The reference is tsgo "
-             "with 4 checkers (`--checkers 4`, its default).", "",
+             f"tsrs `{manifest['tsrs_commit']}` vs tsgo from TypeScript `{manifest['typescript_commit']}`.", "",
              "## Default mode", "",
+             f"tsgo `{command(modes['default']['tsgo'])}` vs tsrs `{command(modes['default']['tsrs'])}`, with each "
+             "project's own options.", "",
              f"{len(results)} of {len(pinned)} repositories have a result; {repositories} had at least one project "
-             "that both compilers loaded and compared.", "",
-             f"{len(compared)} projects compared: {projects['match']} identical ({clean} without errors, "
-             f"{projects['match'] - clean} with the same errors), {projects['mismatch']} different, "
-             f"{projects['tsrs_failed']} tsrs failures. tsgo failed or timed out on {projects['reference_failed']} more.", "",
-             "Identical means the same diagnostics in the same order, the same exit code and the same number of "
-             "loaded files. It does not mean the project has no type errors.", "",
+             "where both compilers completed.", "",
+             f"Both compilers completed on {completed} projects: {projects['match']} identical ({clean} without errors, "
+             f"{projects['match'] - clean} with the same errors) and {projects['mismatch']} different. tsrs crashed or "
+             f"timed out on {projects['tsrs_failed']} more after tsgo completed; tsgo failed or timed out on "
+             f"{projects['reference_failed']}.", "",
+             "Identical means the same output in the same order (diagnostics and other lines, such as "
+             "`traceResolution` traces), the same exit code and the same nonzero number of loaded files. It does not "
+             "mean the project has no type errors.", "",
              "Repository status: " + ", ".join(f"{status}: {n}" for status, n in sorted(counts.items())) + ".", "",
              "Project status: " + ", ".join(f"{status}: {n}" for status, n in sorted(projects.items())) + ".", "",
              "`partial`: some projects were identical and others were not compared (limits, no inputs, or tsgo "
              "failures). `references`: a solution config with no files of its own; its referenced projects were "
              "compared instead. `no_inputs`: neither compiler loaded a file.", "",
              "A difference lists what differs: exit code, loaded files, diagnostics, or other output (lines that are "
-             "not diagnostics, such as `traceResolution` traces).", "",
-             "## Go-compatibility mode", "", *go_lines, "",
+             "not diagnostics, such as `traceResolution` traces). Any of these fails the report.", "",
+             "## Strict mode", "", *strict_lines, "",
              "## Repositories", "",
-             "Checks use `--noEmit`. Artifacts contain logs, diagnostic diffs, and repository commits.", "",
-             "| Repository | Commit | Status | Go mode | Identical / available configs | Detail |",
-             "| --- | --- | --- | --- | --- | --- |"]
+             "Checks use `--noEmit`. Artifacts contain logs, diffs, and repository commits. Projects include configs "
+             "reached through project references, which need not be tracked `tsconfig.json` files.", "",
+             "| Repository | Commit | Status | Strict | Identical / completed projects | Tracked tsconfig.json | Detail |",
+             "| --- | --- | --- | --- | --- | --- | --- |"]
     for name in sorted(pinned):
         r = results.get(name, {"status": "missing", "configs": []})
         matching = sum(c["status"] == "match" for c in r["configs"])
+        done = sum(c["status"] in ("match", "mismatch") for c in r["configs"])
         text = detail(r).replace("|", "\\|").replace("\n", " ")[:500]
         lines.append(f"| [{name}](https://github.com/{name}) | `{r.get('commit') or pinned[name] or ''}` | {r['status']} | "
-                     f"{r.get('go_status', '')} | {matching} / {r.get('available_configs', 0)} | {text} |")
+                     f"{r.get('strict_status', '')} | {matching} / {done} | {r.get('available_configs', 0)} | {text} |")
     if errors:
         lines.extend(["", "## Incomplete run", "", *("- " + e for e in errors)])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
-    return not errors and not any(counter[s] for counter in (projects, go) for s in ("mismatch", "tsrs_failed"))
+    return not errors and not any(counter[s] for counter in (projects, strict) for s in ("mismatch", "tsrs_failed"))
 
 
 def parse_shards(text: str, count: int) -> list[int]:

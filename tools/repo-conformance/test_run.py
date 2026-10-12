@@ -7,8 +7,8 @@ import tempfile
 import time
 import unittest
 
-from run import (Context, check_config, check_projects, child_env, compare, difference, execute, install_plan,
-                 read_compilation, summarize, write_json)
+from run import (MODES, Context, check_config, check_projects, child_env, compare, difference, execute,
+                 install_plan, read_compilation, summarize, write_json)
 
 
 def context(tsgo, tsrs, temp):
@@ -199,7 +199,7 @@ class ReportTests(unittest.TestCase):
             self.assertIn("Missing repository result: a/two", out.read_text())
             write_json(results / "shard-1.json", shard(1, "a/two"))
             self.assertTrue(summarize(manifest, results, out))
-            self.assertIn("These shard reports predate Go mode", out.read_text())
+            self.assertIn("These shard reports predate strict mode", out.read_text())
             write_json(results / "duplicate" / "shard-0.json", shard(0, "a/one"))
             self.assertFalse(summarize(manifest, results, out))
             (results / "duplicate" / "shard-0.json").unlink()
@@ -214,7 +214,7 @@ class ReportTests(unittest.TestCase):
                                      {"repository": "a/three", "commit": "c3"}]}
         def shard(index, *results, **settings):
             return {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": index, "check_timeout": 120,
-                    "modes": ["default", "go"], **settings, "results": [
+                    "modes": MODES, **settings, "results": [
                         {"repository": name, "commit": commit, "status": status, "available_configs": 1,
                          "configs": [{"config": "tsconfig.json", "status": status, "tsgo": {"exit": 0}}]}
                         for name, commit, status in results]}
@@ -246,9 +246,9 @@ class ReportTests(unittest.TestCase):
             self.assertFalse(ok)
             self.assertIn("results for repositories outside shard 1: a/one, a/three", text)
             self.assertIn("Missing repository result: a/two", text)
-            # Shards checked with other settings or modes are not merged, including reports from before Go mode.
+            # Shards checked with other settings or modes are not merged, including reports from before strict mode.
             write_json(root / "rerun" / "shard-1.json", shard(1, ("a/two", "c2", "match")))
-            for settings in ({"check_timeout": 60}, {"modes": ["default"]}):
+            for settings in ({"check_timeout": 60}, {"modes": {"default": MODES["default"]}}):
                 with self.subTest(settings=settings):
                     write_json(root / "previous" / "shard-0.json",
                                shard(0, ("a/one", "c1", "match"), ("a/three", "c3", "match"), **settings))
@@ -256,6 +256,12 @@ class ReportTests(unittest.TestCase):
                     self.assertFalse(ok)
                     self.assertIn("Shard 0 used other settings", text)
                     self.assertIn("Missing repository result: a/one", text)
+            # Round 2's Go mode (no --noLazyMembers, forced 4-checker default reference) is not a known mode.
+            write_json(root / "previous" / "shard-0.json", shard(0, ("a/one", "c1", "match"), ("a/three", "c3", "match"),
+                                                                 modes=["default", "go"]))
+            ok, text = report()
+            self.assertFalse(ok)
+            self.assertIn('unknown comparison modes ["default", "go"]', text)
 
     def test_empty_projects_fail_a_run_with_no_comparisons(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 1,
@@ -316,7 +322,7 @@ class CompilerControls(unittest.TestCase):
             self.assertEqual([c["status"] for c in result["configs"][3:]], ["no_inputs", "no_inputs"])
             self.assertEqual(result["status"], "partial")
 
-    def test_go_mode_is_reported_separately_and_does_not_clear_a_default_difference(self):
+    def test_strict_mode_is_reported_separately_and_does_not_clear_a_default_difference(self):
         """Reduced from the property-order configs (langfuse, qwen-code, OmniRoute, ...): tsrs's default mode prints
         `user?: undefined` where the declaration puts it, tsgo where a.ts's checker first created it."""
         tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
@@ -330,34 +336,70 @@ class CompilerControls(unittest.TestCase):
             result = check_projects(root, ["tsconfig.json"], context(tsgo, tsrs, root), root / "logs", 60, 5)
             [config] = result["configs"]
             self.assertEqual((config["status"], config["difference"]), ("mismatch", ["diagnostics"]))
-            self.assertEqual(config["go"]["status"], "match")
-            self.assertEqual((result["status"], result["go_status"]), ("mismatch", "match"))
+            self.assertEqual(config["strict"]["status"], "match")
+            self.assertEqual((result["status"], result["strict_status"]), ("mismatch", "match"))
             logs = root / "logs" / "0"
             self.assertIn("{ status: string; user?: undefined; }", (logs / "tsrs.log").read_text())
-            self.assertIn("{ user?: undefined; status: string; }", (logs / "tsrs-go.log").read_text())
+            self.assertIn("{ user?: undefined; status: string; }", (logs / "tsrs-strict.log").read_text())
             self.assertTrue((logs / "diagnostics.diff").exists())
-            self.assertFalse((logs / "diagnostics-go.diff").exists())
+            self.assertFalse((logs / "diagnostics-strict.diff").exists())
             manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 1,
                         "repositories": [{"repository": "a/one"}]}
             write_json(root / "results" / "shard-0.json", {
-                "tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": 0, "modes": ["default", "go"],
+                "tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": 0, "modes": MODES,
                 "results": [dict(result, repository="a/one", available_configs=1)]})
             self.assertFalse(summarize(manifest, root / "results", root / "report.md"))
             report = (root / "report.md").read_text()
-            self.assertIn("1 different, 0 tsrs failures", report)
-            self.assertIn("1 of the 1 projects compared in default mode were also compared in Go mode: 1 identical", report)
-            self.assertIn("1 projects that differ or fail in default mode are identical in Go mode", report)
-            self.assertIn("tsconfig.json: mismatch (diagnostics); Go mode match", report)
+            self.assertIn("0 identical (0 without errors, 0 with the same errors) and 1 different", report)
+            self.assertIn("tsrs `--checkerAssignment go --checkers 4 --noLazyMembers`", report)
+            self.assertIn("1 identical, 0 different, 0 tsrs failures in strict mode", report)
+            self.assertIn("1 projects that differ or fail in default mode are identical in strict mode", report)
+            self.assertIn("tsconfig.json: mismatch (diagnostics); strict match", report)
+            self.assertIn("| mismatch | match | 0 / 1 | 1 |", report)
 
-    def test_go_mode_stays_within_the_check_budget(self):
-        """A tsrs that hangs only in Go mode: the default comparisons keep their time, the whole check stays within its
-        budget, and a Go-mode timeout is a failure only when tsrs had at least the default run's limit."""
+    def test_default_mode_keeps_the_projects_checkers_and_strict_mode_has_its_own_reference(self):
+        """make(...) costs just over the 5M instantiation limit. tsgo with the project's 8 checkers checks b.ts's
+        `id(big)` on a checker that has not seen a.ts and reports TS2589 there too; with 4 checkers it does not. A
+        default reference forced to 4 checkers would hide b.ts's error from the default comparison."""
         tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
         tsgo = Path(os.environ["TSRS_CONFORMANCE_TSGO"]).resolve()
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp).resolve()
-            hang = root / "tsrs-hangs-in-go-mode"
-            hang.write_text(f'#!/bin/sh\ncase "$*" in *checkerAssignment*) sleep 60;; esac\nexec "{tsrs}" "$@"\n')
+            write_json(root / "tsconfig.json", {"compilerOptions": {"strict": True, "target": "es2022", "types": [],
+                                                                    "checkers": 8}, "files": ["a.ts", "b.ts"]})
+            (root / "a.ts").write_text(
+                'type D = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9";\n'
+                "type U = `${D}${D}${D}${D}`;\n"
+                'type Chain<T, N extends unknown[] = []> = N["length"] extends 100 ? { value: T } : '
+                "T extends string ? Chain<T, [...N, 0]> : never;\n"
+                "declare function make<T>(f: (x: T) => void): Chain<T>;\n"
+                "const big = make((x: U) => {});\n")
+            (root / "b.ts").write_text("declare function id<T>(x: T): T;\nconst y = id(big);\n")
+            result = check_projects(root, ["tsconfig.json"], context(tsgo, tsrs, root), root / "logs", 60, 5)
+            [config] = result["configs"]
+            logs = root / "logs" / "0"
+            depth = "error TS2589: Type instantiation is excessively deep and possibly infinite."
+            default, strict = (logs / "tsgo.log").read_text(), (logs / "tsgo-strict.log").read_text()
+            self.assertNotIn("--checkers", default.partition("\n")[0])
+            self.assertEqual([line for line in default.splitlines() if depth in line],
+                             ["a.ts(5,13): " + depth, "b.ts(2,11): " + depth])
+            self.assertEqual([line for line in strict.splitlines() if depth in line], ["a.ts(5,13): " + depth])
+            self.assertIn("--noLazyMembers", (logs / "tsrs-strict.log").read_text().partition("\n")[0])
+            self.assertEqual(config["strict"]["status"], "match")
+            # Default-mode tsrs (locality assignment) currently reports only a.ts's error here; checked against the
+            # project's 8-checker reference, that is a difference, where a 4-checker reference would have matched.
+            both = "b.ts(2,11): " + depth in (logs / "tsrs.log").read_text()
+            self.assertEqual(config["status"], "match" if both else "mismatch")
+
+    def test_strict_mode_stays_within_the_check_budget(self):
+        """A tsrs that hangs only in strict mode: the default comparisons keep their time, the whole check stays within
+        its budget, and a strict timeout is a failure only when tsrs had at least the default run's limit."""
+        tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
+        tsgo = Path(os.environ["TSRS_CONFORMANCE_TSGO"]).resolve()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            hang = root / "tsrs-hangs-in-strict-mode"
+            hang.write_text(f'#!/bin/sh\ncase "$*" in *noLazyMembers*) sleep 60;; esac\nexec "{tsrs}" "$@"\n')
             hang.chmod(0o755)
             configs = []
             for name in ("one", "two", "three"):
@@ -370,8 +412,25 @@ class CompilerControls(unittest.TestCase):
                     result = check_projects(root, checked, context(tsgo, hang, root), root / f"logs{budget}", budget, 5)
                     self.assertLess(time.monotonic() - start, budget + 1)
                     self.assertEqual([c["status"] for c in result["configs"]], ["match"] * len(checked))
-                    self.assertEqual([c["go"]["status"] for c in result["configs"]], [expected] * len(checked))
+                    self.assertEqual([c["strict"]["status"] for c in result["configs"]], [expected] * len(checked))
                     self.assertEqual(result["status"], "match")
+
+    def test_a_strict_reference_failure_does_not_run_strict_tsrs(self):
+        tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
+        tsgo = Path(os.environ["TSRS_CONFORMANCE_TSGO"]).resolve()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            broken = root / "tsgo-fails-with-checkers"
+            broken.write_text(f'#!/bin/sh\ncase "$*" in *--checkers*) exit 3;; esac\nexec "{tsgo}" "$@"\n')
+            broken.chmod(0o755)
+            write_json(root / "tsconfig.json", {"files": ["a.ts"]})
+            (root / "a.ts").write_text("export const x: number = 1;\n")
+            result = check_projects(root, ["tsconfig.json"], context(broken, tsrs, root), root / "logs", 30, 5)
+            [config] = result["configs"]
+            self.assertEqual((config["status"], config["strict"]["status"]), ("match", "reference_failed"))
+            self.assertNotIn("tsrs", config["strict"])
+            self.assertFalse((root / "logs" / "0" / "tsrs-strict.log").exists())
+            self.assertEqual(result["strict_status"], "not_checked")
 
     def test_a_reference_timeout_does_not_spend_the_budget_on_tsrs(self):
         tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
