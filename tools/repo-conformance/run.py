@@ -5,11 +5,13 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import difflib
 import json
 import os
 from pathlib import Path
+import platform
 import re
 import signal
 import subprocess
@@ -57,6 +59,16 @@ def execute(command: list[str], cwd: Path, log: Path, timeout: float) -> dict:
     return {"exit": code, "timeout": timed_out, "seconds": round(time.monotonic() - start, 3)}
 
 
+def head_commit(repo: dict) -> str:
+    """The branch's current commit, so every shard and any rerun checks the same snapshot."""
+    output = subprocess.run(["git", "ls-remote", "https://github.com/" + repo["repository"] + ".git",
+                             "refs/heads/" + repo["branch"]], env=child_env(), capture_output=True, text=True,
+                            timeout=60, check=True).stdout.split()
+    if not output or not re.fullmatch(r"[0-9a-f]{40}", output[0]):
+        raise RuntimeError(f"Could not resolve {repo['repository']} {repo['branch']}")
+    return output[0]
+
+
 def discover(count: int, shards: int, out: Path) -> dict:
     headers = {"Accept": "application/vnd.github+json", "User-Agent": "tsrs-repo-conformance"}
     token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
@@ -80,36 +92,109 @@ def discover(count: int, shards: int, out: Path) -> dict:
             break
     if len(repos) < count:
         raise RuntimeError(f"Expected {count} repositories, found only {len(repos)}")
+    selected = list(repos.values())[:count]
+    with ThreadPoolExecutor(16) as pool:
+        for repo, commit in zip(selected, pool.map(head_commit, selected)):
+            repo["commit"] = commit
     manifest = {
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(), "query": QUERY,
         "tsrs_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
         "typescript_commit": subprocess.check_output(["node", "npm/build.mjs", "--print-typescript-commit"], cwd=ROOT, text=True).strip(),
-        "shards": min(shards, count), "repositories": list(repos.values())[:count],
+        "shards": min(shards, count), "repositories": selected,
     }
     write_json(out, manifest)
     return manifest
 
 
-def install_command(root: Path) -> list[str] | None:
-    package = root / "package.json"
-    if not package.exists():
+LOCKFILES = {"bun": ("bun.lock", "bun.lockb"), "pnpm": ("pnpm-lock.yaml",), "yarn": ("yarn.lock",),
+             "npm": ("package-lock.json", "npm-shrinkwrap.json")}
+# Package managers corepack does not provide, installed from their per-platform npm packages.
+TOOLS = {"bun": "@oven/bun-{os}-{arch}", "nub": "@nubjs/nub-{os}-{arch}"}
+TOOL_ARCH = {("bun", "arm64"): "aarch64", ("bun", "aarch64"): "aarch64", ("nub", "aarch64"): "arm64",
+             ("bun", "x86_64"): "x64", ("nub", "x86_64"): "x64", ("nub", "arm64"): "arm64"}
+
+
+def declared_manager(package: dict) -> tuple[str, str] | None:
+    spec = package.get("packageManager")
+    engine = (package.get("devEngines") or {}).get("packageManager")
+    if not spec and isinstance(engine, dict) and re.fullmatch(r"\d+\.\d+\.\d+", str(engine.get("version", ""))):
+        spec = f"{engine.get('name')}@{engine['version']}"
+    if not isinstance(spec, str) or "@" not in spec:
         return None
-    manager = json.loads(package.read_text()).get("packageManager", "")
-    if manager.startswith("bun@") or (not manager and any((root / p).exists() for p in ("bun.lock", "bun.lockb"))):
-        raise ValueError("Bun dependency installation is not supported by this harness")
-    if manager.startswith("pnpm@") or (not manager and (root / "pnpm-lock.yaml").exists()):
-        version = manager or "pnpm@12.10.1"
-        return ["corepack", version, "install", "--frozen-lockfile", "--ignore-scripts"]
-    if manager.startswith("yarn@") or (not manager and (root / "yarn.lock").exists()):
-        version = manager or ("yarn@4.9.2" if "__metadata:" in (root / "yarn.lock").read_text() else "yarn@1.22.22")
-        major = int(version.split("@", 1)[1].split(".", 1)[0])
-        flags = ["--immutable", "--mode=skip-build"] if major >= 2 else ["--frozen-lockfile", "--ignore-scripts", "--non-interactive"]
-        return ["corepack", version, "install", *flags]
-    if manager and not manager.startswith("npm@"):
-        raise ValueError("Unsupported package manager: " + manager)
-    npm = ["corepack", manager] if manager else ["npm"]
-    command = ["ci"] if (root / "package-lock.json").exists() else ["install", "--package-lock=false"]
-    return [*npm, *command, "--ignore-scripts", "--no-audit", "--no-fund"]
+    name, version = spec.split("@", 1)
+    return name, version
+
+
+def default_pnpm(root: Path, package: dict) -> str:
+    lockfile = root / "pnpm-lock.yaml"
+    match = re.match(r"lockfileVersion: '?(\d+)", lockfile.read_text()) if lockfile.exists() else None
+    major = int(match[1]) if match else 9
+    if major <= 5:
+        return "7.33.7"
+    if major == 6:
+        return "8.15.9"
+    # pnpm 11 stopped reading package.json "pnpm" settings and pnpm 12 turns "workspaces" into a workspace file;
+    # either changes the frozen-lockfile check for projects locked by pnpm 10.
+    if "pnpm" in package or ("workspaces" in package and not (root / "pnpm-workspace.yaml").exists()):
+        return "10.33.0"
+    return "12.10.1"
+
+
+def install_plan(root: Path) -> dict | None:
+    path = root / "package.json"
+    if not path.exists():
+        return None
+    package = json.loads(path.read_text())
+    locked = [name for name, files in LOCKFILES.items() if any((root / f).exists() for f in files)]
+    name, version = declared_manager(package) or ("", "")
+    if name != "nub" and locked and name not in locked:
+        name, version = locked[0], ""
+    name = name or "npm"
+    lock = bool(locked) if name == "nub" else name in locked
+    frozen = ["--frozen-lockfile"] if lock else []
+    if name == "pnpm":
+        command = ["corepack", "pnpm@" + (version or default_pnpm(root, package)), "install",
+                   *(frozen or ["--no-frozen-lockfile"]), "--ignore-scripts", "--config.engine-strict=false"]
+    elif name == "yarn":
+        version = version or ("4.9.2" if lock and "__metadata:" in (root / "yarn.lock").read_text() else "1.22.22")
+        if int(version.split(".", 1)[0]) >= 2:
+            flags = [*(["--immutable"] if lock else []), "--mode=skip-build"]
+        else:
+            flags = [*(frozen or ["--no-lockfile"]), "--ignore-scripts", "--non-interactive", "--ignore-engines",
+                     "--ignore-platform"]
+        command = ["corepack", "yarn@" + version, "install", *flags]
+    elif name == "npm":
+        command = [*(["corepack", "npm@" + version] if version else ["npm"]),
+                   *(["ci"] if lock else ["install", "--package-lock=false"]),
+                   "--ignore-scripts", "--no-audit", "--no-fund", "--engine-strict=false"]
+    elif name == "bun":
+        command = [name, "install", *frozen, "--ignore-scripts"]
+        version = version or "1.4.3"
+    elif name == "nub":
+        command = [name, "install", *(frozen or ["--no-frozen-lockfile"]), "--ignore-scripts"]
+    else:
+        raise ValueError(f"Unsupported package manager: {name}@{version}")
+    return {"manager": name, "command": command, "dependencies": "lockfile" if lock else "unpinned",
+            **({"tool": (name, version.split("+", 1)[0])} if name in TOOLS else {})}
+
+
+def tool_binary(name: str, version: str, log: Path, timeout: float) -> Path:
+    system = {"Linux": "linux", "Darwin": "darwin"}.get(platform.system())
+    arch = TOOL_ARCH.get((name, platform.machine()))
+    if not system or not arch:
+        raise ValueError(f"No {name} build for {platform.system()} {platform.machine()}")
+    package = TOOLS[name].format(os=system, arch=arch)
+    cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "tsrs-repo-conformance"
+    prefix = cache / re.sub(r"[^A-Za-z0-9.-]", "_", f"{package}@{version}")
+    binary = prefix / "node_modules" / package / "bin" / name
+    if not binary.is_file():
+        prefix.mkdir(parents=True, exist_ok=True)
+        result = execute(["npm", "install", "--prefix", str(prefix), "--no-save", "--package-lock=false",
+                          "--ignore-scripts", "--no-audit", "--no-fund", f"{package}@{version}"], prefix, log, timeout)
+        if result["exit"] or result["timeout"] or not binary.is_file():
+            raise ValueError(f"Could not install {package}@{version}; see {log.name}")
+        binary.chmod(0o755)  # nub's packages set the mode in a postinstall script, which installs here skip
+    return binary
 
 
 def read_compilation(result: dict, log: Path, root: Path, binary: Path) -> dict:
@@ -144,14 +229,73 @@ def check_config(root: Path, config: str, tsgo: Path, tsrs: Path, out: Path, tim
         result = execute(command, root, log, timeout)
         compilers[label] = read_compilation(result, log, root, binary)
         (out / (label + ".tsbuildinfo")).unlink(missing_ok=True)
-    status = compare(compilers["tsgo"], compilers["tsrs"])
+        if result["timeout"] or result["exit"] not in (0, 1, 2):
+            break
+    if "tsrs" not in compilers:
+        status = "reference_failed"
+    else:
+        status = compare(compilers["tsgo"], compilers["tsrs"])
     if status == "mismatch":
         def lines(run: dict) -> list[str]:
             return [f"exit: {run['exit']}\n", f"files: {run['files']}\n", *(s + "\n" for s in run["diagnostics"].splitlines())]
         diff = difflib.unified_diff(lines(compilers["tsgo"]), lines(compilers["tsrs"]), fromfile="tsgo", tofile="tsrs")
         (out / "diagnostics.diff").write_text("".join(diff))
-    return {"config": config, "status": status,
+    return {"config": config, "status": status, "limit": round(timeout, 1),
             **{label: {k: v for k, v in run.items() if k != "diagnostics"} for label, run in compilers.items()}}
+
+
+def project_references(root: Path, config: str, tsgo: Path, log: Path, timeout: float) -> list[str]:
+    """Referenced config paths, resolved like tsgo's resolveProjectReferencePath, that exist in the checkout."""
+    result = execute([str(tsgo), "-p", config, "--showConfig"], root, log, timeout)
+    if result["exit"] or result["timeout"]:
+        return []
+    try:
+        references = json.loads(log.read_text().partition("\n")[2]).get("references", [])
+    except ValueError:
+        return []
+    paths = []
+    for reference in references:
+        path = os.path.normpath(os.path.join(os.path.dirname(config), reference.get("path", "")))
+        if not path.endswith(".json"):
+            path = os.path.join(path, "tsconfig.json")
+        if not path.startswith("..") and (root / path).is_file():
+            paths.append(Path(path).as_posix())
+    return paths
+
+
+def check_projects(root: Path, configs: list[str], tsgo: Path, tsrs: Path, out: Path, check_timeout: float,
+                   max_configs: int) -> dict:
+    """Compare up to max_configs projects that load files. A config with no inputs of its own (a solution file)
+    queues its project references next; at most 2 * max_configs configs are run."""
+    checked, queue = [], list(configs)
+    deadline = time.monotonic() + check_timeout
+    while queue and len(checked) < 2 * max_configs:
+        if sum(c["status"] not in ("no_inputs", "references") for c in checked) >= max_configs:
+            break
+        config = queue.pop(0)
+        remaining = deadline - time.monotonic()
+        if remaining < 1:
+            checked.append({"config": config, "status": "budget_exhausted"})
+            break
+        index = out / str(len(checked))
+        result = check_config(root, config, tsgo, tsrs, index, min(60, remaining / 2))
+        if result["status"] == "no_inputs":
+            remaining = deadline - time.monotonic()
+            done = {c["config"] for c in checked} | {config}
+            references = [r for r in project_references(root, config, tsgo, index / "references.log",
+                                                         min(10, max(remaining, 0.01))) if r not in done]
+            if references:
+                result.update(status="references", references=references)
+                queue = references + [q for q in queue if q not in references]
+        checked.append(result)
+    counts = Counter(c["status"] for c in checked)
+    if counts["mismatch"] or counts["tsrs_failed"]:
+        status = "mismatch" if counts["mismatch"] else "tsrs_failed"
+    elif counts["match"]:
+        status = "match" if not queue and set(counts) <= {"match", "references"} else "partial"
+    else:
+        status = "not_checked"
+    return {"status": status, "configs": checked}
 
 
 def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, setup_timeout: int,
@@ -161,10 +305,15 @@ def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, setup_timeout: int
         root = Path(temp) / "repo"
         try:
             deadline = time.monotonic() + setup_timeout
-            clone = execute(["git", "clone", "--depth", "1", "--single-branch", "--branch", repo["branch"],
-                             "https://github.com/" + repo["repository"] + ".git", str(root)], Path(temp), out / "clone.log", min(60, setup_timeout))
-            if clone["exit"] or clone["timeout"]:
-                result["reason"] = "Clone failed or timed out; see clone.log"
+            url = "https://github.com/" + repo["repository"] + ".git"
+            if repo.get("commit"):
+                clone = ["sh", "-c", 'git init -q "$1" && git -C "$1" fetch -q --depth 1 "$2" "$3" && '
+                         'git -C "$1" checkout -q FETCH_HEAD', "clone", str(root), url, repo["commit"]]
+            else:
+                clone = ["git", "clone", "--depth", "1", "--single-branch", "--branch", repo["branch"], url, str(root)]
+            cloned = execute(clone, Path(temp), out / "clone.log", min(60, setup_timeout))
+            if cloned["exit"] or cloned["timeout"]:
+                result["reason"] = f"Clone {'timed out' if cloned['timeout'] else 'failed'}; see clone.log"
                 return result
             result["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
             tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
@@ -174,30 +323,24 @@ def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, setup_timeout: int
             if not configs:
                 result.update(status="no_config", reason="No tracked tsconfig.json")
                 return result
-            command = install_command(root)
-            if command:
+            plan = install_plan(root)
+            if plan:
+                result["dependencies"] = plan["dependencies"]
+                command = plan["command"]
+                if "tool" in plan:
+                    binary = tool_binary(*plan["tool"], out / "tool.log", max(0.01, deadline - time.monotonic()))
+                    command = [str(binary), *command[1:]]
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     result["reason"] = "Dependency setup budget exhausted"
                     return result
                 install = execute(command, root, out / "install.log", remaining)
+                result["install"] = dict(install, command=" ".join(plan["command"]))
                 if install["exit"] or install["timeout"]:
-                    result["reason"] = "Dependency installation failed or timed out; see install.log"
+                    result["reason"] = (f"Dependency installation {'timed out' if install['timeout'] else 'failed'}"
+                                        f" ({plan['manager']}); see install.log")
                     return result
-            deadline = time.monotonic() + check_timeout
-            for index, config in enumerate(configs[:max_configs]):
-                remaining = deadline - time.monotonic()
-                if remaining < 1:
-                    result["configs"].append({"config": config, "status": "budget_exhausted"})
-                    break
-                result["configs"].append(check_config(root, config, tsgo, tsrs, out / str(index), min(60, remaining / 2)))
-            counts = Counter(c["status"] for c in result["configs"])
-            if counts["mismatch"] or counts["tsrs_failed"]:
-                result["status"] = "mismatch" if counts["mismatch"] else "tsrs_failed"
-            elif counts["match"]:
-                result["status"] = "match" if counts["match"] == len(configs) else "partial"
-            else:
-                result["status"] = "not_checked"
+            result.update(check_projects(root, configs, tsgo, tsrs, out, check_timeout, max_configs))
             return result
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             result["reason"] = str(error)
@@ -225,53 +368,100 @@ def run_shard(args: argparse.Namespace, manifest: dict) -> None:
         print(f"{name}: {result['status']}", flush=True)
 
 
-def summarize(manifest: dict, directory: Path, out: Path) -> bool:
-    expected = {r["repository"] for r in manifest["repositories"]}
-    results, shards, errors = {}, set(), []
+def load_shards(directory: Path, manifest: dict, errors: list[str]) -> dict[int, dict]:
+    reports = {}
     for path in sorted(directory.rglob("shard-*.json")):
         report = json.loads(path.read_text())
         shard = report["shard"]
-        if shard in shards or not 0 <= shard < manifest["shards"]:
+        if shard in reports or not 0 <= shard < manifest["shards"]:
             errors.append(f"Duplicate or unexpected shard {shard}")
-        shards.add(shard)
         for key in ("tsrs_commit", "typescript_commit"):
             if report[key] != manifest[key]:
                 errors.append(f"{path.name}: {key} does not match the manifest")
+        reports[shard] = report
+    return reports
+
+
+def detail(result: dict) -> str:
+    if result.get("reason"):
+        return result["reason"]
+    notes = []
+    for config in result["configs"]:
+        status = config["status"]
+        if status == "reference_failed":
+            go = config["tsgo"]
+            status += f" (tsgo {'timed out at ' + str(config.get('limit')) + 's' if go['timeout'] else 'exit ' + str(go['exit'])})"
+        if status not in ("match", "references"):
+            notes.append(f"{config['config']}: {status}")
+    if result.get("dependencies") == "unpinned":
+        notes.append("no lockfile; dependencies unpinned")
+    return ", ".join(notes)
+
+
+def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None = None) -> bool:
+    """Write the report. Shards missing from directory are taken from previous, a run with the same manifest."""
+    pinned = {r["repository"]: r.get("commit") for r in manifest["repositories"]}
+    errors: list[str] = []
+    reports = load_shards(directory, manifest, errors)
+    if previous:
+        recovered = load_shards(previous, manifest, errors)
+        reports.update((shard, report) for shard, report in recovered.items() if shard not in reports)
+    results = {}
+    for report in reports.values():
         for result in report["results"]:
             name = result["repository"]
-            if name in results or name not in expected:
+            if name in results or name not in pinned:
                 errors.append(f"Duplicate or unexpected repository {name}")
+            elif pinned[name] and result.get("commit") not in (None, pinned[name]):
+                errors.append(f"{name}: checked {result['commit']}, manifest pins {pinned[name]}")
             results[name] = result
-    missing = expected - results.keys()
-    errors.extend(f"Missing repository result: {name}" for name in sorted(missing))
-    if shards != set(range(manifest["shards"])):
+    errors.extend(f"Missing repository result: {name}" for name in sorted(pinned.keys() - results.keys()))
+    if set(reports) != set(range(manifest["shards"])):
         errors.append("Some shard reports are missing")
     counts = Counter(r["status"] for r in results.values())
-    configs = Counter(c["status"] for r in results.values() for c in r["configs"])
-    if not configs["match"] and not configs["mismatch"]:
+    configs = [c for r in results.values() for c in r["configs"]]
+    projects = Counter(c["status"] for c in configs)
+    compared = [c for c in configs if c["status"] in ("match", "mismatch", "tsrs_failed")]
+    clean = sum(c["status"] == "match" and c["tsgo"]["exit"] == 0 for c in configs)
+    repositories = sum(any(c["status"] in ("match", "mismatch", "tsrs_failed") for c in r["configs"])
+                       for r in results.values())
+    if not projects["match"] and not projects["mismatch"]:
         errors.append("No project completed a diagnostic comparison")
     lines = ["# Top repository conformance", "",
              f"tsrs `{manifest['tsrs_commit']}` vs TypeScript `{manifest['typescript_commit']}`.", "",
-             f"{len(results)}/{len(expected)} repository results; {configs['match']} matching projects; "
-             f"{configs['mismatch']} diagnostic differences; {configs['tsrs_failed']} tsrs failures.", "",
+             f"{len(results)} of {len(pinned)} repositories have a result; {repositories} had at least one project "
+             "that both compilers loaded and compared.", "",
+             f"{len(compared)} projects compared: {projects['match']} identical ({clean} without errors, "
+             f"{projects['match'] - clean} with the same errors), {projects['mismatch']} different, "
+             f"{projects['tsrs_failed']} tsrs failures. tsgo failed or timed out on {projects['reference_failed']} more.", "",
+             "Identical means the same diagnostics in the same order, the same exit code and the same number of "
+             "loaded files. It does not mean the project has no type errors.", "",
              "Repository status: " + ", ".join(f"{status}: {n}" for status, n in sorted(counts.items())) + ".", "",
-             "Project status: " + ", ".join(f"{status}: {n}" for status, n in sorted(configs.items())) + ".", "",
-             "`partial`: some configs matched; others were skipped or exceeded the limit. "
-             "Skipped and empty projects are excluded from the pass count.", "",
+             "Project status: " + ", ".join(f"{status}: {n}" for status, n in sorted(projects.items())) + ".", "",
+             "`partial`: some projects were identical and others were not compared (limits, no inputs, or tsgo "
+             "failures). `references`: a solution config with no files of its own; its referenced projects were "
+             "compared instead. `no_inputs`: neither compiler loaded a file.", "",
              "Checks use `--noEmit`. Artifacts contain logs, diagnostic diffs, and repository commits.", "",
-             "| Repository | Commit | Status | Matching / available configs | Detail |", "| --- | --- | --- | --- | --- |"]
-    for name in sorted(expected):
+             "| Repository | Commit | Status | Identical / available configs | Detail |", "| --- | --- | --- | --- | --- |"]
+    for name in sorted(pinned):
         r = results.get(name, {"status": "missing", "configs": []})
         matching = sum(c["status"] == "match" for c in r["configs"])
-        detail = r.get("reason") or ", ".join(f"{c['config']}: {c['status']}" for c in r["configs"] if c["status"] != "match")
-        detail = detail.replace("|", "\\|").replace("\n", " ")[:500]
-        lines.append(f"| [{name}](https://github.com/{name}) | `{r.get('commit', '')}` | {r['status']} | "
-                     f"{matching} / {r.get('available_configs', 0)} | {detail} |")
+        text = detail(r).replace("|", "\\|").replace("\n", " ")[:500]
+        lines.append(f"| [{name}](https://github.com/{name}) | `{r.get('commit') or pinned[name] or ''}` | {r['status']} | "
+                     f"{matching} / {r.get('available_configs', 0)} | {text} |")
     if errors:
         lines.extend(["", "## Incomplete run", "", *("- " + e for e in errors)])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
-    return not errors and not configs["mismatch"] and not configs["tsrs_failed"]
+    return not errors and not projects["mismatch"] and not projects["tsrs_failed"]
+
+
+def write_matrix(shards: list[int]) -> None:
+    matrix = json.dumps({"shard": shards})
+    if os.environ.get("GITHUB_OUTPUT"):
+        with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+            output.write("matrix=" + matrix + "\n")
+    print(matrix)
 
 
 def positive(value: str) -> int:
@@ -301,20 +491,28 @@ def main() -> int:
     report.add_argument("--manifest", type=Path, required=True)
     report.add_argument("--results", type=Path, required=True)
     report.add_argument("--out", type=Path, required=True)
+    report.add_argument("--previous", type=Path, help="shard reports of an earlier run with the same manifest")
+    rerun = commands.add_parser("rerun", help="print the matrix for shards to rerun from a saved manifest")
+    rerun.add_argument("--manifest", type=Path, required=True)
+    rerun.add_argument("--shards", required=True, help="comma-separated shard indexes")
     args = parser.parse_args()
     if args.command == "plan":
         if args.count > 400 or args.shards > 20:
             parser.error("At most 400 repositories and 20 shards")
         manifest = discover(args.count, args.shards, args.out)
-        matrix = json.dumps({"shard": list(range(manifest["shards"]))})
-        if os.environ.get("GITHUB_OUTPUT"):
-            with open(os.environ["GITHUB_OUTPUT"], "a") as output:
-                output.write("matrix=" + matrix + "\n")
-        print(matrix)
+        write_matrix(list(range(manifest["shards"])))
+    elif args.command == "rerun":
+        manifest = json.loads(args.manifest.read_text())
+        shards = sorted({int(s) for s in args.shards.split(",") if s.strip()})
+        if not shards or not all(0 <= s < manifest["shards"] for s in shards):
+            parser.error(f"Shards must be between 0 and {manifest['shards'] - 1}")
+        if not all(r.get("commit") for r in manifest["repositories"]):
+            parser.error("The manifest does not pin repository commits, so a rerun would check different code")
+        write_matrix(shards)
     elif args.command == "run":
         run_shard(args, json.loads(args.manifest.read_text()))
     else:
-        return 0 if summarize(json.loads(args.manifest.read_text()), args.results, args.out) else 1
+        return 0 if summarize(json.loads(args.manifest.read_text()), args.results, args.out, args.previous) else 1
     return 0
 
 

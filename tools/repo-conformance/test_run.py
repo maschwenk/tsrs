@@ -1,3 +1,4 @@
+import json
 import os
 from pathlib import Path
 import sys
@@ -5,7 +6,7 @@ import tempfile
 import time
 import unittest
 
-from run import check_config, compare, execute, read_compilation, summarize, write_json
+from run import check_config, check_projects, compare, execute, install_plan, read_compilation, summarize, write_json
 
 
 def compilation(text="", files=1, code=0, timeout=False):
@@ -55,6 +56,38 @@ class ComparisonTests(unittest.TestCase):
             self.assertFalse(marker.exists())
 
 
+class InstallTests(unittest.TestCase):
+    def plan(self, files):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            for name, text in files.items():
+                (root / name).write_text(text if isinstance(text, str) else json.dumps(text))
+            return install_plan(root)
+
+    def test_frozen_installs_use_the_manager_that_wrote_the_lockfile(self):
+        pnpm9 = "lockfileVersion: '9.0'\n"
+        cases = [
+            ({"package.json": {}, "pnpm-lock.yaml": pnpm9}, "corepack pnpm@12.10.1 install --frozen-lockfile"),
+            ({"package.json": {"pnpm": {"overrides": {}}}, "pnpm-lock.yaml": pnpm9}, "corepack pnpm@10.33.0 install"),
+            ({"package.json": {"workspaces": ["packages/*"]}, "pnpm-lock.yaml": pnpm9}, "corepack pnpm@10.33.0 install"),
+            ({"package.json": {}, "pnpm-lock.yaml": "lockfileVersion: '6.0'\n"}, "corepack pnpm@8.15.9 install"),
+            ({"package.json": {"packageManager": "pnpm@10.23.0"}, "bun.lock": "{}"}, "bun install --frozen-lockfile"),
+            ({"package.json": {"packageManager": "nub@0.8.3"}, "pnpm-lock.yaml": pnpm9}, "nub install --frozen-lockfile"),
+            ({"package.json": {"devEngines": {"packageManager": {"name": "pnpm", "version": "11.11.0"}}},
+              "pnpm-lock.yaml": pnpm9}, "corepack pnpm@11.11.0 install --frozen-lockfile"),
+            ({"package.json": {"packageManager": "pnpm@12.4.1"}}, "corepack pnpm@12.4.1 install --no-frozen-lockfile"),
+        ]
+        for files, command in cases:
+            with self.subTest(files=files):
+                plan = self.plan(files)
+                self.assertTrue(" ".join(plan["command"]).startswith(command), plan)
+                self.assertIn("--ignore-scripts", plan["command"])
+        self.assertEqual(self.plan(cases[4][0])["tool"], ("bun", "1.4.3"))
+        self.assertEqual(self.plan({"package.json": {}})["dependencies"], "unpinned")
+        with self.assertRaisesRegex(ValueError, "Unsupported package manager: utoo@1.0.0"):
+            self.plan({"package.json": {"packageManager": "utoo@1.0.0"}})
+
+
 class ReportTests(unittest.TestCase):
     def test_missing_duplicate_or_wrong_revision_results_fail_the_report(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 2,
@@ -65,8 +98,8 @@ class ReportTests(unittest.TestCase):
             out = root / "report.md"
             def shard(index, name):
                 return {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": index,
-                        "results": [{"repository": name, "status": "match", "available_configs": 1,
-                                     "configs": [{"config": "tsconfig.json", "status": "match"}]}]}
+                        "results": [{"repository": name, "status": "match", "available_configs": 1, "configs": [
+                            {"config": "tsconfig.json", "status": "match", "tsgo": {"exit": 2}}]}]}
             write_json(results / "shard-0.json", shard(0, "a/one"))
             self.assertFalse(summarize(manifest, results, out))
             self.assertIn("Missing repository result: a/two", out.read_text())
@@ -79,6 +112,26 @@ class ReportTests(unittest.TestCase):
             wrong["typescript_commit"] = "different-go-version"
             write_json(results / "shard-1.json", wrong)
             self.assertFalse(summarize(manifest, results, out))
+
+    def test_a_rerun_shard_fills_a_lost_one_only_at_the_pinned_commits(self):
+        manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 2,
+                    "repositories": [{"repository": "a/one", "commit": "c1"}, {"repository": "a/two", "commit": "c2"}]}
+        def shard(index, name, commit, status="match"):
+            return {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": index,
+                    "results": [{"repository": name, "commit": commit, "status": status, "available_configs": 1,
+                                 "configs": [{"config": "tsconfig.json", "status": status, "tsgo": {"exit": 0}}]}]}
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            write_json(root / "previous" / "shard-0.json", shard(0, "a/one", "c1"))
+            write_json(root / "previous" / "shard-1.json", shard(1, "a/two", "c2", "mismatch"))
+            write_json(root / "rerun" / "shard-1.json", shard(1, "a/two", "c2"))
+            self.assertTrue(summarize(manifest, root / "rerun", root / "report.md", root / "previous"))
+            report = (root / "report.md").read_text()
+            self.assertIn("2 of 2 repositories have a result; 2 had at least one project", report)
+            self.assertIn("2 identical (2 without errors, 0 with the same errors), 0 different", report)
+            write_json(root / "rerun" / "shard-1.json", shard(1, "a/two", "newer-commit"))
+            self.assertFalse(summarize(manifest, root / "rerun", root / "report.md", root / "previous"))
+            self.assertIn("a/two: checked newer-commit, manifest pins c2", (root / "report.md").read_text())
 
     def test_empty_projects_fail_a_run_with_no_comparisons(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 1,
@@ -114,6 +167,44 @@ class CompilerControls(unittest.TestCase):
                     self.assertIn("error TS2322", (root / "logs" / "tsrs.log").read_text())
                 self.assertFalse((root / "a.js").exists())
                 self.assertFalse(any((root / "logs").glob("*.tsbuildinfo")))
+
+    def test_solution_configs_compare_their_references_and_count_only_loaded_projects(self):
+        tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
+        tsgo = Path(os.environ["TSRS_CONFORMANCE_TSGO"]).resolve()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            write_json(root / "tsconfig.json", {"files": [], "references": [{"path": "./tsconfig.app.json"}, {"path": "lib"}]})
+            write_json(root / "tsconfig.app.json", {"compilerOptions": {"strict": True}, "files": ["app.ts"]})
+            write_json(root / "lib" / "tsconfig.json", {"compilerOptions": {"composite": True}, "files": ["lib.ts"]})
+            write_json(root / "empty" / "tsconfig.json", {"files": []})
+            write_json(root / "solution" / "tsconfig.json", {"files": [], "references": [{"path": "../lib"}]})
+            (root / "app.ts").write_text("const x: number = 'no';\n")
+            (root / "lib" / "lib.ts").write_text("export const y = 1;\n")
+            configs = ["tsconfig.json", "empty/tsconfig.json", "lib/tsconfig.json", "solution/tsconfig.json"]
+            result = check_projects(root, configs, tsgo, tsrs, root / "logs", 60, 2)
+            statuses = [(c["config"], c["status"]) for c in result["configs"]]
+            self.assertEqual(statuses, [("tsconfig.json", "references"), ("tsconfig.app.json", "match"),
+                                        ("lib/tsconfig.json", "match")])
+            self.assertEqual(result["status"], "partial")
+            self.assertEqual(result["configs"][1]["tsgo"]["exit"], 2)
+            result = check_projects(root, configs, tsgo, tsrs, root / "logs", 60, 5)
+            self.assertEqual([c["status"] for c in result["configs"][3:]], ["no_inputs", "no_inputs"])
+            self.assertEqual(result["status"], "partial")
+
+    def test_a_reference_timeout_does_not_spend_the_budget_on_tsrs(self):
+        tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            slow = root / "slow-tsgo"
+            slow.write_text("#!/bin/sh\nsleep 30\n")
+            slow.chmod(0o755)
+            write_json(root / "tsconfig.json", {"files": ["a.ts"]})
+            (root / "a.ts").write_text("export {};\n")
+            result = check_config(root, "tsconfig.json", slow, tsrs, root / "logs", 0.5)
+            self.assertEqual(result["status"], "reference_failed")
+            self.assertTrue(result["tsgo"]["timeout"])
+            self.assertNotIn("tsrs", result)
+            self.assertFalse((root / "logs" / "tsrs.log").exists())
 
 
 if __name__ == "__main__":
