@@ -874,10 +874,11 @@ impl NodeBuilderImpl {
         {
             // Should use an indexed access
             let lhs = self.create_access_from_symbol_chain(c, chain, index - 1, stopper, override_type_arguments);
+            let lit = self.mark_symbol_name_literal(self.new_string_literal(c, &symbol_name));
             if is_indexed_access_type_node(lhs) {
-                return self.f.new_indexed_access_type_node(lhs, self.f.new_literal_type_node(self.new_string_literal(c, &symbol_name)));
+                return self.f.new_indexed_access_type_node(lhs, self.f.new_literal_type_node(lit));
             }
-            return self.f.new_indexed_access_type_node(self.f.new_type_reference_node(lhs, type_parameter_nodes), self.f.new_literal_type_node(self.new_string_literal(c, &symbol_name)));
+            return self.f.new_indexed_access_type_node(self.f.new_type_reference_node(lhs, type_parameter_nodes), self.f.new_literal_type_node(lit));
         }
 
         let identifier = self.new_identifier(c, &symbol_name, Some(symbol));
