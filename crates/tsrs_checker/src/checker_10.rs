@@ -2103,7 +2103,6 @@ impl Checker {
 // members and index infos as they are asked for, the way resolveMappedTypeMembers would.
 pub(crate) struct LazyMappedTable {
     pub(crate) type_parameter: P<Type>,
-    pub(crate) template_type: P<Type>,
     pub(crate) modifiers_type: P<Type>,
     pub(crate) template_modifiers: MappedTypeModifiers,
     pub(crate) should_link_prop_declarations: bool,
@@ -2118,7 +2117,6 @@ impl Clone for LazyMappedTable {
     fn clone(&self) -> Self {
         LazyMappedTable {
             type_parameter: self.type_parameter,
-            template_type: self.template_type,
             modifiers_type: self.modifiers_type,
             template_modifiers: self.template_modifiers,
             should_link_prop_declarations: self.should_link_prop_declarations,
@@ -2163,7 +2161,6 @@ impl Checker {
             return None;
         }
         let should_link_prop_declarations = self.get_mapped_type_name_type_kind(mapped_type) != MappedTypeNameTypeKind::Remapping;
-        let template_type = self.get_template_type_from_mapped_type(mapped_type);
         let modifiers_type_of_mapped = self.get_modifiers_type_from_mapped_type(t);
         let modifiers_type = self.get_apparent_type(modifiers_type_of_mapped);
         if !modifiers_type.flags().intersects(TypeFlags::Object) || t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
@@ -2176,7 +2173,6 @@ impl Checker {
         }
         let lazy = std::rc::Rc::new(LazyMappedTable {
             type_parameter,
-            template_type,
             modifiers_type,
             template_modifiers: get_mapped_type_modifiers(t),
             should_link_prop_declarations,
@@ -2235,6 +2231,10 @@ impl Checker {
                 return &[];
             }
             lazy.resolving.set(true);
+            // Resolving the template can reach this type again (through an alias that refers back to it).
+            // resolveMappedTypeMembers does it after setting empty members, so it is done here under the guard,
+            // not when the table is created, where each recursive lookup would start over.
+            let template_type = self.get_template_type_from_mapped_type(t.as_mapped_type().target.get().unwrap_or(t));
             let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
             index_infos = self.get_index_infos_of_type(lazy.modifiers_type).iter().fold(index_infos, |mut index_infos, info| {
                 index_infos = self.append_mapped_type_index_info(
@@ -2242,7 +2242,7 @@ impl Checker {
                     t,
                     lazy.modifiers_type,
                     lazy.type_parameter,
-                    lazy.template_type,
+                    template_type,
                     lazy.template_modifiers,
                     info.key_type(),
                     info.key_type(),
