@@ -26,9 +26,18 @@ checked shallowest first. When neither compiler loads a file for a config, the p
 seconds for setup (60 for cloning); 120 seconds for checking, with at most 60 seconds per compiler per config. tsrs
 is not run when tsgo fails or times out. Timeouts kill child processes too.
 
-Actions reports coverage and retains logs, commits, and diagnostic diffs for 14 days. Diagnostic differences and
-tsrs failures after tsgo completes fail the report, as do missing results, results at another commit, or no
-completed comparisons. Skipped, empty, and untested projects are excluded from pass counts. Identical output is
+tsgo runs once per config with `--checkers 4`, its default, given explicitly so a tsconfig `checkers` setting can't
+change the reference, and that output is compared in two modes. Default mode runs tsrs as users do. Go mode runs
+`tsrs --checkerAssignment go --checkers 4`, which reproduces tsgo's checker assignment and caches; where tsgo's output
+depends on which checker saw a file first, default mode can differ from it (`docs/COMPATIBILITY.md`). Go mode runs
+after all default comparisons and splits the time they leave, so it never shortens them; a Go-mode timeout is a tsrs
+failure only when tsrs had at least the default run's limit, and otherwise counts as not compared. Each mode keeps its
+own logs (`tsrs.log`, `tsrs-go.log`) and diffs (`diagnostics.diff`, `diagnostics-go.diff`).
+
+Actions reports coverage and retains logs, commits, and diagnostic diffs for 14 days. Differences and tsrs failures
+after tsgo completes fail the report in either mode (a Go-mode match does not excuse a default-mode difference), as
+do missing results, results at another commit, or no completed comparisons. The report says whether diagnostics or
+only other output, such as `traceResolution` traces, differ; either is a difference. Skipped, empty, and untested projects are excluded from pass counts. Identical output is
 not the same as a project without type errors; the report counts both. Emit and build graphs are outside this check.
 
 If a shard is lost (for example, its runner shuts down), dispatch the workflow with `rerun_run_id` set to that

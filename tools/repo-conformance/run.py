@@ -25,6 +25,12 @@ from urllib.request import Request, urlopen
 ROOT = Path(__file__).resolve().parents[2]
 QUERY = "language:TypeScript stars:>100 archived:false fork:false"
 FILES = re.compile(r"^Files:\s+(\d+)\s*$", re.MULTILINE)
+DIAGNOSTIC = re.compile(r"^(?:.+\(\d+,\d+\): )?(?:error|warning|message) TS\d+: ")
+# tsgo's checker count when none is given (newCheckerPoolWithTracing, internal/compiler/checkerpool.go), passed
+# explicitly so a tsconfig "checkers" can't make the shared reference differ between modes.
+REFERENCE = ["--checkers", "4"]
+GO_MODE = ["--checkerAssignment", "go", "--checkers", "4"]
+COMPARED = ("match", "mismatch", "tsrs_failed")
 NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 
 
@@ -224,10 +230,14 @@ def read_compilation(result: dict, log: Path, root: Path, binary: Path) -> dict:
     return dict(result, files=int(match[1]) if match else 0, diagnostics=diagnostic_text.rstrip())
 
 
+def failed(run: dict) -> bool:
+    return run["timeout"] or run["exit"] not in (0, 1, 2)
+
+
 def compare(go: dict, rust: dict) -> str:
-    if go["timeout"] or go["exit"] not in (0, 1, 2):
+    if failed(go):
         return "reference_failed"
-    if rust["timeout"] or rust["exit"] not in (0, 1, 2):
+    if failed(rust):
         return "tsrs_failed"
     if any(go[key] != rust[key] for key in ("exit", "files", "diagnostics")):
         return "mismatch"
@@ -236,31 +246,77 @@ def compare(go: dict, rust: dict) -> str:
     return "match"
 
 
+def split_output(text: str) -> tuple[list[str], list[str]]:
+    """Diagnostics (a header and its indented lines) in order, and the other lines, such as resolution traces."""
+    diagnostics, other, inside = [], [], False
+    for line in text.splitlines():
+        if DIAGNOSTIC.match(line):
+            diagnostics.append(line)
+            inside = True
+        elif inside and line.startswith("  "):
+            diagnostics[-1] += "\n" + line
+        else:
+            other.append(line)
+            inside = False
+    return diagnostics, other
+
+
+def difference(go: dict, rust: dict) -> list[str]:
+    """What differs, to read a mismatch faster; any difference is still a mismatch."""
+    parts = [name for key, name in (("exit", "exit code"), ("files", "loaded files")) if go[key] != rust[key]]
+    for name, a, b in zip(("diagnostics", "other output"), split_output(go["diagnostics"]),
+                          split_output(rust["diagnostics"])):
+        if a != b:
+            parts.append(name)
+    return parts
+
+
+def compile_project(root: Path, config: str, ctx: Context, out: Path, label: str, binary: Path, flags: list[str],
+                    timeout: float) -> dict:
+    info = out / (label + ".tsbuildinfo")
+    command = [str(binary), "-p", config, *flags, "--noEmit", "--pretty", "false", "--extendedDiagnostics",
+               "--incremental", "--tsBuildInfoFile", str(info)]
+    info.unlink(missing_ok=True)
+    result = execute(command, root, out / (label + ".log"), timeout, ctx.env)
+    info.unlink(missing_ok=True)
+    return read_compilation(result, out / (label + ".log"), root, binary)
+
+
+def outcome(go: dict, rust: dict | None, diff: Path) -> dict:
+    status = "reference_failed" if rust is None else compare(go, rust)
+    if status != "mismatch":
+        return {"status": status}
+    def lines(run: dict) -> list[str]:
+        return [f"exit: {run['exit']}\n", f"files: {run['files']}\n", *(s + "\n" for s in run["diagnostics"].splitlines())]
+    diff.write_text("".join(difflib.unified_diff(lines(go), lines(rust), fromfile="tsgo", tofile="tsrs")))
+    return {"status": status, "difference": difference(go, rust)}
+
+
+def summary(run: dict) -> dict:
+    return {k: v for k, v in run.items() if k != "diagnostics"}
+
+
 def check_config(root: Path, config: str, ctx: Context, out: Path, timeout: float) -> dict:
+    """Default mode: tsrs as users run it against tsgo with its default 4 checkers."""
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    compilers = {}
-    for label, binary in (("tsgo", ctx.tsgo), ("tsrs", ctx.tsrs)):
-        command = [str(binary), "-p", config, "--noEmit", "--pretty", "false", "--extendedDiagnostics",
-                   "--incremental", "--tsBuildInfoFile", str(out / (label + ".tsbuildinfo"))]
-        (out / (label + ".tsbuildinfo")).unlink(missing_ok=True)
-        log = out / (label + ".log")
-        result = execute(command, root, log, timeout, ctx.env)
-        compilers[label] = read_compilation(result, log, root, binary)
-        (out / (label + ".tsbuildinfo")).unlink(missing_ok=True)
-        if result["timeout"] or result["exit"] not in (0, 1, 2):
-            break
-    if "tsrs" not in compilers:
-        status = "reference_failed"
-    else:
-        status = compare(compilers["tsgo"], compilers["tsrs"])
-    if status == "mismatch":
-        def lines(run: dict) -> list[str]:
-            return [f"exit: {run['exit']}\n", f"files: {run['files']}\n", *(s + "\n" for s in run["diagnostics"].splitlines())]
-        diff = difflib.unified_diff(lines(compilers["tsgo"]), lines(compilers["tsrs"]), fromfile="tsgo", tofile="tsrs")
-        (out / "diagnostics.diff").write_text("".join(diff))
-    return {"config": config, "status": status, "limit": round(timeout, 1),
-            **{label: {k: v for k, v in run.items() if k != "diagnostics"} for label, run in compilers.items()}}
+    go = compile_project(root, config, ctx, out, "tsgo", ctx.tsgo, REFERENCE, timeout)
+    rust = None if failed(go) else compile_project(root, config, ctx, out, "tsrs", ctx.tsrs, [], timeout)
+    return {"config": config, **outcome(go, rust, out / "diagnostics.diff"), "limit": round(timeout, 1),
+            "tsgo": summary(go), **({"tsrs": summary(rust)} if rust else {})}
+
+
+def check_go_mode(root: Path, default: dict, ctx: Context, out: Path, timeout: float) -> dict:
+    """tsrs --checkerAssignment go --checkers 4 against the default comparison's tsgo output, whose command is the
+    same. tsrs gets the time left, so a timeout is a tsrs failure only when it had the default run's limit."""
+    out = out.resolve()
+    go = read_compilation({k: default["tsgo"][k] for k in ("exit", "timeout", "seconds")}, out / "tsgo.log", root,
+                          ctx.tsgo)
+    rust = compile_project(root, default["config"], ctx, out, "tsrs-go", ctx.tsrs, GO_MODE, timeout)
+    result = {**outcome(go, rust, out / "diagnostics-go.diff"), "limit": round(timeout, 1), "tsrs": summary(rust)}
+    if result["status"] == "tsrs_failed" and rust["timeout"] and result["limit"] < default["limit"]:
+        result["status"] = "budget_exhausted"
+    return result
 
 
 def project_references(root: Path, config: str, ctx: Context, log: Path, timeout: float) -> list[str]:
@@ -314,7 +370,20 @@ def check_projects(root: Path, configs: list[str], ctx: Context, out: Path, chec
         status = "match" if not queue and set(counts) <= {"match", "references"} else "partial"
     else:
         status = "not_checked"
-    return {"status": status, "configs": checked}
+    # Go mode runs after every default comparison so that it never takes their time, and splits what is left.
+    pending = [(i, c) for i, c in enumerate(checked) if c["status"] in COMPARED]
+    for n, (i, config) in enumerate(pending):
+        remaining = deadline - time.monotonic()
+        config["go"] = (check_go_mode(root, config, ctx, out / str(i), min(60, remaining / (len(pending) - n)))
+                        if remaining >= 1 else {"status": "budget_exhausted"})
+    go = Counter(c["go"]["status"] for _, c in pending)
+    if go["mismatch"] or go["tsrs_failed"]:
+        go_status = "mismatch" if go["mismatch"] else "tsrs_failed"
+    elif go["match"]:
+        go_status = "match" if go["match"] == len(pending) else "partial"
+    else:
+        go_status = "not_checked"
+    return {"status": status, "go_status": go_status, "configs": checked}
 
 
 def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, cache: Path, setup_timeout: int,
@@ -379,7 +448,7 @@ def run_shard(args: argparse.Namespace, manifest: dict) -> None:
     path = args.out / f"shard-{args.shard}.json"
     report = {"tsrs_commit": manifest["tsrs_commit"], "typescript_commit": manifest["typescript_commit"],
               "shard": args.shard, "setup_timeout": args.setup_timeout, "check_timeout": args.check_timeout,
-              "max_configs": args.max_configs, "results": results}
+              "max_configs": args.max_configs, "modes": ["default", "go"], "results": results}
     write_json(path, report)
     for repo in manifest["repositories"][args.shard::manifest["shards"]]:
         name = repo["repository"]
@@ -413,8 +482,15 @@ def detail(result: dict) -> str:
         if status == "reference_failed":
             go = config["tsgo"]
             status += f" (tsgo {'timed out at ' + str(config.get('limit')) + 's' if go['timeout'] else 'exit ' + str(go['exit'])})"
-        if status not in ("match", "references"):
-            notes.append(f"{config['config']}: {status}")
+        elif config.get("difference"):
+            status += f" ({', '.join(config['difference'])})"
+        note = status if status not in ("match", "references") else ""
+        go = config.get("go")
+        if go and (go["status"] != "match" or note):
+            note = f"{note or 'match'}; Go mode {go['status']}" + (
+                f" ({', '.join(go['difference'])})" if go.get("difference") else "")
+        if note:
+            notes.append(f"{config['config']}: {note}")
     if result.get("dependencies") == "unpinned":
         notes.append("no lockfile; dependencies unpinned")
     return ", ".join(notes)
@@ -443,14 +519,30 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
     counts = Counter(r["status"] for r in results.values())
     configs = [c for r in results.values() for c in r["configs"]]
     projects = Counter(c["status"] for c in configs)
-    compared = [c for c in configs if c["status"] in ("match", "mismatch", "tsrs_failed")]
+    compared = [c for c in configs if c["status"] in COMPARED]
     clean = sum(c["status"] == "match" and c["tsgo"]["exit"] == 0 for c in configs)
-    repositories = sum(any(c["status"] in ("match", "mismatch", "tsrs_failed") for c in r["configs"])
-                       for r in results.values())
+    repositories = sum(any(c["status"] in COMPARED for c in r["configs"]) for r in results.values())
+    go = Counter(c["go"]["status"] for c in compared if "go" in c)
+    go_only = sum(c["status"] != "match" and c.get("go", {}).get("status") == "match" for c in compared)
     if not projects["match"] and not projects["mismatch"]:
         errors.append("No project completed a diagnostic comparison")
+    if any("go" in report.get("modes", ["default"]) for report in reports.values()):
+        go_lines = [
+            f"{sum(go.values()) - go['budget_exhausted']} of the {len(compared)} projects compared in default mode were "
+            f"also compared in Go mode: {go['match']} identical, {go['mismatch']} different, {go['tsrs_failed']} tsrs "
+            f"failures. {go['budget_exhausted']} were not, for lack of time. {go_only} projects that differ or fail in "
+            "default mode are identical in Go mode.", "",
+            "Go mode is `tsrs --checkerAssignment go --checkers 4`, compared with the same tsgo output. Where tsgo's "
+            "output depends on which checker saw a file first, tsrs's default mode can differ "
+            "(docs/COMPATIBILITY.md in tsrs); Go mode reproduces tsgo's assignment and caches. "
+            "It runs after the default comparisons, in the time they leave. Go mode does not excuse a default-mode "
+            "difference: a difference in either mode fails the report."]
+    else:
+        go_lines = ["These shard reports predate Go mode; only the default mode was compared."]
     lines = ["# Top repository conformance", "",
-             f"tsrs `{manifest['tsrs_commit']}` vs TypeScript `{manifest['typescript_commit']}`.", "",
+             f"tsrs `{manifest['tsrs_commit']}` vs TypeScript `{manifest['typescript_commit']}`. The reference is tsgo "
+             "with 4 checkers (`--checkers 4`, its default).", "",
+             "## Default mode", "",
              f"{len(results)} of {len(pinned)} repositories have a result; {repositories} had at least one project "
              "that both compilers loaded and compared.", "",
              f"{len(compared)} projects compared: {projects['match']} identical ({clean} without errors, "
@@ -463,19 +555,24 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
              "`partial`: some projects were identical and others were not compared (limits, no inputs, or tsgo "
              "failures). `references`: a solution config with no files of its own; its referenced projects were "
              "compared instead. `no_inputs`: neither compiler loaded a file.", "",
+             "A difference lists what differs: exit code, loaded files, diagnostics, or other output (lines that are "
+             "not diagnostics, such as `traceResolution` traces).", "",
+             "## Go-compatibility mode", "", *go_lines, "",
+             "## Repositories", "",
              "Checks use `--noEmit`. Artifacts contain logs, diagnostic diffs, and repository commits.", "",
-             "| Repository | Commit | Status | Identical / available configs | Detail |", "| --- | --- | --- | --- | --- |"]
+             "| Repository | Commit | Status | Go mode | Identical / available configs | Detail |",
+             "| --- | --- | --- | --- | --- | --- |"]
     for name in sorted(pinned):
         r = results.get(name, {"status": "missing", "configs": []})
         matching = sum(c["status"] == "match" for c in r["configs"])
         text = detail(r).replace("|", "\\|").replace("\n", " ")[:500]
         lines.append(f"| [{name}](https://github.com/{name}) | `{r.get('commit') or pinned[name] or ''}` | {r['status']} | "
-                     f"{matching} / {r.get('available_configs', 0)} | {text} |")
+                     f"{r.get('go_status', '')} | {matching} / {r.get('available_configs', 0)} | {text} |")
     if errors:
         lines.extend(["", "## Incomplete run", "", *("- " + e for e in errors)])
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text("\n".join(lines) + "\n")
-    return not errors and not projects["mismatch"] and not projects["tsrs_failed"]
+    return not errors and not any(counter[s] for counter in (projects, go) for s in ("mismatch", "tsrs_failed"))
 
 
 def write_matrix(shards: list[int]) -> None:
