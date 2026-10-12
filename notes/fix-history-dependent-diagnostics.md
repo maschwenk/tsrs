@@ -94,6 +94,30 @@ So the only lines that change are the ones that used to depend on the assignment
 - Conformance suite: identical pass lists before and after, Go mode (13,458 / 12,779 / 12,779 errors / `.types` /
   `.symbols`) and canonical with 4 checkers (13,458 / 12,778 / 12,778).
 
+## Later: TS2320 / TS2430 where tsgo's default pool reports them
+
+The per-file rule printed more than tsgo whenever two declaring files share a tsgo checker. The top-400 repository run
+(run 38278199589) found two: supabase's root config, where many checked files augment the global `Window` and tsgo
+reports TS2430 in `DevToolbar.test.tsx` and `DevToolbarContext.tsx` but tsrs also in `HubSpotFormEmbed.tsx`, and
+stagehand's root config, where three vite copies augment rolldown's `MinimalPluginContext` and tsgo reports TS2320 in
+one copy, tsrs in two. tsrs `--checkerAssignment go --checkers 4` printed tsgo's output byte for byte on both.
+
+So the default mode now runs the block where it did (the first declaration in each file, which keeps every file's
+index-constraint errors) but reports TS2320 and TS2430 only where tsgo at its default four checkers would:
+`Checker::reports_interface_check_errors` asks `Program::tsgo_default_check_slot` for the tsgo checker and program
+index of each declaring file (`checkerpool::tsgo_default_check_slots`: Go's association at four checkers, the files it
+type checks), and reports at a declaration only if no earlier file on the same tsgo checker declares the interface.
+Elsewhere the checks run without an error node. That is a function of the program, so the output is still the same at
+every tsrs checker count and assignment, and it is now tsgo's default output rather than a superset of it (tsgo at
+another `--checkers` count can still differ; `--checkerAssignment go` matches it there). The association is computed
+once per program on first use, and only for a merged interface with base types declared in more than one file.
+
+- supabase (cb4307f1) and stagehand (f261c38b), root `tsconfig.json`, default mode: identical to tsgo.
+- `testdata/regressions/merged-interface-check-site` now expects tsgo-ref's default output (a.ts and b.ts);
+  `merged-interface-extends-site` has a TS2430 that tsgo reports in a.ts and b.ts only and TS2411 index-constraint
+  errors in b.ts, c.ts and d.ts, which every checker count reports. `merged_interface_check_site.rs` runs both
+  single-threaded and at 1-4 and 8 checkers with stealing and 8 random assignments each, and Go mode at 1, 4 and 8.
+
 ## Other per-symbol links (audited, not changed)
 
 `type_parameters_checked` (TS2428), `enum_checked` (TS2473/TS2432) and `index_signatures_checked` (TS2374) are also

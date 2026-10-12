@@ -195,6 +195,8 @@ pub struct Program {
     pub(crate) leaf_pass_started: std::sync::atomic::AtomicBool,
     // tsrs-only: the files that can be leaves and that another file refers to (`fileregions::prepare`).
     pub(crate) leaf_referred: OnceLock<rustc_hash::FxHashSet<P<SourceFile>>>,
+    // tsrs-only: `checkerpool::tsgo_default_check_slots`, built on first use.
+    pub(crate) tsgo_check_slots: OnceLock<FxHashMap<P<SourceFile>, (u32, u32)>>,
     // tsrs-only: `ProgramOptions::checker_recycling`.
     pub(crate) checker_recycling: bool,
 }
@@ -429,6 +431,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_files: opts.leaf_files,
         leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
         leaf_referred: OnceLock::new(),
+        tsgo_check_slots: OnceLock::new(),
         checker_recycling: opts.checker_recycling,
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
@@ -651,6 +654,7 @@ impl Program {
             leaf_files: crate::fileregions::LeafMode::Off,
             leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
             leaf_referred: OnceLock::new(),
+            tsgo_check_slots: OnceLock::new(),
             checker_recycling: false,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);

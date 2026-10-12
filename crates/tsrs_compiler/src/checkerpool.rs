@@ -1430,6 +1430,22 @@ fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     )
 }
 
+// tsrs-only: where tsgo's compiler pool at its default checker count (`newCheckerPool`) type checks each file: the
+// checker's index and the file's index in the program, in whose order each checker visits its files
+// (`forEachCheckerGroupDo`). Files it does not type check are absent. Whatever tsrs's own checker count and assignment,
+// this is what tsgo's history-dependent checks saw (`Checker::reports_interface_check_errors`).
+pub(crate) fn tsgo_default_check_slots(program: &Program) -> FxHashMap<P<SourceFile>, (u32, u32)> {
+    let checker_count = GO_DEFAULT_CHECKERS.min(program.files.len() as i64).max(1) as usize;
+    let associations = if checker_count > 1 { go_associations(program, checker_count) } else { vec![0; program.files.len()] };
+    program
+        .files
+        .iter()
+        .enumerate()
+        .filter(|&(_, &file)| !program.skip_type_checking(file, false))
+        .map(|(i, &file)| (file, (associations[i] as u32, i as u32)))
+        .collect()
+}
+
 fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     if checker_count <= 1 {
         return vec![0; program.files.len()];
