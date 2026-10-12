@@ -152,7 +152,7 @@ impl<'h> Setup<'h> {
             && !t.object_flags().intersects(ObjectFlags::MembersResolved)
             && self.checker.members_resolved_like_go(t)
         {
-            o.num("objectFlags", (t.object_flags() | ObjectFlags::MembersResolved).bits() as f64);
+            o.num("objectFlags", (go_object_flags(t) | ObjectFlags::MembersResolved).bits() as f64);
         }
         if let Some(symbol) = t.symbol() {
             o.set("symbol", compact_symbol_reference(self.sd.host, symbol)?);
@@ -325,7 +325,7 @@ fn type_response_base(t: P<Type>, id: u32) -> Obj {
         late.nonzero("freshType", lit.fresh_type().map_or(0.0, |f| f.id().0 as f64));
         late.nonzero("regularType", lit.regular_type().map_or(0.0, |r| r.id().0 as f64));
     } else if flags.intersects(TypeFlags::Object) {
-        object_flags = t.object_flags().bits();
+        object_flags = go_object_flags(t).bits();
         is_tuple = tsrs_checker::is_tuple_type_exported(t);
         let of = t.object_flags();
         if of.intersects(ObjectFlags::Reference) {
@@ -455,4 +455,10 @@ pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &'static Pro
         }
         kind => Err(CheckerError::client(format!("invalid symbol reference kind {kind}"))),
     }
+}
+
+// Go's ObjectFlags end at 1 << 29 (checker/types.go); tsrs keeps its isWeakType and shouldNormalizeIntersection memos
+// in bits 30 and 31 (tsrs_checker types.rs). proto.go:1261 sends `uint32(t.ObjectFlags())`, which never has them.
+fn go_object_flags(t: P<Type>) -> ObjectFlags {
+    t.object_flags() - ObjectFlags::WeakTypeMemo
 }

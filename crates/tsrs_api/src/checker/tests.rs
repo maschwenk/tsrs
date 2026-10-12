@@ -1148,3 +1148,21 @@ fn import_adder_client_errors_follow_go_ordering_and_release_the_clone() {
         assert!(underflow, "auto-import snapshot {i} was not released by the handler");
     }
 }
+
+// tsrs keeps memo bits in ObjectFlags above Go's last flag (1 << 29): `isWeakType` and `shouldNormalizeIntersection`
+// answers (tsrs_checker types.rs). Go's TypeResponse.objectFlags is `uint32(t.ObjectFlags())` (proto.go:1261), so the
+// API reports only Go's bits: a weak type's flags read the same before and after a relation computed its memo.
+#[test]
+fn object_flags_leave_out_tsrs_memo_bits() {
+    const MAIN: &str = "export interface Opts { a?: number; b?: string }\nexport interface Other { c: number }\nexport declare const opts: Opts;\nexport declare const other: Other;\n";
+    let h = TestHost::new(&[("/p/tsconfig.json", TSCONFIG), ("/p/main.ts", MAIN)]);
+    let opts = h.type_at(MAIN_FILE, MAIN, "opts:");
+    let other = h.type_at(MAIN_FILE, MAIN, "other:");
+    let before = num(&opts, "objectFlags");
+    // `Other` shares no property with the weak `Opts`: the relation asks isWeakType(Opts) and memoizes the answer.
+    let assignable = h.ok("isTypeAssignableTo", &h.sp(&format!(r#""source":{},"target":{}"#, num(&other, "id"), num(&opts, "id"))));
+    assert_eq!(assignable, Value::Bool(false));
+    let after = num(&h.type_at(MAIN_FILE, MAIN, "opts:"), "objectFlags");
+    assert_eq!(after & !(u64::from(tsrs_checker::ObjectFlags::MembersResolved.bits())), before & !(u64::from(tsrs_checker::ObjectFlags::MembersResolved.bits())));
+    assert_eq!(after >> 30, 0, "objectFlags {after:#x} has bits Go does not define");
+}
