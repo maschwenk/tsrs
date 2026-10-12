@@ -1,3 +1,6 @@
+enums.ts(3,7): error TS2322: Type '(typeof Keys)[""]' is not assignable to type '"z"'.
+enums.ts(5,7): error TS2322: Type '(typeof Open)[""]' is not assignable to type '"z"'.
+enums.ts(7,7): error TS2322: Type '{ "": { inner: 1; }; }' is not assignable to type '"z"'.
 literals.ts(3,7): error TS2322: Type '"\x001" | "x" | "\u0085\u2028" | "é" | "�" | "😀" | "😀"' is not assignable to type '"z"'.
   Type '"\x001"' is not assignable to type '"z"'.
 literals.ts(6,7): error TS2322: Type '{ "b": 2; "\uD83D\uDE00": 3; }' is not assignable to type '"z"'.

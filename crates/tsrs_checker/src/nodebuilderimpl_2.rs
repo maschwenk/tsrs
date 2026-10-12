@@ -1995,9 +1995,9 @@ impl NodeBuilderImpl {
 
     // Port-only: a string literal holding a symbol name. Go's internal-name prefix is the invalid byte 0xFE, which its
     // printer escapes as `\uFFFD`; the port's U+007F stand-in is user text elsewhere, so mark the literals where Go
-    // would print that byte.
+    // would print that byte. Internal names have a non-empty rest: a lone U+007F is a user name (`"\u007f" = 127`).
     pub(crate) fn mark_symbol_name_literal(&self, node: P<Node>) -> P<Node> {
-        if ast::is_string_literal(node) && node.text().as_bytes().first() == Some(&InternalSymbolNamePrefixByte) {
+        if ast::is_string_literal(node) && node.text().len() > 1 && node.text().as_bytes()[0] == InternalSymbolNamePrefixByte {
             self.e.add_emit_flags(node, EmitFlags::InternalSymbolName);
         }
         node
