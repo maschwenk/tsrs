@@ -2281,8 +2281,8 @@ fn handle_option_config_dir_template_substitution(compiler_options: Option<&mut 
 
     if let Some(paths) = &mut compiler_options.paths {
         for (_, v) in paths.iter_mut() {
-            if let Some(substitution) = get_substituted_string_array_with_config_dir_template(v, base_path) {
-                *v = substitution;
+            if let Some(substitution) = v.as_deref().and_then(|v| get_substituted_string_array_with_config_dir_template(v, base_path)) {
+                *v = Some(substitution);
             }
         }
     }
