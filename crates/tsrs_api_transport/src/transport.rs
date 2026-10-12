@@ -123,13 +123,15 @@ impl Caller for LateCaller {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ServeOptions {
     pub protocol: WireProtocol,
     pub collect_timing: bool,
     pub max_frame_bytes: u64,
     /// See `ConnOptions::reentrancy_grace`.
     pub reentrancy_grace: std::time::Duration,
+    /// See `ConnOptions::shutdown`. The CLI cancels it on SIGINT/SIGTERM (Go signal.NotifyContext).
+    pub shutdown: CancellationToken,
 }
 
 impl ServeOptions {
@@ -140,6 +142,7 @@ impl ServeOptions {
             collect_timing: false,
             max_frame_bytes: DEFAULT_MAX_FRAME_BYTES,
             reentrancy_grace: crate::reentrancy::DEFAULT_ASYNC_GRACE,
+            shutdown: CancellationToken::new(),
         }
     }
 }
@@ -153,7 +156,11 @@ pub enum Connection {
 impl Connection {
     /// Builds the protocol + connection for `stream` (server.go Run), and points `late` at it.
     pub fn new(stream: Stream, handler: Arc<dyn Handler>, options: ServeOptions, late: Option<&LateCaller>) -> Connection {
-        let conn_options = ConnOptions { collect_timing: options.collect_timing, reentrancy_grace: options.reentrancy_grace };
+        let conn_options = ConnOptions {
+            collect_timing: options.collect_timing,
+            reentrancy_grace: options.reentrancy_grace,
+            shutdown: options.shutdown,
+        };
         let conn = match options.protocol {
             WireProtocol::MessagePack => Connection::Sync(SyncConn::new(
                 Box::new(MessagePackReader::with_limit(stream.reader, options.max_frame_bytes)),
@@ -218,6 +225,12 @@ pub fn serve(
         }
         None => (None, Stream::stdio()),
     };
+    let shutdown = options.shutdown.clone();
     let conn = Connection::new(stream, handler, options, Some(&late));
-    conn.run()
+    let result = conn.run();
+    // serverRunError: once the server context is cancelled, how the connection ended is not an error.
+    if shutdown.is_cancelled() {
+        return Ok(());
+    }
+    result
 }

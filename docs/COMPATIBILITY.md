@@ -50,4 +50,5 @@ Updating this table (../AGENTS.md says when; commands and paths below are relati
 | `--init`, `--showConfig` | no | exits with "not supported"; `--help` prints a short usage |
 | `--locale` | ignored | messages are English only |
 | `--generateTrace` | no | warns "Failed to start tracing" (tsgo's message when it can't write a trace) and type-checks as without the flag |
+| Ctrl-C, SIGTERM | `--lsp` and `--api`: yes. Command line: stops at once | the language server exits with status 1 ("context canceled"), the API server with status 0 after the next message or EOF, as in tsgo. tsgo's command line catches the signals too but finishes a non-incremental run anyway; tsrs keeps their default action so a check can be interrupted. Windows: default action everywhere |
 | Prebuilt binaries | yes | macOS arm64, Linux x64/arm64 (glibc and musl since 0.14.0); no Windows or Intel macOS |
