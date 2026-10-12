@@ -161,6 +161,27 @@ Not fixed: making it canonical needs every variance a property type depends on t
 (no such order exists in general), or the circularity to be reported and typed the same wherever it is entered. Both
 change how `getVariancesWorker` and the resolution stack break cycles.
 
+The root `tsconfig.json` (same commit, no overlay, workspace packages unbuilt so `@sequelize/utils` is TS2307) is the
+same case. It was the only sequelize mismatch in the top400 repo-conformance run 38278199589:
+
+```
+-sequelize-typescript.ts(335,12): error TS7022: 'models' implicitly has type 'any' ...
++sequelize-typescript.ts(1053,11): error TS2322: Type 'ModelStatic[] | ModelSetView<Dialect>' is not assignable to type 'Iterable<ModelStatic>'.
++sequelize-typescript.ts(1080,55): error TS2488: Type 'ModelSetView<Dialect>' must have a '[Symbol.iterator]()' method ...
+```
+
+The three lines are one outcome. When the cycle is met, `models` is cached as `any` and lines 1053 and 1080 read
+`any`. When it is not, `models` is `ModelSetView<Dialect>`, whose base `SetView` comes from the unresolved
+`@sequelize/utils`, so it has no `[Symbol.iterator]` and both errors are correct. tsgo-ref prints the `+` side at 1
+and 2 checkers and the `-` side at 4, 8 and 16. Both CI logs reproduce byte for byte on the Mac: the tsgo one is
+tsgo-ref at 4 checkers (its default), the tsrs one is `--checkers 4 --checkerAssignment locality` (the CI runner's
+default count). Under `--checkerAssignment go`, tsrs equals tsgo-ref byte for byte at 1, 2, 4, 8 and 16 checkers and
+`--singleThreaded`, also with `TSRS_LAZY_MEMBERS=0`. Turning off the tsrs-only caches (`TSRS_LAZY_DTS`,
+`TSRS_FLOW_MEMO`, `TSRS_UNION_CACHE`, `TSRS_INFER_MEMO`, `TSRS_LAZY_MEMBERS`) leaves the locality output unchanged.
+With work stealing (the default, no named assignment) the same Mac also printed a third variant, TS7022 plus the
+belongs-to-many.ts(942,13) TS2347 above, and once the `-` side alone. No porting slip in inference was found. Matching
+tsgo here needs Go's assignment at 4 checkers.
+
 ## 3. rxjs: which elaboration the relater reports
 
 From notes/perf-excalidraw-typefest.md (PR #212): rxjs prints its 6,158 errors in every configuration, but five of them
@@ -190,6 +211,9 @@ tsrs ... --checkers 4 --checkerAssignment go                                    
 # sequelize: overlay tsconfig.bench.json, yarn 4 install --mode=skip-build
 tsrs -p tsconfig.bench.json --noEmit --incremental false --pretty false --singleThreaded                         # 42
 tsrs -p tsconfig.bench.json --noEmit --incremental false --pretty false --checkers 4                             # 43
+# sequelize root config (no overlay): the top400 diff, and tsgo-ref's 4-checker output
+tsrs -p tsconfig.json --noEmit --pretty false --checkers 4 --checkerAssignment locality                        # TS2322, TS2488
+tsrs -p tsconfig.json --noEmit --pretty false --checkers 4 --checkerAssignment go                              # TS7022
 # rxjs: overlay from bench PR #206
 tsrs -p packages/rxjs/tsconfig.bench.json --noEmit --incremental false --pretty false --checkers 2 --checkerAssignment random:1
 ```
