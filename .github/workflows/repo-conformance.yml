@@ -1,0 +1,162 @@
+name: Top repository conformance
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "rust-toolchain.toml"
+      - "tools/repo-conformance/**"
+      - ".github/workflows/repo-conformance.yml"
+      - ".node-version"
+      - "npm/build.mjs"
+  pull_request:
+    branches: [main]
+    paths:
+      - "tools/repo-conformance/**"
+      - ".github/workflows/repo-conformance.yml"
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Number of popular repositories (1-400)
+        type: number
+        default: 400
+
+concurrency:
+  group: repo-conformance-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Read TypeScript reference commit
+        id: ts
+        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.ts.outputs.commit }}
+          path: ts-ref
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+      - name: Set up Rust
+        run: rustup show active-toolchain
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          key: repo-conformance
+      - name: Build the two compilers
+        run: |
+          cargo build --release --locked -p tsrs_cli
+          mkdir -p repo-conformance/bin
+          cp target/release/tsrs repo-conformance/bin/tsrs
+          cd ts-ref/tsc
+          go build -o "$GITHUB_WORKSPACE/repo-conformance/bin/tsgo" ./cmd/tsc
+      - name: Check the harness and compiler controls
+        env:
+          TSRS_CONFORMANCE_TSRS: ${{ github.workspace }}/repo-conformance/bin/tsrs
+          TSRS_CONFORMANCE_TSGO: ${{ github.workspace }}/repo-conformance/bin/tsgo
+        run: python3 -m unittest discover -s tools/repo-conformance -p 'test_*.py' -v
+      - name: Select popular TypeScript repositories
+        id: plan
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO_COUNT: ${{ github.event_name == 'pull_request' && '20' || inputs.count || '400' }}
+        run: python3 tools/repo-conformance/run.py plan --count "$REPO_COUNT" --out repo-conformance/manifest.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: repo-conformance-inputs
+          path: repo-conformance/
+          retention-days: 14
+          if-no-files-found: error
+
+  compare:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      max-parallel: 8
+      matrix: ${{ fromJSON(needs.build.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .node-version
+      - name: Set up package managers
+        run: npm install --global --ignore-scripts corepack@0.36.0
+      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: |
+            ~/.npm
+            ~/.cache/node/corepack
+            ~/.local/share/pnpm/store
+          key: repo-conformance-deps-v1-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: repo-conformance-deps-v1-${{ runner.os }}-${{ matrix.shard }}-
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: repo-conformance-inputs
+          path: repo-conformance
+      - name: Compare projects
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          chmod +x repo-conformance/bin/tsgo repo-conformance/bin/tsrs
+          python3 tools/repo-conformance/run.py run --manifest repo-conformance/manifest.json \
+            --shard "$SHARD" --tsgo repo-conformance/bin/tsgo --tsrs repo-conformance/bin/tsrs \
+            --out repo-conformance/results
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: repo-conformance-shard-${{ matrix.shard }}
+          path: repo-conformance/results/
+          retention-days: 14
+          if-no-files-found: error
+
+  report:
+    needs: [build, compare]
+    if: always() && needs.build.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: repo-conformance-*
+          path: repo-conformance-downloads
+      - name: Report compatibility and coverage
+        run: |
+          status=0
+          python3 tools/repo-conformance/run.py report \
+            --manifest repo-conformance-downloads/repo-conformance-inputs/manifest.json \
+            --results repo-conformance-downloads --out repo-conformance-report.md || status=$?
+          cat repo-conformance-report.md >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: repo-conformance-report
+          path: repo-conformance-report.md
+          retention-days: 14
+          if-no-files-found: error
