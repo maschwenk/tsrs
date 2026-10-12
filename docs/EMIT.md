@@ -479,9 +479,10 @@ then-current main:
   `7.1.0-dev`, Go's source default), so a tsrs built with the tsgo version reads and writes tsbuildinfo files that tsgo
   accepts, and vice versa. Different versions simply rebuild from scratch, as in Go.
 - **Default library path.** Go's embedded build reads libs from `bundled:///libs`, the npm (noembed) tsgo from its
-  executable directory; the path sorts differently against project files, which reorders `referencedMap` keys.
-  `TSRS_LIB_PATH=<dir>` makes tsrs read them from a directory like the noembed build (the oracles set it to tsgo's
-  directory).
+  executable directory; the path sorts differently against project files, which reorders `referencedMap` keys. The
+  npm tsrs packages ship the libs next to the binary, and a binary with a `lib.d.ts` beside it reads them from there
+  like the npm tsgo (`bundled::default_lib_path`); a `cargo` build keeps the embedded ones. `TSRS_LIB_PATH=<dir>`
+  overrides both (the oracles set it to tsgo's directory).
 - **Concurrency.** Go runs the per-file snapshot and affected-file work on work groups; tsrs runs it on the calling
   thread in a deterministic order (sorted paths). The transforms run on the checker threads (emit/core); each
   transformed file is then printed and written on the rayon worker pool, at most 4 writes at a time

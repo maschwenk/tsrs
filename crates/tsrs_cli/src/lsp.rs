@@ -35,7 +35,7 @@ pub fn run_lsp(args: &[String]) -> i32 {
     }
 
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(osvfs::fs()));
-    let default_library_path = bundled::lib_path();
+    let default_library_path = bundled::default_lib_path();
     let typings_location = get_global_typings_cache_location();
 
     // signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM): signals keep their default action (the process

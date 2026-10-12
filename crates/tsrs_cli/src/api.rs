@@ -68,7 +68,7 @@ pub(crate) fn new_api_session(flags: &ApiFlags) -> Result<(Arc<Session>, Arc<Cal
     let config = CallbackConfig::parse(&flags.callbacks)?;
     let callback_fs = Arc::new(CallbackFs::new(base, &config, Some(flags.case_sensitive)));
     let fs: Arc<dyn FS> = Arc::<CallbackFs>::clone(&callback_fs);
-    let mut options = SessionOptions::new(flags.cwd.clone(), bundled::lib_path(), fs, !flags.is_async);
+    let mut options = SessionOptions::new(flags.cwd.clone(), bundled::default_lib_path(), fs, !flags.is_async);
     options.run_external_code = flags.run_external_code;
     let session = Session::new(options);
     session.set_build_backend(Arc::new(CliBuildBackend));

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // Assembles the npm packages for tsrs, the way TypeScript 7 ships its native compiler: one main package (Node launcher,
-// `bin/tsrs`) whose `optionalDependencies` name one package per platform, each holding only that platform's binary.
+// `bin/tsrs`) whose `optionalDependencies` name one package per platform, each holding that platform's binary and,
+// beside it, the default libraries (lib.*.d.ts), which the binary then reads from disk like the npm tsgo.
 //
 //   node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 //   node npm/build.mjs --artifacts dir/ --pack      # dir/<target triple>/tsrs[.exe], as the release workflow lays out
@@ -24,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 const npmDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(npmDir, "..");
+const libsDir = path.join(repoRoot, "crates", "tsrs_vfs", "libs");
 
 // Rust target triple -> Node's process.platform / process.arch.
 const TARGETS = {
@@ -280,6 +282,10 @@ function main() {
         const exeName = os === "win32" ? "tsrs.exe" : "tsrs";
         fs.copyFileSync(binary, path.join(dir, exeName));
         fs.chmodSync(path.join(dir, exeName), 0o755);
+        // The binary reads the default libraries from its own directory when they are there (bundled::default_lib_path),
+        // so listings, diagnostics and tsbuildinfo name the same real paths as the npm tsgo.
+        const libNames = fs.readdirSync(libsDir).filter(name => name.endsWith(".d.ts")).sort();
+        for (const libName of libNames) fs.copyFileSync(path.join(libsDir, libName), path.join(dir, libName));
         fs.writeFileSync(path.join(dir, "LICENSE"), license);
         fs.writeFileSync(path.join(dir, "NOTICE.txt"), notice);
         const readme = fs.readFileSync(path.join(npmDir, "platform", "README.md"), "utf8")
@@ -294,7 +300,7 @@ function main() {
             ...common,
             description: `The ${platform} binary for ${name}`,
             preferUnplugged: true,
-            files: [exeName, "NOTICE.txt"],
+            files: [exeName, "NOTICE.txt", ...libNames],
             exports: { "./package.json": "./package.json" },
             os: [os],
             cpu: [cpu],
