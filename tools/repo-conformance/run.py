@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare popular TypeScript projects with tsrs and the pinned Go compiler."""
+"""Compare tsrs and pinned tsgo on popular TypeScript repositories."""
 
 from __future__ import annotations
 
@@ -31,8 +31,7 @@ def write_json(path: Path, data: object) -> None:
 
 
 def child_env() -> dict[str, str]:
-    # Repo package-manager configuration can execute code even with lifecycle scripts disabled.
-    # Only the discovery process gets a GitHub token; package installs and compilers get no CI credentials.
+    # Package-manager config can execute code; exclude CI credentials.
     allowed = {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "USER", "LOGNAME"}
     env = {k: v for k, v in os.environ.items() if k in allowed}
     return dict(env, CI="true", GIT_TERMINAL_PROMPT="0", COREPACK_ENABLE_DOWNLOAD_PROMPT="0",
@@ -52,7 +51,6 @@ def execute(command: list[str], cwd: Path, log: Path, timeout: float) -> dict:
             code = proc.wait(timeout=max(0.01, timeout))
             timed_out = False
         except subprocess.TimeoutExpired:
-            # Kill package-manager/compiler descendants as well as the launcher.
             os.killpg(proc.pid, signal.SIGKILL)
             code = proc.wait()
             timed_out = True
@@ -60,13 +58,13 @@ def execute(command: list[str], cwd: Path, log: Path, timeout: float) -> dict:
 
 
 def discover(count: int, shards: int, out: Path) -> dict:
+    headers = {"Accept": "application/vnd.github+json", "User-Agent": "tsrs-repo-conformance"}
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = "Bearer " + token
     repos = {}
     for page in range(1, 11):
         query = urlencode(dict(q=QUERY, sort="stars", order="desc", per_page=100, page=page))
-        headers = {"Accept": "application/vnd.github+json", "User-Agent": "tsrs-repo-conformance"}
-        token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
-        if token:
-            headers["Authorization"] = "Bearer " + token
         with urlopen(Request("https://api.github.com/search/repositories?" + query, headers=headers), timeout=60) as response:
             data = json.load(response)
         if data.get("incomplete_results"):
@@ -79,7 +77,7 @@ def discover(count: int, shards: int, out: Path) -> dict:
         if len(repos) >= count:
             break
         if not data["items"]:
-            raise RuntimeError(f"Expected {count} repositories, found only {len(repos)}")
+            break
     if len(repos) < count:
         raise RuntimeError(f"Expected {count} repositories, found only {len(repos)}")
     manifest = {
@@ -139,7 +137,6 @@ def check_config(root: Path, config: str, tsgo: Path, tsrs: Path, out: Path, tim
     out.mkdir(parents=True, exist_ok=True)
     compilers = {}
     for label, binary in (("tsgo", tsgo), ("tsrs", tsrs)):
-        # A fresh build-info path prevents either compiler from reusing diagnostics, including composite projects.
         command = [str(binary), "-p", config, "--noEmit", "--pretty", "false", "--extendedDiagnostics",
                    "--incremental", "--tsBuildInfoFile", str(out / (label + ".tsbuildinfo"))]
         (out / (label + ".tsbuildinfo")).unlink(missing_ok=True)
@@ -259,10 +256,9 @@ def summarize(manifest: dict, directory: Path, out: Path) -> bool:
              f"{configs['mismatch']} diagnostic differences; {configs['tsrs_failed']} tsrs failures.", "",
              "Repository status: " + ", ".join(f"{status}: {n}" for status, n in sorted(counts.items())) + ".", "",
              "Project status: " + ", ".join(f"{status}: {n}" for status, n in sorted(configs.items())) + ".", "",
-             "`partial` means some configs matched, but others were skipped or exceeded the per-repo config limit. "
-             "Setup failures, reference failures, empty projects, and untested configs are not passes. "
-             "This checks diagnostics and exit codes with `--noEmit`; it does not check emit or build graphs.", "",
-             "Raw compiler/install logs, diagnostic diffs, and exact repository commits are in the artifacts.", "",
+             "`partial`: some configs matched; others were skipped or exceeded the limit. "
+             "Skipped and empty projects are excluded from the pass count.", "",
+             "Checks use `--noEmit`. Artifacts contain logs, diagnostic diffs, and repository commits.", "",
              "| Repository | Commit | Status | Matching / available configs | Detail |", "| --- | --- | --- | --- | --- |"]
     for name in sorted(expected):
         r = results.get(name, {"status": "missing", "configs": []})

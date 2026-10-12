@@ -13,7 +13,7 @@ def compilation(text="", files=1, code=0, timeout=False):
 
 
 class ComparisonTests(unittest.TestCase):
-    def test_dropped_errors_changed_elaborations_and_reordered_errors_fail_parity(self):
+    def test_dropped_changed_or_reordered_diagnostics_fail_parity(self):
         first = "a.ts(1,1): error TS2322: wrong type.\n  'foo' is missing."
         second = "b.ts(1,1): error TS2345: wrong argument."
         baseline = compilation(first + "\n" + second, code=2)
@@ -21,11 +21,11 @@ class ComparisonTests(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(compare(baseline, compilation(text, code=2)), "mismatch")
 
-    def test_identical_diagnostics_cannot_hide_exit_or_loaded_file_differences(self):
+    def test_exit_codes_and_loaded_file_counts_must_match(self):
         self.assertEqual(compare(compilation(), compilation(code=2)), "mismatch")
         self.assertEqual(compare(compilation(), compilation(files=2)), "mismatch")
 
-    def test_crashes_timeouts_and_empty_projects_never_count_as_matches(self):
+    def test_crashes_timeouts_and_empty_projects_are_not_matches(self):
         for code, timeout in ((-9, False), (101, False), (0, True)):
             with self.subTest(code=code, timeout=timeout):
                 broken = compilation(code=code, timeout=timeout)
@@ -33,7 +33,7 @@ class ComparisonTests(unittest.TestCase):
                 self.assertEqual(compare(broken, broken), "reference_failed")
         self.assertEqual(compare(compilation(files=0), compilation(files=0)), "no_inputs")
 
-    def test_timing_counters_are_excluded_but_multiline_diagnostics_are_preserved(self):
+    def test_parsing_keeps_multiline_diagnostics_and_excludes_counters(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             log = root / "compiler.log"
@@ -43,7 +43,7 @@ class ComparisonTests(unittest.TestCase):
             self.assertEqual(result["diagnostics"], "<repo>/a.ts(1,1): error TS2322: wrong.\n  Detail.")
             self.assertEqual(result["files"], 3)
 
-    def test_timeout_kills_descendants_before_they_can_write_after_the_repository_is_removed(self):
+    def test_timeout_kills_child_processes(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             marker = root / "escaped-child"
@@ -56,7 +56,7 @@ class ComparisonTests(unittest.TestCase):
 
 
 class ReportTests(unittest.TestCase):
-    def test_missing_duplicate_and_wrong_revision_results_cannot_produce_a_green_report(self):
+    def test_missing_duplicate_or_wrong_revision_results_fail_the_report(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 2,
                     "repositories": [{"repository": "a/one"}, {"repository": "a/two"}]}
         with tempfile.TemporaryDirectory() as temp:
@@ -80,7 +80,7 @@ class ReportTests(unittest.TestCase):
             write_json(results / "shard-1.json", wrong)
             self.assertFalse(summarize(manifest, results, out))
 
-    def test_setup_failures_and_empty_projects_do_not_establish_compatibility(self):
+    def test_empty_projects_fail_a_run_with_no_comparisons(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 1,
                     "repositories": [{"repository": "a/one"}]}
         with tempfile.TemporaryDirectory() as temp:
@@ -96,7 +96,7 @@ class ReportTests(unittest.TestCase):
 @unittest.skipUnless(os.environ.get("TSRS_CONFORMANCE_TSRS") and os.environ.get("TSRS_CONFORMANCE_TSGO"),
                      "Set TSRS_CONFORMANCE_TSRS and TSRS_CONFORMANCE_TSGO to run real compiler controls")
 class CompilerControls(unittest.TestCase):
-    def test_real_compilers_check_valid_and_invalid_composite_projects_without_reusing_build_info(self):
+    def test_repeated_composite_checks_do_not_reuse_diagnostics(self):
         tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
         tsgo = Path(os.environ["TSRS_CONFORMANCE_TSGO"]).resolve()
         with tempfile.TemporaryDirectory(dir=Path.cwd()) as temp:
