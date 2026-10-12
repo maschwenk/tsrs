@@ -39,11 +39,11 @@ impl System for osSys {
     }
 
     fn write(&self, text: &str) {
-        let _ = self.writer.lock().unwrap().write_all(text.as_bytes());
+        exit_on_broken_pipe(&self.writer.lock().unwrap().write_all(text.as_bytes()));
     }
 
     fn flush(&self) {
-        let _ = self.writer.lock().unwrap().flush();
+        exit_on_broken_pipe(&self.writer.lock().unwrap().flush());
     }
 
     fn write_output_is_tty(&self) -> bool {
@@ -58,6 +58,24 @@ impl System for osSys {
     fn spawn(&self, command: &[String], dir: &str, stderr: Option<Box<dyn Write + Send>>) -> Result<crate::tsc::ReadWriteCloser, String> {
         tsrs_contentmapper::spawn_process(command, dir, stderr)
     }
+}
+
+// Go's sys.Writer() is os.Stdout, and the Go runtime ends a program whose write to file descriptor 1 or 2 fails
+// with EPIPE by SIGPIPE (os/signal: "If the program is not calling signal.Notify ... a write to a broken pipe on file
+// descriptors 1 or 2 will cause the program to exit with a SIGPIPE signal"), so `tsc | head` stops tsc with status
+// 141. Rust ignores SIGPIPE; this restores the default action and raises it. Other write errors are ignored, as Go's
+// fmt.Fprint callers do.
+fn exit_on_broken_pipe(result: &std::io::Result<()>) {
+    if !matches!(result, Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe) {
+        return;
+    }
+    #[cfg(unix)]
+    // SAFETY: signal and raise take integer arguments only; the default action of SIGPIPE ends the process.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        libc::raise(libc::SIGPIPE);
+    }
+    std::process::exit(crate::tsc::ExitStatus::DiagnosticsPresent_OutputsSkipped as i32);
 }
 
 pub fn new_system() -> osSys {
