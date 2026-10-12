@@ -558,14 +558,10 @@ impl filesParser {
         loader.files_parser.task_data_by_path.reserve(tasks.len());
         loader.files_parser.datas.reserve(tasks.len());
         Self::start(loader, tasks, 0);
-        // Go's single-threaded work group runs the queued closures last-queued first (core/workgroup.go), a depth-first
-        // order that the rounds below do not keep. The program's files do not depend on it, but two outputs do. Which
-        // files a failing content mapper reports before the failure budget disables it (fileloader.go:681, the tsc
-        // contentMapperFailures scenarios): with content mappers, a single-threaded load runs Go's order. Which
-        // resolution trace reads a package.json first ("Found 'package.json'") and which reuse it ("exists according
-        // to earlier cached lookups"): every traced load runs Go's single-threaded order, with no prefetch (its
-        // metadata lookups fill the package.json cache too). Multi-threaded tsgo's traces depend on goroutine timing,
-        // so this keeps tsrs's traces the same at every checker count.
+        // Go's single-threaded work group pops last-queued first (core/workgroup.go). That order controls which
+        // content-mapper failures exhaust the budget (fileloader.go:681) and which package.json reads traces report
+        // as cached. Prefetch metadata fills that cache too. Traced loads use Go's single-threaded order at every
+        // checker count because multi-threaded Go traces depend on goroutine timing.
         let trace_resolution = loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
         if trace_resolution || (loader.files_parser.single_threaded && !loader.content_mapper_extensions.is_empty()) {
             while let Some(item) = loader.files_parser.queue.pop() {
