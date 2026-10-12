@@ -197,7 +197,7 @@ impl<'a> missingMemberFixer<'a> {
                         }
                     }
 
-                    let method = self.create_signature_declaration_from_signature(
+                    self.create_signature_declaration_from_signature(
                         signature,
                         Kind::MethodDeclaration,
                         source_file,
@@ -206,8 +206,7 @@ impl<'a> missingMemberFixer<'a> {
                         modifiers,
                         declaration_name,
                         preserve_optional,
-                    );
-                    if let Some(method) = method { Some(method) } else { None }
+                    )
                 }));
 
                 if signature_only {
@@ -651,7 +650,7 @@ pub(crate) fn create_dummy_parameters(
         let mut parameter_name = if i < names.len() && !names[i].is_empty() {
             names[i].clone()
         } else {
-            format!("arg{}", i)
+            format!("arg{i}")
         };
 
         let count_entry = parameter_name_counts.entry(parameter_name.clone()).or_default();

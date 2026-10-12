@@ -52,9 +52,9 @@ struct importsCollection {
 // import_adder.go:45
 fn new_imports_key(module_specifier: &str, top_level_type_only: bool) -> String {
     if top_level_type_only {
-        return format!("1|{}", module_specifier);
+        return format!("1|{module_specifier}");
     }
-    format!("0|{}", module_specifier)
+    format!("0|{module_specifier}")
 }
 
 // import_adder.go:52
@@ -269,7 +269,8 @@ impl ImportAdder for importAdder {
         let mut new_declarations: Vec<P<Node>> = Vec::new();
         new_declarations.extend(self.new_imports.iter().flat_map(|(key, new_import)| {
             let module_specifier = &key[2..]; // From `${0 | 1}|${moduleSpecifier}` format
-            let declarations = if new_import.use_require {
+
+            if new_import.use_require {
                 get_new_requires(
                     &tracker,
                     module_specifier,
@@ -290,8 +291,7 @@ impl ImportAdder for importAdder {
                     &self.view.program.options(),
                     &self.preferences,
                 )
-            };
-            declarations
+            }
         }));
 
         if !new_declarations.is_empty() {

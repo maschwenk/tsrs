@@ -66,7 +66,7 @@ pub fn run(args: &DumpArgs) {
     let config_dir = tspath::get_directory_path(&config_path);
     let mut files = Vec::new();
     files.extend(program.source_files().iter().filter_map(|&f| {
-        if f.file_name().contains("/node_modules/") || program.is_source_file_default_library(&f.path()) {
+        if f.file_name().contains("/node_modules/") || program.is_source_file_default_library(f.path()) {
             return None;
         }
         Some((f, rel_name(&config_dir, f.file_name())))
@@ -137,10 +137,10 @@ fn rel_name(dir: &str, file_name: &str) -> String {
 }
 
 fn fnv1a64(s: &str) -> u64 {
-    let mut h: u64 = 14695981039346656037;
+    let mut h: u64 = 14_695_981_039_346_656_037;
     for &b in s.as_bytes() {
         h ^= b as u64;
-        h = h.wrapping_mul(1099511628211);
+        h = h.wrapping_mul(1_099_511_628_211);
     }
     h
 }

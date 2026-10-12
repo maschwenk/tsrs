@@ -228,7 +228,7 @@ impl projectLoadingProgress {
                         *loading.entry(text.clone()).or_default() += 1;
                         if token.is_empty() {
                             token_id += 1;
-                            token = format!("tsgo-loading-{}", token_id);
+                            token = format!("tsgo-loading-{token_id}");
                             begun = false;
                             if self.delay.is_zero() {
                                 delay_fired = true;

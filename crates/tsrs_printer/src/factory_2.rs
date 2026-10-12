@@ -277,7 +277,7 @@ impl crate::NodeFactory {
             Kind::NonNullExpression => self.update_non_null_expression(outer_expression, expression, outer_expression.flags()),
             Kind::ExpressionWithTypeArguments => self.update_expression_with_type_arguments(outer_expression, expression, outer_expression.type_argument_list()),
             Kind::PartiallyEmittedExpression => self.update_partially_emitted_expression(outer_expression, expression),
-            k => panic!("Unexpected outer expression kind: {:?}", k),
+            k => panic!("Unexpected outer expression kind: {k:?}"),
         }
     }
 

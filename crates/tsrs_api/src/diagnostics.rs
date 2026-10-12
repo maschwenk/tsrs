@@ -84,7 +84,7 @@ pub fn diagnostic_response(d: &Diagnostic) -> Value {
                 )
                 .set(
                     "character",
-                    n(u32::try_from(start_char).expect("character offset exceeds u32")),
+                    n(start_char),
                 )
                 .build(),
             Obj::new()
@@ -94,7 +94,7 @@ pub fn diagnostic_response(d: &Diagnostic) -> Value {
                 )
                 .set(
                     "character",
-                    n(u32::try_from(end_char).expect("character offset exceeds u32")),
+                    n(end_char),
                 )
                 .build(),
             source_lines(&file, start_line, end_line),

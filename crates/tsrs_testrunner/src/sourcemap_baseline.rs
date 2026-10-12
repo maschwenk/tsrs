@@ -163,7 +163,7 @@ fn query_escape(s: &str) -> String {
             out.push('+');
         } else {
             out.push('%');
-            let _ = write!(out, "{:02X}", c);
+            let _ = write!(out, "{c:02X}");
         }
     }
     out
@@ -210,9 +210,9 @@ fn base64_std_encode(data: &[u8]) -> String {
         let b2 = chunk.get(2).copied().unwrap_or(0) as u32;
         let v = (b0 << 16) | (b1 << 8) | b2;
         [
-            ALPHABET[(v >> 18 & 0x3f) as usize] as char,
-            ALPHABET[(v >> 12 & 0x3f) as usize] as char,
-            if chunk.len() > 1 { ALPHABET[(v >> 6 & 0x3f) as usize] as char } else { '=' },
+            ALPHABET[((v >> 18) & 0x3f) as usize] as char,
+            ALPHABET[((v >> 12) & 0x3f) as usize] as char,
+            if chunk.len() > 1 { ALPHABET[((v >> 6) & 0x3f) as usize] as char } else { '=' },
             if chunk.len() > 2 { ALPHABET[(v & 0x3f) as usize] as char } else { '=' },
         ]
     }));
@@ -225,7 +225,7 @@ pub(crate) fn do_sourcemap_record_baseline(baseline_path: &str, options: &Compil
     let mut actual = NO_CONTENT.to_string();
     if options.source_map.is_true() || options.inline_source_map.is_true() || options.declaration_map.is_true() {
         let record = remove_test_path_prefixes(&(result.get_source_map_record)(), false /*retainTrailingDirectorySeparator*/);
-        if !(options.no_emit_on_error.is_true() && result.diagnostics_count > 0) && !record.is_empty() {
+        if (!options.no_emit_on_error.is_true() || result.diagnostics_count == 0) && !record.is_empty() {
             actual = record;
         }
     }

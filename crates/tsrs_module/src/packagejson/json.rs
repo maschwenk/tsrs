@@ -30,7 +30,7 @@ impl Json {
     // `json.Unmarshal` without `AllowDuplicateNames(true)` rejects such input.
     pub fn has_duplicate_names(&self) -> bool {
         match self {
-            Json::Array(elements) => elements.iter().any(|e| e.has_duplicate_names()),
+            Json::Array(elements) => elements.iter().any(Json::has_duplicate_names),
             Json::Object(members) => {
                 let mut seen = rustc_hash::FxHashSet::default();
                 members.iter().any(|(name, value)| !seen.insert(name.as_str()) || value.has_duplicate_names())
@@ -183,9 +183,9 @@ impl JsonParser<'_> {
                 self.pos += 1;
             }
         }
-        if matches!(self.peek(), Some(b'e') | Some(b'E')) {
+        if matches!(self.peek(), Some(b'e' | b'E')) {
             self.pos += 1;
-            if matches!(self.peek(), Some(b'+') | Some(b'-')) {
+            if matches!(self.peek(), Some(b'+' | b'-')) {
                 self.pos += 1;
             }
             if !matches!(self.peek(), Some(b'0'..=b'9')) {

@@ -144,11 +144,11 @@ fn base64_encode(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     out.extend(data.chunks(3).flat_map(|chunk| {
         let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
-        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
         [
-            ALPHABET[(n >> 18 & 63) as usize] as char,
-            ALPHABET[(n >> 12 & 63) as usize] as char,
-            if chunk.len() > 1 { ALPHABET[(n >> 6 & 63) as usize] as char } else { '=' },
+            ALPHABET[((n >> 18) & 63) as usize] as char,
+            ALPHABET[((n >> 12) & 63) as usize] as char,
+            if chunk.len() > 1 { ALPHABET[((n >> 6) & 63) as usize] as char } else { '=' },
             if chunk.len() > 2 { ALPHABET[(n & 63) as usize] as char } else { '=' },
         ]
     }));

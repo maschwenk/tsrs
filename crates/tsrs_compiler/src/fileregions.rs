@@ -139,7 +139,7 @@ pub(crate) fn force_shared_lists(program: &crate::program::Program) {
         return;
     }
     let mut lists: Vec<P<tsrs_ast::lazylist::LazyNodeList>> = Vec::new();
-    if !std::env::var_os("TSRS_LAZY_DTS_SHARED").is_some_and(|v| v == "0") {
+    if std::env::var_os("TSRS_LAZY_DTS_SHARED").is_none_or(|v| v != "0") {
         lists.extend(
             global_library_files(program)
                 .into_iter()
@@ -544,9 +544,7 @@ pub(crate) fn has_region(file: P<SourceFile>) -> bool {
 }
 
 pub(crate) fn assert_not_freed(file: P<SourceFile>) {
-    if file.is_check_leaf() && !REGIONS.lock().unwrap().contains_key(&file) {
-        panic!("fileregions: {} was freed after the type-check pass; its tree can no longer be read", file.file_name());
-    }
+    assert!(!file.is_check_leaf() || REGIONS.lock().unwrap().contains_key(&file), "fileregions: {} was freed after the type-check pass; its tree can no longer be read", file.file_name());
 }
 
 /// After the type-check pass that freed leaves: gives back the pages of the last batch of freed regions.

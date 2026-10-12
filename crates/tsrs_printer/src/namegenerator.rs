@@ -10,9 +10,9 @@ bitflags::bitflags! {
     // Flags enum to track count of temp variables and a few dedicated names
     #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
     pub(crate) struct tempFlags: u32 {
-        const Auto = 0x00000000; // No preferred name
-        const CountMask = 0x0FFFFFFF; // Temp variable counter
-        const _i = 0x10000000; // Use/preference flag for '_i'
+        const Auto = 0x0000_0000; // No preferred name
+        const CountMask = 0x0FFF_FFFF; // Temp variable counter
+        const _i = 0x1000_0000; // Use/preference flag for '_i'
     }
 }
 
@@ -160,21 +160,15 @@ impl NameGenerator {
                 self.make_unique_name(&text, None /*checkFn*/, flags.is_optimistic(), flags.is_reserved_in_nested_scopes(), private_name, prefix, suffix)
             }
             Kind::ModuleDeclaration | Kind::EnumDeclaration => {
-                if private_name || !prefix.is_empty() || !suffix.is_empty() {
-                    panic!("Generated name for a module or enum cannot be private and may have neither a prefix nor suffix");
-                }
+                assert!(!(private_name || !prefix.is_empty() || !suffix.is_empty()), "Generated name for a module or enum cannot be private and may have neither a prefix nor suffix");
                 self.generate_name_for_module_or_enum(node)
             }
             Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => {
-                if private_name || !prefix.is_empty() || !suffix.is_empty() {
-                    panic!("Generated name for an import or export cannot be private and may have neither a prefix nor suffix");
-                }
+                assert!(!(private_name || !prefix.is_empty() || !suffix.is_empty()), "Generated name for an import or export cannot be private and may have neither a prefix nor suffix");
                 self.generate_name_for_import_or_export_declaration(node)
             }
             Kind::FunctionDeclaration | Kind::ClassDeclaration => {
-                if private_name || !prefix.is_empty() || !suffix.is_empty() {
-                    panic!("Generated name for a class or function declaration cannot be private and may have neither a prefix nor suffix");
-                }
+                assert!(!(private_name || !prefix.is_empty() || !suffix.is_empty()), "Generated name for a class or function declaration cannot be private and may have neither a prefix nor suffix");
                 let name = node.name();
                 if let Some(name) = name {
                     // NOTE: Go writes `!(g.Context == nil && g.Context.HasAutoGenerateInfo(name))`, which is always true
@@ -186,15 +180,11 @@ impl NameGenerator {
                 self.generate_name_for_export_default()
             }
             Kind::ExportAssignment => {
-                if private_name || !prefix.is_empty() || !suffix.is_empty() {
-                    panic!("Generated name for an export assignment cannot be private and may have neither a prefix nor suffix");
-                }
+                assert!(!(private_name || !prefix.is_empty() || !suffix.is_empty()), "Generated name for an export assignment cannot be private and may have neither a prefix nor suffix");
                 self.generate_name_for_export_default()
             }
             Kind::ClassExpression => {
-                if private_name || !prefix.is_empty() || !suffix.is_empty() {
-                    panic!("Generated name for a class expression cannot be private and may have neither a prefix nor suffix");
-                }
+                assert!(!(private_name || !prefix.is_empty() || !suffix.is_empty()), "Generated name for a class expression cannot be private and may have neither a prefix nor suffix");
                 self.generate_name_for_class_expression()
             }
             Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => self.generate_name_for_method_or_accessor(node, private_name, prefix, suffix),
@@ -343,7 +333,7 @@ impl NameGenerator {
 
         let mut i = 1;
         loop {
-            let full_name = format_generated_name(private_name, prefix, &format!("{}{}", base_name, i), suffix);
+            let full_name = format_generated_name(private_name, prefix, &format!("{base_name}{i}"), suffix);
             if self.check_unique_name(&full_name, private_name, check_fn) {
                 self.reserve_name(&full_name, private_name, scoped, false /*temp*/);
                 return full_name;

@@ -93,13 +93,13 @@ impl Checker {
                         if flags.intersects(ElementFlags::Rest) {
                             synthetic_type = self.create_array_type(t);
                         }
-                        let synthetic_arg = self.create_synthetic_expression(
+
+                        self.create_synthetic_expression(
                             arg,
                             synthetic_type,
                             flags.intersects(ElementFlags::Variable),
                             element_infos[i].labeled_declaration,
-                        );
-                        synthetic_arg
+                        )
                     }));
                 } else {
                     effective_args.push(arg);
@@ -201,7 +201,7 @@ impl Checker {
                 }
                 Kind::Parameter => 'case: {
                     let parent = node.parent().unwrap();
-                    if !ast::is_constructor_declaration(parent) && !(ast::is_method_declaration(parent) || ast::is_set_accessor_declaration(parent) && ast::is_class_like(parent.parent().unwrap())) {
+                    if !(ast::is_constructor_declaration(parent) || ast::is_method_declaration(parent) || ast::is_set_accessor_declaration(parent) && ast::is_class_like(parent.parent().unwrap())) {
                         break 'case;
                     }
                     if ast::get_this_parameter(parent) == Some(node) {
@@ -764,12 +764,12 @@ impl Checker {
         let mut mapped_types = self.free_type_lists.pop().unwrap_or_default();
         mapped_types.extend(relevant.iter().filter_map(|&i| {
             let s = types[i as usize];
-            let mapped = if s.flags().intersects(TypeFlags::Union) {
+
+            if s.flags().intersects(TypeFlags::Union) {
                 self.map_type_ex(s, |c, t| c.contextual_property_type_of_constituent(t, name, name_type), true /*noReductions*/)
             } else {
                 self.contextual_property_type_of_constituent(s, name, name_type)
-            };
-            if let Some(mapped) = mapped { Some(mapped) } else { None }
+            }
         }));
         let result = if mapped_types.is_empty() { None } else { Some(self.get_union_type_ex(&mapped_types, UnionReduction::None, AliasArg::None, None)) };
         self.free_type_list(mapped_types);
@@ -853,7 +853,7 @@ impl Checker {
             Some(name_type) => name_type,
             None => self.get_string_literal_type(name),
         };
-        let index_info = self.find_applicable_index_info(&index_infos, name_type);
+        let index_info = self.find_applicable_index_info(index_infos, name_type);
         let Some(index_info) = index_info else {
             return None;
         };
@@ -989,16 +989,10 @@ impl Checker {
                     if keep { Some(p) } else { None }
                 }));
                 let mut discriminant_members = Vec::new();
-                discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter_map(|s| {
+                discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter(|&s| {
                     let node_members = node.symbol().unwrap().members();
-                    if s.flags().intersects(SymbolFlags::Optional)
-                        && node_members.map_or(true, |m| m.lookup(s.name()).is_none())
-                        && self.is_discriminant_property(Some(contextual_type), s.name())
-                    {
-                        Some(s)
-                    } else {
-                        None
-                    }
+                    s.flags().intersects(SymbolFlags::Optional)
+                        && node_members.is_none_or(|m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name())
                 }));
                 let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
                 self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator)
@@ -1710,7 +1704,7 @@ impl Checker {
             // We only need `Awaited<T>` if `T` is a type variable that has no base constraint, or the base constraint of `T` is `any`, `unknown`, `{}`, `object`,
             // or is promise-like.
             if let Some(base_constraint) = base_constraint {
-                return base_constraint.flags().intersects(TypeFlags::AnyOrUnknown) || self.is_empty_object_type(base_constraint) || some_type(self, base_constraint, |c, t| c.is_thenable_type(t));
+                return base_constraint.flags().intersects(TypeFlags::AnyOrUnknown) || self.is_empty_object_type(base_constraint) || some_type(self, base_constraint, super::checker::Checker::is_thenable_type);
             }
             return self.maybe_type_of_kind(t, TypeFlags::TypeVariable);
         }
@@ -1825,7 +1819,7 @@ impl Checker {
         // parameter type 'T extends string | undefined' with a contextual type 'string', we substitute
         // 'string | undefined' to give control flow analysis the opportunity to narrow to type 'string'.
         let substitute_constraints = !check_mode.intersects(CheckMode::Inferential)
-            && some_type(self, t, |c, t| c.is_generic_type_with_union_constraint(t))
+            && some_type(self, t, super::checker::Checker::is_generic_type_with_union_constraint)
             && (self.is_constraint_position(t, reference) || self.has_contextual_type_with_no_generic_types(reference, check_mode));
         if substitute_constraints {
             return self.map_type(t, |c, t| Some(c.get_base_constraint_or_type(t))).unwrap();
@@ -1840,7 +1834,7 @@ impl Checker {
         if self.is_no_infer_type(t) {
             t = t.as_substitution_type().base_type.get().unwrap();
         }
-        let position_read = some_type(self, t, |c, t| c.is_generic_type_with_union_constraint(t));
+        let position_read = some_type(self, t, super::checker::Checker::is_generic_type_with_union_constraint);
         let substitute_constraints = position_read && (self.is_constraint_position(t, reference) || self.has_contextual_type_with_no_generic_types(reference, CheckMode::Normal));
         if substitute_constraints {
             return (self.map_type(t, |c, t| Some(c.get_base_constraint_or_type(t))).unwrap(), true);
@@ -1857,7 +1851,7 @@ impl Checker {
         ast::is_property_access_expression(parent)
             || ast::is_qualified_name(parent)
             || (ast::is_call_expression(parent) || ast::is_new_expression(parent)) && parent.expression() == Some(node)
-            || ast::is_element_access_expression(parent) && parent.expression() == Some(node) && !(some_type(self, t, |c, t| c.is_generic_type_without_nullable_constraint(t)) && {
+            || ast::is_element_access_expression(parent) && parent.expression() == Some(node) && !(some_type(self, t, super::checker::Checker::is_generic_type_without_nullable_constraint) && {
                 let index_type = self.get_type_of_expression(parent.as_element_access_expression().argument_expression);
                 self.is_generic_index_type(index_type)
             })
@@ -1904,7 +1898,7 @@ impl Checker {
     // checker.go:32037
     pub(crate) fn get_non_undefined_type(&mut self, t: P<Type>) -> P<Type> {
         let mut type_or_constraint = t;
-        if some_type(self, t, |c, t| c.is_generic_type_with_undefined_constraint(t)) {
+        if some_type(self, t, super::checker::Checker::is_generic_type_with_undefined_constraint) {
             type_or_constraint = self
                 .map_type(t, |c, t| {
                     if t.flags().intersects(TypeFlags::Instantiable) {
@@ -2105,9 +2099,7 @@ impl Checker {
             }
             Kind::ExportKeyword => {
                 if ast::is_export_assignment(parent) {
-                    if parent.symbol().is_none() {
-                        panic!("Symbol should be defined");
-                    }
+                    assert!(parent.symbol().is_some(), "Symbol should be defined");
                     return parent.symbol();
                 }
                 None
@@ -2189,9 +2181,7 @@ impl Checker {
         } else if ast::is_entity_name(name) && is_in_right_side_of_import_or_export_assignment(name) {
             // Since we already checked for ExportAssignment, this really could only be an Import
             let import_equals_declaration = ast::find_ancestor_kind(name, Kind::ImportEqualsDeclaration);
-            if import_equals_declaration.is_none() {
-                panic!("ImportEqualsDeclaration should be defined");
-            }
+            assert!(import_equals_declaration.is_some(), "ImportEqualsDeclaration should be defined");
             return self.get_symbol_of_part_of_right_hand_side_of_import_equals(name);
         }
 
@@ -2218,13 +2208,13 @@ impl Checker {
 
                 // In a class 'extends' clause we are also looking for a value.
                 if ast::is_expression_with_type_arguments_in_class_extends_clause(name_parent) {
-                    meaning = meaning | SymbolFlags::Value;
+                    meaning |= SymbolFlags::Value;
                 }
             } else {
                 meaning = SymbolFlags::Namespace;
             }
 
-            meaning = meaning | SymbolFlags::Alias;
+            meaning |= SymbolFlags::Alias;
             let mut entity_name_symbol = None;
             if ast::is_entity_name_expression(name) {
                 entity_name_symbol = self.resolve_entity_name(name, meaning, true /*ignoreErrors*/, false /*dontResolveAlias*/, None /*location*/);
@@ -2347,7 +2337,7 @@ impl Checker {
             if !is_implements {
                 // A SyntaxKind.ExpressionWithTypeArguments is considered a type node, except when it occurs in the
                 // extends clause of a class. We handle that case here.
-                let base_type = first_or_nil(&self.get_base_types(class_type));
+                let base_type = first_or_nil(self.get_base_types(class_type));
                 if let Some(base_type) = base_type {
                     return self.get_type_with_this_argument(base_type, class_type.as_interface_type().this_type.get(), false /*needApparentType*/);
                 }
@@ -2495,11 +2485,7 @@ impl Checker {
                         declarations = vec![declaration];
                     } else {
                         declarations.extend(self.get_index_infos_of_type(t).iter().copied().filter_map(|info| {
-                            if let Some(declaration) = info.declaration.get() {
-                                if self.is_applicable_index_type(key_type, info.key_type.get().unwrap()) { Some(declaration) } else { None }
-                            } else {
-                                None
-                            }
+                            info.declaration.get().filter(|&_declaration| self.is_applicable_index_type(key_type, info.key_type.get().unwrap()))
                         }));
                     }
                     if !declarations.is_empty() {

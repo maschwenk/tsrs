@@ -88,9 +88,7 @@ pub struct Common {
 
 pub fn root_length(p: &str) -> usize {
     let l = tspath::get_encoded_root_length(p);
-    if l == tspath::EncodedRootLength::Relative {
-        panic!("vfs: path {:?} is not absolute", p);
-    }
+    assert!(l != tspath::EncodedRootLength::Relative, "vfs: path {p:?} is not absolute");
     l.len()
 }
 
@@ -177,7 +175,6 @@ impl Common {
                             add_to_result(&mut result, &mut symlinks, &entry.name, stat.mode, true);
                         }
                     }
-                    continue;
                 }
             }
         }
@@ -232,7 +229,7 @@ pub fn decode_bytes(mut s: Vec<u8>) -> String {
 }
 
 fn decode_utf16(s: &[u8], big_endian: bool) -> String {
-    let ints = s.chunks_exact(2).map(|c| {
+    let ints = s.as_chunks::<2>().0.iter().map(|c| {
         if big_endian {
             u16::from_be_bytes([c[0], c[1]])
         } else {

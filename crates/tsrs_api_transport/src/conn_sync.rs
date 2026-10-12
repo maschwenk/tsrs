@@ -71,7 +71,7 @@ impl SyncConn {
     }
 
     fn lock(&self) -> MutexGuard<'_, SyncIo> {
-        self.io.lock().unwrap_or_else(|e| e.into_inner())
+        self.io.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     /// Run: processes messages until EOF (Ok) or a fatal error. Always cancels the token on exit.

@@ -68,7 +68,7 @@ impl processingDiagnostic {
                             unqualified_lib_name,
                             tsoptions::LIBS.iter().copied(),
                             |s| *s,
-                            |a, b| a.cmp(b),
+                            std::cmp::Ord::cmp,
                         )
                         .unwrap_or("");
                         let message = if !suggestion.is_empty() {

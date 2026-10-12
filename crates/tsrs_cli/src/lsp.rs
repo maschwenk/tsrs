@@ -31,7 +31,7 @@ pub fn run_lsp(args: &[String]) -> i32 {
 
     if !pprof_dir.is_empty() {
         // pprof is out of scope (docs/LSP.md): the message is printed, no profile is written.
-        eprintln!("pprof profiles will be written to: {}", pprof_dir);
+        eprintln!("pprof profiles will be written to: {pprof_dir}");
     }
 
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(osvfs::fs()));
@@ -75,7 +75,7 @@ pub fn run_lsp(args: &[String]) -> i32 {
     #[cfg(feature = "alloc-profile")]
     crate::census::run_lsp(&s);
     if let Err(err) = result {
-        eprintln!("{}", err);
+        eprintln!("{err}");
         return 1;
     }
     0
@@ -116,7 +116,7 @@ fn start_parent_process_watchdog(ctx: &Context, stop: &CancelFunc, parent_pid: i
                 return;
             }
             if !is_process_alive(parent_pid) {
-                eprintln!("Parent process {} has exited, shutting down.", parent_pid);
+                eprintln!("Parent process {parent_pid} has exited, shutting down.");
                 stop.call();
                 return;
             }
@@ -264,11 +264,11 @@ impl flagSet {
             out.push_str(&line);
             out.push('\n');
         }
-        eprint!("{}", out);
+        eprint!("{out}");
     }
 
     fn fail(&self, message: &str) -> Result<(), ()> {
-        eprintln!("{}", message);
+        eprintln!("{message}");
         self.usage();
         Err(())
     }
@@ -291,7 +291,7 @@ impl flagSet {
             }
             let name = &s[num_minuses..];
             if name.is_empty() || name.starts_with('-') || name.starts_with('=') {
-                return self.fail(&format!("bad flag syntax: {}", s));
+                return self.fail(&format!("bad flag syntax: {s}"));
             }
             i += 1;
 
@@ -306,7 +306,7 @@ impl flagSet {
                     self.usage();
                     return Err(());
                 }
-                return self.fail(&format!("flag provided but not defined: -{}", name));
+                return self.fail(&format!("flag provided but not defined: -{name}"));
             };
 
             match self.flags[index].value {
@@ -315,7 +315,7 @@ impl flagSet {
                         None => true,
                         Some("1" | "t" | "T" | "TRUE" | "true" | "True") => true,
                         Some("0" | "f" | "F" | "FALSE" | "false" | "False") => false,
-                        Some(v) => return self.fail(&format!("invalid boolean value {:?} for -{}: parse error", v, name)),
+                        Some(v) => return self.fail(&format!("invalid boolean value {v:?} for -{name}: parse error")),
                     };
                     self.flags[index].value = flagValue::Bool(b);
                 }
@@ -324,7 +324,7 @@ impl flagSet {
                         Some(value) => value,
                         None => {
                             if i >= args.len() {
-                                return self.fail(&format!("flag needs an argument: -{}", name));
+                                return self.fail(&format!("flag needs an argument: -{name}"));
                             }
                             i += 1;
                             args[i - 1].clone()
@@ -333,7 +333,7 @@ impl flagSet {
                     let new_value = match self.flags[index].value {
                         flagValue::Int(_) => match parse_go_int(&value) {
                             Ok(n) => flagValue::Int(n),
-                            Err(reason) => return self.fail(&format!("invalid value {:?} for flag -{}: {}", value, name, reason)),
+                            Err(reason) => return self.fail(&format!("invalid value {value:?} for flag -{name}: {reason}")),
                         },
                         _ => flagValue::String(value),
                     };

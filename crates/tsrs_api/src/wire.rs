@@ -143,7 +143,7 @@ impl<'a> Params<'a> {
 pub fn as_u64(v: &Value, key: &str) -> ApiResult<u64> {
     match v {
         // Range and syntax were checked by `predecode` against the field's Go type.
-        Value::Number(x) if *x >= 0.0 && x.fract() == 0.0 && *x < 18446744073709551616.0 => Ok(*x as u64),
+        Value::Number(x) if *x >= 0.0 && x.fract() == 0.0 && *x < 18_446_744_073_709_551_616.0 => Ok(*x as u64),
         Value::Null => Ok(0),
         _ => Err(ApiError::invalid_request(format!("{key} must be a non-negative integer"))),
     }

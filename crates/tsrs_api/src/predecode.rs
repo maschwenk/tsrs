@@ -333,7 +333,7 @@ struct Scanner<'a> {
     i: usize,
 }
 
-impl<'a> Scanner<'a> {
+impl Scanner<'_> {
     fn ws(&mut self) {
         self.i += (self.i..self.b.len()).take_while(|&index| matches!(self.b[index], b' ' | b'\t' | b'\n' | b'\r')).count();
     }
@@ -611,7 +611,6 @@ fn batch_params(raw: &[u8]) -> Vec<Option<Vec<u8>>> {
             None | Some(b']') => return out,
             Some(b',') => {
                 s.i += 1;
-                continue;
             }
             Some(b'{') => {
                 let mut params = None;

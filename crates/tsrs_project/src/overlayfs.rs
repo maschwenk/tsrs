@@ -269,7 +269,7 @@ impl Script for Overlay {
 
 impl Script for &Overlay {
     fn file_name(&self) -> &str {
-        (**self).base.file_name()
+        self.base.file_name()
     }
     fn original_file_name(&self) -> &str {
         Overlay::original_file_name(self)
@@ -592,9 +592,7 @@ impl overlayFS {
             let uri = change.uri.clone();
             let events = match file_event_map.get_mut(&uri) {
                 Some(events) => {
-                    if events.open_change.is_some() {
-                        panic!("should see no changes after open");
-                    }
+                    assert!(events.open_change.is_none(), "should see no changes after open");
                     events
                 }
                 None => {
@@ -626,9 +624,7 @@ impl overlayFS {
                     events.watch_changed = false;
                 }
                 FileChangeKind::Change => {
-                    if events.close_change.is_some() {
-                        panic!("should see no changes after close");
-                    }
+                    assert!(events.close_change.is_none(), "should see no changes after close");
                     events.changes.push(change.clone());
                     events.saved = false;
                     events.watch_changed = false;
@@ -671,9 +667,7 @@ impl overlayFS {
             let mut o = new_overlays.get(&path).cloned();
 
             if let Some(open_change) = &events.open_change {
-                if !result.opened.0.is_empty() || !result.reopened.0.is_empty() {
-                    panic!("can only process one file open event at a time");
-                }
+                assert!(!(!result.opened.0.is_empty() || !result.reopened.0.is_empty()), "can only process one file open event at a time");
                 match &o {
                     Some(existing) if existing.content() != open_change.content => {
                         result.changed.add(uri.clone());

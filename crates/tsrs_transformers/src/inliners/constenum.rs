@@ -11,9 +11,7 @@ pub struct ConstEnumInliningTransformer {
 pub fn new_const_enum_inlining_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opt.compiler_options;
     let emit_context = opt.context;
-    if compiler_options.get_isolated_modules() {
-        panic!("const enums are not inlined under isolated modules");
-    }
+    assert!(!compiler_options.get_isolated_modules(), "const enums are not inlined under isolated modules");
     let tx = P::new(ConstEnumInliningTransformer { base: Transformer::default(), compiler_options, emit_resolver: opt.emit_resolver });
     Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(emit_context)))
 }

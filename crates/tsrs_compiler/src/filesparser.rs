@@ -128,7 +128,7 @@ impl parseTask {
     pub(crate) fn reason_path(&mut self) -> &'static str {
         let path = &self.path;
         let data = self.data.get_or_insert_with(Default::default);
-        *data.reason_path.get_or_insert_with(|| tsrs_core::alloc_str(path.as_str()))
+        data.reason_path.get_or_insert_with(|| tsrs_core::alloc_str(path.as_str()))
     }
 }
 
@@ -194,7 +194,7 @@ fn load(t: TaskId, loader: &mut fileLoader) {
                         args: vec![normalized_file_path],
                     }));
                 } else {
-                    let flat: Vec<&str> = loader.supported_extensions.iter().flatten().map(|s| s.as_str()).collect();
+                    let flat: Vec<&str> = loader.supported_extensions.iter().flatten().map(std::string::String::as_str).collect();
                     loader.tasks[t].data().processing_diagnostics.push(processingDiagnostic::explaining(includeExplainingDiagnostic {
                         file: None,
                         diagnostic_reason: include_reason,
@@ -235,7 +235,6 @@ fn load(t: TaskId, loader: &mut fileLoader) {
             match loader.resolve_tripleslash_path_reference(&ref_.file_name, file.file_name(), index, prefetched_lookup) {
                 Err(processing_diagnostic) => {
                     loader.tasks[t].data().processing_diagnostics.push(processing_diagnostic);
-                    continue;
                 }
                 Ok(resolved_ref) => loader.add_sub_task(t, &resolved_ref, None),
             }
@@ -440,7 +439,7 @@ struct speculation<'a> {
     results: std::sync::Mutex<Vec<(Path, speculativeParse)>>,
 }
 
-impl<'a> speculation<'a> {
+impl speculation<'_> {
     // The files that loading `file` adds as sub tasks which are certainly loaded and parsed in turn: triple-slash
     // references and type reference directives that resolved, and imports that `resolved_import_sub_task` adds and
     // does not elide by depth. Lib reference directives and the synthetic helper/JSX imports are left to the loader.
@@ -714,12 +713,8 @@ impl filesParser {
             let unlisted = (!data.tasks.contains_key(&task.normalized_file_path)).then_some(item.task);
             // `task_needs_parse` before the key: it is false for a loaded task, and most of a later round's queued
             // sub tasks name files that an earlier round loaded (vscode's round 2: ~110k of them for 16 files).
-            to_parse.extend(data.tasks.values().copied().chain(unlisted).filter_map(|candidate| {
-                if task_needs_parse(loader, candidate) && planned.insert((item.data, Arc::clone(&loader.tasks[candidate].normalized_file_path))) {
-                    Some(candidate)
-                } else {
-                    None
-                }
+            to_parse.extend(data.tasks.values().copied().chain(unlisted).filter(|&candidate| {
+                task_needs_parse(loader, candidate) && planned.insert((item.data, Arc::clone(&loader.tasks[candidate].normalized_file_path)))
             }));
         }
         // The sub tasks the round's loads will append to `loader.tasks` (at most), reserved at once: on vscode the first

@@ -37,9 +37,9 @@ pub fn new_owner_cache<K: Hash + Eq, V, LoadArgs>(
 impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
     // ownercache.go:38
     pub fn load_and_acquire(&self, identity: &K, owner: u64, load_args: &LoadArgs) -> V {
-        self.load_or_store_locked_entry(&identity, |entry, loaded| {
-            if !loaded || self.is_expired.as_ref().is_some_and(|is_expired| is_expired(&identity, entry.value.as_ref().unwrap(), &load_args)) {
-                entry.value = Some((self.parse)(&identity, &load_args));
+        self.load_or_store_locked_entry(identity, |entry, loaded| {
+            if !loaded || self.is_expired.as_ref().is_some_and(|is_expired| is_expired(identity, entry.value.as_ref().unwrap(), load_args)) {
+                entry.value = Some((self.parse)(identity, load_args));
             }
             entry.owners.insert(owner);
             entry.value.clone().unwrap()
@@ -48,12 +48,12 @@ impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
 
     // ownercache.go:48
     pub fn acquire(&self, identity: &K, owner: u64, value: V) {
-        self.load_or_store_locked_entry(&identity, |entry, loaded| {
+        self.load_or_store_locked_entry(identity, |entry, loaded| {
             if !loaded {
                 entry.value = Some(value);
             }
             entry.owners.insert(owner);
-        })
+        });
     }
 
     // ownercache.go:60
@@ -65,9 +65,7 @@ impl<K: Hash + Eq + Clone, V: Clone, LoadArgs> OwnerCache<K, V, LoadArgs> {
             panic!("OwnerCache.AddOwner: entry not found");
         };
         let mut st = entry.mu.lock().unwrap();
-        if st.owners.is_empty() {
-            panic!("OwnerCache.AddOwner: entry has no owners");
-        }
+        assert!(!st.owners.is_empty(), "OwnerCache.AddOwner: entry has no owners");
         st.owners.insert(owner);
     }
 

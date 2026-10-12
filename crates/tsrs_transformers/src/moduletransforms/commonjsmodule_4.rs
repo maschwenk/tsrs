@@ -691,7 +691,7 @@ impl CommonJSModuleTransformer {
     pub(crate) fn visit_expression_identifier(&self, node: P<Node>) -> P<Node> {
         let emit_context = self.emit_context();
         let info = emit_context.get_auto_generate_info(Some(node));
-        if !(info.is_some_and(|info| !info.flags.has_allow_name_substitution())) && !is_helper_name(emit_context, node) && !is_local_name(emit_context, node) && !is_declaration_name_of_enum_or_namespace(emit_context, node) {
+        if info.is_none_or(|info| info.flags.has_allow_name_substitution()) && !is_helper_name(emit_context, node) && !is_local_name(emit_context, node) && !is_declaration_name_of_enum_or_namespace(emit_context, node) {
             let f = self.factory();
             let original = emit_context.most_original(Some(node)).unwrap();
             let export_container = self.resolver.get_referenced_export_container(original, is_export_name(emit_context, node));

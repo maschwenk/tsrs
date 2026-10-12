@@ -639,19 +639,17 @@ fn encode_semantic_tokens(ctx: &Context, tokens: &[SemanticToken], converters: &
         if !encoded.is_empty() && line == prev_line && char == prev_char {
             continue;
         }
-        if !encoded.is_empty() && (line < prev_line || line == prev_line && char < prev_char) {
-            panic!(
-                "semantic tokens: positions must be strictly increasing: prev=({},{}) current=({},{}) for token at offset {}",
-                prev_line,
-                prev_char,
-                line,
-                char,
-                token
-                    .node
-                    .pos()
-                    .expect_source("semantic-token nodes have source positions")
-            );
-        }
+        assert!(!(!encoded.is_empty() && (line < prev_line || line == prev_line && char < prev_char)),
+            "semantic tokens: positions must be strictly increasing: prev=({},{}) current=({},{}) for token at offset {}",
+            prev_line,
+            prev_char,
+            line,
+            char,
+            token
+                .node
+                .pos()
+                .expect_source("semantic-token nodes have source positions")
+        );
 
         // Encode as: [deltaLine, deltaChar, length, tokenType, tokenModifiers]
         let delta_line = line - prev_line;

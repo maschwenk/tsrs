@@ -177,8 +177,9 @@ impl ParsedCommandLine {
                         .file_names
                         .iter()
                         .filter(|file| {
-                            !(self.compiler_options().unwrap().no_emit_for_js_files.is_true() && tspath::has_js_file_extension(file))
-                                && !tspath::is_declaration_file_name(file)
+                            !(tspath::is_declaration_file_name(file)
+                                || (self.compiler_options().unwrap().no_emit_for_js_files.is_true()
+                                    && tspath::has_js_file_extension(file)))
                         })
                         .cloned()
                         .collect()
@@ -301,7 +302,7 @@ impl ParsedCommandLine {
             let mut globs: Vec<Glob> = Vec::with_capacity(wildcard_directories.len());
             globs.extend(wildcard_directories.iter().filter_map(|(dir, recursive)| {
                 let pattern = format!("{}/{}", tspath::normalize_path(dir), if *recursive { &recursive_file_glob } else { &file_glob });
-                if let Ok(parsed) = glob::parse(&pattern) { Some(parsed) } else { None }
+                glob::parse(&pattern).ok()
             }));
             globs
         })
@@ -375,7 +376,7 @@ impl ParsedCommandLine {
     pub fn get_content_mapper_for_file_name(&self, file_name: &str) -> Option<&Mapper> {
         let ignore_case = !self.use_case_sensitive_file_names();
         let extensions = self.content_mapper_extensions();
-        let extension_refs: Vec<&str> = extensions.iter().map(|s| s.as_str()).collect();
+        let extension_refs: Vec<&str> = extensions.iter().map(std::string::String::as_str).collect();
         let extension = tspath::get_longest_extension_from_path(file_name, &extension_refs, ignore_case);
         self.content_mappers().iter().find(|mapper| {
             mapper.definition.extensions.iter().any(|mapper_extension| {

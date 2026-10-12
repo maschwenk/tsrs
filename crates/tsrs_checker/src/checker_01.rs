@@ -212,9 +212,7 @@ impl Checker {
 
     // checker.go:1212
     pub fn get_type_alias_type_parameters(&mut self, symbol: P<Symbol>) -> Vec<P<Type>> {
-        if !symbol.flags().intersects(SymbolFlags::TypeAlias) {
-            panic!("Attempted to fetch type alias parameters for non-type-alias symbol");
-        }
+        assert!(symbol.flags().intersects(SymbolFlags::TypeAlias), "Attempted to fetch type alias parameters for non-type-alias symbol");
         self.get_declared_type_of_symbol(symbol);
         self.type_alias_links.get(symbol).type_parameters.get().to_vec()
     }
@@ -563,24 +561,24 @@ impl Checker {
     pub(crate) fn create_name_resolver(&mut self) -> P<NameResolver<Checker>> {
         P::new(NameResolver::<Checker> {
             compiler_options: self.compiler_options,
-            get_symbol_of_declaration: Some(|c, node| c.get_symbol_of_declaration(node)),
+            get_symbol_of_declaration: Some(super::checker::Checker::get_symbol_of_declaration),
             error: Some(|c, location, message, args| c.error(location, message, args)),
             globals: Some(self.globals),
             arguments_symbol: Cell::new(Some(self.arguments_symbol)),
             require_symbol: Some(self.require_symbol),
-            lookup: Some(|c, symbols, name, meaning| c.get_symbol(symbols, name, meaning)),
-            symbol_referenced: Some(|c, symbol, meaning| c.symbol_referenced(symbol, meaning)),
-            set_requires_scope_change_cache: Some(|c, node, value| c.set_requires_scope_change_cache(node, value)),
-            get_requires_scope_change_cache: Some(|c, node| c.get_requires_scope_change_cache(node)),
+            lookup: Some(super::checker::Checker::get_symbol),
+            symbol_referenced: Some(super::checker::Checker::symbol_referenced),
+            set_requires_scope_change_cache: Some(super::checker::Checker::set_requires_scope_change_cache),
+            get_requires_scope_change_cache: Some(super::checker::Checker::get_requires_scope_change_cache),
             on_property_with_invalid_initializer: Some(|c, error_location, name, property_with_invalid_initializer, result| {
                 c.check_and_report_error_for_invalid_initializer(error_location, name, property_with_invalid_initializer, result)
             }),
             on_failed_to_resolve_symbol: Some(|c, error_location, name, meaning, name_not_found_message| {
-                c.on_failed_to_resolve_symbol(error_location, name, meaning, name_not_found_message)
+                c.on_failed_to_resolve_symbol(error_location, name, meaning, name_not_found_message);
             }),
             on_successfully_resolved_symbol: Some(
                 |c, error_location, result, meaning, last_location, associated_declaration, within_deferred_context| {
-                    c.on_successfully_resolved_symbol(error_location, result, meaning, last_location, associated_declaration, within_deferred_context)
+                    c.on_successfully_resolved_symbol(error_location, result, meaning, last_location, associated_declaration, within_deferred_context);
                 },
             ),
         })
@@ -590,15 +588,15 @@ impl Checker {
     pub(crate) fn create_name_resolver_for_suggestion(&mut self) -> P<NameResolver<Checker>> {
         P::new(NameResolver::<Checker> {
             compiler_options: self.compiler_options,
-            get_symbol_of_declaration: Some(|c, node| c.get_symbol_of_declaration(node)),
+            get_symbol_of_declaration: Some(super::checker::Checker::get_symbol_of_declaration),
             error: Some(|c, location, message, args| c.error(location, message, args)),
             globals: Some(self.globals),
             arguments_symbol: Cell::new(Some(self.arguments_symbol)),
             require_symbol: Some(self.require_symbol),
-            lookup: Some(|c, symbols, name, meaning| c.get_suggestion_for_symbol_name_lookup(symbols, name, meaning)),
-            symbol_referenced: Some(|c, symbol, meaning| c.symbol_referenced(symbol, meaning)),
-            set_requires_scope_change_cache: Some(|c, node, value| c.set_requires_scope_change_cache(node, value)),
-            get_requires_scope_change_cache: Some(|c, node| c.get_requires_scope_change_cache(node)),
+            lookup: Some(super::checker::Checker::get_suggestion_for_symbol_name_lookup),
+            symbol_referenced: Some(super::checker::Checker::symbol_referenced),
+            set_requires_scope_change_cache: Some(super::checker::Checker::set_requires_scope_change_cache),
+            get_requires_scope_change_cache: Some(super::checker::Checker::get_requires_scope_change_cache),
             ..NameResolver::new(self.compiler_options, Some(self.globals))
         })
     }

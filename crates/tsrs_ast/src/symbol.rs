@@ -79,7 +79,7 @@ impl Symbol {
     }
     #[inline]
     pub fn set_flags(&self, flags: SymbolFlags) {
-        self.flags.set(flags)
+        self.flags.set(flags);
     }
     #[inline]
     pub fn check_flags(&self) -> CheckFlags {
@@ -96,7 +96,7 @@ impl Symbol {
     /// Go `symbol.Declarations = slices.Clone(declarations)`-like: stores a copy.
     #[inline]
     pub fn set_declarations(&self, declarations: &[P<Node>]) {
-        self.set_declarations_static(tsrs_core::alloc_slice(declarations))
+        self.set_declarations_static(tsrs_core::alloc_slice(declarations));
     }
     /// Go `symbol.Declarations = declarations` (shares the slice).
     pub fn set_declarations_static(&self, declarations: &'static [P<Node>]) {
@@ -108,7 +108,7 @@ impl Symbol {
                 self.tables_for_write().value_declaration.set(Some(value_declaration));
             }
         }
-        self.declarations.set(declarations)
+        self.declarations.set(declarations);
     }
     /// Go `append(symbol.Declarations, declarations...)`.
     pub fn append_declarations(&self, declarations: &[P<Node>]) {
@@ -122,14 +122,14 @@ impl Symbol {
         let mut result = Vec::with_capacity(self.declarations.get().len() + declarations.len());
         result.extend_from_slice(self.declarations.get());
         result.extend_from_slice(declarations);
-        self.set_declarations_static(tsrs_core::alloc_vec(result))
+        self.set_declarations_static(tsrs_core::alloc_vec(result));
     }
     #[inline]
     #[expect(clippy::disallowed_methods, reason = "indexing with a bounds check: +0.7% instructions, one checker (notes/mem-small.md)")]
     pub fn value_declaration(&self) -> Option<P<Node>> {
         if self.name.tags() & TAG_VALUE_FIRST != 0 {
             let declarations = self.declarations.get();
-            debug_assert!(!declarations.is_empty());
+            debug_assert_ne!(declarations, []);
             // SAFETY: the bit is set only while the declarations are non-empty (`set_value_declaration`,
             // `set_declarations_static`).
             return Some(unsafe { *declarations.get_unchecked(0) });
@@ -452,7 +452,7 @@ impl KeyPrint {
 
     #[inline]
     fn of(name: &str, hash: u32) -> KeyPrint {
-        KeyPrint(Self::len_bits(name) | Self::hash_bits(hash) << (SymbolMapEntry::HASH_SHIFT - SymbolMapEntry::LEN_SHIFT))
+        KeyPrint(Self::len_bits(name) | (Self::hash_bits(hash) << (SymbolMapEntry::HASH_SHIFT - SymbolMapEntry::LEN_SHIFT)))
     }
 }
 
@@ -472,7 +472,7 @@ impl SymbolMapEntry {
 
     #[inline]
     fn new(symbol: P<Symbol>, print: KeyPrint) -> SymbolMapEntry {
-        SymbolMapEntry(Self::addr_bits(symbol) | print.0 << Self::LEN_SHIFT)
+        SymbolMapEntry(Self::addr_bits(symbol) | (print.0 << Self::LEN_SHIFT))
     }
 
     #[inline]
@@ -616,7 +616,7 @@ fn hash_name(name: &str) -> u32 {
     } else if len >= 4 {
         (u32::from_le_bytes(b[..4].try_into().unwrap()) as u64, u32::from_le_bytes(b[len - 4..].try_into().unwrap()) as u64)
     } else if len > 0 {
-        (b[0] as u64, (b[len - 1] as u64) << 8 | b[len / 2] as u64)
+        (b[0] as u64, ((b[len - 1] as u64) << 8) | b[len / 2] as u64)
     } else {
         (0, 0)
     };
@@ -664,7 +664,7 @@ fn key_at(entries: &[SymbolMapEntry], odd_keys: &[(u32, &'static str)], i: usize
 #[inline]
 fn index_hash(hash: u32) -> u64 {
     let h = hash as u64;
-    h | h << 44
+    h | (h << 44)
 }
 
 
@@ -883,7 +883,7 @@ impl NameFilter {
 
     #[inline]
     pub fn may_contain(&self, key: HashedName<'_>) -> bool {
-        Self::bit_positions(key.hash).iter().all(|&b| self.0[(b >> 6) as usize] & 1 << (b & 63) != 0)
+        Self::bit_positions(key.hash).iter().all(|&b| self.0[(b >> 6) as usize] & (1 << (b & 63)) != 0)
     }
 }
 

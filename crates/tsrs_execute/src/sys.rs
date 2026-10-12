@@ -82,7 +82,7 @@ pub fn new_system() -> osSys {
     let cwd = match std::env::current_dir() {
         Ok(cwd) => cwd,
         Err(err) => {
-            eprintln!("Error getting current directory: {}", err);
+            eprintln!("Error getting current directory: {err}");
             std::process::exit(crate::tsc::ExitStatus::InvalidProject_OutputsSkipped as i32);
         }
     };

@@ -23,7 +23,7 @@ use crate::utilities::{get_contextual_type_from_parent_or_ancestor_type_node, is
 // RenameInfo represents the result of a rename validation check.
 // It is used by the `textDocument/prepareRename` LSP handler.
 // rename.go:25
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct RenameInfo {
     pub can_rename: bool,
     pub localized_error_message: String,
@@ -420,7 +420,7 @@ impl LanguageService {
             tspath::get_any_extension_from_path(old_path, &[] /*extensions*/, ignore_case)
         };
         if !tspath::has_extension(&new_path) {
-            new_path = new_path + &old_ext;
+            new_path.push_str(&old_ext);
         } else if tspath::get_any_extension_from_path(&new_path, &[] /*extensions*/, ignore_case)
             == tspath::get_any_extension_from_path(specifier_text, &[] /*extensions*/, ignore_case)
         {
@@ -449,10 +449,10 @@ impl LanguageService {
                 || (is_object_binding_element_without_property_name(parent) && parent.name() == Some(node) && parent.as_binding_element().dot_dot_dot_token().is_none())
             {
                 if kind == EntryKind::SearchedLocalFoundProperty {
-                    return format!("{}: {}", name, new_text);
+                    return format!("{name}: {new_text}");
                 }
                 if kind == EntryKind::SearchedPropertyFoundLocal {
-                    return format!("{}: {}", new_text, name);
+                    return format!("{new_text}: {name}");
                 }
                 // In `const o = { x }; o.x`, symbolAtLocation at `x` in `{ x }` is the property symbol.
                 // For a binding element `const { x } = o;`, symbolAtLocation at `x` is the property symbol.
@@ -462,11 +462,11 @@ impl LanguageService {
                         && ast::is_binary_expression(grand_parent.parent().unwrap())
                         && ast::is_module_exports_access_expression(grand_parent.parent().unwrap().as_binary_expression().left)
                     {
-                        return format!("{}: {}", name, new_text);
+                        return format!("{name}: {new_text}");
                     }
-                    return format!("{}: {}", new_text, name);
+                    return format!("{new_text}: {name}");
                 }
-                return format!("{}: {}", name, new_text);
+                return format!("{name}: {new_text}");
             } else if ast::is_import_specifier(parent) && parent.property_name().is_none() {
                 // If the original symbol was using this alias, just rename the alias.
                 let original_symbol = if ast::is_export_specifier(original_node.parent().unwrap()) {
@@ -475,22 +475,22 @@ impl LanguageService {
                     ch.get_symbol_at_location_exported(original_node)
                 };
                 if original_symbol.is_some_and(|s| s.declarations().contains(&parent)) {
-                    return format!("{} as {}", name, new_text);
+                    return format!("{name} as {new_text}");
                 }
                 return new_text.to_string();
             } else if ast::is_export_specifier(parent) && parent.property_name().is_none() {
                 // If the symbol for the node is same as declared node symbol use prefix text
                 if Some(original_node) == entry.node || ch.get_symbol_at_location_exported(original_node) == ch.get_symbol_at_location_exported(entry.node.unwrap()) {
-                    return format!("{} as {}", name, new_text);
+                    return format!("{name} as {new_text}");
                 }
-                return format!("{} as {}", new_text, name);
+                return format!("{new_text} as {name}");
             }
         }
 
         // If the node is a numerical indexing literal, then add quotes around the property access.
         if entry.kind != EntryKind::Range && ast::is_numeric_literal(entry.node.unwrap()) && ast::is_access_expression(entry.node.unwrap().parent().unwrap()) {
             let quote = get_quote_from_preference(quote_preference);
-            return format!("{}{}{}", quote, new_text, quote);
+            return format!("{quote}{new_text}{quote}");
         }
 
         new_text.to_string()

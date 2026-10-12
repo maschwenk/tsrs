@@ -66,7 +66,7 @@ pub fn unmarshal<T: ProtocolJson>(raw: Option<Value>) -> Result<T, String> {
 
 // InitializeParams is the parameter object for the initialize request.
 // hostimpl.go:43
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct InitializeParams {
     // Locale is the BCP 47 locale to use for mapper-authored diagnostic messages, when configured.
     pub locale: String,
@@ -105,7 +105,7 @@ impl ProtocolJson for InitializeParams {
 
 // InitializeResult is the mapper's response to the initialize request.
 // hostimpl.go:51
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct InitializeResult {
     // PositionEncoding selects the coordinate space for all mappings and diagnostics.
     pub position_encoding: PositionEncoding,
@@ -257,7 +257,7 @@ impl ProtocolJson for OptionDiagnosticResult {
 
 // CloseProjectParams is the parameter object for the closeProject request.
 // hostimpl.go:88
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct CloseProjectParams {
     pub project_handle: String,
 }
@@ -299,7 +299,7 @@ impl fmt::Display for PositionEncoding {
 
 // TransformParams is the parameter object for the transform request.
 // hostimpl.go:101
-#[derive(Clone, PartialEq, Debug, Default)]
+#[derive(Clone, PartialEq, Eq, Debug, Default)]
 pub struct TransformParams {
     // FileName is the absolute name of the content-mapped source file being transformed.
     pub file_name: String,

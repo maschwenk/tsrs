@@ -73,7 +73,7 @@ impl LanguageService {
         let file_name = document_uri.file_name();
         let (program, file) = self.try_get_program_and_file(&file_name);
         let Some(file) = file else {
-            panic!("file not found: {}", file_name);
+            panic!("file not found: {file_name}");
         };
         (program, file)
     }

@@ -267,10 +267,10 @@ fn compose(base: Option<&Arc<Node>>, overlay: Option<&Arc<Node>>, mut fallback: 
                 }
                 match child.entry.as_deref() {
                     Some(Entry::File { file_name, .. }) => {
-                        entries = merge_entries(&entries, &Entries { files: vec![tspath::get_base_file_name(file_name)], ..Default::default() }, cs)
+                        entries = merge_entries(&entries, &Entries { files: vec![tspath::get_base_file_name(file_name)], ..Default::default() }, cs);
                     }
                     Some(Entry::Directory { directory_name, .. }) => {
-                        entries = merge_entries(&entries, &Entries { directories: vec![tspath::get_base_file_name(directory_name)], ..Default::default() }, cs)
+                        entries = merge_entries(&entries, &Entries { directories: vec![tspath::get_base_file_name(directory_name)], ..Default::default() }, cs);
                     }
                     _ => {}
                 }
@@ -806,11 +806,11 @@ impl FS for RequestFileSystem {
 }
 
 /// Go `addFileChanges`.
-fn add_file_changes(summary: &mut FileChangeSummary, request: &RequestParams, base_request: Option<&RequestFileSystem>, _fs: &RequestFileSystem, cwd: &str) {
+fn add_file_changes(summary: &mut FileChangeSummary, request: &RequestParams, base_request: Option<&RequestFileSystem>, fs: &RequestFileSystem, cwd: &str) {
     // `baseFS` in Go is the base snapshot filesystem: the previous request filesystem or the host.
     let base_fs: &dyn FS = match base_request {
         Some(b) => b,
-        None => &*_fs.base,
+        None => &*fs.base,
     };
     let cs = base_fs.use_case_sensitive_file_names();
     let to_path = |f: &str| tspath::to_path(f, cwd, cs);

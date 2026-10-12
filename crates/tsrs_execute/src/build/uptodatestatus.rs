@@ -129,9 +129,7 @@ impl upToDateStatus {
     // uptodatestatus.go:120
     #[expect(dead_code, reason = "its only Go caller, the downStream loop of BuildTask.updateDownstream (build --watch), is not ported")]
     pub(crate) fn oldest_output_file_name(&self) -> String {
-        if !self.is_pseudo_build() && self.kind != upToDateStatusType::UpToDate {
-            panic!("only valid for up to date status of pseudo-build or up to date");
-        }
+        assert!(self.is_pseudo_build() || self.kind == upToDateStatusType::UpToDate, "only valid for up to date status of pseudo-build or up to date");
 
         if let Some(input_output_file_and_time) = self.input_output_file_and_time() {
             return input_output_file_and_time.output.file.clone();

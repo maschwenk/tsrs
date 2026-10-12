@@ -228,7 +228,8 @@ pub fn new_emit_outputs(recorder: &OutputRecorderFS, program: &'static compiler:
 // harnessutil.go:836
 fn get_output_path(program: &'static compiler::Program, options: &CompilerOptions, host: &dyn CompilerHost, path: &str, ext: &str) -> String {
     let mut path = tspath::resolve_path(host.get_current_directory(), &[path]);
-    let out_dir = if ext == ".d.ts" || ext == ".d.mts" || ext == ".d.cts" || (ext.ends_with(".ts") && ext.contains(".d.")) {
+    let lowercase_ext = ext.to_ascii_lowercase();
+    let out_dir = if lowercase_ext == ".d.ts" || lowercase_ext == ".d.mts" || lowercase_ext == ".d.cts" || (lowercase_ext.strip_suffix(".ts").is_some() && lowercase_ext.contains(".d.")) {
         if options.declaration_dir.is_empty() {
             &options.out_dir
         } else {

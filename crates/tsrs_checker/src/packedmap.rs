@@ -168,7 +168,7 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
     }
 
     pub fn len(&self) -> usize {
-        self.0.get().map_or(0, |m| tsrs_core::sharedgraph::with_ref(&m, |m| m.len()))
+        self.0.get().map_or(0, |m| tsrs_core::sharedgraph::with_ref(&m, PackedMap::len))
     }
 
     #[cfg(feature = "assignment-stats")]

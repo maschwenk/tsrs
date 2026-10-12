@@ -11,7 +11,7 @@ use tsrs_core::{alloc_str, CompilerOptions, ModuleKind, ModuleResolutionKind, Re
 use tsrs_spanmap::MappingErrorKind;
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_module::{self as module, DiagAndArgs, ModeAwareCache, ModeAwareCacheKey, ResolvedModule, ResolvedTypeReferenceDirective, Resolver};
-use tsrs_tsoptions::{self as tsoptions};
+use tsrs_tsoptions as tsoptions;
 
 use crate::file_include::{fileIncludeKind, automaticTypeDirectiveFileData, FileIncludeReason};
 use crate::filesparser::{filesParser, parseTask, resolvedRef, TaskId};
@@ -217,7 +217,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
             current_directory: host.get_current_directory().to_string(),
         },
         files_parser: filesParser::new(single_threaded, max_node_module_js_depth),
-        root_tasks: Vec::with_capacity(root_files.len() + compiler_options.lib.as_ref().map_or(0, |l| l.len())),
+        root_tasks: Vec::with_capacity(root_files.len() + compiler_options.lib.as_ref().map_or(0, std::vec::Vec::len)),
         tasks: Vec::new(),
         total_file_count: 0,
         lib_file_count: 0,
@@ -1027,7 +1027,7 @@ fn tripleslash_reference_lookup(
 pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, meta: &SourceFileMetaData) -> prefetchedResolutions {
     let (opts, resolver, project_references) = (ctx.opts, ctx.resolver, ctx.project_references);
     let compiler_options = opts.config.compiler_options().unwrap();
-    let (redirect, file_name) = project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+    let (redirect, file_name) = project_references.get_redirect_for_resolution(file.file_name(), file.path());
     let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
     let options_for_file = module::get_compiler_options_with_redirect(compiler_options, redirect);
     let mut referenced_files = Vec::new();
@@ -1182,7 +1182,7 @@ impl fileLoader {
         let mut type_resolutions_in_file = ModeAwareCache::default();
         let mut type_resolutions_trace = Vec::new();
         for (index, ref_) in type_reference_directives.iter().enumerate() {
-            let (redirect, file_name) = self.project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+            let (redirect, file_name) = self.project_references.get_redirect_for_resolution(file.file_name(), file.path());
             let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
             let resolution_mode = get_mode_for_type_reference_directive_in_file(
                 *ref_,
@@ -1240,7 +1240,7 @@ impl fileLoader {
         let is_java_script_file = ast::is_source_file_js(file);
         let is_external_module_file = ast::is_external_module(file);
 
-        let (redirect, file_name) = self.project_references.get_redirect_for_resolution(file.file_name(), &file.path());
+        let (redirect, file_name) = self.project_references.get_redirect_for_resolution(file.file_name(), file.path());
         let redirect = redirect.map(crate::projectreferencefilemapper::as_resolved_project_reference);
         let options_for_file = module::get_compiler_options_with_redirect(self.opts.config.compiler_options().unwrap(), redirect);
         if is_java_script_file || (!file.is_declaration_file.get() && (options_for_file.get_isolated_modules() || is_external_module_file)) {
@@ -1525,7 +1525,7 @@ pub(crate) fn resolved_import_sub_task(
     let should_add_file = !module_name.is_empty()
         && module::get_resolution_diagnostic(options_for_file, resolved_module, file).is_none()
         && !options_for_file.no_resolve.is_true()
-        && !(is_js_file && !options_for_file.get_allow_js())
+        && (!is_js_file || options_for_file.get_allow_js())
         && import_index.is_none_or(|import_index| {
             import_index < imports.len()
                 && (ast::is_in_js_file(imports[import_index])
@@ -1598,7 +1598,7 @@ pub(crate) fn source_file_from_reference(
     }
 
     if let Some(result) = supported_extensions[0].iter().find_map(|ext| {
-        let candidate = format!("{}{}", file_name, ext);
+        let candidate = format!("{file_name}{ext}");
         if fs.file_exists(&candidate) {
             return Some((candidate, None));
         }
@@ -1622,7 +1622,7 @@ pub(crate) fn is_supported_extension(supported_extensions_with_json: &[Vec<Strin
 }
 
 fn supported_extensions_display(supported_extensions: &[Vec<String>]) -> String {
-    let flat: Vec<&str> = supported_extensions.iter().flatten().map(|s| s.as_str()).collect();
+    let flat: Vec<&str> = supported_extensions.iter().flatten().map(std::string::String::as_str).collect();
     format!("'{}'", flat.join("', '"))
 }
 
@@ -1656,7 +1656,7 @@ fn get_inferred_library_name_resolve_from(options: &CompilerOptions, current_dir
     } else {
         current_directory.to_string()
     };
-    tspath::combine_paths(&containing_directory, &[&format!("__lib_node_modules_lookup_{}__.ts", lib_file_name)])
+    tspath::combine_paths(&containing_directory, &[&format!("__lib_node_modules_lookup_{lib_file_name}__.ts")])
 }
 
 pub(crate) fn get_mode_for_type_reference_directive_in_file(
@@ -1763,5 +1763,5 @@ pub(crate) fn get_emit_syntax_for_usage_location_worker(
 }
 
 pub(crate) fn str_slice(group: &[String]) -> Vec<&str> {
-    group.iter().map(|s| s.as_str()).collect()
+    group.iter().map(std::string::String::as_str).collect()
 }

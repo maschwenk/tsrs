@@ -51,7 +51,7 @@ pub enum FlowMemoMode {
 fn mode_from_env() -> FlowMemoMode {
     static MODE: OnceLock<FlowMemoMode> = OnceLock::new();
     *MODE.get_or_init(|| match std::env::var("TSRS_FLOW_MEMO").as_deref() {
-        Ok("0") | Ok("off") => FlowMemoMode::Off,
+        Ok("0" | "off") => FlowMemoMode::Off,
         Ok("shadow") => FlowMemoMode::Shadow,
         _ => FlowMemoMode::On,
     })
@@ -519,26 +519,27 @@ impl Checker {
         let reference = f.reference.get().unwrap();
         let declared = f.declared_type.get().unwrap().id.0;
         let initial = f.initial_type.get().unwrap().id.0;
-        let container = u32::try_from(P::key_opt(f.flow_container.get())).ok();
+        let container = P::key_opt(f.flow_container.get());
         let root = match reference.kind() {
             Kind::Identifier => self.flow_memo_root_symbol(reference)?.key(),
             Kind::ThisKeyword => 0,
             _ => return self.compute_hashed_flow_memo_key(f),
         };
-        match (u32::try_from(root), container) {
-            (Ok(root), Some(container)) if declared < 1 << 31 => Some((root as u128) << 96 | (declared as u128) << 64 | (initial as u128) << 32 | container as u128),
-            _ => self.compute_hashed_flow_memo_key(f),
+        if declared < 1 << 31 {
+            Some(((root as u128) << 96) | ((declared as u128) << 64) | ((initial as u128) << 32) | container as u128)
+        } else {
+            self.compute_hashed_flow_memo_key(f)
         }
     }
 
     fn compute_hashed_flow_memo_key(&mut self, f: P<FlowState>) -> Option<u128> {
         let mut key = StackKey { bytes: [0; 128], len: 0 };
         if self.serialize_flow_memo_key(&mut key, f) {
-            return Some(xxhash_rust::xxh3::xxh3_128(&key.bytes[..key.len]) | 1 << 63);
+            return Some(xxhash_rust::xxh3::xxh3_128(&key.bytes[..key.len]) | (1 << 63));
         }
         // Not a key, or longer than the stack buffer.
         let mut buf = std::mem::take(&mut self.flow_memo.key_buf);
-        let key = self.serialize_flow_memo_key(&mut buf, f).then(|| xxhash_rust::xxh3::xxh3_128(&buf) | 1 << 63);
+        let key = self.serialize_flow_memo_key(&mut buf, f).then(|| xxhash_rust::xxh3::xxh3_128(&buf) | (1 << 63));
         self.flow_memo.key_buf = buf;
         key
     }

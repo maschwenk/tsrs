@@ -104,7 +104,7 @@ impl Checker {
                 // named union per constituent, were most of the `compare_types` calls on the 38k-file codebase.
                 let mut named: FxHashSet<P<Type>> = FxHashSet::default();
                 // Extend each known-length constituent slice so the set reserves before inserting.
-                named_unions.iter().for_each(|u| named.extend(u.types().iter().copied()));
+                for u in named_unions.iter() { named.extend(u.types().iter().copied()); }
                 reduced_types.extend(type_set.iter().copied().filter(|t| !named.contains(t)));
             } else {
                 reduced_types
@@ -368,7 +368,7 @@ impl Checker {
         for &t in &types {
             if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsConstrainedTypeVariable) {
                 let it = t.as_intersection_type().types();
-                let index = if !it[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
+                let index = usize::from(!it[0].flags().intersects(TypeFlags::TypeVariable));
                 append_if_unique(&mut type_variables, it[index]);
             }
         }
@@ -381,7 +381,7 @@ impl Checker {
             for &t in &types {
                 if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsConstrainedTypeVariable) {
                     let it = t.as_intersection_type().types();
-                    let index = if !it[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
+                    let index = usize::from(!it[0].flags().intersects(TypeFlags::TypeVariable));
                     if it[index] == type_variable {
                         primitives = insert_type(self, &primitives, it[1 - index]).0;
                     }
@@ -397,7 +397,7 @@ impl Checker {
                     let t = types[i];
                     if t.flags().intersects(TypeFlags::Intersection) && t.object_flags_lazy().intersects(ObjectFlags::IsConstrainedTypeVariable) {
                         let it = t.as_intersection_type().types();
-                        let index = if !it[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
+                        let index = usize::from(!it[0].flags().intersects(TypeFlags::TypeVariable));
                         if it[index] == type_variable && contains_type(self, &primitives, it[1 - index]) {
                             types.remove(i);
                         }
@@ -496,7 +496,7 @@ impl Checker {
                     let target = types[j];
                     j += 1;
                     if source != target {
-                        if count == 100000 {
+                        if count == 100_000 {
                             // After 100000 subtype checks we estimate the remaining amount of work by assuming the
                             // same ratio of checks per element. If the estimated number of remaining type checks is
                             // greater than 1M we deem the union type too complex to represent. This for example
@@ -505,7 +505,7 @@ impl Checker {
                             if trace {
                                 checkpoint = Some(crate::uniontrace::Checkpoint { sources: length - i as i64, estimate: estimated_count });
                             }
-                            if estimated_count > 1000000 {
+                            if estimated_count > 1_000_000 {
                                 if trace {
                                     crate::uniontrace::report(self, input, &types, "too complex (TS2590)", Some(count), checkpoint);
                                 }
@@ -664,7 +664,7 @@ impl Checker {
             return type_set[0];
         }
         if type_set.len() == 2 && !flags.intersects(IntersectionFlags::NoConstraintReduction) {
-            let type_var_index = if !type_set[0].flags().intersects(TypeFlags::TypeVariable) { 1 } else { 0 };
+            let type_var_index = usize::from(!type_set[0].flags().intersects(TypeFlags::TypeVariable));
             let type_variable = type_set[type_var_index];
             let primitive_type = type_set[1 - type_var_index];
             if type_variable.flags().intersects(TypeFlags::TypeVariable)
@@ -674,7 +674,7 @@ impl Checker {
                 // We have an intersection T & P or P & T, where T is a type variable and P is a primitive type, the object type, or {}.
                 let constraint = self.get_base_constraint_of_type(type_variable);
                 // Check that T's constraint is similarly composed of primitive types, the object type, or {}.
-                if let Some(constraint) = constraint.filter(|&constraint| every_type(self, constraint, |c, t| c.is_primitive_or_object_or_empty_type(t))) {
+                if let Some(constraint) = constraint.filter(|&constraint| every_type(self, constraint, super::checker::Checker::is_primitive_or_object_or_empty_type)) {
                     // If T's constraint is a subtype of P, simply return T. For example, given `T extends "a" | "b"`,
                     // the intersection `T & string` reduces to just T.
                     if self.is_type_strict_subtype_of(constraint, primitive_type) {
@@ -1061,8 +1061,8 @@ pub(crate) fn get_constituent_count_of_types(types: &[P<Type>]) -> usize {
 impl Checker {
     // checker.go:26940
     pub(crate) fn filter_types(&mut self, types: &mut [P<Type>], mut predicate: impl FnMut(&mut Checker, P<Type>) -> bool) {
-        for i in 0..types.len() {
-            types[i] = self.filter_type(types[i], &mut predicate);
+        for t in types {
+            *t = self.filter_type(*t, &mut predicate);
         }
     }
 
@@ -2003,7 +2003,7 @@ impl Checker {
                         deprecated_node = access_node;
                     }
                     let declarations = prop.declarations();
-                    self.add_deprecated_suggestion(deprecated_node, &declarations, &prop_name);
+                    self.add_deprecated_suggestion(deprecated_node, declarations, &prop_name);
                 }
                 if let Some(access_expression) = access_expression {
                     let is_self_type_access = self.is_self_type_access(access_expression.expression().unwrap(), object_type.symbol());
@@ -2234,7 +2234,7 @@ impl Checker {
     // checker.go:27693
     pub(crate) fn get_suggestion_for_nonexistent_property(&mut self, name: &str, containing_type: P<Type>) -> String {
         let props = self.get_properties_of_type(containing_type);
-        let symbol = self.get_spelling_suggestion_for_name(name, &props, SymbolFlags::Value);
+        let symbol = self.get_spelling_suggestion_for_name(name, props, SymbolFlags::Value);
         if let Some(symbol) = symbol {
             return symbol.name().to_string();
         }
@@ -2270,7 +2270,7 @@ impl Checker {
     // checker.go:27722
     pub(crate) fn get_suggested_type_for_nonexistent_string_literal_type(&mut self, source: P<Type>, target: P<Type>) -> Option<P<Type>> {
         let candidates = target.types().iter().copied().filter(|t| t.flags().intersects(TypeFlags::StringLiteral));
-        get_spelling_suggestion_with_max_candidate_count(&get_string_literal_value(source), candidates, |t| get_string_literal_value(*t), |a, b| compare_types(self, Some(*a), Some(*b)), 1000)
+        get_spelling_suggestion_with_max_candidate_count(get_string_literal_value(source), candidates, |t| get_string_literal_value(*t), |a, b| compare_types(self, Some(*a), Some(*b)), 1000)
     }
 }
 
@@ -2839,7 +2839,7 @@ impl Checker {
         }
         if is_self_type_access {
             // Find any FunctionLikeDeclaration because those create a new 'this' binding. But this should only matter for methods (or getters/setters).
-            let containing_method = find_ancestor(node_for_check_write_only, |n| is_function_like_declaration(n));
+            let containing_method = find_ancestor(node_for_check_write_only, is_function_like_declaration);
             if containing_method.is_some_and(|m| m.symbol() == Some(prop)) {
                 return;
             }

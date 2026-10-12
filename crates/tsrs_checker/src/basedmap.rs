@@ -58,7 +58,7 @@ impl<K: PackedKey, V: Copy> Based<PackedMap<K, V>> {
 
     /// The base's values, then the fork's own.
     pub fn values(&self) -> impl Iterator<Item = V> + '_ {
-        self.base.into_iter().flat_map(|b| b.values()).chain(self.own.values())
+        self.base.into_iter().flat_map(super::packedmap::PackedMap::values).chain(self.own.values())
     }
 
     pub(crate) fn heap_stat(&self) -> HeapStat {

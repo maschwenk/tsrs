@@ -227,13 +227,13 @@ impl Checker {
         // identities, and potentially a lot of work comparing those identities, so here we create an instantiation
         // that uses the original type identities for all unconstrained type parameters.
         let mut type_arguments = Vec::with_capacity(signature.type_parameters.get().len());
-        type_arguments.extend(signature.type_parameters.get().iter().filter_map(|&tp| {
+        type_arguments.extend(signature.type_parameters.get().iter().map(|&tp| {
             if let Some(target) = tp.target() {
                 if self.get_constraint_of_type_parameter(target).is_none() {
-                    return Some(target);
+                    return target;
                 }
             }
-            Some(tp)
+            tp
         }));
         self.get_signature_instantiation(signature, &type_arguments, ast::is_in_js_file(signature.declaration.get()), &[] /*inferredTypeParameters*/)
     }
@@ -586,7 +586,7 @@ impl Checker {
         let first = symbol.declarations().first().copied();
         if let Some(first) = first {
             let name = first.name();
-            return name.is_some_and(|name| ast::is_computed_property_name(name)) && {
+            return name.is_some_and(ast::is_computed_property_name) && {
                 let name_type = self.check_computed_property_name(name.unwrap());
                 self.is_type_assignable_to_kind(name_type, TypeFlags::ESSymbol)
             };
@@ -612,7 +612,7 @@ impl Checker {
         let first = symbol.declarations().first().copied();
         if let Some(first) = first {
             let name = first.name();
-            return name.is_some_and(|name| ast::is_computed_property_name(name));
+            return name.is_some_and(ast::is_computed_property_name);
         }
         false
     }
@@ -822,7 +822,7 @@ impl Checker {
      * A declaration name is only late-bindable if:
      * - It is a `ComputedPropertyName`.
      * - Its expression is an `Identifier` or either a `PropertyAccessExpression` an
-     * `ElementAccessExpression` consisting only of these same three types of nodes.
+     *   `ElementAccessExpression` consisting only of these same three types of nodes.
      * - The type of its expression is a string or numeric literal type, or is a `unique symbol` type.
      */
     // checker.go:20302
@@ -871,7 +871,7 @@ pub(crate) fn is_late_bindable_ast(node: P<Node>) -> bool {
     } else if ast::is_element_access_expression(node) {
         expr = Some(node.as_element_access_expression().argument_expression);
     }
-    expr.is_some_and(|expr| ast::is_entity_name_expression(expr))
+    expr.is_some_and(ast::is_entity_name_expression)
 }
 
 impl Checker {
@@ -1438,7 +1438,7 @@ impl Checker {
                 let next_type = self.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Next, return_type, flags.intersects(FunctionFlags::Async));
                 return next_type.is_some() && self.is_generic_type(next_type.unwrap());
             }
-            _ => {}
+            WideningKind::Normal => {}
         }
         false
     }
@@ -1649,13 +1649,13 @@ impl Checker {
             self.set_structured_type_members(t, None, &[], &[], &[]);
             let mapper = d.mapper.get().unwrap();
             let target_properties = self.get_properties_of_object_type(target);
-            let members = self.create_instantiated_symbol_table(&target_properties, mapper);
+            let members = self.create_instantiated_symbol_table(target_properties, mapper);
             let target_call_signatures = self.get_signatures_of_type(target, SignatureKind::Call);
-            let call_signatures = self.instantiate_signatures(&target_call_signatures, mapper);
+            let call_signatures = self.instantiate_signatures(target_call_signatures, mapper);
             let target_construct_signatures = self.get_signatures_of_type(target, SignatureKind::Construct);
-            let construct_signatures = self.instantiate_signatures(&target_construct_signatures, mapper);
+            let construct_signatures = self.instantiate_signatures(target_construct_signatures, mapper);
             let target_index_infos = self.get_index_infos_of_type(target);
-            let index_infos = self.instantiate_index_infos(&target_index_infos, mapper);
+            let index_infos = self.instantiate_index_infos(target_index_infos, mapper);
             self.set_structured_type_members(t, members, &call_signatures, &construct_signatures, &index_infos);
             return;
         }
@@ -1676,10 +1676,7 @@ impl Checker {
             let vars_only = SymbolTable::new();
             if let Some(members) = members {
                 for p in members.values() {
-                    if !p.flags().intersects(SymbolFlags::BlockScoped)
-                        && !(p.flags().intersects(SymbolFlags::ValueModule)
-                            && !p.declarations().is_empty()
-                            && p.declarations().iter().all(|d| ast::is_ambient_module(*d)))
+                    if !(p.flags().intersects(SymbolFlags::BlockScoped) || p.flags().intersects(SymbolFlags::ValueModule) && !p.declarations().is_empty() && p.declarations().iter().all(|d| ast::is_ambient_module(*d)))
                     {
                         vars_only.set(p.name(), p);
                     }
@@ -1695,7 +1692,7 @@ impl Checker {
             if base_constructor_type.flags().intersects(TypeFlags::Object | TypeFlags::Intersection | TypeFlags::TypeVariable) {
                 members = members.map(|m| m.clone_table());
                 let base_properties = self.get_properties_of_type(base_constructor_type);
-                self.add_inherited_members(members, &base_properties);
+                self.add_inherited_members(members, base_properties);
                 self.set_structured_type_members(t, members, &[], &[], &[]);
             } else if base_constructor_type == self.any_type {
                 base_constructor_index_info = Some(self.any_base_type_index_info);
@@ -1927,7 +1924,7 @@ impl Checker {
             return vec![self.new_signature(flags, None, local_type_parameters, None, &[], Some(class_type), None, 0)];
         }
         let base_type_node = get_base_type_node_of_class(class_type);
-        let is_java_script = declaration.is_some_and(|d| ast::is_in_js_file(d));
+        let is_java_script = declaration.is_some_and(ast::is_in_js_file);
         let type_arguments = self.get_type_arguments_from_node(base_type_node.unwrap());
         let type_arg_count = type_arguments.len();
         let mut result = Vec::new();
@@ -1998,7 +1995,7 @@ impl Checker {
         if self.is_mapped_type_with_keyof_constraint_declaration(t) {
             // We have a { [P in keyof T]: X }
             self.for_each_mapped_type_property_key_type_and_index_signature_key_type(modifiers_type, include, false /*stringsOnly*/, |c, key_type| {
-                mapped_type_add_member_for_key_type(c, &mut state, key_type)
+                mapped_type_add_member_for_key_type(c, &mut state, key_type);
             });
         } else {
             let lower_bound = self.get_lower_bound_of_key_type(constraint_type);
@@ -2532,7 +2529,7 @@ impl Checker {
                                 this_types.extend(
                                     union_signatures
                                         .iter()
-                                        .filter_map(|&sig| if let Some(tp) = sig.this_parameter() { Some(self.get_type_of_symbol(tp)) } else { None }),
+                                        .filter_map(|&sig| sig.this_parameter().map(|tp| self.get_type_of_symbol(tp))),
                                 );
                                 let this_type = self.get_intersection_type(&this_types);
                                 this_parameter = Some(self.create_symbol_with_type(first_this, Some(this_type)));
@@ -2623,7 +2620,7 @@ impl Checker {
         let (longest_count, longest, shorter) = if left_count >= right_count { (left_count, left, right) } else { (right_count, right, left) };
         let either_has_effective_rest = self.has_effective_rest_parameter(left) || self.has_effective_rest_parameter(right);
         let needs_extra_rest_element = either_has_effective_rest && !self.has_effective_rest_parameter(longest);
-        let mut params: Vec<P<Symbol>> = Vec::with_capacity((longest_count + if needs_extra_rest_element { 1 } else { 0 }) as usize);
+        let mut params: Vec<P<Symbol>> = Vec::with_capacity(longest_count + usize::from(needs_extra_rest_element));
         for i in 0..longest_count {
             let mut longest_param_type = self.try_get_type_at_position(longest, i).unwrap();
             if longest == right {
@@ -2653,7 +2650,7 @@ impl Checker {
                 param_name = left_name;
             }
             if param_name.is_empty() {
-                param_name = format!("arg{}", i);
+                param_name = format!("arg{i}");
             }
             let param_symbol = self.new_symbol_ex(
                 SymbolFlags::FunctionScopedVariable | if is_optional && !is_rest_param { SymbolFlags::Optional } else { SymbolFlags::None },
@@ -2741,7 +2738,7 @@ impl Checker {
                 construct_signatures = self.append_signatures(&construct_signatures, &signatures);
             }
             let call = self.get_signatures_of_type(t, SignatureKind::Call);
-            call_signatures = self.append_signatures(&call_signatures, &call);
+            call_signatures = self.append_signatures(&call_signatures, call);
             index_infos = self.get_index_infos_of_type(t).iter().copied().fold(index_infos, |mut index_infos, info| {
                 index_infos = self.append_index_info(&mut index_infos, info, false /*union*/);
 
@@ -2842,13 +2839,11 @@ impl Checker {
         mixed_types.extend((0..types.len()).filter_map(|i| {
             if i == index {
                 Some(t)
+            } else if mixin_flags[i] {
+                let sig = self.get_signatures_of_type(types[i], SignatureKind::Construct)[0];
+                Some(self.get_return_type_of_signature(sig))
             } else {
-                if mixin_flags[i] {
-                    let sig = self.get_signatures_of_type(types[i], SignatureKind::Construct)[0];
-                    Some(self.get_return_type_of_signature(sig))
-                } else {
-                    None
-                }
+                None
             }
         }));
         self.get_intersection_type(&mixed_types)

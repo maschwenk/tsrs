@@ -13,13 +13,13 @@
 2	crates/tsrs_core/src/reserve.rs
 2	crates/tsrs_incremental/src/emitfileshandler.rs
 2	crates/tsrs_ls/src/autoimport/extract.rs
+2	crates/tsrs_testrunner/src/main.rs
 2	crates/tsrs_vfs/src/osvfs/os.rs
 3	crates/tsrs_compiler/src/program.rs
 3	crates/tsrs_core/src/arena.rs
 4	crates/tsrs_core/src/alloc_profile/census.rs
 4	crates/tsrs_core/src/frozen.rs
 4	crates/tsrs_ls/src/autoimport/registry.rs
-4	crates/tsrs_testrunner/src/main.rs
 5	crates/tsrs_ast/src/identifier.rs
 7	crates/tsrs_projectutil/src/logging/logtree.rs
 15	crates/tsrs_core/src/alloc_profile.rs

@@ -114,7 +114,7 @@ pub fn get_property_name_for_property_name_node(name: P<Node>) -> std::borrow::C
             if is_signed_numeric_literal(name_expression) {
                 let mut text = name_expression.as_prefix_unary_expression().operand.text().to_string();
                 if name_expression.as_prefix_unary_expression().operator == Kind::MinusToken {
-                    text = format!("-{}", text);
+                    text = format!("-{text}");
                 }
                 return text.into();
             }

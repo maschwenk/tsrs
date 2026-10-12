@@ -328,7 +328,7 @@ impl Checker {
                 return false;
             }
             let initializer = d.initializer();
-            initializer.is_some_and(|i| ast::is_function_expression_or_arrow_function(i))
+            initializer.is_some_and(ast::is_function_expression_or_arrow_function)
         })
     }
 
@@ -1646,7 +1646,7 @@ impl Checker {
             for (i, element_info) in element_infos.iter().enumerate().take(arity) {
                 let (type_parameter, name) = self.tuple_elements[i];
                 type_parameters.push(type_parameter);
-                let flags = (*element_info).flags;
+                let flags = element_info.flags;
                 combined_flags |= flags;
                 if !combined_flags.intersects(ElementFlags::Variable) {
                     let property = self.new_symbol_ex(
@@ -1901,7 +1901,7 @@ impl Checker {
                     if let Some(type_parameter) = type_parameter {
                         let constraint = self.get_constraint_of_type_parameter(type_parameter);
                         if let Some(constraint) = constraint {
-                            if every_type(self, constraint, |c, t| c.is_array_or_tuple_type(t)) {
+                            if every_type(self, constraint, super::checker::Checker::is_array_or_tuple_type) {
                                 constraints.push(self.get_union_type(&[self.number_type, self.numeric_string_type]));
                             }
                         }
@@ -2644,7 +2644,7 @@ impl Checker {
             if mapped != Some(s) {
                 changed = true;
             }
-            if let Some(mapped) = mapped { Some(mapped) } else { None }
+            mapped
         }));
         let result = if !changed {
             Some(t)

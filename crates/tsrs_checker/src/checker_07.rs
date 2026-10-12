@@ -431,10 +431,10 @@ impl Checker {
             return Vec::new();
         }
         let mut result = Vec::new();
-        result.extend(self.get_properties_of_type(target).iter().copied().filter_map(|target_prop| {
+        result.extend(self.get_properties_of_type(target).iter().copied().filter(|&target_prop| {
             let s = self.get_type_of_property_of_type(source, target_prop.name());
             let t = self.get_type_of_symbol(target_prop);
-            if self.is_exact_optional_property_mismatch(s, Some(t)) { Some(target_prop) } else { None }
+            self.is_exact_optional_property_mismatch(s, Some(t))
         }));
         result
     }
@@ -707,7 +707,7 @@ impl Checker {
         }
         if self.is_deprecated_symbol(prop) {
             let declarations = prop.declarations();
-            self.add_deprecated_suggestion(name, &declarations, name.text());
+            self.add_deprecated_suggestion(name, declarations, name.text());
         }
     }
 
@@ -935,7 +935,7 @@ impl Checker {
             }
         }
         let index_infos = self.get_index_infos_of_type(first_type);
-        let spread = self.new_anonymous_type(first_type.symbol(), Some(members), &[], &[], &index_infos);
+        let spread = self.new_anonymous_type(first_type.symbol(), Some(members), &[], &[], index_infos);
         spread.object_flags.set(spread.object_flags_lazy() | ObjectFlags::ObjectLiteral | ObjectFlags::ContainsObjectOrArrayLiteral);
         spread
     }
@@ -1709,10 +1709,10 @@ impl Checker {
 
     // checker.go:14331
     pub(crate) fn combine_symbol_tables(&mut self, first: Option<P<SymbolTable>>, second: Option<P<SymbolTable>>) -> Option<P<SymbolTable>> {
-        if first.map_or(true, |t| t.is_empty()) {
+        if first.is_none_or(|t| t.is_empty()) {
             return second;
         }
-        if second.map_or(true, |t| t.is_empty()) {
+        if second.is_none_or(|t| t.is_empty()) {
             return first;
         }
         let combined = SymbolTable::new();
@@ -1802,7 +1802,7 @@ impl Checker {
                 tsrs_binder::set_value_declaration(target, value_declaration);
             }
             let source_declarations = source.declarations();
-            target.append_declarations(&source_declarations);
+            target.append_declarations(source_declarations);
             if source.members().is_some() {
                 let target_members = get_members(target);
                 self.merge_symbol_table(target_members, source.members(), unidirectional, None);
@@ -1861,7 +1861,7 @@ impl Checker {
         let target_declarations = target.declarations();
         for &node in target_declarations {
             let source_declarations = source.declarations();
-            self.add_duplicate_declaration_error(node, message, symbol_name, &source_declarations);
+            self.add_duplicate_declaration_error(node, message, symbol_name, source_declarations);
         }
     }
 
@@ -2168,7 +2168,7 @@ impl Checker {
         }
         // Case 2 in above example
         // entityName.kind could be a QualifiedName or a Missing identifier
-        assert!(entity_name.parent().unwrap().kind() == Kind::ImportEqualsDeclaration);
+        assert_eq!(entity_name.parent().unwrap().kind(), Kind::ImportEqualsDeclaration);
         self.resolve_entity_name(
             entity_name,
             SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace,

@@ -136,7 +136,7 @@ impl NodeBuilderImpl {
         // Instance members via addPropertyToElementList (reusing existing serialization),
         // then convert TypeElements to ClassElements and add class-specific modifiers
         let all_props = c.get_properties_of_type(class_type);
-        let symbol_props = self.filter_inherited_properties(c, class_type, base_types, &all_props);
+        let symbol_props = self.filter_inherited_properties(c, class_type, base_types, all_props);
         let public_props: Vec<P<Symbol>> = symbol_props.iter().copied().filter(|&s| !is_hash_private(s)).collect();
         let has_private = symbol_props.iter().any(|&s| is_hash_private(s));
 
@@ -146,8 +146,8 @@ impl NodeBuilderImpl {
 
         // Static members
         let mut static_props: Vec<P<Symbol>> = Vec::new();
-        static_props.extend(c.get_properties_of_type(static_type).iter().copied().filter_map(|p| {
-            if !p.flags().intersects(SymbolFlags::Prototype) && p.name() != "prototype" && !self.is_namespace_member(c, p) { Some(p) } else { None }
+        static_props.extend(c.get_properties_of_type(static_type).iter().copied().filter(|&p| {
+            !p.flags().intersects(SymbolFlags::Prototype) && p.name() != "prototype" && !self.is_namespace_member(c, p)
         }));
         let mut static_members = self.serialize_properties_with_truncation(c, &static_props, &[]);
         let mut static_members = type_elements_to_class_elements(&self.f, &mut static_members);
@@ -461,15 +461,15 @@ impl NodeBuilderImpl {
         let exports = c.get_exports_of_symbol(symbol);
         let mut members: Vec<P<Symbol>> = Vec::new();
         if let Some(exports) = exports {
-            members.extend(exports.values().into_iter().filter_map(|sym| {
+            members.extend(exports.values().into_iter().filter(|&sym| {
                 // Filter to namespace-relevant members
                 if !self.is_namespace_member(c, sym) {
-                    return None;
+                    return false;
                 }
                 if !tsrs_scanner::is_identifier_text(sym.name(), LanguageVariant::Standard) {
-                    return None;
+                    return false;
                 }
-                Some(sym)
+                true
             }));
         }
         c.sort_symbols(&mut members);
@@ -504,10 +504,7 @@ impl NodeBuilderImpl {
             // Handle alias/re-export symbols
             if m.flags().intersects(SymbolFlags::Alias) {
                 let alias_decl = c.get_declaration_of_alias_symbol(m);
-                let target = match c.get_target_of_alias_declaration(alias_decl) {
-                    Some(t) => Some(c.get_merged_symbol(t)),
-                    None => None,
-                };
+                let target = c.get_target_of_alias_declaration(alias_decl).map(|t| c.get_merged_symbol(t));
                 if let Some(target) = target {
                     // If the alias target is a local symbol (not itself an export), emit its declaration first
                     if target.flags().intersects(SymbolFlags::BlockScopedVariable | SymbolFlags::FunctionScopedVariable | SymbolFlags::Property) && emitted_locals.add_if_absent(target) {
@@ -559,7 +556,7 @@ impl NodeBuilderImpl {
                 }));
                 // If the function also has namespace characteristics, emit an empty namespace.
                 let merged = c.get_merged_symbol(resolved);
-                let has_module_exports = merged.flags().intersects(SymbolFlags::ValueModule | SymbolFlags::NamespaceModule) && merged.exports().is_some_and(|e| e.len() != 0);
+                let has_module_exports = merged.flags().intersects(SymbolFlags::ValueModule | SymbolFlags::NamespaceModule) && merged.exports().is_some_and(|e| !e.is_empty());
                 if !has_module_exports {
                     body_stmts.push(HoverStatement {
                         node: self.f.new_module_declaration(

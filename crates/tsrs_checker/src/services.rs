@@ -465,7 +465,7 @@ impl Checker {
         if symbol.check_flags().intersects(CheckFlags::Synthetic) {
             let types = self.value_symbol_links.get(symbol).containing_type().unwrap().types().to_vec();
             let mut result = Vec::new();
-            result.extend(types.into_iter().filter_map(|t| if let Some(p) = self.get_property_of_type(t, symbol.name()) { Some(p) } else { None }));
+            result.extend(types.into_iter().filter_map(|t| self.get_property_of_type(t, symbol.name())));
             return result;
         }
         if symbol.flags().intersects(SymbolFlags::Transient) {
@@ -640,34 +640,34 @@ impl Checker {
     pub fn get_references_to_symbol_in_file(&mut self, source_file: P<SourceFile>, symbol: P<Symbol>) -> Vec<P<Node>> {
         let identifier_text = symbol.name();
         let mut result = Vec::new();
-        result.extend(get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())).into_iter().filter_map(|token| {
+        result.extend(get_possible_symbol_reference_nodes(source_file, identifier_text, Some(source_file.as_node())).into_iter().filter(|&token| {
             if !ast::is_identifier(token) {
-                return None;
+                return false;
             }
             if token.text() != identifier_text {
-                return None;
+                return false;
             }
             let ref_symbol = self.get_symbol_at_location_exported(token);
             if ref_symbol == Some(symbol) {
-                return Some(token);
+                return true;
             }
             if let Some(parent) = token.parent() {
                 if parent.kind() == Kind::ShorthandPropertyAssignment {
                     let shorthand_symbol = self.get_shorthand_assignment_value_symbol(Some(parent));
                     if shorthand_symbol == Some(symbol) {
-                        return Some(token);
+                        return true;
                     }
                 }
             }
             if let Some(parent) = token.parent() {
                 if ast::is_export_specifier(parent) {
                     let local_symbol = self.get_local_symbol_for_export_specifier(token, ref_symbol, parent);
-                    if local_symbol == Some(symbol) { Some(token) } else { None }
+                    local_symbol == Some(symbol)
                 } else {
-                    None
+                    false
                 }
             } else {
-                None
+                false
             }
         }));
         result
@@ -821,8 +821,8 @@ impl Checker {
                 return None;
             }
             let relevant_type_parameter = signature.type_parameters()[position];
-            let relevant_constraint = self.get_constraint_of_type_parameter(relevant_type_parameter);
-            if let Some(relevant_constraint) = relevant_constraint { Some(relevant_constraint) } else { None }
+
+            self.get_constraint_of_type_parameter(relevant_type_parameter)
         }));
         self.get_union_type(&relevant_constraints)
     }
@@ -1029,12 +1029,7 @@ impl Checker {
             inference_candidates
         });
 
-        candidates.extend(other_candidates.into_iter().filter_map(|candidate| {
-            if candidates_set.contains(&candidate) {
-                return None;
-            }
-            Some(candidate)
-        }));
+        candidates.extend(other_candidates.into_iter().filter(|candidate| !candidates_set.contains(candidate)));
 
         candidates
     }

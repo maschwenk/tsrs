@@ -536,14 +536,14 @@ fn coalesce_imports_worker(
                 let clause_node = ns_import_decl.import_clause.unwrap();
                 let clause = clause_node.as_import_clause();
                 let new_clause = factory.update_import_clause(clause_node, clause.phase_modifier(), None, clause.named_bindings);
-                let new_import_decl = factory.update_import_declaration(
+
+                factory.update_import_declaration(
                     ns_import,
                     ns_import.modifiers(),
                     Some(new_clause),
                     ns_import_decl.module_specifier,
                     ns_import_decl.attributes(),
-                );
-                new_import_decl
+                )
             }));
 
             let first_default_import = group.default_imports.first().copied();
@@ -563,8 +563,8 @@ fn coalesce_imports_worker(
                     let default_clause = default_import.as_import_declaration().import_clause.unwrap().as_import_clause();
                     let default_name = default_clause.name().unwrap();
                     let property_name = factory.new_identifier("default");
-                    let import_spec = factory.new_import_specifier(false, Some(property_name), default_name);
-                    import_spec
+
+                    factory.new_import_specifier(false, Some(property_name), default_name)
                 }));
             }
 
@@ -709,7 +709,7 @@ fn get_new_import_specifiers(named_imports: &[P<Node>], factory: &NodeFactory) -
             continue;
         };
 
-        result.extend(elements.iter().filter_map(|&elem| {
+        result.extend(elements.iter().map(|&elem| {
             let spec = elem.as_import_specifier();
 
             if let Some(property_name) = spec.property_name() {
@@ -718,11 +718,11 @@ fn get_new_import_specifiers(named_imports: &[P<Node>], factory: &NodeFactory) -
 
                 if property_text == name_text {
                     let normalized = factory.update_import_specifier(elem, spec.is_type_only, None, spec.name());
-                    return Some(normalized);
+                    return normalized;
                 }
             }
 
-            Some(elem)
+            elem
         }));
     }
 
@@ -785,8 +785,8 @@ fn get_top_level_export_groups(source_file: P<SourceFile>) -> Vec<Vec<P<Node>>> 
 
     let mut result = Vec::new();
     result.extend(top_level_export_groups.iter().flat_map(|export_group| {
-        let sub_groups = group_by_newline_contiguous(source_file, export_group);
-        sub_groups
+
+        group_by_newline_contiguous(source_file, export_group)
     }));
 
     result
@@ -860,7 +860,7 @@ fn coalesce_exports_worker(
 
     for &export_decl in export_group {
         let export = export_decl.as_export_declaration();
-        let module_specifier = export.module_specifier.map(|m| m.text()).unwrap_or("");
+        let module_specifier = export.module_specifier.map_or("", |m| m.text());
         if !exports_by_module_specifier.contains_key(module_specifier) {
             module_specifier_order.push(module_specifier);
         }

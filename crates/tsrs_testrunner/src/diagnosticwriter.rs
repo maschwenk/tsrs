@@ -63,7 +63,7 @@ fn compare_message_chain_size(c1: &[Diag], c2: &[Diag]) -> Ordering {
         return c;
     }
     for (i, element) in c1.iter().enumerate() {
-        let c = compare_message_chain_size(&(*element).chain, &c2[i].chain);
+        let c = compare_message_chain_size(&element.chain, &c2[i].chain);
         if !c.is_eq() {
             return c;
         }
@@ -73,12 +73,12 @@ fn compare_message_chain_size(c1: &[Diag], c2: &[Diag]) -> Ordering {
 
 fn compare_message_chain_content(c1: &[Diag], c2: &[Diag]) -> Ordering {
     for (i, element) in c1.iter().enumerate() {
-        let c = compare_string_slices(&(*element).args, &c2[i].args);
+        let c = compare_string_slices(&element.args, &c2[i].args);
         if !c.is_eq() {
             return c;
         }
-        if !(*element).chain.is_empty() {
-            let c = compare_message_chain_content(&(*element).chain, &c2[i].chain);
+        if !element.chain.is_empty() {
+            let c = compare_message_chain_content(&element.chain, &c2[i].chain);
             if !c.is_eq() {
                 return c;
             }
@@ -93,7 +93,7 @@ fn compare_related_info(r1: &[Diag], r2: &[Diag]) -> Ordering {
         return c;
     }
     for (i, element) in r1.iter().enumerate() {
-        let c = compare_diagnostics(&(*element), &r2[i]);
+        let c = compare_diagnostics(element, &r2[i]);
         if !c.is_eq() {
             return c;
         }
@@ -146,6 +146,7 @@ pub fn compare_diagnostics(d1: &Diag, d2: &Diag) -> Ordering {
     compare_related_info(&d1.related, &d2.related)
 }
 
+#[expect(clippy::naive_bytecount, reason = "a specialized search is a performance change that requires measurements")]
 pub fn compute_ecma_line_starts(text: &str) -> Vec<u32> {
     let bytes = text.as_bytes();
     let mut result = Vec::with_capacity(bytes.iter().filter(|&&b| b == b'\n').count() + 1);
@@ -350,7 +351,7 @@ fn write_code_snippet(
         if has_more_than_five_lines && first_line + 1 < i && i < last_line - 1 {
             writer.push_str(indent);
             writer.push_str(GUTTER_STYLE_SEQUENCE);
-            let _ = write!(writer, "{:>width$}", ELLIPSIS, width = gutter_width);
+            let _ = write!(writer, "{ELLIPSIS:>gutter_width$}");
             writer.push_str(RESET_ESCAPE_SEQUENCE);
             writer.push_str(GUTTER_SEPARATOR);
             writer.push_str(format_opts.new_line);
@@ -417,7 +418,7 @@ pub fn write_flattened_diagnostic_message(writer: &mut String, diagnostic: &Diag
 
 fn flatten_diagnostic_message_chain(writer: &mut String, chain: &Diag, new_line: &str, level: usize) {
     writer.push_str(new_line);
-    writer.extend((0..level).map(|_| "  "));
+    writer.push_str(&"  ".repeat(level));
     writer.push_str(&chain.message);
     for child in &chain.chain {
         flatten_diagnostic_message_chain(writer, child, new_line, level + 1);

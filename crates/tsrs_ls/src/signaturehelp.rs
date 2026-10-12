@@ -386,7 +386,7 @@ impl LanguageService {
         let mut selected_item_index = 0;
         let mut item_seen = 0;
         for (i, element) in items.iter().enumerate() {
-            let item = &(*element);
+            let item = element;
             if Some(candidates[i]) == resolved_signature {
                 selected_item_index = item_seen;
                 if item.len() > 1 {
@@ -571,7 +571,7 @@ impl LanguageService {
         c: &mut Checker,
         enclosing_declaration: P<Node>,
         source_file: P<SourceFile>,
-        doc_format: lsproto::MarkupKind,
+        _doc_format: lsproto::MarkupKind,
         vs_capability: bool,
     ) -> Vec<signatureHelpItemInfo> {
         let emit_context = printer::new_emit_context();
@@ -584,11 +584,6 @@ impl LanguageService {
                 .iter()
                 .map(|&type_parameter| create_signature_help_parameter_for_type_parameter(type_parameter, source_file, enclosing_declaration, c, &mut p)),
         );
-
-        let mut this_parameter: Vec<signatureHelpParameter> = Vec::new();
-        if let Some(this) = candidate_signature.this_parameter() {
-            this_parameter = vec![self.create_signature_help_parameter_for_parameter(this, enclosing_declaration, &mut p, source_file, c, doc_format)];
-        }
 
         // Creating type parameter display label
         let mut dpw = new_display_parts_writer(vs_capability);
@@ -617,8 +612,6 @@ impl LanguageService {
             let mut param_dpw = new_display_parts_writer(vs_capability);
             param_dpw.write_from(&dpw);
 
-            // Go appends to `thisParameter` (the result is unused for the item, which keeps the type parameters).
-            let mut parameters = this_parameter.clone();
             for (j, &param) in parameter_list.iter().enumerate() {
                 let param_node = checker::new_node_builder(c, emit_context)
                     .symbol_to_parameter_declaration(c, param, Some(enclosing_declaration), SIGNATURE_HELP_NODE_BUILDER_FLAGS, InternalFlags::None, None)
@@ -630,11 +623,7 @@ impl LanguageService {
                 // Use a temporary writer for p.Write since the printer calls Clear() on its writer
                 let mut temp_dpw = new_display_parts_writer(vs_capability);
                 p.write(param_node, Some(source_file), &mut temp_dpw, None);
-                let param_label = temp_dpw.string();
                 param_dpw.write_from(&temp_dpw);
-
-                let parameter = self.create_signature_help_parameter_from_label(param, &param_label, c, doc_format);
-                parameters.push(parameter);
             }
             let close_paren = scanner::token_to_string(Kind::CloseParenToken);
             param_dpw.write_punctuation(close_paren);
@@ -755,23 +744,6 @@ impl LanguageService {
             is_rest,
         }
     }
-
-    // signaturehelp.go:694
-    fn create_signature_help_parameter_for_parameter(
-        &self,
-        parameter: P<Symbol>,
-        enclosing_declaratipn: P<Node>,
-        p: &mut Printer,
-        source_file: P<SourceFile>,
-        c: &mut Checker,
-        doc_format: lsproto::MarkupKind,
-    ) -> signatureHelpParameter {
-        let node = checker::new_node_builder(c, printer::new_emit_context())
-            .symbol_to_parameter_declaration(c, parameter, Some(enclosing_declaratipn), SIGNATURE_HELP_NODE_BUILDER_FLAGS, InternalFlags::None, None)
-            .unwrap();
-        let display = p.emit(node, Some(source_file));
-        self.create_signature_help_parameter_from_label(parameter, &display, c, doc_format)
-    }
 }
 
 // signaturehelp.go:699
@@ -875,7 +847,7 @@ fn get_candidate_or_type_info(info: &argumentListInfo, c: &mut Checker, source_f
             return None;
         }
 
-        let candidates = get_possible_generic_signatures(called, info.argument_count as usize, c);
+        let candidates = get_possible_generic_signatures(called, info.argument_count, c);
         if !candidates.is_empty() {
             let resolved_signature = Some(candidates[0]);
             return Some(CandidateOrTypeInfo { candidate_info: Some(candidateInfo { candidates, resolved_signature }), type_info: None });
@@ -1222,7 +1194,7 @@ fn get_spread_element_count(node: P<Node>, c: &mut Checker) -> usize {
 
         let first_optional_index = element_flags.iter().position(|f| !f.intersects(ElementFlags::Required));
         let Some(first_optional_index) = first_optional_index else {
-            return usize::try_from(fixed_length).expect("tuple fixed length is nonnegative");
+            return fixed_length;
         };
         return first_optional_index;
     }

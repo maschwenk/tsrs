@@ -67,7 +67,7 @@ pub fn diff_ordered_maps<K: Hash + Eq, V: PartialEq>(
     on_removed: impl FnMut(&K, &V),
     on_modified: impl FnMut(&K, &V, &V),
 ) {
-    diff_ordered_maps_func(m1, m2, |a, b| a == b, on_added, on_removed, on_modified)
+    diff_ordered_maps_func(m1, m2, |a, b| a == b, on_added, on_removed, on_modified);
 }
 
 pub fn diff_ordered_maps_func<K: Hash + Eq, V>(

@@ -1356,8 +1356,7 @@ impl FormatSpanWorker {
         r: TextRangeWithKind,
     ) {
         let line_starts = scanner::get_ecma_line_starts(self.source_file.get());
-        for line in line1..line2 {
-            let line_start_position = line_starts[line];
+        for (line, &line_start_position) in line_starts.iter().enumerate().take(line2).skip(line1) {
             let Some(line_end_position) =
                 scanner::get_ecma_end_line_position(self.source_file, line)
             else {
@@ -1616,18 +1615,11 @@ impl FormatSpanWorker {
                     get_indentation_string(new_indentation, &self.fc().options);
                 self.record_replace(
                     start_line_pos,
-                    non_whitespace_character
-                        .try_into()
-                        .expect("comment indentation is nonnegative"),
+                    non_whitespace_character,
                     &indentation_string,
                 );
             } else {
-                self.record_delete(
-                    start_line_pos,
-                    non_whitespace_character
-                        .try_into()
-                        .expect("comment indentation is nonnegative"),
-                );
+                self.record_delete(start_line_pos, non_whitespace_character);
             }
 
             start_line += 1;
@@ -1772,7 +1764,7 @@ impl FormatSpanWorker {
             if let Some(trivia) = current_token_info
                 .trailing_trivia
                 .iter()
-                .find_map(|trivia| if is_comment(trivia.kind) && !trivia.loc.contained_by(self.original_range) { Some(trivia) } else { None })
+                .find(|trivia| is_comment(trivia.kind) && !trivia.loc.contained_by(self.original_range))
             {
                 self.previous_range_trivia_end = trivia
                     .loc

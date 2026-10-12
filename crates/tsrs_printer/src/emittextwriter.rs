@@ -38,61 +38,61 @@ pub trait EmitTextWriter {
 // wherever a `&mut dyn EmitTextWriter` is expected.
 impl<T: EmitTextWriter + ?Sized> EmitTextWriter for Box<T> {
     fn write(&mut self, s: &str) {
-        (**self).write(s)
+        (**self).write(s);
     }
     fn write_trailing_semicolon(&mut self, text: &str) {
-        (**self).write_trailing_semicolon(text)
+        (**self).write_trailing_semicolon(text);
     }
     fn write_comment(&mut self, text: &str) {
-        (**self).write_comment(text)
+        (**self).write_comment(text);
     }
     fn write_keyword(&mut self, text: &str) {
-        (**self).write_keyword(text)
+        (**self).write_keyword(text);
     }
     fn write_operator(&mut self, text: &str) {
-        (**self).write_operator(text)
+        (**self).write_operator(text);
     }
     fn write_punctuation(&mut self, text: &str) {
-        (**self).write_punctuation(text)
+        (**self).write_punctuation(text);
     }
     fn write_space(&mut self, text: &str) {
-        (**self).write_space(text)
+        (**self).write_space(text);
     }
     fn write_string_literal(&mut self, text: &str) {
-        (**self).write_string_literal(text)
+        (**self).write_string_literal(text);
     }
     fn write_parameter(&mut self, text: &str) {
-        (**self).write_parameter(text)
+        (**self).write_parameter(text);
     }
     fn write_property(&mut self, text: &str) {
-        (**self).write_property(text)
+        (**self).write_property(text);
     }
     fn write_symbol(&mut self, text: &str, symbol: P<Symbol>) {
-        (**self).write_symbol(text, symbol)
+        (**self).write_symbol(text, symbol);
     }
     fn write_line(&mut self) {
-        (**self).write_line()
+        (**self).write_line();
     }
     fn write_line_force(&mut self, force: bool) {
-        (**self).write_line_force(force)
+        (**self).write_line_force(force);
     }
     fn increase_indent(&mut self) {
-        (**self).increase_indent()
+        (**self).increase_indent();
     }
     fn decrease_indent(&mut self) {
-        (**self).decrease_indent()
+        (**self).decrease_indent();
     }
     fn clear(&mut self) {
-        (**self).clear()
+        (**self).clear();
     }
     fn string(&self) -> String {
         (**self).string()
     }
     fn raw_write(&mut self, s: &str) {
-        (**self).raw_write(s)
+        (**self).raw_write(s);
     }
     fn write_literal(&mut self, s: &str) {
-        (**self).write_literal(s)
+        (**self).write_literal(s);
     }
     fn get_text_pos(&self) -> u32 {
         (**self).get_text_pos()
@@ -116,6 +116,6 @@ impl<T: EmitTextWriter + ?Sized> EmitTextWriter for Box<T> {
         (**self).has_trailing_whitespace()
     }
     fn grow(&mut self, n: usize) {
-        (**self).grow(n)
+        (**self).grow(n);
     }
 }

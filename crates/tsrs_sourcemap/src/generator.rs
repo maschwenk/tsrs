@@ -94,7 +94,7 @@ pub struct Generator {
 
 // generator.go:56
 // `sources_content` is Go's `[]*string` with `omitzero`: None (nil) is omitted from the JSON, Some(vec![]) is not.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct RawSourceMap {
     pub version: u32,
     pub file: String,
@@ -220,7 +220,9 @@ impl Generator {
             &self.path_options,
         );
 
-        let source_index = match self.source_to_source_index_map.entry(source) {
+
+
+        match self.source_to_source_index_map.entry(source) {
             Entry::Occupied(entry) => *entry.get(),
             Entry::Vacant(entry) => {
                 let source_index = SourceIndex::Index(self.sources.len() as u32);
@@ -229,9 +231,7 @@ impl Generator {
                 entry.insert(source_index);
                 source_index
             }
-        };
-
-        source_index
+        }
     }
 
     // generator.go:101
@@ -356,10 +356,8 @@ impl Generator {
             // Only need to set this once
             self.last_generated_character = 0;
         } else {
-            if self.last_generated_line != self.pending_generated_line {
-                // panic rather than error as an invariant has been violated
-                panic!("generatedLine cannot backtrack");
-            }
+            // panic rather than error as an invariant has been violated
+            assert!(self.last_generated_line == self.pending_generated_line, "generatedLine cannot backtrack");
             // Emit comma to separate the entry
             if self.has_last {
                 self.append_mapping_char_code(',');
@@ -572,9 +570,9 @@ fn base64_std_encode(out: &mut String, data: &[u8]) {
         let b2 = chunk.get(2).copied().unwrap_or(0) as u32;
         let v = (b0 << 16) | (b1 << 8) | b2;
         [
-            ALPHABET[(v >> 18 & 0x3f) as usize] as char,
-            ALPHABET[(v >> 12 & 0x3f) as usize] as char,
-            if chunk.len() > 1 { ALPHABET[(v >> 6 & 0x3f) as usize] as char } else { '=' },
+            ALPHABET[((v >> 18) & 0x3f) as usize] as char,
+            ALPHABET[((v >> 12) & 0x3f) as usize] as char,
+            if chunk.len() > 1 { ALPHABET[((v >> 6) & 0x3f) as usize] as char } else { '=' },
             if chunk.len() > 2 { ALPHABET[(v & 0x3f) as usize] as char } else { '=' },
         ]
     }));
@@ -583,9 +581,9 @@ fn base64_std_encode(out: &mut String, data: &[u8]) {
 // generator.go:372
 pub(crate) fn base64_format_encode(value: u8) -> char {
     match value {
-        0..=25 => (b'A' + value as u8) as char,
-        26..=51 => (b'a' + value as u8 - 26) as char,
-        52..=61 => (b'0' + value as u8 - 52) as char,
+        0..=25 => (b'A' + value) as char,
+        26..=51 => (b'a' + value - 26) as char,
+        52..=61 => (b'0' + value - 52) as char,
         62 => '+',
         63 => '/',
         _ => panic!("not a base64 value"),

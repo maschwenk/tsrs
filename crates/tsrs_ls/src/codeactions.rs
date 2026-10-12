@@ -109,8 +109,8 @@ impl LanguageService {
             for &kind in only {
                 let matching_kinds = get_organize_imports_actions_for_kind(kind);
                 actions.extend(matching_kinds.into_iter().map(|matching_kind| {
-                    let organize_action = self.create_organize_imports_action(ctx, program, file, matching_kind);
-                    organize_action
+
+                    self.create_organize_imports_action(ctx, program, file, matching_kind)
                 }));
 
                 if is_fix_all_kind(kind) {
@@ -152,9 +152,8 @@ impl LanguageService {
 
                         let provider_actions = (provider.get_code_actions)(ctx, &fix_context)?;
                         for action in provider_actions {
-                            let i = match seen.binary_search_by(|probe| probe.compare(&action)) {
-                                Ok(_) => continue,
-                                Err(i) => i,
+                            let Err(i) = seen.binary_search_by(|probe| probe.compare(&action)) else {
+                                continue;
                             };
                             actions.push(convert_to_lsp_code_action(&action, diag, &params.text_document.uri));
                             if !action.fix_id.is_empty() {
@@ -170,7 +169,7 @@ impl LanguageService {
             actions.extend(fix_all_actions);
         }
 
-        Ok(lsproto::CommandOrCodeActionArrayOrNull { command_or_code_action_array: Some(actions), ..Default::default() })
+        Ok(lsproto::CommandOrCodeActionArrayOrNull { command_or_code_action_array: Some(actions) })
     }
 
     // codeactions.go:154
@@ -373,11 +372,7 @@ fn get_organize_imports_actions_for_kind(requested_kind: lsproto::CodeActionKind
     ];
 
     let mut result = Vec::new();
-    result.extend(organize_imports_kinds.into_iter().filter_map(
-        |organize_kind| {
-            if requested_kind.contains(organize_kind) { Some(organize_kind) } else { None }
-        },
-    ));
+    result.extend(organize_imports_kinds.into_iter().filter(|&organize_kind| requested_kind.contains(organize_kind)));
 
     if result.contains(&requested_kind) {
         return vec![requested_kind];

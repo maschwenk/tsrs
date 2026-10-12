@@ -50,12 +50,12 @@ pub fn write_compact(out: &mut String, v: &Value) -> Result<(), String> {
 
 /// Appends the encoding of a string, as `marshal` writes `Value::String`.
 pub fn write_compact_string(out: &mut String, s: &str) {
-    write_string(out, s)
+    write_string(out, s);
 }
 
 /// Appends the encoding of an integer, as `marshal` writes an integral `Value::Number` or a `Value::Integer`.
 pub fn write_compact_int(out: &mut String, n: i64) {
-    write_i64(out, n)
+    write_i64(out, n);
 }
 
 /// `json.Marshal` of a Go string.
@@ -105,7 +105,7 @@ fn es6_number_string(f: f64) -> String {
             out.push_str(&digits[1..]);
         }
         out.push('e');
-        out.push(if n - 1 >= 0 { '+' } else { '-' });
+        out.push(if n > 0 { '+' } else { '-' });
         out.push_str(&(n - 1).abs().to_string());
     }
     out
@@ -114,7 +114,7 @@ fn es6_number_string(f: f64) -> String {
 fn newline(out: &mut String, prefix: &str, indent: &str, depth: usize) {
     out.push('\n');
     out.push_str(prefix);
-    out.extend((0..depth).map(|_| indent));
+    out.extend(std::iter::repeat_n(indent, depth));
 }
 
 fn write_value(out: &mut String, v: &Value, prefix: &str, indent: &str, depth: usize) -> Result<(), String> {
@@ -124,7 +124,7 @@ fn write_value(out: &mut String, v: &Value, prefix: &str, indent: &str, depth: u
         Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
         // An integral value below 1e21 prints as its digits (es6_number_string's first case); writing those directly
         // avoids the shortest-digits formatting and its allocations, which dominate large integer arrays.
-        Value::Number(n) if n.fract() == 0.0 && n.abs() < 9007199254740992.0 => write_i64(out, *n as i64),
+        Value::Number(n) if n.fract() == 0.0 && n.abs() < 9_007_199_254_740_992.0 => write_i64(out, *n as i64),
         Value::Number(n) => out.push_str(&marshal_f64(*n)?),
         Value::Integer(n) => write_i64(out, *n),
         Value::String(s) => write_string(out, s),
@@ -194,7 +194,7 @@ fn write_string(out: &mut String, s: &str) {
     let mut i = 0;
     while i < bytes.len() {
         // Copy the run of bytes that need no escaping in one go.
-        let run = bytes[i..].iter().position(|&b| b >= 0x80 || b < 0x20 || b == b'"' || b == b'\\').unwrap_or(bytes.len() - i);
+        let run = bytes[i..].iter().position(|&b| !(0x20..0x80).contains(&b) || b == b'"' || b == b'\\').unwrap_or(bytes.len() - i);
         if run > 0 {
             out.push_str(&s[i..i + run]);
             i += run;
@@ -211,7 +211,7 @@ fn write_string(out: &mut String, s: &str) {
                 b'\r' => out.push_str("\\r"),
                 b'\t' => out.push_str("\\t"),
                 0..=0x1f => {
-                    let _ = write!(out, "\\u{:04x}", b);
+                    let _ = write!(out, "\\u{b:04x}");
                 }
                 _ => out.push(b as char),
             }

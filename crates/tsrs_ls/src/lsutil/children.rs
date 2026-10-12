@@ -144,7 +144,5 @@ pub fn get_first_token(node: P<Node>, source_file: P<SourceFile>) -> Option<P<No
 
 // children.go:128
 pub fn assert_has_real_position(node: P<Node>) {
-    if ast::position_is_synthesized(node.pos()) || ast::position_is_synthesized(node.end()) {
-        panic!("Node must have a real position for this operation.");
-    }
+    assert!(!(ast::position_is_synthesized(node.pos()) || ast::position_is_synthesized(node.end())), "Node must have a real position for this operation.");
 }

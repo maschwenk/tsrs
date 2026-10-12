@@ -610,7 +610,7 @@ fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
         // SAFETY: just made.
         return (unsafe { (*slab).base }, slab);
     }
-    let (mut cur, mut bump) = current.with(|s| s.get());
+    let (mut cur, mut bump) = current.with(std::cell::Cell::get);
     // SAFETY: the current slab is kept alive by the thread's reference.
     if cur.is_null() || bump + size + CENSUS_GAP > unsafe { (*cur).base.addr() + (*cur).size } {
         if !cur.is_null() {
@@ -735,7 +735,7 @@ fn census_mode() -> bool {
 /// are not recycled.
 #[inline]
 pub const fn free_class(size: usize, align: usize) -> usize {
-    if size >= 8 && size <= MAX_FREE_SIZE && size % 8 == 0 && align <= 8 {
+    if size >= 8 && size <= MAX_FREE_SIZE && size.is_multiple_of(8) && align <= 8 {
         size / 8
     } else {
         0
@@ -749,7 +749,7 @@ pub const fn free_class(size: usize, align: usize) -> usize {
 #[inline]
 pub(crate) unsafe fn free_block(arena: &Arena, addr: usize, size: usize, align: usize, needs_drop: bool) {
     let class = free_class(size, align);
-    if class == 0 || addr % 8 != 0 {
+    if class == 0 || !addr.is_multiple_of(8) {
         return;
     }
     // A region's drop list still names the block; it is dropped (not reused) when the region is freed.
@@ -807,7 +807,7 @@ pub(crate) fn rewind(arena: &Arena, cp: Checkpoint) {
     #[cfg(debug_assertions)]
     // SAFETY: as above.
     unsafe {
-        std::ptr::write_bytes(now, POISON, len)
+        std::ptr::write_bytes(now, POISON, len);
     };
     #[cfg(feature = "alloc-profile")]
     assert!(!crate::alloc_profile::census::active(), "arena rewind while the census records");
@@ -1138,13 +1138,13 @@ pub fn trim_own_arena_tail() {
 
 /// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).
 pub fn current_region() -> Option<Region> {
-    let p = CURRENT.with(|c| c.get());
+    let p = CURRENT.with(std::cell::Cell::get);
     if p.is_null() {
         return None;
     }
     // SAFETY: a non-null `CURRENT` is the thread arena or the arena of a region kept alive by an entered scope.
     let arena = unsafe { &*p };
-    arena.region.as_ref().and_then(|w| w.upgrade()).map(Region)
+    arena.region.as_ref().and_then(std::sync::Weak::upgrade).map(Region)
 }
 
 /// Makes the current thread's own (never freed) arena the allocation target until the scope is dropped: for data
@@ -1180,7 +1180,7 @@ pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
     if !ANY_REGION.load(Ordering::Relaxed) {
         return escape_scratch_unless_inside(addr);
     }
-    let current = CURRENT.with(|c| c.get());
+    let current = CURRENT.with(std::cell::Cell::get);
     match Region::containing(addr) {
         Some(region) if std::ptr::eq(&raw const *region.0.arena, current) => None,
         _ => Some(enter_thread_arena()),
@@ -1206,7 +1206,7 @@ impl Region {
     /// `enter`, and makes the region the thread's scratch region (see `ScratchScope`). Scratch scopes nest; the
     /// innermost one is the scratch region.
     pub fn enter_scratch(&self) -> ScratchScope {
-        let outer = CURRENT.with(|c| c.get());
+        let outer = CURRENT.with(std::cell::Cell::get);
         let outer = if outer.is_null() { std::ptr::from_ref::<Arena>(crate::ptr::own_arena()) } else { outer };
         let scope = self.enter();
         let saved = SCRATCH.with(|s| s.replace((&raw const *self.0.arena, outer)));
@@ -1226,8 +1226,8 @@ impl Drop for ScratchScope {
 /// outside scratch regions or when that target is already current.
 #[inline]
 pub fn escape_scratch() -> Option<RegionScope> {
-    let (scratch, outer) = SCRATCH.with(|s| s.get());
-    if scratch.is_null() || CURRENT.with(|c| c.get()) == outer {
+    let (scratch, outer) = SCRATCH.with(std::cell::Cell::get);
+    if scratch.is_null() || CURRENT.with(std::cell::Cell::get) == outer {
         return None;
     }
     Some(RegionScope::push(outer, None))
@@ -1245,7 +1245,7 @@ fn escape_scratch_unless_inside(addr: usize) -> Option<RegionScope> {
 /// Whether a scratch region is entered on this thread.
 #[inline]
 pub fn scratch_active() -> bool {
-    !SCRATCH.with(|s| s.get()).0.is_null()
+    !SCRATCH.with(std::cell::Cell::get).0.is_null()
 }
 
 /// Whether `addr` lies in the thread's scratch region (for caches outside it that must forget keys in it).
@@ -1262,7 +1262,7 @@ pub fn scratch_contains(addr: usize) -> bool {
 /// The thread's scratch region's arena, if one is entered.
 #[inline]
 pub(crate) fn scratch_arena() -> *const Arena {
-    SCRATCH.with(|s| s.get()).0
+    SCRATCH.with(std::cell::Cell::get).0
 }
 
 impl Drop for RegionInner {
@@ -1353,7 +1353,7 @@ mod retired {
     /// Retires `start .. start + len` (nothing uses it any more, and it is never handed out again).
     pub(super) fn retire(start: usize, len: usize) {
         let (pages, calls) = {
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let mut s = STATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             s.pending.push((start, start + len));
             s.pending_bytes += len;
             if s.pending_bytes < BATCH {
@@ -1368,7 +1368,7 @@ mod retired {
 
     pub(super) fn flush() {
         let (pages, calls) = {
-            let mut s = STATE.lock().unwrap_or_else(|e| e.into_inner());
+            let mut s = STATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             let pages = take_pages(&mut s);
             let calls = spans_of(&s, &pages);
             (pages, calls)

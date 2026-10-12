@@ -99,11 +99,11 @@ impl Checker {
             let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Union) { source.types() } else { std::slice::from_ref(&source) };
             // First, infer between identically matching source and target constituents and remove the
             // matching types.
-            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_or_base_identical_to(s, t), false /*sort*/);
+            let (temp_sources, temp_targets) = self.infer_from_matching_types(n, source_types, target.types(), super::checker::Checker::is_type_or_base_identical_to, false /*sort*/);
             // Next, infer between closely matching source and target constituents and remove
             // the matching types. Types closely match when they are instantiations of the same
             // object type or instantiations of the same type alias.
-            let (sources, targets) = self.infer_from_matching_types(n, &temp_sources, &temp_targets, |c, s, t| c.is_type_closely_matched_by(s, t), true /*sort*/);
+            let (sources, targets) = self.infer_from_matching_types(n, &temp_sources, &temp_targets, super::checker::Checker::is_type_closely_matched_by, true /*sort*/);
             if targets.is_empty() {
                 return;
             }
@@ -126,7 +126,7 @@ impl Checker {
             if !source.flags().intersects(TypeFlags::Union) {
                 let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { std::slice::from_ref(&source) };
                 // Infer between identically matching source and target constituents and remove the matching types.
-                let (sources, targets) = self.infer_from_matching_types(n, &source_types, target.types(), |c, s, t| c.is_type_identical_to(s, t), false /*sort*/);
+                let (sources, targets) = self.infer_from_matching_types(n, source_types, target.types(), super::checker::Checker::is_type_identical_to, false /*sort*/);
                 if sources.is_empty() || targets.is_empty() {
                     return;
                 }
@@ -234,7 +234,7 @@ impl Checker {
             let source_type_arguments = self.get_type_arguments(source);
             let target_type_arguments = self.get_type_arguments(target);
             let variances = self.get_variances(source.as_type_reference().target.get().unwrap());
-            self.infer_from_type_arguments(n, &source_type_arguments, &target_type_arguments, &variances);
+            self.infer_from_type_arguments(n, source_type_arguments, target_type_arguments, &variances);
         } else if source.flags().intersects(TypeFlags::Index) && target.flags().intersects(TypeFlags::Index) {
             self.infer_from_contravariant_types(n, source.as_index_type().target().unwrap(), target.as_index_type().target().unwrap());
         } else if (is_literal_type(source) || source.flags().intersects(TypeFlags::String)) && target.flags().intersects(TypeFlags::Index) {
@@ -253,7 +253,7 @@ impl Checker {
             let substitution_intersection = self.get_substitution_intersection(source);
             self.infer_with_priority(n, substitution_intersection, target, InferencePriority::SubstituteSource);
         } else if target.flags().intersects(TypeFlags::Conditional) {
-            self.invoke_once(n, source, target, |c, n, s, t| c.infer_to_conditional_type(n, s, t));
+            self.invoke_once(n, source, target, super::checker::Checker::infer_to_conditional_type);
         } else if target.flags().intersects(TypeFlags::UnionOrIntersection) {
             self.infer_to_multiple_types(n, source, target.types(), target.flags());
         } else if source.flags().intersects(TypeFlags::Union) {
@@ -266,7 +266,7 @@ impl Checker {
         } else {
             source = self.get_reduced_type(source);
             if self.is_generic_mapped_type(source) && self.is_generic_mapped_type(target) {
-                self.invoke_once(n, source, target, |c, n, s, t| c.infer_from_generic_mapped_types(n, s, t));
+                self.invoke_once(n, source, target, super::checker::Checker::infer_from_generic_mapped_types);
             }
             if !(n.priority.get().intersects(InferencePriority::NoConstraints) && source.flags().intersects(TypeFlags::Intersection | TypeFlags::Instantiable)) {
                 let apparent_source = self.get_apparent_type(source);
@@ -280,7 +280,7 @@ impl Checker {
                 source = apparent_source;
             }
             if source.flags().intersects(TypeFlags::Object | TypeFlags::Intersection) {
-                self.invoke_once(n, source, target, |c, n, s, t| c.infer_from_object_types(n, s, t));
+                self.invoke_once(n, source, target, super::checker::Checker::infer_from_object_types);
             }
         }
     }
@@ -458,7 +458,7 @@ pub(crate) fn get_type_depth(c: &mut Checker, t: P<Type>, max_depth: usize) -> u
         if t.object_flags().intersects(ObjectFlags::Reference) {
             let type_arguments = c.get_type_arguments(t);
             if !type_arguments.is_empty() {
-                return get_type_list_depth(c, &type_arguments, max_depth - 1) + 1;
+                return get_type_list_depth(c, type_arguments, max_depth - 1) + 1;
             }
         }
         if t.flags().intersects(TypeFlags::UnionOrIntersection) {
@@ -636,16 +636,16 @@ impl Checker {
                                 if !all_type_flags.intersects(TypeFlags::String) {
                                     let str = get_string_literal_value(source);
                                     // If the type contains `number` or a number literal and the string isn't a valid number, exclude numbers
-                                    if all_type_flags.intersects(TypeFlags::NumberLike) && !is_valid_number_string(&str, true /*roundTripOnly*/) {
+                                    if all_type_flags.intersects(TypeFlags::NumberLike) && !is_valid_number_string(str, true /*roundTripOnly*/) {
                                         all_type_flags &= !TypeFlags::NumberLike;
                                     }
                                     // If the type contains `bigint` or a bigint literal and the string isn't a valid bigint, exclude bigints
-                                    if all_type_flags.intersects(TypeFlags::BigIntLike) && !is_valid_big_int_string(&str, true /*roundTripOnly*/) {
+                                    if all_type_flags.intersects(TypeFlags::BigIntLike) && !is_valid_big_int_string(str, true /*roundTripOnly*/) {
                                         all_type_flags &= !TypeFlags::BigIntLike;
                                     }
                                     let mut matching_type = self.never_type;
                                     matching_type = constraint.distributed_iter().fold(matching_type, |mut matching_type, t| {
-                                        matching_type = infer_to_template_literal_type_choose(self, matching_type, t, all_type_flags, source, &str);
+                                        matching_type = infer_to_template_literal_type_choose(self, matching_type, t, all_type_flags, source, str);
 
                                         matching_type
                                     });
@@ -760,7 +760,7 @@ impl Checker {
             let source_type_arguments = self.get_type_arguments(source);
             let target_type_arguments = self.get_type_arguments(target);
             let variances = self.get_variances(source.target().unwrap());
-            self.infer_from_type_arguments(n, &source_type_arguments, &target_type_arguments, &variances);
+            self.infer_from_type_arguments(n, source_type_arguments, target_type_arguments, &variances);
             return;
         }
         if self.is_generic_mapped_type(source) && self.is_generic_mapped_type(target) {
@@ -970,10 +970,10 @@ impl Checker {
             // than the target, we infer from the first source signature to the excess target signatures.
             let target_signatures = self.get_signatures_of_type(target, kind);
             let target_len = target_signatures.len();
-            for i in 0..target_len {
+            for (i, &target_signature) in target_signatures.iter().enumerate() {
                 let source_index = (source_len + i).saturating_sub(target_len);
                 let base_signature = self.get_base_signature(source_signatures[source_index]);
-                let erased_signature = self.get_erased_signature(target_signatures[i]);
+                let erased_signature = self.get_erased_signature(target_signature);
                 self.infer_from_signature(n, base_signature, erased_signature);
             }
         }
@@ -1022,7 +1022,7 @@ impl Checker {
             callback(self, s, t);
         }
         if let Some(target_rest_type) = target_rest_type {
-            let readonly = self.is_const_type_variable(Some(target_rest_type), 0) && !some_type(self, target_rest_type, |c, t| c.is_mutable_array_like_type(t));
+            let readonly = self.is_const_type_variable(Some(target_rest_type), 0) && !some_type(self, target_rest_type, super::checker::Checker::is_mutable_array_like_type);
             let rest_type = self.get_rest_type_at_position(source, param_count, readonly);
             callback(self, rest_type, target_rest_type);
         }
@@ -1196,7 +1196,7 @@ impl Checker {
         if is_tuple_type(source) {
             let mut element_types: Vec<Option<P<Type>>> = Vec::new();
             element_types.extend(self.get_element_types(source).iter().map(|&t| self.infer_reverse_mapped_type(t, target, constraint)));
-            if !element_types.iter().all(|t| t.is_some()) {
+            if !element_types.iter().all(std::option::Option::is_some) {
                 return None;
             }
             let element_types: Vec<P<Type>> = element_types.into_iter().map(|t| t.unwrap()).collect();
@@ -1451,7 +1451,7 @@ impl Checker {
                 continue;
             }
             let name = get_string_literal_value(t);
-            let literal_prop = self.new_symbol(SymbolFlags::Property, alloc_str(&name));
+            let literal_prop = self.new_symbol(SymbolFlags::Property, alloc_str(name));
             self.value_symbol_links.get(literal_prop).resolved_type.set(Some(self.any_type));
             if let Some(symbol) = t.symbol() {
                 literal_prop.set_declarations_static(symbol.declarations());
@@ -1855,11 +1855,11 @@ impl Checker {
         // First, find the leftmost type for which no type to the right is a strict supertype, and if that
         // type is a strict supertype of all other candidates, return it. Otherwise, return the leftmost type
         // for which no type to the right is a (regular) supertype.
-        let candidate = self.find_leftmost_type(types, |c, s, t| c.is_type_strict_subtype_of(s, t));
+        let candidate = self.find_leftmost_type(types, super::checker::Checker::is_type_strict_subtype_of);
         if types.iter().all(|&t| Some(t) == candidate || self.is_type_strict_subtype_of(t, candidate.unwrap())) {
             return candidate;
         }
-        self.find_leftmost_type(types, |c, s, t| c.is_type_subtype_of(s, t))
+        self.find_leftmost_type(types, super::checker::Checker::is_type_subtype_of)
     }
 
     // inference.go:1569

@@ -441,7 +441,7 @@ pub fn parse_isolated_entity_name(text: &str) -> Option<P<Node>> {
 
 impl Parser {
     pub(crate) fn initialize_state(&mut self, opts: SourceFileParseOptions, source_text: &str, script_kind: ScriptKind) {
-        self.initialize_state_static(opts, alloc_str(source_text), script_kind)
+        self.initialize_state_static(opts, alloc_str(source_text), script_kind);
     }
 
     /// `initialize_state` for text that already lives in the arena (Go shares the string; no copy).
@@ -451,9 +451,7 @@ impl Parser {
         source_text: &'static str,
         script_kind: ScriptKind,
     ) {
-        if script_kind == ScriptKind::Unknown {
-            panic!("ScriptKind must be specified when parsing source file: {}", opts.file_name);
-        }
+        assert!(script_kind != ScriptKind::Unknown, "ScriptKind must be specified when parsing source file: {}", opts.file_name);
 
         self.scanner.reset();
         self.opts = opts;
@@ -659,9 +657,7 @@ impl Parser {
         let end_jsdoc = self.jsdoc_scanner_info();
         let eof = self.parse_token_node();
         self.with_jsdoc(eof, end_jsdoc);
-        if eof.kind() != Kind::EndOfFile {
-            panic!("Expected end of file token from scanner.");
-        }
+        assert!(eof.kind() == Kind::EndOfFile, "Expected end of file token from scanner.");
         if !self.reparse_list.is_empty() {
             statements.append(&mut self.reparse_list);
         }
@@ -752,9 +748,7 @@ impl Parser {
     }
 
     pub(crate) fn reparse_top_level_await(&mut self, source_file: P<SourceFile>) -> P<Node> {
-        if self.possible_await_spans.len() % 2 == 1 {
-            panic!("possibleAwaitSpans malformed: odd number of indices, not paired into spans.");
-        }
+        assert!(self.possible_await_spans.len() % 2 != 1, "possibleAwaitSpans malformed: odd number of indices, not paired into spans.");
         let source_statements: &'static [P<Node>] = source_file.statements.nodes();
         let mut statements: Vec<P<Node>> = Vec::new();
         let saved_parse_diagnostics = std::mem::take(&mut self.diagnostics);
@@ -1213,7 +1207,7 @@ impl Parser {
             ParsingContext::ImportAttributes => {
                 self.parse_error_at_current_token(&diagnostics::Identifier_or_string_literal_expected, &[]);
             }
-            _ => panic!("Unhandled case in parsingContextErrors"),
+            ParsingContext::Count => panic!("Unhandled case in parsingContextErrors"),
         }
     }
 
@@ -1373,9 +1367,7 @@ impl Parser {
             self.next_token_jsdoc();
             return true;
         }
-        if !is_keyword_or_punctuation(kind) {
-            panic!("Invalid JSDoc kind: expected keyword or punctuation");
-        }
+        assert!(is_keyword_or_punctuation(kind), "Invalid JSDoc kind: expected keyword or punctuation");
         self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(kind)]);
         false
     }
@@ -1475,9 +1467,7 @@ impl Parser {
         match self.parse_optional_token_jsdoc(kind) {
             Some(optional) => optional,
             None => {
-                if !is_keyword_or_punctuation(kind) {
-                    panic!("expected keyword or punctuation");
-                }
+                assert!(is_keyword_or_punctuation(kind), "expected keyword or punctuation");
                 self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(kind)]);
                 let token = self.factory.new_token(kind);
                 let pos = self.node_pos();
@@ -2712,7 +2702,7 @@ impl Parser {
         }
         // The user alternatively might have misspelled or forgotten to add a space after a common keyword.
         let mut suggestion = tsrs_core::get_spelling_suggestion_for_strings(expression_text, viable_keyword_suggestions.iter().copied())
-            .map(|s| s.to_string())
+            .map(std::string::ToString::to_string)
             .unwrap_or_default();
         if suggestion.is_empty() {
             suggestion = get_space_suggestion(expression_text);

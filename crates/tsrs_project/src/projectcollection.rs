@@ -124,14 +124,14 @@ impl ProjectCollection {
         let start = projects.len();
         // collected, then sorted by unique project id as in Go
         projects.extend(self.configured_projects.values().map(std::clone::Clone::clone));
-        projects[start..].sort_by(|a, b| a.id().cmp(&b.id()));
+        projects[start..].sort_by_key(|a| a.id());
     }
 
     // projectcollection.go:108
     // SyntheticProjects returns all synthetic projects in a stable order.
     pub fn synthetic_projects(&self) -> Vec<Shared<Project>> {
         let mut projects: Vec<Shared<Project>> = self.synthetic_projects.values().cloned().collect();
-        projects.sort_by(|a, b| a.id().cmp(&b.id()));
+        projects.sort_by_key(|a| a.id());
         projects
     }
 

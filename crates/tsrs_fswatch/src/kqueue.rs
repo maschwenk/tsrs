@@ -165,7 +165,7 @@ impl kqueueBackend {
         // Watch the read side of the pipe so we can break the loop on shutdown.
         let pipe_ev = new_kevent(pipe_fds[0], libc::EVFILT_READ, libc::EV_ADD | libc::EV_CLEAR, 0);
         if let Err(err) = kevent_register(kq, &pipe_ev) {
-            return Err(Error::new(format!("unable to watch pipe: {}", err)));
+            return Err(Error::new(format!("unable to watch pipe: {err}")));
         }
 
         self.base.notify_started();
@@ -181,13 +181,13 @@ impl kqueueBackend {
                 if err.raw_os_error() == Some(libc::EINTR) {
                     continue;
                 }
-                return Err(Error::new(format!("kevent error: {}", err)));
+                return Err(Error::new(format!("kevent error: {err}")));
             }
 
             let mut stop = false;
             for ev in &events[..n as usize] {
-                let mut fflags = ev.fflags as u32;
-                let flags = ev.flags as u16;
+                let mut fflags = ev.fflags;
+                let flags = ev.flags;
                 let fd = ev.ident as i32;
                 if fd == pipe_fds[0] {
                     stop = true;
@@ -223,6 +223,7 @@ impl kqueueBackend {
                 }
             }
 
+            #[expect(clippy::iter_with_drain, reason = "the vector is reused by the long-running event loop so draining retains its allocation")]
             for w in watchers_touched.drain(..) {
                 w.notify();
             }
@@ -418,7 +419,7 @@ impl kqueueBackend {
         }
         let subs = filtered_subs;
 
-        let dir_start = format!("{}/", path);
+        let dir_start = format!("{path}/");
         struct diskSnapshot {
             entries: Vec<(String, bool)>,
             current_display_paths: rustc_hash::FxHashSet<String>,
@@ -434,7 +435,7 @@ impl kqueueBackend {
                 continue;
             };
             let watch_path = base_entry.watch_path.clone();
-            let watch_dir_start = format!("{}/", watch_path);
+            let watch_dir_start = format!("{watch_path}/");
 
             let snapshot = match snapshots.get(&watch_path) {
                 Some(s) => Arc::clone(s),
@@ -442,7 +443,7 @@ impl kqueueBackend {
                     let Ok(disk_entries) = read_entries(&watch_path) else {
                         continue;
                     };
-                    let current_display_paths = disk_entries.iter().map(|(name, _)| format!("{}{}", dir_start, name)).collect();
+                    let current_display_paths = disk_entries.iter().map(|(name, _)| format!("{dir_start}{name}")).collect();
                     let s = Arc::new(diskSnapshot { entries: disk_entries, current_display_paths });
                     snapshots.insert(watch_path.clone(), Arc::clone(&s));
                     s
@@ -451,8 +452,8 @@ impl kqueueBackend {
 
             let map_id = sub.entries;
             for (name, ent_is_dir) in &snapshot.entries {
-                let full_path = format!("{}{}", dir_start, name);
-                let full_watch_path = format!("{}{}", watch_dir_start, name);
+                let full_path = format!("{dir_start}{name}");
+                let full_watch_path = format!("{watch_dir_start}{name}");
 
                 let existing = st.entry_maps.get(&map_id).and_then(|m| m.get(&full_path)).cloned();
                 if let Some(existing) = existing {
@@ -608,7 +609,7 @@ impl kqState {
     // the corresponding b.subsByPath / b.fdToEntry bookkeeping, and emits a
     // delete event for each.
     fn close_descendant_fds_locked(&mut self, w: &Arc<dirWatch>, map_id: entriesID, root: &str) {
-        let prefix = format!("{}/", root);
+        let prefix = format!("{root}/");
         let Some(m) = self.entry_maps.get_mut(&map_id) else {
             return;
         };
@@ -697,7 +698,7 @@ fn read_entries(path: &str) -> Result<Vec<(String, bool)>, Error> {
     let mut out = Vec::new();
     out = (std::fs::read_dir(path).map_err(Error::from_io)?).try_fold(out, |mut out, ent| {
         let ent = ent.map_err(Error::from_io)?;
-        let is_dir = ent.file_type().map(|t| t.is_dir()).unwrap_or(false);
+        let is_dir = ent.file_type().is_ok_and(|t| t.is_dir());
         out.push((ent.file_name().to_string_lossy().into_owned(), is_dir));
         Ok::<_, Error>(out)
     })?;
@@ -804,7 +805,7 @@ impl watcherImpl for kqueueBackend {
         let mut maps_of_watch = rustc_hash::FxHashSet::default();
         let paths: Vec<String> = st.subs_by_path.keys().cloned().collect();
         for path in paths {
-            let list = st.subs_by_path.get(&path).unwrap();
+            let list = &st.subs_by_path[&path];
             let removed_any = list.iter().any(|s| dwKey(Arc::clone(&s.dir_watch)) == key);
             if !removed_any {
                 continue;

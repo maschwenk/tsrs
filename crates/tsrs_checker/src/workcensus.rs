@@ -456,13 +456,13 @@ impl CKey {
                 }
             }
             CKey::Node(n) => node_label(n),
-            CKey::OptNode(n) => n.map(node_label).unwrap_or_else(|| "(no declaration)".to_string()),
+            CKey::OptNode(n) => n.map_or_else(|| "(no declaration)".to_string(), node_label),
             CKey::Rel(r, s, k) => match s {
                 Some(s) => format!("{} -> {}", REL_NAMES[r as usize], symbol_label(s)),
                 None => format!("{} -> <{}>", REL_NAMES[r as usize], KIND_LABELS[k as usize]),
             },
             CKey::Bucket(b) => format!("size {}", bucket_label(b)),
-            CKey::Mapped(n, b) => format!("{} | keys {}", n.map(node_label).unwrap_or_else(|| "?".to_string()), bucket_label(b)),
+            CKey::Mapped(n, b) => format!("{} | keys {}", n.map_or_else(|| "?".to_string(), node_label), bucket_label(b)),
         }
     }
 }
@@ -524,10 +524,7 @@ impl Checker {
 
     #[inline]
     pub(crate) fn census_begin(&mut self, cat: Cat, key: impl FnOnce() -> CKey) -> Option<Span> {
-        match self.census_mut() {
-            Some(c) => Some(c.begin(cat, key())),
-            None => None,
-        }
+        self.census_mut().map(|c| c.begin(cat, key()))
     }
 
     #[inline]

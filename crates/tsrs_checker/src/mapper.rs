@@ -144,9 +144,10 @@ impl TypeMapperData {
 /// A list's address shifted left by one with its length in the top 16 bits, or `None` when either does not fit.
 #[cfg(target_pointer_width = "64")]
 #[inline]
+#[expect(clippy::verbose_bit_mask, reason = "the mask directly documents the two tag bits reserved in the packed address")]
 fn pack_slice(s: &'static [P<Type>]) -> Option<usize> {
     let a = s.as_ptr().expose_provenance();
-    (a & 3 == 0 && a >> (LEN_SHIFT - 1) == 0 && s.len() <= u16::MAX as usize).then(|| a << 1 | s.len() << LEN_SHIFT)
+    (a & 3 == 0 && a >> (LEN_SHIFT - 1) == 0 && u16::try_from(s.len()).is_ok()).then_some((a << 1) | (s.len() << LEN_SHIFT))
 }
 
 /// # Safety
@@ -417,7 +418,7 @@ impl MapperCell {
         if let Some(m) = m {
             escape_mapper(m);
         }
-        self.0.set(m)
+        self.0.set(m);
     }
 }
 

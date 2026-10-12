@@ -699,7 +699,7 @@ impl Tracker {
                 source_file,
                 TextRange::new(end_pos, end_pos),
                 new_node,
-                NodeOptions { prefix: format!("{} ", separator_string), ..Default::default() },
+                NodeOptions { prefix: format!("{separator_string} "), ..Default::default() },
             );
         }
     }
@@ -877,15 +877,13 @@ impl Tracker {
 
             Kind::VariableDeclaration | Kind::StringLiteral | Kind::Identifier => NodeOptions { prefix: ", ".to_string(), ..Default::default() },
 
-            Kind::PropertyAssignment => NodeOptions { suffix: format!(",{}", new_line_char), ..Default::default() },
+            Kind::PropertyAssignment => NodeOptions { suffix: format!(",{new_line_char}"), ..Default::default() },
 
             Kind::ExportKeyword => NodeOptions { prefix: " ".to_string(), ..Default::default() },
 
             _ => {
-                if !(ast::is_statement(node) || ast::is_class_or_type_element(node)) {
-                    // Else we haven't handled this kind of node yet -- add it
-                    panic!("unimplemented node type {:?} in changeTracker.getInsertNodeAfterOptions", node.kind());
-                }
+                // Else we haven't handled this kind of node yet -- add it
+                assert!(ast::is_statement(node) || ast::is_class_or_type_element(node), "unimplemented node type {:?} in changeTracker.getInsertNodeAfterOptions", node.kind());
                 NodeOptions { suffix: new_line_char, ..Default::default() }
             }
         };
@@ -956,7 +954,7 @@ impl Tracker {
 
         let mut prefix = self.new_line.clone();
         if insert_leading_comma {
-            prefix = format!(",{}", prefix);
+            prefix = format!(",{prefix}");
         }
 
         NodeOptions { indentation: Some(indentation), prefix, suffix, ..Default::default() }

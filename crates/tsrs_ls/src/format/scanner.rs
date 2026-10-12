@@ -295,7 +295,7 @@ impl FormattingScanner {
                 if token == Kind::GreaterThanToken {
                     self.last_scan_action = ScanAction::RescanGreaterThanToken;
                     let new_token = self.s.re_scan_greater_than_token();
-                    assert!(n.kind() == new_token);
+                    assert_eq!(n.kind(), new_token);
                     return new_token;
                 }
             }
@@ -303,7 +303,7 @@ impl FormattingScanner {
                 if starts_with_slash_token(token) {
                     self.last_scan_action = ScanAction::RescanSlashToken;
                     let new_token = self.s.re_scan_slash_token(false);
-                    assert!(n.kind() == new_token);
+                    assert_eq!(n.kind(), new_token);
                     return new_token;
                 }
             }

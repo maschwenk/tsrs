@@ -106,13 +106,13 @@ impl Session {
         let id = self.build_state.next_id.fetch_add(1, Ordering::SeqCst) + 1;
         // A build that failed by unwinding (the moduleResolution boundary above) leaves the map intact; its lock
         // is only poisoned.
-        self.build_state.orchestrators.lock().unwrap_or_else(|e| e.into_inner()).insert(id, Orchestrator { backend: orchestrator });
+        self.build_state.orchestrators.lock().unwrap_or_else(std::sync::PoisonError::into_inner).insert(id, Orchestrator { backend: orchestrator });
         Ok(Obj::new().set("buildOrchestratorID", Value::Number(id as f64)).build())
     }
 
     pub(crate) fn handle_dispose_build_orchestrator(&self, p: Params) -> ApiResult<Value> {
         let id = p.u64("buildOrchestratorID")?;
-        let removed = self.build_state.orchestrators.lock().unwrap_or_else(|e| e.into_inner()).remove(&id);
+        let removed = self.build_state.orchestrators.lock().unwrap_or_else(std::sync::PoisonError::into_inner).remove(&id);
         match removed {
             Some(_) => Ok(Value::Bool(true)),
             None => Err(ApiError::internal("build orchestrator not found while disposing")),

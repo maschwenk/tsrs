@@ -248,7 +248,7 @@ fn is_go_space(c: char) -> bool {
 }
 
 fn utf16_len(s: &str) -> usize {
-    s.chars().map(|c| c.len_utf16()).sum()
+    s.chars().map(char::len_utf16).sum()
 }
 
 fn write_code_snippet(
@@ -331,7 +331,7 @@ fn write_code_snippet(
 
             // Fill with spaces until the first character,
             // then squiggle the remainder of the line.
-            w!(writer, "{}", " ".repeat(first_line_char.max(0) as usize));
+            w!(writer, "{}", " ".repeat(first_line_char as usize));
             w!(writer, "{}", "~".repeat(go_repeat_count(last_char_for_line - first_line_char as i64)));
         } else if i == last_line {
             // Squiggle until the final character.
@@ -348,9 +348,7 @@ fn write_code_snippet(
 
 // strings.Repeat panics on a negative count; the Go code never passes one for valid diagnostics.
 fn go_repeat_count(n: i64) -> usize {
-    if n < 0 {
-        panic!("strings: negative Repeat count");
-    }
+    assert!(n >= 0, "strings: negative Repeat count");
     n as usize
 }
 

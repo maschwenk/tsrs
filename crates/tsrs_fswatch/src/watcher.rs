@@ -17,6 +17,7 @@ use crate::pathcompare::{comparisonCache, comparisonPath, pathComparer};
 pub struct Sentinel(pub &'static str);
 
 #[derive(Clone, PartialEq, Eq, Debug)]
+#[expect(clippy::error_impl_error, reason = "the public name mirrors Go's package-level error value used throughout the port")]
 pub struct Error {
     message: String,
     wraps: Vec<Sentinel>,
@@ -406,7 +407,7 @@ impl PartialEq for dwKey {
 impl Eq for dwKey {}
 impl std::hash::Hash for dwKey {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        (Arc::as_ptr(&self.0) as usize).hash(state)
+        (Arc::as_ptr(&self.0) as usize).hash(state);
     }
 }
 
@@ -473,7 +474,7 @@ impl watcher {
     // watcher.go:377
     fn key_for_dir_watch(&self, dir: &str, recursive: bool) -> String {
         if recursive {
-            return format!("{}\x00recursive", dir);
+            return format!("{dir}\x00recursive");
         }
         dir.to_string()
     }
@@ -514,9 +515,9 @@ impl watcher {
                 .dir_watches
                 .values()
                 .filter(|dw| is_in_directory_or_self(&parent, &dw.dir) && is_in_directory_or_self(&physical_parent, &dw.physical_dir))
-                .take((recursiveConsolidateThreshold - count) as usize)
+                .take(recursiveConsolidateThreshold - count)
                 .count()
-                >= (recursiveConsolidateThreshold - count) as usize
+                >= recursiveConsolidateThreshold - count
             {
                 return parent;
             }
@@ -710,7 +711,7 @@ impl watcher {
     fn as_static(&self) -> &'static watcher {
         if let Some(result) = ([&*inotifyWatcher, &*fseventsWatcher, &*kqueueWatcher, &*windowsWatcher, &*fanotifyWatcher, &*unsupportedWatcher])
             .into_iter()
-            .find_map(|w| if std::ptr::eq(w, self) { Some(w) } else { None })
+            .find(|w| std::ptr::eq(*w, self))
         {
             return result;
         }
@@ -800,7 +801,7 @@ impl watcherBase {
         let subs: Vec<Arc<dirWatch>> = st.subscriptions.iter().map(|k| Arc::clone(&k.0)).collect();
         drop(st);
         for w in subs {
-            w.notify_error(&err);
+            w.notify_error(err);
         }
         self.notify_started();
     }
@@ -818,7 +819,7 @@ fn run(impl_: &Arc<dyn watcherImpl>) -> Result<(), Error> {
                 Ok(Ok(())) => {}
                 Ok(Err(err)) => base_owner.base().handle_start_error(&err),
                 Err(panic) => {
-                    let msg = panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default();
+                    let msg = panic.downcast_ref::<String>().cloned().or_else(|| panic.downcast_ref::<&str>().map(std::string::ToString::to_string)).unwrap_or_default();
                     base_owner.base().handle_start_error(&Error::new(msg));
                 }
             }
@@ -965,7 +966,7 @@ impl dirWatch {
             #[cfg(target_os = "macos")]
             state: Mutex::new(None),
             sequence,
-            mu: Mutex::new(dirWatchState { callbacks: Vec::new(), debounce: Some(Arc::clone(&db)), next_cb_id: 0 }),
+            mu: Mutex::new(dirWatchState { callbacks: Vec::new(), debounce: Some(Arc::clone(db)), next_cb_id: 0 }),
             key: nextDirWatchKey.fetch_add(1, Ordering::Relaxed) as usize,
         });
         let target = Arc::clone(&dw);
@@ -1084,8 +1085,15 @@ impl dirWatch {
                         if cb.dir != self.dir && !is_in_directory_or_self(&cb.dir, &e.path) {
                             continue;
                         }
-                    } else if !is_direct_child(&cb.dir, &e.path) && !(cb.dir != self.dir && e.path == cb.dir) {
-                        continue;
+                    } else {
+                        let is_shared_watch_root = if cb.dir == self.dir {
+                            false
+                        } else {
+                            e.path == cb.dir
+                        };
+                        if !is_direct_child(&cb.dir, &e.path) && !is_shared_watch_root {
+                            continue;
+                        }
                     }
                     filtered.push(e);
                 }
@@ -1263,14 +1271,14 @@ pub(crate) fn join_path_suffix(root: &str, suffix: &str) -> String {
     }
     if let Some(rest) = suffix.strip_prefix('/') {
         if root.ends_with('/') {
-            return format!("{}{}", root, rest);
+            return format!("{root}{rest}");
         }
-        return format!("{}{}", root, suffix);
+        return format!("{root}{suffix}");
     }
     if root.ends_with('/') {
-        return format!("{}{}", root, suffix);
+        return format!("{root}{suffix}");
     }
-    format!("{}/{}", root, suffix)
+    format!("{root}/{suffix}")
 }
 
 // watcher.go:1087
@@ -1334,7 +1342,7 @@ pub(crate) fn filepath_clean(path: &str) -> String {
     }
     let joined = out.join("/");
     if rooted {
-        format!("/{}", joined)
+        format!("/{joined}")
     } else if joined.is_empty() {
         ".".to_string()
     } else {
@@ -1344,6 +1352,6 @@ pub(crate) fn filepath_clean(path: &str) -> String {
 
 // Go `filepath.Dir` (Unix).
 pub(crate) fn filepath_dir(path: &str) -> String {
-    let i = path.rfind('/').map(|i| i + 1).unwrap_or(0);
+    let i = path.rfind('/').map_or(0, |i| i + 1);
     filepath_clean(&path[..i])
 }

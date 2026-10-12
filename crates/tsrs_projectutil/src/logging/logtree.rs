@@ -172,9 +172,7 @@ impl LogTree {
     // logtree.go:140
     pub fn string(&self) -> String {
         let c = self.0.as_ref().expect("String called on nil LogTree");
-        if c.root.is_some() {
-            panic!("can only call String on root LogTree");
-        }
+        assert!(c.root.is_none(), "can only call String on root LogTree");
         let header = format!("======== {} ========\n", c.name);
         let mut builder =
             String::with_capacity(c.string_length.load(Ordering::Relaxed) + header.len());
@@ -187,33 +185,33 @@ impl LogTree {
 impl Logger for LogTree {
     // logtree.go:95
     fn error(&self, msg: &str) {
-        self.log(msg)
+        self.log(msg);
     }
     // logtree.go:99
     fn errorf(&self, args: fmt::Arguments<'_>) {
-        self.logf(args)
+        self.logf(args);
     }
     // logtree.go:103
     fn warn(&self, msg: &str) {
-        self.log(msg)
+        self.log(msg);
     }
     // logtree.go:107
     fn warnf(&self, args: fmt::Arguments<'_>) {
-        self.logf(args)
+        self.logf(args);
     }
     // logtree.go:111
     fn info(&self, msg: &str) {
-        self.log(msg)
+        self.log(msg);
     }
     // logtree.go:115
     fn infof(&self, args: fmt::Arguments<'_>) {
-        self.logf(args)
+        self.logf(args);
     }
     fn log(&self, msg: &str) {
-        LogTree::log(self, msg)
+        LogTree::log(self, msg);
     }
     fn logf(&self, args: fmt::Arguments<'_>) {
-        LogTree::logf(self, args)
+        LogTree::logf(self, args);
     }
     fn verbose(&self) -> Option<&dyn Logger> {
         if self.is_nil() || !LogTree::is_verbose(self) {
@@ -225,7 +223,7 @@ impl Logger for LogTree {
         LogTree::is_verbose(self)
     }
     fn set_verbose(&self, verbose: bool) {
-        LogTree::set_verbose(self, verbose)
+        LogTree::set_verbose(self, verbose);
     }
 }
 

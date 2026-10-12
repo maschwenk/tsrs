@@ -33,7 +33,7 @@ impl ParseConfigHost for sysParseConfigHost {
 }
 
 fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
-    sys.write(&format!("error: {} is not supported by tsrs.\n", what));
+    sys.write(&format!("error: {what} is not supported by tsrs.\n"));
     CommandLineResult { status: ExitStatus::NotImplemented }
 }
 

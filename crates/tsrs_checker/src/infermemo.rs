@@ -308,7 +308,7 @@ impl Checker {
             key.extend_from_slice(&[
                 info.type_parameter.get().map_or(0, |t| t.id.0),
                 info.priority.get().memo_bits(),
-                u32::from(info.top_level.get()) | u32::from(info.is_fixed.get()) << 1,
+                u32::from(info.top_level.get()) | (u32::from(info.is_fixed.get()) << 1),
                 info.implied_arity
                     .get()
                     .map_or(u32::MAX, |arity| arity as u32),
@@ -342,24 +342,22 @@ impl Checker {
         let outcome = info_outcomes(n);
         let entry = &self.infer_memo.entries[key];
         let flags_covered = flags & !entry.flags == 0 && (flags ^ entry.flags) & !crate::flowmemo::FLAG_COUNT_RESET == 0;
-        if effects || !taint.is_pure() || outcome != entry.infos || n.cleared_inferences.get() != entry.cleared || height != entry.height || !flags_covered {
-            panic!(
-                "TSRS_INFER_MEMO=shadow: inferring from type {} to type {} (priority {:?}): the walk again has effects {effects} ({before:?} -> {after:?}; types/symbols/signatures now {}/{}/{}), pure {}, outcome {:?} (stored {:?}), cleared {} (stored {}), height {height} (stored {}), flags {flags} (stored {})",
-                source.id.0,
-                target.id.0,
-                n.priority.get(),
-                self.type_count,
-                self.symbol_count,
-                self.signature_count,
-                taint.is_pure(),
-                outcome,
-                entry.infos,
-                n.cleared_inferences.get(),
-                entry.cleared,
-                entry.height,
-                entry.flags
-            );
-        }
+        assert!(!(effects || !taint.is_pure() || outcome != entry.infos || n.cleared_inferences.get() != entry.cleared || height != entry.height || !flags_covered),
+            "TSRS_INFER_MEMO=shadow: inferring from type {} to type {} (priority {:?}): the walk again has effects {effects} ({before:?} -> {after:?}; types/symbols/signatures now {}/{}/{}), pure {}, outcome {:?} (stored {:?}), cleared {} (stored {}), height {height} (stored {}), flags {flags} (stored {})",
+            source.id.0,
+            target.id.0,
+            n.priority.get(),
+            self.type_count,
+            self.symbol_count,
+            self.signature_count,
+            taint.is_pure(),
+            outcome,
+            entry.infos,
+            n.cleared_inferences.get(),
+            entry.cleared,
+            entry.height,
+            entry.flags
+        );
     }
 
     /// Prints the process totals when `TSRS_INFER_MEMO_STATS` is set or in shadow mode (call at exit).

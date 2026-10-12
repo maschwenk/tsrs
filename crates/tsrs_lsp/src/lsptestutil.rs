@@ -256,7 +256,7 @@ impl LSPClient {
 
     // lspclient.go:245
     pub fn write_msg(&self, msg: &Message) {
-        self.write_to_server(msg).unwrap_or_else(|err| panic!("failed to write message: {}", err));
+        self.write_to_server(msg).unwrap_or_else(|err| panic!("failed to write message: {err}"));
     }
 
     // lspclient.go:253

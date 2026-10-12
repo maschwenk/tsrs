@@ -93,7 +93,7 @@ fn diagnostic_response(d: &Diagnostic) -> Value {
                     )
                     .set(
                         "character",
-                        num(u32::try_from(start_char).expect("character offset exceeds u32")),
+                        num(start_char),
                     )
                     .build(),
             )
@@ -106,7 +106,7 @@ fn diagnostic_response(d: &Diagnostic) -> Value {
                     )
                     .set(
                         "character",
-                        num(u32::try_from(end_char).expect("character offset exceeds u32")),
+                        num(end_char),
                     )
                     .build(),
             );

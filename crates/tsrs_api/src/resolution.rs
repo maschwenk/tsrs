@@ -78,7 +78,7 @@ impl Session {
         let (_sd, program) = self.program_for(p)?;
         let file = resolve_source_file(program, &p.document("file")?)?;
         let mode = mode_param(p, "mode")?;
-        Ok(program.get_resolved_module(file, p.str("moduleName")?, mode).map(|r| resolved_module_response(&r)).unwrap_or(Value::Null))
+        Ok(program.get_resolved_module(file, p.str("moduleName")?, mode).map_or(Value::Null, |r| resolved_module_response(&r)))
     }
 
     pub(crate) fn handle_get_resolved_module_from_module_specifier(&self, p: Params) -> ApiResult<Value> {
@@ -93,7 +93,7 @@ impl Session {
         }
         let file = file.ok_or_else(|| ApiError::client("moduleSpecifier must have a SourceFile ancestor or sourceFile must be provided"))?;
         let mode = program.get_mode_for_usage_location(file, node);
-        Ok(program.get_resolved_module(file, node.text(), mode).map(|r| resolved_module_response(&r)).unwrap_or(Value::Null))
+        Ok(program.get_resolved_module(file, node.text(), mode).map_or(Value::Null, |r| resolved_module_response(&r)))
     }
 
     pub(crate) fn handle_get_resolved_type_reference_directive(&self, p: Params) -> ApiResult<Value> {

@@ -248,7 +248,7 @@ impl Checker {
             Kind::PropertyDeclaration => self.check_property_declaration(node),
             Kind::PropertySignature => self.check_property_signature(node),
             Kind::ConstructorType | Kind::FunctionType | Kind::CallSignature | Kind::ConstructSignature | Kind::IndexSignature => {
-                self.check_signature_declaration(node)
+                self.check_signature_declaration(node);
             }
             Kind::MethodDeclaration | Kind::MethodSignature => self.check_method_declaration(node),
             Kind::ClassStaticBlockDeclaration => self.check_class_static_block_declaration(node),
@@ -425,9 +425,8 @@ impl Checker {
         // Go's OrderedSet.Values() enumerates items added during iteration.
         let mut i = 0;
         loop {
-            let node = match links.deferred_nodes.borrow().get_index(i) {
-                Some(&node) => node,
-                None => break,
+            let Some(&node) = links.deferred_nodes.borrow().get_index(i) else {
+                break;
             };
             if self.is_canceled() {
                 break;
@@ -450,7 +449,7 @@ impl Checker {
                 self.resolve_untyped_call(node);
             }
             Kind::FunctionExpression | Kind::ArrowFunction | Kind::MethodDeclaration | Kind::MethodSignature => {
-                self.check_function_expression_or_object_literal_method_deferred(node)
+                self.check_function_expression_or_object_literal_method_deferred(node);
             }
             Kind::GetAccessor | Kind::SetAccessor => self.check_accessor_declaration(node),
             Kind::ClassExpression => self.check_class_expression_deferred(node),
@@ -1049,7 +1048,7 @@ impl Checker {
                 let declarations = symbol.declarations();
                 if declarations.iter().any(|&d| ast::is_type_declaration(d) && self.is_deprecated_declaration(d)) {
                     let suggestion_node = self.get_deprecated_suggestion_node(node).unwrap();
-                    self.add_deprecated_suggestion(suggestion_node, &declarations, symbol.name());
+                    self.add_deprecated_suggestion(suggestion_node, declarations, symbol.name());
                 }
             }
         }
@@ -1170,20 +1169,18 @@ impl Checker {
                         &diagnostics::A_type_predicate_cannot_reference_a_rest_parameter,
                         &[],
                     );
-                } else {
-                    if let Some(predicate_type) = type_predicate.t.get() {
-                        let mut diags: Vec<P<Diagnostic>> = Vec::new();
-                        let parameter_type =
-                            self.get_type_of_symbol(signature.parameters.get()[parameter_index]);
-                        if !self.check_type_assignable_to_ex(
-                            predicate_type,
-                            parameter_type,
-                            node.type_node(),
-                            None, /*headMessage*/
-                            &mut diags,
-                        ) {
-                            self.add_diagnostic(ast::new_diagnostic_chain(diags[0], &diagnostics::A_type_predicate_s_type_must_be_assignable_to_its_parameter_s_type, &[]));
-                        }
+                } else if let Some(predicate_type) = type_predicate.t.get() {
+                    let mut diags: Vec<P<Diagnostic>> = Vec::new();
+                    let parameter_type =
+                        self.get_type_of_symbol(signature.parameters.get()[parameter_index]);
+                    if !self.check_type_assignable_to_ex(
+                        predicate_type,
+                        parameter_type,
+                        node.type_node(),
+                        None, /*headMessage*/
+                        &mut diags,
+                    ) {
+                        self.add_diagnostic(ast::new_diagnostic_chain(diags[0], &diagnostics::A_type_predicate_s_type_must_be_assignable_to_its_parameter_s_type, &[]));
                     }
                 }
             } else {
@@ -1335,7 +1332,7 @@ impl Checker {
                 }
                 // Check that each private identifier is used only for instance members or only for static members. It is an
                 // error for an instance and a static member to have the same private identifier.
-                if check_private_names && member.name().is_some_and(|name| ast::is_private_identifier(name)) {
+                if check_private_names && member.name().is_some_and(ast::is_private_identifier) {
                     let symbol = symbol.unwrap();
                     let mut flags = private_names.get(symbol.name()).copied().unwrap_or(0);
                     if flags != 3 {
@@ -1755,7 +1752,9 @@ impl Checker {
             // We may be here because of some extra nodes between overloads that could not be parsed into a valid node.
             // In this case the subsequent node is not really consecutive (.pos !== node.end), and we must ignore it here.
             if let Some(subsequent_node) = subsequent_node {
-                if subsequent_node.pos() == node.end() && subsequent_node.kind() == node.kind() {
+                let is_consecutive = subsequent_node.pos() == node.end();
+                let is_same_kind = subsequent_node.kind() == node.kind();
+                if is_consecutive && is_same_kind {
                     let subsequent_name = subsequent_node.name();
                     let error_node = subsequent_name.or(Some(subsequent_node));
                     if let (Some(name), Some(subsequent_name)) = (name, subsequent_name) {
@@ -1831,7 +1830,9 @@ impl Checker {
                         duplicate_function_declaration = true;
                     }
                 } else if let Some(previous) = previous_declaration {
-                    if previous.parent() == node.parent() && previous.end() != node.pos() && !previous.flags().intersects(NodeFlags::Reparsed) {
+                    let is_same_parent = previous.parent() == node.parent();
+                    let is_consecutive = previous.end() == node.pos();
+                    if is_same_parent && !is_consecutive && !previous.flags().intersects(NodeFlags::Reparsed) {
                         report_implementation_expected_error(self, previous, is_constructor);
                     }
                 }
@@ -2256,18 +2257,18 @@ impl Checker {
             let left_type = self.check_expression(var_expr);
             if ast::is_array_literal_expression(var_expr) || ast::is_object_literal_expression(var_expr) {
                 self.error(Some(var_expr), &diagnostics::The_left_hand_side_of_a_for_in_statement_cannot_be_a_destructuring_pattern, &[]);
-            } else if {
-                let index_type = self.get_index_type_or_string(right_type);
-                !self.is_type_assignable_to(index_type, left_type)
-            } {
-                self.error(Some(var_expr), &diagnostics::The_left_hand_side_of_a_for_in_statement_must_be_of_type_string_or_any, &[]);
             } else {
-                // run check only former check succeeded to avoid cascading errors
-                self.check_reference_expression(
-                    var_expr,
-                    &diagnostics::The_left_hand_side_of_a_for_in_statement_must_be_a_variable_or_a_property_access,
-                    &diagnostics::The_left_hand_side_of_a_for_in_statement_may_not_be_an_optional_property_access,
-                );
+                let index_type = self.get_index_type_or_string(right_type);
+                if !self.is_type_assignable_to(index_type, left_type) {
+                    self.error(Some(var_expr), &diagnostics::The_left_hand_side_of_a_for_in_statement_must_be_of_type_string_or_any, &[]);
+                } else {
+                    // run check only former check succeeded to avoid cascading errors
+                    self.check_reference_expression(
+                        var_expr,
+                        &diagnostics::The_left_hand_side_of_a_for_in_statement_must_be_a_variable_or_a_property_access,
+                        &diagnostics::The_left_hand_side_of_a_for_in_statement_may_not_be_an_optional_property_access,
+                    );
+                }
             }
         }
         // unknownType is returned i.e. if node.expression is identifier whose name cannot be resolved
@@ -2299,7 +2300,7 @@ impl Checker {
         self.check_grammar_for_in_or_for_of_statement(node);
         let container = get_containing_function_or_class_static_block(node);
         if let Some(await_modifier) = data.await_modifier {
-            if container.is_some_and(|container| ast::is_class_static_block_declaration(container)) {
+            if container.is_some_and(ast::is_class_static_block_declaration) {
                 self.grammar_error_on_node(await_modifier, &diagnostics::X_for_await_loops_cannot_be_used_inside_a_class_static_block, &[]);
             } else {
                 let function_flags = ast::get_function_flags(container);
@@ -2368,7 +2369,7 @@ impl Checker {
             return;
         }
         let container = get_containing_function_or_class_static_block(node);
-        if container.is_some_and(|container| ast::is_class_static_block_declaration(container)) {
+        if container.is_some_and(ast::is_class_static_block_declaration) {
             self.grammar_error_on_first_token(node, &diagnostics::A_return_statement_cannot_be_used_inside_a_class_static_block, &[]);
             return;
         }

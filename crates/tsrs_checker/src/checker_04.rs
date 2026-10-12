@@ -120,7 +120,7 @@ impl Checker {
     // checker.go:6598
     pub(crate) fn get_iteration_type_union(&mut self, iteration_types: &[IterationTypes], mut f: impl FnMut(&mut Checker, IterationTypes) -> Option<P<Type>>) -> Option<P<Type>> {
         let mut types: Vec<P<Type>> = Vec::new();
-        types.extend(iteration_types.iter().filter_map(|&it| if let Some(t) = f(self, it) { Some(t) } else { None }));
+        types.extend(iteration_types.iter().filter_map(|&it| f(self, it)));
         if types.is_empty() {
             return None;
         }
@@ -251,12 +251,12 @@ impl Checker {
     pub(crate) fn get_iteration_types_of_iterator_slow(&mut self, t: P<Type>, r: P<IterationTypesResolver>, error_node: Option<P<Node>>, mut diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
         let next = self.get_iteration_types_of_method(t, r, "next", error_node, diagnostic_output.as_deref_mut());
         let return_ = self.get_iteration_types_of_method(t, r, "return", error_node, diagnostic_output.as_deref_mut());
-        let throw = self.get_iteration_types_of_method(t, r, "throw", error_node, diagnostic_output.as_deref_mut());
+        let throw = self.get_iteration_types_of_method(t, r, "throw", error_node, diagnostic_output);
         self.combine_iteration_types(&[next, return_, throw])
     }
 
     // checker.go:6711
-    pub(crate) fn get_iteration_types_of_method(&mut self, t: P<Type>, resolver: P<IterationTypesResolver>, method_name: &str, error_node: Option<P<Node>>, mut diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
+    pub(crate) fn get_iteration_types_of_method(&mut self, t: P<Type>, resolver: P<IterationTypesResolver>, method_name: &str, error_node: Option<P<Node>>, diagnostic_output: Option<&mut Vec<P<Diagnostic>>>) -> IterationTypes {
         let method = self.get_property_of_type(t, method_name);
         // Ignore 'return' or 'throw' if they are missing.
         if method.is_none() && method_name != "next" {
@@ -361,7 +361,7 @@ impl Checker {
             if error_node.is_some() {
                 self.report_diagnostic(
                     Some(new_diagnostic_for_node(error_node, Some(resolver.must_have_a_value_diagnostic), &[&method_name])),
-                    diagnostic_output.as_deref_mut(),
+                    diagnostic_output,
                 );
             }
             yield_type = Some(self.any_type);
@@ -401,12 +401,12 @@ impl Checker {
             return IterationTypes { yield_type: None, return_type: Some(self.get_type_arguments(t)[0]), next_type: None };
         }
         // Choose any constituents that can produce the requested iteration type.
-        let yield_iterator_result = self.filter_type(t, |c, t| c.is_yield_iterator_result(t));
+        let yield_iterator_result = self.filter_type(t, super::checker::Checker::is_yield_iterator_result);
         let mut yield_type: Option<P<Type>> = None;
         if yield_iterator_result != self.never_type {
             yield_type = self.get_type_of_property_of_type(yield_iterator_result, "value" /* as __String */);
         }
-        let return_iterator_result = self.filter_type(t, |c, t| c.is_return_iterator_result(t));
+        let return_iterator_result = self.filter_type(t, super::checker::Checker::is_return_iterator_result);
         let mut return_type: Option<P<Type>> = None;
         if return_iterator_result != self.never_type {
             return_type = self.get_type_of_property_of_type(return_iterator_result, "value" /* as __String */);
@@ -509,14 +509,14 @@ impl Checker {
         // A type-only import/export will already have a grammar error in a JS file, so no need to issue more errors within
         if is_in_js_file(node) && !target_flags.intersects(SymbolFlags::Value) && !is_type_only_import_or_export_declaration(node) {
             let error_node = node.property_name_or_name().unwrap_or(node);
-            assert!(node.kind() != Kind::NamespaceExport);
+            assert_ne!(node.kind(), Kind::NamespaceExport);
             if is_export_specifier(node) {
                 let diag = self.error(Some(error_node), &diagnostics::Types_cannot_appear_in_export_declarations_in_JavaScript_files, &[]);
                 if let Some(source_symbol) = get_source_file_of_node(node).unwrap().as_node().symbol() {
                     let already_exported_symbol = source_symbol.exports().and_then(|e| e.lookup(node.property_name_or_name().unwrap().text()));
                     if already_exported_symbol == Some(target) {
                         let already_exported_symbol = already_exported_symbol.unwrap();
-                        let exporting_declaration = find(&already_exported_symbol.declarations(), |&d| is_js_type_alias_declaration(d));
+                        let exporting_declaration = find(already_exported_symbol.declarations(), |&d| is_js_type_alias_declaration(d));
                         if let Some(exporting_declaration) = exporting_declaration {
                             diag.add_related_info(new_diagnostic_for_node(
                                 Some(exporting_declaration),
@@ -537,7 +537,7 @@ impl Checker {
                         specifier_text = module_specifier.text();
                     }
                 }
-                let mut import_text = format!("import(\"{}\")", specifier_text);
+                let mut import_text = format!("import(\"{specifier_text}\")");
                 if is_import_specifier(node) {
                     import_text = import_text + "." + identifier_text;
                 }
@@ -660,7 +660,7 @@ impl Checker {
             let target_symbol = self.resolve_alias_with_deprecation_check(symbol, node);
             if self.is_deprecated_symbol(target_symbol) && !target_symbol.declarations().is_empty() {
                 let declarations = target_symbol.declarations();
-                self.add_deprecated_suggestion(node, &declarations, target_symbol.name());
+                self.add_deprecated_suggestion(node, declarations, target_symbol.name());
             }
         }
     }
@@ -1137,7 +1137,7 @@ impl Checker {
 
     // checker.go:7420
     pub(crate) fn report_unused_imports(&mut self, node: P<Node>, unuseds: &[P<Node>]) {
-        let mut declaration_count: usize = if node.name().is_some() { 1 } else { 0 };
+        let mut declaration_count: usize = usize::from(node.name().is_some());
         let named_bindings = node.as_import_clause().named_bindings;
         if let Some(named_bindings) = named_bindings {
             if is_namespace_import(named_bindings) {
@@ -1354,7 +1354,7 @@ impl Checker {
 
     // checker.go:7581
     pub(crate) fn check_non_null_type(&mut self, t: P<Type>, node: P<Node>) -> P<Type> {
-        self.check_non_null_type_with_reporter(t, node, |c, node, facts| c.report_object_possibly_null_or_undefined_error(node, facts))
+        self.check_non_null_type_with_reporter(t, node, super::checker::Checker::report_object_possibly_null_or_undefined_error)
     }
 
     // checker.go:7585
@@ -1734,7 +1734,7 @@ pub(crate) fn get_unique_type_parameter_name(type_parameters: &[P<Type>], base_n
     }
     let mut index = 1;
     loop {
-        let augmented_name = format!("{}{}", base_name, index);
+        let augmented_name = format!("{base_name}{index}");
         if !has_type_parameter_by_name(type_parameters, &augmented_name) {
             return augmented_name;
         }
@@ -1937,7 +1937,7 @@ impl Checker {
         }
         let class_symbol = self.get_symbol_of_declaration(class_like_declaration).unwrap();
         let class_type = self.get_declared_type_of_symbol(class_symbol);
-        let base_class_type = first_or_nil(&self.get_base_types(class_type));
+        let base_class_type = first_or_nil(self.get_base_types(class_type));
         let Some(base_class_type) = base_class_type else {
             return self.error_type;
         };
@@ -2017,7 +2017,7 @@ impl Checker {
         }
         if self.is_const_context(node) || self.is_template_literal_context(node) || {
             let contextual_type = self.get_contextual_type(node, ContextFlags::None).unwrap_or(self.unknown_type);
-            some_type(self, contextual_type, |c, t| c.is_template_literal_contextual_type(t))
+            some_type(self, contextual_type, super::checker::Checker::is_template_literal_contextual_type)
         } {
             return self.get_template_literal_type(&texts, &types);
         }
@@ -2131,7 +2131,7 @@ impl Checker {
             return self.create_tuple_type_ex(&element_types, &element_infos, false);
         }
         if check_mode.intersects(CheckMode::ForceTuple) || in_const_context || in_tuple_context {
-            let readonly = in_const_context && !contextual_type.is_some_and(|contextual_type| some_type(self, contextual_type, |c, t| c.is_mutable_array_like_type(t)));
+            let readonly = in_const_context && !contextual_type.is_some_and(|contextual_type| some_type(self, contextual_type, super::checker::Checker::is_mutable_array_like_type));
             let tuple = self.create_tuple_type_ex(&element_types, &element_infos, readonly /*readonly*/);
             return self.create_array_literal_type(tuple);
         }
@@ -2631,7 +2631,7 @@ impl Checker {
         } else {
             call_chain_flags = SignatureFlags::None;
         }
-        func_type = self.check_non_null_type_with_reporter(func_type, expression, |c, node, facts| c.report_cannot_invoke_possibly_null_or_undefined_error(node, facts));
+        func_type = self.check_non_null_type_with_reporter(func_type, expression, super::checker::Checker::report_cannot_invoke_possibly_null_or_undefined_error);
         if func_type == self.silent_never_type {
             return self.silent_never_signature;
         }
@@ -2711,6 +2711,6 @@ impl Checker {
             self.skipped_generic_function(node, check_mode);
             return self.resolving_signature;
         }
-        self.resolve_call(node, &call_signatures, candidates_out_array, check_mode, call_chain_flags, None)
+        self.resolve_call(node, call_signatures, candidates_out_array, check_mode, call_chain_flags, None)
     }
 }

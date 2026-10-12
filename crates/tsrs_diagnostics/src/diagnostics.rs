@@ -174,7 +174,7 @@ pub fn format_strings(text: &str, args: &[String]) -> String {
 }
 
 pub fn stringify_args(args: &[&dyn fmt::Display]) -> Vec<String> {
-    args.iter().map(|arg| arg.to_string()).collect()
+    args.iter().map(std::string::ToString::to_string).collect()
 }
 
 pub fn new_ad_hoc_message(message: &str) -> &'static Message {

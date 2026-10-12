@@ -44,7 +44,7 @@ impl logger {
         };
 
         if !server.init_started.load(std::sync::atomic::Ordering::SeqCst) {
-            server.write_stderr_line(&message);
+            server.write_stderr_line(message);
             return;
         }
 
@@ -58,7 +58,7 @@ impl logger {
 
         let background_ctx = server.background_ctx();
         if server.outgoing_queue.put(&background_ctx, notification.message()).is_err() && background_ctx.err().is_some() {
-            server.write_stderr_line(&message);
+            server.write_stderr_line(message);
         }
     }
 
@@ -141,28 +141,28 @@ impl logger {
 // logger.go:11: `_ logging.Logger = (*logger)(nil)`.
 impl tsrs_project::logging::Logger for logger {
     fn error(&self, msg: &str) {
-        logger::error(self, msg)
+        logger::error(self, msg);
     }
     fn errorf(&self, args: fmt::Arguments<'_>) {
-        logger::errorf(self, args)
+        logger::errorf(self, args);
     }
     fn warn(&self, msg: &str) {
-        logger::warn(self, msg)
+        logger::warn(self, msg);
     }
     fn warnf(&self, args: fmt::Arguments<'_>) {
-        logger::warnf(self, args)
+        logger::warnf(self, args);
     }
     fn info(&self, msg: &str) {
-        logger::info(self, msg)
+        logger::info(self, msg);
     }
     fn infof(&self, args: fmt::Arguments<'_>) {
-        logger::infof(self, args)
+        logger::infof(self, args);
     }
     fn log(&self, msg: &str) {
-        logger::log(self, msg)
+        logger::log(self, msg);
     }
     fn logf(&self, args: fmt::Arguments<'_>) {
-        logger::logf(self, args)
+        logger::logf(self, args);
     }
     fn verbose(&self) -> Option<&dyn tsrs_project::logging::Logger> {
         logger::verbose(self).map(|l| l as &dyn tsrs_project::logging::Logger)
@@ -171,6 +171,6 @@ impl tsrs_project::logging::Logger for logger {
         logger::is_verbose(self)
     }
     fn set_verbose(&self, verbose: bool) {
-        logger::set_verbose(self, verbose)
+        logger::set_verbose(self, verbose);
     }
 }

@@ -3,11 +3,12 @@
 `docs/PORTING.md` says how Go becomes Rust. This file says what the Rust must not do, how that is checked, and which
 performance techniques are in place, rejected or untried.
 
-The port keeps the shape of the Go code, so clippy's style advice does not apply. What a port gets wrong is cost that
-Go hides or does not have: copies, allocations, argument passing, hash iteration order, and `unsafe`. The rules below
-target those. They come from reading how other Rust projects with this workload keep their code fast and sound (as of
-2026-10): Bun (also an agent-written port, Zig to Rust), oxc, Rolldown, rust-analyzer, Ruff and ty, Biome, Turborepo
-and swc. Where a rule copies one of them, it says which.
+The Clippy baseline follows oxc: the `all`, `pedantic`, `complexity`, `nursery`, and `cargo` groups, with oxc's
+documented global exceptions. The port keeps the Go source's public API, names, numeric domains, and control-flow
+shape where changing them would obscure parity, so `Cargo.toml` documents the additional active exceptions. The
+stricter rules below target costs and risks that a port can introduce: copies, allocations, argument passing, hash
+iteration order, threading, and `unsafe`. They draw on Bun, oxc, Rolldown, rust-analyzer, Ruff and ty, Biome,
+Turborepo, and swc. Where a rule copies one of them, it says which.
 
 ## Clippy
 
@@ -15,9 +16,9 @@ and swc. Where a rule copies one of them, it says which.
 cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
 ```
 
-`[workspace.lints.clippy]` in `Cargo.toml` and `clippy.toml` turn on a chosen set of Clippy lints. Every enabled lint
-is `deny`, and CI also denies ordinary compiler warnings. There is no findings baseline: the command above must be
-clean before a change lands (CI runs it in the `lint` job).
+`[workspace.lints.clippy]` in `Cargo.toml` and `clippy.toml` turn on the oxc baseline and the project-specific strict
+lints. The command promotes warnings to errors, and CI also denies ordinary compiler warnings. There is no findings
+baseline: the command above must be clean before a change lands (CI runs it in the `lint` job).
 
 When it fails:
 
@@ -32,8 +33,8 @@ Details:
 - Findings depend on the Clippy version, so `rust-toolchain.toml` pins it everywhere.
 - The command covers the library and binary targets of every workspace crate except `tsrs_fourslash`. That crate is
   mostly 750k lines of generated Go test translations and has its own generator and build gates.
-- Generated schema files that need blanket exemptions emit reasoned file attributes from their generators. Other
-  generated Rust is linted; fix its generator when Clippy finds something.
+- Generated Rust is linted; fix its generator when Clippy finds something. When generated code intentionally needs
+  an exception, emit the smallest reasoned `#[expect]` from the generator.
 - Specialized targets and the generated fourslash harness have target-specific unused items, so `[workspace.lints.rust]`
   keeps `dead_code` allowed and the Clippy command denies it over Clippy's scope. `unused_imports`, `unused_variables`,
   `unused_mut` and `unsafe_op_in_unsafe_fn` are ordinary compiler warnings, which `build.warnings=deny` rejects.
@@ -90,11 +91,11 @@ Test files, the generated fourslash crate and generated files are not scanned.
 | Leftovers | `dbg_macro`, `todo`, `unimplemented`, `disallowed_macros`, `allow_attributes`, `allow_attributes_without_reason` | Debugging output and placeholders do not land; suppressions are `#[expect]` with a reason. Bun, oxc and Rolldown have all of the first three; rust-analyzer, Ruff and Biome have `dbg_macro`. |
 | Unused code | `dead_code`, `unused_imports`, `unused_variables`, `unused_mut` (rustc) | Clippy denies unused code in its scope; ordinary compiler warnings are denied in every CI build. Unused variables were not prefixed with `_` in bulk: in a port an unused parameter can mean the Rust code dropped something the Go code uses, so each was checked against Go. Bun denies `dead_code`. |
 
-Left off on purpose: the `style`, `complexity` and `pedantic` groups (they would rewrite Go-shaped code), `unwrap_used`
-(Go's nil dereference is a panic too), `or_fun_call` (it turns `unwrap_or(f())` into `unwrap_or_else(f)`; Go evaluates
-`f` eagerly, and when `f` creates a type or symbol, skipping it changes ids and so output order; oxc and Rolldown
-leave it off too), the cast lints (the port has about 1,000 `as usize`), `print_stdout` /
-`print_stderr` (the CLI and the `TSRS_*` diagnostics print).
+Global exceptions beyond oxc's list are limited to active Go-port patterns documented in `Cargo.toml`: Go-shaped
+visibility and signatures, checked numeric-domain crossings, source-order control flow and declarations, and names
+that mirror Go or protocol APIs. `unwrap_used` remains off because Go's nil dereference is a panic too. `or_fun_call`
+stays on oxc's allowlist: changing eager `unwrap_or(f())` evaluation can change type or symbol IDs and output order.
+`print_stdout` and `print_stderr` remain allowed because compiler, CLI, and test-runner output is their interface.
 
 ## Rules that only review checks
 

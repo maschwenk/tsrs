@@ -74,7 +74,7 @@ unsafe extern "C" {
     fn dispatch_sync_f(queue: dispatch_queue_t, context: *mut c_void, work: extern "C" fn(*mut c_void));
 }
 
-pub(crate) const cfStringEncodingUTF8: u32 = 0x08000100;
+pub(crate) const cfStringEncodingUTF8: u32 = 0x0800_0100;
 const cfStringNormalizationFormC: CFIndex = 2; // kCFStringNormalizationFormC
 // kFSEventStreamCreateFlagUseCFTypes (0x1) | kFSEventStreamCreateFlagFileEvents (0x10); Go hardcodes it in the
 // assembly trampolines.
@@ -146,9 +146,7 @@ pub(crate) fn fold_native_path(s: &str) -> String {
     unsafe { CFStringFold(mut_.0, cfCompareCaseInsensitive, std::ptr::null()) };
     cf_string_normalize(&mut_, cfStringNormalizationFormC);
     let folded = cf_string_to_go(mut_.0);
-    if folded.is_empty() {
-        panic!("fswatch: cannot extract folded CFString");
-    }
+    assert!(!folded.is_empty(), "fswatch: cannot extract folded CFString");
     folded
 }
 
@@ -358,7 +356,7 @@ pub(crate) fn create_and_start_stream(paths: &[String], cb: &mut Box<streamCallb
     let info: *mut streamCallback = &raw mut **cb;
     let ctx = FSEventStreamContext { version: 0, info: info.cast::<c_void>(), retain: std::ptr::null(), release: std::ptr::null(), copy_description: std::ptr::null() };
     // kFSEventStreamEventIdSinceNow == ((FSEventStreamEventId)0xFFFFFFFFFFFFFFFFULL)
-    const eventIDSinceNow: u64 = 0xFFFFFFFFFFFFFFFF;
+    const eventIDSinceNow: u64 = 0xFFFF_FFFF_FFFF_FFFF;
     // SAFETY: `ctx` is copied by FSEventStreamCreate; `paths_to_watch` is a valid CFArray of CFStrings; `info`
     // points into the boxed callback, whose address is stable until the stream is torn down.
     let stream = unsafe { FSEventStreamCreate(std::ptr::null(), fs_events_callback_c, &raw const ctx, paths_to_watch.0, eventIDSinceNow, 0.001, fsEventStreamCreateFlags) };

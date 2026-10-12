@@ -205,7 +205,7 @@ impl fmt::Display for FsError {
             FsError::Exist => f.write_str("file already exists"),
             FsError::NotExist => f.write_str("file does not exist"),
             FsError::Closed => f.write_str("file already closed"),
-            FsError::BrokenSymlink { from, to } => write!(f, "broken symlink {:?} -> {:?}", from, to),
+            FsError::BrokenSymlink { from, to } => write!(f, "broken symlink {from:?} -> {to:?}"),
             FsError::Other(s) => f.write_str(s),
         }
     }

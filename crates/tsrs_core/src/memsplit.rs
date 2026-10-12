@@ -346,7 +346,7 @@ fn read_process_memory() -> usize {
     if kr != 0 || count < 38 {
         return 0;
     }
-    (u64::from(info[36]) | u64::from(info[37]) << 32) as usize
+    (u64::from(info[36]) | (u64::from(info[37]) << 32)) as usize
 }
 
 #[cfg(target_os = "linux")]

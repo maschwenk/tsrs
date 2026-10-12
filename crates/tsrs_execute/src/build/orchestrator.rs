@@ -7,6 +7,7 @@
 // Mutex/atomic; the shared host caches are Mutex-guarded. At the pinned commit Go's builders iterate `order`, not
 // ScheduleOrder() (whose comment says otherwise); this port does the same.
 
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -56,9 +57,13 @@ impl OrchestratorResult {
         (o.error_summary_reporter)(self.errors.as_deref().unwrap_or_default());
         if report_files_to_delete {
             if let Some(files_to_delete) = &self.files_to_delete {
+                let mut file_list = String::new();
+                for file in files_to_delete {
+                    let _ = write!(file_list, "\r\n * {file}");
+                }
                 o.create_builder_status_reporter(None)(new_compiler_diagnostic(
                     &diagnostics::A_non_dry_build_would_delete_the_following_files_Colon_0,
-                    &[&files_to_delete.iter().map(|f| format!("\r\n * {f}")).collect::<String>()],
+                    &[&file_list],
                 ));
             }
         }
@@ -382,9 +387,10 @@ impl Orchestrator {
             };
             let inputs: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
             let outputs = resolved.get_output_file_names().into_iter().chain([resolved.get_build_info_file_name()]);
-            let deleted = outputs.fold(false, |deleted, output_file| {
-                self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic) || deleted
-            });
+            let mut deleted = false;
+            for output_file in outputs {
+                deleted = self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic) || deleted;
+            }
             if deleted {
                 task.reset_status();
                 task.set_build_info_entry(None);
@@ -480,9 +486,13 @@ impl Orchestrator {
     fn build_or_clean_order(&'static self, order: &[String]) -> OrchestratorResult {
         let build_options = &self.opts.command.build_options;
         if !build_options.clean.is_true() && build_options.verbose.is_true() {
+            let mut project_list = String::new();
+            for project in order {
+                let _ = write!(project_list, "\r\n    * {}", self.relative_file_name(project));
+            }
             self.create_builder_status_reporter(None)(new_compiler_diagnostic(
                 &diagnostics::Projects_in_this_build_Colon_0,
-                &[&order.iter().map(|p| format!("\r\n    * {}", self.relative_file_name(p))).collect::<String>()],
+                &[&project_list],
             ));
         }
         let mut build_result = OrchestratorResult::default();
@@ -679,9 +689,9 @@ impl Orchestrator {
 /// is running, and nothing obtained from it (results, programs, diagnostics) is used afterwards.
 pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
     // The lock may be poisoned if the build unwound (`CliOrchestrator::build`); the list itself is intact.
-    let regions = std::mem::take(&mut *o.regions.lock().unwrap_or_else(|e| e.into_inner()));
+    let regions = std::mem::take(&mut *o.regions.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
     if std::env::var_os("TSRS_REGION_LOG").is_some() {
-        eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
+        eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(tsrs_core::arena::Region::allocated_bytes).sum::<usize>() >> 10);
     }
     let h = o.host();
     // Order: the host and orchestrator are dropped before the regions. Their destructors only free heap containers

@@ -55,14 +55,14 @@ pub fn resolve_organize_imports_sort(preferences: &UserPreferences) -> OrganizeI
         return match preferences.organize_imports_ignore_case {
             Tristate::True => OrganizeImportsSort::NaturalIgnoreCase,
             Tristate::False => OrganizeImportsSort::Natural,
-            _ => OrganizeImportsSort::Auto,
+            Tristate::Unknown => OrganizeImportsSort::Auto,
         };
     }
 
     match preferences.organize_imports_ignore_case {
         Tristate::True => OrganizeImportsSort::OrdinalIgnoreCase,
         Tristate::False => OrganizeImportsSort::Ordinal,
-        _ => OrganizeImportsSort::Auto,
+        Tristate::Unknown => OrganizeImportsSort::Auto,
     }
 }
 
@@ -259,7 +259,7 @@ fn compare_organize_imports_case(
                     }
                     return Ordering::Greater;
                 }
-                _ => {
+                OrganizeImportsCaseFirst::False => {
                     if a_upper {
                         return Ordering::Greater;
                     }

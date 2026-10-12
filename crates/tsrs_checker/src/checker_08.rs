@@ -265,9 +265,7 @@ impl Checker {
                 if resolved_module.resolved_using_ts_extension && tspath::is_declaration_file_name(module_reference) {
                     if ast::find_ancestor(location, ast::is_emittable_import).is_some() {
                         let ts_extension = tspath::try_extract_ts_extension(module_reference);
-                        if ts_extension.is_empty() {
-                            panic!("should be able to extract TS extension from string that passes IsDeclarationFileName");
-                        }
+                        assert!(!ts_extension.is_empty(), "should be able to extract TS extension from string that passes IsDeclarationFileName");
                         let suggested = self.get_suggested_import_source(module_reference, ts_extension, mode);
                         self.error(error_node, &diagnostics::A_declaration_file_cannot_be_imported_without_import_type_Did_you_mean_to_import_an_implementation_file_0_instead, &[&suggested]);
                     }
@@ -280,14 +278,12 @@ impl Checker {
                             // not at the end of the module specifier, e.g., "#/foo.ts.omg" through "#/*.omg": "./src/*"
                             if let Some(ext) = tspath::SUPPORTED_TS_EXTENSIONS_FLAT
                                 .iter()
-                                .find_map(|ext| if module_reference.contains(ext) { Some(ext) } else { None })
+                                .find(|&&ext| module_reference.contains(ext))
                             {
                                 ts_extension = ext;
                             }
                         }
-                        if ts_extension.is_empty() {
-                            panic!("should be able to extract TS extension from string when resolvedUsingTsExtension is true");
-                        }
+                        assert!(!ts_extension.is_empty(), "should be able to extract TS extension from string when resolvedUsingTsExtension is true");
                         self.error(error_node, &diagnostics::An_import_path_can_only_end_with_a_0_extension_when_allowImportingTsExtensions_is_enabled, &[&ts_extension]);
                     }
                 } else if self.compiler_options.rewrite_relative_import_extensions.is_true()
@@ -349,7 +345,7 @@ impl Checker {
                     if self.module_kind == ModuleKind::Node16 || self.module_kind == ModuleKind::Node18 {
                         let is_sync_import = self.program.get_default_resolution_mode_for_file(importing_source_file) == ModuleKind::CommonJS && ast::find_ancestor(location, ast::is_import_call).is_none()
                             || ast::find_ancestor(location, ast::is_import_equals_declaration).is_some();
-                        let override_host = ast::find_ancestor(location, |n| ast::is_resolution_mode_override_host(n));
+                        let override_host = ast::find_ancestor(location, ast::is_resolution_mode_override_host);
                         if is_sync_import && self.program.get_default_resolution_mode_for_file(source_file) == ModuleKind::ESNext && !ast::has_resolution_mode_override(override_host) {
                             if ast::find_ancestor_kind(location, Kind::ImportEqualsDeclaration).is_some() {
                                 // ImportEquals in an ESM file resolving to another ESM file
@@ -436,7 +432,7 @@ impl Checker {
                     let absolute_ref = tspath::get_normalized_absolute_path(module_reference, &tspath::get_directory_path(importing_source_file.file_name()));
                     let suggested_ext = self.get_suggested_import_extension(&absolute_ref);
                     if !suggested_ext.is_empty() {
-                        let suggestion = format!("{}{}", module_reference, suggested_ext);
+                        let suggestion = format!("{module_reference}{suggested_ext}");
                         self.error(Some(error_node), &diagnostics::Relative_import_paths_need_explicit_file_extensions_in_ECMAScript_imports_when_moduleResolution_is_node16_or_nodenext_Did_you_mean_0, &[&suggestion]);
                     } else {
                         self.error(Some(error_node), &diagnostics::Relative_import_paths_need_explicit_file_extensions_in_ECMAScript_imports_when_moduleResolution_is_node16_or_nodenext_Consider_adding_an_extension_to_the_import_path, &[]);
@@ -464,9 +460,9 @@ impl Checker {
         if !self.pattern_ambient_modules.is_empty() {
             let pattern_ambient_modules = self.pattern_ambient_modules.clone();
             let mut candidates: Vec<P<ast::PatternAmbientModule>> = Vec::new();
-            candidates.extend(pattern_ambient_modules.into_iter().filter_map(|v| {
+            candidates.extend(pattern_ambient_modules.into_iter().filter(|v| {
                 let module_attributes_type = self.get_type_of_module_import_attributes(v.symbol);
-                if v.pattern.matches(module_reference) && self.is_type_assignable_to(import_attributes_type, module_attributes_type) { Some(v) } else { None }
+                v.pattern.matches(module_reference) && self.is_type_assignable_to(import_attributes_type, module_attributes_type)
             }));
 
             if !candidates.is_empty() {
@@ -533,7 +529,7 @@ impl Checker {
                 ".js"
             };
 
-            return format!("{}{}", import_source_without_extension, ext);
+            return format!("{import_source_without_extension}{ext}");
         }
 
         import_source_without_extension.to_string()
@@ -541,7 +537,7 @@ impl Checker {
 
     // checker.go:15775
     pub(crate) fn get_suggested_import_extension(&mut self, extensionless_import_path: &str) -> String {
-        let exists = |c: &Checker, ext: &str| c.program.file_exists(&format!("{}{}", extensionless_import_path, ext));
+        let exists = |c: &Checker, ext: &str| c.program.file_exists(&format!("{extensionless_import_path}{ext}"));
         let result = if exists(self, ".mts") {
             ".mjs"
         } else if exists(self, ".ts") {
@@ -628,7 +624,7 @@ impl Checker {
             return None;
         }
         let globals = self.globals;
-        let symbol = self.get_symbol(Some(globals), &format!("\"{}\"", module_name), SymbolFlags::ValueModule);
+        let symbol = self.get_symbol(Some(globals), &format!("\"{module_name}\""), SymbolFlags::ValueModule);
         // merged symbol is module declaration symbol combined with all augmentations
         if with_augmentations {
             return symbol.map(|s| self.get_merged_symbol(s));
@@ -798,9 +794,7 @@ impl Checker {
             return false;
         }
         let expression = node.expression().unwrap();
-        if !ast::is_identifier(expression) {
-            panic!("Expected identifier for require call");
-        }
+        assert!(ast::is_identifier(expression), "Expected identifier for require call");
         // Make sure require is not a local function
         let resolved_require = self.resolve_name(Some(expression), expression.text(), SymbolFlags::Value, None /*nameNotFoundMessage*/, true /*isUse*/, false /*excludeGlobals*/);
         if resolved_require == Some(self.require_symbol) {
@@ -1447,9 +1441,7 @@ impl Checker {
     // symbol. The function panics if the argument is not a symbol with an alias meaning.
     // checker.go:16589
     pub(crate) fn resolve_alias(&mut self, symbol: P<Symbol>) -> P<Symbol> {
-        if !symbol.flags().intersects(SymbolFlags::Alias) {
-            panic!("Should only get alias here");
-        }
+        assert!(symbol.flags().intersects(SymbolFlags::Alias), "Should only get alias here");
         let links = self.alias_symbol_links.get(symbol);
         if links.alias_target.get().is_none() {
             // Counted until the target is final (the circularity report below prints with the provisional target).
@@ -1458,9 +1450,8 @@ impl Checker {
                 self.alias_cache_blockers -= 1;
                 return self.unknown_symbol;
             }
-            let node = match self.get_declaration_of_alias_symbol(symbol) {
-                Some(n) => n,
-                None => panic!("Unexpected nil in resolveAlias for symbol: {}", self.symbol_to_string(symbol)),
+            let Some(node) = self.get_declaration_of_alias_symbol(symbol) else {
+                panic!("Unexpected nil in resolveAlias for symbol: {}", self.symbol_to_string(symbol));
             };
             let mut target = self.get_target_of_alias_declaration(Some(node));
             if ast::is_non_local_alias(target, SymbolFlags::Value | SymbolFlags::Type | SymbolFlags::Namespace) {
@@ -1527,7 +1518,7 @@ impl Checker {
                 if !target.declarations().is_empty() {
                     if self.is_deprecated_symbol(target) {
                         let declarations = target.declarations();
-                        self.add_deprecated_suggestion(location, &declarations, target.name());
+                        self.add_deprecated_suggestion(location, declarations, target.name());
                         break;
                     } else {
                         if symbol == target_symbol {
@@ -2135,7 +2126,7 @@ impl Checker {
             members.set(symbol.name(), symbol);
         }
         let index_infos = self.get_index_infos_of_type(t);
-        let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
+        let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], index_infos);
         result.object_flags.set(t.object_flags_lazy() & !ObjectFlags::WeakTypeMemo);
         result
     }
@@ -2152,12 +2143,12 @@ impl Checker {
     // checker.go:17182
     pub(crate) fn pad_tuple_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> {
         let pattern_elements = pattern.elements();
-        if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) as usize >= pattern_elements.len() {
+        if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) >= pattern_elements.len() {
             return t;
         }
         let mut element_types = self.get_element_types(t).to_vec();
         let mut element_infos: Vec<TupleElementInfo> = t.target_tuple_type().element_infos.get().to_vec();
-        let mut i = self.get_type_reference_arity(t) as usize;
+        let mut i = self.get_type_reference_arity(t);
         while i < pattern_elements.len() {
             let e = pattern_elements[i];
             if i < pattern_elements.len() - 1 || !(ast::is_binding_element(e) && has_dot_dot_dot_token(e)) {

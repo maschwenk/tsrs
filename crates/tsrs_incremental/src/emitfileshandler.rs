@@ -398,5 +398,5 @@ pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: &EmitOptio
     }
 
     // Emit only affected files if using builder for emit
-    emit_handler.emit_all_affected_files(&options)
+    emit_handler.emit_all_affected_files(options)
 }

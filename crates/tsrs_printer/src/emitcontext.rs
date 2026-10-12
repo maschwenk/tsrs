@@ -353,9 +353,7 @@ impl EmitContext {
         let right_hoisted_functions_end = find_span_end_with_emit_context(self, declarations, EmitContext::is_hoisted_function, right_standard_prologue_end);
         let right_hoisted_variables_end = find_span_end_with_emit_context(self, declarations, EmitContext::is_hoisted_variable_statement, right_hoisted_functions_end);
         let right_custom_prologue_end = find_span_end_with_emit_context(self, declarations, EmitContext::is_custom_prologue, right_hoisted_variables_end);
-        if right_custom_prologue_end != declarations.len() {
-            panic!("Expected declarations to be valid standard or custom prologues");
-        }
+        assert!(right_custom_prologue_end == declarations.len(), "Expected declarations to be valid standard or custom prologues");
 
         let mut left: Vec<P<Node>> = statements.to_vec();
 
@@ -722,9 +720,7 @@ impl EmitContext {
     }
 
     pub fn request_emit_helper(&self, helper: SP<EmitHelper>) {
-        if helper.scoped {
-            panic!("Cannot request a scoped emit helper");
-        }
+        assert!(!helper.scoped, "Cannot request a scoped emit helper");
         for h in helper.dependencies {
             self.request_emit_helper(*h);
         }

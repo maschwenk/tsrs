@@ -36,7 +36,7 @@ pub fn do_type_and_symbol_baseline(
 
 fn catch(f: impl FnOnce() -> String) -> Result<String, String> {
     std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)).map_err(|e| {
-        e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "<panic>".to_string())
+        e.downcast_ref::<String>().cloned().or_else(|| e.downcast_ref::<&str>().map(std::string::ToString::to_string)).unwrap_or_else(|| "<panic>".to_string())
     })
 }
 
@@ -81,14 +81,14 @@ fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], i
             return None;
         }
         if last_index_written.is_none() {
-            type_lines.push_str(&code_lines[..result.line + 1].join("\r\n"));
+            type_lines.push_str(&code_lines[..=result.line].join("\r\n"));
             type_lines.push_str("\r\n");
         } else if last_index_written != Some(result.line) {
             let next_index = last_index_written.unwrap() + 1;
             if !is_blank_or_bracket(next_index) {
                 type_lines.push_str("\r\n");
             }
-            type_lines.push_str(&code_lines[next_index..result.line + 1].join("\r\n"));
+            type_lines.push_str(&code_lines[next_index..=result.line].join("\r\n"));
             type_lines.push_str("\r\n");
         }
         last_index_written = Some(result.line);
@@ -103,7 +103,7 @@ fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], i
         type_lines.push_str("\r\n");
         if !result.underline.is_empty() {
             type_lines.push('>');
-            type_lines.extend((0..line_text.len()).map(|_| ' '));
+            type_lines.push_str(&" ".repeat(line_text.len()));
             type_lines.push_str(" : ");
             type_lines.push_str(&result.underline);
             type_lines.push_str("\r\n");
@@ -172,7 +172,7 @@ impl TypeWriterWalker {
                 || ast::is_declaration_name(n)
                 || ast::is_qualified_name(n) && ast::is_name_of_heritage_clause_type_reference(n) && (is_symbol_walk || ast::is_qualified_name(n.parent().unwrap()))
             {
-                if let Some(result) = self.write_type_or_symbol(n, is_symbol_walk) { Some(result) } else { None }
+                self.write_type_or_symbol(n, is_symbol_walk)
             } else {
                 None
             }
@@ -329,7 +329,7 @@ fn for_each_ast_node(node: P<Node>) -> Vec<P<Node>> {
     while let Some(elem) = work.pop() {
         let reparsed = elem.flags().intersects(NodeFlags::Reparsed);
         let parent_kind = elem.parent().map(|p| p.kind());
-        let parent_is_as_or_satisfies = matches!(parent_kind, Some(Kind::SatisfiesExpression) | Some(Kind::AsExpression));
+        let parent_is_as_or_satisfies = matches!(parent_kind, Some(Kind::SatisfiesExpression | Kind::AsExpression));
         if !reparsed
             || elem.kind() == Kind::AsExpression
             || elem.kind() == Kind::SatisfiesExpression

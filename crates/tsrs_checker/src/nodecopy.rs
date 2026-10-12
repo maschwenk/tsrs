@@ -42,7 +42,7 @@ impl NodeBuilderImpl {
         let renamed = match kind {
             propertyNameNodeKind::Identifier => self.new_identifier(c, &text, None),
             propertyNameNodeKind::StringLiteral => self.f.new_string_literal(self.f.alloc_text(&text), TokenFlags::None),
-            _ => return Some(res),
+            propertyNameNodeKind::NumericLiteral => return Some(res),
         };
         self.e.set_original(renamed, res);
         self.set_text_range(c, renamed, Some(res))
@@ -117,8 +117,8 @@ impl recoveryBoundary {
     // nodecopy.go:128
     pub(crate) fn end_recovery_scope(&self, state: originalRecoveryScopeState) {
         self.had_error.set(state.had_error);
-        self.ctx.tracked_symbols.borrow_mut().truncate(state.tracked_symbols_top as usize);
-        self.deferred_reports.borrow_mut().truncate(state.unreported_errors_top as usize);
+        self.ctx.tracked_symbols.borrow_mut().truncate(state.tracked_symbols_top);
+        self.deferred_reports.borrow_mut().truncate(state.unreported_errors_top);
     }
 }
 

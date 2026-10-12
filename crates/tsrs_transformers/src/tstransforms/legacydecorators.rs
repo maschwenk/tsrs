@@ -888,7 +888,7 @@ impl LegacyDecoratorsTransformer {
         expressions.extend(
             members.into_iter().filter_map(
                 |member| {
-                    if let Some(expr) = self.generate_class_element_decoration_expression(node, member) { Some(expr) } else { None }
+                    self.generate_class_element_decoration_expression(node, member)
                 },
             ),
         );
@@ -1013,7 +1013,7 @@ impl LegacyDecoratorsTransformer {
      */
     fn transform_decorators(&self, decorators: &[P<Node>]) -> Vec<P<Node>> {
         let mut results: Vec<P<Node>> = Vec::new();
-        results.extend(decorators.iter().flat_map(|d| {
+        results.extend(decorators.iter().filter_map(|d| {
             // Go appends the visited expression even when it is nil.
             self.visitor().visit_node(d.expression())
         }));

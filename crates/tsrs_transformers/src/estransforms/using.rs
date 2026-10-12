@@ -102,9 +102,7 @@ impl usingDeclarationTransformer {
                 pos += 1;
             }
 
-            if pos >= rest.len() {
-                panic!("Should have encountered at least one 'using' statement.");
-            }
+            assert!(pos < rest.len(), "Should have encountered at least one 'using' statement.");
 
             // transform the rest of the body
             let env_binding = self.create_env_binding();

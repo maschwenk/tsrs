@@ -23,7 +23,7 @@ impl<T: Hash + Eq + Clone> SyncSet<T> {
 
     // AddIfAbsent returns true if the key was added, false if it already existed.
     pub fn add_if_absent(&self, key: T) -> bool {
-        let (_, loaded) = self.m.load_or_store(key, ());
+        let ((), loaded) = self.m.load_or_store(key, ());
         !loaded
     }
 
@@ -32,7 +32,7 @@ impl<T: Hash + Eq + Clone> SyncSet<T> {
     }
 
     pub fn range(&self, mut f: impl FnMut(&T) -> bool) {
-        self.m.range(|k, _| f(k));
+        self.m.range(|k, ()| f(k));
     }
 
     pub fn size(&self) -> usize {

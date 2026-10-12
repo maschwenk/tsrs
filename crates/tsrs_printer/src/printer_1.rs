@@ -511,7 +511,7 @@ impl Printer {
                 if self.options.preserve_source_newlines {
                     return self.get_effective_lines(|include_comments| get_lines_between_range_end_and_range_start(node1.loc(), node2.loc(), current_source_file, include_comments));
                 }
-                return if range_end_is_on_same_line_as_range_start(node1.loc(), node2.loc(), current_source_file) { 0 } else { 1 };
+                return usize::from(!range_end_is_on_same_line_as_range_start(node1.loc(), node2.loc(), current_source_file));
             }
         }
 
@@ -524,9 +524,7 @@ impl Printer {
     ) -> usize {
         // If 'preserveSourceNewlines' is disabled, we should never call this function
         // because it could be more expensive than alternative approximations.
-        if !self.options.preserve_source_newlines {
-            panic!("Should not be called when preserveSourceNewlines is false");
-        }
+        assert!(self.options.preserve_source_newlines, "Should not be called when preserveSourceNewlines is false");
         // We start by measuring the line difference from a position to its adjacent comments,
         // so that this is counted as a one-line difference, not two:
         //
@@ -559,7 +557,7 @@ impl Printer {
             }
 
             let Some(first_child) = first_child else {
-                return if parent_node.is_none() || self.current_source_file().is_some() && range_is_on_single_line(parent_node.unwrap().loc(), self.current_source_file().unwrap()) { 0 } else { 1 };
+                return usize::from(!(parent_node.is_none() || self.current_source_file().is_some() && range_is_on_single_line(parent_node.unwrap().loc(), self.current_source_file().unwrap())));
             };
             if self
                 .next_list_element_pos
@@ -595,18 +593,14 @@ impl Printer {
                             get_lines_between_position_and_preceding_non_whitespace_character(first_child.pos(), parent_node.pos(), current_source_file, include_comments)
                         });
                     }
-                    return if range_start_positions_are_on_same_line(parent_node.loc(), first_child.loc(), current_source_file) { 0 } else { 1 };
+                    return usize::from(!range_start_positions_are_on_same_line(parent_node.loc(), first_child.loc(), current_source_file));
                 }
             }
             if self.should_emit_on_new_line(first_child, format) {
                 return 1;
             }
         }
-        if format.intersects(ListFormat::MultiLine) {
-            1
-        } else {
-            0
-        }
+        usize::from(format.intersects(ListFormat::MultiLine))
     }
 
     pub(crate) fn get_separating_line_terminator_count(
@@ -632,22 +626,18 @@ impl Printer {
                     // same node parent. If so, we intend to preserve a single line terminator. This is less precise and
                     // expensive than checking with `preserveSourceNewlines` as above, but the goal is not to preserve the
                     // effective source lines between two sibling nodes.
-                    return if range_end_is_on_same_line_as_range_start(previous_node.loc(), next_node.loc(), current_source_file) { 0 } else { 1 };
+                    return usize::from(!range_end_is_on_same_line_as_range_start(previous_node.loc(), next_node.loc(), current_source_file));
                 }
                 // If the two nodes are not comparable, add a line terminator based on the format that can indicate
                 // whether new lines are preferred or not.
-                return if format.intersects(ListFormat::PreferNewLine) { 1 } else { 0 };
+                return usize::from(format.intersects(ListFormat::PreferNewLine));
             } else if self.should_emit_on_new_line(previous_node, format) || self.should_emit_on_new_line(next_node, format) {
                 return 1;
             }
         } else if self.should_emit_on_new_line(next_node.unwrap(), ListFormat::None) {
             return 1;
         }
-        if format.intersects(ListFormat::MultiLine) {
-            1
-        } else {
-            0
-        }
+        usize::from(format.intersects(ListFormat::MultiLine))
     }
 
     pub(crate) fn get_closing_line_terminator_count(
@@ -662,7 +652,7 @@ impl Printer {
                 return 1;
             }
             let Some(last_child) = last_child else {
-                return if parent_node.is_none() || self.current_source_file().is_some() && range_is_on_single_line(parent_node.unwrap().loc(), self.current_source_file().unwrap()) { 0 } else { 1 };
+                return usize::from(!(parent_node.is_none() || self.current_source_file().is_some() && range_is_on_single_line(parent_node.unwrap().loc(), self.current_source_file().unwrap())));
             };
             if let (Some(current_source_file), Some(parent_node)) = (self.current_source_file(), parent_node) {
                 if !position_is_synthesized(parent_node.pos()) && !node_is_synthesized(last_child) && (last_child.parent().is_none() || last_child.parent() == Some(parent_node)) {
@@ -670,7 +660,7 @@ impl Printer {
                         let end = greatest_end(last_child.end(), &[&children_text_range]);
                         return self.get_effective_lines(|include_comments| get_lines_between_position_and_next_non_whitespace_character(end, parent_node.end(), current_source_file, include_comments));
                     }
-                    return if range_end_positions_are_on_same_line(parent_node.loc(), last_child.loc(), current_source_file) { 0 } else { 1 };
+                    return usize::from(!range_end_positions_are_on_same_line(parent_node.loc(), last_child.loc(), current_source_file));
                 }
             }
             if self.should_emit_on_new_line(last_child, format) {

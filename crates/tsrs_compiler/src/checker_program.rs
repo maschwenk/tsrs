@@ -20,7 +20,7 @@ impl tsrs_checker::Program for Program {
     }
 
     fn bind_source_files(&self) {
-        Program::bind_source_files(self)
+        Program::bind_source_files(self);
     }
 
     fn file_exists(&self, file_name: &str) -> bool {
@@ -144,7 +144,7 @@ impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for Program {
     }
 
     fn get_source_of_project_reference_if_output_included(&self, file: P<SourceFile>) -> String {
-        Program::get_source_of_project_reference_if_output_included(self, file.file_name(), &file.path())
+        Program::get_source_of_project_reference_if_output_included(self, file.file_name(), file.path())
     }
 
     fn file_exists(&self, path: &str) -> bool {

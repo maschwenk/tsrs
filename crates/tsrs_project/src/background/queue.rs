@@ -30,6 +30,7 @@ struct workerPool {
     available: Condvar,
 }
 
+#[expect(clippy::infinite_loop, reason = "background worker threads serve the process-wide queue until process exit")]
 fn worker_pool() -> &'static workerPool {
     static POOL: OnceLock<&'static workerPool> = OnceLock::new();
     POOL.get_or_init(|| {

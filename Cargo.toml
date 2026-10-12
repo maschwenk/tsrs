@@ -113,13 +113,114 @@ non_camel_case_types = "allow"
 raw_borrows_via_references = "warn"
 
 [workspace.lints.clippy]
-# Clippy's style and complexity groups stay off: the port keeps the shape of the Go code (docs/PORTING.md). The
-# lints below catch what a port gets wrong in Rust instead: copies and allocations Go does not make, unsound
-# `unsafe`, and leftovers. Every enabled lint is denied; docs/RUST.md explains each group.
-all = { level = "allow", priority = -2 }
+# Keep the baseline aligned with oxc-project/oxc. The documented Clippy command promotes these warnings to errors;
+# project-specific performance, memory, threading and unsafe lints below are denied directly.
+all = { level = "warn", priority = -2 }
+pedantic = { level = "warn", priority = -1 }
+complexity = { level = "warn", priority = -1 }
+nursery = { level = "warn", priority = -1 }
+cargo = { level = "warn", priority = -1 }
 correctness = { level = "deny", priority = -1 }
 suspicious = { level = "deny", priority = -1 }
 perf = { level = "deny", priority = -1 }
+
+# Oxc's global allowlist: noisy, chaotic or unsuitable for a non-const compiler implementation.
+struct_excessive_bools = "allow"
+too_many_lines = "allow"
+must_use_candidate = "allow"
+wildcard_imports = "allow"
+doc_markdown = "allow"
+similar_names = "allow"
+fn_params_excessive_bools = "allow"
+too_many_arguments = "allow"
+non_std_lazy_statics = "allow"
+result_large_err = "allow"
+missing_const_for_fn = "allow"
+option_if_let_else = "allow"
+or_fun_call = "allow"
+cognitive_complexity = "allow"
+use_self = "allow"
+significant_drop_tightening = "allow"
+branches_sharing_code = "allow"
+fallible_impl_from = "allow"
+useless_let_if_seq = "allow"
+impl_trait_in_params = "allow"
+byte_char_slices = "allow"
+question_mark = "allow"
+multiple_crate_versions = "allow"
+
+# Tsrs-specific exceptions to Oxc's policy. This workspace is an unpublished, mechanical Go port: visibility,
+# signatures, numeric conversions, declaration placement and control-flow decomposition follow the Go source.
+cargo_common_metadata = "allow"
+redundant_pub_crate = "allow"
+missing_panics_doc = "allow"
+missing_errors_doc = "allow"
+cast_lossless = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+cast_possible_wrap = "allow"
+collapsible_if = "allow"
+unused_self = "allow"
+if_not_else = "allow"
+needless_pass_by_ref_mut = "allow"
+unnecessary_wraps = "allow"
+needless_return = "allow"
+identity_op = "allow"
+single_match = "allow"
+type_complexity = "allow"
+too_long_first_doc_paragraph = "allow"
+match_same_arms = "allow"
+items_after_statements = "allow"
+single_match_else = "allow"
+redundant_else = "allow"
+needless_late_init = "allow"
+unnecessary_unwrap = "allow"
+collapsible_match = "allow"
+if_same_then_else = "allow"
+wrong_self_convention = "allow"
+upper_case_acronyms = "allow"
+module_inception = "allow"
+enum_variant_names = "allow"
+only_used_in_recursion = "allow"
+self_only_used_in_recursion = "allow"
+struct_field_names = "allow"
+explicit_iter_loop = "allow"
+option_option = "allow"
+many_single_char_names = "allow"
+float_cmp = "allow"
+ref_option = "allow"
+implicit_hasher = "allow"
+return_self_not_must_use = "allow"
+len_without_is_empty = "allow"
+default_trait_access = "allow"
+
+# Oxc restriction and nursery additions.
+print_stdout = "allow" # Compiler and test-runner output is their interface.
+print_stderr = "allow"
+self_named_module_files = "allow" # One Rust file/module per Go file.
+empty_drop = "warn"
+empty_structs_with_brackets = "allow" # Mirrors Go's `struct{}` protocol types.
+empty_enum_variants_with_brackets = "warn"
+exit = "allow" # CLI entry points must preserve process exit statuses.
+fn_to_numeric_cast_any = "warn"
+unnecessary_self_imports = "warn"
+try_err = "warn"
+error_impl_error = "warn"
+filetype_is_file = "warn"
+get_unwrap = "warn"
+rest_pat_in_fully_bound_structs = "warn"
+unnecessary_safety_comment = "warn"
+infinite_loop = "warn"
+map_with_unused_argument_over_ranges = "warn"
+unused_result_ok = "warn"
+pathbuf_init_then_push = "warn"
+pub_underscore_fields = "warn"
+non_zero_suggestions = "warn"
+precedence_bits = "warn"
+iter_on_single_items = "warn"
+unused_peekable = "warn"
+suspicious_operation_groupings = "warn"
 
 # A `.clone()` that remains is a real copy.
 redundant_clone = "deny"

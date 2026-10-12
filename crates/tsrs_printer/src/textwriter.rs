@@ -242,9 +242,7 @@ pub fn new_text_writer(new_line: &str, indent_size: usize) -> Box<dyn EmitTextWr
     if indent_size == 0 {
         indent_size = 4;
     }
-    let mut w = textWriter::default();
-    w.new_line = new_line.to_string();
-    w.indent_size = indent_size;
+    let mut w = textWriter { new_line: new_line.to_string(), indent_size, ..Default::default() };
     w.clear();
     Box::new(w)
 }

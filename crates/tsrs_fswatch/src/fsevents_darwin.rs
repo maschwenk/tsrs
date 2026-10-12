@@ -28,20 +28,20 @@ use crate::watcher::{dirWatch, dwKey, err_watched_directory_removed, watcher, wa
 
 // ----- FSEvents flag bits (from FSEvents.h) ------------------------------
 
-const flagMustScanSubDirs: u32 = 0x00000001;
-const flagUserDropped: u32 = 0x00000002;
-const flagKernelDropped: u32 = 0x00000004;
-const flagHistoryDone: u32 = 0x00000010;
+const flagMustScanSubDirs: u32 = 0x0000_0001;
+const flagUserDropped: u32 = 0x0000_0002;
+const flagKernelDropped: u32 = 0x0000_0004;
+const flagHistoryDone: u32 = 0x0000_0010;
 
-const flagItemCreated: u32 = 0x00000100;
-const flagItemRemoved: u32 = 0x00000200;
-const flagItemRenamed: u32 = 0x00000800;
-const flagItemIsFile: u32 = 0x00010000;
-const flagItemIsDir: u32 = 0x00020000;
-const flagItemIsSymlink: u32 = 0x00040000;
-const flagItemIsHardlink: u32 = 0x00100000;
-const flagItemIsLastHardlink: u32 = 0x00200000;
-const flagItemCloned: u32 = 0x00400000;
+const flagItemCreated: u32 = 0x0000_0100;
+const flagItemRemoved: u32 = 0x0000_0200;
+const flagItemRenamed: u32 = 0x0000_0800;
+const flagItemIsFile: u32 = 0x0001_0000;
+const flagItemIsDir: u32 = 0x0002_0000;
+const flagItemIsSymlink: u32 = 0x0004_0000;
+const flagItemIsHardlink: u32 = 0x0010_0000;
+const flagItemIsLastHardlink: u32 = 0x0020_0000;
+const flagItemCloned: u32 = 0x0040_0000;
 
 const ignoredFlags: u32 = flagItemIsHardlink | flagItemIsLastHardlink | flagItemIsSymlink | flagItemIsDir | flagItemIsFile | flagItemCloned;
 

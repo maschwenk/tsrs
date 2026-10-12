@@ -196,7 +196,7 @@ fn transpile_in_current_region(input: &str, base: Option<&CompilerOptions>, file
     let outputs: Mutex<(Option<String>, Option<String>)> = Mutex::new((None, None));
     let write = |name: &str, text: &str, _data: &mut WriteFileData| -> Result<(), String> {
         let mut o = outputs.lock().unwrap();
-        let slot = if name.ends_with(".map") { &mut o.1 } else { &mut o.0 };
+        let slot = if name.to_ascii_lowercase().strip_suffix(".map").is_some() { &mut o.1 } else { &mut o.0 };
         if slot.is_some() {
             return Err(format!("Unexpected multiple outputs, file: {name}"));
         }

@@ -175,10 +175,8 @@ impl CommonJSModuleTransformer {
 
     // commonjsmodule.go:782
     pub(crate) fn visit_top_level_import_equals_declaration(&self, node: P<Node>) -> Option<P<Node>> {
-        if !ast::is_external_module_import_equals_declaration(node) {
-            // import m = n;
-            panic!("import= for internal module references should be handled in an earlier transformer.");
-        }
+        // import m = n;
+        assert!(ast::is_external_module_import_equals_declaration(node), "import= for internal module references should be handled in an earlier transformer.");
 
         let f = self.factory();
         let emit_context = self.emit_context();

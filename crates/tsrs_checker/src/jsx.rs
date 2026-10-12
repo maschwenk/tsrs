@@ -176,7 +176,7 @@ impl Checker {
                     );
                 }
             }
-            _ => {
+            JsxReferenceKind::Mixed => {
                 let sfc_return_constraint = self.get_jsx_stateless_element_type_at(opening_like_element);
                 let class_constraint = self.get_jsx_element_class_type_at(opening_like_element);
                 let (Some(sfc_return_constraint), Some(class_constraint)) = (sfc_return_constraint, class_constraint) else {
@@ -322,8 +322,8 @@ impl Checker {
             if keep { Some(p) } else { None }
         }));
         let mut discriminant_members: Vec<P<Symbol>> = Vec::new();
-        discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter_map(|s| {
-            let keep = 'keep: {
+        discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter(|&s| {
+            'keep: {
                 if !s.flags().intersects(SymbolFlags::Optional) || node.symbol().is_none() {
                     break 'keep false;
                 }
@@ -336,8 +336,7 @@ impl Checker {
                 }
                 node.symbol().unwrap().members().and_then(|members| members.lookup(s.name())).is_none()
                     && self.is_discriminant_property(Some(contextual_type), s.name())
-            };
-            if keep { Some(s) } else { None }
+            }
         }));
         let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
         let discriminated = self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator);
@@ -390,7 +389,7 @@ impl Checker {
                 array_like_target_parts = self.filter_type(children_target_type, |c, t| c.is_type_assignable_to(t, any_iterable));
                 non_array_like_target_parts = self.filter_type(children_target_type, |c, t| !c.is_type_assignable_to(t, any_iterable));
             } else {
-                array_like_target_parts = self.filter_type(children_target_type, |c, t| c.is_array_or_tuple_like_type(t));
+                array_like_target_parts = self.filter_type(children_target_type, super::checker::Checker::is_array_or_tuple_like_type);
                 non_array_like_target_parts = self.filter_type(children_target_type, |c, t| !c.is_array_or_tuple_like_type(t));
             }
             let invalid_text_diagnostic: RefCell<Option<(&'static Message, Vec<String>)>> = RefCell::new(None);
@@ -413,19 +412,19 @@ impl Checker {
                     let children = self.generate_jsx_children(containing_element, Rc::clone(&get_invalid_textual_child_diagnostic));
                     reported_error = self.elaborate_iterable_or_array_like_target_elementwise(children, real_source, array_like_target_parts, relation, diagnostic_output.as_deref_mut())
                         || reported_error;
-                } else if {
+                } else {
                     let source_children_type = self.get_indexed_access_type(source, children_name_type);
-                    !self.is_type_related_to(source_children_type, children_target_type, relation)
-                } {
-                    // arity mismatch
-                    let children_target_type_text = self.type_to_string_exported(children_target_type);
-                    let diag = self.error(
-                        Some(containing_element.as_jsx_element().opening_element.tag_name()),
-                        &diagnostics::This_JSX_tag_s_0_prop_expects_a_single_child_of_type_1_but_multiple_children_were_provided,
-                        &[&children_prop_name, &children_target_type_text],
-                    );
-                    self.report_diagnostic(Some(diag), diagnostic_output.as_deref_mut());
-                    reported_error = true;
+                    if !self.is_type_related_to(source_children_type, children_target_type, relation) {
+                        // arity mismatch
+                        let children_target_type_text = self.type_to_string_exported(children_target_type);
+                        let diag = self.error(
+                            Some(containing_element.as_jsx_element().opening_element.tag_name()),
+                            &diagnostics::This_JSX_tag_s_0_prop_expects_a_single_child_of_type_1_but_multiple_children_were_provided,
+                            &[&children_prop_name, &children_target_type_text],
+                        );
+                        self.report_diagnostic(Some(diag), diagnostic_output.as_deref_mut());
+                        reported_error = true;
+                    }
                 }
             } else if non_array_like_target_parts != self.never_type {
                 let child = valid_children[0];
@@ -444,19 +443,19 @@ impl Checker {
                         diagnostic_output.as_deref_mut(),
                     ) || reported_error;
                 }
-            } else if {
+            } else {
                 let source_children_type = self.get_indexed_access_type(source, children_name_type);
-                !self.is_type_related_to(source_children_type, children_target_type, relation)
-            } {
-                // arity mismatch
-                let children_target_type_text = self.type_to_string_exported(children_target_type);
-                let diag = self.error(
-                    Some(containing_element.as_jsx_element().opening_element.tag_name()),
-                    &diagnostics::This_JSX_tag_s_0_prop_expects_type_1_which_requires_multiple_children_but_only_a_single_child_was_provided,
-                    &[&children_prop_name, &children_target_type_text],
-                );
-                self.report_diagnostic(Some(diag), diagnostic_output.as_deref_mut());
-                reported_error = true;
+                if !self.is_type_related_to(source_children_type, children_target_type, relation) {
+                    // arity mismatch
+                    let children_target_type_text = self.type_to_string_exported(children_target_type);
+                    let diag = self.error(
+                        Some(containing_element.as_jsx_element().opening_element.tag_name()),
+                        &diagnostics::This_JSX_tag_s_0_prop_expects_type_1_which_requires_multiple_children_but_only_a_single_child_was_provided,
+                        &[&children_prop_name, &children_target_type_text],
+                    );
+                    self.report_diagnostic(Some(diag), diagnostic_output);
+                    reported_error = true;
+                }
             }
         }
         reported_error
@@ -526,7 +525,7 @@ impl Checker {
         relation: P<Relation>,
         mut diagnostic_output: Option<&mut Vec<P<Diagnostic>>>,
     ) -> bool {
-        let tuple_or_array_like_target_parts = self.filter_type(target, |c, t| c.is_array_or_tuple_like_type(t));
+        let tuple_or_array_like_target_parts = self.filter_type(target, super::checker::Checker::is_array_or_tuple_like_type);
         let non_tuple_or_array_like_target_parts = self.filter_type(target, |c, t| !c.is_array_or_tuple_like_type(t));
         // If `nonTupleOrArrayLikeTargetParts` is not `never`, then that should mean `Iterable` is defined.
         let mut iteration_type: Option<P<Type>> = None;
@@ -622,7 +621,7 @@ impl Checker {
         if jsx_specific.is_some() {
             return jsx_specific;
         }
-        self.get_spelling_suggestion_for_name(name, &properties, SymbolFlags::Value)
+        self.get_spelling_suggestion_for_name(name, properties, SymbolFlags::Value)
     }
 
     // jsx.go:500
@@ -857,8 +856,8 @@ impl Checker {
                         self.add_intra_expression_inference_site(inference_context.unwrap(), inference_node, expr_type);
                     }
                 } else {
-                    assert!(attribute_decl.kind() == Kind::JsxSpreadAttribute);
-                    if attributes_table.len() != 0 {
+                    assert_eq!(attribute_decl.kind(), Kind::JsxSpreadAttribute);
+                    if !attributes_table.is_empty() {
                         // Go passes `objectFlags` in the same call as `createJsxAttributesType()`, which mutates it; gc
                         // reads the plain variable after the call, so `object_flags` is read after it here too (also below).
                         let t = create_jsx_attributes_type(self, &mut object_flags, attributes_symbol, attributes_table);
@@ -886,7 +885,7 @@ impl Checker {
                 }
             }
             if !has_spread_any_type {
-                if attributes_table.len() != 0 {
+                if !attributes_table.is_empty() {
                     let t = create_jsx_attributes_type(self, &mut object_flags, attributes_symbol, attributes_table);
                     spread = self.get_spread_type(spread, t, attributes_symbol, object_flags, false /*readonly*/);
                 }
@@ -931,7 +930,7 @@ impl Checker {
                 let links = self.value_symbol_links.get(children_prop_symbol);
                 if child_types.len() == 1 {
                     links.resolved_type.set(Some(child_types[0]));
-                } else if children_contextual_type.is_some() && some_type(self, children_contextual_type.unwrap(), |c, t| c.is_tuple_like_type(t)) {
+                } else if children_contextual_type.is_some() && some_type(self, children_contextual_type.unwrap(), super::checker::Checker::is_tuple_like_type) {
                     let t = self.create_tuple_type(&child_types);
                     links.resolved_type.set(Some(t));
                 } else {
@@ -1276,7 +1275,7 @@ impl Checker {
         let intrinsic_elements_type = self.get_jsx_type(JsxNames.intrinsic_elements, location);
         if !self.is_error_type(intrinsic_elements_type) {
             let string_literal_type_name = get_string_literal_value(t);
-            let intrinsic_prop = self.get_property_of_type(intrinsic_elements_type, &string_literal_type_name);
+            let intrinsic_prop = self.get_property_of_type(intrinsic_elements_type, string_literal_type_name);
             if let Some(intrinsic_prop) = intrinsic_prop {
                 return Some(self.get_type_of_symbol(intrinsic_prop));
             }
@@ -1365,9 +1364,7 @@ impl Checker {
         if !self.is_error_type(intrinsic_elements_type) {
             // Property case
             let tag_name = node.tag_name();
-            if !ast::is_identifier(tag_name) && !ast::is_jsx_namespaced_name(tag_name) {
-                panic!("Invalid tag name");
-            }
+            assert!(!(!ast::is_identifier(tag_name) && !ast::is_jsx_namespaced_name(tag_name)), "Invalid tag name");
             let prop_name = tag_name.text();
             let intrinsic_prop = self.get_property_of_type(intrinsic_elements_type, prop_name);
             if intrinsic_prop.is_some() {
@@ -1531,24 +1528,24 @@ impl Checker {
                 }
             }
         }
-        if self._jsx_namespace.is_empty() {
-            self._jsx_namespace = "React".to_string();
+        if self.jsx_namespace.is_empty() {
+            self.jsx_namespace = "React".to_string();
             if !self.compiler_options.jsx_factory.is_empty() {
                 let jsx_factory = self.compiler_options.jsx_factory.clone();
-                self._jsx_factory_entity = self.parse_isolated_entity_name(&jsx_factory);
-                if let Some(jsx_factory_entity) = self._jsx_factory_entity {
-                    self._jsx_namespace = ast::get_first_identifier(jsx_factory_entity).text().to_string();
+                self.jsx_factory_entity = self.parse_isolated_entity_name(&jsx_factory);
+                if let Some(jsx_factory_entity) = self.jsx_factory_entity {
+                    self.jsx_namespace = ast::get_first_identifier(jsx_factory_entity).text().to_string();
                 }
             } else if !self.compiler_options.react_namespace.is_empty() {
-                self._jsx_namespace = self.compiler_options.react_namespace.clone();
+                self.jsx_namespace = self.compiler_options.react_namespace.clone();
             }
         }
-        if self._jsx_factory_entity.is_none() {
-            let left = self.factory.new_identifier(alloc_str(&self._jsx_namespace));
+        if self.jsx_factory_entity.is_none() {
+            let left = self.factory.new_identifier(alloc_str(&self.jsx_namespace));
             let right = self.factory.new_identifier("createElement");
-            self._jsx_factory_entity = Some(self.factory.new_qualified_name(left, right));
+            self.jsx_factory_entity = Some(self.factory.new_qualified_name(left, right));
         }
-        self._jsx_namespace.clone()
+        self.jsx_namespace.clone()
     }
 
     // jsx.go:1388
@@ -1577,7 +1574,7 @@ impl Checker {
                 return Some(local_jsx_factory);
             }
         }
-        self._jsx_factory_entity
+        self.jsx_factory_entity
     }
 
     // jsx.go:1414

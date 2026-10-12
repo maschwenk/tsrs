@@ -122,9 +122,7 @@ impl<T: Named + Clone> Index<T> {
     // insertAsWords adds a value to the index keyed by the first letter of each word in its name.
     pub(crate) fn insert_as_words(&mut self, value: T) {
         let name = value.name().to_string();
-        if name.is_empty() {
-            panic!("Cannot index entry with empty name");
-        }
+        assert!(!name.is_empty(), "Cannot index entry with empty name");
         let entry_index = self.entries.len();
         self.entries.push(value);
 

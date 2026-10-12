@@ -78,13 +78,9 @@ impl NodeVisitor {
         if let Some(v) = visited {
             if v.kind() == Kind::SyntaxList {
                 let nodes = v.as_syntax_list().children;
-                if nodes.len() != 1 {
-                    panic!("Expected only a single node to be written to output");
-                }
+                assert!(nodes.len() == 1, "Expected only a single node to be written to output");
                 visited = Some(nodes[0]);
-                if nodes[0].kind() == Kind::SyntaxList {
-                    panic!("The result of visiting and lifting a Node may not be SyntaxList");
-                }
+                assert!(nodes[0].kind() != Kind::SyntaxList, "The result of visiting and lifting a Node may not be SyntaxList");
             }
         }
         visited
@@ -284,9 +280,7 @@ impl NodeVisitor {
             let list = self.factory.new_node_list(nodes);
             self.factory.new_block(list, true /*multiLine*/)
         };
-        if node.kind() == Kind::SyntaxList {
-            panic!("The result of visiting and lifting a Node may not be SyntaxList");
-        }
+        assert!(node.kind() != Kind::SyntaxList, "The result of visiting and lifting a Node may not be SyntaxList");
         node
     }
 }

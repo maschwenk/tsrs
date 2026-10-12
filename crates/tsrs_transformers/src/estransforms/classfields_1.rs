@@ -282,7 +282,7 @@ impl classFieldsTransformer {
     // a class expression is directly inside a loop body.
     // Replaces Strada's resolver.hasNodeCheckFlag(node, NodeCheckFlags.BlockScopedBindingInLoop).
     pub(crate) fn requires_block_scoped_var(&self) -> bool {
-        self.in_iteration_statement.get() && self.current_class_container.get().is_some_and(|c| ast::is_class_expression(c))
+        self.in_iteration_statement.get() && self.current_class_container.get().is_some_and(ast::is_class_expression)
     }
 
     // classfields.go:207
@@ -539,7 +539,7 @@ impl classFieldsTransformer {
         if !self.should_transform_private_elements_or_class_static_blocks.get() {
             return Some(node);
         }
-        if self.parent_node.get().is_some_and(|p| ast::is_statement(p)) {
+        if self.parent_node.get().is_some_and(ast::is_statement) {
             return Some(node);
         }
         let result = self.factory().new_identifier("");
@@ -862,7 +862,7 @@ impl classFieldsTransformer {
 
     // classfields.go:785
     pub(crate) fn get_hoisted_function_name(&self, node: P<Node>) -> Option<P<Node>> {
-        assert!(node.name().is_some_and(|n| ast::is_private_identifier(n)));
+        assert!(node.name().is_some_and(ast::is_private_identifier));
         let info = self.access_private_identifier(node.name().unwrap());
         assert!(info.is_some(), "Undeclared private name for property declaration.");
         let info = info.unwrap();
@@ -1937,7 +1937,7 @@ impl classFieldsTransformer {
         let result = visitor(self, node, facts);
         self.enclosing_class_declarations.borrow_mut().remove(&original);
         self.end_class_lexical_environment();
-        assert!(self.lexical_environment.get() == saved_lexical_environment);
+        assert_eq!(self.lexical_environment.get(), saved_lexical_environment);
         self.current_class_container.set(saved_current_class_container);
         *self.pending_expressions.borrow_mut() = saved_pending_expressions;
         self.lexical_environment.set(saved_lexical_environment);

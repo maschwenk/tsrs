@@ -212,8 +212,7 @@ impl DocumentPositionMapper {
         let source_mappings: &[SourceMappedPosition] = self
             .source_mappings
             .get(&source_index)
-            .map(|v| v.as_slice())
-            .unwrap_or(&[]);
+            .map_or(&[], std::vec::Vec::as_slice);
         let (target_index, _) =
             goslices::binary_search_func(source_mappings, &loc.pos, |m, pos| {
                 m.source_position.cmp(&Some(*pos))
@@ -285,7 +284,7 @@ pub(crate) fn convert_document_to_source_mapper(host: &dyn Host, contents: &str,
     };
 
     // Don't support source maps that contain inlined sources
-    if source_map.sources_content.as_deref().unwrap_or(&[]).iter().any(|s| s.is_some()) {
+    if source_map.sources_content.as_deref().unwrap_or(&[]).iter().any(std::option::Option::is_some) {
         return None;
     }
 
@@ -341,7 +340,7 @@ pub(crate) fn try_parse_base64_url(url: &str) -> (&str, bool) {
 // skip): padded quanta of four, '=' only as "xx==" or "xxx=" in the last quantum, nonzero trailing bits accepted.
 fn base64_std_decode_string(s: &str) -> Option<Vec<u8>> {
     let src = s.as_bytes();
-    if src.len() % 4 != 0 {
+    if !src.len().is_multiple_of(4) {
         return None;
     }
     let mut out = Vec::with_capacity(src.len() / 4 * 3);

@@ -276,7 +276,7 @@ impl DeclarationTransformer {
         if !original.flags().intersects(NodeFlags::Reparsed) {
             return;
         }
-        let Some(&jsdoc) = original.eager_jsdoc(ast::get_source_file_of_node(original).map(|f| f.get())).first() else {
+        let Some(&jsdoc) = original.eager_jsdoc(ast::get_source_file_of_node(original).map(tsrs_core::P::get)).first() else {
             return;
         };
         let description = scanner::get_text_of_jsdoc_comment(Some(jsdoc.as_jsdoc().comment));

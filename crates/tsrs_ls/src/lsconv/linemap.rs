@@ -48,6 +48,7 @@ pub fn compute_lsp_line_starts(text: &str) -> Arc<LSPLineMap> {
     Arc::new(LSPLineMap { line_starts, ascii_only })
 }
 
+#[expect(clippy::naive_bytecount, reason = "a specialized search is a performance change that requires measurements")]
 fn memchr_count(bytes: &[u8]) -> usize {
     bytes.iter().filter(|&&b| b == b'\n').count()
 }

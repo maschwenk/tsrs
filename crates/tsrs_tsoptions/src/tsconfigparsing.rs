@@ -360,6 +360,7 @@ impl TsConfigSourceFile {
     }
 }
 
+#[expect(clippy::single_option_map, reason = "named Go conversion helper used at the tsconfig/source-file boundary")]
 pub(crate) fn tsconfig_to_source_file(tsconfig_source_file: Option<P<TsConfigSourceFile>>) -> Option<P<SourceFile>> {
     tsconfig_source_file.map(|f| f.source_file)
 }
@@ -691,7 +692,7 @@ fn get_extends_config_path(
     if tspath::is_rooted_disk_path(&extended_config) || extended_config.starts_with("./") || extended_config.starts_with("../") {
         let mut extended_config_path = tspath::get_normalized_absolute_path(&extended_config, base_path);
         if !host.fs().file_exists(&extended_config_path) && !extended_config_path.ends_with(tspath::EXTENSION_JSON) {
-            extended_config_path = extended_config_path + tspath::EXTENSION_JSON;
+            extended_config_path += tspath::EXTENSION_JSON;
             if !host.fs().file_exists(&extended_config_path) {
                 errors.push(create_diagnostic_for_node_in_source_file_or_compiler_diagnostic(
                     error_file,
@@ -946,7 +947,7 @@ fn convert_object_literal_expression_to_json(
         let mut text_of_key = String::new();
         let name = element.name().unwrap();
         if !tsrs_ast::is_computed_non_literal_name(name) {
-            text_of_key = tsrs_ast::try_get_text_of_property_name(name).map(|s| s).unwrap_or_default();
+            text_of_key = tsrs_ast::try_get_text_of_property_name(name).unwrap_or_default();
         }
         let key_text = text_of_key;
         let mut option: Option<&'static CommandLineOption> = None;
@@ -1348,7 +1349,7 @@ fn parse_config(
     if resolution_stack.contains(&resolved_path) {
         let result;
         errors.push(new_compiler_diagnostic(&diagnostics::Circularity_detected_while_resolving_configuration_Colon_0, &[]));
-        if json.as_ref().map_or(0, |j| j.size()) == 0 {
+        if json.as_ref().map_or(0, tsrs_core::collections::OrderedMapExt::size) == 0 {
             result = ParsedTsconfig {
                 raw: match json {
                     Some(json) => CompilerOptionsValue::Object(json),
@@ -1589,7 +1590,7 @@ fn parse_json_config_file_content_worker(
                         _ => None,
                     };
                     if let CompilerOptionsValue::Array(a) = value {
-                        if source_file.is_none() && !a.iter().all(|e| validate_element(e)) {
+                        if source_file.is_none() && !a.iter().all(validate_element) {
                             errors.push(new_compiler_diagnostic(
                                 &diagnostics::Compiler_option_0_requires_a_value_of_type_1,
                                 &[&prop, &element_type_name],
@@ -1615,12 +1616,12 @@ fn parse_json_config_file_content_worker(
         let mut has_zero_or_no_references = false;
         if references_of_raw.wrong_value == "no-prop"
             || references_of_raw.wrong_value == "not-array"
-            || references_of_raw.slice_value.as_ref().map_or(0, |v| v.len()) == 0
+            || references_of_raw.slice_value.as_ref().map_or(0, std::vec::Vec::len) == 0
         {
             has_zero_or_no_references = true;
         }
         let has_extends = raw_config.get("extends").filter(|v| !v.is_null());
-        if file_specs.slice_value.as_ref().is_some_and(|v| v.is_empty()) && has_zero_or_no_references && has_extends.is_none() {
+        if file_specs.slice_value.as_ref().is_some_and(std::vec::Vec::is_empty) && has_zero_or_no_references && has_extends.is_none() {
             if let Some(source_file) = source_file {
                 let file_name = if !config_file_name.is_empty() { config_file_name } else { "tsconfig.json" };
                 let diagnostic_message = &diagnostics::The_files_list_in_config_file_0_is_empty;
@@ -2004,7 +2005,7 @@ pub fn get_ts_config_prop_array_element_value(
     element_value: &str,
 ) -> Option<P<Node>> {
     let callback = get_callback_for_finding_property_assignment_by_value(element_value);
-    for_each_ts_config_prop_array(ts_config_source_file, prop_key, |property| callback(property))
+    for_each_ts_config_prop_array(ts_config_source_file, prop_key, callback)
 }
 
 pub fn for_each_ts_config_prop_array<T>(
@@ -2323,7 +2324,7 @@ fn handle_option_config_dir_template_substitution(compiler_options: Option<&mut 
 // (`extensions` is getSupportedExtensions' result as string slices, built once per call of the caller.)
 fn has_file_with_higher_priority_extension(file: &str, extensions: &[Vec<&str>], has_file: impl Fn(&str) -> bool) -> bool {
     let mut extension_group: Vec<&str> = Vec::new();
-    extension_group.extend(extensions.iter().filter_map(|group| if tspath::file_extension_is_one_of(file, group) { Some(group) } else { None }).flatten());
+    extension_group.extend(extensions.iter().filter(|group| tspath::file_extension_is_one_of(file, group)).flatten());
     if extension_group.is_empty() {
         return false;
     }
@@ -2486,15 +2487,15 @@ pub(crate) fn get_file_names_from_config_specs(
 }
 
 fn to_owned_groups(groups: &[&[&str]]) -> Vec<Vec<String>> {
-    groups.iter().map(|g| g.iter().map(|s| s.to_string()).collect()).collect()
+    groups.iter().map(|g| g.iter().map(std::string::ToString::to_string).collect()).collect()
 }
 
 pub fn get_supported_extensions(compiler_options: Option<&CompilerOptions>, extra_extensions: &[String]) -> Vec<Vec<String>> {
-    let need_js_extensions = compiler_options.is_some_and(|o| o.get_allow_js());
+    let need_js_extensions = compiler_options.is_some_and(tsrs_core::CompilerOptions::get_allow_js);
     let builtins = if need_js_extensions {
-        to_owned_groups(&tspath::ALL_SUPPORTED_EXTENSIONS)
+        to_owned_groups(tspath::ALL_SUPPORTED_EXTENSIONS)
     } else {
-        to_owned_groups(&tspath::SUPPORTED_TS_EXTENSIONS)
+        to_owned_groups(tspath::SUPPORTED_TS_EXTENSIONS)
     };
     if extra_extensions.is_empty() {
         return builtins;
@@ -2520,11 +2521,11 @@ pub fn get_supported_extensions_with_json_if_resolve_json_module(
     if !compiler_options.get_resolve_json_module() {
         return supported_extensions.to_vec();
     }
-    if supported_extensions == to_owned_groups(&tspath::ALL_SUPPORTED_EXTENSIONS).as_slice() {
-        return to_owned_groups(&tspath::ALL_SUPPORTED_EXTENSIONS_WITH_JSON);
+    if supported_extensions == to_owned_groups(tspath::ALL_SUPPORTED_EXTENSIONS).as_slice() {
+        return to_owned_groups(tspath::ALL_SUPPORTED_EXTENSIONS_WITH_JSON);
     }
-    if supported_extensions == to_owned_groups(&tspath::SUPPORTED_TS_EXTENSIONS).as_slice() {
-        return to_owned_groups(&tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON);
+    if supported_extensions == to_owned_groups(tspath::SUPPORTED_TS_EXTENSIONS).as_slice() {
+        return to_owned_groups(tspath::SUPPORTED_TS_EXTENSIONS_WITH_JSON);
     }
     let mut result = supported_extensions.to_vec();
     result.push(vec![tspath::EXTENSION_JSON.to_string()]);

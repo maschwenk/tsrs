@@ -60,23 +60,23 @@ pub(crate) struct ParseCacheJournal(Mutex<FxHashMap<ParseCacheKey, i64>>);
 impl ParseCacheJournal {
     pub(crate) fn acquire(&self, cache: &ParseCache, key: ParseCacheKey, fh: Arc<dyn FileHandle>) -> P<SourceFile> {
         let file = cache.acquire(&key, fh);
-        *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
+        *self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).entry(key).or_default() += 1;
         file
     }
 
     pub(crate) fn ref_(&self, cache: &ParseCache, key: ParseCacheKey) {
         cache.ref_(&key);
-        *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key).or_default() += 1;
+        *self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).entry(key).or_default() += 1;
     }
 
     pub(crate) fn deref(&self, cache: &ParseCache, key: &ParseCacheKey) {
         cache.deref(key);
-        *self.0.lock().unwrap_or_else(|e| e.into_inner()).entry(key.clone()).or_default() -= 1;
+        *self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner).entry(key.clone()).or_default() -= 1;
     }
 
     /// Releases every reference this clone still holds (its programs never reached a snapshot).
     pub(crate) fn roll_back(&self, cache: &ParseCache) {
-        let held = std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()));
+        let held = std::mem::take(&mut *self.0.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
         #[expect(clippy::iter_over_hash_type, reason = "refcount decrements on distinct keys commute (no Go counterpart: Rust-only journal)")]
         for (key, count) in held {
             for _ in 0..count.max(0) {
@@ -143,7 +143,7 @@ pub struct ContentMappedParseCache {
 // parsecache.go:92
 pub fn new_content_mapped_parse_cache(options: RefCountCacheOptions) -> ContentMappedParseCache {
     ContentMappedParseCache {
-        ref_count_cache: new_ref_count_cache(options, |_: &ContentMappedParseCacheKey, _: ()| -> P<SourceFile> {
+        ref_count_cache: new_ref_count_cache(options, |_: &ContentMappedParseCacheKey, (): ()| -> P<SourceFile> {
             panic!("content-mapped source files must be produced with AcquireOrError")
         }),
     }

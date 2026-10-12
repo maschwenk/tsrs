@@ -421,7 +421,7 @@ pub(crate) fn compute_module_specifiers(
                 options.override_import_mode,
             );
         }
-        if !specifier.is_empty() && !(for_auto_import && is_excluded_by_regex(&specifier, &preferences.exclude_regexes)) {
+        if !(specifier.is_empty() || (for_auto_import && is_excluded_by_regex(&specifier, &preferences.exclude_regexes))) {
             node_modules_specifiers.push(specifier.clone());
             if module_path.is_redirect {
                 // If we got a specifier for a redirect, it was a bare package specifier (e.g. "@foo/bar",
@@ -952,10 +952,10 @@ pub(crate) fn try_directory_with_package_json(
         }
     }
 
-    if !main_file_relative.is_empty()
-        && !(maybe_blocked_by_types_versions
+    if !(main_file_relative.is_empty()
+        || (maybe_blocked_by_types_versions
             && tsrs_module::match_pattern_or_exact(&tsrs_module::try_parse_patterns(version_paths_paths), &main_file_relative) != Pattern::default())
-    {
+    ) {
         // The 'main' file is also subject to mapping through typesVersions, and we couldn't come up with a path
         // explicitly through typesVersions, so if it matches a key in typesVersions now, it's not reachable.
         // (The only way this can happen is if some file in a package that's not resolvable from outside the
@@ -974,7 +974,7 @@ pub(crate) fn try_directory_with_package_json(
         ) == std::cmp::Ordering::Equal
         {
             // ^ An arbitrary removal of file extension for this comparison is almost certainly wrong
-            return pkgJsonDirAttemptResult { package_root_path, module_file_to_try, ..Default::default() };
+            return pkgJsonDirAttemptResult { module_file_to_try, package_root_path, ..Default::default() };
         } else if package_json_content.is_none()
             || package_json_content.unwrap().fields.type_.value != "module"
                 && !tspath::file_extension_is_one_of(&module_file_to_try, tspath::EXTENSIONS_NOT_SUPPORTING_EXTENSIONLESS_RESOLUTION)
@@ -991,7 +991,7 @@ pub(crate) fn try_directory_with_package_json(
             // example mainExportFile: `pkg/lib` and moduleFileToTry: `pkg/lib/index`, we can use packageRootPath
             // but this behavior is deprecated for packages with "type": "module", so we only do this for packages without "type": "module"
             // and make sure that the extension on index.{???} is something that supports omitting the extension
-            return pkgJsonDirAttemptResult { package_root_path, module_file_to_try, ..Default::default() };
+            return pkgJsonDirAttemptResult { module_file_to_try, package_root_path, ..Default::default() };
         }
     }
 

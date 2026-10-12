@@ -508,7 +508,7 @@ impl Relater {
         result = match source_types.iter().enumerate().try_fold(result, |mut result, (i, &source_type)| {
             if stripped_target.flags().intersects(TypeFlags::Union)
                 && source_types.len() >= stripped_types.len()
-                && source_types.len() % stripped_types.len() == 0
+                && source_types.len().is_multiple_of(stripped_types.len())
             {
                 // many unions are mappings of one another; in such cases, simply comparing members at the same index can shortcut the comparison
                 // such unions will have identical lengths, and their corresponding elements will match up. Another common scenario is where a large
@@ -959,7 +959,7 @@ impl Relater {
         keys.push(key);
         let mut set = self.maybe_keys_set.borrow_mut();
         if keys.len() == MAYBE_STACK_SCAN_MAX + 1 {
-            set.m.extend(keys.iter().map(|&k| k));
+            set.m.extend(keys.iter().copied());
         } else if keys.len() > MAYBE_STACK_SCAN_MAX {
             set.add(key);
         }
@@ -986,7 +986,7 @@ impl Relater {
             let k = crate::workcensus::rel_kind(c, self.rel());
             let (sym, label) = crate::workcensus::type_identity(target);
             let census = c.census.as_mut().unwrap();
-            if (((source.id.0 as u64) << 32 | target.id.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 61) == 0 {
+            if ((((source.id.0 as u64) << 32) | target.id.0 as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 61) == 0 {
                 *census.rel_pairs.entry((source.id.0, target.id.0)).or_default() |= 1 << k;
             }
             census.record(crate::workcensus::Cat::Rel, crate::workcensus::CKey::Rel(k, sym, label), timing, (r == Ternary::False) as u64, 0, 0);
@@ -1014,7 +1014,7 @@ impl Relater {
             // For example, if `T extends 1 | 2` and `U extends 2 | 3` and we compare `T & U` to `T & U & (1 | 2 | 3)`
             if result == Ternary::False && (source.flags().intersects(TypeFlags::Intersection) || source.flags().intersects(TypeFlags::TypeParameter) && target.flags().intersects(TypeFlags::Union)) {
                 let source_types: &[P<Type>] = if source.flags().intersects(TypeFlags::Intersection) { source.types() } else { std::slice::from_ref(&source) };
-                let constraint = c.get_effective_constraint_of_intersection(&source_types, target.flags().intersects(TypeFlags::Union));
+                let constraint = c.get_effective_constraint_of_intersection(source_types, target.flags().intersects(TypeFlags::Union));
                 if let Some(constraint) = constraint {
                     if every_type(c, constraint, |_, t| t != source) {
                         // TODO: Stack errors so we get a pyramid for the "normal" comparison above, _and_ a second for this
@@ -1729,11 +1729,11 @@ impl Relater {
                 }
                 let source_type_arguments = c.get_type_arguments(source);
                 let target_type_arguments = c.get_type_arguments(target);
-                let (variance_result, ok) = self.relate_variances(c, &source_type_arguments, &target_type_arguments, &variances, intersection_state, report_errors, &save_error_state, &mut result, &mut variance_check_failed, &mut original_error_chain);
+                let (variance_result, ok) = self.relate_variances(c, source_type_arguments, target_type_arguments, &variances, intersection_state, report_errors, &save_error_state, &mut result, &mut variance_check_failed, &mut original_error_chain);
                 if ok {
                     return variance_result;
                 }
-            } else if c.is_array_type(target) && (c.is_readonly_array_type(target) && every_type(c, source, |c, t| c.is_array_or_tuple_type(t)) || every_type(c, source, |_, t| is_mutable_tuple_type(t))) {
+            } else if c.is_array_type(target) && (c.is_readonly_array_type(target) && every_type(c, source, super::checker::Checker::is_array_or_tuple_type) || every_type(c, source, |_, t| is_mutable_tuple_type(t))) {
                 if self.rel() != c.identity_relation {
                     let source_index_type = c.get_index_type_of_type_ex(source, c.number_type, c.any_type);
                     let target_index_type = c.get_index_type_of_type_ex(target, c.number_type, c.any_type);
@@ -1924,7 +1924,7 @@ impl Relater {
         // NOTE: See ~/tests/cases/conformance/types/typeRelationships/assignmentCompatibility/assignmentCompatWithDiscriminatedUnion.ts
         //       for examples.
         let source_properties = c.get_properties_of_type(source);
-        let source_properties_filtered = c.find_discriminant_properties(&source_properties, target);
+        let source_properties_filtered = c.find_discriminant_properties(source_properties, target);
         if source_properties_filtered.is_empty() {
             return Ternary::False;
         }
@@ -1957,7 +1957,7 @@ impl Relater {
             let mut combination: Vec<Option<P<Type>>> = vec![None; source_discriminant_types.len()];
             let mut n = i;
             for (j, element) in source_discriminant_types.iter().enumerate().rev() {
-                let source_types = &(*element);
+                let source_types = element;
                 let length = source_types.len();
                 combination[j] = Some(source_types[n % length]);
                 n /= length;
@@ -2097,7 +2097,7 @@ impl Relater {
                 let target_start_count = get_start_element_count(target.target_tuple_type(), ElementFlags::NonRest);
                 let target_end_count = get_end_element_count(target.target_tuple_type(), ElementFlags::NonRest);
                 let mut can_exclude_discriminants = excluded_properties.len() != 0;
-                for source_position in 0..source_arity {
+                for (source_position, &source_type_argument) in source_type_arguments.iter().enumerate().take(source_arity) {
                     let source_flags = if is_tuple_type(source) {
                         source.target_tuple_type().element_infos.get()[source_position].flags
                     } else {
@@ -2147,8 +2147,8 @@ impl Relater {
                             continue;
                         }
                     }
-                    let source_type = c.remove_missing_type(source_type_arguments[source_position as usize], (source_flags & target_flags).intersects(ElementFlags::Optional));
-                    let target_type = target_type_arguments[target_position as usize];
+                    let source_type = c.remove_missing_type(source_type_argument, (source_flags & target_flags).intersects(ElementFlags::Optional));
+                    let target_type = target_type_arguments[target_position];
                     let target_check_type = if source_flags.intersects(ElementFlags::Variadic) && target_flags.intersects(ElementFlags::Rest) {
                         c.create_array_type(target_type)
                     } else {
@@ -2194,7 +2194,7 @@ impl Relater {
         }
         if is_object_literal_type(target) {
             let source_properties = c.get_properties_of_type(source);
-            if let Some(result) = exclude_properties(&source_properties, excluded_properties).iter().copied().into_iter().find_map(|source_prop| {
+            if let Some(result) = exclude_properties(source_properties, excluded_properties).iter().copied().into_iter().find_map(|source_prop| {
                 if c.get_property_of_object_type(target, source_prop.name()).is_none() {
                     if report_errors {
                         let source_prop_string = c.symbol_to_string(source_prop);
@@ -2216,7 +2216,7 @@ impl Relater {
         // `found` is by position in `properties` when it covers them all and nothing is excluded.
         let found = if found.len() == properties.len() && excluded_properties.len() == 0 { found } else { &[] };
         let resolved_source = c.resolved_property_source(source);
-        for (i, target_prop) in exclude_properties(&properties, excluded_properties).iter().copied().enumerate() {
+        for (i, target_prop) in exclude_properties(properties, excluded_properties).iter().copied().enumerate() {
             let name = target_prop.name();
             if !target_prop.flags().intersects(SymbolFlags::Prototype) && (!numeric_names_only || is_numeric_literal_name(name) || name == "length") && (!optionals_only || target_prop.flags().intersects(SymbolFlags::Optional)) {
                 let source_prop = match found.get(i) {
@@ -2229,7 +2229,7 @@ impl Relater {
                 if let Some(source_prop) = source_prop {
                     if source_prop != target_prop {
                         let skip_optional = self.rel() == c.comparable_relation;
-                        let related = self.property_related_to(c, source, target, source_prop, target_prop, |c, s| c.get_non_missing_type_of_symbol(s), report_errors, intersection_state, skip_optional);
+                        let related = self.property_related_to(c, source, target, source_prop, target_prop, super::checker::Checker::get_non_missing_type_of_symbol, report_errors, intersection_state, skip_optional);
                         if related == Ternary::False {
                             return Ternary::False;
                         }
@@ -2423,9 +2423,9 @@ impl Relater {
             return Ternary::False;
         }
         let source_object_properties = c.get_properties_of_object_type(source);
-        let source_properties = exclude_properties(&source_object_properties, excluded_properties);
+        let source_properties = exclude_properties(source_object_properties, excluded_properties);
         let target_object_properties = c.get_properties_of_object_type(target);
-        let target_properties = exclude_properties(&target_object_properties, excluded_properties);
+        let target_properties = exclude_properties(target_object_properties, excluded_properties);
         if source_properties.len() != target_properties.len() {
             return Ternary::False;
         }
@@ -2810,7 +2810,7 @@ impl Relater {
                 .iter()
                 .copied()
                 .into_iter()
-                .find_map(|p| if c.is_discriminant_with_never_type(p) { Some(p) } else { None })
+                .find(|&p| c.is_discriminant_with_never_type(p))
             {
                 prop = Some(p);
             }

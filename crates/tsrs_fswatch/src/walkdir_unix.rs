@@ -43,7 +43,7 @@ fn iterate_dir(rd: fs::ReadDir, dirname: &str, recursive: bool, f: &mut dyn FnMu
     })?;
 
     for (name, is_dir) in entries {
-        let full_path = format!("{}/{}", dirname, name);
+        let full_path = format!("{dirname}/{name}");
         if !is_dir {
             f(&full_path, false)?;
             continue;

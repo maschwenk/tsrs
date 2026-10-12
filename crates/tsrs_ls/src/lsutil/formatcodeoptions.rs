@@ -62,7 +62,7 @@ pub(crate) fn parse_semicolon_preference(v: &Value) -> SemicolonPreference {
 }
 
 // formatcodeoptions.go:60
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct EditorSettings {
     pub base_indent_size: i32,
     pub indent_size: i32,
@@ -74,7 +74,7 @@ pub struct EditorSettings {
 }
 
 // formatcodeoptions.go:70
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct FormatCodeSettings {
     pub editor_settings: EditorSettings,
     pub insert_space_after_comma_delimiter: Tristate,

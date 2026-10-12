@@ -178,10 +178,11 @@ impl LanguageService {
             other => return detailsData { request: Some(other), ..Default::default() },
         };
 
-        let mut literal: Option<LiteralValue> = None;
-        if let Some(l) = data.literals.iter().find_map(|l| if completion_name_for_literal(file, &preferences, l) == item_data.name { Some(l) } else { None }) {
-            literal = Some(*l);
-        }
+        let literal = data
+            .literals
+            .iter()
+            .find(|literal| completion_name_for_literal(file, &preferences, literal) == item_data.name)
+            .copied();
         if literal.is_some() {
             return detailsData { literal, ..Default::default() };
         }
@@ -360,9 +361,7 @@ impl LanguageService {
             return Some(lsp_range);
         }
 
-        if node.kind() == Kind::ImportKeyword || node.kind() == Kind::ImportSpecifier {
-            panic!("ImportKeyword was necessarily on one line; ImportSpecifier was necessarily parented in an ImportDeclaration");
-        }
+        assert!(!(node.kind() == Kind::ImportKeyword || node.kind() == Kind::ImportSpecifier), "ImportKeyword was necessarily on one line; ImportSpecifier was necessarily parented in an ImportDeclaration");
 
         // Guess which point in the import might actually be a later statement parsed as part of the import
         // during parser recovery - either in the middle of named imports, or the module specifier.
@@ -682,7 +681,7 @@ fn js_doc_tag_completion_items() -> &'static [lsproto::CompletionItem] {
     ITEMS.get_or_init(|| {
         let mut items = Vec::with_capacity(JS_DOC_TAG_NAMES.len());
         items.extend(JS_DOC_TAG_NAMES.iter().map(|tag_name| lsproto::CompletionItem {
-            label: format!("@{}", tag_name),
+            label: format!("@{tag_name}"),
             kind: Some(lsproto::CompletionItemKind::Keyword),
             sort_text: Some(SORT_TEXT_LOCATION_PRIORITY.to_string()),
             ..Default::default()
@@ -796,7 +795,7 @@ pub(crate) fn get_jsdoc_parameter_completions(
             }));
         } else if param_index == param_tag_count {
             // Destructuring parameter; do it positionally
-            let param_path = format!("param{}", param_index);
+            let param_path = format!("param{param_index}");
             let display_text_result = generate_jsdoc_param_tags_for_destructuring(
                 &param_path,
                 param.name().unwrap(),
@@ -902,7 +901,7 @@ fn get_jsdoc_param_annotation(
                 let counter = tabstop_counter.as_deref_mut().unwrap();
                 let tabstop = *counter;
                 *counter += 1;
-                t = format!("${{{}:{}}}", tabstop, t);
+                t = format!("${{{tabstop}:{t}}}");
             }
         }
         let dot_dot_dot = if !is_object && dot_dot_dot_token.is_some() { "..." } else { "" };
@@ -911,18 +910,18 @@ fn get_jsdoc_param_annotation(
             let counter = tabstop_counter.as_deref_mut().unwrap();
             let tabstop = *counter;
             *counter += 1;
-            description = format!("${{{}}}", tabstop);
+            description = format!("${{{tabstop}}}");
         }
-        format!("@param {{{}{}}} {} {}", dot_dot_dot, t, param_name, description)
+        format!("@param {{{dot_dot_dot}{t}}} {param_name} {description}")
     } else {
         let mut description = String::new();
         if is_snippet {
-            let counter = tabstop_counter.as_deref_mut().unwrap();
+            let counter = tabstop_counter.unwrap();
             let tabstop = *counter;
             *counter += 1;
-            description = format!("${{{}}}", tabstop);
+            description = format!("${{{tabstop}}}");
         }
-        format!("@param {} {}", param_name, description)
+        format!("@param {param_name} {description}")
     }
 }
 
@@ -931,9 +930,9 @@ fn get_jsdoc_param_name_with_initializer(param_name: &str, initializer: P<Node>)
     let initializer_text = scanner::get_text_of_node(initializer);
     let initializer_text = initializer_text.trim();
     if initializer_text.contains('\n') || initializer_text.len() > 80 {
-        return format!("[{}]", param_name);
+        return format!("[{param_name}]");
     }
-    format!("[{}={}]", param_name, initializer_text)
+    format!("[{param_name}={initializer_text}]")
 }
 
 // completions.go:6360
@@ -1048,7 +1047,7 @@ fn js_doc_param_element_worker(
         if property_name.is_empty() {
             return Vec::new();
         }
-        let param_name = format!("{}.{}", path, property_name);
+        let param_name = format!("{path}.{property_name}");
         return vec![get_jsdoc_param_annotation(
             &param_name,
             element.initializer(),
@@ -1068,7 +1067,7 @@ fn js_doc_param_element_worker(
             return Vec::new();
         }
         return js_doc_param_pattern_worker(
-            &format!("{}.{}", path, property_name),
+            &format!("{path}.{property_name}"),
             element.name().unwrap(),
             element.initializer(),
             element.as_binding_element().dot_dot_dot_token(),
@@ -1450,43 +1449,43 @@ impl EmitTextWriter for snippetEmitTextWriter {
 
     // The methods Go promotes from the embedded *printer.ChangeTrackerWriter.
     fn write_trailing_semicolon(&mut self, text: &str) {
-        self.base.write_trailing_semicolon(text)
+        self.base.write_trailing_semicolon(text);
     }
     fn write_keyword(&mut self, text: &str) {
-        self.base.write_keyword(text)
+        self.base.write_keyword(text);
     }
     fn write_operator(&mut self, text: &str) {
-        self.base.write_operator(text)
+        self.base.write_operator(text);
     }
     fn write_punctuation(&mut self, text: &str) {
-        self.base.write_punctuation(text)
+        self.base.write_punctuation(text);
     }
     fn write_space(&mut self, text: &str) {
-        self.base.write_space(text)
+        self.base.write_space(text);
     }
     fn write_line(&mut self) {
-        self.base.write_line()
+        self.base.write_line();
     }
     fn write_line_force(&mut self, force: bool) {
-        self.base.write_line_force(force)
+        self.base.write_line_force(force);
     }
     fn increase_indent(&mut self) {
-        self.base.increase_indent()
+        self.base.increase_indent();
     }
     fn decrease_indent(&mut self) {
-        self.base.decrease_indent()
+        self.base.decrease_indent();
     }
     fn clear(&mut self) {
-        self.base.clear()
+        self.base.clear();
     }
     fn string(&self) -> String {
         self.base.string()
     }
     fn raw_write(&mut self, s: &str) {
-        self.base.raw_write(s)
+        self.base.raw_write(s);
     }
     fn write_literal(&mut self, s: &str) {
-        self.base.write_literal(s)
+        self.base.write_literal(s);
     }
     fn get_text_pos(&self) -> u32 {
         self.base.get_text_pos()

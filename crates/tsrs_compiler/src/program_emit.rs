@@ -264,7 +264,7 @@ impl Program {
                             pending.release();
                         });
                     });
-                })
+                });
             }
             Some(pool) => pool.for_each_checker_group_do(&source_files, true, |c, index, file| print(transform(c, file), index)),
             None => {

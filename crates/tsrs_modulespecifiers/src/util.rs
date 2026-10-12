@@ -164,9 +164,7 @@ pub fn try_get_real_file_name_for_non_js_declaration_file_name(file_name: &str) 
 // util.go:174
 pub(crate) fn get_js_extension_for_file(file_name: &str, options: &CompilerOptions) -> String {
     let result = tsrs_module::try_get_js_extension_for_file(file_name, options);
-    if result.is_empty() {
-        panic!("Extension {} is unsupported:: FileName:: {}", extension_from_path(file_name), file_name);
-    }
+    assert!(!result.is_empty(), "Extension {} is unsupported:: FileName:: {}", extension_from_path(file_name), file_name);
     result.to_string()
 }
 
@@ -177,9 +175,7 @@ pub(crate) fn get_js_extension_for_file(file_name: &str, options: &CompilerOptio
 // util.go:186
 pub(crate) fn extension_from_path(path: &str) -> String {
     let ext = tspath::try_get_extension_from_path(path);
-    if ext.is_empty() {
-        panic!("File {path} has unknown extension.");
-    }
+    assert!(!ext.is_empty(), "File {path} has unknown extension.");
     ext.to_string()
 }
 

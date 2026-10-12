@@ -21,7 +21,7 @@ struct Defer(Box<dyn FnMut()>);
 
 impl Drop for Defer {
     fn drop(&mut self) {
-        (self.0)()
+        (self.0)();
     }
 }
 
@@ -42,7 +42,7 @@ impl NodeBuilderImpl {
             type_parameters.extend(signature.target().unwrap().type_parameters().iter().filter_map(|&parameter| {
                 let t = c.instantiate_type(parameter, signature.mapper.get());
                 // Go appends a possibly-nil node; a nil element cannot be represented in a Rust node list.
-                if let Some(n) = self.type_to_type_node(c, Some(t)) { Some(n) } else { None }
+                self.type_to_type_node(c, Some(t))
             }));
         } else {
             type_parameters.extend(signature.type_parameters().iter().map(|&parameter| self.type_parameter_to_declaration(c, parameter)));
@@ -179,7 +179,6 @@ fn get_uniq_associated_names_from_tuple_type(c: &mut Checker, t: P<Type>, rest_s
                 let candidate = format!("{}_{}", names[i], counter);
                 if unique_names.contains(&candidate) {
                     counter += 1;
-                    continue;
                 } else {
                     unique_names.insert(candidate.clone());
                     name = candidate;
@@ -695,7 +694,7 @@ impl NodeBuilderImpl {
         match classify_property_name(name, string_named, is_method) {
             propertyNameNodeKind::Identifier => self.new_identifier(c, name, Some(symbol)),
             propertyNameNodeKind::NumericLiteral => self.f.new_numeric_literal(self.f.alloc_text(name), TokenFlags::None),
-            _ => self.f.new_string_literal(self.f.alloc_text(name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None }),
+            propertyNameNodeKind::StringLiteral => self.f.new_string_literal(self.f.alloc_text(name), if single_quote { TokenFlags::SingleQuote } else { TokenFlags::None }),
         }
     }
 
@@ -741,12 +740,12 @@ impl NodeBuilderImpl {
         }
 
         let mut name: String = symbol.name().to_string();
-        let private_name_prefix = format!("{}#", InternalSymbolNamePrefix);
+        let private_name_prefix = format!("{InternalSymbolNamePrefix}#");
         if name.starts_with(&private_name_prefix) {
             // symbol IDs are unstable - replace #nnn# with #private#
             name = name[private_name_prefix.len()..].to_string();
             name = name.trim_start_matches(|ch: char| ch.is_ascii_digit()).to_string();
-            name = format!("__#private{}", name);
+            name = format!("__#private{name}");
         }
 
         Some(self.mark_symbol_name_literal(self.create_property_name_node_for_identifier_or_literal(c, &name, single_quote, string_named, is_method, symbol)))
@@ -1280,11 +1279,11 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3009
-    pub(crate) fn conditional_type_to_type_node(&self, c: &mut Checker, _t: P<Type>) -> P<Node> {
+    pub(crate) fn conditional_type_to_type_node(&self, c: &mut Checker, typ: P<Type>) -> P<Node> {
         if self.check_truncation_length(c) {
             return self.create_elided_information_placeholder(c);
         }
-        let t = _t.as_conditional_type();
+        let t = typ.as_conditional_type();
         let root = t.root.get().unwrap();
         let check_type_node = self.type_to_type_node(c, t.check_type.get());
         add_approximate_length(self, 15);
@@ -1329,9 +1328,9 @@ impl NodeBuilderImpl {
         self.ctx().infer_type_parameters.set(root.infer_type_parameters.get());
         let extends_type_node = self.type_to_type_node(c, t.extends_type.get());
         self.ctx().infer_type_parameters.set(save_infer_type_parameters);
-        let true_type = c.get_true_type_from_conditional_type(_t);
+        let true_type = c.get_true_type_from_conditional_type(typ);
         let true_type_node = self.type_to_type_node_or_circularity_elision(c, true_type);
-        let false_type = c.get_false_type_from_conditional_type(_t);
+        let false_type = c.get_false_type_from_conditional_type(typ);
         let false_type_node = self.type_to_type_node_or_circularity_elision(c, false_type);
         self.f.new_conditional_type_node(check_type_node.unwrap(), extends_type_node.unwrap(), true_type_node.unwrap(), false_type_node.unwrap())
     }
@@ -1540,11 +1539,7 @@ impl NodeBuilderImpl {
             Some(CompositeSymbolIdentity { is_constructor_node: false, symbol_id: SymbolId(0), node_id: ast::get_node_id(t.as_type_reference().node.get().unwrap()) })
         } else if t.flags().intersects(TypeFlags::Conditional) {
             Some(CompositeSymbolIdentity { is_constructor_node: false, symbol_id: SymbolId(0), node_id: ast::get_node_id(t.as_conditional_type().root.get().unwrap().node.get().unwrap()) })
-        } else if let Some(symbol) = t.symbol() {
-            Some(CompositeSymbolIdentity { is_constructor_node: is_constructor_object, symbol_id: ast::get_symbol_id(symbol), node_id: NodeId(0) })
-        } else {
-            None
-        };
+        } else { t.symbol().map(|symbol| CompositeSymbolIdentity { is_constructor_node: is_constructor_object, symbol_id: ast::get_symbol_id(symbol), node_id: NodeId(0) }) };
         // Since instantiations of the same anonymous type have the same symbol, tracking symbols instead
         // of types allows us to catch circular references to instantiations of the same anonymous type
 
@@ -1639,14 +1634,15 @@ impl NodeBuilderImpl {
         let mut t = get_non_distributed_type_parameter(t).unwrap();
 
         // Push type onto typeStack for expansion depth tracking
-        let mut _pop_type_stack: Option<Defer> = None;
-        if self.ctx().max_expansion_depth.get().is_some() {
+        let _pop_type_stack = if self.ctx().max_expansion_depth.get().is_some() {
             self.ctx().type_stack.borrow_mut().push(Some(t));
             let b = self.as_p();
-            _pop_type_stack = Some(Defer(Box::new(move || {
+            Some(Defer(Box::new(move || {
                 b.ctx().type_stack.borrow_mut().pop();
-            })));
-        }
+            })))
+        } else {
+            None
+        };
 
         if !self.ctx().flags.get().intersects(Flags::NoTypeReduction) {
             t = c.get_reduced_type(t);
@@ -1715,9 +1711,8 @@ impl NodeBuilderImpl {
             expanding_enum = true;
         }
         if t.flags().intersects(TypeFlags::StringLiteral) {
-            let value = match t.as_literal_type().value.get() {
-                Some(LiteralValue::String(s)) => s,
-                _ => panic!("string literal type without a string value"),
+            let Some(LiteralValue::String(value)) = t.as_literal_type().value.get() else {
+                panic!("string literal type without a string value");
             };
             add_approximate_length(self, value.len() + 2);
             let lit = self.new_string_literal(c, value);
@@ -1725,9 +1720,8 @@ impl NodeBuilderImpl {
             return Some(self.f.new_literal_type_node(lit));
         }
         if t.flags().intersects(TypeFlags::NumberLiteral) {
-            let value = match t.as_literal_type().value.get() {
-                Some(LiteralValue::Number(n)) => n,
-                _ => panic!("number literal type without a number value"),
+            let Some(LiteralValue::Number(value)) = t.as_literal_type().value.get() else {
+                panic!("number literal type without a number value");
             };
             let value_text = value.string();
             add_approximate_length(self, value_text.len());
@@ -1807,8 +1801,7 @@ impl NodeBuilderImpl {
             return Some(self.f.new_this_type_node());
         }
 
-        let mut _decrement_depth: Option<Defer> = None;
-        if in_type_alias.is_empty() && t.alias().is_some() && (self.ctx().flags.get().intersects(Flags::UseAliasDefinedOutsideCurrentScope) || c.is_type_symbol_accessible(t.alias().symbol().unwrap(), self.ctx().enclosing_declaration.get())) {
+        let _decrement_depth = if in_type_alias.is_empty() && t.alias().is_some() && (self.ctx().flags.get().intersects(Flags::UseAliasDefinedOutsideCurrentScope) || c.is_type_symbol_accessible(t.alias().symbol().unwrap(), self.ctx().enclosing_declaration.get())) {
             // If we should expand this type alias, skip the alias and fall through to expand the underlying type
             if !self.should_expand_type(c, t, true /*isAlias*/) {
                 let sym = t.alias().symbol().unwrap();
@@ -1824,10 +1817,12 @@ impl NodeBuilderImpl {
             // Expanding: increment depth and process the underlying type
             self.ctx().depth.set(self.ctx().depth.get() + 1);
             let b = self.as_p();
-            _decrement_depth = Some(Defer(Box::new(move || {
+            Some(Defer(Box::new(move || {
                 b.ctx().depth.set(b.ctx().depth.get() - 1);
-            })));
-        }
+            })))
+        } else {
+            None
+        };
 
         let object_flags = t.object_flags();
 
@@ -1989,8 +1984,8 @@ impl NodeBuilderImpl {
         if is_single_quote || self.ctx().flags.get().intersects(Flags::UseSingleQuotesForStringLiteralType) {
             flags |= TokenFlags::SingleQuote;
         }
-        let node = self.f.new_string_literal(self.f.alloc_text(text), flags);
-        node
+
+        self.f.new_string_literal(self.f.alloc_text(text), flags)
     }
 
     // Port-only: a string literal holding a symbol name. Go's internal-name prefix is the invalid byte 0xFE, which its

@@ -51,9 +51,7 @@ pub type npmInstallFunc = Arc<dyn Fn(&str, &[String]) -> Result<Vec<u8>, String>
 
 // server.go:60
 pub fn new_server(opts: ServerOptions) -> Arc<Server> {
-    if opts.cwd.is_empty() {
-        panic!("Cwd is required");
-    }
+    assert!(!opts.cwd.is_empty(), "Cwd is required");
 
     Arc::new_cyclic(|weak: &Weak<Server>| Server {
         r: Mutex::new(Some(opts.in_)),
@@ -132,7 +130,7 @@ struct lspWriter<W: Write> {
 const MESSAGE_MARSHAL_ERROR: ErrorTag = ErrorTag::Sentinel("messageMarshalError");
 
 fn message_marshal_error(err: &str) -> Error {
-    Error { message: format!("failed to marshal message: {}", err), tags: vec![MESSAGE_MARSHAL_ERROR, ErrorTag::Code(ErrorCode::InternalError)] }
+    Error { message: format!("failed to marshal message: {err}"), tags: vec![MESSAGE_MARSHAL_ERROR, ErrorTag::Code(ErrorCode::InternalError)] }
 }
 
 impl<R: Read + Send> Reader for lspReader<R> {
@@ -326,13 +324,16 @@ impl Server {
 
     pub(crate) fn write_stderr_line(&self, message: &str) {
         let mut stderr = self.stderr.lock().unwrap();
-        let _ = writeln!(stderr, "{}", message);
+        let _ = writeln!(stderr, "{message}");
         let _ = stderr.flush();
     }
 
     // Go `s.clientCapabilities` (zero until initialize).
     pub(crate) fn client_capabilities(&self) -> &lsproto::ResolvedClientCapabilities {
-        self.client_capabilities.get().map(|c| &**c).unwrap_or(&DEFAULT_CLIENT_CAPABILITIES)
+        match self.client_capabilities.get() {
+            Some(capabilities) => capabilities,
+            None => &DEFAULT_CLIENT_CAPABILITIES,
+        }
     }
 
     fn client_capabilities_arc(&self) -> Arc<lsproto::ResolvedClientCapabilities> {
@@ -379,7 +380,7 @@ impl Server {
     pub fn watch_files(&self, ctx: &Context, id: &str, watchers: Vec<lsproto::FileSystemWatcher>) -> Result<(), Error> {
         if let Some(builtin_watcher) = self.builtin_watcher.get() {
             if let Err(err) = builtin_watcher.watch_files(id, &watchers) {
-                return Err(Error::new(format!("failed to register file watcher: {}", err)));
+                return Err(Error::new(format!("failed to register file watcher: {err}")));
             }
             self.watchers.lock().unwrap().insert(id.to_string());
             return Ok(());
@@ -394,7 +395,6 @@ impl Server {
                         workspace_did_change_watched_files: Some(lsproto::DidChangeWatchedFilesRegistrationOptions { watchers }),
                         ..Default::default()
                     }),
-                    ..Default::default()
                 }],
             },
         );
@@ -411,10 +411,10 @@ impl Server {
     pub fn unwatch_files(&self, ctx: &Context, id: &str) -> Result<(), Error> {
         if let Some(builtin_watcher) = self.builtin_watcher.get() {
             if !self.watchers.lock().unwrap().contains(id) {
-                return Err(Error::new(format!("no file watcher exists with ID {}", id)));
+                return Err(Error::new(format!("no file watcher exists with ID {id}")));
             }
             if let Err(err) = builtin_watcher.unwatch_files(id) {
-                return Err(Error::new(format!("failed to unregister file watcher: {}", err)));
+                return Err(Error::new(format!("failed to unregister file watcher: {err}")));
             }
             self.watchers.lock().unwrap().remove(id);
             return Ok(());
@@ -436,7 +436,7 @@ impl Server {
             return Ok(());
         }
 
-        Err(Error::new(format!("no file watcher exists with ID {}", id)))
+        Err(Error::new(format!("no file watcher exists with ID {id}")))
     }
 
     // server.go:362
@@ -531,7 +531,7 @@ impl Server {
         let mut filters = Vec::with_capacity(extensions.len());
         filters.extend(extensions.iter().map(|ext| lsproto::TextDocumentFilterLanguageOrSchemeOrPattern {
             pattern: Some(lsproto::TextDocumentFilterPattern {
-                pattern: lsproto::PatternOrRelativePattern { pattern: Some(format!("**/*{}", ext)), ..Default::default() },
+                pattern: lsproto::PatternOrRelativePattern { pattern: Some(format!("**/*{ext}")), ..Default::default() },
                 ..Default::default()
             }),
             ..Default::default()
@@ -540,13 +540,12 @@ impl Server {
         let mut content_mapper_file_rename_filters = Vec::with_capacity(extensions.len());
         content_mapper_file_rename_filters.extend(extensions.iter().map(|extension| lsproto::FileOperationFilter {
             scheme: Some("file".to_string()),
-            pattern: lsproto::FileOperationPattern { glob: format!("**/*{}", extension), ..Default::default() },
+            pattern: lsproto::FileOperationPattern { glob: format!("**/*{extension}"), ..Default::default() },
         }));
 
         let registration = |id: &str, register_options: lsproto::RegisterOptions| lsproto::Registration {
             id: id.to_string(),
             register_options: Some(register_options),
-            ..Default::default()
         };
         let mut registrations = vec![
             registration(
@@ -814,9 +813,7 @@ impl Server {
     // server.go:730
     // SendTelemetry implements project.Client.
     pub fn send_telemetry(&self, _ctx: &Context, telemetry: lsproto::TelemetryEvent) -> Result<(), Error> {
-        if !self.telemetry_enabled.load(Ordering::SeqCst) {
-            panic!("SendTelemetry called with telemetry disabled");
-        }
+        assert!(self.telemetry_enabled.load(Ordering::SeqCst), "SendTelemetry called with telemetry disabled");
         self.send_notification(lsproto::TELEMETRY_EVENT_INFO, telemetry)
     }
 
@@ -911,7 +908,6 @@ impl Server {
                     lsproto::ConfigurationItem { section: Some("javascript".to_string()), ..Default::default() },
                     lsproto::ConfigurationItem { section: Some("editor".to_string()), ..Default::default() },
                 ],
-                ..Default::default()
             },
         ) {
             Ok(configs) => configs,
@@ -925,7 +921,7 @@ impl Server {
             3 => Some(("editor".to_string(), config)),
             _ => None,
         }));
-        let show = |key: &str| config_map.get(key).map(go_sprint_value).unwrap_or_else(|| "<nil>".to_string());
+        let show = |key: &str| config_map.get(key).map_or_else(|| "<nil>".to_string(), go_sprint_value);
         self.logger.logf(format_args!(
             "received options from workspace/configuration request:\njs/ts: {}\n\ntypescript: {}\n\njavascript: {}\n\neditor: {}\n",
             show("js/ts"),
@@ -1122,7 +1118,7 @@ impl Server {
                     let resp = msg.as_response();
                     if resp.id.is_some() && resp.error.is_none() {
                         let id = resp.id.as_ref().unwrap();
-                        self.logger.errorf(format_args!("failed to marshal response for request {}: {}", id, err));
+                        self.logger.errorf(format_args!("failed to marshal response for request {id}: {err}"));
                         self.send_error(Some(id), err)?;
                         continue;
                     }
@@ -1187,7 +1183,7 @@ impl Server {
         // Do not send error response for notifications,
         // except for parse errors which may occur before determining if the message is a request or notification.
         if id.is_none() && !err.is_code(ErrorCode::InvalidRequest) {
-            self.logger.errorf(format_args!("error handling notification: {}", err));
+            self.logger.errorf(format_args!("error handling notification: {err}"));
             return Ok(());
         }
         let code = err.as_error_code().unwrap_or(ErrorCode::InternalError);
@@ -1225,7 +1221,7 @@ impl Server {
             let start = Instant::now();
             let result = handler(self, &ctx, req);
             let id_str = match &req.id {
-                Some(id) => format!(" ({})", id),
+                Some(id) => format!(" ({id})"),
                 None => String::new(),
             };
             let do_async_work = match result {
@@ -1305,7 +1301,7 @@ impl Server {
 
     // server.go:1477
     fn recover(&self, req: &RequestMessage, r: &Box<dyn Any + Send>, stack: &str) {
-        let r = panic_value_string(&r);
+        let r = panic_value_string(r);
         self.logger.errorf(format_args!("panic handling request {}: {}\n{}", req.method, r, stack));
         if req.id.is_some() {
             let _ = self.send_error(
@@ -1348,7 +1344,7 @@ impl Server {
         // absent value as empty options so the rest of the server can read fields
         // off s.initializationOptions without nil-checking the container.
         let initialization_options = match &params.initialization_options {
-            Some(lsproto::InitializationOptionsOrNull { initialization_options: Some(options), .. }) => options.clone(),
+            Some(lsproto::InitializationOptionsOrNull { initialization_options: Some(options),  }) => options.clone(),
             _ => lsproto::InitializationOptions::default(),
         };
         let _ = self.initialization_options.set(initialization_options);
@@ -1548,13 +1544,13 @@ impl Server {
         let initialize_params = Arc::clone(self.initialize_params.get().unwrap());
         let mut cwd = self.cwd.clone();
         if self.client_capabilities().workspace.workspace_folders
-            && matches!(&initialize_params.workspace_folders, Some(lsproto::WorkspaceFoldersOrNull { workspace_folders: Some(folders), .. }) if folders.len() == 1)
+            && matches!(&initialize_params.workspace_folders, Some(lsproto::WorkspaceFoldersOrNull { workspace_folders: Some(folders),  }) if folders.len() == 1)
         {
             let folders = initialize_params.workspace_folders.as_ref().unwrap().workspace_folders.as_ref().unwrap();
             cwd = lsproto::DocumentUri(folders[0].uri.0.clone()).file_name();
         } else if let Some(root_uri) = &initialize_params.root_uri.document_uri {
             cwd = root_uri.file_name();
-        } else if let Some(lsproto::StringOrNull { string: Some(root_path), .. }) = &initialize_params.root_path {
+        } else if let Some(lsproto::StringOrNull { string: Some(root_path),  }) = &initialize_params.root_path {
             cwd.clone_from(root_path);
         }
         if !tspath::path_is_absolute(&cwd) {
@@ -1608,7 +1604,6 @@ impl Server {
                         }),
                         ..Default::default()
                     }),
-                    ..Default::default()
                 }],
             },
         );
@@ -1646,7 +1641,7 @@ impl Server {
 
     // server.go:1800
     fn handle_did_change_workspace_configuration(self: &Arc<Self>, _ctx: &Context, params: &lsproto::DidChangeConfigurationParams) -> Result<(), Error> {
-        if let lsproto::Value::Null = params.settings {
+        if params.settings == lsproto::Value::Null {
             return Ok(());
         } else if let lsproto::Value::Object(settings) = &params.settings {
             self.session().configure(&lsutil::parse_user_preferences(settings));
@@ -1716,13 +1711,12 @@ impl Server {
         let direct = language_service.provide_diagnostics(&ctx, &params.text_document.uri)?;
         // Go runs a full `Program.Emit` (writing nothing) between the two diagnostics requests to provoke checker
         // state changes; this port does not call `Program::emit` here, so the second request follows the first directly.
-        let secondary = match language_service.provide_diagnostics(&ctx, &params.text_document.uri) {
-            Ok(secondary) => secondary,
-            Err(_) => return Ok(direct),
+        let Ok(secondary) = language_service.provide_diagnostics(&ctx, &params.text_document.uri) else {
+            return Ok(direct);
         };
         let empty = Vec::new();
-        let direct_items = direct.full_document_diagnostic_report.as_ref().map(|r| &r.items).unwrap_or(&empty);
-        let secondary_items = secondary.full_document_diagnostic_report.as_ref().map(|r| &r.items).unwrap_or(&empty);
+        let direct_items = direct.full_document_diagnostic_report.as_ref().map_or(&empty, |r| &r.items);
+        let secondary_items = secondary.full_document_diagnostic_report.as_ref().map_or(&empty, |r| &r.items);
         let (missing_from_pre, missing_from_post) = lsproto::compare_diagnostics(direct_items, secondary_items);
         if missing_from_pre.is_empty() && missing_from_post.is_empty() {
             return Ok(direct);
@@ -1750,15 +1744,13 @@ impl Server {
             );
         }
 
-        if self.flake_logging() == lsproto::DiagnosticFlakeLogLevel::Panic {
-            panic!("flaky diagnostic(s) logged:\n{}", diff);
-        }
+        assert!(self.flake_logging() != lsproto::DiagnosticFlakeLogLevel::Panic, "flaky diagnostic(s) logged:\n{diff}");
         Ok(direct)
     }
 
     // server.go:1907
     fn handle_hover(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::HoverParams) -> Result<lsproto::HoverResponse, Error> {
-        ls.provide_hover(ctx, &params)
+        ls.provide_hover(ctx, params)
     }
 
     // server.go:1911
@@ -1788,7 +1780,7 @@ impl Server {
             if tsrs_ls::client_supports_will_rename_files(ctx) {
                 let document_changes = vec![lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
                     rename_file: Some(lsproto::RenameFile {
-                        kind: lsproto::StringLiteralRename::default(),
+                        kind: lsproto::StringLiteralRename,
                         old_uri: tsrs_ls::lsconv::file_name_to_document_uri(&info.file_to_rename),
                         new_uri: tsrs_ls::lsconv::file_name_to_document_uri(&info.new_file_name),
                         ..Default::default()
@@ -1882,7 +1874,7 @@ impl Server {
         if send_rename_file {
             document_changes.extend(params.files.iter().map(|file| lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
                 rename_file: Some(lsproto::RenameFile {
-                    kind: lsproto::StringLiteralRename::default(),
+                    kind: lsproto::StringLiteralRename,
                     old_uri: file.old_uri.clone(),
                     new_uri: file.new_uri.clone(),
                     ..Default::default()
@@ -1898,7 +1890,6 @@ impl Server {
         if tsrs_ls::client_supports_document_changes(ctx) {
             return Ok(lsproto::WillRenameFilesResponse {
                 workspace_edit: Some(lsproto::WorkspaceEdit { document_changes: Some(document_changes), ..Default::default() }),
-                ..Default::default()
             });
         }
 
@@ -1917,7 +1908,6 @@ impl Server {
 
         Ok(lsproto::WillRenameFilesResponse {
             workspace_edit: Some(lsproto::WorkspaceEdit { changes: Some(changes), ..Default::default() }),
-            ..Default::default()
         })
     }
 
@@ -1933,7 +1923,7 @@ impl Server {
 
     // server.go:2083
     fn handle_vs_on_auto_insert(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, Error> {
-        ls.provide_on_auto_insert(ctx, &params)
+        ls.provide_on_auto_insert(ctx, params)
     }
 
     // server.go:2087
@@ -1943,7 +1933,7 @@ impl Server {
         ls: &Arc<LanguageService>,
         params: &lsproto::LinkedEditingRangeParams,
     ) -> Result<lsproto::LinkedEditingRangeResponse, Error> {
-        ls.provide_linked_editing_range(ctx, &params)
+        ls.provide_linked_editing_range(ctx, params)
     }
 
     // server.go:2091
@@ -2073,17 +2063,17 @@ impl Server {
 
     // server.go:2196
     fn handle_selection_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::SelectionRangeParams) -> Result<lsproto::SelectionRangeResponse, Error> {
-        ls.provide_selection_ranges(ctx, &params)
+        ls.provide_selection_ranges(ctx, params)
     }
 
     // server.go:2200
     fn handle_code_action(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::CodeActionParams) -> Result<lsproto::CodeActionResponse, Error> {
-        ls.provide_code_actions(ctx, &params)
+        ls.provide_code_actions(ctx, params)
     }
 
     // server.go:2204
     fn handle_inlay_hint(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: &lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, Error> {
-        language_service.provide_inlay_hint(ctx, &params)
+        language_service.provide_inlay_hint(ctx, params)
     }
 
     // server.go:2212
@@ -2326,7 +2316,7 @@ fn handlers() -> &'static handlerMap {
     HANDLERS.get_or_init(|| {
         let mut handlers = handlerMap(FxHashMap::default());
 
-        handlers.register_request_handler(lsproto::INITIALIZE_INFO, |s, ctx, params, req| s.handle_initialize(ctx, params, req));
+        handlers.register_request_handler(lsproto::INITIALIZE_INFO, Server::handle_initialize);
         handlers.register_notification_handler(lsproto::INITIALIZED_INFO, Server::handle_initialized);
         handlers.register_request_handler(lsproto::SHUTDOWN_INFO, Server::handle_shutdown);
         handlers.register_notification_handler(lsproto::EXIT_INFO, Server::handle_exit);
@@ -2599,17 +2589,17 @@ impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
 // The handlers of out-of-scope features (content mappers, API sessions attached to the server, runGC and the profiling
 // commands) answer with this error.
 pub(crate) fn not_yet_ported(method: Method) -> Error {
-    Error::wrap_code(ErrorCode::MethodNotFound, Error::new(format!("{} is not ported yet", method)))
+    Error::wrap_code(ErrorCode::MethodNotFound, Error::new(format!("{method} is not ported yet")))
 }
 
 // server.go:1896
 fn generate_diagnostic_diff_string(missing_from_pre: &[&lsproto::Diagnostic], missing_from_post: &[&lsproto::Diagnostic], stringifier: fn(&lsproto::Diagnostic) -> String) -> String {
     let mut b = String::new();
     for elem in missing_from_pre {
-        let _ = write!(b, "Diagnostic {} was present after emit but not before emit\n", stringifier(elem));
+        let _ = writeln!(b, "Diagnostic {} was present after emit but not before emit", stringifier(elem));
     }
     for elem in missing_from_post {
-        let _ = write!(b, "Diagnostic {} was present before emit but not after emit\n", stringifier(elem));
+        let _ = writeln!(b, "Diagnostic {} was present before emit but not after emit", stringifier(elem));
     }
     b
 }
@@ -2638,10 +2628,10 @@ impl project::Client for Server {
         Server::refresh_code_lens(self, ctx)
     }
     fn progress_start(&self, message: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]) {
-        Server::progress_start(self, message, args)
+        Server::progress_start(self, message, args);
     }
     fn progress_finish(&self, message: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]) {
-        Server::progress_finish(self, message, args)
+        Server::progress_finish(self, message, args);
     }
     fn send_telemetry(&self, ctx: &Context, telemetry: lsproto::TelemetryEvent) -> Result<(), Error> {
         Server::send_telemetry(self, ctx, telemetry)
@@ -2650,7 +2640,7 @@ impl project::Client for Server {
         Server::is_active(self)
     }
     fn set_locale(&self, locale: &str) {
-        Server::set_locale(self, locale)
+        Server::set_locale(self, locale);
     }
     fn get_locale(&self) -> Locale {
         Server::get_locale(self)
@@ -2740,8 +2730,7 @@ impl<F: FnOnce()> Drop for deferCall<F> {
 fn unix_millis_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map(|duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
-        .unwrap_or(0)
+        .map_or(0, |duration| u64::try_from(duration.as_millis()).unwrap_or(u64::MAX))
 }
 
 // locale.Parse: English only (docs/LSP.md); any tag parses and is kept as text.
@@ -2775,7 +2764,7 @@ fn recover_scope<R>(f: impl FnOnce() -> R) -> Result<R, (Box<dyn Any + Send>, St
     HOOK.call_once(|| {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
-            if RECOVER_DEPTH.with(|d| d.get()) > 0 {
+            if RECOVER_DEPTH.with(std::cell::Cell::get) > 0 {
                 let stack = std::backtrace::Backtrace::force_capture().to_string();
                 PANIC_STACK.with(|s| *s.borrow_mut() = Some(stack));
                 return;
@@ -2813,13 +2802,13 @@ fn go_format_float(f: f64) -> String {
         return format!("{}", f as i64);
     }
     let exp = if f == 0.0 { 0 } else { f.abs().log10().floor() as i32 };
-    if exp < -4 || exp >= 21 {
-        let s = format!("{:e}", f);
+    if !(-4..21).contains(&exp) {
+        let s = format!("{f:e}");
         let (mantissa, exponent) = s.split_once('e').unwrap();
         let exponent: i32 = exponent.parse().unwrap();
         return format!("{}e{}{:02}", mantissa, if exponent < 0 { '-' } else { '+' }, exponent.abs());
     }
-    format!("{}", f)
+    format!("{f}")
 }
 
 // Go `%T` of a decoded JSON value.
@@ -2848,14 +2837,14 @@ pub(crate) fn go_duration_string(d: Duration) -> String {
             return int.to_string();
         }
         let mut digits = prec;
-        while f % 10 == 0 {
+        while f.is_multiple_of(10) {
             f /= 10;
             digits -= 1;
         }
         format!("{}.{:0width$}", int, f, width = digits as usize)
     }
     if nanos < 1_000 {
-        return format!("{}ns", nanos);
+        return format!("{nanos}ns");
     }
     if nanos < 1_000_000 {
         return format!("{}µs", frac(nanos, 3));
@@ -2869,10 +2858,10 @@ pub(crate) fn go_duration_string(d: Duration) -> String {
     let minutes = rem / 60_000_000_000;
     let secs = rem % 60_000_000_000;
     if hours > 0 {
-        let _ = write!(out, "{}h", hours);
+        let _ = write!(out, "{hours}h");
     }
     if hours > 0 || minutes > 0 {
-        let _ = write!(out, "{}m", minutes);
+        let _ = write!(out, "{minutes}m");
     }
     let _ = write!(out, "{}s", frac(secs, 9));
     out

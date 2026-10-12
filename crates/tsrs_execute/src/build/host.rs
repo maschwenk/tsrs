@@ -37,7 +37,7 @@ pub(crate) struct host {
 
 impl host {
     fn o(&self) -> &'static Orchestrator {
-        *self.orchestrator.get().unwrap()
+        self.orchestrator.get().unwrap()
     }
 
     // host.go:118

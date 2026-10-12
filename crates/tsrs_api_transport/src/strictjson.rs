@@ -322,10 +322,10 @@ impl Scanner<'_> {
                 self.string(&ptr)?;
                 Ok(Expect::AfterValue)
             }
-            b't' => self.literal(b"true", "true").map(|_| Expect::AfterValue),
-            b'f' => self.literal(b"false", "false").map(|_| Expect::AfterValue),
-            b'n' => self.literal(b"null", "null").map(|_| Expect::AfterValue),
-            b'-' | b'0'..=b'9' => self.number().map(|_| Expect::AfterValue),
+            b't' => self.literal(b"true", "true").map(|()| Expect::AfterValue),
+            b'f' => self.literal(b"false", "false").map(|()| Expect::AfterValue),
+            b'n' => self.literal(b"null", "null").map(|()| Expect::AfterValue),
+            b'-' | b'0'..=b'9' => self.number().map(|()| Expect::AfterValue),
             _ => Err(self.invalid_char(self.i, "at start of value", &self.value_ptr())),
         }
     }

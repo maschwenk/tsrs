@@ -53,9 +53,7 @@ impl<T> FrozenCell<T> {
         {
             let mut state = self.state.load(Ordering::Acquire);
             loop {
-                if state == EXCLUSIVE_BORROW {
-                    panic!("FrozenCell already mutably borrowed");
-                }
+                assert!(state != EXCLUSIVE_BORROW, "FrozenCell already mutably borrowed");
                 assert!(
                     state < EXCLUSIVE_BORROW - 1,
                     "FrozenCell shared borrow count overflow"
@@ -230,7 +228,7 @@ impl<T: Copy> OwnedCell<T> {
         if crate::sharedgraph::any_frozen() && crate::sharedgraph::owned_set_if_frozen(self, value) {
             return;
         }
-        self.0.set(value)
+        self.0.set(value);
     }
 
     #[inline]
@@ -285,7 +283,7 @@ impl<T> OwnedSliceCell<T> {
     #[inline]
     pub fn set(&self, value: &'static [T]) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedSliceCell");
-        self.0.set(value)
+        self.0.set(value);
     }
 }
 
@@ -306,7 +304,7 @@ impl OwnedStrCell {
     #[inline]
     pub fn set(&self, value: &'static str) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedStrCell");
-        self.0.set(crate::ptr::PackedStr::new(value))
+        self.0.set(crate::ptr::PackedStr::new(value));
     }
 }
 
@@ -338,7 +336,7 @@ impl OwnedTaggedStrCell {
     fn pack(s: &'static str) -> u64 {
         let a = s.as_ptr().expose_provenance() as u64;
         if (s.len() as u64) < TAGGED_LEN_MASK && a >> TAGGED_LEN_SHIFT == 0 {
-            return a | (s.len() as u64) << TAGGED_LEN_SHIFT;
+            return a | ((s.len() as u64) << TAGGED_LEN_SHIFT);
         }
         Self::pack_long(s)
     }
@@ -353,7 +351,7 @@ impl OwnedTaggedStrCell {
         let copy = crate::alloc_slice_aligned4(&bytes);
         let a = copy.as_ptr().expose_provenance() as u64;
         assert!(a >> TAGGED_LEN_SHIFT == 0, "arena address above 2^48");
-        a | TAGGED_LEN_MASK << TAGGED_LEN_SHIFT
+        a | (TAGGED_LEN_MASK << TAGGED_LEN_SHIFT)
     }
 
     #[inline]
@@ -376,7 +374,7 @@ impl OwnedTaggedStrCell {
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn set(&self, value: &'static str) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedTaggedStrCell");
-        self.0.set(Self::pack(value) | self.0.get() & !(TAGGED_ADDR | TAGGED_LEN_MASK << TAGGED_LEN_SHIFT))
+        self.0.set(Self::pack(value) | self.0.get() & !(TAGGED_ADDR | (TAGGED_LEN_MASK << TAGGED_LEN_SHIFT)));
     }
 
     /// The two tag bits.
@@ -389,7 +387,7 @@ impl OwnedTaggedStrCell {
     pub fn set_tags(&self, tags: u8) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedTaggedStrCell");
         debug_assert!(tags < 4);
-        self.0.set(self.0.get() & !(3 << TAGGED_TAG_SHIFT) | (tags as u64) << TAGGED_TAG_SHIFT)
+        self.0.set(self.0.get() & !(3 << TAGGED_TAG_SHIFT) | ((tags as u64) << TAGGED_TAG_SHIFT));
     }
 }
 
@@ -432,7 +430,7 @@ impl<T> OwnedPSliceCell<T> {
     #[cfg_attr(feature = "alloc-profile", track_caller)]
     pub fn set(&self, value: &'static [T]) {
         crate::ptr::shared_check::assert_not_shared(self, "OwnedPSliceCell");
-        self.0.set(value)
+        self.0.set(value);
     }
 }
 

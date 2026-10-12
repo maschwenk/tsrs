@@ -404,7 +404,7 @@ pub(crate) fn thread_cpu_seconds() -> f64 {
     if unsafe { clock_gettime(CLOCK_THREAD_CPUTIME_ID, &raw mut ts) } != 0 {
         return 0.0;
     }
-    ts.tv_sec as f64 + ts.tv_nsec as f64 * 1e-9
+    (ts.tv_nsec as f64).mul_add(1e-9, ts.tv_sec as f64)
 }
 
 #[cfg(not(unix))]
@@ -518,7 +518,7 @@ fn get_checker_associations_in_order(
             None => position,
         };
 
-        neighbor_counts.iter_mut().for_each(|c| *c = 0);
+        neighbor_counts.fill(0);
         for &adjacent_file in &adjacent_files[file_index] {
             if let Some(checker_index) = associations[adjacent_file] {
                 neighbor_counts[checker_index] += 1;
@@ -624,7 +624,7 @@ impl checkerPool {
         };
 
         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
-        let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
+        let checker_count = checker_count.min(program.files.len() as i64).clamp(1, 256) as usize;
 
         checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
     }
@@ -686,7 +686,7 @@ impl checkerPool {
             let create_and_assign = || {
                 let create_start = std::time::Instant::now();
                 tsrs_checker::links::set_multiple_checkers(self.checker_count > 1);
-                let slots: Vec<Mutex<Option<CheckerSlot>>> = (0..self.checker_count).map(|_| Mutex::new(None)).collect();
+                let slots: Vec<Mutex<Option<CheckerSlot>>> = std::iter::repeat_with(|| Mutex::new(None)).take(self.checker_count).collect();
                 // With the shared graph (sharedgraph.rs) the pool's checkers are plain until the type-check pass makes
                 // them forks of the seed.
                 run_work_group(self.single_threaded, self.checker_count, |i| {
@@ -765,7 +765,7 @@ impl checkerPool {
     // checkerpool.go:464
     pub(crate) fn get_global_diagnostics(&self) -> Vec<P<Diagnostic>> {
         let state = self.create_checkers();
-        let global_diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = (0..state.checkers.len()).map(|_| Mutex::new(Vec::new())).collect();
+        let global_diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = std::iter::repeat_with(|| Mutex::new(Vec::new())).take(state.checkers.len()).collect();
         self.for_each_checker_parallel(|idx, checker| {
             *global_diagnostics[idx].lock().unwrap() = checker.get_global_diagnostics();
         });
@@ -805,9 +805,9 @@ impl checkerPool {
         let state = self.create_checkers();
         let stats = assignment_stats_enabled();
         let n = state.checkers.len();
-        let times: Vec<Mutex<(f64, usize)>> = if stats { (0..n).map(|_| Mutex::new((0.0, 0))).collect() } else { Vec::new() };
-        let cpu: Vec<Mutex<f64>> = if stats { (0..n).map(|_| Mutex::new(0.0)).collect() } else { Vec::new() };
-        let stolen: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
+        let times: Vec<Mutex<(f64, usize)>> = if stats { std::iter::repeat_with(|| Mutex::new((0.0, 0))).take(n).collect() } else { Vec::new() };
+        let cpu: Vec<Mutex<f64>> = if stats { std::iter::repeat_with(|| Mutex::new(0.0)).take(n).collect() } else { Vec::new() };
+        let stolen: Vec<std::sync::atomic::AtomicUsize> = std::iter::repeat_with(|| std::sync::atomic::AtomicUsize::new(0)).take(n).collect();
         let file_times = file_times_path().is_some();
         let cost_cache = checker_cost_cache_path().is_some() && n > 1;
         // Each checker's positions in `files`, in the order of `files` (visit_order).
@@ -842,7 +842,9 @@ impl checkerPool {
             // Each owner starts with the files that could be the pass's tail (heavy_files_first).
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
             let threshold = total / (active.len() as u64 * heavy_share_divisor());
-            positions.iter_mut().for_each(|p| heavy_files_first(p, threshold, weight));
+            for position in &mut positions {
+                heavy_files_first(position, threshold, weight);
+            }
             if state.recycle && leaves_first() {
                 // With checkers retired under a memory target their memory stops growing, and what the front end holds sets
                 // the peak: the leaves' trees go once they are checked, so each checker checks its leaves first
@@ -867,7 +869,7 @@ impl checkerPool {
         }
         let queues: Vec<FileQueue> = positions.into_iter().map(|p| FileQueue::new(p, weight)).collect();
         // `--maxMemory`: each checker's region size after its last file, to retire the largest.
-        let region_sizes: Vec<std::sync::atomic::AtomicUsize> = (0..n).map(|_| std::sync::atomic::AtomicUsize::new(0)).collect();
+        let region_sizes: Vec<std::sync::atomic::AtomicUsize> = std::iter::repeat_with(|| std::sync::atomic::AtomicUsize::new(0)).take(n).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
         let run = |checker_idx: usize| {
@@ -1456,7 +1458,7 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
         CheckerAssignment::Locality => locality_associations(program, checker_count),
         CheckerAssignment::Random(seed) => {
             let mut state = seed;
-            (0..program.files.len()).map(|_| (splitmix64(&mut state) % checker_count as u64) as usize).collect()
+            std::iter::repeat_with(|| (splitmix64(&mut state) % checker_count as u64) as usize).take(program.files.len()).collect()
         }
         CheckerAssignment::File(path) => {
             let text = tsrs_core::utf8::read_to_string(path).expect("TSRS_CHECKER_ASSIGNMENT file");
@@ -1669,13 +1671,13 @@ fn default_checker_count_by_machine() -> i64 {
     if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
         return GO_DEFAULT_CHECKERS;
     }
-    default_checkers_for_parallelism(std::thread::available_parallelism().map_or(1, |n| n.get()) as i64)
+    default_checkers_for_parallelism(std::thread::available_parallelism().map_or(1, std::num::NonZero::get) as i64)
 }
 
 // The machine rule of `default_checker_count_by_machine` for a core count (bench/run.py `tsrs_default_checkers` mirrors
 // it for the results tables).
 fn default_checkers_for_parallelism(parallelism: i64) -> i64 {
-    (parallelism / 2).max(parallelism.min(SMALL_MACHINE_CHECKERS)).min(MAX_DEFAULT_CHECKERS).max(GO_DEFAULT_CHECKERS)
+    (parallelism / 2).max(parallelism.min(SMALL_MACHINE_CHECKERS)).clamp(GO_DEFAULT_CHECKERS, MAX_DEFAULT_CHECKERS)
 }
 
 #[cfg(test)]
@@ -1922,7 +1924,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             if associations[g] != heavy {
                 continue;
             }
-            affinity.iter_mut().for_each(|a| *a = 0);
+            affinity.fill(0);
             for &n in &adjacency[g] {
                 affinity[associations[n]] += 1;
             }
@@ -1931,7 +1933,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
                 if dest == heavy {
                     continue;
                 }
-                let mut new_max = (loads[heavy] - cost).max(loads[dest] + cost * MOVE_COST_PREMIUM);
+                let mut new_max = (loads[heavy] - cost).max(cost.mul_add(MOVE_COST_PREMIUM, loads[dest]));
                 for (c, element) in loads[..checker_count].iter().enumerate() {
                     if c != heavy && c != dest {
                         new_max = new_max.max(*element);
@@ -1948,7 +1950,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
             break;
         }
         loads[heavy] -= costs[g] as f64;
-        loads[dest] += costs[g] as f64 * MOVE_COST_PREMIUM;
+        loads[dest] = (costs[g] as f64).mul_add(MOVE_COST_PREMIUM, loads[dest]);
         associations[g] = dest;
     }
 }
@@ -2012,7 +2014,7 @@ fn dump_assignment_inputs(program: &Program, associations: &[usize], path: &str)
         let mut targets: Vec<usize> = resolved_modules
             .values()
             .filter(|r| r.is_resolved())
-            .filter_map(|r| program.get_source_file_for_resolved_module(&r.resolved_file_name))
+            .filter_map(|r| program.get_source_file_for_resolved_module(r.resolved_file_name))
             .filter_map(|f| file_indices.get(&f).copied())
             .filter(|&t| t != file_index)
             .collect();
@@ -2045,7 +2047,7 @@ fn get_import_targets(program: &Program, concurrent: bool) -> Vec<Vec<usize>> {
         resolved_modules
             .values()
             .filter(|resolved| resolved.is_resolved())
-            .filter_map(|resolved| program.get_source_file_for_resolved_module(&resolved.resolved_file_name))
+            .filter_map(|resolved| program.get_source_file_for_resolved_module(resolved.resolved_file_name))
             .filter_map(|imported_file| file_indices.get(&imported_file).copied())
             .filter(|&imported_index| imported_index != file_index)
             .collect()

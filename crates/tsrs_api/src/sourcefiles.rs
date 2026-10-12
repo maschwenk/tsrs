@@ -109,6 +109,7 @@ impl Session {
         }
         // SAFETY: `file` is reachable from a live snapshot or lease for the whole request, and the cached table built
         // from it is evicted when the file's arena region is freed (`store_table`).
+        #[expect(clippy::deref_addrof, reason = "the raw pointer round trip deliberately severs the temporary P borrow")]
         let file_ref: &'static SourceFile = unsafe { &*(&raw const *file) };
         self.store_table(addr, Arc::new(codec::build_node_index_table(file_ref)))
     }
@@ -138,6 +139,7 @@ impl Session {
     fn encode_source_file(&self, file: P<SourceFile>) -> ApiResult<Vec<u8>> {
         // SAFETY: as in `node_index_table`: the file outlives the request, and the cached table is evicted when its arena
         // region is freed.
+        #[expect(clippy::deref_addrof, reason = "the raw pointer round trip deliberately severs the temporary P borrow")]
         let file_ref: &'static SourceFile = unsafe { &*(&raw const *file) };
         let (mut data, table) = codec::encode_source_file(file_ref).map_err(|e| ApiError::internal(format!("failed to encode source file: {e}")))?;
         self.store_table(file.as_node().addr(), Arc::new(table));
@@ -201,7 +203,7 @@ impl Session {
         // errors about the descriptor's contents.
         if let Value::Object(o) = descriptor {
             if let Some(result) = (["fileName", "path", "contentHash", "parseOptionsKey", "nodeId"]).into_iter().find_map(|key| {
-                if !matches!(o.get(key), None | Some(Value::Null) | Some(Value::String(_))) {
+                if !matches!(o.get(key), None | Some(Value::Null | Value::String(_))) {
                     Some(Err(ApiError::invalid_request(format!("cannot unmarshal into Go string within \"/file/{key}\""))))
                 } else {
                     None
@@ -209,7 +211,7 @@ impl Session {
             }) {
                 return result;
             }
-            if !matches!(o.get("scriptKind"), None | Some(Value::Null) | Some(Value::Number(_))) {
+            if !matches!(o.get("scriptKind"), None | Some(Value::Null | Value::Number(_))) {
                 return Err(ApiError::invalid_request("cannot unmarshal into Go core.ScriptKind within \"/file/scriptKind\""));
             }
         } else if !matches!(descriptor, Value::Null) {

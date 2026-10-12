@@ -37,28 +37,28 @@ impl LogCollector for logCollector {
 
 impl Logger for logCollector {
     fn error(&self, msg: &str) {
-        self.logger.error(msg)
+        self.logger.error(msg);
     }
     fn errorf(&self, args: fmt::Arguments<'_>) {
-        self.logger.errorf(args)
+        self.logger.errorf(args);
     }
     fn warn(&self, msg: &str) {
-        self.logger.warn(msg)
+        self.logger.warn(msg);
     }
     fn warnf(&self, args: fmt::Arguments<'_>) {
-        self.logger.warnf(args)
+        self.logger.warnf(args);
     }
     fn info(&self, msg: &str) {
-        self.logger.info(msg)
+        self.logger.info(msg);
     }
     fn infof(&self, args: fmt::Arguments<'_>) {
-        self.logger.infof(args)
+        self.logger.infof(args);
     }
     fn log(&self, msg: &str) {
-        self.logger.log(msg)
+        self.logger.log(msg);
     }
     fn logf(&self, args: fmt::Arguments<'_>) {
-        self.logger.logf(args)
+        self.logger.logf(args);
     }
     fn verbose(&self) -> Option<&dyn Logger> {
         self.logger.verbose()?;
@@ -68,7 +68,7 @@ impl Logger for logCollector {
         self.logger.is_verbose()
     }
     fn set_verbose(&self, verbose: bool) {
-        self.logger.set_verbose(verbose)
+        self.logger.set_verbose(verbose);
     }
 }
 
@@ -78,7 +78,7 @@ pub fn new_test_logger() -> Arc<dyn LogCollector> {
     Arc::new(logCollector {
         logger: logger::new(
             Box::new(sharedBuilder(Arc::clone(&builder))),
-            Box::new(|| format_time(UNIX_EPOCH + Duration::from_secs(1349085672))),
+            Box::new(|| format_time(UNIX_EPOCH + Duration::from_secs(1_349_085_672))),
         ),
         builder,
     })

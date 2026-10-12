@@ -423,7 +423,11 @@ fn find_all_initial_declarations(c: &mut Checker, node: P<Node>) -> Option<Vec<P
     for i in indices {
         let decl = symbol_declarations[i];
         if is_valid_call_hierarchy_declaration(Some(decl)) {
-            if last_decl.is_none_or(|last_decl| last_decl.parent() != decl.parent() || last_decl.end() != decl.pos()) {
+            if last_decl.is_none_or(|last_decl| {
+                let same_parent = last_decl.parent() == decl.parent();
+                let declarations_are_adjacent = last_decl.end() == decl.pos();
+                !same_parent || !declarations_are_adjacent
+            }) {
                 declarations.push(decl);
             }
             last_decl = Some(decl);
@@ -787,7 +791,7 @@ impl LanguageService {
         ref_entries.extend(data.symbols_and_entries.iter().flat_map(|symbol_and_entry| symbol_and_entry.references.iter().cloned()));
 
         let mut call_sites: Vec<callSite> = Vec::new();
-        call_sites.extend(ref_entries.iter().filter_map(|entry| if let Some(site) = convert_entry_to_call_site(entry) { Some(site) } else { None }));
+        call_sites.extend(ref_entries.iter().filter_map(|entry| convert_entry_to_call_site(entry)));
 
         if call_sites.is_empty() {
             return Ok(lsproto::CallHierarchyIncomingCallsOrNull::default());
@@ -801,7 +805,7 @@ impl LanguageService {
 
         let mut result: Vec<lsproto::CallHierarchyIncomingCall> = Vec::new();
         result.extend(grouped.iter().filter_map(|(_, sites)| {
-            if let Some(incoming_call) = self.convert_call_site_group_to_incoming_call(program, sites) { Some(incoming_call) } else { None }
+            self.convert_call_site_group_to_incoming_call(program, sites)
         }));
         Ok(lsproto::CallHierarchyIncomingCallsOrNull { call_hierarchy_incoming_calls: Some(result) })
     }
@@ -1089,7 +1093,7 @@ impl LanguageService {
 
         let mut result: Vec<lsproto::CallHierarchyOutgoingCall> = Vec::new();
         result.extend(grouped.iter().filter_map(|(_, sites)| {
-            if let Some(outgoing_call) = self.convert_call_site_group_to_outgoing_call(program, sites) { Some(outgoing_call) } else { None }
+            self.convert_call_site_group_to_outgoing_call(program, sites)
         }));
 
         result.sort_by(|a, b| {
@@ -1237,7 +1241,7 @@ impl LanguageService {
                     }
                 }
                 Some(CallHierarchyDeclarations::Nodes(decls)) => {
-                    declarations.extend(decls.into_iter().filter_map(|declaration| if seen.insert(declaration) { Some(declaration) } else { None }));
+                    declarations.extend(decls.into_iter().filter(|&declaration| seen.insert(declaration)));
                 }
                 None => {}
             }

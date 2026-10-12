@@ -146,7 +146,7 @@ pub struct AfterFuncStop {
 impl AfterFuncStop {
     // Reports whether the call stopped f from being run.
     pub fn stop(&self) -> bool {
-        let Some(state) = self.state.as_ref().and_then(|s| s.upgrade()) else {
+        let Some(state) = self.state.as_ref().and_then(std::sync::Weak::upgrade) else {
             return false;
         };
         let mut inner = state.inner.lock().unwrap();

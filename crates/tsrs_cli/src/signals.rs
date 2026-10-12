@@ -20,6 +20,7 @@ static STATE: Mutex<State> = Mutex::new(State { received: false, hooks: Vec::new
 /// Starts catching SIGINT and SIGTERM. Call it before the process starts any other thread: threads
 /// inherit the signal mask, and a thread that does not block the signals would take them with their
 /// default action. Child processes start with an empty mask (std::process::Command resets it).
+#[cfg_attr(unix, expect(clippy::infinite_loop, reason = "the signal thread waits for process interrupts until process exit"))]
 pub(crate) fn notify_interrupts() {
     #[cfg(unix)]
     {
@@ -48,7 +49,7 @@ pub(crate) fn notify_interrupts() {
 
 /// Runs `hook` once SIGINT or SIGTERM arrives, or now if one already has.
 pub(crate) fn on_interrupt(hook: impl FnOnce() + Send + 'static) {
-    let mut state = STATE.lock().unwrap_or_else(|e| e.into_inner());
+    let mut state = STATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if state.received {
         drop(state);
         hook();
@@ -60,7 +61,7 @@ pub(crate) fn on_interrupt(hook: impl FnOnce() + Send + 'static) {
 #[cfg(unix)]
 fn interrupted() {
     let hooks = {
-        let mut state = STATE.lock().unwrap_or_else(|e| e.into_inner());
+        let mut state = STATE.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         state.received = true;
         std::mem::take(&mut state.hooks)
     };

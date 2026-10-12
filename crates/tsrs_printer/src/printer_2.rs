@@ -447,7 +447,7 @@ impl Printer {
                 // exponentiation is right-associative
                 left_prec = OperatorPrecedence::Update;
             }
-            _ => panic!("unhandled precedence: {:?}", precedence),
+            _ => panic!("unhandled precedence: {precedence:?}"),
         }
         (left_prec, right_prec)
     }

@@ -138,7 +138,7 @@ pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: &'static P
         opts,
         mu: Mutex::new(checkerPoolState {
             discarded: false,
-            checkers: (0..opts.max_checkers).map(|_| None).collect(),
+            checkers: std::iter::repeat_with(|| None).take(opts.max_checkers).collect(),
             held_by: vec![String::new(); opts.max_checkers],
             file_associations: FxHashMap::default(),
             request_associations: FxHashMap::default(),
@@ -207,10 +207,7 @@ impl checkerPool {
     }
 
     fn live_owner(&self) -> Option<Arc<programOwner>> {
-        match &*self.owner.lock().unwrap() {
-            None => None,
-            Some(w) => Some(w.upgrade().expect("checker pool used after its program was freed")),
-        }
+        (*self.owner.lock().unwrap()).as_ref().map(|w| w.upgrade().expect("checker pool used after its program was freed"))
     }
 
     // Region hook: frees every checker of the pool and their regions. Called when the program is freed (nothing
@@ -249,7 +246,7 @@ impl checkerPool {
         match lifetime {
             CheckerLifetime::Diagnostics => self.get_diagnostics_checker(ctx, &request_id),
             CheckerLifetime::API => self.get_persistent_checker(),
-            _ => self.get_query_checker(ctx, &request_id, file),
+            CheckerLifetime::Temporary => self.get_query_checker(ctx, &request_id, file),
         }
     }
 
@@ -377,7 +374,7 @@ impl checkerPool {
         // Create in the first empty slot.
         for (i, element) in st.checkers.iter_mut().enumerate().skip(1) {
             if (*element).is_none() {
-                (self.log)(&format!("checkerpool: Creating query checker {}", i));
+                (self.log)(&format!("checkerpool: Creating query checker {i}"));
                 (*element) = Some(self.new_pooled_checker());
                 return i;
             }
@@ -551,7 +548,7 @@ impl checkerPool {
             };
             let idle = now.duration_since(last_released);
             if idle >= self.opts.idle_timeout {
-                (self.log)(&format!("checkerpool: Disposing idle checker {} (idle {:?})", i, idle));
+                (self.log)(&format!("checkerpool: Disposing idle checker {i} (idle {idle:?})"));
                 let c = st.checkers[i].as_mut().unwrap().as_non_null();
                 self.dispose_checker_locked(&mut st, i, c);
             }

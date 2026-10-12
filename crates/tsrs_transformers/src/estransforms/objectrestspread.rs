@@ -445,8 +445,7 @@ impl objectRestSpreadTransformer {
                 let statements_location: TextRange;
                 if ast::is_block(s.statement) {
                     statements.extend(s.statement.statements().iter().filter_map(|&statement| {
-                        let visited = self.visitor().visit_each_child(Some(statement));
-                        if let Some(visited) = visited { Some(visited) } else { None }
+                        self.visitor().visit_each_child(Some(statement))
                     }));
                     body_location = s.statement.loc();
                     statements_location = s.statement.statement_list().unwrap().loc.get();

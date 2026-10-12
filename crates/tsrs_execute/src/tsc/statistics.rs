@@ -34,7 +34,7 @@ impl table {
         for r in &self.rows {
             // Go: "%-*s %*s\n"
             let name = format!("{}:", r.name);
-            let _ = write!(out, "{:<nw$} {:>vw$}\n", name, r.value, nw = name_width + 1, vw = value_width);
+            let _ = writeln!(out, "{:<nw$} {:>vw$}", name, r.value, nw = name_width + 1, vw = value_width);
         }
         w(&out);
     }

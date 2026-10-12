@@ -439,14 +439,14 @@ pub fn node_file_mode_to_go_file_mode(mode: u32) -> FileMode {
     if mode & 0o1000 != 0 {
         result |= FileMode::Sticky;
     }
-    match mode & 0o170000 {
-        0o010000 => result |= FileMode::NamedPipe,
-        0o020000 => result |= FileMode::Device | FileMode::CharDevice,
-        0o040000 => result |= FileMode::Dir,
-        0o060000 => result |= FileMode::Device,
-        0o100000 => {}
-        0o120000 => result |= FileMode::Symlink,
-        0o140000 => result |= FileMode::Socket,
+    match mode & 0o170_000 {
+        0o010_000 => result |= FileMode::NamedPipe,
+        0o020_000 => result |= FileMode::Device | FileMode::CharDevice,
+        0o040_000 => result |= FileMode::Dir,
+        0o060_000 => result |= FileMode::Device,
+        0o100_000 => {}
+        0o120_000 => result |= FileMode::Symlink,
+        0o140_000 => result |= FileMode::Socket,
         _ => result |= FileMode::Irregular,
     }
     result
@@ -483,7 +483,7 @@ pub fn parse_rfc3339(s: &str) -> Result<SystemTime, String> {
         nanos = format!("{digits:0<9}").parse::<u32>().unwrap();
     }
     let offset_secs: i64 = match b.get(i) {
-        Some(b'Z') | Some(b'z') if i + 1 == b.len() => 0,
+        Some(b'Z' | b'z') if i + 1 == b.len() => 0,
         Some(&sign @ (b'+' | b'-')) if b.len() == i + 6 && b[i + 3] == b':' => {
             let (oh, om) = (num(i + 1..i + 3)?, num(i + 4..i + 6)?);
             if oh > 23 || om > 59 {
@@ -524,5 +524,5 @@ fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
     let mp = (m + 9) % 12;
     let doy = (153 * mp + 2) / 5 + d - 1;
     let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
-    era * 146097 + doe - 719468
+    era * 146_097 + doe - 719_468
 }

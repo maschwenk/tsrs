@@ -15,19 +15,19 @@ pub(crate) fn modf(f: f64) -> (f64, f64) {
 
 // Go's archExp for arm64 (exp_arm64.s).
 pub(crate) fn exp(x: f64) -> f64 {
-    const Ln2Hi: f64 = 6.93147180369123816490e-01;
-    const Ln2Lo: f64 = 1.90821492927058770002e-10;
+    const Ln2Hi: f64 = 6.931_471_803_691_238e-1;
+    const Ln2Lo: f64 = 1.908_214_929_270_587_7e-10;
     #[expect(clippy::approx_constant, reason = "the literal from Go's math.Exp, kept verbatim")]
-    const Log2e: f64 = 1.44269504088896338700e+00;
-    const Overflow: f64 = 7.09782712893383973096e+02;
-    const Underflow: f64 = -7.45133219101941108420e+02;
+    const Log2e: f64 = 1.442_695_040_888_963_4;
+    const Overflow: f64 = 7.097_827_128_933_84e2;
+    const Underflow: f64 = -7.451_332_191_019_411e2;
     const NearZero: f64 = 1.0 / (1u64 << 28) as f64;
-    const FracMask: u64 = 0x000fffffffffffff;
-    const P1: f64 = 1.66666666666666657415e-01;
-    const P2: f64 = -2.77777777770155933842e-03;
-    const P3: f64 = 6.61375632143793436117e-05;
-    const P4: f64 = -1.65339022054652515390e-06;
-    const P5: f64 = 4.13813679705723846039e-08;
+    const FracMask: u64 = 0x000f_ffff_ffff_ffff;
+    const P1: f64 = 1.666_666_666_666_666_6e-1;
+    const P2: f64 = -2.777_777_777_701_559_3e-3;
+    const P3: f64 = 6.613_756_321_437_934e-5;
+    const P4: f64 = -1.653_390_220_546_525_2e-6;
+    const P5: f64 = 4.138_136_797_057_238_5e-8;
 
     if x.is_nan() {
         return x;
@@ -65,21 +65,21 @@ pub(crate) fn exp(x: f64) -> f64 {
     let mut m: f64 = 1.0;
     if e < 1 {
         e += 52;
-        m = f64::from_bits(0x3cb0000000000000); // 2**-52
+        m = f64::from_bits(0x3cb0_0000_0000_0000); // 2**-52
     }
     m * f64::from_bits(((e as u64) << 52) | frac)
 }
 
 pub(crate) fn log(x: f64) -> f64 {
-    const Ln2Hi: f64 = 6.93147180369123816490e-01; /* 3fe62e42 fee00000 */
-    const Ln2Lo: f64 = 1.90821492927058770002e-10; /* 3dea39ef 35793c76 */
-    const L1: f64 = 6.666666666666735130e-01; /* 3FE55555 55555593 */
-    const L2: f64 = 3.999999999940941908e-01; /* 3FD99999 9997FA04 */
-    const L3: f64 = 2.857142874366239149e-01; /* 3FD24924 94229359 */
-    const L4: f64 = 2.222219843214978396e-01; /* 3FCC71C5 1D8E78AF */
-    const L5: f64 = 1.818357216161805012e-01; /* 3FC74664 96CB03DE */
-    const L6: f64 = 1.531383769920937332e-01; /* 3FC39A09 D078C69F */
-    const L7: f64 = 1.479819860511658591e-01; /* 3FC2F112 DF3E5244 */
+    const Ln2Hi: f64 = 6.931_471_803_691_238e-1; /* 3fe62e42 fee00000 */
+    const Ln2Lo: f64 = 1.908_214_929_270_587_7e-10; /* 3dea39ef 35793c76 */
+    const L1: f64 = 6.666_666_666_666_735e-1; /* 3FE55555 55555593 */
+    const L2: f64 = 3.999_999_999_940_942e-1; /* 3FD99999 9997FA04 */
+    const L3: f64 = 2.857_142_874_366_239e-1; /* 3FD24924 94229359 */
+    const L4: f64 = 2.222_219_843_214_978_4e-1; /* 3FCC71C5 1D8E78AF */
+    const L5: f64 = 1.818_357_216_161_805e-1; /* 3FC74664 96CB03DE */
+    const L6: f64 = 1.531_383_769_920_937_3e-1; /* 3FC39A09 D078C69F */
+    const L7: f64 = 1.479_819_860_511_658_6e-1; /* 3FC2F112 DF3E5244 */
 
     // special cases
     if x.is_nan() || x == f64::INFINITY {
@@ -119,7 +119,7 @@ pub(crate) fn log(x: f64) -> f64 {
 }
 
 fn normalize(x: f64) -> (f64, i64) {
-    const SmallestNormal: f64 = 2.2250738585072014e-308;
+    const SmallestNormal: f64 = 2.225_073_858_507_201_4e-308;
     if x.abs() < SmallestNormal {
         return (x * (1u64 << 52) as f64, -52);
     }
@@ -272,7 +272,7 @@ pub(crate) fn pow(x: f64, y: f64) -> f64 {
     let (mut x1, mut xe) = frexp(x);
     let mut i = yi as i64;
     while i != 0 {
-        if xe < -(1 << 12) || (1 << 12) < xe {
+        if !(-(1 << 12)..=(1 << 12)).contains(&xe) {
             // catch xe before it overflows the left shift below
             // Since i !=0 it has at least one bit still set, so ae will accumulate xe
             // on at least one more iteration, ae += xe is a lower bound on ae

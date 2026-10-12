@@ -107,7 +107,7 @@ fn transform_component(content: &str) -> Result<(String, Value), ipc::Error> {
         let mut pos = expr_start;
         while pos < expr_end {
             if !is_identifier_start(bytes[pos]) {
-                w.write_synthesized(&content[pos..pos + 1]);
+                w.write_synthesized(&content[pos..=pos]);
                 pos += 1;
                 continue;
             }

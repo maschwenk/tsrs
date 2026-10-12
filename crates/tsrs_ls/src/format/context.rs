@@ -70,15 +70,9 @@ impl FormattingContext {
         next_parent: Option<P<Node>>,
         common_parent: Option<P<Node>>,
     ) {
-        if cur_parent.is_none() {
-            panic!("nil current range node parent in update context");
-        }
-        if next_parent.is_none() {
-            panic!("nil next range node parent in update context");
-        }
-        if common_parent.is_none() {
-            panic!("nil common parent node in update context");
-        }
+        assert!(cur_parent.is_some(), "nil current range node parent in update context");
+        assert!(next_parent.is_some(), "nil next range node parent in update context");
+        assert!(common_parent.is_some(), "nil common parent node in update context");
         self.current_token_span = cur;
         self.current_token_parent = cur_parent;
         self.next_token_span = next;

@@ -161,8 +161,8 @@ pub const FILE_EXTENSION_KIND_MODIFIERS: ScriptElementKindModifier = ScriptEleme
     .union(ScriptElementKindModifier::Cjs);
 
 // symbol_display.go:159
-pub fn get_symbol_kind(mut type_checker: Option<&mut Checker>, symbol: P<Symbol>, location: P<Node>) -> ScriptElementKind {
-    let result = get_symbol_kind_of_constructor_property_method_accessor_function_or_var(type_checker.as_deref_mut(), symbol, location);
+pub fn get_symbol_kind(type_checker: Option<&mut Checker>, symbol: P<Symbol>, location: P<Node>) -> ScriptElementKind {
+    let result = get_symbol_kind_of_constructor_property_method_accessor_function_or_var(type_checker, symbol, location);
     if result != ScriptElementKind::Unknown {
         return result;
     }
@@ -281,7 +281,7 @@ fn get_symbol_kind_of_constructor_property_method_accessor_function_or_var(
     }
 
     if flags.intersects(SymbolFlags::Property) {
-        if let Some(c) = type_checker.as_deref_mut() {
+        if let Some(c) = type_checker {
             if flags.intersects(SymbolFlags::Transient) && symbol.check_flags().intersects(CheckFlags::Synthetic) {
                 // If union property is result of union of non method (property/accessors/variables), it is labeled as property
                 let mut union_property_kind = ScriptElementKind::Unknown;
@@ -365,7 +365,7 @@ pub fn get_symbol_modifiers(mut type_checker: Option<&mut Checker>, symbol: Opti
 
     let mut modifiers = get_normalized_symbol_modifiers(type_checker.as_deref_mut(), symbol);
     if symbol.flags().intersects(SymbolFlags::Alias) {
-        if let Some(c) = type_checker.as_deref_mut() {
+        if let Some(c) = type_checker {
             let resolved_symbol = c.get_aliased_symbol(symbol);
             if resolved_symbol != symbol {
                 modifiers |= get_normalized_symbol_modifiers(Some(c), resolved_symbol);
@@ -409,12 +409,12 @@ fn is_deprecated_declaration(type_checker: Option<&mut Checker>, declaration: P<
 }
 
 // symbol_display.go:397
-fn get_node_modifiers(mut type_checker: Option<&mut Checker>, node: P<Node>, exclude_flags: ModifierFlags) -> ScriptElementKindModifier {
+fn get_node_modifiers(type_checker: Option<&mut Checker>, node: P<Node>, exclude_flags: ModifierFlags) -> ScriptElementKindModifier {
     let mut result = ScriptElementKindModifier::None;
     let mut flags = ModifierFlags::None;
     if ast::is_declaration(node) {
         flags = ast::get_combined_modifier_flags(node);
-        if is_deprecated_declaration(type_checker.as_deref_mut(), node) {
+        if is_deprecated_declaration(type_checker, node) {
             flags |= ModifierFlags::Deprecated;
         }
         flags &= !exclude_flags;

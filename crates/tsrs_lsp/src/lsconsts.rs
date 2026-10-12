@@ -4,5 +4,5 @@
 pub(crate) use tsrs_ls::{COMPLETION_TRIGGER_CHARACTERS, SIGNATURE_HELP_RETRIGGER_CHARACTERS, SIGNATURE_HELP_TRIGGER_CHARACTERS};
 
 pub(crate) fn strings(values: &[&str]) -> Vec<String> {
-    values.iter().map(|s| s.to_string()).collect()
+    values.iter().map(std::string::ToString::to_string).collect()
 }

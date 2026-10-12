@@ -335,7 +335,7 @@ impl KeywordCompletionFilters {
 fn keyword_filters_from_syntax_kind(keyword_completion: Kind) -> KeywordCompletionFilters {
     match keyword_completion {
         Kind::TypeKeyword => KeywordCompletionFilters::TypeKeyword,
-        _ => panic!("Unknown mapping from ast.Kind `Kind{:?}` to KeywordCompletionFilters", keyword_completion),
+        _ => panic!("Unknown mapping from ast.Kind `Kind{keyword_completion:?}` to KeywordCompletionFilters"),
     }
 }
 
@@ -366,7 +366,7 @@ pub(crate) const NO_COMMA_COMMIT_CHARACTERS: [&str; 2] = [".", ";"];
 pub(crate) const EMPTY_COMMIT_CHARACTERS: [&str; 0] = [];
 
 pub(crate) fn strings(values: &[&str]) -> Vec<String> {
-    values.iter().map(|s| s.to_string()).collect()
+    values.iter().map(std::string::ToString::to_string).collect()
 }
 
 // completions.go:269 (`type SortText string`)
@@ -789,6 +789,7 @@ impl LanguageService {
                         property_access_to_convert = Some(parent);
                         node = parent.expression().unwrap();
                         let left_most_access_expression = ast::get_leftmost_access_expression(parent);
+                        #[expect(clippy::suspicious_operation_groupings, reason = "the parsed expression end is intentionally compared with the dot token start")]
                         if ast::node_is_missing(left_most_access_expression)
                             || ((ast::is_call_expression(node) || ast::is_function_like(node))
                                 && node.end() == ct.pos()
@@ -812,9 +813,7 @@ impl LanguageService {
                     }
                     Kind::MetaProperty => {
                         node = lsutil::get_first_token(parent, file).unwrap();
-                        if node.kind() != Kind::ImportKeyword && node.kind() != Kind::NewKeyword {
-                            panic!("Unexpected token kind: Kind{:?}", node.kind());
-                        }
+                        assert!(!(node.kind() != Kind::ImportKeyword && node.kind() != Kind::NewKeyword), "Unexpected token kind: Kind{:?}", node.kind());
                     }
                     _ => {
                         // There is nothing that precedes the dot, so this likely just a stray character
@@ -991,7 +990,7 @@ impl LanguageService {
 
         // exclude literal suggestions after <input type="text" [||] /> microsoft/TypeScript#51667) and after closing quote (microsoft/TypeScript#52675)
         // for strings getStringLiteralCompletions handles completions
-        let is_literal_expected = !(previous_token.is_some() && ast::is_string_literal_like(previous_token.unwrap())) && !is_jsx_identifier_expected;
+        let is_literal_expected = previous_token.is_none_or(|token| !ast::is_string_literal_like(token)) && !is_jsx_identifier_expected;
         let mut literals: Vec<LiteralValue> = Vec::new();
         if is_literal_expected {
             let mut types: Vec<P<Type>> = Vec::new();
@@ -1173,8 +1172,8 @@ impl getCompletionDataState {
             // each individual type has. This is because we're going to add all identifiers
             // anyways. So we might as well elevate the members that were at least part
             // of the individual types to a higher status since we know what they are.
-            self.symbols.extend(get_properties_for_completion(t, type_checker).into_iter().filter_map(|symbol| {
-                if type_checker.is_valid_property_access_for_completions_exported(property_access, t, symbol) { Some(symbol) } else { None }
+            self.symbols.extend(get_properties_for_completion(t, type_checker).into_iter().filter(|&symbol| {
+                type_checker.is_valid_property_access_for_completions_exported(property_access, t, symbol)
             }));
         }
 
@@ -1366,15 +1365,11 @@ impl getCompletionDataState {
                 }
             }
         } else {
-            if object_like_container.kind() != Kind::ObjectBindingPattern {
-                panic!("Expected 'objectLikeContainer' to be an object binding pattern.");
-            }
+            assert!(object_like_container.kind() == Kind::ObjectBindingPattern, "Expected 'objectLikeContainer' to be an object binding pattern.");
             // We are *only* completing on properties from the type being destructured.
             self.is_new_identifier_location = false;
             let root_declaration = ast::get_root_declaration(object_like_container.parent().unwrap());
-            if !ast::is_variable_like(root_declaration) {
-                panic!("Root declaration is not variable-like.");
-            }
+            assert!(ast::is_variable_like(root_declaration), "Root declaration is not variable-like.");
 
             // We don't want to complete using the type acquired by the shape
             // of the binding pattern; we are only interested in types acquired
@@ -1766,7 +1761,6 @@ impl getCompletionDataState {
                             data: symbolOriginData::ComputedPropertyName(symbolOriginInfoComputedPropertyName {
                                 symbol_name: type_checker.symbol_to_string_exported(symbol),
                             }),
-                            ..Default::default()
                         };
                         self.symbol_to_origin_info_map.insert(index, origin);
                     }
@@ -1826,9 +1820,7 @@ impl getCompletionDataState {
         self.default_commit_characters = Some(default_commit_characters);
 
         if previous_token != context_token {
-            if previous_token.is_none() {
-                panic!("Expected 'contextToken' to be defined when different from 'previousToken'.");
-            }
+            assert!(previous_token.is_some(), "Expected 'contextToken' to be defined when different from 'previousToken'.");
         }
 
         // We need to find the node that will give us an appropriate scope to begin
@@ -1879,7 +1871,6 @@ impl getCompletionDataState {
                     let origin = symbolOriginInfo {
                         kind: symbolOriginInfoKind::TypeOnlyAlias,
                         data: symbolOriginData::TypeOnlyAlias(symbolOriginInfoTypeOnlyAlias { declaration: type_only_alias_declaration }),
-                        ..Default::default()
                     };
                     self.symbol_to_origin_info_map.insert(index, origin);
                 }

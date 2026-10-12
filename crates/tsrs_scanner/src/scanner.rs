@@ -98,12 +98,12 @@ macro_rules! keywords {
 // Go `textToKeyword` is a map. The port looks keywords up in a perfect hash over the first two bytes, the last
 // byte and the length (every keyword has at least two bytes); KEYWORD_HASH_MUL was searched for the current
 // keyword list, and the table is built at compile time, which fails if two keywords collide.
-const KEYWORD_HASH_MUL: u32 = 0xae8526c7;
+const KEYWORD_HASH_MUL: u32 = 0xae85_26c7;
 const NO_KEYWORD: u8 = u8::MAX;
 
 #[inline]
 const fn keyword_hash(b: &[u8]) -> usize {
-    let key = b[0] as u32 | (b[1] as u32) << 8 | (b[b.len() - 1] as u32) << 16 | (b.len() as u32) << 24;
+    let key = b[0] as u32 | ((b[1] as u32) << 8) | ((b[b.len() - 1] as u32) << 16) | ((b.len() as u32) << 24);
     (key.wrapping_mul(KEYWORD_HASH_MUL) >> 24) as usize
 }
 
@@ -715,7 +715,7 @@ impl Scanner {
         args: &[&dyn Display],
     ) {
         if self.on_error {
-            self.errors.push(ScanError { message: diagnostic, start: pos, length, args: args.iter().map(|a| a.to_string()).collect() });
+            self.errors.push(ScanError { message: diagnostic, start: pos, length, args: args.iter().map(std::string::ToString::to_string).collect() });
         }
     }
 
@@ -1412,7 +1412,7 @@ impl Scanner {
         self.state.pos += 1;
         self.scan_ascii_identifier_parts();
         let ch = self.char();
-        if ch.is_none() || ch.is_some_and(|ch| ch < RUNE_SELF as u8 && ch != b'\\') {
+        if ch.is_none_or(|ch| ch < RUNE_SELF as u8 && ch != b'\\') {
             self.state.token_value = self.slice(start, self.state.pos);
             return Some(get_identifier_token(self.state.token_value));
         }
@@ -1600,9 +1600,7 @@ impl Scanner {
     }
 
     pub fn re_scan_asterisk_equals_token(&mut self) -> Kind {
-        if self.state.token != Kind::AsteriskEqualsToken {
-            panic!("'ReScanAsteriskEqualsToken' should only be called on a '*='");
-        }
+        assert!(self.state.token == Kind::AsteriskEqualsToken, "'ReScanAsteriskEqualsToken' should only be called on a '*='");
         self.state.pos = self.state.token_start + 1;
         self.state.token = Kind::EqualsToken;
         self.state.token
@@ -1795,9 +1793,7 @@ impl Scanner {
     }
 
     pub fn re_scan_question_token(&mut self) -> Kind {
-        if self.state.token != Kind::QuestionQuestionToken {
-            panic!("'reScanQuestionToken' should only be called on a '??'");
-        }
+        assert!(self.state.token == Kind::QuestionQuestionToken, "'reScanQuestionToken' should only be called on a '??'");
         self.state.pos = self.state.token_start + 1;
         self.state.token = Kind::QuestionToken;
         self.state.token
@@ -2074,7 +2070,7 @@ impl Scanner {
         }
         if ch == '\\' as Rune {
             if let Some(escaped) =
-                self.scan_identifier_escape(|ch| is_identifier_start(ch), variant == IdentifierVariant::RegExpGroupName)
+                self.scan_identifier_escape(is_identifier_start, variant == IdentifierVariant::RegExpGroupName)
             {
                 let mut value = ArenaStringBuilder::with_capacity((self.state.pos - start) as usize * 2);
                 value.push_str(self.slice(start, identifier_start));
@@ -2343,7 +2339,7 @@ impl Scanner {
                 self.state.token_flags |= TokenFlags::ContainsInvalidEscape;
                 if flags.intersects(EscapeSequenceScanningFlags::ReportInvalidEscapeErrors) {
                     let code = u32::from_str_radix(self.slice(start + 1, self.state.pos), 8).unwrap_or(0);
-                    let arg = format!("\\x{:02x}", code);
+                    let arg = format!("\\x{code:02x}");
                     if flags.intersects(EscapeSequenceScanningFlags::RegularExpression)
                         && !flags.intersects(EscapeSequenceScanningFlags::AtomEscape)
                         && ch != b'0'
@@ -2530,7 +2526,7 @@ impl Scanner {
         let hex_value = parse_int_32(hex_digits, 16);
         if extended {
             let mut is_invalid_extended_escape = false;
-            if hex_value > 0x10FFFF {
+            if hex_value > 0x0010_FFFF {
                 if should_emit_invalid_escape_error {
                     self.error_at(
                         &diagnostics::An_extended_Unicode_escape_value_must_be_between_0x0_and_0x10FFFF_inclusive,
@@ -3206,9 +3202,7 @@ pub(crate) fn scan_conflict_marker_trivia(
             (ch, size) = decode_rune(&bytes[pos as usize..]);
         }
     } else {
-        if ch != '|' as Rune && ch != '=' as Rune {
-            panic!("Assertion failed: ch must be either '|' or '='");
-        }
+        assert!(!(ch != '|' as Rune && ch != '=' as Rune), "Assertion failed: ch must be either '|' or '='");
         // Consume everything from the start of a ||||||| or ======= marker to the start
         // of the next ======= or >>>>>>> marker.
         while pos < length {
@@ -3229,9 +3223,7 @@ pub(crate) fn is_shebang_trivia(text: &str, pos: u32) -> bool {
     if bytes.len() < 2 {
         return false;
     }
-    if pos != 0 {
-        panic!("Shebangs check must only be done at the start of the file");
-    }
+    assert!(pos == 0, "Shebangs check must only be done at the start of the file");
     bytes[0] == b'#' && bytes[1] == b'!'
 }
 
@@ -3523,15 +3515,15 @@ pub fn compute_line_of_position(line_starts: &[u32], pos: u32) -> usize {
     while low <= high {
         let middle = low + ((high - low) >> 1);
         let value = line_starts[middle];
-        if value < pos {
-            low = middle + 1;
-        } else if value > pos {
-            if middle == 0 {
-                return 0;
+        match value.cmp(&pos) {
+            std::cmp::Ordering::Less => low = middle + 1,
+            std::cmp::Ordering::Greater => {
+                if middle == 0 {
+                    return 0;
+                }
+                high = middle - 1;
             }
-            high = middle - 1;
-        } else {
-            return middle;
+            std::cmp::Ordering::Equal => return middle,
         }
     }
     low.saturating_sub(1)
@@ -3555,7 +3547,7 @@ pub fn get_ecma_line_and_utf16_character_of_position(
 ) -> (usize, UTF16Offset) {
     let line_map = get_ecma_line_starts(source_file);
     let line = compute_line_of_position(line_map, pos);
-    let character = tsrs_core::utf16_len(&source_file.text()[line_map[line as usize] as usize..pos as usize]);
+    let character = tsrs_core::utf16_len(&source_file.text()[line_map[line] as usize..pos as usize]);
     (line, character)
 }
 
@@ -3569,13 +3561,13 @@ pub fn get_ecma_line_and_byte_offset_of_position(
 ) -> (usize, u32) {
     let line_map = get_ecma_line_starts(source_file);
     let line = compute_line_of_position(line_map, pos);
-    let byte_offset = pos - line_map[line as usize];
+    let byte_offset = pos - line_map[line];
     (line, byte_offset)
 }
 
 pub fn get_ecma_end_line_position(source_file: P<SourceFile>, line: usize) -> Option<u32> {
     let text = source_file.text().as_bytes();
-    let mut pos = get_ecma_line_starts(&*source_file)[line as usize];
+    let mut pos = get_ecma_line_starts(&*source_file)[line];
     loop {
         let (ch, size) = decode_rune(&text[pos as usize..]);
         if size == 0 || stringutil::is_line_break(ch) {
@@ -3615,13 +3607,11 @@ pub fn compute_position_of_line_and_byte_offset(
     line: usize,
     byte_offset: u32,
 ) -> u32 {
-    if line >= line_starts.len() {
-        panic!(
-            "Bad line number. Line: {}, lineStarts.length: {}.",
-            line,
-            line_starts.len()
-        );
-    }
+    assert!(line < line_starts.len(),
+        "Bad line number. Line: {}, lineStarts.length: {}.",
+        line,
+        line_starts.len()
+    );
     line_starts[line] + byte_offset
 }
 
@@ -3666,9 +3656,7 @@ pub fn compute_position_of_line_and_utf16_character(
             pos += size as u32;
         }
         if !allow_edits {
-            if pos == line_end && utf16_count < character {
-                panic!("Bad UTF-16 character offset. Line: {}, character: {}.", line, character);
-            }
+            assert!(!(pos == line_end && utf16_count < character), "Bad UTF-16 character offset. Line: {line}, character: {character}.");
             assert!(pos <= text_len);
             return pos;
         }
@@ -3779,11 +3767,9 @@ impl Iterator for CommentRangeIter {
                         self.pending_has_trailing_new_line = true;
                     }
 
-                    continue;
                 }
                 0x09 | 0x0B | 0x0C | 0x20 => {
                     self.pos += 1;
-                    continue;
                 }
                 0x2F /* / */ => {
                     let next_char = if self.pos + 1 < len { text[(self.pos + 1) as usize] } else { 0 };

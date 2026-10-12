@@ -446,7 +446,7 @@ pub(crate) fn array_is_homogeneous<T: Clone>(array: &[T], mut comparer: impl FnM
     }
     let first = &array[0];
     for element in array.iter().skip(1) {
-        let target = &(*element);
+        let target = element;
         if !comparer(first.clone(), target.clone()) {
             return false;
         }
@@ -996,8 +996,8 @@ pub(crate) fn can_use_property_access(name: &str) -> bool {
     }
     // TODO: in strada, this only used `isIdentifierStart` on the first character, while this checks the whole string for validity
     // - possible strada bug?
-    if name.starts_with('#') {
-        return name.len() > 1 && tsrs_scanner::is_identifier_text(&name[1..], LanguageVariant::Standard);
+    if let Some(name) = name.strip_prefix('#') {
+        return !name.is_empty() && tsrs_scanner::is_identifier_text(name, LanguageVariant::Standard);
     }
     tsrs_scanner::is_identifier_text(name, LanguageVariant::Standard)
 }
@@ -1035,13 +1035,13 @@ impl NodeBuilderImpl {
                     return c.value_to_string(value.unwrap());
                 }
                 if is_numeric_literal_name(&name) && name.starts_with('-') {
-                    return format!("[{}]", name);
+                    return format!("[{name}]");
                 }
                 return name;
             }
             if name_type.flags().intersects(TypeFlags::UniqueESSymbol) {
                 let text = self.get_name_of_symbol_as_written(c, name_type.symbol().unwrap());
-                return format!("[{}]", text);
+                return format!("[{text}]");
             }
         }
         String::new()
@@ -1189,7 +1189,7 @@ impl NodeBuilderImpl {
         {
             let res = self.get_symbol_chain(c, symbol, meaning, true /*endOfChain*/, yield_module_symbol);
             chain = res;
-            assert!(!chain.is_empty());
+            assert_ne!(chain, [] as [tsrs_core::P<tsrs_ast::Symbol>; 0]);
         } else {
             chain.push(symbol);
         }
@@ -1439,7 +1439,7 @@ impl NodeBuilderImpl {
             modulespecifiers::ModuleSpecifierOptions { override_import_mode },
             false, /*forAutoImports*/
         );
-        assert!(!module_specifiers_result.specifiers.is_empty());
+        assert_ne!(module_specifiers_result.specifiers, [] as [std::string::String; 0]);
         let mut result = moduleSpecifierResult { specifier: self.f.alloc_text(&module_specifiers_result.specifiers[0]), import_attributes_type: None };
         if let Some(ambient_module_symbol) = module_specifiers_result.ambient_module_symbol {
             result.import_attributes_type = Some(c.get_type_of_module_import_attributes(ambient_module_symbol));
@@ -1513,7 +1513,7 @@ impl NodeBuilderImpl {
                 ctx.approximate_length.set(ctx.approximate_length.get() + 2);
                 n
             };
-            attributes.push(self.f.new_import_attribute(Some(name_node), self.new_string_literal(c, &value)));
+            attributes.push(self.f.new_import_attribute(Some(name_node), self.new_string_literal(c, value)));
             let ctx = self.ctx();
             ctx.approximate_length
                 .set(ctx.approximate_length.get() + name.len() + value.len() + 4); // `name: "value"`
@@ -1651,7 +1651,7 @@ impl NodeBuilderImpl {
                     break;
                 }
                 i += 1;
-                text = format!("{}_{}", raw_text, i);
+                text = format!("{raw_text}_{i}");
             }
 
             if text != raw_text {
@@ -1704,10 +1704,7 @@ impl NodeBuilderImpl {
         let type_parameter = c.get_type_parameter_from_mapped_type(t);
 
         // If the mapped type isn't `keyof` constraint-declared, _but_ still has modifiers preserved, and its naive instantiation won't preserve modifiers because its constraint isn't `keyof` constrained, we have work to do
-        let needs_modifier_preserving_wrapper = !c.is_mapped_type_with_keyof_constraint_declaration(t)
-            && !c.get_modifiers_type_from_mapped_type(t).flags().intersects(TypeFlags::Unknown)
-            && self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams)
-            && !(c.get_constraint_type_from_mapped_type(t).flags().intersects(TypeFlags::TypeParameter) && {
+        let needs_modifier_preserving_wrapper = !(c.is_mapped_type_with_keyof_constraint_declaration(t) || c.get_modifiers_type_from_mapped_type(t).flags().intersects(TypeFlags::Unknown) || !self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) || c.get_constraint_type_from_mapped_type(t).flags().intersects(TypeFlags::TypeParameter) && {
                 let constraint_type = c.get_constraint_type_from_mapped_type(t);
                 c.get_constraint_of_type_parameter(constraint_type).unwrap().flags().intersects(TypeFlags::Index)
             });

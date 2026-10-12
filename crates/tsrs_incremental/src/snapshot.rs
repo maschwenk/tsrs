@@ -14,7 +14,7 @@ use tsrs_diagnostics::{Category, Key};
 use crate::emit::WriteFileData;
 use crate::referencemap::ReferenceMap;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FileInfo {
     pub(crate) version: String,
     pub(crate) signature: String,
@@ -126,7 +126,7 @@ pub(crate) fn get_pending_emit_kind(emit_kind: FileEmitKind, old_emit_kind: File
 
 // Signature (Hash of d.ts emitted), is string if it was emitted using same d.ts.map option as what compilerOptions indicate,
 // otherwise tuple of string
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EmitSignature {
     pub(crate) signature: String,
     pub(crate) signature_with_different_options: Option<Vec<String>>,

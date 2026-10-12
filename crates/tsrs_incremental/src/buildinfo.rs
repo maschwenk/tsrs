@@ -26,7 +26,7 @@ pub type BuildInfoFileIdListId = u32;
 //
 // - for non incremental program buildinfo
 //   - string that is the root file name
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoRoot {
     pub start: BuildInfoFileId,
     pub end: BuildInfoFileId,
@@ -69,7 +69,7 @@ impl BuildInfoRoot {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct buildInfoFileInfoNoSignature {
     pub version: String,
     pub no_signature: bool,
@@ -80,7 +80,7 @@ pub struct buildInfoFileInfoNoSignature {
 //	 Signature is
 //		 - undefined if FileInfo.version === FileInfo.signature
 //		 - string actual signature
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct buildInfoFileInfoWithSignature {
     pub version: String,
     pub signature: String,
@@ -88,7 +88,7 @@ pub struct buildInfoFileInfoWithSignature {
     pub implied_node_format: ResolutionMode,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoFileInfo {
     signature: String,
     no_signature: Option<buildInfoFileInfoNoSignature>,
@@ -211,7 +211,7 @@ impl BuildInfoFileInfo {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoReferenceMapEntry {
     pub file_id: BuildInfoFileId,
     pub file_id_list_id: BuildInfoFileIdListId,
@@ -294,10 +294,10 @@ impl BuildInfoDiagnostic {
             o.set("messageArgs", Value::Array(self.message_args.iter().map(|a| Value::String(a.clone())).collect()));
         }
         if !self.message_chain.is_empty() {
-            o.set("messageChain", Value::Array(self.message_chain.iter().map(|d| d.marshal_json()).collect()));
+            o.set("messageChain", Value::Array(self.message_chain.iter().map(BuildInfoDiagnostic::marshal_json).collect()));
         }
         if !self.related_information.is_empty() {
-            o.set("relatedInformation", Value::Array(self.related_information.iter().map(|d| d.marshal_json()).collect()));
+            o.set("relatedInformation", Value::Array(self.related_information.iter().map(BuildInfoDiagnostic::marshal_json).collect()));
         }
         o.bool("reportsUnnecessary", self.reports_unnecessary);
         o.bool("reportsDeprecated", self.reports_deprecated);
@@ -334,7 +334,7 @@ impl BuildInfoDiagnostic {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildInfoRepopulateInfo {
     pub kind: RepopulateDiagnosticKind,
     pub module_reference: String,
@@ -378,7 +378,7 @@ impl BuildInfoDiagnosticsOfFile {
     // buildInfo.go:234
     pub fn marshal_json(&self) -> Value {
         // Go marshals a nil []*BuildInfoDiagnostic inside []any as null.
-        Value::Array(vec![num(self.file_id), Value::Array(self.diagnostics.iter().map(|d| d.marshal_json()).collect())])
+        Value::Array(vec![num(self.file_id), Value::Array(self.diagnostics.iter().map(BuildInfoDiagnostic::marshal_json).collect())])
     }
 
     // buildInfo.go:241
@@ -434,7 +434,7 @@ impl BuildInfoSemanticDiagnostic {
 // fileId if pending emit is same as what compilerOptions suggest
 // [fileId] if pending emit is only dts file emit
 // [fileId, emitKind] if any other type emit is pending
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoFilePendingEmit {
     pub file_id: BuildInfoFileId,
     pub emit_kind: FileEmitKind,
@@ -481,7 +481,7 @@ impl BuildInfoFilePendingEmit {
 
 // [fileId, signature] if different from file's signature
 // fileId if file wasnt emitted
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoEmitSignature {
     pub file_id: BuildInfoFileId,
     pub signature: String,             // Signature if it is different from file's Signature
@@ -567,7 +567,7 @@ impl BuildInfoEmitSignature {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoResolvedRoot {
     pub resolved: BuildInfoFileId,
     pub root: BuildInfoFileId,

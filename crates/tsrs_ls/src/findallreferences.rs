@@ -403,9 +403,7 @@ pub(crate) fn get_range_of_node(node: P<Node>, source_file: Option<P<SourceFile>
         .end()
         .expect_source("reference nodes have source positions");
     if ast::is_string_literal_like(node) && (end - start) > 2 {
-        if end_node.is_some() {
-            panic!("endNode is not nil for stringLiteralLike");
-        }
+        assert!(end_node.is_none(), "endNode is not nil for stringLiteralLike");
         start += 1;
         end -= 1;
     }
@@ -523,7 +521,9 @@ pub(crate) fn get_symbol_scope(symbol: P<Symbol>) -> Option<P<Node>> {
     let exposed_by_parent = symbol.parent().is_some() && !symbol.flags().intersects(SymbolFlags::TypeParameter);
     if exposed_by_parent {
         let parent = symbol.parent().unwrap();
-        if !(tsrs_checker::is_external_module_symbol(parent) && !is_source_file_with_global_exports(parent.value_declaration())) {
+        let is_external_without_global_exports =
+            tsrs_checker::is_external_module_symbol(parent) && !is_source_file_with_global_exports(parent.value_declaration());
+        if !is_external_without_global_exports {
             return None;
         }
     }
@@ -1290,7 +1290,7 @@ impl LanguageService {
     pub(crate) fn convert_entries_to_locations(&self, entries: &[Rc<ReferenceEntry>], feature: Feature) -> Vec<lsproto::Location> {
         let mut locations: Vec<lsproto::Location> = Vec::with_capacity(entries.len());
         locations.extend(
-            entries.iter().filter_map(|entry| if let Some(location) = self.get_location_of_entry_for_feature(entry, feature) { Some(location) } else { None }),
+            entries.iter().filter_map(|entry| self.get_location_of_entry_for_feature(entry, feature)),
         );
         locations
     }
@@ -1657,7 +1657,7 @@ impl LanguageService {
     ) -> Option<Vec<SymbolAndEntries>> {
         let module_source_file_name: &str;
         let symbol = symbol?;
-        if !(symbol.flags().intersects(SymbolFlags::Module) && !symbol.declarations().is_empty()) {
+        if !symbol.flags().intersects(SymbolFlags::Module) || symbol.declarations().is_empty() {
             return None;
         }
         if let Some(module_source_file) = symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d)) {
@@ -2204,7 +2204,7 @@ pub(crate) fn get_special_search_kind(node: Option<P<Node>>) -> &'static str {
         Kind::Constructor | Kind::ConstructorKeyword => "constructor",
         Kind::Identifier => {
             if ast::is_class_like(node.parent().unwrap()) {
-                assert!(node.parent().unwrap().name() == Some(node));
+                assert_eq!(node.parent().unwrap().name(), Some(node));
                 return "class";
             }
             "none"
@@ -2340,7 +2340,7 @@ pub(crate) fn new_state<'a>(
     }
 }
 
-impl<'a> RefState<'a> {
+impl RefState<'_> {
     // findallreferences.go:1942
     pub(crate) fn includes_source_file(&self, source_file: P<SourceFile>) -> bool {
         self.source_files_set.has(&source_file.file_name().to_string())
@@ -2532,7 +2532,7 @@ pub(crate) fn for_each_descendant_of_kind(node: P<Node>, kind: Kind, action: &mu
     });
 }
 
-impl<'a> RefState<'a> {
+impl RefState<'_> {
     // findallreferences.go:2110
     pub(crate) fn add_implementation_references(&mut self, ref_node: P<Node>, add_ref: &mut dyn FnMut(P<Node>)) {
         // Check if we found a function/propertyAssignment/method with an implementation or initializer
@@ -2953,7 +2953,7 @@ impl<'a> RefState<'a> {
                         indirect_search = Some(self.create_search(Some(export_location), export_symbol, ImpExpKind::Export, "default", Vec::new()));
                     }
                 }
-                _ => {}
+                ExportKind::ExportEquals => {}
             }
             if let Some(indirect_search) = indirect_search {
                 for &indirect_user in &r.indirect_users {

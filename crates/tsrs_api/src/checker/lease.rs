@@ -44,7 +44,7 @@ struct Gate {
 static GATES: Mutex<Option<FxHashMap<usize, Arc<Gate>>>> = Mutex::new(None);
 
 fn lock_gates() -> std::sync::MutexGuard<'static, Option<FxHashMap<usize, Arc<Gate>>>> {
-    GATES.lock().unwrap_or_else(|e| e.into_inner())
+    GATES.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Exclusive right to acquire the program's API checker; released on drop.
@@ -60,7 +60,7 @@ pub(crate) fn acquire(program: &'static Program) -> CheckerResult<ApiCheckerLeas
     let gate = Arc::clone(lock_gates().get_or_insert_with(FxHashMap::default).entry(key).or_default());
     let lease = |gate: Arc<Gate>| ApiCheckerLease { key, gate };
     let result = (|| {
-        let mut st = gate.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut st = gate.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         // One contention state per acquisition (created on first contention, dropped when this
         // acquisition ends, which also clears this request's wait-for edge).
         let mut wait: Option<ContentionWait> = None;
@@ -71,7 +71,7 @@ pub(crate) fn acquire(program: &'static Program) -> CheckerResult<ApiCheckerLeas
                 return Ok(());
             }
             let Some(cx) = tsrs_api_transport::current_request() else {
-                st = gate.released.wait(st).unwrap_or_else(|e| e.into_inner());
+                st = gate.released.wait(st).unwrap_or_else(std::sync::PoisonError::into_inner);
                 continue;
             };
             let w = wait.get_or_insert_with(|| ContentionWait::new(st.holder.as_ref()));
@@ -83,7 +83,7 @@ pub(crate) fn acquire(program: &'static Program) -> CheckerResult<ApiCheckerLeas
                 return Err(CheckerError { kind: CheckerErrorKind::Internal, message: "ipc: connection closed".to_string() });
             }
             // Re-check shortly: the holder may start or stop waiting on the client while we wait.
-            st = gate.released.wait_timeout(st, Duration::from_millis(2)).unwrap_or_else(|e| e.into_inner()).0;
+            st = gate.released.wait_timeout(st, Duration::from_millis(2)).unwrap_or_else(std::sync::PoisonError::into_inner).0;
         }
     })();
     match result {
@@ -98,7 +98,7 @@ pub(crate) fn acquire(program: &'static Program) -> CheckerResult<ApiCheckerLeas
 fn forget_if_unused(key: usize, gate: &Arc<Gate>) {
     let mut gates = lock_gates();
     // One reference in the map plus the caller's: nobody else holds or waits on this gate.
-    if Arc::strong_count(gate) == 2 && !gate.state.lock().unwrap_or_else(|e| e.into_inner()).held {
+    if Arc::strong_count(gate) == 2 && !gate.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner).held {
         if let Some(map) = gates.as_mut() {
             map.remove(&key);
         }
@@ -108,7 +108,7 @@ fn forget_if_unused(key: usize, gate: &Arc<Gate>) {
 impl Drop for ApiCheckerLease {
     fn drop(&mut self) {
         {
-            let mut st = self.gate.state.lock().unwrap_or_else(|e| e.into_inner());
+            let mut st = self.gate.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
             st.held = false;
             st.holder = None;
         }

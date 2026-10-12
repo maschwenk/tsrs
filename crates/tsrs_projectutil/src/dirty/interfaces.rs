@@ -70,7 +70,7 @@ impl<T> Eq for Shared<T> {}
 
 impl<T> Hash for Shared<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        Arc::as_ptr(&self.0).hash(state)
+        Arc::as_ptr(&self.0).hash(state);
     }
 }
 

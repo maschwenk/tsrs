@@ -63,7 +63,7 @@ static CHUNKS: Mutex<Chunks> = Mutex::new(Chunks { next: GRANULE, free: BTreeMap
 
 #[cold]
 fn fail(what: &str) -> ! {
-    let live = CHUNKS.try_lock().map(|c| c.live).unwrap_or(0);
+    let live = CHUNKS.try_lock().map_or(0, |c| c.live);
     eprintln!(
         "tsrs: {what} (compressed pointers: one {} GiB address range for every arena; {} MiB of it in use). \
          Build with the tsrs_core/plain-ptrs feature to lift the limit.",
@@ -193,7 +193,7 @@ impl Chunks {
 pub(crate) fn alloc_chunk(size: usize, huge: bool) -> *mut u8 {
     let align = if huge { HUGE_CHUNK } else { GRANULE };
     let size = size.next_multiple_of(align);
-    let mut c = CHUNKS.lock().unwrap_or_else(|e| e.into_inner());
+    let mut c = CHUNKS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     if !RESERVED.load(Ordering::Relaxed) {
         reserve();
         RESERVED.store(true, Ordering::Relaxed);
@@ -218,7 +218,7 @@ pub(crate) unsafe fn release_chunk(p: *mut u8, size: usize) {
     let size = size.next_multiple_of(GRANULE);
     decommit(p, size);
     let off = p.addr() - base().addr();
-    CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).put(off, size);
+    CHUNKS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).put(off, size);
 }
 
 /// The system page size (16 KiB on Apple silicon, 4 KiB on most Linux machines).
@@ -266,12 +266,12 @@ pub(crate) unsafe fn discard(p: *mut u8, len: usize) {
 
 /// Bytes of the reservation handed out as chunks and not released.
 pub fn reserved_in_use() -> usize {
-    CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).live
+    CHUNKS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).live
 }
 
 /// How far into the reservation chunks have ever been carved (released ranges are reused before it grows).
 pub fn reserved_high_water() -> usize {
-    CHUNKS.lock().unwrap_or_else(|e| e.into_inner()).peak
+    CHUNKS.lock().unwrap_or_else(std::sync::PoisonError::into_inner).peak
 }
 
 #[cfg(test)]

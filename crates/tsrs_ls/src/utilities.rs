@@ -1608,7 +1608,7 @@ pub(crate) fn get_reference_at_position(
 
     if let Some(type_reference_directive) = find_reference_in_position(source_file.type_reference_directives(), position) {
         if let Some(reference) = program.get_resolved_type_reference_directive_from_type_reference_directive(type_reference_directive, source_file) {
-            if let Some(file) = program.get_source_file(&reference.resolved_file_name) {
+            if let Some(file) = program.get_source_file(reference.resolved_file_name) {
                 return Some(RefInfo { reference: Some(type_reference_directive), file_name: file.file_name().to_string(), file: Some(file) });
             }
         }

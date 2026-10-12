@@ -401,7 +401,7 @@ function genGetters(l: Layout) {
         if (f.cell) {
             w(`    #[inline]`);
             w(`    pub fn set_${f.rust.replace(/_$/, "")}(&self, value: ${f.ty}) {`);
-            w(`        self.${f.path}.set(value)`);
+            w(`        self.${f.path}.set(value);`);
             w(`    }`);
         }
     }
@@ -447,7 +447,8 @@ function structLiteral(l: Layout, values: Map<string, string>, indent: string): 
     for (const f of l.fields) {
         if (f.rare) continue;
         const v = values.get(f.name) ?? defaultValue(f.ty);
-        lines.push(`${indent}    ${f.rust}: ${f.cell ? `OwnedCell::new(${v})` : isPackedStr(f) ? `PackedStr::new(${v})` : v},`);
+        const value = f.cell ? `OwnedCell::new(${v})` : isPackedStr(f) ? `PackedStr::new(${v})` : v;
+        lines.push(value === f.rust ? `${indent}    ${f.rust},` : `${indent}    ${f.rust}: ${value},`);
     }
     lines.push(`${indent}}`);
     return lines.join("\n");
@@ -458,7 +459,7 @@ function rareLiteral(l: Layout, values: Map<string, string>, indent: string): { 
     const rare = l.fields.filter(f => f.rare);
     if (rare.length === 0) return undefined;
     const value = (f: Field) => values.get(f.name) ?? defaultValue(f.ty);
-    const lines = [`${l.name}Rare {`, ...rare.map(f => `${indent}    ${f.rust}: ${value(f)},`), `${indent}}`];
+    const lines = [`${l.name}Rare {`, ...rare.map(f => value(f) === f.rust ? `${indent}    ${f.rust},` : `${indent}    ${f.rust}: ${value(f)},`), `${indent}}`];
     return { cond: rare.map(f => `${value(f)}.is_some()`).join(" || "), lit: lines.join("\n") };
 }
 
@@ -755,9 +756,7 @@ function genNodeImpl() {
         const empty = isEmptyLayout(layouts.get(n.name)!);
         w(`    #[inline]`);
         w(`    pub fn ${fn}(&self) -> &'static ${n.name} {`);
-        w(`        if self.data_tag() != NodeDataTag::${n.name} {`);
-        w(`            panic!("${fn} called on {:?}", self.kind());`);
-        w(`        }`);
+        w(`        assert!(self.data_tag() == NodeDataTag::${n.name}, "${fn} called on {:?}", self.kind());`);
         w(empty ? `        &${n.name}` : `        self.payload()`);
         w(`    }`);
     }
@@ -765,9 +764,7 @@ function genNodeImpl() {
         const fn = `as_${snake(e)}`;
         w(`    #[inline]`);
         w(`    pub fn ${fn}(&self) -> &'static ${e} {`);
-        w(`        if self.data_tag() != NodeDataTag::${e} {`);
-        w(`            panic!("${fn} called on {:?}", self.kind());`);
-        w(`        }`);
+        w(`        assert!(self.data_tag() == NodeDataTag::${e}, "${fn} called on {:?}", self.kind());`);
         w(`        self.payload()`);
         w(`    }`);
     }

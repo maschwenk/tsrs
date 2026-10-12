@@ -2,8 +2,6 @@
 //
 // Rust counterpart of the pinned tsc/internal/api/encoder/{encoder,decoder}_generated.go.
 
-#![allow(clippy::all, clippy::pedantic, clippy::nursery, unused_parens, unused_variables, unused_mut, non_snake_case, reason = "generated from the TypeScript AST schema")]
-
 use tsrs_ast::*;
 use tsrs_core::{alloc_slice, P};
 
@@ -45,11 +43,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ComputedPropertyName => {
             let n = node.as_computed_property_name();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::Decorator => {
             let n = node.as_decorator();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::IfStatement => {
             let n = node.as_if_statement();
@@ -83,15 +81,15 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::BreakStatement => {
             let n = node.as_break_statement();
-            ((present(n.label()) as u8) << 0)
+            (present(n.label()) as u8) << 0
         }
         Kind::ContinueStatement => {
             let n = node.as_continue_statement();
-            ((present(n.label()) as u8) << 0)
+            (present(n.label()) as u8) << 0
         }
         Kind::ReturnStatement => {
             let n = node.as_return_statement();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::WithStatement => {
             let n = node.as_with_statement();
@@ -105,7 +103,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::CaseBlock => {
             let n = node.as_case_block();
-            ((present(n.clauses()) as u8) << 0)
+            (present(n.clauses()) as u8) << 0
         }
         Kind::CaseClause | Kind::DefaultClause => {
             let n = node.as_case_or_default_clause();
@@ -114,7 +112,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ThrowStatement => {
             let n = node.as_throw_statement();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::TryStatement => {
             let n = node.as_try_statement();
@@ -134,11 +132,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ExpressionStatement => {
             let n = node.as_expression_statement();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::Block => {
             let n = node.as_block();
-            ((present(n.statements()) as u8) << 0)
+            (present(n.statements()) as u8) << 0
         }
         Kind::VariableStatement => {
             let n = node.as_variable_statement();
@@ -154,11 +152,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::VariableDeclarationList => {
             let n = node.as_variable_declaration_list();
-            ((present(n.declarations()) as u8) << 0)
+            (present(n.declarations()) as u8) << 0
         }
         Kind::ObjectBindingPattern | Kind::ArrayBindingPattern => {
             let n = node.as_binding_pattern();
-            ((present(n.elements()) as u8) << 0)
+            (present(n.elements()) as u8) << 0
         }
         Kind::Parameter => {
             let n = node.as_parameter_declaration();
@@ -178,7 +176,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::MissingDeclaration => {
             let n = node.as_missing_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8) << 0
         }
         Kind::FunctionDeclaration => {
             let n = node.as_function_declaration();
@@ -208,7 +206,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::HeritageClause => {
             let n = node.as_heritage_clause();
-            ((present(n.types()) as u8) << 0)
+            (present(n.types()) as u8) << 0
         }
         Kind::InterfaceDeclaration => {
             let n = node.as_interface_declaration();
@@ -238,7 +236,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ModuleBlock => {
             let n = node.as_module_block();
-            ((present(n.statements()) as u8) << 0)
+            (present(n.statements()) as u8) << 0
         }
         Kind::ImportDeclaration | Kind::JSImportDeclaration => {
             let n = node.as_import_declaration();
@@ -249,15 +247,15 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ExternalModuleReference => {
             let n = node.as_external_module_reference();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::NamespaceImport => {
             let n = node.as_namespace_import();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8) << 0
         }
         Kind::NamedImports => {
             let n = node.as_named_imports();
-            ((present(n.elements()) as u8) << 0)
+            (present(n.elements()) as u8) << 0
         }
         Kind::ExportAssignment => {
             let n = node.as_export_assignment();
@@ -272,11 +270,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::NamespaceExport => {
             let n = node.as_namespace_export();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8) << 0
         }
         Kind::NamedExports => {
             let n = node.as_named_exports();
-            ((present(n.elements()) as u8) << 0)
+            (present(n.elements()) as u8) << 0
         }
         Kind::ExportSpecifier => {
             let n = node.as_export_specifier();
@@ -378,11 +376,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::PrefixUnaryExpression => {
             let n = node.as_prefix_unary_expression();
-            ((present(n.operand()) as u8) << 0)
+            (present(n.operand()) as u8) << 0
         }
         Kind::PostfixUnaryExpression => {
             let n = node.as_postfix_unary_expression();
-            ((present(n.operand()) as u8) << 0)
+            (present(n.operand()) as u8) << 0
         }
         Kind::YieldExpression => {
             let n = node.as_yield_expression();
@@ -453,15 +451,15 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::MetaProperty => {
             let n = node.as_meta_property();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8) << 0
         }
         Kind::NonNullExpression => {
             let n = node.as_non_null_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::SpreadElement => {
             let n = node.as_spread_element();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::TemplateExpression => {
             let n = node.as_template_expression();
@@ -482,19 +480,19 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ParenthesizedExpression => {
             let n = node.as_parenthesized_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::ArrayLiteralExpression => {
             let n = node.as_array_literal_expression();
-            ((present(n.elements()) as u8) << 0)
+            (present(n.elements()) as u8) << 0
         }
         Kind::ObjectLiteralExpression => {
             let n = node.as_object_literal_expression();
-            ((present(n.properties()) as u8) << 0)
+            (present(n.properties()) as u8) << 0
         }
         Kind::SpreadAssignment => {
             let n = node.as_spread_assignment();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::PropertyAssignment => {
             let n = node.as_property_assignment();
@@ -515,19 +513,19 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::DeleteExpression => {
             let n = node.as_delete_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::TypeOfExpression => {
             let n = node.as_type_of_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::VoidExpression => {
             let n = node.as_void_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::AwaitExpression => {
             let n = node.as_await_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::TypeAssertionExpression => {
             let n = node.as_type_assertion();
@@ -536,11 +534,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::UnionType => {
             let n = node.as_union_type_node();
-            ((present(n.types()) as u8) << 0)
+            (present(n.types()) as u8) << 0
         }
         Kind::IntersectionType => {
             let n = node.as_intersection_type_node();
-            ((present(n.types()) as u8) << 0)
+            (present(n.types()) as u8) << 0
         }
         Kind::ConditionalType => {
             let n = node.as_conditional_type_node();
@@ -551,15 +549,15 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::TypeOperator => {
             let n = node.as_type_operator_node();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::InferType => {
             let n = node.as_infer_type_node();
-            ((present(n.type_parameter()) as u8) << 0)
+            (present(n.type_parameter()) as u8) << 0
         }
         Kind::ArrayType => {
             let n = node.as_array_type_node();
-            ((present(n.element_type()) as u8) << 0)
+            (present(n.element_type()) as u8) << 0
         }
         Kind::IndexedAccessType => {
             let n = node.as_indexed_access_type_node();
@@ -578,7 +576,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::LiteralType => {
             let n = node.as_literal_type_node();
-            ((present(n.literal()) as u8) << 0)
+            (present(n.literal()) as u8) << 0
         }
         Kind::TypePredicate => {
             let n = node.as_type_predicate_node();
@@ -593,7 +591,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ImportAttributes => {
             let n = node.as_import_attributes();
-            ((present(n.attributes()) as u8) << 0)
+            (present(n.attributes()) as u8) << 0
         }
         Kind::TypeQuery => {
             let n = node.as_type_query_node();
@@ -611,11 +609,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::TypeLiteral => {
             let n = node.as_type_literal_node();
-            ((present(n.members()) as u8) << 0)
+            (present(n.members()) as u8) << 0
         }
         Kind::TupleType => {
             let n = node.as_tuple_type_node();
-            ((present(n.elements()) as u8) << 0)
+            (present(n.elements()) as u8) << 0
         }
         Kind::NamedTupleMember => {
             let n = node.as_named_tuple_member();
@@ -626,15 +624,15 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::OptionalType => {
             let n = node.as_optional_type_node();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::RestType => {
             let n = node.as_rest_type_node();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::ParenthesizedType => {
             let n = node.as_parenthesized_type_node();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::FunctionType => {
             let n = node.as_function_type_node();
@@ -661,11 +659,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::SyntheticExpression => {
             let n = node.as_synthetic_expression();
-            ((present(n.tuple_name_source()) as u8) << 0)
+            (present(n.tuple_name_source()) as u8) << 0
         }
         Kind::PartiallyEmittedExpression => {
             let n = node.as_partially_emitted_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::JsxElement => {
             let n = node.as_jsx_element();
@@ -675,7 +673,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::JsxAttributes => {
             let n = node.as_jsx_attributes();
-            ((present(n.properties()) as u8) << 0)
+            (present(n.properties()) as u8) << 0
         }
         Kind::JsxNamespacedName => {
             let n = node.as_jsx_namespaced_name();
@@ -707,11 +705,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::JsxSpreadAttribute => {
             let n = node.as_jsx_spread_attribute();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8) << 0
         }
         Kind::JsxClosingElement => {
             let n = node.as_jsx_closing_element();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8) << 0
         }
         Kind::JsxExpression => {
             let n = node.as_jsx_expression();
@@ -720,7 +718,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::SyntaxList => {
             let n = node.as_syntax_list();
-            ((!n.children().is_empty() as u8) << 0)
+            (!n.children().is_empty() as u8) << 0
         }
         Kind::JSDoc => {
             let n = node.as_jsdoc();
@@ -729,23 +727,23 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::JSDocTypeExpression => {
             let n = node.as_jsdoc_type_expression();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::JSDocNonNullableType => {
             let n = node.as_jsdoc_non_nullable_type();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::JSDocNullableType => {
             let n = node.as_jsdoc_nullable_type();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::JSDocVariadicType => {
             let n = node.as_jsdoc_variadic_type();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::JSDocOptionalType => {
             let n = node.as_jsdoc_optional_type();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8) << 0
         }
         Kind::JSDocTypeTag => {
             let n = node.as_jsdoc_type_tag();
@@ -873,7 +871,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::JSDocNameReference => {
             let n = node.as_jsdoc_name_reference();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8) << 0
         }
         Kind::ModuleDeclaration => {
             let n = node.as_module_declaration();
@@ -914,15 +912,15 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::JSDocLink => {
             let n = node.as_jsdoc_link();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8) << 0
         }
         Kind::JSDocLinkPlain => {
             let n = node.as_jsdoc_link_plain();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8) << 0
         }
         Kind::JSDocLinkCode => {
             let n = node.as_jsdoc_link_code();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8) << 0
         }
         Kind::TypeParameter => {
             let n = node.as_type_parameter_declaration();
@@ -939,7 +937,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::JSDocTypeLiteral => {
             let n = node.as_jsdoc_type_literal();
-            ((!n.jsdoc_property_tags().is_empty() as u8) << 0)
+            (!n.jsdoc_property_tags().is_empty() as u8) << 0
         }
         Kind::JSDocParameterTag | Kind::JSDocPropertyTag => {
             let n = node.as_jsdoc_parameter_or_property_tag();
@@ -957,48 +955,48 @@ pub(crate) fn node_common_data(node: P<Node>) -> Result<u32, EncodeError> {
     Ok(match node.kind() {
         Kind::Block => {
             let n = node.as_block();
-            ((n.multi_line() as u32) << 24)
+            (n.multi_line() as u32) << 24
         }
         Kind::HeritageClause => {
             let n = node.as_heritage_clause();
             let token_idx: u32 = match n.token() { Kind::ImplementsKeyword => 1, _ => 0 };
-            (token_idx << 24)
+            token_idx << 24
         }
         Kind::ExportAssignment => {
             let n = node.as_export_assignment();
-            ((n.is_export_equals() as u32) << 24)
+            (n.is_export_equals() as u32) << 24
         }
         Kind::ExportSpecifier => {
             let n = node.as_export_specifier();
-            ((n.is_type_only() as u32) << 24)
+            (n.is_type_only() as u32) << 24
         }
         Kind::PrefixUnaryExpression => {
             let n = node.as_prefix_unary_expression();
             let operator_idx: u32 = match n.operator() { Kind::MinusToken => 1, Kind::TildeToken => 2, Kind::ExclamationToken => 3, Kind::PlusPlusToken => 4, Kind::MinusMinusToken => 5, _ => 0 };
-            (operator_idx << 24)
+            operator_idx << 24
         }
         Kind::PostfixUnaryExpression => {
             let n = node.as_postfix_unary_expression();
             let operator_idx: u32 = match n.operator() { Kind::MinusMinusToken => 1, _ => 0 };
-            (operator_idx << 24)
+            operator_idx << 24
         }
         Kind::MetaProperty => {
             let n = node.as_meta_property();
             let keyword_token_idx: u32 = match n.keyword_token() { Kind::NewKeyword => 1, _ => 0 };
-            (keyword_token_idx << 24)
+            keyword_token_idx << 24
         }
         Kind::ArrayLiteralExpression => {
             let n = node.as_array_literal_expression();
-            ((n.multi_line() as u32) << 24)
+            (n.multi_line() as u32) << 24
         }
         Kind::ObjectLiteralExpression => {
             let n = node.as_object_literal_expression();
-            ((n.multi_line() as u32) << 24)
+            (n.multi_line() as u32) << 24
         }
         Kind::TypeOperator => {
             let n = node.as_type_operator_node();
             let operator_idx: u32 = match n.operator() { Kind::ReadonlyKeyword => 1, Kind::UniqueKeyword => 2, _ => 0 };
-            (operator_idx << 24)
+            operator_idx << 24
         }
         Kind::ImportAttributes => {
             let n = node.as_import_attributes();
@@ -1008,37 +1006,37 @@ pub(crate) fn node_common_data(node: P<Node>) -> Result<u32, EncodeError> {
         Kind::SyntheticExpression => node_common_data_synthetic_expression(node)?,
         Kind::JsxText => {
             let n = node.as_jsx_text();
-            ((n.contains_only_trivia_white_spaces() as u32) << 24)
+            (n.contains_only_trivia_white_spaces() as u32) << 24
         }
         Kind::ModuleDeclaration => {
             let n = node.as_module_declaration();
             let keyword_idx: u32 = match n.keyword() { Kind::NamespaceKeyword => 1, _ => 0 };
-            (keyword_idx << 24)
+            keyword_idx << 24
         }
         Kind::ImportEqualsDeclaration => {
             let n = node.as_import_equals_declaration();
-            ((n.is_type_only() as u32) << 24)
+            (n.is_type_only() as u32) << 24
         }
         Kind::ExportDeclaration => {
             let n = node.as_export_declaration();
-            ((n.is_type_only() as u32) << 24)
+            (n.is_type_only() as u32) << 24
         }
         Kind::ImportType => {
             let n = node.as_import_type_node();
-            ((n.is_type_of() as u32) << 24)
+            (n.is_type_of() as u32) << 24
         }
         Kind::ImportClause => {
             let n = node.as_import_clause();
             let phase_modifier_idx: u32 = match n.phase_modifier() { Kind::TypeKeyword => 1, Kind::DeferKeyword => 2, _ => 0 };
-            (phase_modifier_idx << 24)
+            phase_modifier_idx << 24
         }
         Kind::ImportSpecifier => {
             let n = node.as_import_specifier();
-            ((n.is_type_only() as u32) << 24)
+            (n.is_type_only() as u32) << 24
         }
         Kind::JSDocTypeLiteral => {
             let n = node.as_jsdoc_type_literal();
-            ((n.is_array_type() as u32) << 24)
+            (n.is_array_type() as u32) << 24
         }
         Kind::JSDocParameterTag | Kind::JSDocPropertyTag => {
             let n = node.as_jsdoc_parameter_or_property_tag();
@@ -1941,7 +1939,7 @@ impl Decoder<'_> {
                 f.new_jsx_expression(dot_dot_dot_token, expression)
             }
             Kind::SyntaxList => {
-                if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic(format!("runtime error: index out of range [0] with length 0"))); }
+                if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic("runtime error: index out of range [0] with length 0".to_string())); }
                 let children: &'static [P<Node>] = &[];
                 f.new_syntax_list(children)
             }
@@ -2189,7 +2187,7 @@ impl Decoder<'_> {
             }
             Kind::JSDocTypeLiteral => {
                 let is_array_type = common_data & 1 != 0;
-                if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic(format!("runtime error: index out of range [0] with length 0"))); }
+                if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic("runtime error: index out of range [0] with length 0".to_string())); }
                 let jsdoc_property_tags: &'static [P<Node>] = &[];
                 f.new_jsdoc_type_literal(jsdoc_property_tags, is_array_type)
             }

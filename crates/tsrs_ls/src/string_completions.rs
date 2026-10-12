@@ -571,7 +571,7 @@ impl LanguageService {
         let options = program.options();
         let extension_options = self.get_extension_options(&options, referenceKind::ModuleSpecifier, file, mode, Some(checker));
 
-        let paths_size = options.paths.as_ref().map_or(0, |p| p.len());
+        let paths_size = options.paths.as_ref().map_or(0, indexmap::IndexMap::len);
         if is_path_relative_to_script(&literal_value) || (paths_size == 0 && (tspath::is_rooted_disk_path(&literal_value) || tspath::is_url(&literal_value))) {
             self.get_completion_entries_for_relative_modules(&literal_value, &script_directory, program, &script_path, &extension_options)
         } else {
@@ -696,7 +696,7 @@ impl LanguageService {
                 };
 
                 let ancestor_lookup = |ancestor: &str| -> Option<()> {
-                    if !(!fragment_directory.is_empty() && resolve_package_json_exports) {
+                    if fragment_directory.is_empty() || !resolve_package_json_exports {
                         return node_modules_directory_or_imports_lookup(ancestor);
                     }
                     let components = tspath::get_path_components(fragment, "");
@@ -1052,7 +1052,7 @@ fn get_base_directories_from_root_dirs(root_dirs: &[String], base_path: &str, sc
     let compare_paths_options = ComparePathsOptions { use_case_sensitive_file_names: !ignore_case, current_directory: base_path.to_string() };
     if let Some(root_directory) = normalized_root_dirs
         .iter()
-        .find_map(|root_directory| if tspath::contains_path(root_directory, script_directory, &compare_paths_options) { Some(root_directory) } else { None })
+        .find(|root_directory| tspath::contains_path(root_directory, script_directory, &compare_paths_options))
     {
         if root_directory.len() > script_directory.len() {
             relative_directory = String::new();
@@ -1369,7 +1369,7 @@ impl LanguageService {
             if name.starts_with(fragment) {
                 let mut name = tspath::remove_trailing_directory_separator(name).to_string();
                 if !fragment_directory.is_empty() {
-                    name = name.strip_prefix(fragment_directory.as_str()).map(|s| s.to_string()).unwrap_or(name);
+                    name = name.strip_prefix(fragment_directory.as_str()).map(std::string::ToString::to_string).unwrap_or(name);
                 }
                 return vec![moduleCompletionNameAndKind { name, kind, extension }];
             }
@@ -1519,8 +1519,8 @@ impl LanguageService {
         let mut declaration_extension = String::new();
         let mut input_extensions: Vec<String> = Vec::new();
         if !normalized_suffix.is_empty() {
-            declaration_extension = tspath::get_declaration_emit_extension_for_path(&format!("_{}", normalized_suffix));
-            input_extensions = tspath::get_possible_original_input_extension_for_extension(&format!("_{}", normalized_suffix));
+            declaration_extension = tspath::get_declaration_emit_extension_for_path(&format!("_{normalized_suffix}"));
+            input_extensions = tspath::get_possible_original_input_extension_for_extension(&format!("_{normalized_suffix}"));
         }
 
         let mut matching_suffixes: Vec<String> = Vec::new();
@@ -1539,7 +1539,7 @@ impl LanguageService {
         // interpretation, so we can filter those superfluous results out via `trimPrefixAndSuffix` as we've always
         // done.
         let include_globs: Vec<String> =
-            if !normalized_suffix.is_empty() { matching_suffixes.iter().map(|suffix| format!("**/*{}", suffix)).collect() } else { vec!["./*".to_string()] };
+            if !normalized_suffix.is_empty() { matching_suffixes.iter().map(|suffix| format!("**/*{suffix}")).collect() } else { vec!["./*".to_string()] };
 
         let is_exports_or_imports_wildcard = (is_exports || is_imports) && pattern.ends_with("/*");
 
@@ -1990,14 +1990,9 @@ impl LanguageService {
         )
         .collect();
 
-        let mut found_range: Option<&ast::CommentRange> = None;
-        if let Some(comment_range) = comment_ranges
+        let found_range = comment_ranges
             .iter()
-            .find_map(|comment_range| if position >= comment_range.pos() && position <= comment_range.end() { Some(comment_range) } else { None })
-        {
-            found_range = Some(comment_range);
-        }
-        let found_range = found_range?;
+            .find(|comment_range| position >= comment_range.pos() && position <= comment_range.end())?;
 
         let text = &file.text()[found_range.pos() as usize..position as usize];
         let (prefix, kind, to_complete) = parse_triple_slash_directive_fragment(text)?;

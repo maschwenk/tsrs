@@ -52,7 +52,7 @@ impl Tristate {
         match self {
             Tristate::True => "true",
             Tristate::False => "false",
-            _ => "null",
+            Tristate::Unknown => "null",
         }
     }
 

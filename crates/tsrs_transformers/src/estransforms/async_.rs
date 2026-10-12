@@ -837,7 +837,7 @@ impl asyncTransformer {
         );
 
         // Substitute super property accesses with _super/_superIndex helpers
-        let emit_super_helpers = s.captured_super_properties.borrow().as_ref().is_some_and(|c| c.len() > 0 || s.has_super_element_access.get());
+        let emit_super_helpers = s.captured_super_properties.borrow().as_ref().is_some_and(|c| !c.is_empty() || s.has_super_element_access.get());
         if emit_super_helpers {
             inner_parameters = s.super_access_visitor.get().unwrap().clone().visit_nodes(inner_parameters);
             async_body = s.substitute_super_accesses_in_body(async_body);
@@ -848,7 +848,7 @@ impl asyncTransformer {
             self.emit_context().start_variable_environment();
 
             // Minor optimization, emit `_super` helper to capture `super` access in an arrow.
-            if emit_super_helpers && s.captured_super_properties.borrow().as_ref().unwrap().len() > 0 {
+            if emit_super_helpers && !s.captured_super_properties.borrow().as_ref().unwrap().is_empty() {
                 self.emit_context().add_initialization_statement(s.create_super_access_variable_statement());
             }
 

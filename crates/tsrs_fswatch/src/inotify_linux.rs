@@ -211,8 +211,8 @@ impl inotifyBackend {
         let mut watch_path = sub.watch_path.clone();
         let is_dir = ev.mask & libc::IN_ISDIR != 0;
         if !name.is_empty() {
-            path = format!("{}/{}", path, name);
-            watch_path = format!("{}/{}", watch_path, name);
+            path = format!("{path}/{name}");
+            watch_path = format!("{watch_path}/{name}");
         }
 
         if ev.mask & (libc::IN_CREATE | libc::IN_MOVED_TO) != 0 {
@@ -294,7 +294,7 @@ impl watcherImpl for inotifyBackend {
         let mut subs = self.subscriptions.lock().unwrap();
         if !w.recursive {
             if let Err(err) = self.watch_dir(&mut subs, w, &w.dir, &w.physical_dir) {
-                return Err(Error::wrap(format!("inotify_add_watch on '{}' failed: {}", w.dir, err), &err));
+                return Err(Error::wrap(format!("inotify_add_watch on '{}' failed: {err}", w.dir), &err));
             }
             return Ok(());
         }
@@ -304,7 +304,7 @@ impl watcherImpl for inotifyBackend {
             }
             let path = w.display_path(watch_path);
             if let Err(err) = self.watch_dir(&mut subs, w, &path, watch_path) {
-                return Err(Error::wrap(format!("inotify_add_watch on '{}' failed: {}", path, err), &err));
+                return Err(Error::wrap(format!("inotify_add_watch on '{path}' failed: {err}"), &err));
             }
             Ok(())
         });
@@ -333,7 +333,7 @@ impl watcherImpl for inotifyBackend {
                 // SAFETY: removing a watch descriptor of our own inotify instance.
                 if unsafe { libc::inotify_rm_watch(self.inotify.load(Ordering::SeqCst), wd) } < 0 && first_err.is_none() {
                     let err = Error::from_errno(last_errno());
-                    first_err = Some(Error::wrap(format!("unable to remove dirWatch: {}", err), &err));
+                    first_err = Some(Error::wrap(format!("unable to remove dirWatch: {err}"), &err));
                 }
                 subs.remove(&wd);
             }

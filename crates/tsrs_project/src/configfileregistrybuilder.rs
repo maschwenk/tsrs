@@ -789,9 +789,19 @@ impl configFileRegistryBuilder {
         let mut changed = false;
         self.configs.range(|entry| {
             entry.delete_if(|value| {
-                let should_delete = value.retaining_projects.as_ref().is_none_or(|r| r.is_empty())
-                    && value.retaining_open_files.as_ref().is_none_or(|r| r.is_empty())
-                    && value.retaining_configs.as_ref().is_none_or(|r| r.is_empty());
+                let no_retaining_projects = match value.retaining_projects.as_ref() {
+                    Some(projects) => projects.is_empty(),
+                    None => true,
+                };
+                let no_retaining_open_files = match value.retaining_open_files.as_ref() {
+                    Some(files) => files.is_empty(),
+                    None => true,
+                };
+                let no_retaining_configs = match value.retaining_configs.as_ref() {
+                    Some(configs) => configs.is_empty(),
+                    None => true,
+                };
+                let should_delete = no_retaining_projects && no_retaining_open_files && no_retaining_configs;
                 changed = changed || should_delete;
                 should_delete
             });

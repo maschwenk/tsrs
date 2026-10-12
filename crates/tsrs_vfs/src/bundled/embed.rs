@@ -22,7 +22,7 @@ fn split_path(path: &str) -> Option<&str> {
 }
 
 pub(crate) fn lib_path() -> String {
-    format!("{}libs", SCHEME)
+    format!("{SCHEME}libs")
 }
 
 pub fn is_bundled(path: &str) -> bool {
@@ -73,7 +73,7 @@ impl<T: FS> FS for WrappedFS<T> {
 
     fn read_file(&self, path: &str) -> Option<String> {
         if let Some(rest) = split_path(path) {
-            return embedded_contents(rest).map(|s| s.to_string());
+            return embedded_contents(rest).map(std::string::ToString::to_string);
         }
         self.fs.read_file(path)
     }
@@ -91,7 +91,7 @@ impl<T: FS> FS for WrappedFS<T> {
             if rest.is_empty() {
                 result.directories = vec!["libs".to_string()];
             } else if rest == "libs" {
-                result.files = LIB_NAMES.iter().map(|s| s.to_string()).collect();
+                result.files = LIB_NAMES.iter().map(std::string::ToString::to_string).collect();
             }
             return result;
         }
@@ -130,30 +130,22 @@ impl<T: FS> FS for WrappedFS<T> {
     }
 
     fn write_file(&self, path: &str, data: &str) -> Result<(), String> {
-        if split_path(path).is_some() {
-            panic!("cannot write to embedded file system");
-        }
+        assert!(split_path(path).is_none(), "cannot write to embedded file system");
         self.fs.write_file(path, data)
     }
 
     fn append_file(&self, path: &str, data: &str) -> Result<(), String> {
-        if split_path(path).is_some() {
-            panic!("cannot write to embedded file system");
-        }
+        assert!(split_path(path).is_none(), "cannot write to embedded file system");
         self.fs.append_file(path, data)
     }
 
     fn remove(&self, path: &str) -> Result<(), String> {
-        if split_path(path).is_some() {
-            panic!("cannot remove from embedded file system");
-        }
+        assert!(split_path(path).is_none(), "cannot remove from embedded file system");
         self.fs.remove(path)
     }
 
     fn chtimes(&self, path: &str, a_time: SystemTime, m_time: SystemTime) -> Result<(), String> {
-        if split_path(path).is_some() {
-            panic!("cannot change times on embedded file system");
-        }
+        assert!(split_path(path).is_none(), "cannot change times on embedded file system");
         self.fs.chtimes(path, a_time, m_time)
     }
 }

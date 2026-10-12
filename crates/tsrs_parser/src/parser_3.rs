@@ -225,7 +225,7 @@ impl Parser {
             // It is definitely not an arrow function
             Tristate::False
         } else {
-            assert!(first == Kind::LessThanToken);
+            assert_eq!(first, Kind::LessThanToken);
             // If we have "<" not followed by an identifier,
             // then this definitely is not an arrow function.
             if !self.is_identifier() && self.token != Kind::ConstKeyword {
@@ -2798,7 +2798,7 @@ impl Parser {
                 self.js_error_at_range(modifier.loc(), &diagnostics::Decorators_are_not_valid_here, &[]);
             }
         } else if ast::can_have_decorators(node) {
-            if let Some(decorator_index) = find_index(modifiers, |m| ast::is_decorator(m)) {
+            if let Some(decorator_index) = find_index(modifiers, ast::is_decorator) {
                 if ast::is_class_declaration(node) {
                     if let Some(export_index) = find_index(modifiers, is_export_modifier) {
                         let default_index =
@@ -3106,10 +3106,7 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
         text = text.strip_suffix("*/").unwrap_or(text);
         let mut pos: usize = 2;
         let mut pragmas = Vec::new();
-        loop {
-            let Some(found) = skip_to(text, pos, "@") else {
-                break;
-            };
+        while let Some(found) = skip_to(text, pos, "@") {
             pos = found;
             // Mirrors the /@(\S+)(\s+(?:\S.*)?)?$/gm pragma regex used by TypeScript: the '@'
             // must be immediately followed by a non-whitespace pragma name, and the remainder
@@ -3175,10 +3172,7 @@ fn skip_to(text: &str, pos: usize, s: &str) -> Option<usize> {
     }
     let haystack = &text.as_bytes()[pos..];
     let needle = s.as_bytes();
-    match haystack.windows(needle.len()).position(|w| w == needle) {
-        None => None,
-        Some(i) => Some(pos + i),
-    }
+    haystack.windows(needle.len()).position(|w| w == needle).map(|i| pos + i)
 }
 
 fn line_end_pos(text: &str, pos: usize) -> usize {

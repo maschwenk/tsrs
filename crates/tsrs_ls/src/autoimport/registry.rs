@@ -101,7 +101,7 @@ fn known_recursive_search_packages() -> &'static Set<String> {
                 "web3-provider-engine",
                 "webpack",
             ]
-            .map(|s| s.to_string()),
+            .map(std::string::ToString::to_string),
         )
     });
     &SET
@@ -145,7 +145,7 @@ impl bucketBuildPreferences {
 
 // Go `*collections.Set` nil semantics (a nil set is empty; `Clone` keeps nil; `Equals` distinguishes nil).
 fn set_len(s: &Option<Set<String>>) -> usize {
-    s.as_ref().map_or(0, |s| s.len())
+    s.as_ref().map_or(0, tsrs_core::collections::Set::len)
 }
 
 fn set_has(s: &Option<Set<String>>, key: &str) -> bool {
@@ -515,10 +515,10 @@ impl Registry {
                 builder.specifier_cache.clear();
             }
         }
-        builder.update_bucket_and_directory_existence(&change, &logger);
-        builder.mark_buckets_dirty(&change, &logger);
+        builder.update_bucket_and_directory_existence(change, &logger);
+        builder.mark_buckets_dirty(change, &logger);
         if !change.requested_file.is_empty() {
-            builder.update_indexes(ctx, &change, &logger);
+            builder.update_indexes(ctx, change, &logger);
         }
         if !logger.is_nil() {
             logger.logf(format_args!("Built autoimport registry in {:?}", start.elapsed()));
@@ -581,7 +581,7 @@ const SCRATCH_REGION_FIRST_CHUNK: usize = 1 << 20;
 // region of the update that read it).
 fn regions_of_directories(directories: &SharedMap<Path, directory>) -> Vec<Region> {
     let mut regions: Vec<Region> = Vec::new();
-    for region in Region::containing_all(directories.iter().map(|(_, dir)| dir.package_json.addr())).into_iter().flatten() {
+    for region in Region::containing_all(directories.values().map(|dir| dir.package_json.addr())).into_iter().flatten() {
         if !regions.iter().any(|r| r.ptr_eq(&region)) {
             regions.push(region);
         }
@@ -796,10 +796,10 @@ impl registryBuilder<'_> {
         }));
         if !logger.is_nil() {
             for project_id in &added_projects {
-                logger.logf(format_args!("Added project: {}", project_id));
+                logger.logf(format_args!("Added project: {project_id}"));
             }
             for project_id in &removed_projects {
-                logger.logf(format_args!("Removed project: {}", project_id));
+                logger.logf(format_args!("Removed project: {project_id}"));
             }
         }
 
@@ -1242,7 +1242,7 @@ impl registryBuilder<'_> {
             }
             if should_rebuild {
                 let mut br = bucketBuildResult::new(bucketTarget::Project(project), (self.base.to_path)(program.get_current_directory()));
-                self.build_project_bucket(ctx, &mut br, &project_id, resolved_package_names, &logger.fork(&format!("Building project bucket {}", project_id)));
+                self.build_project_bucket(ctx, &mut br, &project_id, resolved_package_names, &logger.fork(&format!("Building project bucket {project_id}")));
                 all_results.push(br);
             }
         }
@@ -1560,7 +1560,7 @@ impl registryBuilder<'_> {
                 pool.created_count()
             ));
             if skipped_file_count > 0 {
-                logger.logf(format_args!("Skipped {} files due to exclude patterns", skipped_file_count));
+                logger.logf(format_args!("Skipped {skipped_file_count} files due to exclude patterns"));
             }
             logger.logf(format_args!("Built index: {:?}", index_start.elapsed()));
             logger.logf(format_args!("Bucket total: {:?}", start.elapsed()));
@@ -1597,11 +1597,8 @@ impl registryBuilder<'_> {
         // Add packages that are directly imported by programs but not listed in package.json.
         // This ensures node_modules files are always in node_modules buckets.
         // Include packages from all projects that have this node_modules directory in their spine.
-        #[expect(clippy::iter_over_hash_type, reason = "pure set inserts; Go ranges the map too")]
-        for resolved_package_names in all_resolved_package_names.values() {
-            if let Some(names) = resolved_package_names {
-                dependencies.m.extend(names.keys().iter().map(std::clone::Clone::clone));
-            }
+        for names in all_resolved_package_names.values().flatten() {
+            dependencies.m.extend(names.keys().iter().map(std::clone::Clone::clone));
         }
 
         Some(dependencies)
@@ -1661,7 +1658,7 @@ impl registryBuilder<'_> {
     // discoverBucketPackages resolves the package.json and realpath for each package name
     // in a node_modules directory. This is the discovery phase of the three-phase extraction pipeline.
     fn discover_bucket_packages(&self, package_names: Option<&Set<String>>, dir_name: &str, _dir_path: &Path) -> Vec<Arc<discoveredPackage>> {
-        let mut result = Vec::with_capacity(package_names.map_or(0, |p| p.len()));
+        let mut result = Vec::with_capacity(package_names.map_or(0, tsrs_core::collections::Set::len));
         let Some(package_names) = package_names else {
             return result;
         };

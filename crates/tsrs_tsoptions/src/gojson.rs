@@ -123,7 +123,7 @@ impl GoJson for Option<i64> {
         // itself parses as the f64 2^63, which saturates back to i64::MAX here.
         match value {
             Value::Null => Ok(None),
-            Value::Number(n) if n.fract() == 0.0 && *n >= -9223372036854775808.0 && *n <= 9223372036854775808.0 => Ok(Some(*n as i64)),
+            Value::Number(n) if n.fract() == 0.0 && *n >= -9_223_372_036_854_775_808.0 && *n <= 9_223_372_036_854_775_808.0 => Ok(Some(*n as i64)),
             Value::Integer(n) => Ok(Some(*n)),
             v => Err(type_error(field, "int", v)),
         }

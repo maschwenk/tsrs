@@ -48,8 +48,8 @@ pub struct TimingCollector {
 impl TimingCollector {
     pub fn record(&self, method: &str, d: Duration) {
         let processing_ms = d.as_nanos() as f64 / 1_000_000.0;
-        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).map(|d| d.as_millis() as i64).unwrap_or(0);
-        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let timestamp = SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_millis() as i64);
+        let mut s = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         s.totals.request_count += 1;
         s.totals.total_processing_time_ms += processing_ms;
         let entry = ServerRequestTiming { method: method.to_string(), processing_time_ms: processing_ms, timestamp };
@@ -63,14 +63,14 @@ impl TimingCollector {
     }
 
     pub fn snapshot(&self) -> ServerTimingInfo {
-        let s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let s = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let n = s.ring.len();
         let recent = (0..n).map(|i| s.ring[(s.head + i) % n].clone()).collect();
         ServerTimingInfo { enabled: true, totals: s.totals.clone(), recent_requests: recent }
     }
 
     pub fn reset(&self) {
-        let mut s = self.state.lock().unwrap_or_else(|e| e.into_inner());
+        let mut s = self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         *s = State::default();
     }
 }

@@ -258,7 +258,7 @@ impl Program {
     // GetRedirectTargets returns the list of file paths that redirect to the given path.
     // These are files from the same package (same name@version) installed in different locations.
     pub fn get_redirect_targets(&self, path: &Path) -> &[String] {
-        self.redirect_targets_map.get(path).map(|v| v.as_slice()).unwrap_or(&[])
+        self.redirect_targets_map.get(path).map_or(&[] as &[String], std::vec::Vec::as_slice)
     }
 
     // gets the original file that was included in program
@@ -293,7 +293,7 @@ impl Program {
 
     // program.go:226
     pub fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>> {
-        self.project_reference_file_mapper.get_redirect_parsed_command_line_for_resolution(file.file_name(), &file.path())
+        self.project_reference_file_mapper.get_redirect_parsed_command_line_for_resolution(file.file_name(), file.path())
     }
 
     // program.go:231
@@ -325,7 +325,7 @@ impl Program {
 
     // program.go:183
     pub fn package_json_cache_entries(&self, f: impl FnMut(&Path, &P<tsrs_module::packagejson::InfoCacheEntry>) -> bool) {
-        self.resolution_data.package_json_cache_entries(f)
+        self.resolution_data.package_json_cache_entries(f);
     }
 
     pub fn use_case_sensitive_file_names(&self) -> bool {
@@ -361,7 +361,7 @@ impl Program {
 
         // Only try adding extensions from the first supported group (which should be .ts/.tsx/.d.ts)
         if let Some(result) = supported_extensions[0].iter().find_map(|ext| {
-            if let Some(result) = self.get_source_file_for_resolved_module(&format!("{}{}", file_name, ext)) {
+            if let Some(result) = self.get_source_file_for_resolved_module(&format!("{file_name}{ext}")) {
                 return Some(Some(result));
             }
 
@@ -395,7 +395,7 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|&n| n > 0)
-            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, |n| n.get()).min(PARSE_THREAD_CAP));
+            .unwrap_or_else(|| std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(PARSE_THREAD_CAP));
         rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap()
     })
 }
@@ -694,17 +694,13 @@ impl Program {
 
     // program.go:443
     fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
-        if !self.finished_processing {
-            panic!("Program must finish processing files before initializing checker pool");
-        }
+        assert!(self.finished_processing, "Program must finish processing files before initializing checker pool");
 
         let pool = match create {
             Some(create) => programCheckerPool::External(create(self)),
             None => programCheckerPool::Compiler(checkerPool::new(self)),
         };
-        if self.checker_pool.set(pool).is_err() {
-            panic!("checker pool initialized twice");
-        }
+        assert!(self.checker_pool.set(pool).is_ok(), "checker pool initialized twice");
     }
 
     // program.go:458
@@ -741,11 +737,11 @@ impl Program {
             && equal_func(file1.imports(), file2.imports(), |n1, n2| {
                 equal_module_specifiers(n1, n2) && self.get_mode_for_usage_location(file1, n1) == self.get_mode_for_usage_location(file2, n2)
             })
-            && equal_func(file1.module_augmentations(), file2.module_augmentations(), |n1, n2| equal_module_augmentation_names(n1, n2))
+            && equal_func(file1.module_augmentations(), file2.module_augmentations(), equal_module_augmentation_names)
             && file1.ambient_module_names() == file2.ambient_module_names()
-            && equal_func(file1.referenced_files(), file2.referenced_files(), |f1, f2| equal_file_references(f1, f2))
-            && equal_func(file1.type_reference_directives.get(), file2.type_reference_directives.get(), |f1, f2| equal_file_references(f1, f2))
-            && equal_func(file1.lib_reference_directives.get(), file2.lib_reference_directives.get(), |f1, f2| equal_file_references(f1, f2))
+            && equal_func(file1.referenced_files(), file2.referenced_files(), equal_file_references)
+            && equal_func(file1.type_reference_directives.get(), file2.type_reference_directives.get(), equal_file_references)
+            && equal_func(file1.lib_reference_directives.get(), file2.lib_reference_directives.get(), equal_file_references)
             && equal_check_js_directives(file1.check_js_directive.get(), file2.check_js_directive.get())
     }
 
@@ -951,7 +947,7 @@ impl Program {
     }
 
     pub fn get_resolved_module(&self, file: P<SourceFile>, module_reference: &str, mode: ResolutionMode) -> Option<P<ResolvedModule>> {
-        self.get_resolved_module_by_path(&file.path(), module_reference, mode)
+        self.get_resolved_module_by_path(file.path(), module_reference, mode)
     }
 
     pub(crate) fn get_resolved_module_by_path(&self, path: &Path, module_reference: &str, mode: ResolutionMode) -> Option<P<ResolvedModule>> {
@@ -961,9 +957,7 @@ impl Program {
     }
 
     pub fn get_resolved_module_from_module_specifier(&self, file: P<SourceFile>, module_specifier: P<Node>) -> Option<P<ResolvedModule>> {
-        if !ast::is_string_literal_like(module_specifier) {
-            panic!("moduleSpecifier must be a StringLiteralLike");
-        }
+        assert!(ast::is_string_literal_like(module_specifier), "moduleSpecifier must be a StringLiteralLike");
         let mode = self.get_mode_for_usage_location(file, module_specifier);
         self.get_resolved_module(file, module_specifier.text(), mode)
     }
@@ -1212,8 +1206,8 @@ impl Program {
     pub fn skip_type_checking(&self, source_file: P<SourceFile>, ignore_no_check: bool) -> bool {
         (!ignore_no_check && self.options().no_check.is_true())
             || self.options().skip_lib_check.is_true() && source_file.is_declaration_file.get()
-            || self.options().skip_default_lib_check.is_true() && self.is_source_file_default_library(&source_file.path())
-            || self.is_source_from_project_reference(&source_file.path())
+            || self.options().skip_default_lib_check.is_true() && self.is_source_file_default_library(source_file.path())
+            || self.is_source_from_project_reference(source_file.path())
             || !self.can_include_bind_and_check_diagnostics(source_file)
     }
 
@@ -1245,7 +1239,7 @@ impl Program {
         let config_file_path = source_file.map(|f| f.file_name().to_string()).unwrap_or_default();
 
         let compiler_options_property_syntax: Option<P<Node>> =
-            tsoptions::for_each_ts_config_prop_array(source_file, "compilerOptions", |p| Some(p));
+            tsoptions::for_each_ts_config_prop_array(source_file, "compilerOptions", Some);
 
         let compiler_options_object_literal_syntax: Option<P<Node>> = compiler_options_property_syntax
             .and_then(|p| p.initializer())
@@ -1359,7 +1353,7 @@ impl Program {
             if !config_file_path.is_empty() {
                 let mut relative = tspath::get_relative_path_from_file(&config_file_path, &options.base_url, &self.compare_paths_options);
                 if !(relative.starts_with("./") || relative.starts_with("../")) {
-                    relative = format!("./{}", relative);
+                    relative = format!("./{relative}");
                 }
                 let suggestion = tspath::combine_paths(&relative, &["*"]);
                 use_instead = format!("\"paths\": {{\"*\": [{}]}}", tsrs_core::json::marshal_string(&suggestion));
@@ -1629,7 +1623,7 @@ impl Program {
             }
         }
 
-        if !options.map_root.is_empty() && !(options.source_map.is_true() || options.declaration_map.is_true()) {
+        if !(options.map_root.is_empty() || options.source_map.is_true() || options.declaration_map.is_true()) {
             // Error to specify --mapRoot without --sourcemap
             create_diagnostic_for_option_name!(
                 &diagnostics::Option_0_cannot_be_specified_without_specifying_option_1_or_option_2,
@@ -2125,11 +2119,10 @@ impl Program {
             }
             let current_globals = file_checker.get_global_diagnostics();
             if current_globals.len() > previous_globals.len() {
-                diags.extend(current_globals.into_iter().filter_map(|diagnostic| {
-                    let found = previous_globals
+                diags.extend(current_globals.into_iter().filter(|&diagnostic| {
+                    previous_globals
                         .binary_search_by(|d| compare_diagnostics(*d, diagnostic))
-                        .is_ok();
-                    if !found { Some(diagnostic) } else { None }
+                        .is_err()
                 }));
             }
         }
@@ -2205,7 +2198,7 @@ impl Program {
                 continue;
             };
             let mut line =
-                tsrs_scanner::compute_line_of_position(&line_starts, diagnostic_pos).checked_sub(1);
+                tsrs_scanner::compute_line_of_position(line_starts, diagnostic_pos).checked_sub(1);
             while let Some(current_line) = line {
                 // If line contains a @ts-ignore or @ts-expect-error directive, ignore this diagnostic and change
                 // the directive kind to @ts-ignore to indicate it was used.
@@ -2237,11 +2230,11 @@ impl Program {
     }
 
     pub fn identifier_count(&self) -> usize {
-        self.files.iter().map(|f| f.identifier_count.get() as usize).sum()
+        self.files.iter().map(|f| f.identifier_count.get()).sum()
     }
 
     pub fn symbol_count(&'static self) -> usize {
-        let count: usize = self.files.iter().map(|f| f.symbol_count.get() as usize).sum();
+        let count: usize = self.files.iter().map(|f| f.symbol_count.get()).sum();
         let val = std::sync::atomic::AtomicUsize::new(count + self.retired_checkers(|r| r.symbol_count));
         self.for_each_checker_parallel(|_, c| {
             val.fetch_add(c.symbol_count as usize, std::sync::atomic::Ordering::Relaxed);
@@ -2297,17 +2290,17 @@ impl Program {
     pub fn get_emit_module_format_of_file(&self, source_file: P<SourceFile>) -> ModuleKind {
         ast::get_emit_module_format_of_file_worker(
             source_file.file_name(),
-            &self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), &source_file.path()),
-            &self.get_source_file_meta_data(&source_file.path()),
+            &self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), source_file.path()),
+            self.get_source_file_meta_data(source_file.path()),
         )
     }
 
     pub fn get_emit_syntax_for_usage_location(&self, source_file: P<SourceFile>, location: P<Node>) -> ResolutionMode {
         get_emit_syntax_for_usage_location_worker(
             source_file.file_name(),
-            &self.get_source_file_meta_data(&source_file.path()),
+            self.get_source_file_meta_data(source_file.path()),
             location,
-            &self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), &source_file.path()),
+            &self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), source_file.path()),
         )
     }
 
@@ -2315,18 +2308,18 @@ impl Program {
         ast::get_implied_node_format_for_emit_worker(
             source_file.file_name(),
             self.project_reference_file_mapper
-                .get_compiler_options_for_file(source_file.file_name(), &source_file.path())
+                .get_compiler_options_for_file(source_file.file_name(), source_file.path())
                 .get_emit_module_kind(),
-            &self.get_source_file_meta_data(&source_file.path()),
+            self.get_source_file_meta_data(source_file.path()),
         )
     }
 
     pub fn get_mode_for_usage_location(&self, source_file: P<SourceFile>, location: P<Node>) -> ResolutionMode {
         get_mode_for_usage_location(
             source_file.file_name(),
-            &self.get_source_file_meta_data(&source_file.path()),
+            self.get_source_file_meta_data(source_file.path()),
             location,
-            Some(&self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), &source_file.path())),
+            Some(&self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), source_file.path())),
         )
     }
 
@@ -2337,7 +2330,7 @@ impl Program {
         }
         let index = index - imports.len();
         if let Some(&augmentation) =
-            source_file.module_augmentations.get().iter().filter(|augmentation| augmentation.kind() == Kind::StringLiteral).nth(index as usize)
+            source_file.module_augmentations.get().iter().filter(|augmentation| augmentation.kind() == Kind::StringLiteral).nth(index)
         {
             return self.get_mode_for_usage_location(source_file, augmentation);
         }
@@ -2347,8 +2340,8 @@ impl Program {
     pub fn get_default_resolution_mode_for_file(&self, source_file: P<SourceFile>) -> ResolutionMode {
         get_default_resolution_mode_for_file(
             source_file.file_name(),
-            &self.get_source_file_meta_data(&source_file.path()),
-            &self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), &source_file.path()),
+            self.get_source_file_meta_data(source_file.path()),
+            &self.project_reference_file_mapper.get_compiler_options_for_file(source_file.file_name(), source_file.path()),
         )
     }
 
@@ -2477,7 +2470,7 @@ impl Program {
         let mut files_explained = 0usize;
         let mut explain_file = |file_name: &str, path: &Path, files_explained: &mut usize| {
             let _ = writeln!(w, "{}", to_relative_file_name(file_name));
-            for &reason in self.file_include_data.file_include_reasons.get(path).map(|v| v.as_slice()).unwrap_or(&[]) {
+            for &reason in self.file_include_data.file_include_reasons.get(path).map_or(&[] as &[P<FileIncludeReason>], std::vec::Vec::as_slice) {
                 let _ = writeln!(w, "   {}", file_include::to_diagnostic(reason, self, true).localize());
             }
             for diag in self.include_processor.explain_redirect_and_implied_format(self, path, &to_relative_file_name).unwrap_or_default() {
@@ -2496,7 +2489,7 @@ impl Program {
             // Explain all sourceFiles till we reach this redirectFile index
             while files_explained < redirect_file.index {
                 let f = files[source_file_index];
-                explain_file(f.file_name(), &f.path(), &mut files_explained);
+                explain_file(f.file_name(), f.path(), &mut files_explained);
                 source_file_index += 1;
             }
             explain_file(&redirect_file.file_name, &redirect_file.path, &mut files_explained);
@@ -2505,7 +2498,7 @@ impl Program {
         // Explain any remaining sourceFiles
         while files_explained < files.len() + redirect_files.len() {
             let f = files[source_file_index];
-            explain_file(f.file_name(), &f.path(), &mut files_explained);
+            explain_file(f.file_name(), f.path(), &mut files_explained);
             source_file_index += 1;
         }
     }
@@ -2608,7 +2601,7 @@ impl Program {
                             let mut name = resolved_module.package_id.name.to_string();
                             if name.is_empty() {
                                 // 2. GetPackageScopeForPath - get name from package.json in the package directory
-                                if let Some(package_scope) = resolver.get_package_scope_for_path(&resolved_module.resolved_file_name) {
+                                if let Some(package_scope) = resolver.get_package_scope_for_path(resolved_module.resolved_file_name) {
                                     if package_scope.exists() {
                                         if let Some(scope_name) = package_scope.contents.and_then(|c| c.get().name.get_value()) {
                                             name.clone_from(scope_name);
@@ -2618,7 +2611,7 @@ impl Program {
                             }
                             if name.is_empty() {
                                 // 3. GetPackageNameFromDirectory - extract from node_modules path
-                                name = tsrs_modulespecifiers::get_package_name_from_directory(&resolved_module.resolved_file_name);
+                                name = tsrs_modulespecifiers::get_package_name_from_directory(resolved_module.resolved_file_name);
                             }
                             // 4. If all fail, don't add empty string
                             if !name.is_empty() {
@@ -2628,7 +2621,7 @@ impl Program {
                                 // map, so auto-import can only find them via recursive directory search.
                                 let (_, rest) = module::parse_package_name(imp.text());
                                 if !rest.is_empty() {
-                                    if let Some(scope) = resolver.get_package_scope_for_path(&resolved_module.resolved_file_name) {
+                                    if let Some(scope) = resolver.get_package_scope_for_path(resolved_module.resolved_file_name) {
                                         if scope.exists() && !scope.contents.is_some_and(|c| c.exports.is_present()) {
                                             package_names.deep_import_packages.add(module::get_package_name_from_types_package_name(&name));
                                         }

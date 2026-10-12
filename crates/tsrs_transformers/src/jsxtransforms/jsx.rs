@@ -110,7 +110,7 @@ impl JSXTransformer {
 
         let f = self.factory();
         let generated_name = f.new_unique_name_ex(
-            &format!("_{}", name),
+            &format!("_{name}"),
             printer::AutoGenerateOptions {
                 flags: printer::GeneratedIdentifierFlags::Optimistic | printer::GeneratedIdentifierFlags::FileLevel | printer::GeneratedIdentifierFlags::AllowNameSubstitution,
                 ..Default::default()
@@ -212,7 +212,7 @@ impl JSXTransformer {
 
     // jsx.go:179
     fn insert_statement_after_custom_prologue(&self, to: &mut Vec<P<Node>>, statement: Option<P<Node>>) {
-        insert_statement_after_prologue(to, statement, |tx: &JSXTransformer, n| tx.is_any_prologue_directive(n), self)
+        insert_statement_after_prologue(to, statement, |tx: &JSXTransformer, n| tx.is_any_prologue_directive(n), self);
     }
 }
 
@@ -911,7 +911,7 @@ fn fixup_whitespace_and_decode_entities(text: &str) -> String {
             {
                 add_line_of_jsx_text(
                     &mut acc,
-                    &text[first_non_whitespace..last_non_whitespace_end + 1],
+                    &text[first_non_whitespace..=last_non_whitespace_end],
                     initial,
                 );
                 initial = false;
@@ -972,11 +972,8 @@ fn decode_entities(text: &str) -> String {
         // Skip past any intervening '&' characters between the current '&'
         // and the ';'. Each such '&' is not part of a valid entity, so emit
         // it (and any text before the next '&') as literals.
-        loop {
-            let Some(next_amp) = text[1..semi].find('&') else {
-                break;
-            };
-            result.push_str(&text[..next_amp + 1]);
+        while let Some(next_amp) = text[1..semi].find('&') {
+            result.push_str(&text[..=next_amp]);
             text = &text[next_amp + 1..];
             semi -= next_amp + 1;
         }
@@ -987,7 +984,7 @@ fn decode_entities(text: &str) -> String {
             // are preserved rather than being lost to U+FFFD by WriteRune.
             result.push_str(&stringutil::encode_js_string_rune(decoded));
         } else {
-            result.push_str(&text[..semi + 1]);
+            result.push_str(&text[..=semi]);
         }
         text = &text[semi + 1..];
 
