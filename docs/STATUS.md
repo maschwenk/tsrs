@@ -424,9 +424,10 @@ the arena leaks its chunks by design). The Linux release binaries are BOLT-optim
 gates run on the optimized binaries (#101; -1 to -3% wall; notes/perf-build-level.md records the build-level space:
 text huge pages, panic=abort, allocators, opt-level, PGO training, #102). CI and the Linux Node API jobs run on
 Depot CI, macOS stays on GitHub; nightly differential parser fuzzing against tsgo (#76); the bench flags instruction
-and peak-memory regressions on main (#74); Rust is pinned at 1.99.0 (#78); the clippy ratchet and the unused-code
-ratchet were paid down across the workspace (#53, #57-#72, #79-#87) and generated code is checked against its
-generators. notes/perf-round3.md indexes what landed, what was rejected and what is open (2026-10-10: with a dated status of each open item).
+and peak-memory regressions on main (#74); Rust is pinned at 1.99.0 (#78); the Clippy and unused-code backlogs were
+paid down across the workspace (#53, #57-#72, #79-#87), Clippy is now denied with no baseline, and generated code is
+checked against its generators. notes/perf-round3.md indexes what landed, what was rejected and what is open
+(2026-10-10: with a dated status of each open item).
 
 ## 2026-10-03: 0.3.0 release
 

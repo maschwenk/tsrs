@@ -137,7 +137,7 @@ fn run(s: &Value) -> Value {
                 &to,
                 &options,
                 program,
-                prefs,
+                &prefs,
                 modulespecifiers::ModuleSpecifierOptions { override_import_mode },
                 false,
             );

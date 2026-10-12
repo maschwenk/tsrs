@@ -21,7 +21,7 @@ pub fn get_module_specifiers(
     compiler_options: &CompilerOptions,
     importing_source_file: P<SourceFile>,
     host: &dyn ModuleSpecifierGenerationHost,
-    user_preferences: UserPreferences,
+    user_preferences: &UserPreferences,
     options: ModuleSpecifierOptions,
     for_auto_imports: bool,
 ) -> ModuleSpecifiersResult {
@@ -44,7 +44,7 @@ pub fn get_module_specifiers_with_info(
     compiler_options: &CompilerOptions,
     importing_source_file: P<SourceFile>,
     host: &dyn ModuleSpecifierGenerationHost,
-    user_preferences: UserPreferences,
+    user_preferences: &UserPreferences,
     options: ModuleSpecifierOptions,
     for_auto_imports: bool,
 ) -> ModuleSpecifiersResult {
@@ -81,7 +81,7 @@ pub fn get_module_specifiers_for_file_with_info(
     module_file_name: &str,
     compiler_options: &CompilerOptions,
     host: &dyn ModuleSpecifierGenerationHost,
-    user_preferences: UserPreferences,
+    user_preferences: &UserPreferences,
     options: ModuleSpecifierOptions,
     for_auto_imports: bool,
 ) -> (Vec<String>, ResultKind) {
@@ -93,7 +93,7 @@ pub fn get_module_specifiers_for_file_with_info(
         options,
     );
 
-    compute_module_specifiers(&module_paths, compiler_options, importing_source_file, host, &user_preferences, options, for_auto_imports)
+    compute_module_specifiers(&module_paths, compiler_options, importing_source_file, host, user_preferences, options, for_auto_imports)
 }
 
 // specifiers.go:112
@@ -1469,7 +1469,7 @@ pub fn update_module_specifier(
     importing_source_file_name: &str,
     old_import_specifier: &str,
     to_file_name: &str,
-    user_preferences: UserPreferences,
+    user_preferences: &UserPreferences,
     options: ModuleSpecifierOptions,
 ) -> String {
     get_module_specifier_with_preferences(
@@ -1479,7 +1479,7 @@ pub fn update_module_specifier(
         importing_source_file_name,
         old_import_specifier,
         to_file_name,
-        &user_preferences,
+        user_preferences,
         options,
     )
 }

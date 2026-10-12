@@ -2,7 +2,7 @@
 //
 // Rust counterpart of the pinned tsc/internal/api/encoder/{encoder,decoder}_generated.go.
 
-#![allow(clippy::all, unused_parens, unused_variables, unused_mut, non_snake_case)]
+#![allow(clippy::all, clippy::pedantic, clippy::nursery, unused_parens, unused_variables, unused_mut, non_snake_case, reason = "generated from the TypeScript AST schema")]
 
 use tsrs_ast::*;
 use tsrs_core::{alloc_slice, P};

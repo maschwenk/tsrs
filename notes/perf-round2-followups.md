@@ -471,12 +471,12 @@ with the switch off, which is why it is not in the default build.
   from the deeply-nested walk (+0.04% single-threaded), `Relation::set` through hashbrown's `entry` (-0.005%, noise),
   a Bloom filter of names in `some_property_reduces_to_never`'s counts (+0.03%).
 
-## The lint ratchet
+## Clippy baseline (complete)
 
 `tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md) and is
-now 3 (status 2026-10-10: 2 `clippy::needless_pass_by_value` in tsrs_modulespecifiers/src/specifiers.rs, 1 `dead_code`
-in tsrs_parser/src/parser_1.rs). Measured on the way: none of the 43 `#[inline(always)]` were needed; the unchecked
-string conversions and link-store indexing are (+1.6% to +5%, +0.6%); removing ~170 clones did not change speed.
+now gone (2026-10-12); every enabled Clippy lint is denied directly. Measured on the way: none of the 43
+`#[inline(always)]` were needed; the unchecked string conversions and link-store indexing are (+1.6% to +5%,
++0.6%); removing ~170 clones did not change speed.
 
 ## Housekeeping
 

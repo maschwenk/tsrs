@@ -1,15 +1,15 @@
-# lint-paydown-compiler: the lint ratchet in the compiler-side crates
+# lint-paydown-compiler: removing the Clippy baseline
 
 Scope: every workspace crate except the project / language-service crates, `tsrs_api*` and the generated
-`tsrs_fourslash` (#57 and two compiler-side branches). Goal: a smaller `tools/lint/baseline.tsv` with identical output
+`tsrs_fourslash` (#57 and two compiler-side branches). Goal: eliminate the Clippy baseline with identical output
 and no instruction cost. Result: 559 baseline findings in these crates -> 5; `#[expect]` cleared 64 of them, each with
 a reason (42 `iter_over_hash_type` loops where Go itself ranges over a map and the order cannot be seen, the 8
 measured unchecked operations below, 14 sites intended as written). No wrong output was found. Instructions and peak
 memory on the 38k-file codebase were unchanged within noise (cumulative: -0.06% / -0.18% instructions with 1 / 4
 checkers, peak -0.06% / +0.03%): the removed clones and the forced inlining are not on paths that show up at
-this scale. Status (2026-10-10): the whole baseline is now 3 findings in 2 rows (tools/lint/baseline.tsv). Of the 5 left
-here, the two `needless_pass_by_value` on `get_module_specifiers_for_file_with_info` / `update_module_specifier`
-remain (specifiers.rs); the other three are gone.
+this scale. Final status (2026-10-12): the last two `needless_pass_by_value` findings now borrow `UserPreferences`,
+the remaining unused parser and fourslash harness items are gone, every enabled lint is denied, and the ratchet
+script and baseline have been removed. The direct Clippy gate is clean.
 
 One gate observation that recurs: in `cargo test -p tsrs_cli` tsctests, one output file differs in an
 `@iterator@<symbol id>` name, which also differs between two runs of the same binary.

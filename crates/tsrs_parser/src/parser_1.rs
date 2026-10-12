@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 
 use bitflags::bitflags;
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_ast::{self as ast, CommentRange, Diagnostic, DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, NodeList, SourceFile, SourceFileParseOptions, TokenFlags};
+use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, Kind, ModifierFlags, ModifierList, Node, NodeFactory, NodeFlags, NodeList, SourceFile, SourceFileParseOptions, TokenFlags};
 use tsrs_core::{alloc_slice, alloc_str, alloc_vec, new_text_range, tspath, LanguageVariant, ScriptKind, TextRange, P};
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_scanner::{self as scanner, Scanner, ScannerState};
@@ -121,7 +121,6 @@ pub struct Parser {
     pub(crate) jsdoc_infos: Vec<JSDocInfo>,
     pub(crate) possible_await_spans: Vec<usize>,
     pub(crate) jsdoc_comments_space: Vec<&'static str>,
-    pub(crate) jsdoc_comment_ranges_space: Vec<CommentRange>,
     pub(crate) jsdoc_tag_comments_space: Vec<&'static str>,
     pub(crate) jsdoc_tag_comments_parts_space: Vec<P<Node>>,
     pub(crate) reparse_list: Vec<P<Node>>,
@@ -165,7 +164,6 @@ pub(crate) fn new_parser() -> Parser {
         jsdoc_infos: Vec::new(),
         possible_await_spans: Vec::new(),
         jsdoc_comments_space: Vec::new(),
-        jsdoc_comment_ranges_space: Vec::new(),
         jsdoc_tag_comments_space: Vec::new(),
         jsdoc_tag_comments_parts_space: Vec::new(),
         reparse_list: Vec::new(),

@@ -60,7 +60,7 @@ impl View {
             &export.module_file_name,
             &self.program.options(),
             self.program,
-            user_preferences.clone(),
+            user_preferences,
             ModuleSpecifierOptions::default(),
             true,
         );

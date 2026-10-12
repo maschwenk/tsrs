@@ -5,12 +5,12 @@ practices. This file adds the rules below.
 
 ## Lint
 
-Run `tools/lint/ratchet.py` and `tools/lint/source.py` before a change lands (`docs/RUST.md`).
+Run `cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"'` and
+`tools/lint/source.py` before a change lands (`docs/RUST.md`).
 
-- Fix what they report in the code you wrote. Do not fix baseline findings in passing; paying them down is its own
-  change.
+- Fix what they report in the code you wrote.
 - If the flagged code is intended, use `#[expect(clippy::<lint>, reason = "...")]` on the smallest item. Never a bare
-  `#[allow]`, and never raise `tools/lint/baseline.tsv`.
+  `#[allow]`.
 
 ## Performance and memory changes
 

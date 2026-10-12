@@ -88,15 +88,6 @@ pub(crate) fn get_baseline_extension(command: BaselineCommand) -> &'static str {
     }
 }
 
-// baselineutil.go:102
-pub(crate) fn drop_trailing_empty_lines(ss: &[String]) -> &[String] {
-    let end = ss
-        .iter()
-        .rposition(|s| !s.is_empty())
-        .map_or(0, |index| index + 1);
-    &ss[..end]
-}
-
 // baselineutil.go:106
 pub(crate) fn normalize_command_name(command: &str) -> String {
     let words: Vec<&str> = command.split_whitespace().collect();

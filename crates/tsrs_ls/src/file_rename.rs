@@ -292,7 +292,7 @@ impl LanguageService {
             new_import_from_path,
             import_literal.text(),
             &target.new_file_name,
-            user_preferences.clone(),
+            user_preferences,
             ModuleSpecifierOptions { override_import_mode: program.get_mode_for_usage_location(source_file, import_literal) },
         )
     }
@@ -388,7 +388,7 @@ fn get_updated_import_specifier_from_moved_source_files(
             importing_source_file_name,
             import_literal.text(),
             candidate.source_file.file_name(),
-            user_preferences.clone(),
+            user_preferences,
             ModuleSpecifierOptions { override_import_mode: resolution_mode },
         );
         if old_specifier != import_literal.text() {
@@ -402,7 +402,7 @@ fn get_updated_import_specifier_from_moved_source_files(
             importing_source_file_name,
             import_literal.text(),
             &candidate.new_file_name,
-            user_preferences.clone(),
+            user_preferences,
             ModuleSpecifierOptions { override_import_mode: resolution_mode },
         ))
     }) {

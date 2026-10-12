@@ -1434,7 +1434,7 @@ impl NodeBuilderImpl {
             &specifier_compiler_options,
             context_file,
             host,
-            modulespecifiers::UserPreferences { import_module_specifier_preference: specifier_pref, import_module_specifier_ending: ending_pref, ..Default::default() },
+            &modulespecifiers::UserPreferences { import_module_specifier_preference: specifier_pref, import_module_specifier_ending: ending_pref, ..Default::default() },
             modulespecifiers::ModuleSpecifierOptions { override_import_mode },
             false, /*forAutoImports*/
         );

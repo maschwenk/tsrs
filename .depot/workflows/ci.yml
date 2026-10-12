@@ -322,8 +322,8 @@ jobs:
             target/wasm-diff/*/fail/**
           if-no-files-found: ignore
 
-  # docs/RUST.md: clippy findings per (lint, file) may not grow past tools/lint/baseline.tsv.
-  lint-ratchet:
+  # docs/RUST.md: every enabled Clippy lint is denied across the hand-written workspace.
+  lint:
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -335,8 +335,8 @@ jobs:
           cache-key: warm
 
       - parallel:
-          - name: Lint ratchet
-            run: python3 tools/lint/ratchet.py --self-test && python3 tools/lint/ratchet.py
+          - name: Clippy
+            run: cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"'
 
           # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
           - name: Source checks
@@ -417,7 +417,7 @@ jobs:
   # behaviour that LLVM exploited only in `panic = "abort"` builds (every call `nounwind`). Two cheap guards for that
   # class: Miri on the arena's free-list tests (plus a negative control that Miri must reject), and the conformance
   # suite on a `panic = "abort"` release build, which crashed on 44 tests before the fix. tools/lint/source.py
-  # (lint-ratchet job) rejects the direct pattern.
+  # (lint job) rejects the direct pattern.
   arena-safety:
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 40
