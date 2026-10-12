@@ -6,7 +6,7 @@
 //   node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 //   node npm/build.mjs --artifacts dir/ --pack      # dir/<target triple>/tsrs[.exe], as the release workflow lays out
 //   node npm/build.mjs --wasm npm/tsrs-wasm/tsrs.wasm --pack   # the WebAssembly package (tools/wasm/build.sh)
-//   node npm/build.mjs --print-version          # also --print-typescript-commit, --check-tag <tag>
+//   node npm/build.mjs --print-version          # also --print-typescript-commit, --print-typescript-nightly, --check-tag <tag>
 //   node npm/build.mjs --sdk-only               # just compile the JS API (npm/tsrs/src -> npm/tsrs/dist)
 //
 // The main package also carries TypeScript 7's unstable JS API (`tsrs/unstable/sync`, `/async`, `/ast`, ...),
@@ -43,7 +43,7 @@ function usage(message) {
     console.error(
         "usage: node npm/build.mjs [--binary <triple>=<path>]... [--artifacts <dir>] [--out <dir>] [--pack] [--tsc <path>]\n" +
             "                          [--wasm <tsrs.wasm>] [--sdk-only]\n" +
-            "                          [--check-tag <git tag>] [--print-version | --print-typescript-commit]\n" +
+            "                          [--check-tag <git tag>] [--print-version | --print-typescript-commit | --print-typescript-nightly]\n" +
             `triples: ${Object.keys(TARGETS).join(", ")}`,
     );
     process.exit(message ? 2 : 0);
@@ -96,6 +96,9 @@ function parseArgs(argv) {
             case "--print-typescript-commit":
                 opts.print = "typescriptCommit";
                 break;
+            case "--print-typescript-nightly":
+                opts.print = "typescriptNightly";
+                break;
             case "-h":
             case "--help":
                 usage();
@@ -123,10 +126,16 @@ function readCargoVersions() {
     }
     const crateVersion = tables["workspace.package"]?.version;
     const ts = tables["workspace.metadata.typescript"];
-    if (!crateVersion || !ts?.version || !ts?.commit) {
-        throw new Error("Cargo.toml needs [workspace.package] version and [workspace.metadata.typescript] version/commit");
+    if (!crateVersion || !ts?.version || !ts?.commit || !ts?.nightly) {
+        throw new Error("Cargo.toml needs [workspace.package] version and [workspace.metadata.typescript] version/commit/nightly");
     }
-    return { crateVersion, version: `${crateVersion}-ts${ts.version}`, typescriptVersion: ts.version, typescriptCommit: ts.commit };
+    return {
+        crateVersion,
+        version: `${crateVersion}-ts${ts.version}`,
+        typescriptVersion: ts.version,
+        typescriptCommit: ts.commit,
+        typescriptNightly: ts.nightly,
+    };
 }
 
 function writeJson(file, value) {
