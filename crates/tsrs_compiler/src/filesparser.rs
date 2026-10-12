@@ -559,10 +559,15 @@ impl filesParser {
         loader.files_parser.datas.reserve(tasks.len());
         Self::start(loader, tasks, 0);
         // Go's single-threaded work group runs the queued closures last-queued first (core/workgroup.go), a depth-first
-        // order that the rounds below do not keep. The program's files do not depend on it, but which files a failing
-        // content mapper reports before the failure budget disables it does (fileloader.go:681, the tsc
-        // contentMapperFailures scenarios): with content mappers, a single-threaded load runs Go's order.
-        if loader.files_parser.single_threaded && !loader.content_mapper_extensions.is_empty() {
+        // order that the rounds below do not keep. The program's files do not depend on it, but two outputs do. Which
+        // files a failing content mapper reports before the failure budget disables it (fileloader.go:681, the tsc
+        // contentMapperFailures scenarios): with content mappers, a single-threaded load runs Go's order. Which
+        // resolution trace reads a package.json first ("Found 'package.json'") and which reuse it ("exists according
+        // to earlier cached lookups"): every traced load runs Go's single-threaded order, with no prefetch (its
+        // metadata lookups fill the package.json cache too). Multi-threaded tsgo's traces depend on goroutine timing,
+        // so this keeps tsrs's traces the same at every checker count.
+        let trace_resolution = loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
+        if trace_resolution || (loader.files_parser.single_threaded && !loader.content_mapper_extensions.is_empty()) {
             while let Some(item) = loader.files_parser.queue.pop() {
                 Self::run_queued(loader, item);
             }
@@ -688,10 +693,10 @@ impl filesParser {
 
     // Before a round's sequential load: adopts what an earlier round's speculative walk parsed, then, when at least
     // two files remain and not --singleThreaded, in parallel computes the metadata of every remaining file (lib files
-    // get the default), parses and binds it and (unless --traceResolution) resolves its references, type reference
-    // directives and imports. The first parallel round also walks ahead, parsing, binding and resolving the files those
-    // certainly load (not with --traceResolution, project references or libReplacement). `load` falls back to doing
-    // the work on the spot for anything not prefetched.
+    // get the default), parses and binds it and resolves its references, type reference directives and imports. The
+    // first parallel round also walks ahead, parsing, binding and resolving the files those certainly load (not with
+    // project references or libReplacement). `load` falls back to doing the work on the spot for anything not
+    // prefetched. Never with --traceResolution (`parse`).
     fn prefetch(loader: &mut fileLoader, round: &[queuedTask]) {
         let mut planned: FxHashSet<(DataId, std::sync::Arc<str>)> = FxHashSet::default();
         let mut to_parse: Vec<TaskId> = Vec::new();
@@ -748,17 +753,14 @@ impl filesParser {
             loader.tasks.reserve(sub_tasks);
             return;
         }
-        // Each job computes the file's metadata, parses it and, unless resolution traces are requested, resolves
-        // its imports and type reference directives (Go does all of this per task in parallel). Traces stay
-        // sequential: they say whether a lookup was served from a cache, which depends on the resolution order.
-        let resolve_ahead = !loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
+        // Each job computes the file's metadata, parses it and resolves its imports and type reference directives
+        // (Go does all of this per task in parallel).
         // The first parallel round also walks ahead: each parsed file's sub tasks that will certainly be loaded are
         // parsed and resolved on the spot, recursively, instead of one dependency level per round (Go has no
         // rounds; it queues each sub task as soon as it is found). Only files the program loads are touched, so the
         // resolver and package.json caches end up with the same entries. Not with project references (their
         // redirect lookups record symlink state) or lib replacement (a lib file can live in node_modules).
-        let speculate = resolve_ahead
-            && !loader.files_parser.speculated
+        let speculate = !loader.files_parser.speculated
             && loader.opts.config.resolved_project_reference_paths().is_empty()
             && !loader.opts.config.compiler_options().unwrap().lib_replacement.is_true();
         loader.files_parser.speculated = true;
@@ -800,10 +802,8 @@ impl filesParser {
                             if let Some(file) = file {
                                 apply_virtual_file_name(&mut metadata, file);
                             }
-                            let resolutions = festats::timed(Cat::Resolve, || match file {
-                                Some(file) if resolve_ahead => Some(Box::new(prefetch_resolutions(&ctx, file, &metadata))),
-                                _ => None,
-                            });
+                            let resolutions =
+                                festats::timed(Cat::Resolve, || file.map(|file| Box::new(prefetch_resolutions(&ctx, file, &metadata))));
                             if speculate && !is_lib {
                                 if let (Some(file), Some(resolutions)) = (file, &resolutions) {
                                     spec.spawn_sub_tasks(scope, file, resolutions);
