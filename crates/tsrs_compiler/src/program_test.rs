@@ -154,6 +154,8 @@ fn external_checker_pool_diagnostics() {
     let idle = Arc::new(Mutex::new(Vec::new()));
     let acquired = Arc::new(AtomicUsize::new(0));
     let mut opts = ProgramOptions::new(config, host_for(&files));
+    // Even an explicit batch request cannot replace the caller's external pool.
+    opts.batch_check = true;
     let (idle_c, acquired_c) = (idle.clone(), acquired.clone());
     opts.create_checker_pool = Some(Arc::new(move |program: &'static Program| -> Box<dyn CheckerPool> {
         Box::new(testPool { program, idle: idle_c.clone(), acquired: acquired_c.clone() })
@@ -188,6 +190,49 @@ fn external_checker_pool_diagnostics() {
     }
     assert_eq!(acquired.load(Ordering::Relaxed), 6);
     assert!(!idle.lock().unwrap().is_empty());
+}
+
+#[test]
+fn batch_contexts_keep_identity_and_share_program_input() {
+    let files = [
+        ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true,"noEmit":true,"strict":true,"checkers":2},"files":["a.ts","b.ts"]}"#),
+        ("/src/a.ts", "export type Box<T> = { value: T }; export const a: Box<string> = { value: 1 };"),
+        ("/src/b.ts", "import type { Box } from './a'; export const b: Box<number> = { value: 'bad' };"),
+    ];
+    let config = config_for(&files);
+    let legacy = new_program(ProgramOptions::new(config, host_for(&files)));
+    let mut opts = ProgramOptions::new(config, host_for(&files));
+    opts.batch_check = true;
+    let batch = new_program(opts);
+    assert!(batch.compiler_checker_pool().is_none());
+    assert_eq!(batch.checker_count(), 2);
+    let context_ids = || {
+        let ids = Mutex::new(Vec::new());
+        batch.for_each_checker_parallel(|i, c| {
+            ids.lock().unwrap().push((i, std::ptr::from_ref(c).addr(), Arc::as_ptr(&c.shared_data).addr()));
+        });
+        let mut ids = ids.into_inner().unwrap();
+        ids.sort_unstable();
+        ids
+    };
+    let before = context_ids();
+    assert_eq!(before.len(), 2);
+    assert_ne!(before[0].1, before[1].1);
+    assert_eq!(before[0].2, before[1].2);
+    let ctx = Context::default();
+    let diagnostic_keys = |program: &'static Program| {
+        let mut diagnostics = program.get_global_diagnostics(&ctx);
+        diagnostics.extend(program.get_semantic_diagnostics(&ctx, None));
+        diagnostics.extend(program.get_global_diagnostics(&ctx));
+        crate::sort_and_deduplicate_diagnostics(&diagnostics)
+            .iter()
+            .map(|d| (d.file().map(|f| f.file_name().to_string()), d.pos(), d.code(), d.message_text().to_string()))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(diagnostic_keys(batch), diagnostic_keys(legacy));
+    assert_eq!(context_ids(), before);
+    assert!(batch.type_count() > 0);
+    assert!(batch.symbol_count() > 0);
 }
 
 // tsrs-only (fileregions.rs): after a type-check pass that freed a leaf, asking for that one file's diagnostics would

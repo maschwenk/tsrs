@@ -795,7 +795,7 @@ impl Checker {
                 let mut end_length = 0;
                 if is_tuple_type(source) {
                     start_length = source.target_tuple_type().fixed_length().min(target.target_tuple_type().fixed_length());
-                    if target.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
+                    if target.target_tuple_type().combined_flags().intersects(ElementFlags::Variable) {
                         end_length = get_end_element_count(source.target_tuple_type(), ElementFlags::Fixed).min(get_end_element_count(target.target_tuple_type(), ElementFlags::Fixed));
                     }
                 }
@@ -847,7 +847,7 @@ impl Checker {
                             if let Some(info) = get_inference_info_for_type(n, element_types[sl]) {
                                 let constraint = self.get_base_constraint_of_type(info.type_parameter.get().unwrap());
                                 if let Some(constraint) = constraint {
-                                    if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
+                                    if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.target_tuple_type().fixed_length();
                                         let slice = self.slice_tuple_type(source, start_length, source_arity.saturating_sub(start_length + implied_arity));
                                         self.infer_from_types(n, slice, element_types[sl]);
@@ -863,7 +863,7 @@ impl Checker {
                             if let Some(info) = get_inference_info_for_type(n, element_types[sl + 1]) {
                                 let constraint = self.get_base_constraint_of_type(info.type_parameter.get().unwrap());
                                 if let Some(constraint) = constraint {
-                                    if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
+                                    if is_tuple_type(constraint) && !constraint.target_tuple_type().combined_flags().intersects(ElementFlags::Variable) {
                                         let implied_arity = constraint.target_tuple_type().fixed_length();
                                         if let Some(end_index) = source_arity.checked_sub(get_end_element_count(target.target_tuple_type(), ElementFlags::Fixed)) {
                                             if let Some(start_index) = end_index.checked_sub(implied_arity).filter(|&index| index >= start_length) {
@@ -1212,7 +1212,7 @@ impl Checker {
                     })
                     .collect();
             }
-            let readonly = source.target_tuple_type().readonly.get();
+            let readonly = source.target_tuple_type().is_readonly();
             return Some(self.create_tuple_type_ex(&element_types, &element_infos, readonly));
         }
         // For all other object types we infer a new object type where the reverse mapping has been
@@ -1408,8 +1408,8 @@ impl Checker {
 pub(crate) fn tuple_types_definitely_unrelated(source: P<Type>, target: P<Type>) -> bool {
     let s = source.target_tuple_type();
     let t = target.target_tuple_type();
-    !t.combined_flags.get().intersects(ElementFlags::Variadic) && t.min_length.get() > s.min_length.get()
-        || !t.combined_flags.get().intersects(ElementFlags::Variable) && (s.combined_flags.get().intersects(ElementFlags::Variable) || t.fixed_length.get() < s.fixed_length.get())
+    !t.combined_flags().intersects(ElementFlags::Variadic) && t.min_length() > s.min_length()
+        || !t.combined_flags().intersects(ElementFlags::Variable) && (s.combined_flags().intersects(ElementFlags::Variable) || t.fixed_length() < s.fixed_length())
 }
 
 impl Checker {

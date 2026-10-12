@@ -2665,12 +2665,12 @@ impl Checker {
     // checker.go:23764
     pub(crate) fn create_normalized_tuple_type_ex(&mut self, target: P<Type>, element_types: &[P<Type>], object_flags: ObjectFlags) -> P<Type> {
         let d = target.as_tuple_type();
-        if !d.combined_flags.get().intersects(ElementFlags::NonRequired) {
+        if !d.combined_flags().intersects(ElementFlags::NonRequired) {
             // No need to normalize when we only have regular required elements
             return self.create_type_reference_ex(target, element_types, object_flags);
         }
         let element_infos = d.element_infos();
-        if d.combined_flags.get().intersects(ElementFlags::Variadic) {
+        if d.combined_flags().intersects(ElementFlags::Variadic) {
             if let Some(result) = element_types.iter().enumerate().find_map(|(i, &e)| {
                 if i < element_infos.len()
                     && element_infos[i].flags.intersects(ElementFlags::Variadic)
@@ -2709,7 +2709,7 @@ impl Checker {
         if element_types.len() > element_infos.len() {
             n.types.push(element_types[element_infos.len()]);
         }
-        let tuple_target = self.get_tuple_target_type(&n.infos, d.readonly.get());
+        let tuple_target = self.get_tuple_target_type(&n.infos, d.is_readonly());
         if tuple_target == self.empty_generic_type {
             return self.empty_object_type;
         } else if !n.types.is_empty() {

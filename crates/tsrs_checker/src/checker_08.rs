@@ -2157,7 +2157,7 @@ impl Checker {
     // checker.go:17182
     pub(crate) fn pad_tuple_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> {
         let pattern_elements = pattern.elements();
-        if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) as usize >= pattern_elements.len() {
+        if t.target_tuple_type().combined_flags().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) as usize >= pattern_elements.len() {
             return t;
         }
         let mut element_types = self.get_element_types(t).to_vec();
@@ -2179,7 +2179,7 @@ impl Checker {
             }
             i += 1;
         }
-        let readonly = t.target_tuple_type().readonly.get();
+        let readonly = t.target_tuple_type().is_readonly();
         self.create_tuple_type_ex(&element_types, &element_infos, readonly)
     }
 

@@ -159,7 +159,7 @@ impl Checker {
         // fixed element. We simplify to either the combined type of all elements (when the index type
         // the actual number type) or to the combined type of all non-fixed elements.
         if self.is_generic_tuple_type(object_type) && index_type.flags().intersects(TypeFlags::NumberLike) {
-            let index = if_else(index_type.flags().intersects(TypeFlags::Number), 0, object_type.target_tuple_type().fixed_length.get());
+            let index = if_else(index_type.flags().intersects(TypeFlags::Number), 0, object_type.target_tuple_type().fixed_length());
             if let Some(element_type) = self.get_element_type_of_slice_of_tuple_type(object_type, index, 0 /*endSkipCount*/, writing, false) {
                 return element_type;
             }
@@ -2506,7 +2506,7 @@ impl Checker {
                     // If index is before any spread element and within the fixed part of the contextual tuple type, return
                     // the type of the contextual tuple element.
                     if first_spread_index.is_none_or(|first| index < first)
-                        && index < tuple.fixed_length.get()
+                        && index < tuple.fixed_length()
                     {
                         let type_argument = c.get_type_arguments(t)[index];
                         return Some(
@@ -2526,8 +2526,7 @@ impl Checker {
                         .filter(|&offset| offset > 0);
                     let fixed_end_length = if offset.is_some()
                         && tuple
-                            .combined_flags
-                            .get()
+                            .combined_flags()
                             .intersects(ElementFlags::Variable)
                     {
                         get_end_element_count(tuple, ElementFlags::Fixed)
@@ -2541,7 +2540,7 @@ impl Checker {
                         return Some(c.get_type_arguments(t)[arity - offset.unwrap()]);
                     }
                     // Return a union of the possible contextual element types with no subtype reduction.
-                    let mut tuple_index = tuple.fixed_length.get();
+                    let mut tuple_index = tuple.fixed_length();
                     if let Some(first_spread_index) = first_spread_index {
                         tuple_index = tuple_index.min(first_spread_index);
                     }

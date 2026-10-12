@@ -1413,7 +1413,7 @@ impl NodeBuilderImpl {
                     node_list.loc.set(tuple_constituent_nodes.loc.get());
                     let tuple_type_node = self.f.new_tuple_type_node(node_list);
                     self.e.set_emit_flags(tuple_type_node, EmitFlags::SingleLine);
-                    if target.as_tuple_type().readonly.get() {
+                    if target.as_tuple_type().is_readonly() {
                         return Some(self.f.new_type_operator_node(Kind::ReadonlyKeyword, tuple_type_node));
                     } else {
                         return Some(tuple_type_node);
@@ -1423,7 +1423,7 @@ impl NodeBuilderImpl {
             if self.ctx().encountered_error.get() || self.ctx().flags.get().intersects(Flags::AllowEmptyTuple) {
                 let tuple_type_node = self.f.new_tuple_type_node(self.f.new_node_list(vec![]));
                 self.e.set_emit_flags(tuple_type_node, EmitFlags::SingleLine);
-                if target.as_tuple_type().readonly.get() {
+                if target.as_tuple_type().is_readonly() {
                     return Some(self.f.new_type_operator_node(Kind::ReadonlyKeyword, tuple_type_node));
                 } else {
                     return Some(tuple_type_node);

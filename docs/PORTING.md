@@ -64,7 +64,7 @@ contributing `impl` blocks to the same type.
 
 Go objects that are referenced by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,
-mappers, inference contexts … — are allocated in a process-lifetime leak arena and
+mappers, inference contexts … — are allocated in an arena and
 referenced through `tsrs_core::P<T>`:
 
 - `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by identity** (like Go pointers).
@@ -76,9 +76,14 @@ referenced through `tsrs_core::P<T>`:
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
   Decide from the Go code (nil checks, `return nil`). When unsure, use `Option`.
 - There are **no lifetime parameters** anywhere in this codebase. Arena data is `'static`.
-- Nothing is ever freed. That is intentional (batch compiler). The exceptions are a few recycling sites that
-  prove an object dead (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
-  bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.
+- Thread arenas intentionally retain their values for the batch compiler's lifetime. Owner-scoped regions can
+  reclaim a group of values when its owner ends. The CLI batch checking backend gives each context a permanent
+  scratch region: a leaked owner preserves thread-arena allocation/recycling rules while allowing jobs to move
+  between Rayon workers. Enter that context's scratch region for every job. Shared immutable payloads live in
+  `SharedCheckData`'s shard-owned regions; the shared store must outlive all consumers of those payloads.
+  Other recycling sites prove an object dead (rolled-back parses, dropped flow labels, scratch mappers and inference
+  contexts whose escape bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper
+  must be a `MapperCell`.
   Emit runs each file in a scratch region that is freed after the file is written (notes/mem-emit-regions.md): code
   that emit calls and that stores what it allocates beyond the file (the checker, program caches, diagnostics)
   escapes it (`arena::escape_scratch`; `CheckerSlot::with` does it for the checker), and a checker cache keyed by a
@@ -100,13 +105,18 @@ referenced through `tsrs_core::P<T>`:
 
 ### Threading
 
-Parsing and binding run per file (in parallel) and finish before checking. Checking runs on N checkers
+Parsing and binding run per file (in parallel) and finish before checking. Checking uses N persistent contexts
 (`--checkers N`, `--singleThreaded` = 1; Go's default is 4, tsrs's default is max(cores/2, min(cores, 16)), clamped to
 4..32, then capped at one checker per 32 type-checked files (but not below 4), then at most the file count; 4 in build
-mode: `default_checker_count`), each on its own OS thread with a 512 MB stack (`tsrs_compiler::checkerpool`). Files are assigned to checkers by directory
+mode: `default_checker_count`). Eligible non-incremental CLI `--noEmit` checks schedule these contexts on a dedicated
+Rayon executor with 512 MiB worker stacks (`tsrs_compiler::batchcheck`); when N = 1, it runs on the caller. A job
+borrows one context exclusively, and recursive checking stays within that context. Go history, explicit assignments,
+emit/declaration diagnostics, build/incremental, LSP/API, `--maxMemory` and assignment/cost tracing retain existing pools
+(`tsrs_compiler::checkerpool`; exact eligibility in `batchcheck::enabled`). Files are assigned to contexts by directory
 locality; in the type-check pass a checker that runs out steals unstarted files from the busiest one
 (notes/perf-checker-stealing.md), which is safe because output does not depend on which checker checks a file
-(notes/perf-order-independence.md; `--checkerAssignment go` keeps Go's assignment and history). Each thread allocates in its own leak arena;
+(notes/perf-order-independence.md; `--checkerAssignment go` keeps Go's assignment and history). Batch context
+allocations follow the context's owned region, rather than its current worker;
 `P<T>` is `Send + Sync` by decree, so the compiler does not police sharing. The rules:
 
 - **Shared, frozen after binding**: AST nodes and node lists, `SourceFile`, binder symbols and symbol tables,
@@ -116,6 +126,11 @@ locality; in the type-check pass a checker that runs out steals unstarted files 
   creates, synthetic nodes and diagnostics a checker creates. Only that checker touches them. Go keeps all
   checker state about shared objects in link stores keyed by the object; so do we. Go clones a symbol before
   mutating it unless it is transient (e.g. `mergeSymbol`); so do we.
+- **Shared immutable payloads**: batch contexts share `SharedCheckData`'s compiler settings, file-index map and
+  completed literal values, tuple metadata, text/name arrays and variance arrays. Interner misses copy the complete
+  payload into a shard-owned region under a lock; reads need no lock. Payloads contain no local type, symbol,
+  signature, mapper or AST-node identity. Type identities, fresh/regular links, labeled tuple bindings, lazy
+  resolutions and recursion/history state remain local (`notes/shared-checker-rayon.md`).
 - **Lazily initialized shared data** mirrors Go's synchronization: node/symbol ids are atomics, `SourceFile`
   line maps, position maps and identifier sets are `OnceLock`s, binding runs under a `std::sync::Once`
   (Go `bindOnce`), the lazily parsed JSDoc cache is guarded by `jsdoc_mu` (Go `jsdocMu`).
@@ -131,7 +146,8 @@ Cell types for shared objects (`tsrs_core::frozen`):
 - `Cell`/`RefCell` stay fine for checker-owned objects (types, links, checker state).
 
 Checking the contract: build with `--features tsrs_core/checked-cells` (or a debug build) and run with
-`TSRS_CHECK_SHARED=1`. The pool then binds all files, records every arena allocation made so far as shared, and
+`TSRS_CHECK_SHARED=1`. The checking backend then binds all files, records every arena allocation made so far as
+shared, and
 any `OwnedCell::set` / `FrozenCell::borrow_mut` on such an object panics with a backtrace pointing at the write.
 Checked builds also keep an atomic borrow counter in `FrozenCell` to catch aliasing like `RefCell` does.
 ThreadSanitizer is not usable here (the installed nightly's TSan runtime crashes at startup on this macOS).
@@ -205,8 +221,9 @@ callback, even when the closure does not need it.
 - Go `panic(...)` -> `panic!(...)`. `debug.Assert(cond, msg)` -> `debug_assert!`-free: use `assert!(cond, msg)`.
 - `defer` -> restructure, or a small scope guard; keep the same effect on all return paths.
 - Goroutines / `sync.WaitGroup` / work groups -> sequential code unless the owning crate documents a parallel entry
-  point (file parsing and binding use rayon; the checker pool runs one OS thread per checker, see "Threading"). `sync.Once` -> `std::sync::OnceLock`. `sync.Mutex` -> `std::sync::Mutex` only if
-  the data really is shared between threads, otherwise drop it. `atomic.*` -> the `std::sync::atomic` equivalent.
+  point (file parsing/binding and eligible batch checking use Rayon; compatibility checking retains its pool, see
+  "Threading"). `sync.Once` -> `std::sync::OnceLock`. `sync.Mutex` -> `std::sync::Mutex` only if the data really is
+  shared between threads, otherwise drop it. `atomic.*` -> the `std::sync::atomic` equivalent.
 - `switch` with fallthrough, labeled `break`/`continue`, `goto` -> loops with labels / `match`; preserve evaluation order.
 - Type switches on node kind -> `match node.kind()`.
 

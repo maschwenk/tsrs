@@ -2158,7 +2158,7 @@ impl Checker {
                 }
                 // Store the results unless a restarted computation has already stored them.
                 if variances_len(links) == 0 {
-                    links.variances.set(Some(alloc_vec(variances)));
+                    links.variances.set(Some(self.shared_data.payloads.variances(variances)));
                 }
                 self.variance_stack.pop();
                 if self.variance_stack.is_empty() {
@@ -2556,11 +2556,10 @@ impl Checker {
             let rest_type = self.get_type_of_symbol(signature.parameters()[length - 1]);
             if is_tuple_type(rest_type) {
                 let target = rest_type.target_tuple_type();
-                return length + target.fixed_length.get()
+                return length + target.fixed_length()
                     - usize::from(
                         !target
-                            .combined_flags
-                            .get()
+                            .combined_flags()
                             .intersects(ElementFlags::Variable),
                     );
             }
@@ -2634,7 +2633,7 @@ impl Checker {
     pub fn has_effective_rest_parameter(&mut self, signature: P<Signature>) -> bool {
         if signature_has_rest_parameter(signature) {
             let rest_type = self.get_type_of_symbol(signature.parameters()[signature.parameters().len() - 1]);
-            return !is_tuple_type(rest_type) || rest_type.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable);
+            return !is_tuple_type(rest_type) || rest_type.target_tuple_type().combined_flags().intersects(ElementFlags::Variable);
         }
         false
     }
@@ -2666,7 +2665,7 @@ impl Checker {
             let rest_type = self.get_type_of_symbol(signature.parameters()[param_count]);
             let index = pos - param_count;
             if !is_tuple_type(rest_type)
-                || rest_type.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)
+                || rest_type.target_tuple_type().combined_flags().intersects(ElementFlags::Variable)
                 || index < rest_type.target_tuple_type().fixed_length()
             {
                 let index_type = self.get_number_literal_type(Number(index as f64));
@@ -2806,7 +2805,7 @@ impl Checker {
                 }
                 return Some(rest_type);
             }
-            if rest_type.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) {
+            if rest_type.target_tuple_type().combined_flags().intersects(ElementFlags::Variable) {
                 let fixed_length = rest_type.target_tuple_type().fixed_length();
                 return Some(self.slice_tuple_type(rest_type, fixed_length, 0));
             }
@@ -2847,7 +2846,7 @@ impl Checker {
         for i in 0..fixed_length {
             keys.push(self.get_string_literal_type(&i.to_string()));
         }
-        let array_type = if t.target_tuple_type().readonly.get() { self.global_readonly_array_type } else { self.global_array_type };
+        let array_type = if t.target_tuple_type().is_readonly() { self.global_readonly_array_type } else { self.global_array_type };
         keys.push(self.get_index_type(array_type));
         self.get_union_type(&keys)
     }

@@ -294,7 +294,7 @@ pub fn set_max_memory_from_cli(bytes: usize) {
 }
 
 // The target in bytes (0: off).
-fn max_memory() -> usize {
+pub(crate) fn max_memory() -> usize {
     static MAX: OnceLock<usize> = OnceLock::new();
     *MAX.get_or_init(|| CLI_MAX_MEMORY.get().copied().or_else(|| std::env::var("TSRS_MAX_MEMORY").ok().and_then(|v| parse_memory_size(&v))).unwrap_or(0))
 }
@@ -614,17 +614,7 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 impl checkerPool {
     // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
     pub(crate) fn new(program: &'static Program) -> checkerPool {
-        // Go's default is a constant 4; tsrs picks it per machine and program (default_checker_count).
-        let checker_count: i64 = if program.single_threaded() {
-            1
-        } else if let Some(c) = program.options().checkers {
-            c
-        } else {
-            default_checker_count(program)
-        };
-
-        // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
-        let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
+        let checker_count = checker_count_for_program(program);
 
         checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
     }
@@ -1047,7 +1037,7 @@ impl poolState {
 // (notes/perf-order-independence.md); the --extendedDiagnostics counters do, so they vary from run to run. Off when an
 // assignment is named (`--checkerAssignment` / TSRS_CHECKER_ASSIGNMENT: the fully deterministic static modes, also
 // for the oracles and harnesses) and under Go's check history.
-fn stealing_enabled() -> bool {
+pub(crate) fn stealing_enabled() -> bool {
     let named = CLI_CHECKER_ASSIGNMENT.get().is_some() || std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty());
     !named && !tsrs_core::compat::go_compatible_history()
 }
@@ -1062,7 +1052,7 @@ fn stealing_enabled() -> bool {
 // costs 1-3%). TSRS_HEAVY_SHARE_DIVISOR=<n> overrides it for experiments.
 const HEAVY_SHARE_DIVISOR: u64 = 200;
 
-fn heavy_share_divisor() -> u64 {
+pub(crate) fn heavy_share_divisor() -> u64 {
     static VALUE: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
     *VALUE.get_or_init(|| {
         std::env::var("TSRS_HEAVY_SHARE_DIVISOR").ok().and_then(|v| v.parse().ok()).filter(|&d| d > 0).unwrap_or(HEAVY_SHARE_DIVISOR)
@@ -1076,7 +1066,7 @@ fn heavy_share_divisor() -> u64 {
 // locality of the checker's caches (sorting a whole queue by weight costs 5-8% more CPU per instruction) and keeps the
 // thieves' end of the queue (the back) as it was. On vscode at 32 and 64 checkers the check phase went from 0.65 s
 // to 0.50 s, with no change at 8 and 16 (at 1/100; notes/perf-heavy-first-threshold.md has the 1/200 curve).
-fn heavy_files_first(positions: &mut Vec<u32>, threshold: u64, weight: impl Fn(u32) -> u64) {
+pub(crate) fn heavy_files_first(positions: &mut Vec<u32>, threshold: u64, weight: impl Fn(u32) -> u64) {
     let (mut heavy, light): (Vec<u32>, Vec<u32>) = positions.iter().partition(|&&i| weight(i) > threshold);
     if heavy.is_empty() {
         return;
@@ -1088,18 +1078,18 @@ fn heavy_files_first(positions: &mut Vec<u32>, threshold: u64, weight: impl Fn(u
 
 // The split files of one pass (splitcheck.rs) and their queued pieces.
 #[derive(Default)]
-struct SplitPlan {
-    files: Vec<splitcheck::SplitFile>,
+pub(crate) struct SplitPlan {
+    pub(crate) files: Vec<splitcheck::SplitFile>,
     // Position in `files` of each split file's own item -> index in `files` above.
-    split_of: FxHashMap<u32, usize>,
+    pub(crate) split_of: FxHashMap<u32, usize>,
     // The weight of each split file's own item: its first piece.
     owner_weights: Vec<u64>,
     // (split file, piece, weight) of each queued piece; queue position `files.len() + j` is piece item `j`.
-    piece_items: Vec<(usize, usize, u64)>,
+    pub(crate) piece_items: Vec<(usize, usize, u64)>,
 }
 
 impl SplitPlan {
-    fn item_weight(&self, file_count: usize, i: u32) -> Option<u64> {
+    pub(crate) fn item_weight(&self, file_count: usize, i: u32) -> Option<u64> {
         if let Some(j) = (i as usize).checked_sub(file_count) {
             return Some(self.piece_items[j].2);
         }
@@ -1112,7 +1102,7 @@ impl SplitPlan {
 // a share (with `force:<k>`, every checked declaration file into k pieces); a file that would be one piece is not
 // split. Each queued piece goes to the active checker, other than the file's owner, with the least work in heavy items
 // so far, so the pieces start at once on different checkers.
-fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[usize], weight: impl Fn(u32) -> u64) -> SplitPlan {
+pub(crate) fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<u32>], active: &[usize], weight: impl Fn(u32) -> u64) -> SplitPlan {
     let config = splitcheck::split_config();
     let mut plan = SplitPlan::default();
     if active.len() < 2 {
@@ -1180,7 +1170,7 @@ fn plan_splits(program: &Program, files: &[P<SourceFile>], positions: &mut [Vec<
 // One checker's positions in the files of a group pass, in visiting order. The owner takes from the front, other
 // checkers from the back. `range` packs the next front position (low 32 bits) and the back end (high 32 bits,
 // exclusive); `prefix[k]` is the weight of `positions[..k]`, the estimate of the work left.
-struct FileQueue {
+pub(crate) struct FileQueue {
     positions: Vec<u32>,
     prefix: Vec<u64>,
     range: std::sync::atomic::AtomicU64,
@@ -1191,7 +1181,7 @@ struct FileQueue {
 const QUEUE_LOW: u64 = u32::MAX as u64;
 
 impl FileQueue {
-    fn new(positions: Vec<u32>, weight: impl Fn(u32) -> u64) -> FileQueue {
+    pub(crate) fn new(positions: Vec<u32>, weight: impl Fn(u32) -> u64) -> FileQueue {
         let mut prefix = Vec::with_capacity(positions.len() + 1);
         let mut sum = 0;
         prefix.push(0);
@@ -1279,7 +1269,7 @@ impl FileQueue {
 // stolen from a new region brings its modules onto the thief. With the module affinity it lowered checker CPU on every
 // app project at 16 and 32 checkers, where the affinity alone had cost cal-diy 1.3-2.2%; below 16 checkers it is off
 // (at 4 it cost mikro-orm 3.7% of wall time). `TSRS_STEAL_STICKY=0` turns it off.
-fn steal_sticky() -> bool {
+pub(crate) fn steal_sticky() -> bool {
     static VALUE: OnceLock<bool> = OnceLock::new();
     *VALUE.get_or_init(|| !std::env::var("TSRS_STEAL_STICKY").is_ok_and(|v| v == "0" || v == "off"))
 }
@@ -1297,7 +1287,7 @@ fn steal_sticky() -> bool {
 const THIEF_LIMIT_CHECKERS: std::ops::Range<usize> = 8..crate::affinity::MIN_CHECKERS;
 const CHECKERS_PER_THIEF: usize = 4;
 
-fn max_thieves_per_queue(checker_count: usize) -> u32 {
+pub(crate) fn max_thieves_per_queue(checker_count: usize) -> u32 {
     static VALUE: OnceLock<Option<u32>> = OnceLock::new();
     let configured = *VALUE.get_or_init(|| std::env::var("TSRS_STEAL_MAX_THIEVES").ok().and_then(|v| v.parse().ok()));
     configured.unwrap_or(if THIEF_LIMIT_CHECKERS.contains(&checker_count) { (checker_count / CHECKERS_PER_THIEF) as u32 } else { 0 })
@@ -1307,7 +1297,7 @@ fn max_thieves_per_queue(checker_count: usize) -> u32 {
 // that admit it (`max_thieves`, max_thieves_per_queue); `slot` is the queue it steals from now (usize::MAX for none),
 // whose place it gives up when it moves to another. With `last_victim` (the queue `me` last took from, usize::MAX for
 // none) a thief keeps its victim (steal_sticky).
-fn queues_next(
+pub(crate) fn queues_next(
     queues: &[FileQueue],
     me: usize,
     steal: bool,
@@ -1368,7 +1358,7 @@ impl CheckerPool for checkerPool {
 
 // The order in which a checker group visits `count` files: program order, or with `TSRS_CHECKER_ASSIGNMENT=random:<seed>`
 // a permutation drawn from the seed (a debug mode that checks that output does not depend on the visit order).
-fn visit_order(count: usize) -> Vec<usize> {
+pub(crate) fn visit_order(count: usize) -> Vec<usize> {
     let mut order: Vec<usize> = (0..count).collect();
     if let CheckerAssignment::Random(seed) = checker_assignment() {
         // Fisher-Yates with splitmix64.
@@ -1430,7 +1420,7 @@ fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     )
 }
 
-fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+pub(crate) fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     if checker_count <= 1 {
         return vec![0; program.files.len()];
     }
@@ -1465,7 +1455,7 @@ pub fn set_checker_cost_cache_from_cli(path: &str) {
 }
 
 // The cost cache path; None unless the option is set and the locality assignment is used.
-fn checker_cost_cache_path() -> Option<&'static str> {
+pub(crate) fn checker_cost_cache_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
     PATH.get_or_init(|| {
         CLI_CHECKER_COST_CACHE
@@ -1627,6 +1617,13 @@ static GO_DEFAULT_CHECKER_COUNT: std::sync::atomic::AtomicBool = std::sync::atom
 /// constant default instead of sizing every pool for the whole machine.
 pub fn use_go_default_checker_count() {
     GO_DEFAULT_CHECKER_COUNT.store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
+// Both execution backends use the same explicit and default checker-count policy.
+pub(crate) fn checker_count_for_program(program: &Program) -> usize {
+    let count = if program.single_threaded() { 1 } else { program.options().checkers.unwrap_or_else(|| default_checker_count(program)) };
+    // Go caps the count at the file count and 256, and keeps one checker even for an empty program.
+    count.min(program.files.len() as i64).clamp(1, 256) as usize
 }
 
 // tsrs-only: the checker count when neither --checkers nor --singleThreaded is given. Go always uses 4. Here: half the
@@ -1944,7 +1941,7 @@ fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacenc
 // unchecked files already weigh 0, so declaration files that are checked (no skipLibCheck) get it too. Measured
 // on webpack (642 checked declaration files): 393 ns of check CPU per base unit for declaration files, 536 for
 // sources; with 4 checkers the slowest checker (the one holding the lib files) went from 53% to 12% above the mean.
-fn checked_file_weights(program: &Program) -> Vec<i64> {
+pub(crate) fn checked_file_weights(program: &Program) -> Vec<i64> {
     let files = &program.files;
     let checked: Vec<bool> = files
         .iter()

@@ -2,7 +2,7 @@
 //! function-valued `Checker` fields.
 
 use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{LazyLock, OnceLock};
+use std::sync::{Arc, LazyLock, OnceLock};
 
 use bitflags::bitflags;
 
@@ -1008,12 +1008,11 @@ static nextCheckerID: AtomicU32 = AtomicU32::new(0);
 /// Go `symbolTableID` (symbolaccessibility.go); the `stKind*` constants live with the printer port.
 pub type symbolTableID = u64;
 
-pub struct Checker {
+/// One sequential evaluation history. The batch executor moves a context as a whole between workers; only its
+/// owner can evaluate with it. Immutable program input and completed payloads belong to `SharedCheckData`.
+pub struct CheckContext {
+    pub shared_data: Arc<SharedCheckData>,
     pub id: u32,
-    pub program: &'static dyn Program,
-    pub compiler_options: P<CompilerOptions>,
-    pub files: &'static [P<SourceFile>],
-    pub file_index_map: FxHashMap<P<SourceFile>, usize>,
     /// `source_file_and_index_of_node` (utilities.rs): (node key, file key, file index); key 0 is an empty slot.
     pub(crate) node_file_cache: Vec<(tsrs_core::ptr::PKey, tsrs_core::ptr::PKey, usize)>,
     pub type_count: u32,
@@ -1059,24 +1058,8 @@ pub struct Checker {
     /// the file; dropped with the checker otherwise.
     pub(crate) deferred_type_argument_checks: FxHashMap<P<SourceFile>, Vec<P<Node>>>,
     pub variance_type_parameter: Option<P<Type>>,
-    pub language_version: ScriptTarget,
-    pub module_kind: ModuleKind,
-    pub module_resolution_kind: ModuleResolutionKind,
     pub is_inference_partially_blocked: bool,
-    pub legacy_decorators: bool,
-    pub emit_standard_class_fields: bool,
-    pub strict_null_checks: bool,
-    pub strict_function_types: bool,
-    pub strict_bind_call_apply: bool,
-    pub strict_property_initialization: bool,
-    pub strict_builtin_iterator_return: bool,
-    pub no_implicit_any: bool,
-    pub no_implicit_this: bool,
-    pub use_unknown_in_catch_variables: bool,
-    pub exact_optional_property_types: bool,
-    pub can_collect_symbol_alias_accessibility_data: bool,
     pub was_canceled: bool,
-    pub array_variances: &'static [VarianceFlags],
     pub globals: P<SymbolTable>,
     pub string_literal_types: StringLiteralTypes,
     pub number_literal_types: FxHashMap<Number, P<Type>>,
@@ -1456,10 +1439,26 @@ pub struct Checker {
     pub is_fork: bool,
 }
 
+/// Compatibility name used by the Go-shaped API and the shared checking algorithms.
+pub type Checker = CheckContext;
+
+impl std::ops::Deref for CheckContext {
+    type Target = SharedCheckData;
+
+    fn deref(&self) -> &Self::Target {
+        &self.shared_data
+    }
+}
+
 // checker.go:911
 /// Go `NewChecker(program, tracer)`. The tracer and the returned mutex are not ported.
 pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
-    program.bind_source_files();
+    new_checker_with_shared_data(SharedCheckData::private(program))
+}
+
+/// Creates a sequential context over shared immutable input, retaining its own identities and lazy state.
+pub fn new_checker_with_shared_data(shared_data: Arc<SharedCheckData>) -> Box<CheckContext> {
+    let program = shared_data.program;
     crate::types::census_layouts();
 
     // Placeholders for pointer fields Go leaves nil until they are assigned below.
@@ -1479,12 +1478,9 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     });
 
     let files = program.source_files();
-    let mut c = Box::new(Checker {
+    let mut c = Box::new(CheckContext {
+        shared_data,
         id: nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1,
-        program,
-        compiler_options,
-        files,
-        file_index_map: create_file_index_map(files),
         node_file_cache: Vec::new(),
         type_count: 0,
         symbol_count: 0,
@@ -1509,24 +1505,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         tuple_elements: Vec::new(),
         deferred_type_argument_checks: FxHashMap::default(),
         variance_type_parameter: None,
-        language_version: compiler_options.get_emit_script_target(),
-        module_kind: compiler_options.get_emit_module_kind(),
-        module_resolution_kind: compiler_options.get_module_resolution_kind(),
         is_inference_partially_blocked: false,
-        legacy_decorators: compiler_options.experimental_decorators == Tristate::True,
-        emit_standard_class_fields: compiler_options.get_emit_standard_class_fields(),
-        strict_null_checks: compiler_options.get_strict_option_value(compiler_options.strict_null_checks),
-        strict_function_types: compiler_options.get_strict_option_value(compiler_options.strict_function_types),
-        strict_bind_call_apply: compiler_options.get_strict_option_value(compiler_options.strict_bind_call_apply),
-        strict_property_initialization: compiler_options.get_strict_option_value(compiler_options.strict_property_initialization),
-        strict_builtin_iterator_return: compiler_options.get_strict_option_value(compiler_options.strict_builtin_iterator_return),
-        no_implicit_any: compiler_options.get_strict_option_value(compiler_options.no_implicit_any),
-        no_implicit_this: compiler_options.get_strict_option_value(compiler_options.no_implicit_this),
-        use_unknown_in_catch_variables: compiler_options.get_strict_option_value(compiler_options.use_unknown_in_catch_variables),
-        exact_optional_property_types: compiler_options.exact_optional_property_types == Tristate::True,
-        can_collect_symbol_alias_accessibility_data: compiler_options.verbatim_module_syntax.is_false_or_unknown(),
         was_canceled: false,
-        array_variances: alloc_slice(&[VarianceFlags::Covariant]),
         globals: SymbolTable::with_capacity(count_global_symbols(files) as usize),
         string_literal_types: StringLiteralTypes::default(),
         number_literal_types: FxHashMap::default(),
@@ -1972,13 +1952,10 @@ impl Checker {
     #[expect(clippy::clone_on_copy, reason = "a field-by-field list: `clone` for every field, whatever its type")]
     pub fn fork(base: &'static Checker) -> Box<Checker> {
         base.assert_freezable();
-        let mut c = Box::new(Checker {
+        let mut c = Box::new(CheckContext {
+            shared_data: Arc::clone(&base.shared_data),
             // Relaxed: the counter only hands out distinct ids (as in new_checker).
             id: nextCheckerID.fetch_add(1, Ordering::Relaxed) + 1,
-            program: base.program,
-            compiler_options: base.compiler_options.clone(),
-            files: base.files,
-            file_index_map: base.file_index_map.clone(),
             type_count: base.type_count.clone(),
             symbol_count: base.symbol_count.clone(),
             signature_count: base.signature_count.clone(),
@@ -2005,24 +1982,8 @@ impl Checker {
             // The seed's history: its checks deferred to files it did not check run in the fork that checks them.
             deferred_type_argument_checks: base.deferred_type_argument_checks.clone(),
             variance_type_parameter: None,
-            language_version: base.language_version.clone(),
-            module_kind: base.module_kind.clone(),
-            module_resolution_kind: base.module_resolution_kind.clone(),
             is_inference_partially_blocked: base.is_inference_partially_blocked.clone(),
-            legacy_decorators: base.legacy_decorators.clone(),
-            emit_standard_class_fields: base.emit_standard_class_fields.clone(),
-            strict_null_checks: base.strict_null_checks.clone(),
-            strict_function_types: base.strict_function_types.clone(),
-            strict_bind_call_apply: base.strict_bind_call_apply.clone(),
-            strict_property_initialization: base.strict_property_initialization.clone(),
-            strict_builtin_iterator_return: base.strict_builtin_iterator_return.clone(),
-            no_implicit_any: base.no_implicit_any.clone(),
-            no_implicit_this: base.no_implicit_this.clone(),
-            use_unknown_in_catch_variables: base.use_unknown_in_catch_variables.clone(),
-            exact_optional_property_types: base.exact_optional_property_types.clone(),
-            can_collect_symbol_alias_accessibility_data: base.can_collect_symbol_alias_accessibility_data.clone(),
             was_canceled: base.was_canceled.clone(),
-            array_variances: base.array_variances,
             globals: base.globals.clone(),
             string_literal_types: base.string_literal_types.fork(),
             number_literal_types: base.number_literal_types.clone(),

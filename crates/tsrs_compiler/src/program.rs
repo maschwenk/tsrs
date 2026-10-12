@@ -58,6 +58,8 @@ pub struct ProgramOptions {
     /// with a fresh one (checkerpool.rs `retire_checker`; the CLI's `--noEmit` check, where no later pass needs the
     /// checker that checked a file).
     pub checker_recycling: bool,
+    /// The batch CLI's non-incremental `--noEmit` engine. External pools and reusable programs never opt in.
+    pub batch_check: bool,
 }
 
 impl ProgramOptions {
@@ -74,6 +76,7 @@ impl ProgramOptions {
             create_module_resolver: None,
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
+            batch_check: false,
         }
     }
 
@@ -96,6 +99,7 @@ impl ProgramOptions {
             create_module_resolver,
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
+            batch_check: false,
         }
     }
 
@@ -141,6 +145,7 @@ pub(crate) struct packageNamesInfo {
 #[expect(clippy::large_enum_variant, reason = "one per program; the built-in pool, the usual variant, is reached on every checker request and stays inline")]
 enum programCheckerPool {
     Compiler(checkerPool),
+    Batch(crate::batchcheck::BatchCheck),
     External(Box<dyn CheckerPool>),
 }
 
@@ -439,7 +444,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
-    p.init_checker_pool(opts.create_checker_pool);
+    p.init_checker_pool(opts.create_checker_pool, opts.batch_check);
     p
 }
 
@@ -670,18 +675,19 @@ impl Program {
         result.files = tsrs_core::alloc_vec(files);
         let result: &'static Program = Box::leak(Box::new(result));
         tsrs_core::census_scrub_stack();
-        result.init_checker_pool(create_checker_pool);
+        result.init_checker_pool(create_checker_pool, false);
         (Some(result), new_file, true)
     }
 
     // program.go:443
-    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
+    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>, batch_check: bool) {
         if !self.finished_processing {
             panic!("Program must finish processing files before initializing checker pool");
         }
 
         let pool = match create {
             Some(create) => programCheckerPool::External(create(self)),
+            None if batch_check && crate::batchcheck::enabled(self) => programCheckerPool::Batch(crate::batchcheck::BatchCheck::new(self)),
             None => programCheckerPool::Compiler(checkerPool::new(self)),
         };
         if self.checker_pool.set(pool).is_err() {
@@ -694,6 +700,7 @@ impl Program {
     pub fn get_checker_pool(&self) -> &dyn CheckerPool {
         match self.checker_pool.get().unwrap() {
             programCheckerPool::Compiler(pool) => pool,
+            programCheckerPool::Batch(_) => panic!("the batch check engine does not lease type checkers"),
             programCheckerPool::External(pool) => &**pool,
         }
     }
@@ -702,6 +709,13 @@ impl Program {
     pub(crate) fn compiler_checker_pool(&self) -> Option<&checkerPool> {
         match self.checker_pool.get() {
             Some(programCheckerPool::Compiler(pool)) => Some(pool),
+            _ => None,
+        }
+    }
+
+    fn batch_checker(&self) -> Option<&crate::batchcheck::BatchCheck> {
+        match self.checker_pool.get() {
+            Some(programCheckerPool::Batch(batch)) => Some(batch),
             _ => None,
         }
     }
@@ -845,7 +859,7 @@ impl Program {
     }
 
     pub fn checker_count(&self) -> usize {
-        self.pool().checker_count()
+        self.batch_checker().map_or_else(|| self.pool().checker_count(), crate::batchcheck::BatchCheck::count)
     }
 
     // TSRS_ASSIGNMENT_STATS report (checkerpool_stats.rs).
@@ -889,7 +903,9 @@ impl Program {
 
     // program.go:605
     pub fn for_each_checker_parallel(&self, cb: impl Fn(usize, &mut Checker) + Sync) {
-        if let Some(pool) = self.compiler_checker_pool() {
+        if let Some(batch) = self.batch_checker() {
+            batch.for_each_context(cb);
+        } else if let Some(pool) = self.compiler_checker_pool() {
             pool.for_each_checker_parallel(cb);
         }
     }
@@ -1059,7 +1075,12 @@ impl Program {
         collect: &(impl Fn(&Context, &mut Checker, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync),
     ) -> Vec<Vec<P<Diagnostic>>> {
         let diagnostics: Vec<Mutex<Vec<P<Diagnostic>>>> = source_files.iter().map(|_| Mutex::new(Vec::new())).collect();
-        if let Some(pool) = self.compiler_checker_pool() {
+        if let Some(batch) = self.batch_checker() {
+            assert!(allow_steal && std::ptr::eq(source_files, self.files), "batch checking requires the complete semantic pass");
+            batch.check(ctx, |c, file_index, file| {
+                *diagnostics[file_index].lock().unwrap() = collect(ctx, c, file);
+            });
+        } else if let Some(pool) = self.compiler_checker_pool() {
             pool.for_each_checker_group_do_ex(source_files, self.single_threaded(), allow_steal, allow_steal.then_some(ctx), |c, file_index, file| {
                 *diagnostics[file_index].lock().unwrap() = collect(ctx, c, file);
             });
@@ -1999,6 +2020,9 @@ impl Program {
     pub fn get_global_diagnostics(&'static self, _ctx: &Context) -> Vec<P<Diagnostic>> {
         if self.files.is_empty() {
             return Vec::new();
+        }
+        if let Some(batch) = self.batch_checker() {
+            return batch.global_diagnostics();
         }
         if let Some(pool) = self.compiler_checker_pool() {
             return pool.get_global_diagnostics();

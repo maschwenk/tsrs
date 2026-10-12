@@ -1015,8 +1015,8 @@ pub(crate) fn compare_tuple_types(t1: &'static TupleType, t2: &'static TupleType
     if std::ptr::eq(t1, t2) {
         return Ordering::Equal;
     }
-    if t1.readonly.get() != t2.readonly.get() {
-        return if t1.readonly.get() {
+    if t1.is_readonly() != t2.is_readonly() {
+        return if t1.is_readonly() {
             Ordering::Greater
         } else {
             Ordering::Less

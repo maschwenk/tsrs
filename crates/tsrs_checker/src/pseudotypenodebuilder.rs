@@ -549,7 +549,7 @@ impl NodeBuilderImpl {
                 let tuple_target = undefined_stripped.target_tuple_type();
                 // Pseudo-tuples come from `as const` array literals, so they only ever have required elements.
                 // If the target tuple has optional, rest, or variadic elements, the structures can't match.
-                if tuple_target.combined_flags.get().intersects(ElementFlags::NonRequired) {
+                if tuple_target.combined_flags().intersects(ElementFlags::NonRequired) {
                     return false;
                 }
                 let element_types = c.get_type_arguments(undefined_stripped);

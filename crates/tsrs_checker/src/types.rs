@@ -1320,10 +1320,10 @@ pub(crate) fn census_layouts() {
         header.push(CensusField::X8 { off: sym, modes: 0b101 }); // address / 8, bit 63 for the record
         let name = type_name::<TypeAlloc<LiteralType>>();
         tsrs_core::census_layout(&name[..=name.find('<').unwrap()], &header);
-        // The number and boolean variants leave the rest of the value uninitialized (its strings are never freed).
-        let d = offset_of!(TypeAlloc<LiteralType>, data);
-        let value = CensusField::NoPointer { off: d + offset_of!(LiteralType, value), len: size_of::<Option<LiteralValue>>() };
-        tsrs_core::census_layout(name, &[value]);
+        // Literal types point to immutable payloads. The enum's numeric and boolean variants must not be read as
+        // pointers; payload strings are retained by their owning store rather than the checker's type graph.
+        tsrs_core::census_layout(type_name::<LiteralValue>(), &[CensusField::NoPointer { off: 0, len: size_of::<LiteralValue>() }]);
+        tsrs_core::census_layout(type_name::<TupleMetadata>(), &[CensusField::NoPointer { off: 0, len: size_of::<TupleMetadata>() }]);
         let d = offset_of!(TypeAlloc<TypeParameter>, data);
         let offsets = [
             offset_of!(TypeParameter, constrained_type),
@@ -2148,9 +2148,30 @@ pub enum LiteralValue {
 
 #[derive(Default)]
 pub struct LiteralType {
-    pub value: Cell<Option<LiteralValue>>, // string | jsnum.Number | bool | PseudoBigInt | nil (computed enum)
+    pub value: LiteralValueCell, // immutable payload; nil for a computed enum
     pub fresh_type: OvCell<Option<P<Type>>>, // Fresh version of type
     pub regular_type: Cell<Option<P<Type>>>, // Regular version of type
+}
+
+/// Each literal keeps its own type identity and fresh/regular links; only its completed value is shared.
+#[derive(Default)]
+pub struct LiteralValueCell(Cell<Option<P<LiteralValue>>>);
+
+impl LiteralValueCell {
+    #[inline]
+    pub fn get(&self) -> Option<LiteralValue> {
+        self.0.get().map(|value| *value)
+    }
+
+    #[inline]
+    pub(crate) fn payload(&self) -> Option<P<LiteralValue>> {
+        self.0.get()
+    }
+
+    #[inline]
+    pub(crate) fn set_payload(&self, value: Option<P<LiteralValue>>) {
+        self.0.set(value);
+    }
 }
 
 impl LiteralType {
@@ -2566,21 +2587,35 @@ impl TupleElementInfo {
 pub struct TupleType {
     pub interface_type: InterfaceType,
     pub element_infos: Cell<&'static [TupleElementInfo]>,
-    pub min_length: CountCell,   // Number of required or variadic elements
-    pub fixed_length: CountCell, // Number of initial required or optional elements
-    pub combined_flags: Cell<ElementFlags>,
-    pub readonly: Cell<bool>,
+    pub metadata: Cell<Option<P<TupleMetadata>>>,
 }
 embeds!(TupleType, interface_type, InterfaceType);
 
+/// Pointer-free tuple structure. Element types, labels, declarations and all lazy resolution stay local.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct TupleMetadata {
+    pub min_length: u32,
+    pub fixed_length: u32,
+    pub combined_flags: ElementFlags,
+    pub readonly: bool,
+}
+
 impl TupleType {
     #[inline]
+    pub fn min_length(&self) -> usize {
+        self.metadata.get().map_or(0, |metadata| metadata.min_length as usize)
+    }
+    #[inline]
     pub fn fixed_length(&self) -> usize {
-        self.fixed_length.get()
+        self.metadata.get().map_or(0, |metadata| metadata.fixed_length as usize)
+    }
+    #[inline]
+    pub fn combined_flags(&self) -> ElementFlags {
+        self.metadata.get().map_or(ElementFlags::None, |metadata| metadata.combined_flags)
     }
     #[inline]
     pub fn is_readonly(&self) -> bool {
-        self.readonly.get()
+        self.metadata.get().is_some_and(|metadata| metadata.readonly)
     }
     #[inline]
     pub fn element_flags(&self) -> Vec<ElementFlags> {

@@ -17,8 +17,15 @@ fn run(case: &Path, mode: &str, stats: &Path) -> String {
     let out = Command::new(env!("CARGO_BIN_EXE_tsrs"))
         .args(["-p", ".", "--pretty", "false", "--checkers", "4"])
         .current_dir(case)
+        .env("TSRS_CHECK_ENGINE", "shared")
         .env("TSRS_SPLIT_FILES", format!("{mode},stats:{}", stats.display()))
         .env_remove("TSRS_CHECKER_ASSIGNMENT")
+        .env_remove("TSRS_HISTORY")
+        .env_remove("TSRS_MAX_MEMORY")
+        .env_remove("TSRS_SHARED_GRAPH")
+        .env_remove("TSRS_ASSIGNMENT_STATS")
+        .env_remove("TSRS_FILE_TIMES")
+        .env_remove("TSRS_CHECKER_COST_CACHE")
         .output()
         .unwrap();
     assert!(out.status.code().is_some_and(|c| c <= 2), "{} ({mode}): {}", case.display(), String::from_utf8_lossy(&out.stderr));

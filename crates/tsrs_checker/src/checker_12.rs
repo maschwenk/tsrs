@@ -13,12 +13,12 @@ use tsrs_diagnostics as diagnostics;
 
 // checker.go:23954
 pub(crate) fn is_mutable_tuple_type(t: P<Type>) -> bool {
-    is_tuple_type(t) && !t.target_tuple_type().readonly.get()
+    is_tuple_type(t) && !t.target_tuple_type().is_readonly()
 }
 
 // checker.go:23958
 pub(crate) fn is_generic_tuple_type(t: P<Type>) -> bool {
-    is_tuple_type(t) && t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
+    is_tuple_type(t) && t.target_tuple_type().combined_flags().intersects(ElementFlags::Variadic)
 }
 
 // checker.go:23962
@@ -35,7 +35,7 @@ impl Checker {
 
     // checker.go:23970
     pub(crate) fn is_mutable_array_or_tuple(&mut self, t: P<Type>) -> bool {
-        self.is_array_type(t) && !self.is_readonly_array_type(t) || is_tuple_type(t) && !t.target_tuple_type().readonly.get()
+        self.is_array_type(t) && !self.is_readonly_array_type(t) || is_tuple_type(t) && !t.target_tuple_type().is_readonly()
     }
 
     // checker.go:23974
@@ -1639,7 +1639,7 @@ impl Checker {
             // (`create_union_or_intersection_property`).
             while self.tuple_elements.len() < arity {
                 let type_parameter = self.new_type_parameter(None);
-                let name = alloc_str(&self.tuple_elements.len().to_string());
+                let name = self.shared_data.payloads.alloc_string(&self.tuple_elements.len().to_string());
                 self.tuple_elements.push((type_parameter, name));
             }
             type_parameters = Vec::with_capacity(arity + 1);
@@ -1695,11 +1695,13 @@ impl Checker {
         d.instantiations.add(t);
         d.declared_members_resolved.set(true);
         d.declared_members.set(Some(members));
-        d.element_infos.set(alloc_slice(element_infos));
-        d.min_length.set(min_length);
-        d.fixed_length.set(fixed_length);
-        d.combined_flags.set(combined_flags);
-        d.readonly.set(readonly);
+        d.element_infos.set(self.shared_data.payloads.tuple_infos(element_infos));
+        d.metadata.set(Some(self.shared_data.payloads.tuple_metadata(TupleMetadata {
+            min_length: u32::try_from(min_length).expect("count exceeds u32 storage"),
+            fixed_length: u32::try_from(fixed_length).expect("count exceeds u32 storage"),
+            combined_flags,
+            readonly,
+        })));
         t
     }
 
@@ -1736,7 +1738,7 @@ impl Checker {
 
     // checker.go:25321
     pub(crate) fn get_rest_type_of_tuple_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        let fixed_length = t.target_tuple_type().fixed_length.get();
+        let fixed_length = t.target_tuple_type().fixed_length();
         self.get_element_type_of_slice_of_tuple_type(t, fixed_length, 0, false, false)
     }
 
@@ -1802,7 +1804,7 @@ impl Checker {
     // checker.go:25374
     #[inline]
     pub(crate) fn is_generic_tuple_type(&mut self, t: P<Type>) -> bool {
-        is_tuple_type(t) && t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
+        is_tuple_type(t) && t.target_tuple_type().combined_flags().intersects(ElementFlags::Variadic)
     }
 
     // checker.go:25378
@@ -1961,7 +1963,7 @@ impl Checker {
     // checker.go:25491
     pub(crate) fn new_intrinsic_type_ex(&mut self, flags: TypeFlags, intrinsic_name: &str, object_flags: ObjectFlags) -> P<Type> {
         let data = IntrinsicType::default();
-        data.intrinsic_name.set(alloc_str(intrinsic_name));
+        data.intrinsic_name.set(self.shared_data.payloads.alloc_string(intrinsic_name));
         self.new_type(flags, object_flags, data)
     }
 
@@ -1985,8 +1987,14 @@ impl Checker {
 
     // checker.go:25513
     pub(crate) fn new_literal_type(&mut self, flags: TypeFlags, value: Option<LiteralValue>, regular_type: Option<P<Type>>) -> P<Type> {
+        let value = value.map(|value| self.shared_data.payloads.literal(value));
+        self.new_literal_type_with_payload(flags, value, regular_type)
+    }
+
+    // Storage-only split: callers retain the same local Type allocation, identity and fresh/regular links.
+    fn new_literal_type_with_payload(&mut self, flags: TypeFlags, value: Option<P<LiteralValue>>, regular_type: Option<P<Type>>) -> P<Type> {
         let data = LiteralType::default();
-        data.value.set(value);
+        data.value.set_payload(value);
         let t = self.new_type(flags, ObjectFlags::None, data);
         let data = t.as_literal_type();
         if regular_type.is_some() {
@@ -2000,7 +2008,7 @@ impl Checker {
     // checker.go:25525
     pub(crate) fn new_unique_es_symbol_type(&mut self, symbol: P<Symbol>, name: &str) -> P<Type> {
         let data = UniqueESSymbolType::default();
-        data.name.set(alloc_str(name));
+        data.name.set(self.shared_data.payloads.alloc_string(name));
         let t = self.new_type(TypeFlags::UniqueESSymbol, ObjectFlags::None, data);
         t.set_symbol(Some(symbol));
         t
@@ -2201,7 +2209,7 @@ impl Checker {
     // checker.go:25685
     pub(crate) fn new_template_literal_type(&mut self, texts: &[&str], types: &[P<Type>]) -> P<Type> {
         let data = TemplateLiteralType::default();
-        data.texts.set(alloc_vec(texts.iter().map(|s| alloc_str(s)).collect()));
+        data.texts.set(self.shared_data.payloads.string_list(texts));
         data.types.set(alloc_slice(types));
         self.new_type(TypeFlags::TemplateLiteral, ObjectFlags::None, data)
     }
@@ -2294,7 +2302,7 @@ impl Checker {
         if t.flags().intersects(TypeFlags::Freshable) {
             let d = t.as_literal_type();
             if d.fresh_type.get().is_none() {
-                let f = self.new_literal_type(t.flags(), d.value.get(), Some(t));
+                let f = self.new_literal_type_with_payload(t.flags(), d.value.payload(), Some(t));
                 f.set_symbol(t.symbol());
                 f.as_literal_type().fresh_type.set(Some(f));
                 d.fresh_type.set(Some(f));
@@ -2315,7 +2323,8 @@ impl Checker {
     pub(crate) fn get_string_literal_type(&mut self, value: &str) -> P<Type> {
         let mut t = self.string_literal_types.get(value);
         if t.is_none() {
-            let literal = self.new_literal_type(TypeFlags::StringLiteral, Some(LiteralValue::String(alloc_str(value))), None);
+            let value = self.shared_data.payloads.string_literal(value);
+            let literal = self.new_literal_type_with_payload(TypeFlags::StringLiteral, Some(value), None);
             self.string_literal_types.insert_new(literal);
             t = Some(literal);
         }

@@ -58,9 +58,9 @@ const CLASSES: usize = MAX_FREE_SIZE / 8 + 1;
 pub const POISON: u8 = 0xA5;
 
 pub struct Arena {
-    /// Bump finger in the current chunk (allocation moves it down towards `start`; in a region, up towards `end`).
+    /// Bump finger (down towards `start` in permanent arenas; up towards `end` in freeable regions).
     ptr: Cell<*mut u8>,
-    /// Regions bump upwards: the allocator that hands out a chunk writes its first word (mimalloc's free list), so
+    /// Freeable regions bump upwards: the allocator that hands out a chunk writes its first word (mimalloc's free list), so
     /// the start of every chunk is resident anyway, and the unused part of a region's last chunk (most regions are
     /// small, one per parsed file) should be the untouched end.
     up: bool,
@@ -74,9 +74,11 @@ pub struct Arena {
     free: [Cell<*mut u8>; CLASSES],
     /// Regions only (`None` for a thread's own arena): the region, for the chunk registry.
     region: Option<Weak<RegionInner>>,
-    /// Regions only: values that need drop, dropped when the region is freed.
+    /// Whether this arena will run destructors: freeable regions only, never thread or permanent arenas.
+    tracks_drops: bool,
+    /// Freeable regions only: values that need drop, dropped when the region is freed.
     drops: RefCell<Vec<DropEntry>>,
-    /// Regions only: the slab each chunk was carved from, in chunk order (retired chunks, then the current one).
+    /// Freeable regions only: each chunk's slab, in chunk order (retired chunks, then the current one).
     slabs: RefCell<Vec<*const Slab>>,
     /// Regions only: the chunks are in the registry (`Region::containing`); scratch regions are not.
     registered: bool,
@@ -166,13 +168,13 @@ pub struct Checkpoint {
 
 impl Arena {
     pub(crate) fn new() -> Arena {
-        Arena::with_first_chunk(FIRST_CHUNK, None, false, false)
+        Arena::with_first_chunk(FIRST_CHUNK, None, false, false, false)
     }
 
-    fn with_first_chunk(first_chunk: usize, region: Option<Weak<RegionInner>>, registered: bool, large_slabs: bool) -> Arena {
+    fn with_first_chunk(first_chunk: usize, region: Option<Weak<RegionInner>>, registered: bool, large_slabs: bool, tracks_drops: bool) -> Arena {
         let a = Arena {
             ptr: Cell::new(std::ptr::null_mut()),
-            up: region.is_some(),
+            up: region.is_some() && tracks_drops,
             start: Cell::new(std::ptr::null_mut()),
             end: Cell::new(std::ptr::null_mut()),
             retired: RefCell::new(Vec::new()),
@@ -180,6 +182,7 @@ impl Arena {
             epoch: Cell::new(0),
             free: [const { Cell::new(std::ptr::null_mut()) }; CLASSES],
             region,
+            tracks_drops,
             drops: RefCell::new(Vec::new()),
             slabs: RefCell::new(Vec::new()),
             registered,
@@ -191,16 +194,11 @@ impl Arena {
         a
     }
 
-    #[inline]
-    pub(crate) fn is_region(&self) -> bool {
-        self.region.is_some()
-    }
-
     /// Records `len` values of type `T` at `ptr` (just allocated in this arena) for dropping when the region is freed.
-    /// Does nothing in a thread's own arena (values there are never dropped).
+    /// Does nothing in thread or permanent arenas (values there are never dropped).
     #[inline]
     pub(crate) fn track_drop<T>(&self, ptr: *mut T, len: usize) {
-        if std::mem::needs_drop::<T>() && self.is_region() && len != 0 {
+        if std::mem::needs_drop::<T>() && self.tracks_drops && len != 0 {
             self.drops.borrow_mut().push(DropEntry { ptr: ptr.cast(), len, drop: drop_slice::<T> });
         }
     }
@@ -245,11 +243,11 @@ impl Arena {
     fn alloc_layout_slow(&self, layout: Layout) -> NonNull<u8> {
         let prev = self.end.get().addr() - self.start.get().addr();
         let need = layout.size().checked_add(layout.align()).expect("arena allocation size overflow");
-        // A region grows by a quarter of what it has (at least 4 KiB): many regions are small (one per parsed file),
+        // A freeable region grows by a quarter of what it has (at least 4 KiB): many are small (one per parsed file),
         // and the unused tail of a doubled chunk would dominate their footprint.
-        // Compressed pointers: thread-arena chunks stop doubling at `MAX_CHUNK`, since every chunk takes its size out
+        // Compressed pointers: permanent-arena chunks stop doubling at `MAX_CHUNK`, since every chunk takes its size out
         // of the fixed reservation, touched or not.
-        let next = if self.is_region() {
+        let next = if self.up {
             (self.capacity.get() / 4).max(PAGE)
         } else if cfg!(any(compressed_ptrs, target_pointer_width = "32")) {
             (prev * 2).min(MAX_CHUNK)
@@ -300,9 +298,13 @@ impl Arena {
         }
     }
 
-    /// Region only: gives the unused end of the current chunk back to the slab it was carved from, if it was the
-    /// last carve on this thread (a file region right after parse and bind).
+    /// Freeable region: returns the unused end to its slab, if it was the last carve on this thread. Permanent
+    /// region: discards only the resident unused part of the huge page at the bump finger, like a thread arena.
     fn trim(&self) {
+        if !self.up {
+            self.trim_unused_huge_tail();
+            return;
+        }
         let (start, end, ptr) = (self.start.get(), self.end.get(), self.ptr.get());
         let new_end = ptr.addr().next_multiple_of(CHUNK_ALIGN).max(start.addr() + CHUNK_ALIGN);
         let Some(&slab) = self.slabs.borrow().last() else {
@@ -315,6 +317,24 @@ impl Arena {
         self.capacity.set(self.capacity.get() - (end.addr() - new_end));
         if let (Some(region), true) = (&self.region, self.registered) {
             REGISTRY.write().unwrap().insert(reg_key(start.addr()), (reg_key(new_end), Weak::clone(region)));
+        }
+    }
+
+    /// A downward-growing arena's unused part of the huge page at its bump finger. The allocation range stays
+    /// available; later allocations fault in fresh pages. On platforms without huge chunks, tails are untouched.
+    fn trim_unused_huge_tail(&self) {
+        #[cfg(all(compressed_ptrs, target_os = "linux"))]
+        {
+            debug_assert!(!self.up);
+            let (start, end, ptr) = (self.start.get().addr(), self.end.get().addr(), self.ptr.get().addr());
+            let Some(huge) = HUGE_THREAD_CHUNK.filter(|&h| end - start >= h) else {
+                return;
+            };
+            let lo = (ptr & !(huge - 1)).max(start);
+            if ptr & !(PAGE - 1) > lo {
+                // SAFETY: `lo .. ptr` lies below the finger in the current chunk: never handed out, nothing points into it.
+                unsafe { crate::reserve::discard(self.ptr.get().with_addr(lo), ptr - lo) };
+            }
         }
     }
 
@@ -752,8 +772,8 @@ pub(crate) unsafe fn free_block(arena: &Arena, addr: usize, size: usize, align: 
     if class == 0 || addr % 8 != 0 {
         return;
     }
-    // A region's drop list still names the block; it is dropped (not reused) when the region is freed.
-    if needs_drop && arena.is_region() {
+    // A freeable region's drop list still names the block; it is dropped (not reused) when the region is freed.
+    if needs_drop && arena.tracks_drops {
         return;
     }
     // Free lists belong to the arena that allocated the block: a recycling site frees only what it made, while the
@@ -918,7 +938,7 @@ impl Region {
     /// A new, empty region whose first chunk has at least `first_chunk` bytes (rounded up to a page).
     pub fn new(first_chunk: usize) -> Region {
         ANY_REGION.store(true, Ordering::Relaxed);
-        Region::new_in(first_chunk, true, false)
+        Region::new_in(first_chunk, true, false, true)
     }
 
     /// A region to be used only through `enter_scratch` (one file's emit): like `new`, but its chunks are not in the
@@ -926,7 +946,15 @@ impl Region {
     /// of an object inside it (`enter_owner`) goes to the current target, the region itself while it is entered. A
     /// process with only scratch regions (the CLI) keeps `enter_owner` / `enter_table_owner` free.
     pub fn new_scratch(first_chunk: usize) -> Region {
-        Region::new_in(first_chunk, false, false)
+        Region::new_in(first_chunk, false, false, true)
+    }
+
+    /// A scratch allocation owner with thread-arena chunk growth that lives until process exit. The leaked handle makes
+    /// the lifetime unconditional, including during unwinding: no destructor list is needed, and dead blocks
+    /// whose values need drop can be recycled under the same rules as in a thread arena. Enter it for each job
+    /// so its allocations and free lists follow the logical owner when that owner moves between threads.
+    pub fn new_permanent_scratch(first_chunk: usize) -> &'static Region {
+        Box::leak(Box::new(Region::new_in(first_chunk, false, false, false)))
     }
 
     /// `new_scratch` for one of many regions that are mostly retired (`retire_on_free`) in an order unrelated to
@@ -934,12 +962,12 @@ impl Region {
     /// (`LARGE_SLAB_SIZE`), so the regions one thread made lie together and retired neighbours give their pages back
     /// in long runs, one system call (and one TLB flush on every core of the process) each.
     pub fn new_scratch_in_large_slabs(first_chunk: usize) -> Region {
-        Region::new_in(first_chunk, false, true)
+        Region::new_in(first_chunk, false, true, true)
     }
 
-    fn new_in(first_chunk: usize, registered: bool, large_slabs: bool) -> Region {
+    fn new_in(first_chunk: usize, registered: bool, large_slabs: bool, tracks_drops: bool) -> Region {
         Region(Arc::new_cyclic(|weak| RegionInner {
-            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(Weak::clone(weak)), registered, large_slabs)),
+            arena: Box::new(Arena::with_first_chunk(first_chunk.max(PAGE), Some(Weak::clone(weak)), registered, large_slabs, tracks_drops)),
             lock: OwnerLock { state: Mutex::new((None, 0, 0)), released: Condvar::new() },
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),
@@ -1011,8 +1039,8 @@ impl Region {
         self.0.arena.capacity()
     }
 
-    /// Gives the unused end of the region's current chunk back (call on the thread that last allocated in it, right
-    /// after a phase that will not allocate much more, such as parsing and binding a file).
+    /// Gives back the unused tail of a freeable region's slab or the unused resident huge-page tail of a permanent
+    /// region. Call on the thread that last allocated in it, after a phase that will not allocate much more.
     pub fn trim(&self) {
         let _scope = self.enter();
         self.0.arena.trim();
@@ -1031,6 +1059,11 @@ impl Region {
     /// Number of values waiting to be dropped when the region is freed (diagnostics).
     pub fn drop_entries(&self) -> usize {
         self.0.arena.drops.borrow().len()
+    }
+
+    /// Retained heap capacity of the destructor list (diagnostics; permanent regions have none).
+    pub fn drop_list_bytes(&self) -> usize {
+        self.0.arena.drops.borrow().capacity() * std::mem::size_of::<DropEntry>()
     }
 
     /// Forgets the values waiting to be dropped (and frees the list): for a region that will never be freed, whose
@@ -1122,18 +1155,7 @@ pub(crate) fn give_spare_arena(arena: &'static Arena) {
 /// resident and this does nothing.
 pub fn trim_own_arena_tail() {
     #[cfg(all(compressed_ptrs, target_os = "linux"))]
-    {
-        let a = crate::ptr::own_arena();
-        let (start, end, ptr) = (a.start.get().addr(), a.end.get().addr(), a.ptr.get().addr());
-        let Some(huge) = HUGE_THREAD_CHUNK.filter(|&h| end - start >= h) else {
-            return;
-        };
-        let lo = (ptr & !(huge - 1)).max(start);
-        if ptr & !(PAGE - 1) > lo {
-            // SAFETY: `lo .. ptr` lies in the current chunk below the finger: never handed out, nothing points into it.
-            unsafe { crate::reserve::discard(a.ptr.get().with_addr(lo), ptr - lo) };
-        }
-    }
+    crate::ptr::own_arena().trim_unused_huge_tail();
 }
 
 /// The region that is the current thread's allocation target, if any (`None`: the thread's own arena).
@@ -1671,6 +1693,102 @@ mod tests {
         drop(region);
         // The rewound value lost its entry (not dropped, like a thread arena); `c` and `d` were dropped.
         assert_eq!(Rc::strong_count(&counter), 2);
+    }
+
+    #[test]
+    fn permanent_regions_keep_values_and_reuse_drop_blocks_across_threads() {
+        use super::Region;
+        use std::sync::atomic::{AtomicUsize, Ordering};
+
+        static DROPS: AtomicUsize = AtomicUsize::new(0);
+        struct Tracked(u64);
+        impl Drop for Tracked {
+            fn drop(&mut self) {
+                // Relaxed: the threads are joined before the assertion; this counter only records drops.
+                DROPS.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+
+        let freeable = Region::new_scratch(4096);
+        {
+            let _scope = freeable.enter_scratch();
+            let _value = P::new(Tracked(1));
+        }
+        assert_eq!(freeable.drop_entries(), 1);
+        assert!(freeable.drop_list_bytes() >= std::mem::size_of::<super::DropEntry>());
+        drop(freeable);
+        // Relaxed: the only drop so far ran on this thread.
+        assert_eq!(DROPS.load(Ordering::Relaxed), 1);
+
+        let permanent = Region::new_permanent_scratch(4096);
+        let (kept, free_addr) = std::thread::spawn(move || {
+            let _scope = permanent.enter_scratch();
+            let kept = P::new(Tracked(2));
+            let dead = P::new(Tracked(3));
+            let free_addr = dead.addr();
+            // SAFETY: nothing uses `dead` after this point, and the permanent arena never runs its destructor.
+            unsafe { free!(dead) };
+            (kept, free_addr)
+        })
+        .join()
+        .unwrap();
+        let reused = std::thread::spawn(move || {
+            let _scope = permanent.enter_scratch();
+            let reused = P::new_recycled(Tracked(4));
+            assert_eq!(reused.addr(), free_addr);
+            assert_eq!(kept.0, 2);
+            reused
+        })
+        .join()
+        .unwrap();
+        assert_eq!((kept.0, reused.0), (2, 4));
+        assert_eq!((permanent.drop_entries(), permanent.drop_list_bytes()), (0, 0));
+        // Relaxed: both worker threads were joined, and the permanent region cannot run destructors.
+        assert_eq!(DROPS.load(Ordering::Relaxed), 1);
+    }
+
+    #[test]
+    fn permanent_region_growth_and_trimming_preserve_values_and_recycling() {
+        use super::Region;
+
+        let region = Region::new_permanent_scratch(1 << 20);
+        let (values, free_addr) = {
+            let _scope = region.enter_scratch();
+            let dead = P::new([1u64, 2]);
+            let free_addr = dead.addr();
+            // SAFETY: `dead` is never used again; its block remains on this region's free list across growth.
+            unsafe { free!(dead) };
+            let mut values = Vec::new();
+            for i in 0..450u64 {
+                values.push(P::new([i; 1024]));
+                if i % 100 == 0 {
+                    region.trim();
+                }
+            }
+            region.trim();
+            (values, free_addr)
+        };
+        let mut sizes: Vec<_> = region.chunks().iter().map(|&(_, size)| size).collect();
+        sizes.sort_unstable();
+        assert_eq!(sizes, [1 << 20, 2 << 20, 4 << 20]);
+        assert!(!region.0.arena.up);
+        assert!(region.0.arena.slabs.borrow().is_empty());
+        std::thread::spawn(move || {
+            let _scope = region.enter_scratch();
+            region.trim();
+            let reused = P::new_recycled([3u64, 4]);
+            assert_eq!(reused.addr(), free_addr);
+            assert_eq!(*reused, [3, 4]);
+            // Allocating below the trimmed finger must work, including after Linux discarded its huge-page tail.
+            let after_trim = P::new([5u64; 1024]);
+            region.trim();
+            assert_eq!(*after_trim, [5; 1024]);
+            for (i, value) in values.iter().enumerate() {
+                assert_eq!(**value, [i as u64; 1024]);
+            }
+        })
+        .join()
+        .unwrap();
     }
 
     #[test]

@@ -3074,7 +3074,7 @@ impl Checker {
                     if !added.is_empty() {
                         added.extend_from_slice(settled);
                         added.sort_unstable();
-                        memo.settled = alloc_vec(added);
+                        memo.settled = self.shared_data.payloads.name_list(added);
                     }
                     memo.settled
                 }
@@ -3095,7 +3095,7 @@ impl Checker {
                 }
                 self.lazy_member_stats.member_table_declared_members += named;
                 settled.sort_unstable();
-                let settled = alloc_vec(settled);
+                let settled = self.shared_data.payloads.name_list(settled);
                 self.lazy_unaffected.insert(source, LazyUnaffected { table: declared_members, len: declared_members.len(), maps_this_only, named, settled, pending });
                 settled
             }
@@ -3468,7 +3468,7 @@ impl Checker {
             }),
         );
         let u = self.get_union_type(&element_types);
-        self.create_array_type_ex(u, t.as_tuple_type().readonly.get())
+        self.create_array_type_ex(u, t.as_tuple_type().is_readonly())
     }
 
     // checker.go:19561

@@ -2041,7 +2041,7 @@ impl Checker {
             }
             if every_type(self, object_type, |_, t| is_tuple_type(t)) && is_numeric_literal_name(&prop_name) {
                 let index = jsnum::from_string(&prop_name);
-                if access_node.is_some() && every_type(self, object_type, |_, t| !t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
+                if access_node.is_some() && every_type(self, object_type, |_, t| !t.target_tuple_type().combined_flags().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
                     let index_node = get_index_node_for_access_expression(access_node.unwrap());
                     if is_tuple_type(object_type) {
                         if index < jsnum::Number(0.0) {
@@ -2662,7 +2662,7 @@ impl Checker {
                 }
                 new_elements.push(new_element);
             }
-            return Some(self.create_tuple_type_ex(&new_elements, element_infos, t.target_tuple_type().readonly.get()));
+            return Some(self.create_tuple_type_ex(&new_elements, element_infos, t.target_tuple_type().is_readonly()));
         }
         Some(t)
     }

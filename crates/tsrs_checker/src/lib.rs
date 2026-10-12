@@ -23,6 +23,8 @@ pub(crate) use tsrs_pseudochecker::{new_pseudo_checker, PseudoChecker, PseudoPar
 // Data model (checker-foundation).
 pub mod workcensus;
 pub mod checker;
+pub mod sharedcheck;
+pub mod shareddata;
 pub mod evaluator;
 pub mod flow_types;
 pub mod inference_types;
@@ -37,6 +39,7 @@ pub mod types;
 pub mod utilities_types;
 
 pub use checker::*;
+pub use sharedcheck::SharedCheckData;
 pub use flow_types::*;
 pub use inference_types::*;
 pub use jsx_types::*;

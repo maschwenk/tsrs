@@ -145,6 +145,21 @@ with the switch off, which is why it is not in the default build.
   chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);
   root names instead of reference paths (a quarter of the skips).
 
+- Initial batch checker-pool replacement with Rayon contexts and completed immutable payload interning
+  (`notes/shared-checker-rayon.md`, owner-requested worktree implementation). Unlike the frozen-seed experiment it
+  has no warm-up/lazy-field overlay and preserves local semantic identities/history. Initial public measurements
+  increased default RSS: xstate +4.6..+4.9%, VS Code +1.1..+1.9%. Revisited with concrete allocation evidence:
+  freeable-region destructor lists retained 9/48 MiB and disabled block reuse that the original CLI used. Permanent
+  context arenas restore those rules; the follow-up note records matched measurements. Smaller shard chunks
+  (64 → 4 KiB) lowered virtual capacity but not RSS and were reverted. Completed-context cache release freed
+  22/204 MiB of live heap only after peak usage, gave no peak-RSS gain, and was also reverted. The final worktree
+  retains contexts and uses 16 shards (lower fixed overhead on the Compiler workloads without observed contention).
+  Two normal-release passes of pre-rebase `4260fa6b` versus `b8bdd76b` lower default RSS by 2.14/2.31% on VS Code
+  and 0.56/0.56% on xstate; this fixes the regression but remains below the 5% RSS landing bar, with no
+  demonstrated instruction gain. The implementation rebased onto `d8b0959e` is unmeasured. Do not count avoided
+  allocation requests or post-peak release as RSS savings; further sharing must be justified by actual
+  before/after peaks and instructions.
+
 - Unconditional loop-to-iterator conversion (PR 317; notes/perf-iterator-regressions.md): the original patch added
   0.036–0.339% single-threaded instructions on 16 of 17 public projects, and restarting the formatter's diagnostic
   search on each call made it quadratic. Keep advancing cursors and measured hot loops; iterator syntax alone

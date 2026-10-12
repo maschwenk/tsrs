@@ -353,6 +353,7 @@ fn perform_compilation(
     let mut program_options = ProgramOptions::new(config, host);
     program_options.leaf_files = leaf_settings.mode;
     program_options.checker_recycling = leaf_freeing_allowed;
+    program_options.batch_check = testing.is_none() && options.no_emit.is_true() && !options.is_incremental();
 
     start_tracing_if_needed(sys, &config);
     let parse_start = sys.now();

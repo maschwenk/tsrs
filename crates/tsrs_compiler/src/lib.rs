@@ -1,4 +1,5 @@
 mod checker_program;
+mod batchcheck;
 mod checkerpool;
 mod checkerpool_stats;
 pub mod diagnosticwriter;
