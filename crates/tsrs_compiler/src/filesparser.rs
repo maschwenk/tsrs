@@ -559,10 +559,15 @@ impl filesParser {
         loader.files_parser.datas.reserve(tasks.len());
         Self::start(loader, tasks, 0);
         // Go's single-threaded work group runs the queued closures last-queued first (core/workgroup.go), a depth-first
-        // order that the rounds below do not keep. The program's files do not depend on it, but which files a failing
-        // content mapper reports before the failure budget disables it does (fileloader.go:681, the tsc
-        // contentMapperFailures scenarios): with content mappers, a single-threaded load runs Go's order.
-        if loader.files_parser.single_threaded && !loader.content_mapper_extensions.is_empty() {
+        // order that the rounds below do not keep. The program's files do not depend on it, but two outputs do, and
+        // for them the load runs Go's order:
+        // - which files a failing content mapper reports before the failure budget disables it (fileloader.go:681,
+        //   the tsc contentMapperFailures scenarios), single-threaded;
+        // - `--traceResolution`, at any checker count: a lookup traces as served "according to earlier cached
+        //   lookups" when an earlier resolution made it. Go's parallel order is a race; its single-threaded order is
+        //   the one deterministic reference. Traced resolutions run sequentially anyway (`prefetch`).
+        let trace_resolution = loader.opts.config.compiler_options().unwrap().trace_resolution.is_true();
+        if trace_resolution || (loader.files_parser.single_threaded && !loader.content_mapper_extensions.is_empty()) {
             while let Some(item) = loader.files_parser.queue.pop() {
                 Self::run_queued(loader, item);
             }
