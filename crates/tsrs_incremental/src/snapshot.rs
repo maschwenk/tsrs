@@ -489,7 +489,7 @@ pub(crate) fn get_text_handling_source_map_for_signature<'a>(
 }
 
 // snapshot.go:413
-fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<SourceFile>, builder: &mut String) {
+pub(crate) fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<SourceFile>, builder: &mut String) {
     let Some(diagnostic) = diagnostic else {
         return;
     };
@@ -504,7 +504,8 @@ fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<Sourc
         )));
     }
     if diagnostic.file().is_some() {
-        let _ = write!(builder, "({:?},{:?}): ", diagnostic.pos(), diagnostic.len());
+        // Go prints the raw ints: a synthetic position is -1, and its length 0.
+        let _ = write!(builder, "({},{}): ", diagnostic.pos().map_or(-1, i64::from), diagnostic.len().map_or(0, i64::from));
     }
     builder.push_str(diagnostic.category().name());
     let _ = write!(builder, "{}: ", diagnostic.code());
