@@ -13,8 +13,11 @@ Bun and nub from their per-platform npm packages. Undeclared pnpm versions follo
 when package.json has a `pnpm` field or a `workspaces` field without `pnpm-workspace.yaml`, which newer pnpm reads
 differently. Installs are frozen when a lockfile exists and unpinned (and marked so) when none does. Lifecycle scripts
 are disabled and engine and platform checks are ignored, since only the files are needed. Yarn uses node_modules.
-Package downloads are cached; installs and compilers receive no CI credentials. Other package managers, out-of-date
-lockfiles and custom setup requirements are reported as setup failures.
+Clones, installs and compilers get no CI credentials and, per repository, a fresh HOME with empty npm and git config, so
+package-manager config and hooks find no host config or tokens through HOME, XDG paths or the environment. This is not
+a sandbox: a hook can still read absolute host paths. Downloads go to the `--cache` directory, which holds only package
+manager caches and tools. Other package managers, out-of-date lockfiles and custom setup requirements are reported as
+setup failures.
 
 The harness compares ordered diagnostics, exit codes, and loaded-file counts with `--noEmit` and fresh build info.
 It normalizes checkout/compiler paths and CRLF, and excludes timing counters. Tracked `tsconfig.json` files are
@@ -39,7 +42,7 @@ at the manifest's commits. A saved manifest can be reused, and `--previous` adds
 ```sh
 python3 tools/repo-conformance/run.py plan --count 20 --shards 1 --out /tmp/top-repos/manifest.json
 python3 tools/repo-conformance/run.py run --manifest /tmp/top-repos/manifest.json --shard 0 \
-  --tsrs target/release/tsrs --tsgo /path/to/pinned/tsgo --out /tmp/top-repos/results
+  --tsrs target/release/tsrs --tsgo /path/to/pinned/tsgo --out /tmp/top-repos/results --cache /tmp/top-repos/cache
 python3 tools/repo-conformance/run.py report --manifest /tmp/top-repos/manifest.json \
   --results /tmp/top-repos/results --out /tmp/top-repos/report.md
 ```

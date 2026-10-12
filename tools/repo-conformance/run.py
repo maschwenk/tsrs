@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
+from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
 import datetime as dt
 import difflib
@@ -32,22 +33,40 @@ def write_json(path: Path, data: object) -> None:
     path.write_text(json.dumps(data, indent=2) + "\n")
 
 
-def child_env() -> dict[str, str]:
-    # Package-manager config can execute code; exclude CI credentials.
-    allowed = {"PATH", "HOME", "LANG", "LC_ALL", "TMPDIR", "USER", "LOGNAME"}
+def child_env(home: Path, cache: Path) -> dict[str, str]:
+    """Environment for package managers and compilers. Package-manager config and hooks can run code, so CI
+    credentials are left out and HOME is a fresh directory with empty npm and git config: no host config or token is
+    reachable through HOME, XDG paths or the environment. Downloads go to cache, which holds nothing else. This is not
+    a sandbox; a hook can still read absolute host paths."""
+    allowed = {"PATH", "LANG", "LC_ALL", "TMPDIR", "USER", "LOGNAME"}
     env = {k: v for k, v in os.environ.items() if k in allowed}
-    return dict(env, CI="true", GIT_TERMINAL_PROMPT="0", COREPACK_ENABLE_DOWNLOAD_PROMPT="0",
+    for path in (home / ".npmrc", home / ".npmrc-global", home / ".gitconfig"):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.touch()
+    return dict(env, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), XDG_STATE_HOME=str(home / ".state"),
+                XDG_CACHE_HOME=str(cache / "xdg"), XDG_DATA_HOME=str(cache / "data"),  # pnpm store, Yarn Berry cache
+                npm_config_userconfig=str(home / ".npmrc"), npm_config_globalconfig=str(home / ".npmrc-global"),
+                npm_config_cache=str(cache / "npm"), COREPACK_HOME=str(cache / "corepack"),
+                BUN_INSTALL_CACHE_DIR=str(cache / "bun"), GIT_CONFIG_GLOBAL=str(home / ".gitconfig"),
+                GIT_CONFIG_NOSYSTEM="1", CI="true", GIT_TERMINAL_PROMPT="0", COREPACK_ENABLE_DOWNLOAD_PROMPT="0",
                 COREPACK_ENABLE_PROJECT_SPEC="0", npm_config_ignore_scripts="true",
                 YARN_ENABLE_SCRIPTS="false", YARN_NODE_LINKER="node-modules", YARN_IGNORE_PATH="1")
 
 
-def execute(command: list[str], cwd: Path, log: Path, timeout: float) -> dict:
+@dataclass(frozen=True)
+class Context:
+    tsgo: Path
+    tsrs: Path
+    env: dict[str, str]
+
+
+def execute(command: list[str], cwd: Path, log: Path, timeout: float, env: dict[str, str]) -> dict:
     log.parent.mkdir(parents=True, exist_ok=True)
     start = time.monotonic()
     with log.open("w") as output:
         output.write("$ " + " ".join(command) + "\n")
         output.flush()
-        proc = subprocess.Popen(command, cwd=cwd, env=child_env(), stdout=output,
+        proc = subprocess.Popen(command, cwd=cwd, env=env, stdout=output,
                                 stderr=subprocess.STDOUT, start_new_session=True)
         try:
             code = proc.wait(timeout=max(0.01, timeout))
@@ -59,10 +78,10 @@ def execute(command: list[str], cwd: Path, log: Path, timeout: float) -> dict:
     return {"exit": code, "timeout": timed_out, "seconds": round(time.monotonic() - start, 3)}
 
 
-def head_commit(repo: dict) -> str:
+def head_commit(repo: dict, env: dict[str, str]) -> str:
     """The branch's current commit, so every shard and any rerun checks the same snapshot."""
     output = subprocess.run(["git", "ls-remote", "https://github.com/" + repo["repository"] + ".git",
-                             "refs/heads/" + repo["branch"]], env=child_env(), capture_output=True, text=True,
+                             "refs/heads/" + repo["branch"]], env=env, capture_output=True, text=True,
                             timeout=60, check=True).stdout.split()
     if not output or not re.fullmatch(r"[0-9a-f]{40}", output[0]):
         raise RuntimeError(f"Could not resolve {repo['repository']} {repo['branch']}")
@@ -93,8 +112,9 @@ def discover(count: int, shards: int, out: Path) -> dict:
     if len(repos) < count:
         raise RuntimeError(f"Expected {count} repositories, found only {len(repos)}")
     selected = list(repos.values())[:count]
-    with ThreadPoolExecutor(16) as pool:
-        for repo, commit in zip(selected, pool.map(head_commit, selected)):
+    with tempfile.TemporaryDirectory(prefix="tsrs-plan-") as temp, ThreadPoolExecutor(16) as pool:
+        env = child_env(Path(temp) / "home", Path(temp) / "cache")
+        for repo, commit in zip(selected, pool.map(lambda r: head_commit(r, env), selected)):
             repo["commit"] = commit
     manifest = {
         "created_at": dt.datetime.now(dt.timezone.utc).isoformat(), "query": QUERY,
@@ -178,19 +198,18 @@ def install_plan(root: Path) -> dict | None:
             **({"tool": (name, version.split("+", 1)[0])} if name in TOOLS else {})}
 
 
-def tool_binary(name: str, version: str, log: Path, timeout: float) -> Path:
+def tool_binary(name: str, version: str, log: Path, timeout: float, env: dict[str, str], cache: Path) -> Path:
     system = {"Linux": "linux", "Darwin": "darwin"}.get(platform.system())
     arch = TOOL_ARCH.get((name, platform.machine()))
     if not system or not arch:
         raise ValueError(f"No {name} build for {platform.system()} {platform.machine()}")
     package = TOOLS[name].format(os=system, arch=arch)
-    cache = Path(os.environ.get("XDG_CACHE_HOME") or Path.home() / ".cache") / "tsrs-repo-conformance"
-    prefix = cache / re.sub(r"[^A-Za-z0-9.-]", "_", f"{package}@{version}")
+    prefix = cache / "tools" / re.sub(r"[^A-Za-z0-9.-]", "_", f"{package}@{version}")
     binary = prefix / "node_modules" / package / "bin" / name
     if not binary.is_file():
         prefix.mkdir(parents=True, exist_ok=True)
         result = execute(["npm", "install", "--prefix", str(prefix), "--no-save", "--package-lock=false",
-                          "--ignore-scripts", "--no-audit", "--no-fund", f"{package}@{version}"], prefix, log, timeout)
+                          "--ignore-scripts", "--no-audit", "--no-fund", f"{package}@{version}"], prefix, log, timeout, env)
         if result["exit"] or result["timeout"] or not binary.is_file():
             raise ValueError(f"Could not install {package}@{version}; see {log.name}")
         binary.chmod(0o755)  # nub's packages set the mode in a postinstall script, which installs here skip
@@ -217,16 +236,16 @@ def compare(go: dict, rust: dict) -> str:
     return "match"
 
 
-def check_config(root: Path, config: str, tsgo: Path, tsrs: Path, out: Path, timeout: float) -> dict:
+def check_config(root: Path, config: str, ctx: Context, out: Path, timeout: float) -> dict:
     out = out.resolve()
     out.mkdir(parents=True, exist_ok=True)
     compilers = {}
-    for label, binary in (("tsgo", tsgo), ("tsrs", tsrs)):
+    for label, binary in (("tsgo", ctx.tsgo), ("tsrs", ctx.tsrs)):
         command = [str(binary), "-p", config, "--noEmit", "--pretty", "false", "--extendedDiagnostics",
                    "--incremental", "--tsBuildInfoFile", str(out / (label + ".tsbuildinfo"))]
         (out / (label + ".tsbuildinfo")).unlink(missing_ok=True)
         log = out / (label + ".log")
-        result = execute(command, root, log, timeout)
+        result = execute(command, root, log, timeout, ctx.env)
         compilers[label] = read_compilation(result, log, root, binary)
         (out / (label + ".tsbuildinfo")).unlink(missing_ok=True)
         if result["timeout"] or result["exit"] not in (0, 1, 2):
@@ -244,9 +263,9 @@ def check_config(root: Path, config: str, tsgo: Path, tsrs: Path, out: Path, tim
             **{label: {k: v for k, v in run.items() if k != "diagnostics"} for label, run in compilers.items()}}
 
 
-def project_references(root: Path, config: str, tsgo: Path, log: Path, timeout: float) -> list[str]:
+def project_references(root: Path, config: str, ctx: Context, log: Path, timeout: float) -> list[str]:
     """Referenced config paths, resolved like tsgo's resolveProjectReferencePath, that exist in the checkout."""
-    result = execute([str(tsgo), "-p", config, "--showConfig"], root, log, timeout)
+    result = execute([str(ctx.tsgo), "-p", config, "--showConfig"], root, log, timeout, ctx.env)
     if result["exit"] or result["timeout"]:
         return []
     try:
@@ -263,7 +282,7 @@ def project_references(root: Path, config: str, tsgo: Path, log: Path, timeout: 
     return paths
 
 
-def check_projects(root: Path, configs: list[str], tsgo: Path, tsrs: Path, out: Path, check_timeout: float,
+def check_projects(root: Path, configs: list[str], ctx: Context, out: Path, check_timeout: float,
                    max_configs: int) -> dict:
     """Compare up to max_configs projects that load files. A config with no inputs of its own (a solution file)
     queues its project references next; at most 2 * max_configs configs are run."""
@@ -278,11 +297,11 @@ def check_projects(root: Path, configs: list[str], tsgo: Path, tsrs: Path, out: 
             checked.append({"config": config, "status": "budget_exhausted"})
             break
         index = out / str(len(checked))
-        result = check_config(root, config, tsgo, tsrs, index, min(60, remaining / 2))
+        result = check_config(root, config, ctx, index, min(60, remaining / 2))
         if result["status"] == "no_inputs":
             remaining = deadline - time.monotonic()
             done = {c["config"] for c in checked} | {config}
-            references = [r for r in project_references(root, config, tsgo, index / "references.log",
+            references = [r for r in project_references(root, config, ctx, index / "references.log",
                                                          min(10, max(remaining, 0.01))) if r not in done]
             if references:
                 result.update(status="references", references=references)
@@ -298,11 +317,12 @@ def check_projects(root: Path, configs: list[str], tsgo: Path, tsrs: Path, out: 
     return {"status": status, "configs": checked}
 
 
-def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, setup_timeout: int,
+def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, cache: Path, setup_timeout: int,
                check_timeout: int, max_configs: int) -> dict:
     result = dict(repo, status="setup_failed", configs=[])
     with tempfile.TemporaryDirectory(prefix="tsrs-repo-") as temp:
         root = Path(temp) / "repo"
+        ctx = Context(tsgo, tsrs, child_env(Path(temp) / "home", cache))
         try:
             deadline = time.monotonic() + setup_timeout
             url = "https://github.com/" + repo["repository"] + ".git"
@@ -311,12 +331,13 @@ def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, setup_timeout: int
                          'git -C "$1" checkout -q FETCH_HEAD', "clone", str(root), url, repo["commit"]]
             else:
                 clone = ["git", "clone", "--depth", "1", "--single-branch", "--branch", repo["branch"], url, str(root)]
-            cloned = execute(clone, Path(temp), out / "clone.log", min(60, setup_timeout))
+            cloned = execute(clone, Path(temp), out / "clone.log", min(60, setup_timeout), ctx.env)
             if cloned["exit"] or cloned["timeout"]:
                 result["reason"] = f"Clone {'timed out' if cloned['timeout'] else 'failed'}; see clone.log"
                 return result
-            result["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
-            tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root).decode().split("\0")
+            result["commit"] = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, env=ctx.env,
+                                                       text=True).strip()
+            tracked = subprocess.check_output(["git", "ls-files", "-z"], cwd=root, env=ctx.env).decode().split("\0")
             configs = sorted((p for p in tracked if Path(p).name == "tsconfig.json" and "node_modules" not in Path(p).parts),
                              key=lambda p: (len(Path(p).parts), p))
             result["available_configs"] = len(configs)
@@ -328,19 +349,20 @@ def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, setup_timeout: int
                 result["dependencies"] = plan["dependencies"]
                 command = plan["command"]
                 if "tool" in plan:
-                    binary = tool_binary(*plan["tool"], out / "tool.log", max(0.01, deadline - time.monotonic()))
+                    binary = tool_binary(*plan["tool"], out / "tool.log", max(0.01, deadline - time.monotonic()),
+                                         ctx.env, cache)
                     command = [str(binary), *command[1:]]
                 remaining = deadline - time.monotonic()
                 if remaining <= 0:
                     result["reason"] = "Dependency setup budget exhausted"
                     return result
-                install = execute(command, root, out / "install.log", remaining)
+                install = execute(command, root, out / "install.log", remaining, ctx.env)
                 result["install"] = dict(install, command=" ".join(plan["command"]))
                 if install["exit"] or install["timeout"]:
                     result["reason"] = (f"Dependency installation {'timed out' if install['timeout'] else 'failed'}"
                                         f" ({plan['manager']}); see install.log")
                     return result
-            result.update(check_projects(root, configs, tsgo, tsrs, out, check_timeout, max_configs))
+            result.update(check_projects(root, configs, ctx, out, check_timeout, max_configs))
             return result
         except (OSError, ValueError, subprocess.CalledProcessError) as error:
             result["reason"] = str(error)
@@ -362,7 +384,7 @@ def run_shard(args: argparse.Namespace, manifest: dict) -> None:
     for repo in manifest["repositories"][args.shard::manifest["shards"]]:
         name = repo["repository"]
         result = check_repo(repo, args.tsgo.resolve(), args.tsrs.resolve(), args.out / name.replace("/", "--"),
-                            args.setup_timeout, args.check_timeout, args.max_configs)
+                            args.cache.resolve(), args.setup_timeout, args.check_timeout, args.max_configs)
         results.append(result)
         write_json(path, report)
         print(f"{name}: {result['status']}", flush=True)
@@ -484,6 +506,7 @@ def main() -> int:
     run.add_argument("--tsgo", type=Path, required=True)
     run.add_argument("--tsrs", type=Path, required=True)
     run.add_argument("--out", type=Path, required=True)
+    run.add_argument("--cache", type=Path, required=True, help="package and tool download cache; holds no config")
     run.add_argument("--setup-timeout", type=positive, default=180)
     run.add_argument("--check-timeout", type=positive, default=120)
     run.add_argument("--max-configs", type=positive, default=5)

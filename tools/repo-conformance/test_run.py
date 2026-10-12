@@ -1,12 +1,18 @@
 import json
 import os
 from pathlib import Path
+import subprocess
 import sys
 import tempfile
 import time
 import unittest
 
-from run import check_config, check_projects, compare, execute, install_plan, read_compilation, summarize, write_json
+from run import (Context, check_config, check_projects, child_env, compare, execute, install_plan, read_compilation,
+                 summarize, write_json)
+
+
+def context(tsgo, tsrs, temp):
+    return Context(tsgo, tsrs, child_env(Path(temp) / "home", Path(temp) / "cache"))
 
 
 def compilation(text="", files=1, code=0, timeout=False):
@@ -50,10 +56,44 @@ class ComparisonTests(unittest.TestCase):
             marker = root / "escaped-child"
             child = f"import time; from pathlib import Path; time.sleep(0.5); Path({str(marker)!r}).touch()"
             parent = f"import subprocess,sys,time; subprocess.Popen([sys.executable,'-c',{child!r}]); time.sleep(30)"
-            result = execute([sys.executable, "-c", parent], root, root / "timeout.log", 0.2)
+            result = execute([sys.executable, "-c", parent], root, root / "timeout.log", 0.2,
+                             child_env(root / "home", root / "cache"))
             self.assertTrue(result["timeout"])
             time.sleep(0.6)
             self.assertFalse(marker.exists())
+
+
+class IsolationTests(unittest.TestCase):
+    def test_children_get_a_fresh_home_without_host_credentials_or_config(self):
+        """A package-manager hook or config lookup must not reach the runner's npm/git config or CI tokens."""
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            host = root / "host-home"
+            host.mkdir()
+            (host / ".npmrc").write_text("init-author-name=sentinel-host-npmrc\n")
+            (host / ".gitconfig").write_text("[user]\n\tname = sentinel-host-gitconfig\n")
+            ambient = {"HOME": str(host), "XDG_CONFIG_HOME": str(host), "XDG_CACHE_HOME": str(root / "ambient-cache"),
+                       "NPM_TOKEN": "sentinel-npm-token", "GH_TOKEN": "sentinel-gh-token",
+                       "npm_config_userconfig": str(host / ".npmrc")}
+            saved = {key: os.environ.get(key) for key in ambient}
+            os.environ.update(ambient)
+            try:
+                env = child_env(root / "home", root / "cache")
+            finally:
+                for key, value in saved.items():
+                    if value is None:
+                        os.environ.pop(key, None)
+                    else:
+                        os.environ[key] = value
+            def run(*command):
+                return subprocess.run(command, cwd=root, env=env, capture_output=True, text=True).stdout.strip()
+            leaked = run(sys.executable, "-c", "import os; print([k for k, v in os.environ.items() if 'sentinel' in v])")
+            self.assertEqual(leaked, "[]")
+            self.assertEqual(run("npm", "config", "get", "init-author-name"), "")
+            self.assertEqual(run("npm", "config", "get", "userconfig"), str(root / "home" / ".npmrc"))
+            self.assertEqual(run("npm", "config", "get", "cache"), str(root / "cache" / "npm"))
+            self.assertEqual(run("git", "config", "user.name"), "")
+            self.assertFalse((root / "ambient-cache").exists())
 
 
 class InstallTests(unittest.TestCase):
@@ -159,7 +199,7 @@ class CompilerControls(unittest.TestCase):
             for source, code in (("const x: number = 1;\n", 0), ("const x: number = 'no';\n", 2),
                                  ("const x: number = 1;\n", 0)):
                 (root / "a.ts").write_text(source)
-                result = check_config(root, "tsconfig.json", tsgo, tsrs, out, 30)
+                result = check_config(root, "tsconfig.json", context(tsgo, tsrs, root), out, 30)
                 self.assertEqual(result["status"], "match", result)
                 self.assertEqual(result["tsgo"]["exit"], code)
                 self.assertGreater(result["tsgo"]["files"], 0)
@@ -181,13 +221,14 @@ class CompilerControls(unittest.TestCase):
             (root / "app.ts").write_text("const x: number = 'no';\n")
             (root / "lib" / "lib.ts").write_text("export const y = 1;\n")
             configs = ["tsconfig.json", "empty/tsconfig.json", "lib/tsconfig.json", "solution/tsconfig.json"]
-            result = check_projects(root, configs, tsgo, tsrs, root / "logs", 60, 2)
+            ctx = context(tsgo, tsrs, root)
+            result = check_projects(root, configs, ctx, root / "logs", 60, 2)
             statuses = [(c["config"], c["status"]) for c in result["configs"]]
             self.assertEqual(statuses, [("tsconfig.json", "references"), ("tsconfig.app.json", "match"),
                                         ("lib/tsconfig.json", "match")])
             self.assertEqual(result["status"], "partial")
             self.assertEqual(result["configs"][1]["tsgo"]["exit"], 2)
-            result = check_projects(root, configs, tsgo, tsrs, root / "logs", 60, 5)
+            result = check_projects(root, configs, ctx, root / "logs", 60, 5)
             self.assertEqual([c["status"] for c in result["configs"][3:]], ["no_inputs", "no_inputs"])
             self.assertEqual(result["status"], "partial")
 
@@ -200,7 +241,7 @@ class CompilerControls(unittest.TestCase):
             slow.chmod(0o755)
             write_json(root / "tsconfig.json", {"files": ["a.ts"]})
             (root / "a.ts").write_text("export {};\n")
-            result = check_config(root, "tsconfig.json", slow, tsrs, root / "logs", 0.5)
+            result = check_config(root, "tsconfig.json", context(slow, tsrs, root), root / "logs", 0.5)
             self.assertEqual(result["status"], "reference_failed")
             self.assertTrue(result["tsgo"]["timeout"])
             self.assertNotIn("tsrs", result)
