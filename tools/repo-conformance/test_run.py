@@ -203,10 +203,17 @@ class ReportTests(unittest.TestCase):
             write_json(results / "duplicate" / "shard-0.json", shard(0, "a/one"))
             self.assertFalse(summarize(manifest, results, out))
             (results / "duplicate" / "shard-0.json").unlink()
-            wrong = shard(1, "a/two")
-            wrong["typescript_commit"] = "different-go-version"
-            write_json(results / "shard-1.json", wrong)
-            self.assertFalse(summarize(manifest, results, out))
+            # A shard from other compilers is left out entirely: its repository is missing, not counted.
+            for key in ("tsrs_commit", "typescript_commit"):
+                with self.subTest(key=key):
+                    write_json(results / "shard-1.json", dict(shard(1, "a/two"), **{key: "other-compiler"}))
+                    self.assertFalse(summarize(manifest, results, out))
+                    text = out.read_text()
+                    self.assertIn(f"{key} do not match the manifest; its results are left out", text)
+                    self.assertIn("1 of 2 repositories have a result; 1 had at least one project", text)
+                    self.assertIn("Both compilers completed on 1 projects: 1 identical", text)
+                    self.assertIn("Missing repository result: a/two", text)
+                    self.assertIn("| [a/two](https://github.com/a/two) | `` | missing |  | 0 / 0 | 0 |", text)
 
     def test_a_rerun_shard_fills_a_lost_one_only_with_matching_provenance(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 2,

@@ -481,8 +481,8 @@ SETTINGS = ("setup_timeout", "check_timeout", "max_configs", "modes")
 
 
 def load_shards(directory: Path, manifest: dict, errors: list[str]) -> dict[int, dict]:
-    """Shard reports by index, keeping only results for repositories the manifest assigns to that shard. Reports with
-    unknown modes are left out, so their repositories count as missing."""
+    """Shard reports by index, keeping only results for repositories the manifest assigns to that shard. Reports from
+    other compilers or with unknown modes are left out, so their repositories count as missing."""
     reports = {}
     for path in sorted(directory.rglob("shard-*.json")):
         report = json.loads(path.read_text())
@@ -491,9 +491,10 @@ def load_shards(directory: Path, manifest: dict, errors: list[str]) -> dict[int,
         if shard in reports or not 0 <= shard < manifest["shards"]:
             errors.append(f"{path}: duplicate or unexpected shard {shard}")
             continue
-        for key in ("tsrs_commit", "typescript_commit"):
-            if report[key] != manifest[key]:
-                errors.append(f"{path}: {key} does not match the manifest")
+        wrong = [key for key in ("tsrs_commit", "typescript_commit") if report[key] != manifest[key]]
+        if wrong:
+            errors.append(f"{path}: {' and '.join(wrong)} do not match the manifest; its results are left out")
+            continue
         if report["modes"] not in (MODES, LEGACY_MODES):
             errors.append(f"{path}: unknown comparison modes {json.dumps(report['modes'])}; its results are left out")
             continue

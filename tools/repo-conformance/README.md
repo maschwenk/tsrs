@@ -54,10 +54,11 @@ before anything is built, so a malformed request fails rather than starting a fu
 manifest, compiler binaries and harness commit (for both checking and the report), checks the same repository commits,
 and reports the rerun shards together with the earlier run's other shards. The manifest must come from that run of
 this workflow and record the same harness version (`HARNESS` in `run.py`); older manifests are refused, including
-those without repository commits. The report only merges shard reports with the same compiler commits, limits and mode
-flags (reports without recorded modes are read as default-only), keeps each shard's results to the repositories the
-manifest assigns it, and accepts a result only at the pinned commit; a clone that failed before any checkout is
-reported as a setup failure without one.
+those without repository commits. The report leaves out shard reports from other compiler commits, so their
+repositories count as missing, and only merges shard reports with the same limits and mode flags (reports without
+recorded modes are read as default-only), keeps each shard's results to the repositories the manifest assigns it, and
+accepts a result only at the pinned commit; a clone that failed before any checkout is reported as a setup failure
+without one.
 
 For a local run, install `corepack@0.36.0`, set `GH_TOKEN` or `GITHUB_TOKEN` for discovery, and build both compilers
 at the manifest's commits. A saved manifest can be reused, and `--previous` adds shards from an earlier run:
