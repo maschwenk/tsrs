@@ -1482,10 +1482,8 @@ impl Checker {
     /// intersection key) or of the types it combined (the union being reduced; the operands of a cross product that has
     /// no cache of its own).
     pub(crate) fn too_complex_key<K: std::hash::Hash + ?Sized>(key: &K) -> u64 {
-        use std::hash::Hasher;
-        let mut h = rustc_hash::FxHasher::default();
-        key.hash(&mut h);
-        h.finish()
+        use std::hash::BuildHasher;
+        rustc_hash::FxBuildHasher.hash_one(key)
     }
 
     /// tsrs-only: emits the TS2590 reports recorded since the last flush. Since `too_complex_since` keeps such results

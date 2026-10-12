@@ -37,6 +37,7 @@ use crate::*;
 use tsrs_core::ptr::PKey;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
+use std::hash::{BuildHasher, Hash, Hasher};
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum UnionCacheMode {
@@ -112,8 +113,8 @@ pub(crate) struct UnionFrontCache {
     /// Calls that took a reduction whose answer can change (see the module comment); stores are skipped across them.
     pub(crate) impure: u32,
     slots: Vec<Slot>,
-    /// 64 - log2 of the table size.
-    shift: u32,
+    /// Log2 of the table size.
+    bits: u32,
     /// Count lookups, hits, stores and shadow checks into the process totals (stats or shadow mode).
     stats: bool,
     /// Calls whose key is longer than `MAX_WORDS` (`LongKeys`).
@@ -146,7 +147,7 @@ struct LongEntry {
 impl UnionFrontCache {
     pub(crate) fn new() -> Self {
         let mode = union_cache_mode();
-        UnionFrontCache { mode, impure: 0, slots: Vec::new(), shift: 64 - bits(), stats: mode != UnionCacheMode::Off && (stats_on() || mode == UnionCacheMode::Shadow), long: LongKeys::default() }
+        UnionFrontCache { mode, impure: 0, slots: Vec::new(), bits: bits(), stats: mode != UnionCacheMode::Off && (stats_on() || mode == UnionCacheMode::Shadow), long: LongKeys::default() }
     }
 }
 
@@ -180,7 +181,7 @@ fn count(on: bool, counter: &AtomicU64) {
 /// The key of a call, or None when it does not fit in `MAX_WORDS`.
 #[inline(always)]
 #[expect(clippy::inline_always, reason = "on the getUnionType path; out of line the key is built in memory and copied")]
-fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, shift: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> {
+fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, bits: u32) -> Option<([PKey; MAX_WORDS], u16, usize)> {
     let (symbol, type_arguments): (Option<P<Symbol>>, &[P<Type>]) = match alias {
         AliasArg::None => (None, &[]),
         AliasArg::Some(alias) => (alias.symbol.get(), alias.type_arguments.get()),
@@ -190,13 +191,15 @@ fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, s
     if types.len() + usize::from(has_alias) + type_arguments.len() > MAX_WORDS {
         return None;
     }
+    let meta = 1 | (reduction as u16) << 1 | (types.len() as u16) << 3 | u16::from(has_alias) << 7;
     let mut key = [0 as PKey; MAX_WORDS];
-    let mut h: u64 = reduction as u64;
+    let mut hasher = rustc_hash::FxHasher::default();
+    hasher.write_u16(meta);
     let mut n = 0;
     let mut push = |k: PKey| {
         key[n] = k;
         n += 1;
-        h = (h ^ k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
+        k.hash(&mut hasher);
     };
     for t in types {
         push(t.key());
@@ -207,9 +210,9 @@ fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, s
             push(t.key());
         }
     }
-    h ^= h >> 29;
-    let meta = 1 | (reduction as u16) << 1 | (types.len() as u16) << 3 | u16::from(has_alias) << 7;
-    Some((key, meta, (h >> shift) as usize))
+    let hash = hasher.finish();
+    // Fx returns a pointer-sized hash, so use its low bits on 32-bit targets too.
+    Some((key, meta, hash as usize & ((1usize << bits) - 1)))
 }
 
 /// The key words of a call that does not fit `make_key` (inputs, then the alias's symbol and type arguments), its meta
@@ -227,14 +230,9 @@ fn make_long_key(words: &mut Vec<PKey>, types: &[P<Type>], reduction: UnionReduc
         words.push(symbol?.key());
         words.extend(type_arguments.iter().map(|t| t.key()));
     }
-    let mut h: u64 = reduction as u64 | (types.len() as u64) << 2;
-    h = words.iter().fold(h, |mut h, &k| {
-        h = (h ^ k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
-
-        h
-    });
-    h ^= h >> 29;
-    Some((reduction as u16 | u16::from(has_alias) << 2, h))
+    let meta = reduction as u16 | u16::from(has_alias) << 2;
+    let hash = rustc_hash::FxBuildHasher.hash_one((meta, types.len(), words.as_slice()));
+    Some((meta, hash))
 }
 
 impl Checker {
@@ -299,12 +297,12 @@ impl Checker {
 
     /// The front of `getUnionType` for calls with two or more inputs and no origin.
     pub(crate) fn get_union_type_front_cached(&mut self, types: &[P<Type>], union_reduction: UnionReduction, alias: AliasArg<'_>) -> P<Type> {
-        let Some((key, meta, index)) = make_key(types, union_reduction, alias, self.union_front_cache.shift) else {
+        let Some((key, meta, index)) = make_key(types, union_reduction, alias, self.union_front_cache.bits) else {
             return self.get_union_type_long_cached(types, union_reduction, alias);
         };
         let cache = &mut self.union_front_cache;
         if cache.slots.is_empty() {
-            cache.slots = vec![Slot::default(); 1 << (64 - cache.shift)];
+            cache.slots = vec![Slot::default(); 1 << cache.bits];
         }
         count(cache.stats, &LOOKUPS);
         let slot = cache.slots[index];

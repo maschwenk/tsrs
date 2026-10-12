@@ -22,7 +22,7 @@
 //! the same.
 
 use std::fmt::Write;
-use std::hash::{DefaultHasher, Hash, Hasher};
+use std::hash::{Hash, Hasher};
 use std::sync::OnceLock;
 
 use crate::*;
@@ -98,8 +98,8 @@ fn checking_file(c: &Checker) -> String {
 }
 
 fn fingerprint<S: AsRef<str>>(items: &[S]) -> u64 {
-    // DefaultHasher::new() has fixed keys: the same items hash the same in every run.
-    let mut h = DefaultHasher::new();
+    // FxHasher has fixed initialization: the same items hash the same in every run on the same target.
+    let mut h = rustc_hash::FxHasher::default();
     for item in items {
         item.as_ref().hash(&mut h);
     }

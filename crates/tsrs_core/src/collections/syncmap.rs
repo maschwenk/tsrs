@@ -1,8 +1,8 @@
 use hashbrown::hash_table::Entry;
 use hashbrown::HashTable;
-use rustc_hash::{FxHashMap, FxHasher};
+use rustc_hash::{FxBuildHasher, FxHashMap};
 use std::borrow::Borrow;
-use std::hash::{Hash, Hasher};
+use std::hash::{BuildHasher, Hash};
 use std::sync::RwLock;
 
 /// Shards per map. Program construction reads and writes the resolver's and package.json caches from every worker
@@ -22,13 +22,6 @@ impl<K: Hash + Eq, V> Default for SyncMap<K, V> {
     fn default() -> Self {
         SyncMap { shards: (0..SHARDS).map(|_| RwLock::new(HashTable::new())).collect() }
     }
-}
-
-#[inline]
-fn hash_of<Q: Hash + ?Sized>(key: &Q) -> u64 {
-    let mut h = FxHasher::default();
-    key.hash(&mut h);
-    h.finish()
 }
 
 #[inline]
@@ -56,15 +49,15 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
         K: Borrow<Q>,
         Q: Hash + Eq + ?Sized,
     {
-        let hash = hash_of(key);
+        let hash = FxBuildHasher.hash_one(key);
         let m = read(self.shard(hash));
         m.find(hash, |(k, _)| k.borrow() == key).map(|(_, v)| v.clone())
     }
 
     pub fn store(&self, key: K, value: V) {
-        let hash = hash_of(&key);
+        let hash = FxBuildHasher.hash_one(&key);
         let mut m = write(self.shard(hash));
-        match m.entry(hash, |(k, _)| *k == key, |(k, _)| hash_of(k)) {
+        match m.entry(hash, |(k, _)| *k == key, |(k, _)| FxBuildHasher.hash_one(k)) {
             Entry::Occupied(mut e) => e.get_mut().1 = value,
             Entry::Vacant(e) => {
                 e.insert((key, value));
@@ -73,13 +66,13 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
     }
 
     pub fn load_or_store(&self, key: K, value: V) -> (V, bool) {
-        let hash = hash_of(&key);
+        let hash = FxBuildHasher.hash_one(&key);
         let shard = self.shard(hash);
         if let Some((_, v)) = read(shard).find(hash, |(k, _)| *k == key) {
             return (v.clone(), true);
         }
         let mut m = write(shard);
-        match m.entry(hash, |(k, _)| *k == key, |(k, _)| hash_of(k)) {
+        match m.entry(hash, |(k, _)| *k == key, |(k, _)| FxBuildHasher.hash_one(k)) {
             Entry::Occupied(e) => (e.get().1.clone(), true),
             Entry::Vacant(e) => {
                 e.insert((key, value.clone()));
@@ -89,7 +82,7 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
     }
 
     pub fn delete(&self, key: &K) {
-        let hash = hash_of(key);
+        let hash = FxBuildHasher.hash_one(key);
         let mut m = self.shard(hash).write().unwrap();
         if let Ok(e) = m.find_entry(hash, |(k, _)| k == key) {
             e.remove();

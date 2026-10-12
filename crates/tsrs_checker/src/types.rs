@@ -2413,7 +2413,7 @@ embeds!(TypeReference, object_type, ObjectType);
 /// `getTypeListKey(typeArguments)`). Every value is a non-deferred reference whose `resolved_type_arguments` are
 /// exactly the list its key was made from (the target itself for its type parameters), and they never change, so
 /// the table stores only the references and compares type-argument lists: one word per slot instead of the 128-bit
-/// key plus the value, and a lookup hashes the type ids instead of xxh3 over the key bytes. Exact list equality maps
+/// key plus the value, and a lookup hashes the type handles instead of xxh3 over the key bytes. Exact list equality maps
 /// lists to references like Go's collision-free 128-bit key does. Nil until `make()`, like the Go map.
 #[derive(Default)]
 pub struct ReferenceInstantiations(OvExact<Option<P<RefCell<hashbrown::HashTable<P<Type>>>>>>);
@@ -2429,13 +2429,8 @@ impl ReferenceInstantiations {
 
     #[inline]
     fn hash(type_arguments: &[P<Type>]) -> u64 {
-        use std::hash::Hasher;
-        let mut h = rustc_hash::FxHasher::default();
-        h.write_usize(type_arguments.len());
-        for t in type_arguments {
-            h.write_u32(t.id.0);
-        }
-        h.finish()
+        use std::hash::BuildHasher;
+        rustc_hash::FxBuildHasher.hash_one(type_arguments)
     }
 
     #[inline]

@@ -104,7 +104,8 @@ mode a checker reports the TS2590 only where it first builds the type (notes/ope
 `TSRS_TRACE_UNION_REDUCTION=1` prints three kinds of lines on stderr (crates/tsrs_checker/src/uniontrace.rs; the first
 two below are from the reporter's reproduction (PR #228, now testdata/regressions/union-too-complex-cross-product), the third
 from
-testdata/regressions/union-too-complex-canonical-order):
+testdata/regressions/union-too-complex-canonical-order). These examples show the output format; fingerprint values
+depend on the build and target:
 
 ```
 tsrs check file: checker 1 begins a.ts

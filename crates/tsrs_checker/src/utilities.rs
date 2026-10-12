@@ -6,6 +6,7 @@ use tsrs_ast as ast;
 use tsrs_diagnostics as diagnostics;
 use tsrs_diagnostics::Message;
 use std::fmt::Display;
+use std::hash::BuildHasher;
 
 // Non-function declarations of utilities.go are hand-ported in utilities_types.rs.
 
@@ -508,7 +509,7 @@ impl Checker {
     fn source_file_and_index_of_node(&mut self, n: P<Node>) -> (tsrs_core::ptr::PKey, usize) {
         const BITS: u32 = 12;
         let key = n.key();
-        let slot = ((key as u32).wrapping_mul(0x9E37_79B1) >> (32 - BITS)) as usize;
+        let slot = rustc_hash::FxBuildHasher.hash_one(key) as usize & ((1usize << BITS) - 1);
         if self.node_file_cache.is_empty() {
             self.node_file_cache = vec![(0, 0, 0); 1 << BITS];
         }
