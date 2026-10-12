@@ -172,6 +172,24 @@ on which files share a checker. tsgo-ref also prints different text at 1 and 4 c
 cache: which elaboration path the relater reports depends on what the cache already holds. Not investigated further
 here; the base constraint experiments above leave its output byte-identical to main in all of these runs.
 
+**Cause (2026-10-12):** not the relation cache. `createTypeReferenceEx` interns a reference and keeps the flags of its
+first creation, and a reference first written in a type annotation has `ObjectFlagsFromTypeNode`, which gives it its
+own recursion identity (`getRecursionIdentityFromTarget`). Whether `Observable<number>` counts towards
+`isDeeplyNestedType`'s limit of 3 therefore depends on whether that checker met an annotation `Observable<number>`
+before the comparison instantiated it, and the elaboration stops one level earlier or later. On `zip-all.spec.ts(99,50)`
+the relater's source stack holds `Observable<number>` with the flag single-threaded and without it in Go mode at 4
+checkers (a temporary trace of the stacks). The three-file reduction is in
+upstream/determinism-type-reference-from-type-node.md: tsgo prints `buf().buf().grp` at 1 and 2 checkers and
+`buf().grp` at 3 and 4, and so does tsrs in both modes.
+
+The repo-conformance run 38278199589 (tsrs d4940027, rxjs `54796b38a57e`, `packages/rxjs/tsconfig.json`, 22,030
+errors) flagged three of these (`zip-all.spec.ts` 99, 194, 227). tsgo itself prints 5 diagnostics differently at 1 and
+4 checkers and 24 at 1 and 8, same headers. tsrs in Go mode equals tsgo byte for byte at 1, 2, 4 and 8 checkers
+(`--checkers N --checkerAssignment go`, also with `TSRS_LAZY_MEMBERS=0` at 4), so the port follows Go. The default mode
+prints tsgo's single-checker text at one checker and varies with the count, like tsgo. A canonical rule would change
+which elaboration one-checker runs print, so tsrs keeps Go's. A regression case cannot hold the reduction:
+tools/ci/determinism.sh requires every case to print the same at 2 and 4 checkers.
+
 ## Regression cases
 
 `union-too-complex-cross-product` (section 4, the fixed case, from the reporter's PR #228) and
