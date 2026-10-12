@@ -1001,13 +1001,21 @@ impl Checker {
             return true;
         }
         let file = get_source_file_of_node(node).unwrap();
+        let mut other_files = symbol
+            .declarations()
+            .iter()
+            .filter(|&&d| is_interface_declaration(d))
+            .map(|&d| get_source_file_of_node(d).unwrap())
+            .filter(|&f| f != file)
+            .peekable();
+        // Declared in this file only: avoid building the program-wide slot map.
+        if other_files.peek().is_none() {
+            return true;
+        }
         let Some((checker, index)) = self.program.tsgo_default_check_slot(file) else {
             return true;
         };
-        !symbol.declarations().iter().any(|&d| {
-            let other = get_source_file_of_node(d).unwrap();
-            is_interface_declaration(d) && other != file && self.program.tsgo_default_check_slot(other).is_some_and(|(c, i)| c == checker && i < index)
-        })
+        !other_files.any(|other| self.program.tsgo_default_check_slot(other).is_some_and(|(c, i)| c == checker && i < index))
     }
 
     // checker.go:5127

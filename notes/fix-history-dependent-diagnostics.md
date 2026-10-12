@@ -110,9 +110,13 @@ type checks), and reports at a declaration only if no earlier file on the same t
 Elsewhere the checks run without an error node. That is a function of the program, so the output is still the same at
 every tsrs checker count and assignment, and it is now tsgo's default output rather than a superset of it (tsgo at
 another `--checkers` count can still differ; `--checkerAssignment go` matches it there). The association is computed
-once per program on first use, and only for a merged interface with base types declared in more than one file.
+once per program on first use, and only when a checked merged interface with base types is declared in more than one
+file (lib files count when they are checked: without `skipLibCheck` / `skipDefaultLibCheck` the lib interfaces build it).
 
 - supabase (cb4307f1) and stagehand (f261c38b), root `tsconfig.json`, default mode: identical to tsgo.
+- nuxt (85b8d54f, the case above): tsgo-ref prints the four errors (both `ImportMeta` TS2320) at its default and at 32
+  checkers, three at 1 and 2. tsrs prints the four in `--singleThreaded`, at 1, 2, 4, 8, 16 and 32 checkers (20 more
+  runs at 32), under `random:1..8` at 2, 4 and 32 checkers, and in Go mode at 4; Go mode at 1 prints tsgo's three.
 - `testdata/regressions/merged-interface-check-site` now expects tsgo-ref's default output (a.ts and b.ts);
   `merged-interface-extends-site` has a TS2430 that tsgo reports in a.ts and b.ts only and TS2411 index-constraint
   errors in b.ts, c.ts and d.ts, which every checker count reports. `merged_interface_check_site.rs` runs both
