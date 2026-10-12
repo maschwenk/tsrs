@@ -37,10 +37,10 @@ pub fn parse_string_array(value: &CompilerOptionsValue) -> Option<Vec<String>> {
     None
 }
 
-pub(crate) fn parse_string_map(value: &CompilerOptionsValue) -> Option<OrderedMap<String, Vec<String>>> {
+pub(crate) fn parse_string_map(value: &CompilerOptionsValue) -> Option<OrderedMap<String, Option<Vec<String>>>> {
     if let CompilerOptionsValue::Object(m) = value {
         let mut result = OrderedMap::with_capacity_and_hasher(m.len(), Default::default());
-        result.extend(m.iter().map(|(k, v)| (k.clone(), parse_string_array(v).unwrap_or_default())));
+        result.extend(m.iter().map(|(k, v)| (k.clone(), parse_string_array(v))));
         return Some(result);
     }
     None
@@ -807,10 +807,14 @@ impl ToOptionsValue for Option<i32> {
     }
 }
 
-impl ToOptionsValue for Option<OrderedMap<String, Vec<String>>> {
+impl ToOptionsValue for Option<OrderedMap<String, Option<Vec<String>>>> {
     fn to_options_value(&self) -> CompilerOptionsValue {
         match self {
-            Some(m) => CompilerOptionsValue::Object(m.iter().map(|(k, v)| (k.clone(), CompilerOptionsValue::StringArray(v.clone()))).collect()),
+            Some(m) => CompilerOptionsValue::Object(
+                m.iter()
+                    .map(|(k, v)| (k.clone(), CompilerOptionsValue::StringArray(v.clone().unwrap_or_default())))
+                    .collect(),
+            ),
             None => CompilerOptionsValue::Null,
         }
     }

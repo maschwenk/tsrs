@@ -1560,16 +1560,18 @@ impl Program {
                 if !has_zero_or_one_asterisk_character(key) {
                     create_diagnostic_for_option_paths(&mut diags, true, key, &diagnostics::Pattern_0_can_have_at_most_one_Asterisk_character, &[&key]);
                 }
-                if value.is_empty() {
-                    create_diagnostic_for_option_paths(
+                match value {
+                    None => create_diagnostic_for_option_paths(&mut diags, false, key, &diagnostics::Substitutions_for_pattern_0_should_be_an_array, &[&key]),
+                    Some(value) if value.is_empty() => create_diagnostic_for_option_paths(
                         &mut diags,
                         false,
                         key,
                         &diagnostics::Substitutions_for_pattern_0_shouldn_t_be_an_empty_array,
                         &[&key],
-                    );
+                    ),
+                    Some(_) => {}
                 }
-                for (i, subst) in value.iter().enumerate() {
+                for (i, subst) in value.iter().flatten().enumerate() {
                     if !has_zero_or_one_asterisk_character(subst) {
                         create_diagnostic_for_option_path_key_value(
                             &mut diags,

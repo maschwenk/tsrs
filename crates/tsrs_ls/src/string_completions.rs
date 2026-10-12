@@ -5,6 +5,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{self as ast, Kind, Node, SourceFile, Symbol};
 use tsrs_checker::{Checker, ContextFlags, LiteralValue, Type};
 use tsrs_compiler::Program;
+use tsrs_core::PathSubstitutions;
 use tsrs_core::collections::OrderedMap;
 use tsrs_core::context::Context;
 use tsrs_core::stringutil::{self, Comparison};
@@ -1242,9 +1243,9 @@ impl LanguageService {
         fragment: &str,
         base_directory: &str,
         extension_options: &extensionOptions,
-        paths: &OrderedMap<String, Vec<String>>,
+        paths: &OrderedMap<String, impl PathSubstitutions>,
     ) -> bool {
-        let get_patterns_for_keys = |key: &str| -> Vec<String> { paths.get(key).cloned().unwrap_or_default() };
+        let get_patterns_for_keys = |key: &str| -> Vec<String> { paths.get(key).map(|v| v.substitutions().to_vec()).unwrap_or_default() };
         let compare_paths = |a: &str, b: &str| -> Comparison {
             let length_a = a.find('*').unwrap_or(a.len());
             let length_b = b.find('*').unwrap_or(b.len());

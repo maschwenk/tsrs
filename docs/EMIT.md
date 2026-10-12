@@ -475,9 +475,11 @@ then-current main:
   order with Go's `omitzero` rules (nil vs empty kept where Go distinguishes them, e.g. `fileInfos: []`) and the
   tuple encodings of the custom `MarshalJSON`s; unmarshaling follows the `UnmarshalJSON` fallbacks.
 - **Version.** The tsbuildinfo `version` is `core::version()` as in Go. Go's release builds stamp it with ldflags
-  (npm nightly: `7.1.0-dev.20260929.1`); tsrs reads `TSRS_TS_VERSION` at build time for the same purpose (default
-  `7.1.0-dev`, Go's source default), so a tsrs built with the tsgo version reads and writes tsbuildinfo files that tsgo
-  accepts, and vice versa. Different versions simply rebuild from scratch, as in Go.
+  (the npm nightly built from the pinned commit: `7.1.0-dev.20260930.4`); tsrs reads `TSRS_TS_VERSION` at build time for
+  the same purpose (default `7.1.0-dev`, Go's source default), so a tsrs built with the tsgo version reads and writes
+  tsbuildinfo files that tsgo accepts, and vice versa. Different versions simply rebuild from scratch, as in Go. Release
+  builds stamp `[workspace.metadata.typescript] nightly` (Cargo.toml); release.yml checks that the nightly was built from
+  the pinned commit (or a later one that changes nothing under tsc/) and that the binaries report it.
 - **Default library path.** Go's embedded build reads libs from `bundled:///libs`, the npm (noembed) tsgo from its
   executable directory; the path sorts differently against project files, which reorders `referencedMap` keys. The
   npm tsrs packages ship the libs next to the binary, and a binary with a `lib.d.ts` beside it reads them from there

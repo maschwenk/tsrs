@@ -38,9 +38,10 @@ pub fn run_lsp(args: &[String]) -> i32 {
     let default_library_path = bundled::default_lib_path();
     let typings_location = get_global_typings_cache_location();
 
-    // signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM): signals keep their default action (the process
-    // terminates) because the port has no signal handling; `stop` is still what the watchdog calls.
+    // signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM); main started catching the signals.
     let (ctx, stop) = Context::background().with_cancel();
+    let on_signal = stop.clone();
+    crate::signals::on_interrupt(move || on_signal.call());
 
     let cwd = match std::env::current_dir() {
         Ok(cwd) => cwd.to_string_lossy().into_owned(),
