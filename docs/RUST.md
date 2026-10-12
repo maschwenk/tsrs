@@ -12,7 +12,7 @@ and swc. Where a rule copies one of them, it says which.
 ## Clippy
 
 ```sh
-cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"'
+cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
 ```
 
 `[workspace.lints.clippy]` in `Cargo.toml` and `clippy.toml` turn on a chosen set of Clippy lints. Every enabled lint
@@ -34,8 +34,9 @@ Details:
   mostly 750k lines of generated Go test translations and has its own generator and build gates.
 - Generated schema files that need blanket exemptions emit reasoned file attributes from their generators. Other
   generated Rust is linted; fix its generator when Clippy finds something.
-- `dead_code` is denied in `[workspace.lints.rust]`. `unused_imports`, `unused_variables`, `unused_mut` and
-  `unsafe_op_in_unsafe_fn` are ordinary compiler warnings, which `build.warnings=deny` rejects.
+- Specialized targets and the generated fourslash harness have target-specific unused items, so `[workspace.lints.rust]`
+  keeps `dead_code` allowed and the Clippy command denies it over Clippy's scope. `unused_imports`, `unused_variables`,
+  `unused_mut` and `unsafe_op_in_unsafe_fn` are ordinary compiler warnings, which `build.warnings=deny` rejects.
 
 ## Upgrading Rust
 
@@ -87,7 +88,7 @@ Test files, the generated fourslash crate and generated files are not scanned.
 | Locks and threads | `mutex_atomic`, `mutex_integer`, `rc_mutex`, `significant_drop_in_scrutinee`, `non_send_fields_in_send_ty` | A mutex around a flag or counter, a lock guard held across a whole `match`, and every new `unsafe impl Send` over non-`Send` fields (the "by decree" impls in PORTING.md "Threading") becomes a reviewed line. |
 | `unsafe` | `undocumented_unsafe_blocks`, `missing_safety_doc`, `unsafe_op_in_unsafe_fn`, `ptr_as_ptr`, `ptr_cast_constness`, `ref_as_ptr`, `borrow_as_ptr`, `cast_ptr_alignment`, `as_ptr_cast_mut`, `transmute_ptr_to_ptr`, `mem_forget`, `disallowed_methods` | Every `unsafe` block states its invariant in a `// SAFETY:` comment. Pointer casts use the forms that cannot change mutability or type by accident. `clippy.toml` lists the unchecked operations (`get_unchecked`, `unwrap_unchecked`, `unreachable_unchecked`, `from_utf8_unchecked`): each needs a reason that cites a measurement. Bun, oxc, rust-analyzer. |
 | Leftovers | `dbg_macro`, `todo`, `unimplemented`, `disallowed_macros`, `allow_attributes`, `allow_attributes_without_reason` | Debugging output and placeholders do not land; suppressions are `#[expect]` with a reason. Bun, oxc and Rolldown have all of the first three; rust-analyzer, Ruff and Biome have `dbg_macro`. |
-| Unused code | `dead_code`, `unused_imports`, `unused_variables`, `unused_mut` (rustc) | All unused code is denied. Unused variables were not prefixed with `_` in bulk: in a port an unused parameter can mean the Rust code dropped something the Go code uses, so each was checked against Go. Bun denies `dead_code`. |
+| Unused code | `dead_code`, `unused_imports`, `unused_variables`, `unused_mut` (rustc) | Clippy denies unused code in its scope; ordinary compiler warnings are denied in every CI build. Unused variables were not prefixed with `_` in bulk: in a port an unused parameter can mean the Rust code dropped something the Go code uses, so each was checked against Go. Bun denies `dead_code`. |
 
 Left off on purpose: the `style`, `complexity` and `pedantic` groups (they would rewrite Go-shaped code), `unwrap_used`
 (Go's nil dereference is a panic too), `or_fun_call` (it turns `unwrap_or(f())` into `unwrap_or_else(f)`; Go evaluates

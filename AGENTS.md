@@ -5,7 +5,7 @@ practices. This file adds the rules below.
 
 ## Lint
 
-Run `cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"'` and
+Run `cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code` and
 `tools/lint/source.py` before a change lands (`docs/RUST.md`).
 
 - Fix what they report in the code you wrote.

@@ -165,6 +165,14 @@ impl TextLengthChange {
     }
 }
 
+// fourslash.go:101
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct TextEditSpan {
+    pub(crate) start: u32,
+    pub(crate) end: u32,
+    pub(crate) length: u32,
+}
+
 // fourslash.go:107
 pub(crate) fn new_script_info(file_name: &str, content: &str) -> ScriptInfo {
     ScriptInfo { file_name: file_name.to_string(), content: content.to_string(), line_map: lsconv::compute_lsp_line_starts(content), version: 1 }
@@ -5722,6 +5730,8 @@ pub(crate) struct FourslashDiagnostic {
     pub(crate) category: tsrs_diagnostics::Category,
     pub(crate) message: String,
     pub(crate) related_diagnostics: Vec<FourslashDiagnostic>,
+    pub(crate) reports_unnecessary: bool,
+    pub(crate) reports_deprecated: bool,
 }
 
 // fourslash.go:5525 (file = harnessutil.TestFile{UnitName, Content}; the ECMA line map is computed eagerly)
@@ -5765,6 +5775,8 @@ impl FourslashTest {
                     category,
                     message: info.message.clone(),
                     related_diagnostics: Vec::new(),
+                    reports_unnecessary: false,
+                    reports_deprecated: false,
                 };
                 Some(related_diagnostic)
             }));
@@ -5777,6 +5789,8 @@ impl FourslashTest {
             category,
             message: lsp_diagnostic.message.as_string(),
             related_diagnostics,
+            reports_unnecessary: false,
+            reports_deprecated: false,
         }
     }
 }

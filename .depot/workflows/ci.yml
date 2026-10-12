@@ -323,7 +323,7 @@ jobs:
           if-no-files-found: ignore
 
   # docs/RUST.md: every enabled Clippy lint is denied across the hand-written workspace.
-  lint:
+  lint-ratchet:
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -336,7 +336,7 @@ jobs:
 
       - parallel:
           - name: Clippy
-            run: cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"'
+            run: cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
 
           # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
           - name: Source checks

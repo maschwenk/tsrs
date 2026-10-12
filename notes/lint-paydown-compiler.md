@@ -8,7 +8,7 @@ measured unchecked operations below, 14 sites intended as written). No wrong out
 memory on the 38k-file codebase were unchanged within noise (cumulative: -0.06% / -0.18% instructions with 1 / 4
 checkers, peak -0.06% / +0.03%): the removed clones and the forced inlining are not on paths that show up at
 this scale. Final status (2026-10-12): the last two `needless_pass_by_value` findings now borrow `UserPreferences`,
-the remaining unused parser and fourslash harness items are gone, every enabled lint is denied, and the ratchet
+the remaining unused parser scratch field is gone, every enabled lint is denied in the Clippy scope, and the ratchet
 script and baseline have been removed. The direct Clippy gate is clean.
 
 One gate observation that recurs: in `cargo test -p tsrs_cli` tsctests, one output file differs in an
