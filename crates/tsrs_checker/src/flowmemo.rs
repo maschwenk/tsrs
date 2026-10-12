@@ -22,6 +22,7 @@
 //! not tainted by its own back edges, while every frame computed under them is; likewise a resolution's final result.
 
 use std::sync::OnceLock;
+use std::hash::BuildHasher;
 
 use crate::*;
 
@@ -321,8 +322,8 @@ impl FlowMemo {
     }
 
     fn slot_index(&self, flow: P<FlowNode>, key: u128) -> usize {
-        let h = (flow.key() as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) ^ (key as u64) ^ ((key >> 64) as u64).rotate_left(29);
-        (h.wrapping_mul(0xFF51_AFD7_ED55_8CCD) >> 32) as usize & (self.slots.len() - 1)
+        let hash = rustc_hash::FxBuildHasher.hash_one((flow.key(), key));
+        hash as usize & (self.slots.len() - 1)
     }
 
     #[inline]
@@ -614,5 +615,49 @@ impl Checker {
     pub(crate) fn restore_flow_type_cache(&mut self, saved: SavedFlowTypeCache) {
         self.flow_type_cache = saved.cache;
         self.flow_memo.type_cache_epoch = saved.epoch;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn flow_node() -> P<FlowNode> {
+        P::new(FlowNode::new(ast::FlowFlags::Start, None, None, 0))
+    }
+
+    #[test]
+    fn memo_slots_use_multiple_buckets_on_every_pointer_width() {
+        let mut memo = FlowMemo::new();
+        memo.slots = vec![Slot::default(); 16];
+        let flow = flow_node();
+        let mut used = [false; 16];
+        for key in 0..256u128 {
+            used[memo.slot_index(flow, key | key << 64)] = true;
+        }
+        // The high half of FxHasher::finish is zero on 32-bit targets.
+        assert!(used.into_iter().filter(|&occupied| occupied).count() > 1);
+    }
+
+    #[test]
+    fn a_slot_collision_cannot_return_another_flow_or_key() {
+        let mut memo = FlowMemo::new();
+        memo.mode = FlowMemoMode::On;
+        memo.slots = vec![Slot::default(); 1];
+        let flow = flow_node();
+        let other_flow = flow_node();
+        let first = Type::alloc(TypeFlags::String, ObjectFlags::None, TypeId(0), IntrinsicType::default());
+        let second = Type::alloc(TypeFlags::Number, ObjectFlags::None, TypeId(1), IntrinsicType::default());
+        let other_key = 1u128 << 96;
+        memo.store(flow, 0, first, 1, 0, false);
+        assert!(memo.lookup(flow, 0).unwrap().t == first);
+        assert!(memo.lookup(flow, other_key).is_none());
+        assert!(memo.lookup(other_flow, 0).is_none());
+        memo.store(flow, other_key, second, 2, 0, false);
+        assert!(memo.lookup(flow, 0).is_none());
+        assert!(memo.lookup(flow, other_key).unwrap().t == second);
+        memo.store(other_flow, other_key, first, 1, 0, false);
+        assert!(memo.lookup(flow, other_key).is_none());
+        assert!(memo.lookup(other_flow, other_key).unwrap().t == first);
     }
 }

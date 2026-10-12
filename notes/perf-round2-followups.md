@@ -140,6 +140,14 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Blanket replacement of custom hashes with FxHash (notes/fxhash-standardization.md, 2026-10-12). The owner accepted
+  neutral simplification without a minimum speedup. Retain Fx for flow-memo slots. Keep the symbol-name fast path
+  and signature-key mixer: neither replacement established neutrality in the macOS screen; signature hashing
+  remained above baseline in its confirmation. Union-cache and node-file replacements were also dropped after
+  the combined candidate failed to establish neutrality. Counters were noisy, so revisit these only with more
+  stable evidence. Exact compact keys, XXH3 identities, perfect keyword hashing and Go-oracle FNV have different
+  contracts and are not bucket-hash replacements.
+
 - Within the flow-walk skip (notes/perf-flow-skip-unnarrowed.md, landed): computing an assertion candidate's effects
   signature in the skip check instead of peeking at it (overflowed the 512 MB stack on vscode: it starts resolution
   chains no walk does); condition aliases matched by name across the whole file (+41% bind instructions on vscode);
