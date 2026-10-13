@@ -110,8 +110,25 @@ type checks), and reports at a declaration only if no earlier file on the same t
 Elsewhere the checks run without an error node. That is a function of the program, so the output is still the same at
 every tsrs checker count and assignment, and it is now tsgo's default output rather than a superset of it (tsgo at
 another `--checkers` count can still differ; `--checkerAssignment go` matches it there). The association is computed
-once per program on first use, and only when a checked merged interface with base types is declared in more than one
-file (lib files count when they are checked: without `skipLibCheck` / `skipDefaultLibCheck` the lib interfaces build it).
+once per compiler-pool program on first use, and only when a checked merged interface with base types is declared in
+more than one file (lib files count when they are checked: without `skipLibCheck` / `skipDefaultLibCheck` the lib
+interfaces build it). Project/API pools have no fixed file assignment and retain the per-file rule in default mode,
+including single-file diagnostics requests. Go-compatible history is unchanged in both kinds of pool.
+
+The lazy association build runs sequentially. It can be entered while a checker is held, so it must not submit work
+to the worker pool: a nested wait could execute another file's check that needs the held checker or the same
+partly-initialized slot table. The initial 300-program API stress probe completed at 1, 2, 4 and 8 workers without
+reproducing a hang; the lock/reentrancy hazard is source-derived. The API regression checks TS2320, TS2430 and TS2411
+in all declaring files, whole-program and single-file requests, with a bounded wait.
+
+Incremental builds must also account for this program-wide placement. With `merged-interface-check-site`, adding an
+unrelated module first in the root list (100 exported numeric constants) moves `b.ts` onto `a.ts`'s virtual checker.
+The cached build used to keep the TS2320 in `b.ts`, while a clean build only reported `a.ts`. Moving the same module
+to the end of the root list reproduced the reverse error: a cached build omitted `b.ts`. Default mode now refreshes
+semantic diagnostics of files containing interfaces when a program file, reference set, file order or lib-check
+option changes. This also invalidates cached absence when a report site reappears. Other files' semantic caches and
+emit caches keep the existing reuse rules. File order is recovered from the existing build-info file table; the
+serialized format is unchanged. Go-compatible history keeps the existing incremental reuse rules.
 
 - supabase (cb4307f1) and stagehand (f261c38b), root `tsconfig.json`, default mode: identical to tsgo.
 - nuxt (85b8d54f, the case above): tsgo-ref prints the four errors (both `ImportMeta` TS2320) at its default and at 32

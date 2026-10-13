@@ -346,7 +346,8 @@ interface declared in several files reported in files that depended on which fil
 runs them at the first declaration of the symbol in each file (#165), and reports TS2320 / TS2430 only at the
 declarations where pinned tsgo at its default four checkers does, whatever tsrs's own checker count and assignment
 (notes/fix-history-dependent-diagnostics.md). tsgo at another `--checkers` count can differ; `--checkerAssignment go`
-keeps Go's placement for byte-identity there.
+keeps Go's placement for byte-identity there. Project/API pools retain per-file reporting in default mode. Incremental
+builds refresh interface-file diagnostics when program inputs or file order change, since those can move the report sites.
 
 Front end and start-up: the config is parsed on the worker pool and a CLI run creates no rayon global pool (#156, -64
 threads and -50 MB peak on vscode); checkers are created while files are assigned (#162) and program diagnostics are

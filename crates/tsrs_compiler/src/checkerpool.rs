@@ -1390,7 +1390,7 @@ fn splitmix64(state: &mut u64) -> u64 {
 }
 
 // Go `createCheckers`' association step (FENNEL over the import graph, see above).
-fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+fn go_associations(program: &Program, checker_count: usize, concurrent: bool) -> Vec<usize> {
     let files = &program.files;
     let mut base_weights = vec![0i64; files.len()];
     let mut import_counts = vec![0i64; files.len()];
@@ -1418,7 +1418,7 @@ fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
         }
     }
     let file_weights = get_checker_association_weights(&base_weights, &import_counts);
-    let adjacent_files = get_import_adjacency(program);
+    let adjacent_files = get_import_adjacency(program, concurrent);
     let file_order = get_checker_association_order(&file_weights, &is_declaration_file, policy.prioritize_source_files);
     get_checker_associations_in_order(
         &file_weights,
@@ -1436,7 +1436,8 @@ fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
 // this is what tsgo's history-dependent checks saw (`Checker::reports_interface_check_errors`).
 pub(crate) fn tsgo_default_check_slots(program: &Program) -> FxHashMap<P<SourceFile>, (u32, u32)> {
     let checker_count = GO_DEFAULT_CHECKERS.min(program.files.len() as i64).max(1) as usize;
-    let associations = if checker_count > 1 { go_associations(program, checker_count) } else { vec![0; program.files.len()] };
+    // Called while holding a checker and initializing a OnceLock: nested worker-pool jobs could re-enter either.
+    let associations = if checker_count > 1 { go_associations(program, checker_count, false) } else { vec![0; program.files.len()] };
     program
         .files
         .iter()
@@ -1451,7 +1452,7 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
         return vec![0; program.files.len()];
     }
     let associations = match checker_assignment() {
-        CheckerAssignment::Go => go_associations(program, checker_count),
+        CheckerAssignment::Go => go_associations(program, checker_count, true),
         CheckerAssignment::Locality => locality_associations(program, checker_count),
         CheckerAssignment::Random(seed) => {
             let mut state = seed;
@@ -1721,10 +1722,10 @@ fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> 
     // tsrs-only: the import graph (built on the worker pool) does not depend on the groups; it is built while they
     // are formed.
     if program.single_threaded() {
-        return locality_associations_with(program, checker_count, || get_import_targets(program));
+        return locality_associations_with(program, checker_count, || get_import_targets(program, true));
     }
     std::thread::scope(|s| {
-        let targets = s.spawn(|| get_import_targets(program));
+        let targets = s.spawn(|| get_import_targets(program, true));
         locality_associations_with(program, checker_count, || targets.join().unwrap())
     })
 }
@@ -2024,12 +2025,12 @@ fn dump_assignment_inputs(program: &Program, associations: &[usize], path: &str)
 }
 
 // getImportAdjacency returns an undirected import graph represented by file index.
-fn get_import_adjacency(program: &Program) -> Vec<Vec<usize>> {
-    undirected(&get_import_targets(program))
+fn get_import_adjacency(program: &Program, concurrent: bool) -> Vec<Vec<usize>> {
+    undirected(&get_import_targets(program, concurrent))
 }
 
 // The in-program files each program file imports (resolved, other than itself), by file index.
-fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
+fn get_import_targets(program: &Program, concurrent: bool) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
     file_indices.extend(files.iter().enumerate().map(|(i, &file)| (file, i)));
@@ -2049,7 +2050,7 @@ fn get_import_targets(program: &Program) -> Vec<Vec<usize>> {
             .filter(|&imported_index| imported_index != file_index)
             .collect()
     };
-    let targets: Vec<Vec<usize>> = if program.single_threaded() {
+    let targets: Vec<Vec<usize>> = if !concurrent || program.single_threaded() {
         (0..files.len()).map(targets_of).collect()
     } else {
         use rayon::prelude::*;

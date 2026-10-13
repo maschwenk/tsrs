@@ -116,6 +116,9 @@ impl tsrs_checker::Program for Program {
     }
 
     fn tsgo_default_check_slot(&self, file: P<SourceFile>) -> Option<(u32, u32)> {
+        // Project/API pools have no fixed file assignment. Keep their per-file reporting rather than applying the
+        // CLI's virtual four-checker history to single-file diagnostics requests.
+        self.compiler_checker_pool()?;
         self.tsgo_check_slots.get_or_init(|| crate::checkerpool::tsgo_default_check_slots(self)).get(&file).copied()
     }
 }

@@ -21,7 +21,11 @@ pub(crate) fn program_to_snapshot(program: &'static CompilerProgram, old_program
             return old_program.snapshot;
         }
     }
-    let snapshot = P::new(Snapshot { hash_with_text, ..Default::default() });
+    let snapshot = P::new(Snapshot {
+        hash_with_text,
+        file_order: program.get_source_files().iter().map(|file| file.path().clone()).collect(),
+        ..Default::default()
+    });
     snapshot.options.set(Some(program.options()));
     snapshot.check_pending.set(program.options().no_check.is_true());
     let mut to = toProgramSnapshot { program, old_program, snapshot, global_file_removed: false };
@@ -200,7 +204,25 @@ impl toProgramSnapshot {
             tsrs_compiler::worker_pool().install(|| files.par_iter().zip(checker_references).map(|(&file, r)| compute(file, r)).collect())
         };
 
-        for (&file, (info, new_references, change)) in files.iter().zip(results) {
+        // Canonical TS2320/TS2430 placement depends on the whole program's weights, imports, visit order and checked
+        // files. An unrelated module can change an unchanged interface's reporting site. Invalidate both cached
+        // errors and cached absence in interface files, leaving other semantic diagnostics and emit caches reusable.
+        let refresh_interface_diagnostics = !tsrs_core::compat::go_compatible_history()
+            && old.is_some_and(|old| {
+                old.file_order != self.snapshot.file_order
+                    || old.options().skip_lib_check != new_options.skip_lib_check
+                    || old.options().skip_default_lib_check != new_options.skip_default_lib_check
+                    || !deleted_files.is_empty()
+                    || results.iter().any(|(_, _, change)| change.add_to_change_set)
+            });
+        for (&file, (info, new_references, mut change)) in files.iter().zip(results) {
+            if refresh_interface_diagnostics
+                && change.semantic_diagnostics.is_some()
+                && !self.program.skip_type_checking(file, false)
+                && contains_interface_declaration(file.as_node())
+            {
+                change.semantic_diagnostics = None;
+            }
             if let Some(new_references) = new_references {
                 self.snapshot.referenced_map.store_shared_references(file.path().clone(), new_references);
             }
@@ -307,6 +329,10 @@ impl toProgramSnapshot {
             }
         }
     }
+}
+
+fn contains_interface_declaration(node: P<Node>) -> bool {
+    ast::is_interface_declaration(node) || node.for_each_child(&mut contains_interface_declaration)
 }
 
 // programtosnapshot.go:235
