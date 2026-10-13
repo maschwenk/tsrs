@@ -365,6 +365,13 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
         let raw_path = &path;
         let mut path_exists = false;
         let mut path_exists_known = false;
+        // tsrs-only (`set_write_settling`): FSEvents has no close event, but a save that truncates the file and
+        // writes it later (a slow writer, or `ftruncate` and then `write`) is seen empty by the time its event
+        // arrives (FSEvents delivers about 12 ms after the write). An empty file holds the callbacks like an
+        // unclosed one on inotify, until an event shows it non-empty or removed, or the hold times out. A save that
+        // is not empty when its event arrives is not delayed.
+        let being_written = (crate::watcher::write_settling() && flag & flagItemIsFile != 0)
+            .then(|| !(is_removed && !is_created) && std::fs::metadata(raw_path).is_ok_and(|m| m.is_file() && m.len() == 0));
 
         for watch in watches {
             if watch.state.terminated.load(Ordering::SeqCst) {
@@ -383,6 +390,11 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
             // relies on it to tear down the stream.)
             if display_path == w.dir && !is_removed && !is_renamed {
                 continue;
+            }
+            match being_written {
+                Some(true) => w.write_started(&display_path),
+                Some(false) => w.write_finished(&display_path),
+                None => {}
             }
 
             if is_removed && !is_created {

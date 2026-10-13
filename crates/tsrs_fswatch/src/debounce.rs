@@ -96,7 +96,7 @@ impl debounce {
         self.latch_cv.notify_all();
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     // tsrs-only: a writer wrote to `path` (or created it) and has not closed it yet.
     pub(crate) fn write_started(&self, path: &str) {
         let now = Instant::now();
@@ -112,7 +112,7 @@ impl debounce {
         }
     }
 
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     // tsrs-only: the writer of `path` closed it; the callbacks fire once no file is being written.
     pub(crate) fn write_finished(&self, path: &str) {
         let mut writes = self.writes.lock().unwrap();
