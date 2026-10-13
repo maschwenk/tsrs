@@ -21,6 +21,15 @@ def rss_mb():
     # ps works on Linux and macOS. On macOS also look at `footprint <pid>` (RSS misses compressed memory).
     r = subprocess.run(["ps", "-o", "rss=", "-p", str(p.pid)], capture_output=True, text=True)
     return int(r.stdout.strip()) // 1024 if r.stdout.strip() else -1
+def footprint_mb():
+    # macOS: the physical footprint, which counts compressed pages that RSS leaves out.
+    if sys.platform != "darwin":
+        return ""
+    r = subprocess.run(["footprint", "-p", str(p.pid)], capture_output=True, text=True)
+    for word in r.stdout.split("Footprint:")[1:2]:
+        n, unit = word.split()[:2]
+        return f"  footprint {float(n) * (1024 if unit == 'GB' else 1):.0f} MB"
+    return ""
 def wait_ready(t0, timeout=300):
     # Returns (first detection, last report, cycles) once no output has arrived for 3 s after a report.
     detected = None; last = None; cycles = 0; msg = ""
@@ -36,7 +45,7 @@ def wait_ready(t0, timeout=300):
             last = t - t0; msg = l.strip().split(" - ")[-1]
 t0 = time.monotonic()
 _, ready, _, msg = wait_ready(t0)
-print(f"{os.path.basename(comp):10} initial  {ready*1000:8.0f} ms  rss {rss_mb()} MB  {msg}")
+print(f"{os.path.basename(comp):10} initial  {ready*1000:8.0f} ms  rss {rss_mb()} MB{footprint_mb()}  {msg}")
 originals = {}
 try:
     for name, rel, f in EDITS * REPEAT:
@@ -46,7 +55,7 @@ try:
         t0 = time.monotonic()
         with open(path, "w") as fh: fh.write(f(cur))
         det, ready, cycles, msg = wait_ready(t0)
-        print(f"{os.path.basename(comp):10} {name:24} detected {det*1000 if det else float('nan'):7.1f} ms  done {ready*1000 if ready else float('nan'):8.0f} ms  cycles {cycles}  rss {rss_mb()} MB  {msg}")
+        print(f"{os.path.basename(comp):10} {name:24} detected {det*1000 if det else float('nan'):7.1f} ms  done {ready*1000 if ready else float('nan'):8.0f} ms  cycles {cycles}  rss {rss_mb()} MB{footprint_mb()}  {msg}")
 finally:
     for path, s in originals.items(): open(path, "w").write(s)
     time.sleep(1.0)
