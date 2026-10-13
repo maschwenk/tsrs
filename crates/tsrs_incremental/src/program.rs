@@ -214,6 +214,38 @@ impl Program {
         stored
     }
 
+    /// tsrs-only (a watch session's file regions, tsrs_execute watchmem.rs): calls `f` with each source file that the
+    /// diagnostics the snapshot keeps refer to, related information and message chains included. Diagnostics copied
+    /// from an older snapshot refer to the file versions they were reported for, which need not be the program's.
+    pub fn for_each_diagnostic_file(&self, f: &mut dyn FnMut(P<SourceFile>)) {
+        fn visit(diagnostics: &[P<Diagnostic>], f: &mut dyn FnMut(P<SourceFile>)) {
+            for d in diagnostics {
+                if let Some(file) = d.file() {
+                    f(file);
+                }
+                visit(d.message_chain(), f);
+                visit(d.related_information(), f);
+            }
+        }
+        let mut snapshots = vec![self.snapshot];
+        // The test harness reads the previous snapshot's diagnostics too.
+        if let Some(testing_data) = &self.testing_data
+            && let Some(old) = testing_data.lock().unwrap().old_snapshot
+        {
+            snapshots.push(old);
+        }
+        for snapshot in snapshots {
+            for map in [&snapshot.semantic_diagnostics_per_file, &snapshot.emit_diagnostics_per_file] {
+                map.range(|_, cache| {
+                    if let Some(diagnostics) = cache.diagnostics() {
+                        visit(&diagnostics, f);
+                    }
+                    true
+                });
+            }
+        }
+    }
+
     pub fn get_program(&self) -> &'static CompilerProgram {
         self.panic_if_no_program("GetProgram");
         self.program.unwrap()

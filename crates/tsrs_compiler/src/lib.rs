@@ -33,7 +33,7 @@ pub use emitter::EmitOnly;
 pub use programlike::{get_diagnostics_of_any_program_like, ProgramLike};
 pub use program_emit::{combine_emit_results, handle_no_emit_options, EmitOptions, EmitResult, SourceMapEmitResult, WriteFile, WriteFileData};
 pub use file_include::FileIncludeReason;
-pub use fileregions::{enable as enable_file_regions, enable_lazy_dts, lazy_dts_allowed, leaf_settings_from_env, stats_report as leaf_stats_report, LeafMode, LeafSettings};
+pub use fileregions::{bind_in_file_regions, enable as enable_file_regions, enable_lazy_dts, lazy_dts_allowed, leaf_settings_from_env, stats_report as leaf_stats_report, LeafMode, LeafSettings};
 pub use fileloader::{
     content_mapper_initialization_diagnostic, content_mapper_project_diagnostic, content_mapper_project_error_diagnostic, DuplicateSourceFile, LibFile,
 };

@@ -1168,6 +1168,9 @@ pub fn enter_owner(addr: usize) -> Option<RegionScope> {
     }
     Some(match Region::containing(addr) {
         Some(region) => region.enter(),
+        // Scratch regions are not registered: an object of the one entered on this thread (a checker's, a file's
+        // emit) keeps its data there, as when no region is registered, instead of leaking it into the thread arena.
+        None if scratch_contains(addr) => return None,
         None => enter_thread_arena(),
     })
 }
@@ -1185,6 +1188,8 @@ pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
     let current = CURRENT.with(|c| c.get());
     match Region::containing(addr) {
         Some(region) if std::ptr::eq(&raw const *region.0.arena, current) => None,
+        // As in `enter_owner`: a table in the scratch region entered on this thread, which is the current target.
+        None if std::ptr::eq(scratch_arena(), current) && scratch_contains(addr) => None,
         _ => Some(enter_thread_arena()),
     }
 }

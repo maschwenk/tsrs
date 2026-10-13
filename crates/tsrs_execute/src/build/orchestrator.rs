@@ -114,6 +114,8 @@ pub struct Orchestrator {
     // Watch mode: the status lines ("Found N errors. Watching for file changes.") and the directory watches.
     watch_status_reporter: Option<DiagnosticReporter<'static>>,
     wm: Arc<WatchManager>,
+    // tsrs-only, watch mode: frees the programs the tasks replace and the files nothing refers to (watchmem.rs).
+    pub(crate) freer: crate::watchmem::Freer,
 
     // order sorted by dependency depth, to reduce how often builders block on upstream projects
     schedule_order: Mutex<Vec<String>>,
@@ -695,6 +697,7 @@ impl Orchestrator {
             self.update_watch();
             self.reconcile(&mut state);
             self.reset_caches();
+            self.free_unreachable_watch_files();
         }
         if self.opts.testing.is_none() {
             self.wm.run_loop(|| self.do_cycle());
@@ -759,6 +762,21 @@ impl Orchestrator {
         self.update_watch();
         self.reconcile(&mut state);
         self.reset_caches();
+        self.free_unreachable_watch_files();
+    }
+
+    // tsrs-only (watchmem.rs): after a cycle's builds, frees the regions of the parsed files that neither the host's
+    // cache nor a task's program refers to, once the programs the cycle replaced are freed (queued before this).
+    fn free_unreachable_watch_files(&self) {
+        let host = self.host();
+        let Some(cache) = &host.watch_source_files else { return };
+        let mut live: rustc_hash::FxHashSet<usize> = cache.lock().unwrap().values().map(|f| f.addr()).collect();
+        let tasks: Vec<P<BuildTask>> = self.tasks.lock().unwrap().values().copied().collect();
+        for task in tasks {
+            task.add_live_watch_files(&mut live);
+        }
+        let dead = host.watch_file_regions.take_unreachable(&live);
+        self.freer.run(move || drop(dead));
     }
 
     // orchestrator.go:515
@@ -1048,6 +1066,10 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
     let error_summary_reporter = create_report_error_summary(sys, &opts.command.compiler_options);
     let watch = opts.command.compiler_options.watch.is_true();
     let watch_status_reporter = watch.then(|| tsc::create_watch_status_reporter(sys, &opts.command.compiler_options, opts.testing));
+    if watch {
+        tsrs_compiler::bind_in_file_regions();
+    }
+    let freer = crate::watchmem::Freer::new(opts.testing.is_some());
     let fs = sys.fs();
     let wm = WatchManager::new(Arc::new(move |t: &str| sys.write(t)), Box::new(move |d: &str| fs.directory_exists(d)));
     if watch && let Some(backend) = opts.testing.and_then(|t| t.watch_backend()) {
@@ -1065,6 +1087,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         error_summary_reporter,
         watch_status_reporter,
         wm,
+        freer,
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
@@ -1084,6 +1107,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         resolved_references: parseCache::default(),
         m_times: Mutex::new(Arc::new(Mutex::new(FxHashMap::default()))),
         watch_source_files: watch.then(|| Mutex::new(FxHashMap::default())),
+        watch_file_regions: Default::default(),
     }));
     let _ = h.orchestrator.set(orchestrator);
     let _ = orchestrator.host.set(h);

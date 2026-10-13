@@ -418,15 +418,23 @@ impl BuildTask {
         // later cycles reuse the parsed files (host.rs `get_watch_source_file`).
         program.bind_source_files();
         let Some(previous) = self.watch_program.lock().unwrap().replace(program) else { return };
-        let free = move || {
+        orchestrator.freer.run(move || {
             // SAFETY: see above; a build program shares nothing with another program.
             unsafe { tsrs_compiler::free_unshared_program(previous) };
-        };
-        // The test harness frees in place, for deterministic runs; a session frees beside the build.
-        if orchestrator.opts.testing.is_some() {
-            free();
-        } else {
-            std::thread::Builder::new().name("tsrs-free-program".to_string()).spawn(free).expect("failed to spawn a thread");
+        });
+    }
+
+    // tsrs-only (watch mode): adds the files the task's program and its diagnostics refer to
+    // (`Orchestrator::free_unreachable_watch_files`).
+    pub(crate) fn add_live_watch_files(&self, live: &mut rustc_hash::FxHashSet<usize>) {
+        if let Some(program) = *self.watch_program.lock().unwrap() {
+            live.extend(program.get_source_files().iter().map(|f| f.addr()));
+        }
+        let program = self.result.lock().unwrap().as_ref().and_then(|r| r.program);
+        if let Some(program) = program {
+            program.for_each_diagnostic_file(&mut |f| {
+                live.insert(f.addr());
+            });
         }
     }
 

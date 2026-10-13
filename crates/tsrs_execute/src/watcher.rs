@@ -21,6 +21,7 @@ use tsrs_vfs::{cachedvfs, trackingvfs, FS};
 
 use crate::tsc::{self, CommandLineTesting, DiagnosticReporter, DiagnosticsReporter, EmitInput, ExtendedConfigCache, System};
 use crate::watchmanager::{self, DirWatchSet, WatchManager, WatchState};
+use crate::watchmem::{FileRegions, Freer};
 
 #[derive(Clone, Copy)]
 struct cachedSourceFile {
@@ -34,6 +35,8 @@ type SourceFileCache = Arc<SyncMap<Path, cachedSourceFile>>;
 struct watchCompilerHost {
     inner: Arc<dyn CompilerHost>,
     cache: SourceFileCache,
+    // tsrs-only: each parsed file gets a region of its own (watchmem.rs).
+    regions: Arc<FileRegions>,
 }
 
 impl CompilerHost for watchCompilerHost {
@@ -58,7 +61,8 @@ impl CompilerHost for watchCompilerHost {
             return Some(cached.file);
         }
         let path = opts.path.clone();
-        let file = self.inner.get_source_file(opts);
+        let size = info.as_ref().map_or(0, |info| usize::try_from(info.size()).unwrap_or(0));
+        let file = self.regions.parse(size, || self.inner.get_source_file(opts));
         match file {
             Some(file) => {
                 if let Some(info) = info {
@@ -115,6 +119,12 @@ pub struct Watcher {
     config_file_paths: Vec<String>,
 
     source_file_cache: SourceFileCache,
+    // tsrs-only (watchmem.rs): the regions of the parsed files, the files of the last full build (the programs
+    // updated from it share its processed-file data, which refers to them), and the thread that frees what the
+    // session no longer uses.
+    file_regions: Arc<FileRegions>,
+    full_build_files: Vec<P<SourceFile>>,
+    freer: Freer,
 
     wm: Arc<WatchManager>,
     seen_files: FxHashSet<Path>, // all build dependencies (for event filtering)
@@ -159,6 +169,7 @@ pub(crate) fn run_watcher(
         WatchManager::set_backend(&mut wm.lock(), backend);
     }
     let options = config.compiler_options().unwrap();
+    tsrs_compiler::bind_in_file_regions();
     let mut w = Box::new(Watcher {
         sys,
         shared_program_data: None,
@@ -180,6 +191,9 @@ pub(crate) fn run_watcher(
         config_has_errors: false,
         config_file_paths: Vec::new(),
         source_file_cache: Arc::default(),
+        file_regions: Arc::default(),
+        full_build_files: Vec::new(),
+        freer: Freer::new(testing.is_some()),
         wm,
         seen_files: FxHashSet::default(),
         config_mtimes: FxHashMap::default(),
@@ -469,7 +483,11 @@ impl Watcher {
         if self.program.is_some() && self.program_ready && !self.config_modified && !self.watch_set_dirty && !self.force_full_rebuild {
             let cached = Arc::new(cachedvfs::from(self.sys.fs()));
             let inner_host = self.new_compiler_host(Arc::clone(&cached) as Arc<dyn FS>);
-            let host: Arc<dyn CompilerHost> = Arc::new(watchCompilerHost { inner: inner_host, cache: Arc::clone(&self.source_file_cache) });
+            let host: Arc<dyn CompilerHost> = Arc::new(watchCompilerHost {
+                inner: inner_host,
+                cache: Arc::clone(&self.source_file_cache),
+                regions: Arc::clone(&self.file_regions),
+            });
             if self.try_update_program(host) {
                 self.fast_path_builds += 1;
                 let result = self.compile_and_emit();
@@ -490,7 +508,11 @@ impl Watcher {
         let cached = Arc::new(cachedvfs::from(self.sys.fs()));
         let tfs = Arc::new(trackingvfs::FS::new(Arc::clone(&cached)));
         let inner_host = self.new_compiler_host(Arc::clone(&tfs) as Arc<dyn FS>);
-        let host: Arc<dyn CompilerHost> = Arc::new(watchCompilerHost { inner: inner_host, cache: Arc::clone(&self.source_file_cache) });
+        let host: Arc<dyn CompilerHost> = Arc::new(watchCompilerHost {
+            inner: inner_host,
+            cache: Arc::clone(&self.source_file_cache),
+            regions: Arc::clone(&self.file_regions),
+        });
 
         if self.config.config_file.is_some() {
             if let Some(wildcards) = self.config.wildcard_directories() {
@@ -598,20 +620,27 @@ impl Watcher {
     // tsrs-only (Go's GC): makes `program` the current one and frees the compiler program it replaces, with its
     // checkers, once the new incremental program has taken what it keeps of the old snapshot (diagnostics, which the
     // checkers allocate outside their regions, and plain data). A full build also frees the data the programs since
-    // the previous full build shared (`update_program` hands it on).
+    // the previous full build shared (`update_program` hands it on). Then the regions of the files nothing refers to
+    // any more (watchmem.rs).
     fn install_program(&mut self, program: &'static Program, host: Arc<dyn CompilerHost>, full_build: bool) {
         // Bind before any checker exists: single-threaded, the first checker would bind the files in its region, and
         // later programs reuse the cached files.
         program.bind_source_files();
-        let old = self.program.replace(tsrs_incremental::new_program(
+        let new = tsrs_incremental::new_program(
             program,
             self.program,
             tsrs_incremental::create_host(host),
             Some(std::time::Instant::now),
             self.testing.is_some(),
-        ));
-        let old = old.and_then(|old| old.compiler_program());
-        let shared = if full_build { self.shared_program_data.replace(tsrs_compiler::shared_program_data(program)) } else { None };
+        );
+        let old = self.program.replace(new).and_then(|old| old.compiler_program());
+        let shared = if full_build {
+            self.full_build_files = program.get_source_files().to_vec();
+            self.shared_program_data.replace(tsrs_compiler::shared_program_data(program))
+        } else {
+            None
+        };
+        let dead_files = self.file_regions.take_unreachable(&self.live_files(new));
         let free = move || {
             if let Some(old) = old {
                 // SAFETY: nothing refers to the old compiler program any more: the watcher's only reference was
@@ -621,9 +650,13 @@ impl Watcher {
             }
             if let Some(shared) = shared {
                 // SAFETY: every program since the previous full build shared this data, and each was freed when the
-                // next one replaced it (above, for the last one); the new full build has its own.
+                // next one replaced it (above, for the last one, after the earlier ones: the frees run in order);
+                // the new full build has its own.
                 unsafe { shared.free() };
             }
+            // The programs that referred to these files are freed (above, or by earlier jobs), and nothing that is
+            // read again does (`live_files`).
+            drop(dead_files);
         };
         // The test harness frees in place, for deterministic runs.
         if self.testing.is_some() {
@@ -669,11 +702,32 @@ impl Watcher {
     }
 
     // Freeing a large program's checker regions takes a while (~150 ms on a 9k-file project) and nothing waits for it,
-    // so it runs on a thread of its own, started once the cycle has reported instead of beside the rest of the cycle.
+    // so it runs on the free thread (watchmem.rs `Freer`), queued once the cycle has reported instead of beside the
+    // rest of the cycle.
     fn free_replaced_program(&mut self) {
         if let Some(free) = self.free_replaced.take() {
-            std::thread::Builder::new().name("tsrs-free-program".to_string()).spawn(free).expect("failed to spawn a thread");
+            self.freer.run(free);
         }
+    }
+
+    // The files whose regions must live on: those the cache can hand out again, the current program's, the last full
+    // build's (its processed-file data, which the current program shares, refers to them), and those the
+    // diagnostics the new snapshot copied from the old one refer to. The old incremental program also refers to
+    // older files, but nothing reads it again.
+    fn live_files(&self, program: P<tsrs_incremental::Program>) -> FxHashSet<usize> {
+        let mut live = FxHashSet::default();
+        self.source_file_cache.range(|_, cached| {
+            live.insert(cached.file.addr());
+            true
+        });
+        live.extend(self.full_build_files.iter().map(|f| f.addr()));
+        if let Some(compiler_program) = program.compiler_program() {
+            live.extend(compiler_program.get_source_files().iter().map(|f| f.addr()));
+        }
+        program.for_each_diagnostic_file(&mut |f| {
+            live.insert(f.addr());
+        });
+        live
     }
 
     fn evict_changed_source_files(&self, changed_paths: &FxHashMap<String, EventKind>) {

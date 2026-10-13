@@ -1,0 +1,84 @@
+// tsrs-only (Go's GC): what a watch session frees as it goes. The batch compiler leaks every parsed file
+// (docs/PORTING.md "Memory model"); a watch session reparses each changed file every cycle, so without this a branch
+// switch that rewrites a few thousand files keeps every old version (about 0.9 GB per switch on vscode).
+//
+// Each parsed file version gets a region of its own, as in the language server (tsrs_project parsecache.rs): the text,
+// tree and binder data (`tsrs_compiler` fileregions.rs `bind`), and the file's lazily filled data (`arena::enter_owner`).
+// A region is freed once nothing that is read again refers to its file. The session lists those referrers each cycle
+// (`FileRegions::take_unreachable`); the programs it replaced refer to old versions too, so the regions are freed on
+// the `Freer` thread after them.
+
+use std::sync::mpsc;
+use std::sync::Mutex;
+
+use rustc_hash::{FxHashMap, FxHashSet};
+use tsrs_ast::SourceFile;
+use tsrs_core::arena::Region;
+use tsrs_core::P;
+
+/// The regions of the files a watch session parsed, by the address of the file.
+#[derive(Default)]
+pub(crate) struct FileRegions(Mutex<FxHashMap<usize, Region>>);
+
+impl FileRegions {
+    /// Runs `parse` (a compiler host's `get_source_file`) with a fresh region as the allocation target. `size` is the
+    /// file's size on disk, for the region's first chunk.
+    pub(crate) fn parse(&self, size: usize, parse: impl FnOnce() -> Option<P<SourceFile>>) -> Option<P<SourceFile>> {
+        let region = Region::new(first_chunk(size));
+        let file = {
+            let _scope = region.enter();
+            parse()
+        }?;
+        region.trim();
+        // A host that returned a file it had parsed before (none does today) keeps it where it is.
+        if Region::containing(file.addr()).is_some_and(|r| r.ptr_eq(&region)) {
+            self.0.lock().unwrap().insert(file.addr(), region);
+        }
+        Some(file)
+    }
+
+    /// Removes the regions of the files that are not in `live` and returns them, to be dropped once nothing that may
+    /// still read those files runs (`Freer`).
+    pub(crate) fn take_unreachable(&self, live: &FxHashSet<usize>) -> Vec<Region> {
+        self.0.lock().unwrap().extract_if(|addr, _| !live.contains(addr)).map(|(_, region)| region).collect()
+    }
+}
+
+// As tsrs_project parsecache.rs: text, AST and binder data take about 8 times the text.
+fn first_chunk(text_len: usize) -> usize {
+    text_len.saturating_mul(10).saturating_add(4 << 10).min(64 << 20)
+}
+
+type FreeJob = Box<dyn FnOnce() + Send>;
+
+/// Runs the frees of a watch session on one thread, in the order they were queued: a file region is freed only after
+/// the programs that were replaced before it was found unreachable (they may refer to it). Freeing a large program's
+/// checker regions takes a while (~150 ms on a 9k-file project) and nothing waits for it. The test harness frees in
+/// place, for deterministic runs.
+pub(crate) struct Freer(Option<Mutex<mpsc::Sender<FreeJob>>>);
+
+impl Freer {
+    pub(crate) fn new(in_place: bool) -> Freer {
+        if in_place {
+            return Freer(None);
+        }
+        let (tx, rx) = mpsc::channel::<FreeJob>();
+        std::thread::Builder::new()
+            .name("tsrs-free-program".to_string())
+            .spawn(move || {
+                for job in rx {
+                    job();
+                }
+            })
+            .expect("failed to spawn a thread");
+        Freer(Some(Mutex::new(tx)))
+    }
+
+    pub(crate) fn run(&self, job: impl FnOnce() + Send + 'static) {
+        match &self.0 {
+            // The thread only ends when the sender is dropped, with the session.
+            Some(tx) => tx.lock().unwrap().send(Box::new(job)).expect("the free thread ended"),
+            None => job(),
+        }
+    }
+}

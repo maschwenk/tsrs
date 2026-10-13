@@ -36,6 +36,8 @@ pub(crate) struct host {
 
     // tsrs-only, watch mode: every parsed file, kept across build cycles (`get_watch_source_file`).
     pub(crate) watch_source_files: Option<Mutex<FxHashMap<SourceFileParseOptions, P<SourceFile>>>>,
+    // tsrs-only, watch mode: the regions of those files (watchmem.rs; `Orchestrator::free_unreachable_watch_files`).
+    pub(crate) watch_file_regions: crate::watchmem::FileRegions,
 }
 
 impl host {
@@ -59,7 +61,8 @@ impl host {
                 }
             }
         }
-        let file = self.host.get_source_file(opts.clone())?;
+        let size = self.host.fs().stat(&opts.file_name).map_or(0, |info| usize::try_from(info.size()).unwrap_or(0));
+        let file = self.watch_file_regions.parse(size, || self.host.get_source_file(opts.clone()))?;
         cache.lock().unwrap().insert(opts, file);
         Some(file)
     }

@@ -7,6 +7,7 @@ pub mod sys;
 pub mod tsc;
 pub mod watcher;
 pub mod watchmanager;
+mod watchmem;
 #[cfg(test)]
 mod tsctests;
 
