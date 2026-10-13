@@ -127,24 +127,62 @@ The cached build used to keep the TS2320 in `b.ts`, while a clean build only rep
 to the end of the root list reproduced the reverse error: a cached build omitted `b.ts`. Default mode now refreshes
 semantic diagnostics of files containing interfaces when a program file, reference set, file order or lib-check
 option changes. A package export alias can also change the import multigraph from `[a,b,a]` to `[a,b,b]` while all
-those inputs stay the same. Reuse now additionally requires equal virtual check slots in the retained old and new
-compiler programs. A snapshot loaded from build info has no old slots, so checked interface files are rechecked,
-including on an unchanged build. This also invalidates cached absence when a report site reappears. Other files'
-semantic caches and emit caches keep the existing reuse rules. File order is recovered from the existing build-info
-file table; the serialized format is unchanged. Go-compatible history keeps the existing incremental reuse rules.
-If the refresh produces identical build-info bytes, the default filesystem writer preserves the old timestamp;
-custom emit writers still receive the emit.
+those inputs stay the same. Reuse additionally requires equal virtual check slots. Default-history build info now
+stores `tsrsCanonicalCheckSignature`, a `go4-v1:` prefix and a 128-bit xxh3 hash of the virtual checker indices in
+program order (little-endian u32, `u32::MAX` for an unchecked file). The index in that sequence supplies each slot's
+visit position. The existing file table supplies the file order, and source/version and lib-check option changes
+still invalidate interface caches even if the slots match. This hashes the actual association result, including
+the effect of repeated resolved import edges. The serial, lazily initialized slot table is shared between cache
+validation and diagnostic reporting. The same compiler program retains
+its snapshot fast path; external API/LS pools retain per-file reporting.
 
-The loaded-build fallback has a measured cost. On local macOS arm64 `--release` builds, five unchanged warm runs
+Both build-info writers include the optional field only in default history. An absent, malformed or unknown-version
+signature causes one conservative refresh of checked interface diagnostics, including cached absence, and a rewrite
+with the current proof. Subsequent unchanged loaded programs reuse those caches and neither serialize nor rewrite
+build info. Custom writers receive real emissions through the existing callback; no byte-equality write suppression
+is needed. Other files' semantic caches and emit caches keep their existing reuse rules. Go-compatible history
+neither writes the field nor changes its incremental reuse rules. A change to canonical placement semantics must
+bump the signature version before caches from that policy can be reused.
+
+The initial unconditional loaded-build fallback had a measured cost. On local macOS arm64 `--release` builds, five unchanged warm runs
 per binary and mode, alternating before/after order after one cold run each, matched full ordered diagnostics and
 kept build-info bytes stable for each binary. A synthetic 257-file project with 16,384 derived interfaces took 14.3 -> 24.1 ms by
 default (0.670 -> 1.643 billion instructions, 53.6 -> 92.9 MiB peak RSS); single-threaded, 32.1 -> 76.7 ms
 (0.598 -> 1.540 billion instructions, 45.3 -> 79.5 MiB). Stagehand at f261c38b, 5,787 files, took 136 -> 402 ms
 by default (9.14 -> 26.50 billion instructions, 424 -> 879 MiB). Go-compatible four-checker runs were within local
 noise: Stagehand 132 -> 133 ms, 8.97 -> 8.98 billion instructions, 410 -> 410 MiB. These are bounded local
-measurements with a warm filesystem, not release/CI performance guarantees. A new in-memory program with unchanged
-slots still reuses its cached interface diagnostics; only loaded snapshots lack the old placement evidence.
-Classifying only the new program's merges cannot establish the old cache's dependencies after a resolution change.
+measurements with a warm filesystem, not release/CI performance guarantees. Classifying only the new program's
+merges cannot establish the old cache's dependencies after a resolution change.
+
+With the persistent slot signature, two local five-sample interleaved comparisons restore useful warm reuse.
+The second comparison rebases saved caches lexically, preserving symlinks, so its first load isolates migration.
+The pre-fallback binary, the inherited branch after merging current main, and the fix use the same project, flags
+and build-info path. Full ordered diagnostics match throughout. The second comparison's warm medians are:
+
+| Project / mode | Pre-fallback ms | Inherited ms | Fixed ms | Pre-fallback / fixed G instructions | Pre-fallback / fixed MiB |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Stagehand default | 146 | 443 | 157 | 9.199 / 9.233 | 423.7 / 423.4 |
+| Stagehand single | 2656 | 4289 | 2129 | 10.218 / 10.159 | 379.5 / 380.2 |
+| Stagehand Go4 | 205 | 204 | 223 | 9.135 / 9.143 | 410.8 / 410.9 |
+| Synthetic default | 16.3 | 31.3 | 18.5 | 0.677 / 0.678 | 53.7 / 53.7 |
+| Synthetic single | 40.7 | 94.7 | 40.0 | 0.603 / 0.602 | 45.3 / 45.4 |
+| Synthetic Go4 | 23.4 | 24.5 | 23.7 | 0.672 / 0.668 | 52.0 / 51.8 |
+
+This is not an unchanged-performance claim: default wall medians are still +7.3% on Stagehand and +13.7% on the
+synthetic project. The first comparison measured 138 -> 142 ms on Stagehand and 16.6 -> 21.0 ms on the synthetic
+project. Stagehand single-threaded wall medians varied from 572/588 ms to 2656/2129 ms (before/fixed); Go4 varied
+too. Default instruction overhead was 0.37-0.68% on Stagehand and -0.28 to +0.14% on the synthetic project; peak
+memory stayed within 0.4% of the pre-fallback baseline in both sets.
+
+Migration remains a one-time conservative check: Stagehand default took 502 ms, 26.82 G instructions and 874 MiB;
+the synthetic default took 37 ms, 1.67 G instructions and 93 MiB. All subsequent warm samples kept build-info
+bytes and timestamps unchanged. Stagehand warm checking recorded zero instantiations, versus millions during
+migration. The incremental regression asserts actual reuse of deserialized interface cache entries, one-time
+legacy/invalid-proof migration, and custom-writer behavior. The CLI regressions preserve forward/reverse alias
+changes and root reordering; the API control preserves all 12 reporting sites across 48 files at 1/2/4/8 workers.
+Native Go and Go-history tsrs build-info bytes match on the control, and the two Go4 benchmark caches remain
+byte-identical to both baseline binaries. The 21 targeted tests, four incremental library tests, 36 regression
+fixtures and 12 public-project comparisons passed; Nuxt retains four errors.
 
 - supabase (cb4307f1) and stagehand (f261c38b), root `tsconfig.json`, default mode: identical to tsgo.
 - nuxt (85b8d54f, the case above): tsgo-ref prints the four errors (both `ImportMeta` TS2320) at its default and at 32

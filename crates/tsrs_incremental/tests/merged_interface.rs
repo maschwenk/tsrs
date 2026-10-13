@@ -1,12 +1,13 @@
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use tsrs_compiler::{new_compiler_host, Context, ProgramOptions};
 use tsrs_core::{CompilerOptions, ModuleKind, Tristate, P};
-use tsrs_incremental::emit::ProgramLike;
-use tsrs_incremental::{create_host, new_program, Program, SemanticDiagnosticsState};
+use tsrs_incremental::emit::{EmitOptions, ProgramLike, WriteFileData};
+use tsrs_incremental::{create_host, new_build_info_reader, new_program, read_build_info_program, BuildInfo, Program, SemanticDiagnosticsState};
 
-// The public incremental API must preserve useful in-memory reuse, but not a cached absence after an export
-// alias changes the virtual checker slots. This uses the real OS filesystem, resolver, binder and checkers.
+// In-memory and loaded incremental caches must reuse unchanged interfaces, but not stale report sites after
+// an export alias change. This uses the real OS filesystem, resolver, binder, checkers and build-info writer.
 #[test]
 fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     let dir = std::env::temp_dir().join(format!("tsrs-in-memory-merged-{}", std::process::id()));
@@ -27,13 +28,16 @@ fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     let package = |target: &str| {
         std::fs::write(dir.join("node_modules/p/package.json"), format!(r#"{{"name":"p","version":"1.0.0","type":"module","exports":{{"./a":"./a.ts","./b":"./b.ts","./alias":"./{target}.ts"}}}}"#)).unwrap();
     };
-    let build = |old: Option<P<Program>>| {
+    let build_info_path = dir.join("tsconfig.tsbuildinfo");
+    let options = CompilerOptions { incremental: Tristate::True, no_emit: Tristate::True, no_lib: Tristate::True, module: ModuleKind::NodeNext, ts_build_info_file: build_info_path.to_str().unwrap().to_string(), ..Default::default() };
+    let config = P::new(tsrs_tsoptions::new_parsed_command_line(P::new(options), files.iter().map(|file| dir.join(file).to_str().unwrap().to_string()).collect(), Vec::new(), Default::default()));
+    let create = |old: Option<P<Program>>, loaded: bool| {
         let host = new_compiler_host(dir.to_str().unwrap(), Arc::new(tsrs_vfs::osvfs::fs()), "", None, None, None);
-        let options = CompilerOptions { incremental: Tristate::True, no_emit: Tristate::True, no_lib: Tristate::True, module: ModuleKind::NodeNext, ..Default::default() };
-        let config = P::new(tsrs_tsoptions::new_parsed_command_line(P::new(options), files.iter().map(|file| dir.join(file).to_str().unwrap().to_string()).collect(), Vec::new(), Default::default()));
+        let old = if loaded { read_build_info_program(config, &*new_build_info_reader(Arc::clone(&host)), &*host) } else { old };
         let compiler = tsrs_compiler::new_program(ProgramOptions::new(config, Arc::clone(&host)));
         new_program(compiler, old, create_host(host), None, true)
     };
+    let build = |old| create(old, false);
     let sites = |program: P<Program>| {
         program.get().get_semantic_diagnostics(&Context::default(), None).into_iter().map(|diag| (diag.code(), diag.file().unwrap().file_name().to_string(), diag.pos(), diag.len(), diag.to_string())).collect::<Vec<_>>()
     };
@@ -51,6 +55,43 @@ fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     let unchanged = build(Some(same));
     assert_eq!(state(unchanged, "e.ts"), SemanticDiagnosticsState::Reused, "an unchanged new program must reuse cached absence");
     assert_eq!(sites(unchanged), expected);
+    let writes = AtomicUsize::new(0);
+    let writer = |path: &str, text: &str, data: &mut WriteFileData| {
+        assert_eq!(data.build_info.as_ref().unwrap().downcast_ref::<BuildInfo>().unwrap().marshal(), text, "custom writer must receive the serialized build info");
+        writes.fetch_add(1, Ordering::Relaxed);
+        std::fs::write(path, text).map_err(|err| err.to_string())
+    };
+    let emit = |program: P<Program>| program.get().emit(&Context::default(), EmitOptions { write_file: Some(&writer), ..Default::default() });
+    emit(unchanged);
+    let serialized = std::fs::read_to_string(&build_info_path).unwrap();
+    let modified = std::fs::metadata(&build_info_path).unwrap().modified().unwrap();
+    for _ in 0..2 {
+        let loaded = create(None, true);
+        assert_eq!(state(loaded, "e.ts"), SemanticDiagnosticsState::Reused, "loaded cache must reuse the interface diagnostic entry");
+        assert_eq!(sites(loaded), expected);
+        emit(loaded);
+    }
+    assert_eq!(writes.load(Ordering::Relaxed), 1, "an unchanged loaded cache must not emit");
+    assert_eq!(std::fs::read_to_string(&build_info_path).unwrap(), serialized);
+    assert_eq!(std::fs::metadata(&build_info_path).unwrap().modified().unwrap(), modified);
+    for signature in ["", "go4-v2:0123456789abcdef0123456789abcdef", "go4-v1:bad"] {
+        let mut legacy = BuildInfo::unmarshal(&serialized).unwrap();
+        legacy.tsrs_canonical_check_signature = signature.to_string();
+        std::fs::write(&build_info_path, legacy.marshal()).unwrap();
+        let migrating = create(None, true);
+        assert_eq!(state(migrating, "e.ts"), SemanticDiagnosticsState::NotCached, "legacy or invalid proof must refresh interfaces");
+        assert_eq!(state(migrating, "f.ts"), SemanticDiagnosticsState::Reused, "migration must preserve other caches");
+        assert_eq!(sites(migrating), expected);
+        let before = writes.load(Ordering::Relaxed);
+        emit(migrating);
+        assert_eq!(writes.load(Ordering::Relaxed), before + 1, "migration must emit through custom writers");
+        assert_eq!(std::fs::read_to_string(&build_info_path).unwrap(), serialized, "migration must upgrade once");
+        let upgraded = create(None, true);
+        assert_eq!(state(upgraded, "e.ts"), SemanticDiagnosticsState::Reused);
+        assert_eq!(sites(upgraded), expected);
+        emit(upgraded);
+        assert_eq!(writes.load(Ordering::Relaxed), before + 1);
+    }
     package("b");
     let changed = build(Some(unchanged));
     assert_eq!(state(changed, "e.ts"), SemanticDiagnosticsState::NotCached, "changed report slots must invalidate cached absence");

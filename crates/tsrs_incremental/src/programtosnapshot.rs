@@ -205,10 +205,21 @@ impl toProgramSnapshot {
             tsrs_compiler::worker_pool().install(|| files.par_iter().zip(checker_references).map(|(&file, r)| compute(file, r)).collect())
         };
 
-        // Canonical TS2320/TS2430 placement depends on the whole program's weights, imports, visit order and checked
-        // files. Reference sets omit repeated import edges, so even unchanged files and sets do not prove the
-        // slots are unchanged. Build info has no old slots; only a retained compiler program can prove equality.
-        // Invalidate both cached errors and absence in interface files, leaving other semantic and emit caches reusable.
+        // Hash the actual virtual slots, not the deduplicated reference sets: an export alias can change edge
+        // multiplicities without changing any source. The same lazily initialized table serves diagnostic reporting.
+        if !tsrs_core::compat::go_compatible_history() {
+            let mut hash = xxhash_rust::xxh3::Xxh3::new();
+            for &file in files {
+                let slot = self.program.tsgo_default_check_slot(file);
+                hash.update(&slot.map_or(u32::MAX, |(checker, _)| checker).to_le_bytes());
+            }
+            let signature = format!("go4-v1:{:032x}", hash.digest128());
+            if old.is_some_and(|old| old.canonical_check_signature.get() != Some(&signature)) {
+                self.snapshot.build_info_emit_pending.set(true);
+            }
+            let _ = self.snapshot.canonical_check_signature.set(signature);
+        }
+        // Source/order/option changes can change a merge's declarations even when its slots remain equal.
         let refresh_interface_diagnostics = !tsrs_core::compat::go_compatible_history()
             && old.is_some_and(|old| {
                 old.file_order != self.snapshot.file_order
@@ -216,13 +227,7 @@ impl toProgramSnapshot {
                     || old.options().skip_default_lib_check != new_options.skip_default_lib_check
                     || !deleted_files.is_empty()
                     || results.iter().any(|(_, _, change)| change.add_to_change_set)
-                    || self.old_program.and_then(|old| old.program).is_none_or(|old_program| {
-                        files.iter().any(|&file| {
-                            old_program.get_source_file_by_path(file.path()).is_none_or(|old_file| {
-                                self.program.tsgo_default_check_slot(file) != old_program.tsgo_default_check_slot(old_file)
-                            })
-                        })
-                    })
+                    || old.canonical_check_signature.get() != self.snapshot.canonical_check_signature.get()
             });
         for (&file, (info, new_references, mut change)) in files.iter().zip(results) {
             if refresh_interface_diagnostics
@@ -231,7 +236,6 @@ impl toProgramSnapshot {
                 && contains_interface_declaration(file.as_node())
             {
                 change.semantic_diagnostics = None;
-                self.snapshot.interface_diagnostics_refreshed.set(true);
             }
             if let Some(new_references) = new_references {
                 self.snapshot.referenced_map.store_shared_references(file.path().clone(), new_references);
