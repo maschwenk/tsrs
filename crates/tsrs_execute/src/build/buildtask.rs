@@ -662,15 +662,16 @@ impl BuildTask {
         if let Some(region) = &snapshot_diagnostics {
             let _scope = region.enter();
             incremental_program.copy_diagnostics();
-            // SAFETY: `incremental_program` was made from them, and nothing else holds them: `old_program` was the
-            // task's kept state (taken above) or read from the build info for this build alone, and an unused kept
-            // state is the task's alone too.
             if let Some(old_program) = old_program {
+                // SAFETY: `incremental_program` was made from it, and nothing else holds it: it is the task's kept
+                // state (taken above) or was read from the build info for this build alone.
                 unsafe { tsrs_incremental::Program::drop_replaced(old_program) };
             }
             if let Some(kept) = kept
                 && old_program != Some(kept)
             {
+                // SAFETY: the task's kept state, taken above, which nothing else holds, and which this build did not
+                // use.
                 unsafe { tsrs_incremental::Program::drop_replaced(kept) };
             }
         }
