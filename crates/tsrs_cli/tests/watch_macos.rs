@@ -350,3 +350,49 @@ fn a_new_directory_beside_the_project_starts_no_cycle(args: &[&str]) {
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&beside);
 }
+
+#[test]
+fn a_watch_that_cannot_watch_says_so() {
+    let _shared = shared();
+    // The kqueue fallback with a descriptor limit it cannot raise: the watch error and the build's report are printed
+    // (they were held in the output buffer for good).
+    let mut files = vec![("tsconfig.json".to_string(), TSCONFIG.to_string())];
+    files.extend((0..200).map(|i| (format!("src/f{i}.ts"), format!("export const f{i} = {i};\n"))));
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, c)| (p.as_str(), c.as_str())).collect();
+    let dir = project("nofds", &files);
+    let mut command = Command::new(env!("CARGO_BIN_EXE_tsrs"));
+    command.args(["--watch", "-p", ".", "--pretty", "false"]).current_dir(&dir).env("TSRS_WATCH_BACKEND", "kqueue").stdout(Stdio::piped());
+    // SAFETY: setrlimit is async-signal-safe; the closure touches nothing else.
+    unsafe {
+        std::os::unix::process::CommandExt::pre_exec(&mut command, || {
+            let lim = libc::rlimit { rlim_cur: 64, rlim_max: 64 };
+            if libc::setrlimit(libc::RLIMIT_NOFILE, &raw const lim) != 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+            Ok(())
+        });
+    }
+    let mut child = command.spawn().unwrap();
+    let stdout = child.stdout.take().unwrap();
+    let (tx, rx) = channel();
+    std::thread::spawn(move || {
+        for line in BufReader::new(stdout).lines() {
+            if tx.send(line.unwrap()).is_err() {
+                break;
+            }
+        }
+    });
+    let mut lines = Vec::new();
+    while let Ok(line) = rx.recv_timeout(Duration::from_secs(10)) {
+        let done = line.contains("Watching for file changes");
+        lines.push(line);
+        if done {
+            break;
+        }
+    }
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(lines.iter().any(|l| l.contains("ulimit -n")), "{lines:?}");
+    assert!(lines.iter().any(|l| l.contains("Found 0 errors")), "{lines:?}");
+    let _ = std::fs::remove_dir_all(&dir);
+}

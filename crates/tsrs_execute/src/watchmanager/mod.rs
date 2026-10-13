@@ -129,7 +129,12 @@ impl WatchManager {
         if state.backend.is_none() {
             // tsrs-only: a cycle starts when the saved files are closed, not at the first write (a save's truncation).
             tsrs_fswatch::set_write_settling(true);
-            let fsw = tsrs_fswatch::default();
+            // tsrs-only: TSRS_WATCH_BACKEND=kqueue picks the fallback that macOS uses when FSEvents is unavailable,
+            // for testing it.
+            let fsw = match std::env::var("TSRS_WATCH_BACKEND").as_deref() {
+                Ok("kqueue") if tsrs_fswatch::kqueue().available() => tsrs_fswatch::kqueue(),
+                _ => tsrs_fswatch::default(),
+            };
             state.backend = Some(Arc::new(FsWatchBackend(fsw)));
             self.debug(|| format!("[watch] using {} backend\n", fsw.name()));
         }

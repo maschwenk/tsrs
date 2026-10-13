@@ -672,6 +672,9 @@ impl Watcher {
 
         if let Err(err) = self.reconcile_watches(state, &seen) {
             self.sys.write(&format!("{}\n", err.message()));
+            // tsrs-only: the build's diagnostics and status line still go out (Go returns here and prints neither);
+            // the status line also flushes the output, which would otherwise hold the error until the next cycle.
+            self.report_error_count(result.diagnostics.len());
             return Err(err);
         }
         self.watch_set_dirty = false;
