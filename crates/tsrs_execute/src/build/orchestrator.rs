@@ -712,7 +712,13 @@ impl Orchestrator {
         }
         if self.opts.testing.is_none() {
             self.queue_files_changed_since(build_started);
-            self.wm.run_loop(|| self.do_cycle());
+            #[cfg(target_os = "macos")]
+            self.freer.collect_heap();
+            self.wm.run_loop(|| {
+                self.do_cycle();
+                #[cfg(target_os = "macos")]
+                self.freer.collect_heap();
+            });
         }
     }
 

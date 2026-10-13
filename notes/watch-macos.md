@@ -1,6 +1,6 @@
 # watch-macos: `--watch` and `-b --watch` on macOS (FSEvents, kqueue)
 
-The first run of the watch on a Mac, following `tools/watch/MACOS.md`. Machine: MacBook Pro, Apple M3 Max (14 cores,
+The first run of the watch on a Mac (the brief was PR #365's tools/watch/MACOS.md, since removed). Machine: MacBook Pro, Apple M3 Max (14 cores,
 96 GB), macOS 26.6.2 (25G83). Comparison: tsgo nightly 7.0.0-dev.20260707.2 (`@typescript/native-preview`), not a
 pinned build. Project: vscode at 9cf0128b9822 (9.4k files under `src/`), as in the brief.
 
@@ -71,8 +71,12 @@ it (debounce, cycle start, status line) adds under 1 ms.
 
 - A writer that writes one file in pieces with pauses (4 x 100 ms): 2 cycles. Its first event shows partial content,
   which nothing tells apart from a finished save without waiting.
-- Memory grows across `REPEAT=5` rounds (RSS after the repeat comment edit 2.5 -> 3.3 GB on the pre-rebase branch);
-  being fixed separately (notes/watch-memory.md).
+- Memory: after notes/watch-memory.md's fixes, comment edits are flat (footprint 1.51-1.57 GB over 100 edit/revert
+  pairs). Full rebuilds leave mimalloc's heap about 1 GB above the initial build and grow it ~30 MB per hub
+  round trip; the thread arenas stay flat. About half of the heap rise is freed memory mimalloc keeps resident on
+  macOS: the watch now collects it (`mi_collect(true)`) on the free thread after each cycle (footprint after 6
+  `--watch` hub round trips 3.99 -> 3.48 GB, after 4 `-b --watch` ones 3.05 -> 2.75 GB; cycle times unchanged in
+  interleaved runs). The rest (~60 MB per round trip, live data or fragmentation with 16 KB pages) is not split.
 - An overflow (dropped events) still rebuilds every callback of a shared watch, whatever path it names. With the QoS
   fix none occurred in these runs; parallel tests that churn `$TMPDIR` can still trigger one.
 - Emitted outputs under a consolidated stream root still reach the process (now cheap); FSEventStreamSetExclusionPaths

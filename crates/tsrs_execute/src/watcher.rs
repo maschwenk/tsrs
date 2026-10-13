@@ -222,7 +222,13 @@ pub(crate) fn run_watcher(
         return Some(w);
     }
     let wm = Arc::clone(&w.wm);
-    wm.run_loop(|| w.do_cycle());
+    #[cfg(target_os = "macos")]
+    w.freer.collect_heap();
+    wm.run_loop(|| {
+        w.do_cycle();
+        #[cfg(target_os = "macos")]
+        w.freer.collect_heap();
+    });
     None
 }
 

@@ -74,6 +74,15 @@ impl Freer {
         Freer(Some(Mutex::new(tx)))
     }
 
+    /// tsrs-only, macOS: once the frees queued so far are done, the allocator gives its freed memory back
+    /// (`mi_collect(true)`). On macOS mimalloc keeps much of what a cycle freed resident (about 0.5 GB after a few full
+    /// rebuilds of vscode); purging it at once on every free slows the cycles themselves (MIMALLOC_PURGE_DELAY=0: the
+    /// hub edit 1.3 -> 2.0 s), so it is done here, after the cycle reported, on the free thread.
+    #[cfg(target_os = "macos")]
+    pub(crate) fn collect_heap(&self) {
+        self.run(|| tsrs_core::memsplit::heap_collect(true));
+    }
+
     pub(crate) fn run(&self, job: impl FnOnce() + Send + 'static) {
         match &self.0 {
             // The thread only ends when the sender is dropped, with the session.
