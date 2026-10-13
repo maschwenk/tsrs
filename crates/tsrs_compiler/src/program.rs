@@ -71,6 +71,11 @@ pub struct ProgramOptions {
     /// tsrs-only: what the file loader allocates goes to these regions (programregions.rs), which the caller frees
     /// once nothing uses the program's processed-file and resolution data (watch mode).
     pub regions: Option<std::sync::Arc<crate::programregions::ProgramRegions>>,
+    /// tsrs-only: `reuse_program` may keep the file loader's synthetic imports (JSX runtime, import helpers) of the
+    /// edited file. Their parent is this program's version of the file, so the caller must keep it alive while any
+    /// program reused from this one lives (watch mode keeps the full build's files). The language server frees it
+    /// with this program, so it leaves this off and gets Go's full rebuild.
+    pub reuse_synthetic_imports: bool,
 }
 
 impl ProgramOptions {
@@ -91,6 +96,7 @@ impl ProgramOptions {
             checker_regions: false,
             checker_diagnostic_regions: false,
             regions: None,
+            reuse_synthetic_imports: false,
         }
     }
 
@@ -117,6 +123,7 @@ impl ProgramOptions {
             checker_regions: false,
             checker_diagnostic_regions: false,
             regions: None,
+            reuse_synthetic_imports: false,
         }
     }
 
@@ -227,6 +234,8 @@ pub struct Program {
     pub(crate) checker_regions: bool,
     // tsrs-only: `ProgramOptions::checker_diagnostic_regions`.
     pub(crate) checker_diagnostic_regions: bool,
+    // tsrs-only: `ProgramOptions::reuse_synthetic_imports`.
+    reuse_synthetic_imports: bool,
     // tsrs-only: the address of the program `reuse_program` made this one from, 0 for a program built in full
     // (`is_reuse_of`). An address, not a reference: the watch frees that program once this one has replaced it.
     reused_from: usize,
@@ -475,6 +484,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         canonical_diagnostics: opts.canonical_diagnostics,
         checker_regions: opts.checker_regions,
         checker_diagnostic_regions: opts.checker_diagnostic_regions,
+        reuse_synthetic_imports: opts.reuse_synthetic_imports,
         reused_from: 0,
         own_region: None,
     };
@@ -642,7 +652,7 @@ impl Program {
             return (None, new_file, false);
         }
         let new_file_some = new_file.unwrap();
-        if !self.has_same_synthetic_imports(old_file, new_file_some) {
+        if !self.can_keep_synthetic_imports(old_file, new_file_some) {
             return (None, new_file, false);
         }
         if old_supplemental_files.len() != new_supplemental_files.len() {
@@ -653,7 +663,7 @@ impl Program {
             if old_supplemental.path() != new_supplemental.path() || !self.can_replace_file_in_program(old_supplemental, Some(new_supplemental)) {
                 return Some((None, new_file, false));
             }
-            if !self.has_same_synthetic_imports(old_supplemental, new_supplemental) {
+            if !self.can_keep_synthetic_imports(old_supplemental, new_supplemental) {
                 return Some((None, new_file, false));
             }
 
@@ -702,6 +712,7 @@ impl Program {
             canonical_diagnostics: self.canonical_diagnostics,
             checker_regions: self.checker_regions,
             checker_diagnostic_regions: self.checker_diagnostic_regions,
+            reuse_synthetic_imports: self.reuse_synthetic_imports,
             reused_from: std::ptr::from_ref(self) as usize,
             own_region,
         };
@@ -790,19 +801,24 @@ impl Program {
             && equal_check_js_directives(file1.check_js_directive.get(), file2.check_js_directive.get())
     }
 
-    // Whether `new_file` needs the synthetic imports the file loader made for `old_file`, the version of it in this
-    // program: the import helpers module, and the same JSX runtime module. The program `reuse_program` makes keeps them
-    // and their module resolution (the clone keeps the file's), as it keeps the file's other imports. tsrs-only: Go
-    // builds the program again whenever either version has one, so every edit of a file with JSX (`react-jsx`) or
-    // under `importHelpers` was a full build. The synthetic nodes' parent stays the old version of the file, which
-    // only lends them its path, options and implied format, the same as the new version's (`can_replace_file_in_program`
-    // compares the parse options). The JSX runtime comes from the options and the file's pragmas; whether the file
-    // needs the helpers module, from the options and whether it is a module, which `can_replace_file_in_program`
-    // also compares.
-    fn has_same_synthetic_imports(&self, old_file: P<SourceFile>, new_file: P<SourceFile>) -> bool {
+    // Whether the program `reuse_program` makes may keep the synthetic imports the file loader made for `old_file`,
+    // the version of it in this program (the import helpers module and the JSX runtime module), with their module
+    // resolution (the clone keeps the file's), as it keeps the file's other imports. Go builds the program again
+    // whenever either version has one (program.go:389), so every edit of a file with JSX (`react-jsx`) or under
+    // `importHelpers` is a full build. tsrs-only, with `reuse_synthetic_imports`: they are kept when `new_file` needs
+    // the same ones. The synthetic nodes' parent stays the old version of the file, which only lends them its path,
+    // options and implied format, the same as the new version's (`can_replace_file_in_program` compares the parse
+    // options). The JSX runtime comes from the options and the file's pragmas; whether the file needs the helpers
+    // module, from the options and whether it is a module, which `can_replace_file_in_program` also compares.
+    fn can_keep_synthetic_imports(&self, old_file: P<SourceFile>, new_file: P<SourceFile>) -> bool {
+        let old_helpers = self.import_helpers_import_specifiers.contains_key(old_file.path());
+        let new_helpers = self.needs_import_helpers_import_specifier(new_file);
         let old_jsx_runtime = self.jsx_runtime_import_specifiers.get(old_file.path()).map_or("", |jsx| jsx.module_reference.as_str());
-        self.import_helpers_import_specifiers.contains_key(old_file.path()) == self.needs_import_helpers_import_specifier(new_file)
-            && old_jsx_runtime == self.jsx_runtime_import_specifier(new_file)
+        let new_jsx_runtime = self.jsx_runtime_import_specifier(new_file);
+        if !self.reuse_synthetic_imports {
+            return !old_helpers && !new_helpers && old_jsx_runtime.is_empty() && new_jsx_runtime.is_empty();
+        }
+        old_helpers == new_helpers && old_jsx_runtime == new_jsx_runtime
     }
 
     // program.go:480

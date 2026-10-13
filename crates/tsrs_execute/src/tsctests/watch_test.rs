@@ -149,7 +149,7 @@ fn the_watch_ignores_its_own_outputs() {
 }
 
 // A file with JSX (`react-jsx`) or under `importHelpers` has synthetic imports, of the JSX runtime and the helpers
-// module; an edit that keeps them reuses the program (`has_same_synthetic_imports`), one that changes the runtime
+// module; an edit that keeps them reuses the program (`can_keep_synthetic_imports`), one that changes the runtime
 // (a pragma) builds it again.
 #[test]
 fn edits_of_files_with_synthetic_imports_build_what_a_fresh_build_does() {

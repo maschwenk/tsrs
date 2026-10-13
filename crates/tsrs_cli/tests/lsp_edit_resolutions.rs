@@ -13,13 +13,52 @@ const B_TS: &str = "export const environment = { name: \"b\" }\n";
 
 #[test]
 fn edit_keeps_module_resolutions_of_the_edited_file() {
-    let dir = std::env::temp_dir().join(format!("tsrs-lsp-edit-resolutions-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).unwrap();
-    std::fs::write(dir.join("tsconfig.json"), r#"{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "noEmit": true }, "files": ["a.ts"] }"#).unwrap();
-    std::fs::write(dir.join("a.ts"), A_TS).unwrap();
-    std::fs::write(dir.join("b.ts"), B_TS).unwrap();
+    let tsconfig = r#"{ "compilerOptions": { "strict": true, "module": "esnext", "moduleResolution": "bundler", "noEmit": true }, "files": ["a.ts"] }"#;
+    // Insert an undeclared identifier into main's body; the import is unchanged, so the program is reused.
+    let (before, after) = diagnostics_after_edits("resolutions", &[("tsconfig.json", tsconfig), ("a.ts", A_TS), ("b.ts", B_TS)], "a.ts", "typescript", 3, 1);
+
+    assert!(!before.contains("\"code\":"), "unexpected diagnostics before the edit: {before}");
+    assert!(after.contains("\"code\":2304"), "the edit's error is missing: {after}");
+    assert!(!after.contains("\"code\":2307"), "./b lost its resolution after the edit: {after}");
+}
+
+// The file loader's synthetic JSX runtime import has the file version it was made for as its parent. The language
+// server frees that version once the next program replaces it, so `reuse_program` must not keep the import there
+// (watch mode keeps the full build's files and may): checking the JSX in the edited file walks from the import to
+// its parent. Every version cloned from the full build keeps the full build's import, so the third version reads
+// the first after the language server freed it: the server crashed there.
+const A_TSX: &str = "export function main() {\n\treturn <div />\n}\n";
+const JSX_RUNTIME_D_TS: &str = "export namespace JSX {\n\tinterface IntrinsicElements {\n\t\tdiv: {}\n\t}\n\ttype Element = {}\n}\nexport declare function jsx(type: any, props: any): JSX.Element\n";
+
+#[test]
+fn edit_of_a_jsx_file_keeps_the_jsx_runtime() {
+    let tsconfig = r#"{ "compilerOptions": { "strict": true, "jsx": "react-jsx", "module": "esnext", "moduleResolution": "bundler", "noEmit": true }, "files": ["a.tsx"] }"#;
+    let files = [
+        ("tsconfig.json", tsconfig),
+        ("a.tsx", A_TSX),
+        ("node_modules/react/package.json", r#"{ "name": "react", "version": "1.0.0" }"#),
+        ("node_modules/react/jsx-runtime.d.ts", JSX_RUNTIME_D_TS),
+    ];
+    let (before, after) = diagnostics_after_edits("jsx-runtime", &files, "a.tsx", "typescriptreact", 1, 4);
+
+    assert!(!before.contains("\"code\":"), "unexpected diagnostics before the edit: {before}");
+    assert!(after.contains("\"code\":2304"), "the edit's error is missing: {after}");
+    assert!(!after.contains("\"code\":2875"), "the JSX runtime lost its resolution after the edit: {after}");
+}
+
+/// Writes `files` to a temporary project, opens `open` in `tsrs --lsp` (with TSRS_ARENA_POISON=1), `edits` times
+/// inserts an undeclared identifier `c` as a new line before line `line` (0-based), and returns the file's
+/// diagnostics before the first edit and after the last.
+fn diagnostics_after_edits(name: &str, files: &[(&str, &str)], open: &str, language_id: &str, line: u32, edits: u32) -> (String, String) {
+    let dir = std::env::temp_dir().join(format!("tsrs-lsp-edit-{name}-{}", std::process::id()));
+    for (path, text) in files {
+        let path = dir.join(path);
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    }
+    let open_text = files.iter().find(|(path, _)| *path == open).unwrap().1;
     let root = format!("file://{}", dir.display());
-    let a = format!("{root}/a.ts");
+    let uri = format!("{root}/{open}");
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_tsrs"))
         .args(["--lsp", "-stdio"])
@@ -42,28 +81,28 @@ fn edit_keeps_module_resolutions_of_the_edited_file() {
     response(&mut stdout, 1, &mut send);
     send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#.to_string());
     send(format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{a}","languageId":"typescript","version":1,"text":{}}}}}}}"#,
-        json_string(A_TS)
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"{language_id}","version":1,"text":{}}}}}}}"#,
+        json_string(open_text)
     ));
-    send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/diagnostic","params":{{"textDocument":{{"uri":"{a}"}}}}}}"#));
+    send(format!(r#"{{"jsonrpc":"2.0","id":2,"method":"textDocument/diagnostic","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#));
     let before = response(&mut stdout, 2, &mut send);
-    assert!(!before.contains("\"code\":"), "unexpected diagnostics before the edit: {before}");
 
-    // Insert an undeclared identifier into main's body; the import is unchanged, so the program is reused.
-    send(format!(
-        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{a}","version":2}},"contentChanges":[{{"range":{{"start":{{"line":3,"character":0}},"end":{{"line":3,"character":0}}}},"text":"\tc\n"}}]}}}}"#
-    ));
-    send(format!(r#"{{"jsonrpc":"2.0","id":3,"method":"textDocument/diagnostic","params":{{"textDocument":{{"uri":"{a}"}}}}}}"#));
-    let after = response(&mut stdout, 3, &mut send);
+    let mut after = String::new();
+    for edit in 0..edits {
+        let (version, id) = (edit + 2, edit + 3);
+        send(format!(
+            r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":{version}}},"contentChanges":[{{"range":{{"start":{{"line":{line},"character":0}},"end":{{"line":{line},"character":0}}}},"text":"\tc\n"}}]}}}}"#
+        ));
+        send(format!(r#"{{"jsonrpc":"2.0","id":{id},"method":"textDocument/diagnostic","params":{{"textDocument":{{"uri":"{uri}"}}}}}}"#));
+        after = response(&mut stdout, id, &mut send);
+    }
 
-    send(r#"{"jsonrpc":"2.0","id":4,"method":"shutdown"}"#.to_string());
+    send(format!(r#"{{"jsonrpc":"2.0","id":{},"method":"shutdown"}}"#, edits + 3));
     send(r#"{"jsonrpc":"2.0","method":"exit"}"#.to_string());
     drop(stdin);
     let _ = child.wait();
     let _ = std::fs::remove_dir_all(&dir);
-
-    assert!(after.contains("\"code\":2304"), "the edit's error is missing: {after}");
-    assert!(!after.contains("\"code\":2307"), "./b lost its resolution after the edit: {after}");
+    (before, after)
 }
 
 /// Reads messages until the response to `id`, answering the server's own requests (configuration, registrations)

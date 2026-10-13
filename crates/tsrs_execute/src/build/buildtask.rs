@@ -643,6 +643,8 @@ impl BuildTask {
             // Watch mode frees the program when the task builds again (`replace_watch_program`), with the diagnostics
             // its checkers make: the task's errors are cleared first, and the snapshot that keeps some copies them.
             program_options.checker_regions = watch;
+            // `watch_full_build` keeps the parents of the synthetic imports the reused programs keep.
+            program_options.reuse_synthetic_imports = watch;
             program_options.checker_diagnostic_regions = watch && orchestrator.opts.testing.is_none();
             regions = watch.then(|| Arc::new(tsrs_compiler::ProgramRegions::default()));
             program_options.regions.clone_from(&regions);
