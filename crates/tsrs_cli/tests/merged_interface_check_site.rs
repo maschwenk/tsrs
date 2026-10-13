@@ -72,6 +72,54 @@ fn incremental_merged_interface_sites_match_clean_builds() {
     }
 }
 
+#[test]
+fn incremental_merged_interface_sites_follow_history_changes() {
+    let dir = std::env::temp_dir().join(format!("tsrs-merged-history-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    for name in ["bases.ts", "a.ts", "b.ts", "c.ts", "d.d.ts"] {
+        std::fs::copy(case("merged-interface-check-site").join(name), dir.join(name)).unwrap();
+    }
+    let config = std::fs::read_to_string(case("merged-interface-check-site").join("tsconfig.json")).unwrap();
+    std::fs::write(dir.join("tsconfig.json"), config.replace("\"strict\":true", "\"strict\":true,\"incremental\":true")).unwrap();
+    let info = dir.join("tsconfig.tsbuildinfo");
+    let default = ["--checkers", "8"];
+    let go = ["--checkers", "8", "--checkerAssignment", "go"];
+    let unchanged = |args: &[&str], expected: &str| {
+        let bytes = std::fs::read(&info).unwrap();
+        let modified = std::fs::metadata(&info).unwrap().modified().unwrap();
+        assert_eq!(run_in(&dir, args), expected);
+        assert_eq!(std::fs::read(&info).unwrap(), bytes, "unchanged history must preserve build info");
+        assert_eq!(std::fs::metadata(&info).unwrap().modified().unwrap(), modified, "unchanged history must not rewrite build info");
+    };
+    let initial = run_in(&dir, &default);
+    assert_eq!(initial.lines().filter(|line| line.contains("TS2320")).count(), 2);
+    let default_info = std::fs::read_to_string(&info).unwrap();
+    unchanged(&default, &initial);
+    let switched = run_in(&dir, &go);
+    let go_info = std::fs::read_to_string(&info).unwrap();
+    assert!(!go_info.contains("tsrsCanonicalCheckSignature"), "Go history must rewrite tagged default caches");
+    std::fs::remove_file(&info).unwrap();
+    let fresh_go = run_in(&dir, &go);
+    assert_eq!(fresh_go.lines().filter(|line| line.contains("TS2320")).count(), 4);
+    assert_eq!(switched, fresh_go, "default-to-Go must preserve the full ordered diagnostics");
+    assert_eq!(std::fs::read_to_string(&info).unwrap(), go_info);
+    unchanged(&go, &fresh_go);
+
+    let key = "\"tsrsCanonicalCheckSignature\":";
+    let start = default_info.find(key).unwrap() + key.len();
+    let end = start + default_info[start..].find(',').unwrap();
+    for value in ["\"\"", "\"go4-v1:bad\"", "\"go4-v2:0123456789abcdef0123456789abcdef\"", "null", "123", "false", "{}", "[]"] {
+        std::fs::write(&info, format!("{}{value}{}", &default_info[..start], &default_info[end..])).unwrap();
+        assert_eq!(run_in(&dir, &go), fresh_go, "Go history must reject every present default tag: {value}");
+        assert_eq!(std::fs::read_to_string(&info).unwrap(), go_info, "Go rewrite must omit the default tag: {value}");
+        unchanged(&go, &fresh_go);
+    }
+    assert_eq!(run_in(&dir, &default), initial, "Go-to-default must refresh the reporting sites");
+    assert_eq!(std::fs::read_to_string(&info).unwrap(), default_info);
+    unchanged(&default, &initial);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 // Package exports can change the resolved import multigraph without changing source text, root order or the
 // deduplicated reference sets in build info. Cached TS2320 presence and absence must follow the new report slots.
 #[test]

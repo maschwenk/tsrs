@@ -103,5 +103,39 @@ fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     let reversed = build(Some(changed));
     assert_eq!(state(reversed, "e.ts"), SemanticDiagnosticsState::NotCached, "changed report slots must invalidate cached errors");
     assert_eq!(sites(reversed), sites(build(None)));
+
+    std::fs::write(&build_info_path, &serialized).unwrap();
+    tsrs_core::compat::set_go_compatible_history(true);
+    let go = create(None, true);
+    assert_eq!(state(go, "e.ts"), SemanticDiagnosticsState::NotCached, "Go history must reject a tagged default cache");
+    let go_expected = sites(build(None));
+    assert_eq!(sites(go), go_expected);
+    emit(go);
+    let go_serialized = std::fs::read_to_string(&build_info_path).unwrap();
+    assert!(!go_serialized.contains("tsrsCanonicalCheckSignature"));
+    let go_modified = std::fs::metadata(&build_info_path).unwrap().modified().unwrap();
+    let go_writes = writes.load(Ordering::Relaxed);
+    for _ in 0..2 {
+        let loaded = create(None, true);
+        assert_eq!(state(loaded, "e.ts"), SemanticDiagnosticsState::Reused, "native Go interface caches must remain reusable");
+        assert_eq!(state(loaded, "f.ts"), SemanticDiagnosticsState::Reused);
+        assert_eq!(sites(loaded), go_expected);
+        emit(loaded);
+    }
+    assert_eq!(writes.load(Ordering::Relaxed), go_writes);
+    assert_eq!(std::fs::read_to_string(&build_info_path).unwrap(), go_serialized);
+    assert_eq!(std::fs::metadata(&build_info_path).unwrap().modified().unwrap(), go_modified);
+    tsrs_core::compat::set_go_compatible_history(false);
+    let default = create(None, true);
+    assert_eq!(state(default, "e.ts"), SemanticDiagnosticsState::NotCached, "default history must refresh an untagged Go cache");
+    assert_eq!(state(default, "f.ts"), SemanticDiagnosticsState::Reused);
+    assert_eq!(sites(default), expected);
+    emit(default);
+    assert_eq!(std::fs::read_to_string(&build_info_path).unwrap(), serialized);
+    let restored = create(None, true);
+    assert_eq!(state(restored, "e.ts"), SemanticDiagnosticsState::Reused, "restored default history must reuse the interface cache");
+    assert_eq!(sites(restored), expected);
+    emit(restored);
+    assert_eq!(writes.load(Ordering::Relaxed), go_writes + 1);
     std::fs::remove_dir_all(dir).unwrap();
 }

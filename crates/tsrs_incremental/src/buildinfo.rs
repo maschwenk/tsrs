@@ -662,6 +662,10 @@ impl BuildInfo {
     // Go `json.Unmarshal(data, &buildInfo)`.
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfo, String> {
         let o = as_object(data)?;
+        // tsrs-only: canonical diagnostics cannot be reused in Go history, even if the proof is malformed.
+        if tsrs_core::compat::go_compatible_history() && o.contains_key("tsrsCanonicalCheckSignature") {
+            return Err("default-history build info cannot be reused in Go-compatible history".to_string());
+        }
         Ok(BuildInfo {
             version: get_string(o, "version")?,
             errors: get_bool(o, "errors")?,

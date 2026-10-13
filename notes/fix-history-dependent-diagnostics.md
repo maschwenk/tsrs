@@ -141,8 +141,13 @@ signature causes one conservative refresh of checked interface diagnostics, incl
 with the current proof. Subsequent unchanged loaded programs reuse those caches and neither serialize nor rewrite
 build info. Custom writers receive real emissions through the existing callback; no byte-equality write suppression
 is needed. Other files' semantic caches and emit caches keep their existing reuse rules. Go-compatible history
-neither writes the field nor changes its incremental reuse rules. A change to canonical placement semantics must
-bump the signature version before caches from that policy can be reused.
+never writes the field. As a tsrs-only exception to Go's build-info reader, it rejects any cache containing the
+field, including an empty, malformed or unknown-version value, before converting it to a snapshot. Otherwise a
+default-to-Go switch at eight checkers can reuse two cached TS2320 sites where a fresh Go build reports four.
+The existing cold path rewrites the cache in Go's format; subsequent native Go caches retain their usual reuse.
+This checks field presence in the already parsed JSON, with no second parse or virtual-slot work. Default-history
+validation is unchanged. A change to canonical placement semantics must bump the signature version before caches
+from that policy can be reused.
 
 The initial unconditional loaded-build fallback had a measured cost. On local macOS arm64 `--release` builds, five unchanged warm runs
 per binary and mode, alternating before/after order after one cold run each, matched full ordered diagnostics and
