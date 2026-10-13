@@ -1012,12 +1012,12 @@ impl Orchestrator {
     }
 
     // tsrs-only: a directory that appeared or changed under a watched one matters when a project's wildcards may
-    // match it, or when it is (an ancestor of) a directory the build wants watched (a node_modules that did not
-    // exist). Go counts any directory under any watch and rebuilds every project, so a directory made beside the
+    // match it, when it is (an ancestor of) a directory the build wants watched, or when it is or lies in a
+    // node_modules (an installed package: the build info does not list the module lookups that found nothing). Go counts any directory under any watch and rebuilds every project, so a directory made beside the
     // projects (whose parent is watched for a lookup) rebuilt them all.
     fn directory_change_matters(&self, dir: &str) -> bool {
         let p = self.to_path(dir);
-        if self.wanted_watch_dirs.lock().unwrap().contains(&p) {
+        if watchmanager::is_in_node_modules(&p) || self.wanted_watch_dirs.lock().unwrap().contains(&p) {
             return true;
         }
         let order = self.order.lock().unwrap().clone();

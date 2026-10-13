@@ -442,6 +442,12 @@ impl DirWatchSet {
     }
 }
 
+/// tsrs-only: whether `p` is a node_modules directory or lies in one.
+pub fn is_in_node_modules(p: &tspath::Path) -> bool {
+    let s = p.as_str();
+    s.ends_with("/node_modules") || s.contains("/node_modules/")
+}
+
 /// Go `ShouldIgnoreWatchPath`.
 pub fn should_ignore_watch_path(path: &str) -> bool {
     let p = tspath::normalize_slashes(path);

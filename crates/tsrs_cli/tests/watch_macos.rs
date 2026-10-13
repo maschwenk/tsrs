@@ -396,3 +396,34 @@ fn a_watch_that_cannot_watch_says_so() {
     assert!(lines.iter().any(|l| l.contains("Found 0 errors")), "{lines:?}");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+fn installing_a_package_resolves_its_import(args: &[&str]) {
+    // node_modules does not exist when the watch starts; the import resolves once the package is installed.
+    let dir = project(&format!("install-{}", args[0].trim_start_matches('-')), &[("tsconfig.json", TSCONFIG), ("src/a.ts", "import type { N } from 'pkg';\nexport const n: N = 42;\n")]);
+    let mut watch = Watch::start_with(&dir, args);
+    std::thread::sleep(Duration::from_millis(600));
+    let pkg = dir.join("node_modules/pkg");
+    std::fs::create_dir_all(&pkg).unwrap();
+    std::fs::write(pkg.join("index.d.ts"), "export type N = 42;\n").unwrap();
+    std::fs::write(pkg.join("package.json"), r#"{ "name": "pkg", "version": "1.0.0", "types": "index.d.ts" }"#).unwrap();
+    let mut errors = watch.next_cycle();
+    // The files may come in two batches.
+    while !errors.is_empty() {
+        errors = watch.next_cycle();
+    }
+    assert_eq!(errors, fresh(&dir));
+    drop(watch);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn installing_a_package_resolves_its_import_in_watch() {
+    let _shared = shared();
+    installing_a_package_resolves_its_import(&["--watch", "-p", "."]);
+}
+
+#[test]
+fn installing_a_package_resolves_its_import_in_build_watch() {
+    let _shared = shared();
+    installing_a_package_resolves_its_import(&["-b", ".", "--watch"]);
+}

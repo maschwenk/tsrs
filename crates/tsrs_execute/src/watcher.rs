@@ -575,11 +575,12 @@ impl Watcher {
     }
 
     // tsrs-only: a directory that appeared or changed under a watched one matters when the config's wildcards may
-    // match it, or when a file the build read or looked for lies below it (a node_modules that did not exist). Go
+    // match it, when a file the build read or looked for lies below it, or when it is or lies in a node_modules (an
+    // installed package). Go
     // counts any directory under any watch, so a new directory beside the project (the watch of its parent is for a
     // node_modules lookup) ran a full cycle.
     fn directory_change_matters(&self, p: &Path) -> bool {
-        (self.config.config_file.is_some() && self.config.possibly_matches_directory_name(p)) || self.seen_dirs.contains(p)
+        (self.config.config_file.is_some() && self.config.possibly_matches_directory_name(p)) || self.seen_dirs.contains(p) || watchmanager::is_in_node_modules(p)
     }
 
     fn do_build(&mut self, state: &mut WatchState) -> Result<(), tsrs_fswatch::Error> {
