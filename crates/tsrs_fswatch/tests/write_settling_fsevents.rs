@@ -61,6 +61,7 @@ fn write_settling() {
     a_truncation_waits_for_the_data();
     a_complete_save_is_not_delayed();
     an_emptied_file_stops_holding_after_the_idle_time();
+    a_burst_of_writes_is_one_batch();
 }
 
 fn a_truncation_waits_for_the_data() {
@@ -119,6 +120,35 @@ fn an_emptied_file_stops_holding_after_the_idle_time() {
     assert_eq!(seen.len(), 1, "an empty file must not hold the callbacks for good");
     let waited = seen[0].0.duration_since(written);
     assert!(waited >= Duration::from_millis(900) && waited < Duration::from_millis(2500), "released after {waited:?}");
+    let _ = watch.close();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+fn a_burst_of_writes_is_one_batch() {
+    let dir = temp_dir("burst");
+    let batches = Arc::new(Mutex::new(Vec::new()));
+    let b = Arc::clone(&batches);
+    let watch = fsevents()
+        .watch_directory(
+            dir.to_str().unwrap(),
+            Arc::new(move |events, _err| {
+                if !events.is_empty() {
+                    b.lock().unwrap().push(events.len());
+                }
+            }),
+            Vec::new(),
+        )
+        .unwrap();
+    std::thread::sleep(Duration::from_millis(700));
+    batches.lock().unwrap().clear();
+
+    // A formatter: 20 files, 5 ms apart (100 ms in all, much longer than FSEvents takes to deliver the first).
+    for i in 0..20 {
+        std::fs::write(dir.join(format!("f{i}.ts")), format!("export const f{i} = {i};\n")).unwrap();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    std::thread::sleep(Duration::from_millis(700));
+    assert_eq!(*batches.lock().unwrap(), vec![20], "one batch for the whole burst");
     let _ = watch.close();
     let _ = std::fs::remove_dir_all(&dir);
 }

@@ -123,6 +123,18 @@ impl debounce {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    // tsrs-only: the events about to be triggered start a burst of writes. Unless the callbacks fired recently, this
+    // counts as a fire, so that they wait for a quiet period (`minWaitTime`, at most `maxWaitTime`) instead of firing
+    // at the first event.
+    pub(crate) fn hold_leading_edge(&self) {
+        let mut st = self.mu.lock().unwrap();
+        let now = Instant::now();
+        if st.last_time.is_none_or(|last| now.duration_since(last) > maxWaitTime) {
+            st.last_time = Some(now);
+        }
+    }
+
     // When a file is still being written: the time at which the first of them stops holding the callbacks.
     fn pending_write_deadline(&self) -> Option<Instant> {
         let now = Instant::now();

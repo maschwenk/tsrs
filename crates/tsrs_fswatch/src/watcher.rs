@@ -1031,6 +1031,15 @@ impl dirWatch {
         }
     }
 
+    #[cfg(target_os = "macos")]
+    // tsrs-only: see `debounce::hold_leading_edge`.
+    pub(crate) fn hold_leading_edge(&self) {
+        let db = self.mu.lock().unwrap().debounce.clone();
+        if let Some(db) = db {
+            db.hold_leading_edge();
+        }
+    }
+
     // watcher.go:926
     pub(crate) fn notify(&self) {
         let st = self.mu.lock().unwrap();

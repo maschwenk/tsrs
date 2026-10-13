@@ -321,6 +321,8 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
         }
     };
 
+    let mut first_file: Option<String> = None;
+    let mut burst = false;
     for i in 0..num_events {
         let flag = payload.flag(i);
         let event_id = payload.id(i);
@@ -370,8 +372,22 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
         // arrives (FSEvents delivers about 12 ms after the write). An empty file holds the callbacks like an
         // unclosed one on inotify, until an event shows it non-empty or removed, or the hold times out. A save that
         // is not empty when its event arrives is not delayed.
-        let being_written = (crate::watcher::write_settling() && flag & flagItemIsFile != 0)
-            .then(|| !(is_removed && !is_created) && std::fs::metadata(raw_path).is_ok_and(|m| m.is_file() && m.len() == 0));
+        let file_len = (crate::watcher::write_settling() && flag & flagItemIsFile != 0)
+            .then(|| if is_removed && !is_created { None } else { std::fs::metadata(raw_path).ok().filter(std::fs::Metadata::is_file).map(|m| m.len()) });
+        let being_written = file_len.map(|len| len == Some(0));
+        // tsrs-only (`set_write_settling`): a batch that changed two files that still exist is a tool writing many
+        // files (a formatter, a checkout, a code generator), and the rest of its writes are still on the way.
+        // Starting at once (the debounce's leading edge) would build on the first few and run a second cycle for the
+        // rest, so the batch counts as a fire instead: the callbacks wait for 50 ms of quiet. A save, which changes
+        // one file (an atomic save's temporary file is gone by the time its event arrives), is not delayed.
+        if let Some(Some(_)) = file_len
+            && !burst
+        {
+            match &first_file {
+                None => first_file = Some(path.clone()),
+                Some(first) => burst = *first != path,
+            }
+        }
 
         for watch in watches {
             if watch.state.terminated.load(Ordering::SeqCst) {
@@ -444,6 +460,9 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
         }
     }
 
+    if burst && let Some(w) = touched.first() {
+        w.hold_leading_edge();
+    }
     for w in touched {
         w.notify();
     }
