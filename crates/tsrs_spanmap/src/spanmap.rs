@@ -540,9 +540,8 @@ impl SpanMap {
     // the index of the segment immediately before pos (`None` if none) and false.
     // spanmap.go:378
     pub(crate) fn segment_index_at(&self, pos: u32) -> (Option<usize>, bool) {
-        let (idx, found) =
-            goslices::binary_search_func(&self.segments, &pos, |s, p| s.virtual_start.cmp(p));
-        if found {
+        let idx = self.segments.partition_point(|s| s.virtual_start < pos);
+        if self.segments.get(idx).is_some_and(|s| s.virtual_start == pos) {
             return (Some(idx), true);
         }
         let prev = idx.checked_sub(1);

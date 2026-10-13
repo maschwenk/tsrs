@@ -569,7 +569,7 @@ fn coalesce_imports_worker(
             }
 
             new_import_specifiers.extend(get_new_import_specifiers(&group.named_imports, &factory));
-            goslices::sort_stable_func(&mut new_import_specifiers, |&a, &b| specifier_comparer(a, b));
+            new_import_specifiers.sort_by(|&a, &b| specifier_comparer(a, b));
 
             let new_named_imports: Option<P<Node>> = if new_import_specifiers.is_empty() {
                 if new_default_import.is_some() {
@@ -867,7 +867,7 @@ fn coalesce_exports_worker(
         exports_by_module_specifier.entry(module_specifier).or_default().push(export_decl);
     }
 
-    goslices::sort_stable_func(&mut module_specifier_order, |a, b| {
+    module_specifier_order.sort_by(|a, b| {
         if a.is_empty() && !b.is_empty() {
             return Ordering::Greater;
         }
@@ -913,7 +913,7 @@ fn coalesce_exports_worker(
                     .flatten(),
             );
 
-            goslices::sort_stable_func(&mut new_export_specifiers, |&a, &b| specifier_comparer(a, b));
+            new_export_specifiers.sort_by(|&a, &b| specifier_comparer(a, b));
 
             let export_decl_node = sub_group[0];
             let export_decl = export_decl_node.as_export_declaration();

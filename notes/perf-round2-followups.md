@@ -372,6 +372,10 @@ with the switch off, which is why it is not in the default build.
   measurement, so variances differ between checkers (cal-diy at 4 checkers printed 40 more lines).
 - Go's pdqsort (`goslices::sort_func`) for every symbol sort, not only where `compareSymbols` is not total
   (notes/lsp-memfix.md): +1.4% instructions on webpack (16.56 vs 16.33 G).
+  The requested Rust slice cleanup ([rust-stdlib-slices.md](rust-stdlib-slices.md)) changes only ordinary
+  stable sorts and position searches with pure comparators. Five-pair Mac screening on Compiler/Compiler-Unions:
+  -0.006% to -0.002% single instructions, -0.179% to +0.261% default RSS. No qualifying gain; retain Go's sort/search
+  where comparison history, non-total comparators or equal-element order is observable.
 - Flow memo variants (notes/perf-flow-union-inference.md): no checkpoints (webpack -4.4% instead of -7.0%, xstate
   +0.50% instead of +0.13%), table sizes 2^10 to 2^16 (no measurable difference), the per-node step out of line
   (+0.17% on xstate).

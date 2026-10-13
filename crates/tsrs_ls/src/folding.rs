@@ -3,7 +3,6 @@
 use rustc_hash::FxHashSet;
 use tsrs_ast::{self as ast, Kind, Node, NodeFlags, SourceFile};
 use tsrs_core::context::Context;
-use tsrs_core::goslices;
 use tsrs_core::{TextRange, P};
 use tsrs_lsproto as lsproto;
 use tsrs_printer as printer;
@@ -30,7 +29,7 @@ impl LanguageService {
             }
             ranges
         }));
-        goslices::sort_stable_func(&mut res, |a, b| {
+        res.sort_by(|a, b| {
             let c = a.start_line.cmp(&b.start_line);
             if c != std::cmp::Ordering::Equal {
                 return c;

@@ -180,10 +180,7 @@ impl DocumentPositionMapper {
             return None;
         }
 
-        let (target_index, _) =
-            goslices::binary_search_func(&self.generated_mappings, &loc.pos, |m, pos| {
-                m.generated_position.cmp(&Some(*pos))
-            });
+        let target_index = self.generated_mappings.partition_point(|m| m.generated_position < Some(loc.pos));
 
         if target_index >= self.generated_mappings.len() {
             return None;
@@ -213,10 +210,7 @@ impl DocumentPositionMapper {
             .source_mappings
             .get(&source_index)
             .map_or(&[], std::vec::Vec::as_slice);
-        let (target_index, _) =
-            goslices::binary_search_func(source_mappings, &loc.pos, |m, pos| {
-                m.source_position.cmp(&Some(*pos))
-            });
+        let target_index = source_mappings.partition_point(|m| m.source_position < Some(loc.pos));
 
         if target_index >= source_mappings.len() {
             return None;
