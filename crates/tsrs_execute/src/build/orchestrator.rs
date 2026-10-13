@@ -94,7 +94,7 @@ pub struct Orchestrator {
     // region collected here, so the whole orchestrator (configs, programs, checkers' arenas, diagnostics) can be
     // freed at once (`free_api_orchestrator`). Off for the CLI, whose single build runs to process exit.
     regions: Mutex<Vec<tsrs_core::arena::Region>>,
-    use_regions: AtomicBool,
+    api_mode: AtomicBool,
     // API clean existence answers, kept until the next build (which uses a fresh orchestrator): Go's `Clean` asks
     // the orchestrator's cachedvfs, which only `Build`'s recheck clears, so a later clean reuses them.
     api_clean_exists: Mutex<FxHashMap<String, bool>>,
@@ -319,14 +319,18 @@ impl Orchestrator {
         CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
     }
 
-    /// Makes this orchestrator allocate in collectable regions (API builds; see `regions`).
-    pub fn enable_api_regions(&self) {
-        self.use_regions.store(true, Ordering::SeqCst);
+    /// Makes this orchestrator allocate in collectable regions and retain per-file API diagnostics.
+    pub fn enable_api_mode(&self) {
+        self.api_mode.store(true, Ordering::SeqCst);
+    }
+
+    pub(crate) fn uses_canonical_diagnostics(&self) -> bool {
+        !self.api_mode.load(Ordering::SeqCst)
     }
 
     // A fresh region for the calling thread, registered for `free_api_orchestrator`; `None` for CLI builds.
     pub(crate) fn enter_api_region(&self) -> Option<tsrs_core::arena::RegionScope> {
-        if !self.use_regions.load(Ordering::SeqCst) {
+        if !self.api_mode.load(Ordering::SeqCst) {
             return None;
         }
         let region = tsrs_core::arena::Region::new(1 << 20);
@@ -482,7 +486,7 @@ impl Orchestrator {
             ));
         }
         let mut build_result = OrchestratorResult::default();
-        if self.errors.lock().unwrap().is_empty() && self.use_regions.load(Ordering::SeqCst) {
+        if self.errors.lock().unwrap().is_empty() && self.api_mode.load(Ordering::SeqCst) {
             // API builds: one builder, run on the calling thread (a builder thread per build would leave its
             // never-freed thread arena behind), then report in Order() like the reporter below. Everything outside
             // the task regions goes to a region of this call (single thread: nothing else enters it).
@@ -549,7 +553,7 @@ impl Orchestrator {
     // orchestrator.go:925
     fn range_tasks(&'static self, order: &[String], f: &(dyn Fn(&Path, P<BuildTask>) + Sync)) {
         let mut num_routines = 4;
-        if self.use_regions.load(Ordering::SeqCst) {
+        if self.api_mode.load(Ordering::SeqCst) {
             // API builds: one task region is entered at a time. Concurrent tasks could each wait to enter the
             // other's region (`arena::enter_owner` for lazily filled data of a shared source file), so the API
             // runs one builder.
@@ -630,7 +634,7 @@ impl Orchestrator {
             // The program is only needed by Testing.OnProgram at report time; drop it now so a task
             // that has finished but is not yet reported does not keep its program alive.
             let program = task.result.lock().unwrap().as_mut().unwrap().program.take();
-            if let (true, Some(program)) = (self.use_regions.load(Ordering::SeqCst), program) {
+            if let (true, Some(program)) = (self.api_mode.load(Ordering::SeqCst), program) {
                 // API builds free each project's program once it is built (its arenas go with the task region when
                 // the orchestrator is freed; this frees the heap side: program, checkers, processed data). It is a
                 // full build that shares nothing, and nothing reads it after its task (statistics and diagnostics are
@@ -668,10 +672,10 @@ impl Orchestrator {
     }
 }
 
-/// Frees an orchestrator created with `enable_api_regions` and everything its builds allocated.
+/// Frees an orchestrator created with `enable_api_mode` and everything its builds allocated.
 ///
 /// # Safety
-/// `o` came from `new_orchestrator`, `enable_api_regions` was called before its first build, no build or clean
+/// `o` came from `new_orchestrator`, `enable_api_mode` was called before its first build, no build or clean
 /// is running, and nothing obtained from it (results, programs, diagnostics) is used afterwards.
 pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
     // The lock may be poisoned if the build unwound (`CliOrchestrator::build`); the list itself is intact.
@@ -710,7 +714,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         error_summary_reporter,
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),
-        use_regions: AtomicBool::new(false),
+        api_mode: AtomicBool::new(false),
         api_clean_exists: Mutex::new(FxHashMap::default()),
         content_mapper_host: Mutex::new(None),
     }));

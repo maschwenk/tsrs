@@ -35,7 +35,9 @@ fn run_with(dir: &Path, checkers: &str, poison: bool, extended: bool, relation_l
     }
     let out = cmd.output().expect("run tsrs");
     assert!(matches!(out.status.code(), Some(0 | 2)), "{}: {}", dir.display(), String::from_utf8_lossy(&out.stderr));
-    String::from_utf8_lossy(&out.stdout).into_owned()
+    // Resolution traces print absolute paths; expected.txt has <dir> for the case's directory (tools/regressions.sh).
+    let here = std::fs::canonicalize(dir).unwrap();
+    String::from_utf8_lossy(&out.stdout).replace(here.to_str().unwrap(), "<dir>")
 }
 
 #[test]

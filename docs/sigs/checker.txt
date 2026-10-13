@@ -340,7 +340,7 @@ check_indexed_access | pub(crate) fn check_indexed_access(&mut self, node: P<Nod
 check_indexed_access_index_type | pub(crate) fn check_indexed_access_index_type(&mut self, t: P<Type>, access_node: P<Node>) -> P<Type> | checker.go:8392 | Checker
 check_indexed_access_type | pub(crate) fn check_indexed_access_type(&mut self, node: P<Node>) | checker.go:3407 | Checker
 check_infer_type | pub(crate) fn check_infer_type(&mut self, node: P<Node>) | checker.go:3336 | Checker
-check_inherited_properties_are_identical | pub(crate) fn check_inherited_properties_are_identical(&mut self, t: P<Type>, type_node: P<Node>) -> bool | checker.go:5127 | Checker
+check_inherited_properties_are_identical | pub(crate) fn check_inherited_properties_are_identical(&mut self, t: P<Type>, type_node: Option<P<Node>>) -> bool | checker.go:5127 | Checker
 check_instance_of_expression | pub(crate) fn check_instance_of_expression(&mut self, left: P<Node>, right: P<Node>, left_type: P<Type>, right_type: P<Type>, check_mode: CheckMode) -> P<Type> | checker.go:13255 | Checker
 check_interface_declaration | pub(crate) fn check_interface_declaration(&mut self, node: P<Node>) | checker.go:5082 | Checker
 check_iterated_type_or_element_type | pub(crate) fn check_iterated_type_or_element_type(&mut self, use_: IterationUse, input_type: P<Type>, sent_type: P<Type>, error_node: Option<P<Node>>) -> P<Type> | checker.go:6265 | Checker
@@ -2296,7 +2296,7 @@ is_inline_import_attributes | pub(crate) fn is_inline_import_attributes(&mut sel
 is_instance_property_with_initializer_or_private_identifier_property | pub(crate) fn is_instance_property_with_initializer_or_private_identifier_property(n: P<Node>) -> bool | checker.go:2952 | -
 is_instantiated_generic_parameter | pub(crate) fn is_instantiated_generic_parameter(&mut self, signature: P<Signature>, pos: i32) -> bool | relater.go:1954 | Checker
 is_instantiated_module | pub(crate) fn is_instantiated_module(node: P<Node>, preserve_const_enums: bool) -> bool | checker.go:5352 | -
-is_interface_check_site | fn is_interface_check_site(&mut self, symbol: P<Symbol>, node: P<Node>) -> bool | rust:checker_03.rs:972 | Checker
+is_interface_check_site | fn is_interface_check_site(&mut self, symbol: P<Symbol>, node: P<Node>) -> bool | rust:checker_03.rs:982 | Checker
 is_internal_module_import_equals_declaration | pub(crate) fn is_internal_module_import_equals_declaration(node: P<Node>) -> bool | checker.go:28862 | -
 is_intersection | pub fn is_intersection(&self) -> bool | rust:types.rs:1843 | Type
 is_intersection_data | fn is_intersection_data(&self) -> bool | rust:types.rs:2680 | UnionOrIntersectionType
@@ -3033,6 +3033,7 @@ report_unused_variable | pub(crate) fn report_unused_variable(&mut self, locatio
 report_unused_variable_declarations | pub(crate) fn report_unused_variable_declarations(&mut self, declarations: &[P<Node>]) | checker.go:7380 | Checker
 report_unused_variables | pub(crate) fn report_unused_variables(&mut self, node: P<Node>) | checker.go:7358 | Checker
 report_widening_errors_in_type | pub(crate) fn report_widening_errors_in_type(&mut self, t: P<Type>) -> bool | checker.go:20838 | Checker
+reports_interface_check_errors | fn reports_interface_check_errors(&mut self, symbol: P<Symbol>, node: P<Node>, t: P<Type>) -> bool | rust:checker_03.rs:999 | Checker
 requires_adding_implicit_undefined | pub fn requires_adding_implicit_undefined(&mut self, node: P<Node>) -> bool | exports.go:374 | Checker
 requires_adding_implicit_undefined | pub(crate) fn requires_adding_implicit_undefined(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | emitresolver.go:585 | EmitResolver
 requires_adding_implicit_undefined_exported | pub fn requires_adding_implicit_undefined_exported(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool | emitresolver.go:568 | EmitResolver

@@ -235,6 +235,9 @@ pub(crate) fn get_literal_text_of_node_worker(g: &mut NameGenerator, s: &printer
     if s.emit_context.emit_flags(node).intersects(EmitFlags::NoAsciiEscaping) {
         flags |= getLiteralTextFlags::NeverAsciiEscape;
     }
+    if s.emit_context.emit_flags(node).intersects(EmitFlags::InternalSymbolName) {
+        flags |= getLiteralTextFlags::InternalSymbolName;
+    }
     if s.target.get() >= ScriptTarget::ES2021 {
         flags |= getLiteralTextFlags::AllowNumericSeparator;
     }

@@ -386,9 +386,13 @@ pub struct Snapshot {
     // Looked up package.json files from
     pub(crate) package_jsons: RefCell<Option<Vec<String>>>,
     pub(crate) missing_package_jsons: RefCell<Option<Vec<String>>>,
+    // tsrs-only, versioned proof of canonical report placement; absent in Go-compatible history.
+    pub(crate) canonical_check_signature: OnceLock<String>,
 
     // Additional fields that are not serialized but needed to track state
 
+    // Program order, also recoverable from build info's fileNames/fileInfos, for history-dependent diagnostics.
+    pub(crate) file_order: Vec<Path>,
     // true if build info emit is pending
     pub(crate) build_info_emit_pending: Cell<bool>,
     pub(crate) has_errors_from_old_state: Cell<Tristate>,

@@ -2,7 +2,8 @@
 //
 // Go marshals these types with encoding/json/v2 (`omitzero` fields, custom MarshalJSON for the tuple shapes).
 // Rust builds the same `json::Value` tree by hand, field by field in Go's declaration order, so that
-// `json::marshal` produces Go's exact bytes. Unmarshaling follows the Go `UnmarshalJSON` fallbacks.
+// `json::marshal` produces Go's exact bytes in Go-compatible history. Unmarshaling follows the Go
+// `UnmarshalJSON` fallbacks; default history adds an optional tsrs canonical-cache proof.
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::RepopulateDiagnosticKind;
@@ -600,6 +601,8 @@ pub struct BuildInfo {
     pub package_jsons: Option<Vec<String>>,
     pub missing_package_jsons: Option<Vec<String>>,
     pub content_mapper_identities: Option<Vec<String>>,
+    // Default-history cache proof; Go-compatible history leaves it empty and omits it.
+    pub tsrs_canonical_check_signature: String,
 
     // IncrementalProgram info
     pub file_names: Vec<String>,
@@ -632,6 +635,7 @@ impl BuildInfo {
         o.opt_strings("packageJsons", &self.package_jsons);
         o.opt_strings("missingPackageJsons", &self.missing_package_jsons);
         o.opt_strings("contentMapperIdentities", &self.content_mapper_identities);
+        o.str("tsrsCanonicalCheckSignature", &self.tsrs_canonical_check_signature);
         if !self.file_names.is_empty() {
             o.set("fileNames", strings(&self.file_names));
         }
@@ -657,7 +661,15 @@ impl BuildInfo {
 
     // Go `json.Unmarshal(data, &buildInfo)`.
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfo, String> {
+        Self::unmarshal_json_with_canonical_diagnostics(data, true)
+    }
+
+    fn unmarshal_json_with_canonical_diagnostics(data: &Value, canonical_diagnostics: bool) -> Result<BuildInfo, String> {
         let o = as_object(data)?;
+        // tsrs-only: tagged CLI diagnostics cannot be reused by API or Go history, even with a malformed proof.
+        if (!canonical_diagnostics || tsrs_core::compat::go_compatible_history()) && o.contains_key("tsrsCanonicalCheckSignature") {
+            return Err("canonical build info cannot be reused with this diagnostic policy".to_string());
+        }
         Ok(BuildInfo {
             version: get_string(o, "version")?,
             errors: get_bool(o, "errors")?,
@@ -666,6 +678,12 @@ impl BuildInfo {
             package_jsons: get_opt_string_array(o, "packageJsons")?,
             missing_package_jsons: get_opt_string_array(o, "missingPackageJsons")?,
             content_mapper_identities: get_opt_string_array(o, "contentMapperIdentities")?,
+            tsrs_canonical_check_signature: match o.get("tsrsCanonicalCheckSignature") {
+                Some(Value::String(signature)) if signature.strip_prefix("go4-v1:").is_some_and(|hash| {
+                    hash.len() == 32 && hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                }) => signature.clone(),
+                _ => String::new(),
+            },
             file_names: get_string_array(o, "fileNames")?,
             file_infos: get_array(o, "fileInfos", BuildInfoFileInfo::unmarshal_json)?,
             file_infos_non_nil: matches!(o.get("fileInfos"), Some(Value::Array(_))),
@@ -721,6 +739,7 @@ impl BuildInfo {
         w.opt_strings("packageJsons", &self.package_jsons);
         w.opt_strings("missingPackageJsons", &self.missing_package_jsons);
         w.opt_strings("contentMapperIdentities", &self.content_mapper_identities);
+        w.str("tsrsCanonicalCheckSignature", &self.tsrs_canonical_check_signature);
         if !self.file_names.is_empty() {
             w.strings("fileNames", &self.file_names);
         }
@@ -756,6 +775,10 @@ impl BuildInfo {
 
     pub fn unmarshal(text: &str) -> Result<BuildInfo, String> {
         BuildInfo::unmarshal_json(&tsrs_core::json::unmarshal(text)?)
+    }
+
+    pub(crate) fn unmarshal_with_canonical_diagnostics(text: &str, canonical_diagnostics: bool) -> Result<BuildInfo, String> {
+        Self::unmarshal_json_with_canonical_diagnostics(&tsrs_core::json::unmarshal(text)?, canonical_diagnostics)
     }
 
     // buildInfo.go:500
@@ -1240,6 +1263,7 @@ mod tests {
             package_jsons: Some(vec!["../package.json".into()]),
             missing_package_jsons: Some(vec![]),
             content_mapper_identities: None,
+            tsrs_canonical_check_signature: "go4-v1:0123456789abcdef0123456789abcdef".into(),
             file_names: vec!["lib.d.ts".into(), "../src/a.ts".into(), "../src/ü \"q\".ts".into()],
             file_infos: vec![
                 info("v1", "v1", false, ModuleKind::CommonJS),
@@ -1267,6 +1291,7 @@ mod tests {
         for build_info in [full, empty, bare] {
             let expected = tsrs_core::json::marshal(&build_info.marshal_json()).unwrap();
             assert_eq!(build_info.marshal(), expected);
+            assert_eq!(BuildInfo::unmarshal(&expected).unwrap().tsrs_canonical_check_signature, build_info.tsrs_canonical_check_signature);
         }
     }
 }

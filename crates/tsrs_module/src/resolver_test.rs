@@ -88,7 +88,7 @@ fn test_resolution_data_caches() {
 
     resolver.resolve_type_reference_directive("missing", "/src/index.ts", ModuleKind::CommonJS, None);
     let mut paths = new_ordered_map_with_size_hint(1);
-    paths.set("alias/*".to_string(), vec!["./*".to_string()]);
+    paths.set("alias/*".to_string(), Some(vec!["./*".to_string()]));
     resolver.get_parsed_patterns_for_paths(&CompilerOptions { paths: Some(paths), ..Default::default() });
     assert_eq!(resolver.module_resolution_cache.size(), 1);
     assert_eq!(resolver.type_ref_directive_resolution_cache.size(), 1);

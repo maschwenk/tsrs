@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, Node, SourceFile, Symbol};
+use tsrs_checker::Program as _;
 use tsrs_compiler::{Checker, Context, Program as CompilerProgram};
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::{self, Path};
@@ -21,7 +22,11 @@ pub(crate) fn program_to_snapshot(program: &'static CompilerProgram, old_program
             return old_program.snapshot;
         }
     }
-    let snapshot = P::new(Snapshot { hash_with_text, ..Default::default() });
+    let snapshot = P::new(Snapshot {
+        hash_with_text,
+        file_order: program.get_source_files().iter().map(|file| file.path().clone()).collect(),
+        ..Default::default()
+    });
     snapshot.options.set(Some(program.options()));
     snapshot.check_pending.set(program.options().no_check.is_true());
     let mut to = toProgramSnapshot { program, old_program, snapshot, global_file_removed: false };
@@ -200,7 +205,40 @@ impl toProgramSnapshot {
             tsrs_compiler::worker_pool().install(|| files.par_iter().zip(checker_references).map(|(&file, r)| compute(file, r)).collect())
         };
 
-        for (&file, (info, new_references, change)) in files.iter().zip(results) {
+        // Hash the actual virtual slots, not the deduplicated reference sets: an export alias can change edge
+        // multiplicities without changing any source. The same lazily initialized table serves diagnostic reporting.
+        let canonical_diagnostics = self.program.uses_canonical_diagnostics();
+        if canonical_diagnostics {
+            let mut hash = xxhash_rust::xxh3::Xxh3::new();
+            for &file in files {
+                let slot = self.program.tsgo_default_check_slot(file);
+                hash.update(&slot.map_or(u32::MAX, |(checker, _)| checker).to_le_bytes());
+            }
+            let signature = format!("go4-v1:{:032x}", hash.digest128());
+            let _ = self.snapshot.canonical_check_signature.set(signature);
+        }
+        let reporting_policy_changed = old.is_some_and(|old| old.canonical_check_signature.get() != self.snapshot.canonical_check_signature.get());
+        if reporting_policy_changed {
+            self.snapshot.build_info_emit_pending.set(true);
+        }
+        // Source/order/option changes can change a merge's declarations even when its slots remain equal.
+        let refresh_interface_diagnostics = reporting_policy_changed
+            || canonical_diagnostics
+                && old.is_some_and(|old| {
+                    old.file_order != self.snapshot.file_order
+                        || old.options().skip_lib_check != new_options.skip_lib_check
+                        || old.options().skip_default_lib_check != new_options.skip_default_lib_check
+                        || !deleted_files.is_empty()
+                        || results.iter().any(|(_, _, change)| change.add_to_change_set)
+                });
+        for (&file, (info, new_references, mut change)) in files.iter().zip(results) {
+            if refresh_interface_diagnostics
+                && change.semantic_diagnostics.is_some()
+                && !self.program.skip_type_checking(file, false)
+                && contains_interface_declaration(file.as_node())
+            {
+                change.semantic_diagnostics = None;
+            }
             if let Some(new_references) = new_references {
                 self.snapshot.referenced_map.store_shared_references(file.path().clone(), new_references);
             }
@@ -307,6 +345,10 @@ impl toProgramSnapshot {
             }
         }
     }
+}
+
+fn contains_interface_declaration(node: P<Node>) -> bool {
+    ast::is_interface_declaration(node) || node.for_each_child(&mut contains_interface_declaration)
 }
 
 // programtosnapshot.go:235

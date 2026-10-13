@@ -1,0 +1,1 @@
+{"compilerOptions":{"strict":true,"noEmit":true,"target":"es2020","types":[],"skipDefaultLibCheck":true},"files":["base.ts","a.ts","b.ts","c.ts","d.ts"]}

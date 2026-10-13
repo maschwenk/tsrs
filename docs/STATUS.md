@@ -343,8 +343,11 @@ thieves keep stealing from one queue (#171, instructions -3 to -15% at 16-32 che
 
 Diagnostics: tsgo runs the merged-interface checks (TS2320, TS2430, index constraints) once per checker, so a merged
 interface declared in several files reported in files that depended on which files shared a checker. By default tsrs
-now runs them at the first declaration of the symbol in each file (#165, notes/fix-history-dependent-diagnostics.md);
-`--checkerAssignment go` keeps Go's placement for byte-identity.
+runs them at the first declaration of the symbol in each file (#165), and reports TS2320 / TS2430 only at the
+declarations where pinned tsgo at its default four checkers does, whatever tsrs's own checker count and assignment
+(notes/fix-history-dependent-diagnostics.md). tsgo at another `--checkers` count can differ; `--checkerAssignment go`
+keeps Go's placement for byte-identity there. Project/API pools retain per-file reporting in default mode. Incremental
+builds refresh interface-file diagnostics when program inputs or file order change, since those can move the report sites.
 
 Front end and start-up: the config is parsed on the worker pool and a CLI run creates no rayon global pool (#156, -64
 threads and -50 MB peak on vscode); checkers are created while files are assigned (#162) and program diagnostics are

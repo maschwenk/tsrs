@@ -749,7 +749,7 @@ impl NodeBuilderImpl {
             name = format!("__#private{}", name);
         }
 
-        Some(self.create_property_name_node_for_identifier_or_literal(c, &name, single_quote, string_named, is_method, symbol))
+        Some(self.mark_symbol_name_literal(self.create_property_name_node_for_identifier_or_literal(c, &name, single_quote, string_named, is_method, symbol)))
     }
 
     // See getNameForSymbolFromNameType for a stringy equivalent
@@ -1700,9 +1700,11 @@ impl NodeBuilderImpl {
                     // children instead.
                     let import_type = parent_name.as_import_type_node();
                     let parent_name = self.f.new_import_type_node(true, import_type.argument, import_type.attributes, import_type.qualifier, parent_name.type_argument_list());
-                    return Some(self.f.new_indexed_access_type_node(parent_name, self.f.new_literal_type_node(self.new_string_literal(c, member_name))));
+                    let lit = self.mark_symbol_name_literal(self.new_string_literal(c, member_name));
+                    return Some(self.f.new_indexed_access_type_node(parent_name, self.f.new_literal_type_node(lit)));
                 } else if ast::is_type_reference_node(parent_name) {
-                    return Some(self.f.new_indexed_access_type_node(self.f.new_type_query_node(parent_name.as_type_reference_node().type_name, None), self.f.new_literal_type_node(self.new_string_literal(c, member_name))));
+                    let lit = self.mark_symbol_name_literal(self.new_string_literal(c, member_name));
+                    return Some(self.f.new_indexed_access_type_node(self.f.new_type_query_node(parent_name.as_type_reference_node().type_name, None), self.f.new_literal_type_node(lit)));
                 } else {
                     panic!("Unhandled type node kind returned from `symbolToTypeNode`.");
                 }
@@ -1988,6 +1990,16 @@ impl NodeBuilderImpl {
             flags |= TokenFlags::SingleQuote;
         }
         let node = self.f.new_string_literal(self.f.alloc_text(text), flags);
+        node
+    }
+
+    // Port-only: a string literal holding a symbol name. Go's internal-name prefix is the invalid byte 0xFE, which its
+    // printer escapes as `\uFFFD`; the port's U+007F stand-in is user text elsewhere, so mark the literals where Go
+    // would print that byte. Internal names have a non-empty rest: a lone U+007F is a user name (`"\u007f" = 127`).
+    pub(crate) fn mark_symbol_name_literal(&self, node: P<Node>) -> P<Node> {
+        if ast::is_string_literal(node) && node.text().len() > 1 && node.text().as_bytes()[0] == InternalSymbolNamePrefixByte {
+            self.e.add_emit_flags(node, EmitFlags::InternalSymbolName);
+        }
         node
     }
 }

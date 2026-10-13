@@ -220,6 +220,7 @@ impl Checker {
             self.check_source_element_worker(node);
             self.current_node = save_current_node;
             self.within_unreachable_code = save_within_unreachable_code;
+            self.end_instantiation_count();
         }
         false
     }

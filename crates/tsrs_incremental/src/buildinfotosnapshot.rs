@@ -49,6 +49,10 @@ pub(crate) fn build_info_to_snapshot(build_info: &BuildInfo, config: &ParsedComm
         .collect();
     to.set_compiler_options();
     to.set_file_info_and_emit_signatures();
+    to.snapshot.file_order = to.file_paths[..build_info.file_infos.len()].to_vec();
+    if !build_info.tsrs_canonical_check_signature.is_empty() {
+        let _ = to.snapshot.canonical_check_signature.set(build_info.tsrs_canonical_check_signature.clone());
+    }
     to.set_referenced_map();
     to.set_change_file_set();
     to.set_semantic_diagnostics();

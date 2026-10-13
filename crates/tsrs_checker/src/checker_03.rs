@@ -948,11 +948,12 @@ impl Checker {
         if self.is_interface_check_site(symbol, node) {
             let t = self.get_declared_type_of_symbol(symbol);
             let type_with_this = self.get_type_with_this_argument(t, None, false);
+            let error_node = if self.reports_interface_check_errors(symbol, node, t) { node.name() } else { None };
             // run subsequent checks only if first set succeeded
-            if self.check_inherited_properties_are_identical(t, node.name().unwrap()) {
+            if self.check_inherited_properties_are_identical(t, error_node) {
                 for &base_type in self.get_base_types(t) {
                     let base_with_this = self.get_type_with_this_argument(base_type, t.as_interface_type().this_type.get(), false);
-                    self.check_type_assignable_to(type_with_this, base_with_this, node.name(), Some(&diagnostics::Interface_0_incorrectly_extends_interface_1));
+                    self.check_type_assignable_to(type_with_this, base_with_this, error_node, Some(&diagnostics::Interface_0_incorrectly_extends_interface_1));
                 }
                 self.check_index_constraints(t, symbol /*isStaticIndex*/, false);
             }
@@ -972,12 +973,12 @@ impl Checker {
         self.register_for_unused_identifiers_check(node);
     }
 
-    // Whether `node` runs the checks of its merged interface that report at the declaration being checked (TS2320,
-    // TS2430). Go runs them once per checker, at whichever declaration that checker visits first
-    // (`interfaceChecked`), so with declarations in several files the errors depend on which files share a checker and
-    // in what order it visits them (notes/fix-history-dependent-diagnostics.md). By default they run at the first
-    // interface declaration of the symbol in each file: every file that declares the interface reports, whatever
-    // checked it before. `go_compatible_history()` keeps Go's flag.
+    // Whether `node` runs the checks of its merged interface (TS2320, TS2430, index constraints). Go runs them once per
+    // checker, at whichever declaration that checker visits first (`interfaceChecked`), so with declarations in several
+    // files the errors depend on which files share a checker and in what order it visits them
+    // (notes/fix-history-dependent-diagnostics.md). By default they run at the first interface declaration of the symbol
+    // in each file, so each file gets the index-constraint errors at its own declarations whatever checked it before;
+    // `reports_interface_check_errors` decides where TS2320 and TS2430 go. `go_compatible_history()` keeps Go's flag.
     fn is_interface_check_site(&mut self, symbol: P<Symbol>, node: P<Node>) -> bool {
         if tsrs_core::compat::go_compatible_history() {
             let links = self.declared_type_links.get(symbol);
@@ -991,8 +992,35 @@ impl Checker {
         symbol.declarations().iter().copied().find(|&d| is_interface_declaration(d) && get_source_file_of_node(d) == file) == Some(node)
     }
 
+    // Whether the checks running at `node` report TS2320 and TS2430, which go to the declaration being checked. Under
+    // Go's flag, always. By default, where tsgo's compiler at its default checker count reports them: at `node` only if
+    // no earlier file of the program that tsgo type checks on the same checker declares the interface
+    // (`Program::tsgo_default_check_slot`). That depends on the program alone, not on tsrs's checkers.
+    fn reports_interface_check_errors(&mut self, symbol: P<Symbol>, node: P<Node>, t: P<Type>) -> bool {
+        if tsrs_core::compat::go_compatible_history() || self.get_base_types(t).is_empty() {
+            return true;
+        }
+        let file = get_source_file_of_node(node).unwrap();
+        let mut other_files = symbol
+            .declarations()
+            .iter()
+            .filter(|&&d| is_interface_declaration(d))
+            .map(|&d| get_source_file_of_node(d).unwrap())
+            .filter(|&f| f != file)
+            .peekable();
+        // Declared in this file only: avoid building the program-wide slot map.
+        if other_files.peek().is_none() {
+            return true;
+        }
+        let Some((checker, index)) = self.program.tsgo_default_check_slot(file) else {
+            return true;
+        };
+        !other_files.any(|other| self.program.tsgo_default_check_slot(other).is_some_and(|(c, i)| c == checker && i < index))
+    }
+
     // checker.go:5127
-    pub(crate) fn check_inherited_properties_are_identical(&mut self, t: P<Type>, type_node: P<Node>) -> bool {
+    // `type_node` is None where the checks run without reporting (`reports_interface_check_errors`).
+    pub(crate) fn check_inherited_properties_are_identical(&mut self, t: P<Type>, type_node: Option<P<Node>>) -> bool {
         let base_types = self.get_base_types(t);
         if base_types.len() < 2 {
             return true;
@@ -1021,6 +1049,7 @@ impl Checker {
                         let is_inherited_property = existing_containing_type != t;
                         if is_inherited_property && !self.is_property_identical_to(existing_prop, prop) {
                             identical = false;
+                            let Some(type_node) = type_node else { continue };
                             let type_name1 = self.type_to_string(existing_containing_type, None);
                             let type_name2 = self.type_to_string(base, None);
                             let a0 = self.symbol_to_string(prop);

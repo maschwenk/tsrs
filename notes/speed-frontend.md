@@ -33,7 +33,11 @@ Outside checking: 1.90 s -> 1.00 s. Diagnostics collection, sorting and printing
    augmentations, type reference directives and triple-slash references (Go does all of a task's load in parallel);
    the sequential load consumes the results in the same order (the first module-resolution error is still the first
    in load order). Resolution results do not depend on order (resolver caches keyed by name, directory, mode,
-   redirect); with `--traceResolution` resolutions stay sequential because traces report cache hits. Root file
+   redirect). With `--traceResolution` none of this runs: traces report cache hits ("Found 'package.json'" for the
+   first read, "exists according to earlier cached lookups" after), and the prefetch's metadata lookups fill the
+   package.json cache too, so a traced load runs Go's single-threaded last-queued-first order sequentially and prints
+   what `tsgo --singleThreaded` prints, at any checker count. Multi-threaded tsgo's cache hits depend on goroutine
+   timing (five runs on colinhacks/zod's packages/bench printed five different traces), so no order matches it. Root file
    lookups run in parallel. Parse time 2.65 -> 0.98 s on a loaded machine.
 3. The include glob reads the directory listings of every directory it will enter in parallel first; the walk, its
    order and its symlink-cycle check are unchanged. Config 0.155 -> 0.117 s.

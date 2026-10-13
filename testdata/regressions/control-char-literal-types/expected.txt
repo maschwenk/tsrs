@@ -1,0 +1,8 @@
+enums.ts(3,7): error TS2322: Type '(typeof Keys)[""]' is not assignable to type '"z"'.
+enums.ts(5,7): error TS2322: Type '(typeof Open)[""]' is not assignable to type '"z"'.
+enums.ts(7,7): error TS2322: Type '{ "": { inner: 1; }; }' is not assignable to type '"z"'.
+literals.ts(3,7): error TS2322: Type '"\x001" | "x" | "\u0085\u2028" | "é" | "�" | "😀" | "😀"' is not assignable to type '"z"'.
+  Type '"\x001"' is not assignable to type '"z"'.
+literals.ts(6,7): error TS2322: Type '{ "b": 2; "\uD83D\uDE00": 3; }' is not assignable to type '"z"'.
+parser.ts(23,8): error TS2345: Argument of type 'readonly ["\b"] | readonly ["\b\b\b"] | readonly ["\b\u001B[A\b"] | readonly ["\ttest"] | readonly ["\rtest"] | readonly ["\u001B[A\u001B[B"] | readonly ["\u001B[A"] | readonly ["abc"] | readonly ["abc"] | readonly ["abcd"] | readonly [""] | readonly ["\b"] | readonly ["\u001B[A"] | readonly [""]' is not assignable to parameter of type 'string[]'.
+  The type 'readonly ["\b"]' is 'readonly' and cannot be assigned to the mutable type 'string[]'.

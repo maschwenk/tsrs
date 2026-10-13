@@ -114,6 +114,13 @@ impl tsrs_checker::Program for Program {
     fn as_module_specifier_generation_host(&self) -> &dyn tsrs_modulespecifiers::ModuleSpecifierGenerationHost {
         self
     }
+
+    fn tsgo_default_check_slot(&self, file: P<SourceFile>) -> Option<(u32, u32)> {
+        if !self.uses_canonical_diagnostics() {
+            return None;
+        }
+        self.tsgo_check_slots.get_or_init(|| crate::checkerpool::tsgo_default_check_slots(self)).get(&file).copied()
+    }
 }
 
 // Go `*compiler.Program` satisfies `modulespecifiers.ModuleSpecifierGenerationHost` structurally (its supertrait

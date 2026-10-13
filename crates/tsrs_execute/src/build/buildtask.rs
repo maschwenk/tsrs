@@ -369,7 +369,9 @@ impl BuildTask {
         }
         compile_times.build_info_read_time = sys.now() - build_info_read_start;
         let parse_start = sys.now();
-        let program = new_program(ProgramOptions::new(self.resolved(), compiler_host));
+        let mut program_options = ProgramOptions::new(self.resolved(), compiler_host);
+        program_options.canonical_diagnostics = orchestrator.uses_canonical_diagnostics();
+        let program = new_program(program_options);
         compile_times.parse_time = sys.now() - parse_start;
         let changes_compute_start = sys.now();
         let incremental_program = tsrs_incremental::new_program(
@@ -1024,7 +1026,12 @@ impl BuildTask {
                 return (entry.build_info.clone(), entry.m_time);
             }
         }
-        let build_info = tsrs_incremental::new_build_info_reader(Arc::clone(&orchestrator.host().host)).read_build_info(&self.resolved()).map(Arc::new);
+        let build_info = tsrs_incremental::new_build_info_reader_with_canonical_diagnostics(
+            Arc::clone(&orchestrator.host().host),
+            orchestrator.uses_canonical_diagnostics(),
+        )
+        .read_build_info(&self.resolved())
+        .map(Arc::new);
         let m_time = if build_info.is_some() { orchestrator.host().get_m_time(build_info_file_name) } else { None };
         *entry = Some(buildInfoEntry { build_info: build_info.clone(), path, m_time, dts_time: None });
         (build_info, m_time)
