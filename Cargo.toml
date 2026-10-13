@@ -10,9 +10,14 @@ license = "Apache-2.0"
 
 # The microsoft/TypeScript commit this port follows. Read by crates/tsrs_execute/build.rs (`tsrs --version`), by
 # npm/build.mjs (npm version = "<workspace version>-ts<version>") and by CI (conformance testdata checkout).
+# `nightly` is the npm `typescript` nightly built from `commit` (its package.json `gitHead` is `commit`, or a later
+# commit that changes nothing under tsc/; 7.1.0-dev.20260930.4 adds a CI-only one). Release builds stamp it
+# as TypeScript's version (TSRS_TS_VERSION, crates/tsrs_core/src/version.rs), as the nightly's own build does, so the
+# tsbuildinfo `version`, `typesVersions` matching and `--version` agree with that tsgo; the release checks both.
 [workspace.metadata.typescript]
 version = "7.1.0-dev.20260929"
 commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"
+nightly = "7.1.0-dev.20260930.4"
 
 [workspace.dependencies]
 rustc-hash = "2"

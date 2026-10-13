@@ -65,6 +65,12 @@ non-generic mapped types; no observable difference anywhere below).
   map stays alive in the arena for callers that still hold it. Only `lazy_mapped_tables` still holds `Rc`s.
 - Go iterates `declaredMembers` (a map: random order) in `prepareLazyMembers`, `resolveLazyMembers` and
   `everyLazyProperty`; tsrs's `SymbolTable` is insertion-ordered, so these are deterministic here.
+- `getLazyMappedTable` (#64526) resolves the template type before it checks the modifiers type and before the table
+  exists, so a template that reaches the same mapped type again (joi's `SchemaLike` = `Exclude<... | SchemaMap<T>,
+  any[]> | object`, `SchemaMap<T> = { [K in keyof T]?: SchemaLike | ... }`) recursed until TS5115 (modifiers `any`,
+  no table) or TS2456 (object modifiers), where `resolveMappedTypeMembers` sees an empty type and tsgo-ref reports
+  nothing. tsrs resolves the template only in `get_lazy_mapped_type_index_infos`, under its `resolving` guard
+  (testdata/regressions/lazy-mapped-template-cycle; the same change makes tsgo-pr-b match tsgo-ref there).
 - `lazyMappedTable.members` (a SymbolTable holding nil entries for "being created / no member") is a
   `FxHashMap<String, Option<P<Symbol>>>`; `getLazyMappedTypeMember`'s `(member, ok)` is `Option<Option<P<Symbol>>>`.
 

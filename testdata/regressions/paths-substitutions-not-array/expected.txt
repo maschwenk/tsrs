@@ -1,0 +1,5 @@
+tsconfig.json(5,20): error TS5063: Substitutions for pattern '@string/*' should be an array.
+tsconfig.json(6,18): error TS5063: Substitutions for pattern '@null/*' should be an array.
+tsconfig.json(7,20): error TS5063: Substitutions for pattern '@number/*' should be an array.
+tsconfig.json(8,19): error TS5066: Substitutions for pattern '@empty/*' shouldn't be an empty array.
+tsconfig.json(9,21): error TS5066: Substitutions for pattern '@numbers/*' shouldn't be an empty array.

@@ -151,7 +151,7 @@ fn run(scenario: &Json) -> Vec<(String, String, String)> {
         let mut paths = new_ordered_map_with_size_hint(entries.len());
         paths.extend(entries.iter().map(|entry| {
             let Json::Array(pair) = entry else { panic!("bad paths entry") };
-            (str_of(Some(&pair[0])), strings_of(Some(&pair[1])).unwrap_or_default())
+            (str_of(Some(&pair[0])), Some(strings_of(Some(&pair[1])).unwrap_or_default()))
         }));
         options.paths = Some(paths);
     }

@@ -1787,7 +1787,7 @@ fn test_extended_config_config_dir_paths_are_not_cached() {
     parse_config("/packages/a/tsconfig.json");
     let parsed = parse_config("/packages/b/tsconfig.json");
     let paths = parsed.compiler_options().unwrap().paths.clone().unwrap();
-    assert_eq!(paths.get("@pkg/*").cloned().unwrap_or_default(), vec!["/packages/b/src/*".to_string()]);
+    assert_eq!(paths.get("@pkg/*").cloned().flatten().unwrap_or_default(), vec!["/packages/b/src/*".to_string()]);
 }
 
 #[test]
