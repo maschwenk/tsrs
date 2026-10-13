@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 use tsrs_ast::{self as ast, Diagnostic, DiagnosticExt, Node, SourceFile, Symbol};
+use tsrs_checker::Program as _;
 use tsrs_compiler::{Checker, Context, Program as CompilerProgram};
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::{self, Path};
@@ -205,8 +206,9 @@ impl toProgramSnapshot {
         };
 
         // Canonical TS2320/TS2430 placement depends on the whole program's weights, imports, visit order and checked
-        // files. An unrelated module can change an unchanged interface's reporting site. Invalidate both cached
-        // errors and cached absence in interface files, leaving other semantic diagnostics and emit caches reusable.
+        // files. Reference sets omit repeated import edges, so even unchanged files and sets do not prove the
+        // slots are unchanged. Build info has no old slots; only a retained compiler program can prove equality.
+        // Invalidate both cached errors and absence in interface files, leaving other semantic and emit caches reusable.
         let refresh_interface_diagnostics = !tsrs_core::compat::go_compatible_history()
             && old.is_some_and(|old| {
                 old.file_order != self.snapshot.file_order
@@ -214,6 +216,13 @@ impl toProgramSnapshot {
                     || old.options().skip_default_lib_check != new_options.skip_default_lib_check
                     || !deleted_files.is_empty()
                     || results.iter().any(|(_, _, change)| change.add_to_change_set)
+                    || self.old_program.and_then(|old| old.program).is_none_or(|old_program| {
+                        files.iter().any(|&file| {
+                            old_program.get_source_file_by_path(file.path()).is_none_or(|old_file| {
+                                self.program.tsgo_default_check_slot(file) != old_program.tsgo_default_check_slot(old_file)
+                            })
+                        })
+                    })
             });
         for (&file, (info, new_references, mut change)) in files.iter().zip(results) {
             if refresh_interface_diagnostics
@@ -222,6 +231,7 @@ impl toProgramSnapshot {
                 && contains_interface_declaration(file.as_node())
             {
                 change.semantic_diagnostics = None;
+                self.snapshot.interface_diagnostics_refreshed.set(true);
             }
             if let Some(new_references) = new_references {
                 self.snapshot.referenced_map.store_shared_references(file.path().clone(), new_references);

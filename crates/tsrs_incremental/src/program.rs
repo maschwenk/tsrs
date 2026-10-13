@@ -290,6 +290,15 @@ impl Program {
             }
         };
         let text = tsrs_core::phases::time("BuildInfo: marshal", || build_info.marshal());
+        // A conservative interface recheck can leave the entire build info unchanged. Preserve its timestamp;
+        // custom writers still receive the emit, and Go-compatible history never takes this refresh path.
+        if self.snapshot.interface_diagnostics_refreshed.get()
+            && options.write_file.is_none()
+            && program.host().fs().read_file(&build_info_file_name).is_some_and(|previous| previous == text)
+        {
+            self.snapshot.build_info_emit_pending.set(false);
+            return None;
+        }
         let write_start = std::time::Instant::now();
         let err = match options.write_file {
             Some(write_file) => {

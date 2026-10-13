@@ -36,7 +36,7 @@ Updating this table (../AGENTS.md says when; commands and paths below are relati
 | JavaScript emit | yes | all of tsgo's transforms; 13,392 `.js` baselines pass, 0 fail |
 | Declaration emit (`.d.ts`) | yes | part of the `.js` baselines |
 | Source maps, declaration maps | yes | 149 `.js.map` and 156 `.sourcemap.txt` baselines pass, 0 fail |
-| Incremental builds (`.tsbuildinfo`) | yes | identical tsbuildinfo format; default merged-interface report sites refresh after program changes ([details](../notes/fix-history-dependent-diagnostics.md)) |
+| Incremental builds (`.tsbuildinfo`) | yes | identical tsbuildinfo format; default merged-interface report sites refresh after program or resolution changes; loaded builds recheck interface files ([details](../notes/fix-history-dependent-diagnostics.md)) |
 | `--build` (project references) | yes | 189 of 192 `tsbuild` and 191 of 223 `tsc` scenario baselines pass; the failures are CLI commands tsrs doesn't port (`--help`, `--init`, …). Uses more memory than tsgo on large graphs |
 | Multi-package emit | yes | Run on a large private monorepo |
 | Content mappers (`.vue`, `.svelte`, `.astro` via `contentMappers`) | CLI and `-b`: yes. Language server: no | all 9 content-mapper scenario baselines identical; the 15 content-mapper conformance cases are not run yet ([experiment note](../notes/contentmappers.md)) |

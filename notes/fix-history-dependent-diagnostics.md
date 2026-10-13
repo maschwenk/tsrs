@@ -126,9 +126,25 @@ unrelated module first in the root list (100 exported numeric constants) moves `
 The cached build used to keep the TS2320 in `b.ts`, while a clean build only reported `a.ts`. Moving the same module
 to the end of the root list reproduced the reverse error: a cached build omitted `b.ts`. Default mode now refreshes
 semantic diagnostics of files containing interfaces when a program file, reference set, file order or lib-check
-option changes. This also invalidates cached absence when a report site reappears. Other files' semantic caches and
-emit caches keep the existing reuse rules. File order is recovered from the existing build-info file table; the
-serialized format is unchanged. Go-compatible history keeps the existing incremental reuse rules.
+option changes. A package export alias can also change the import multigraph from `[a,b,a]` to `[a,b,b]` while all
+those inputs stay the same. Reuse now additionally requires equal virtual check slots in the retained old and new
+compiler programs. A snapshot loaded from build info has no old slots, so checked interface files are rechecked,
+including on an unchanged build. This also invalidates cached absence when a report site reappears. Other files'
+semantic caches and emit caches keep the existing reuse rules. File order is recovered from the existing build-info
+file table; the serialized format is unchanged. Go-compatible history keeps the existing incremental reuse rules.
+If the refresh produces identical build-info bytes, the default filesystem writer preserves the old timestamp;
+custom emit writers still receive the emit.
+
+The loaded-build fallback has a measured cost. On local macOS arm64 `--release` builds, five unchanged warm runs
+per binary and mode, alternating before/after order after one cold run each, matched full ordered diagnostics and
+kept build-info bytes stable for each binary. A synthetic 257-file project with 16,384 derived interfaces took 14.3 -> 24.1 ms by
+default (0.670 -> 1.643 billion instructions, 53.6 -> 92.9 MiB peak RSS); single-threaded, 32.1 -> 76.7 ms
+(0.598 -> 1.540 billion instructions, 45.3 -> 79.5 MiB). Stagehand at f261c38b, 5,787 files, took 136 -> 402 ms
+by default (9.14 -> 26.50 billion instructions, 424 -> 879 MiB). Go-compatible four-checker runs were within local
+noise: Stagehand 132 -> 133 ms, 8.97 -> 8.98 billion instructions, 410 -> 410 MiB. These are bounded local
+measurements with a warm filesystem, not release/CI performance guarantees. A new in-memory program with unchanged
+slots still reuses its cached interface diagnostics; only loaded snapshots lack the old placement evidence.
+Classifying only the new program's merges cannot establish the old cache's dependencies after a resolution change.
 
 - supabase (cb4307f1) and stagehand (f261c38b), root `tsconfig.json`, default mode: identical to tsgo.
 - nuxt (85b8d54f, the case above): tsgo-ref prints the four errors (both `ImportMeta` TS2320) at its default and at 32

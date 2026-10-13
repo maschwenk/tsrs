@@ -391,6 +391,7 @@ pub struct Snapshot {
 
     // Program order, also recoverable from build info's fileNames/fileInfos, for history-dependent diagnostics.
     pub(crate) file_order: Vec<Path>,
+    pub(crate) interface_diagnostics_refreshed: Cell<bool>,
     // true if build info emit is pending
     pub(crate) build_info_emit_pending: Cell<bool>,
     pub(crate) has_errors_from_old_state: Cell<Tristate>,

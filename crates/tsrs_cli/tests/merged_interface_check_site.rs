@@ -72,6 +72,54 @@ fn incremental_merged_interface_sites_match_clean_builds() {
     }
 }
 
+// Package exports can change the resolved import multigraph without changing source text, root order or the
+// deduplicated reference sets in build info. Cached TS2320 presence and absence must follow the new report slots.
+#[test]
+fn incremental_merged_interface_sites_follow_package_export_aliases() {
+    for mode in [&["--singleThreaded"][..], &["--checkers", "4"][..], &["--checkers", "8", "--checkerAssignment", "random:3"][..]] {
+        let dir = std::env::temp_dir().join(format!("tsrs-merged-exports-{}-{}", std::process::id(), mode.join("-")));
+        std::fs::create_dir_all(dir.join("node_modules/p")).unwrap();
+        let files = ["node_modules/p/a.ts", "node_modules/p/b.ts", "c.ts", "d.ts", "e.ts", "f.ts", "g.ts", "h.ts"];
+        for (i, name) in files.iter().enumerate() {
+            let imports = if i == 4 { "import 'p/a';\nimport 'p/b';\nimport 'p/alias';\n" } else { "import 'missing/a';\nimport 'missing/b';\nimport 'missing/c';\n" };
+            let (body, nodes) = match i {
+                0 => ("declare global { interface Array<T> { length: number; [n: number]: T } interface Boolean {} interface CallableFunction {} interface Function {} interface IArguments {} interface NewableFunction {} interface Number {} interface Object {} interface RegExp {} interface String {} interface Left { kind: 'l' } interface Right { kind: 'r' } interface M extends Left, Right {} }\n", 64),
+                4 => ("declare global { interface M { extra?: number } }\n", 18),
+                _ => ("", 8),
+            };
+            let mut text = format!("{imports}{body}");
+            // Equal node-plus-text weights and import counts leave only the resolved edge multiplicities different.
+            let padding = (100 - nodes) * 100 - text.len() - 4;
+            text.push_str(&format!("/*{}*/", "x".repeat(padding)));
+            std::fs::write(dir.join(name), text).unwrap();
+        }
+        std::fs::write(dir.join("tsconfig.json"), r#"{"compilerOptions":{"noLib":true,"noEmit":true,"incremental":true,"module":"nodenext"},"files":["node_modules/p/a.ts","node_modules/p/b.ts","c.ts","d.ts","e.ts","f.ts","g.ts","h.ts"]}"#).unwrap();
+        let package = |target: &str| {
+            std::fs::write(dir.join("node_modules/p/package.json"), format!(r#"{{"name":"p","version":"1.0.0","type":"module","exports":{{"./a":"./a.ts","./b":"./b.ts","./alias":"./{target}.ts"}}}}"#)).unwrap();
+        };
+        let clean = || {
+            std::fs::remove_file(dir.join("tsconfig.tsbuildinfo")).unwrap();
+            run_in(&dir, mode)
+        };
+        package("a");
+        let initial = run_in(&dir, mode);
+        assert_eq!(initial.lines().filter(|line| line.contains("TS2320")).count(), 1);
+        let build_info = std::fs::read(dir.join("tsconfig.tsbuildinfo")).unwrap();
+        let modified = std::fs::metadata(dir.join("tsconfig.tsbuildinfo")).unwrap().modified().unwrap();
+        assert_eq!(run_in(&dir, mode), initial, "unchanged build: {mode:?}");
+        assert_eq!(std::fs::read(dir.join("tsconfig.tsbuildinfo")).unwrap(), build_info, "unchanged build info: {mode:?}");
+        assert_eq!(std::fs::metadata(dir.join("tsconfig.tsbuildinfo")).unwrap().modified().unwrap(), modified, "unchanged build info timestamp: {mode:?}");
+        package("b");
+        let changed = run_in(&dir, mode);
+        let fresh = clean();
+        assert_eq!(fresh.lines().filter(|line| line.contains("TS2320")).count(), 2);
+        assert_eq!(changed, fresh, "alias a -> b must discard cached absence: {mode:?}");
+        package("a");
+        assert_eq!(run_in(&dir, mode), clean(), "alias b -> a must discard cached error: {mode:?}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+}
+
 #[test]
 fn merged_interface_reports_where_tsgo_does() {
     for name in ["merged-interface-check-site", "merged-interface-extends-site"] {
