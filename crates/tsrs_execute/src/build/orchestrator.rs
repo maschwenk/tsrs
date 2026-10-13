@@ -888,7 +888,6 @@ impl Orchestrator {
         }
         let fs = CompilerHost::fs(self.host());
         let names = resolved.file_names_by_path();
-        #[expect(clippy::iter_over_hash_type, reason = "only asks whether any path qualifies")]
         let cwd = self.opts.sys.get_current_directory();
         let may_change = changed_paths.keys().any(|p| {
             let listed = names.get(&self.to_path(p));
@@ -1065,7 +1064,6 @@ impl Orchestrator {
 
     fn invalidate_realpaths(&self, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>, overflow: bool) {
         let fs = CompilerHost::fs(self.host());
-        #[expect(clippy::iter_over_hash_type, reason = "only asks whether any path qualifies")]
         let structural = overflow
             || changed_paths.keys().any(|p| std::fs::symlink_metadata(p).map_or(true, |m| m.file_type().is_symlink()) || fs.directory_exists(p));
         if structural {
