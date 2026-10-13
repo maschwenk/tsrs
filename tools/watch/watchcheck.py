@@ -1,6 +1,7 @@
 # usage: watchcheck.py <compiler> <projdir>
 # Applies a sequence of edits under a running `--watch`, and after each cycle compares the diagnostics the watch
 # printed with a fresh `--noEmit` build of the same tree. Restores every touched file at the end.
+# BUILD=<config> runs `-b <config> --watch` instead (the fresh build uses `-p <config>`).
 import os, queue, signal, subprocess, sys, threading, time
 
 comp, proj = sys.argv[1], sys.argv[2]
@@ -30,7 +31,9 @@ EDITS = [
     ("export type restore", STRINGS, lambda s: s.replace("export function isFalsyOrWhitespace(str: string | undefined): number {", "export function isFalsyOrWhitespace(str: string | undefined): boolean {", 1)),
 ]
 
-p = subprocess.Popen([comp, "--watch", "-p", ".", "--pretty", "false"], cwd=proj, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+BUILD = os.environ.get("BUILD")
+MODE = ["-b", BUILD, "--watch"] if BUILD else ["--watch", "-p", "."]
+p = subprocess.Popen([comp, *MODE, "--pretty", "false"], cwd=proj, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 q = queue.Queue()
 threading.Thread(target=lambda: [q.put(l) for l in p.stdout], daemon=True).start()
 
@@ -53,7 +56,7 @@ def next_cycle(timeout=300):
         lines.append(l.rstrip("\n").replace("\x1b[2J\x1b[3J\x1b[H", ""))
 
 def fresh():
-    r = subprocess.run([comp, "-p", ".", "--pretty", "false", "--noEmit"], cwd=proj, capture_output=True, text=True)
+    r = subprocess.run([comp, "-p", BUILD or ".", "--pretty", "false", "--noEmit"], cwd=proj, capture_output=True, text=True)
     return [l for l in r.stdout.split("\n")]
 
 def normalize(lines):
