@@ -576,9 +576,33 @@ const CENSUS_GAP: usize = if cfg!(feature = "alloc-profile") { CHUNK_ALIGN } els
 
 thread_local! {
     /// The thread's current slab and its bump position (upwards).
-    static SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
+    static SLAB: CurrentSlab = const { CurrentSlab(Cell::new((std::ptr::null(), 0))) };
     /// The same for large slabs (`LARGE_SLAB_SIZE`).
-    static LARGE_SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
+    static LARGE_SLAB: CurrentSlab = const { CurrentSlab(Cell::new((std::ptr::null(), 0))) };
+}
+
+/// A thread's current slab, which holds one of the slab's references until the thread exits. Without the release,
+/// every thread that ended kept its current slab: a watch session's checker and worker threads are made per build
+/// and end with it, and switching branches on vscode kept about 0.9 GB of the arena address range per round trip.
+struct CurrentSlab(Cell<(*const Slab, usize)>);
+
+impl CurrentSlab {
+    fn get(&self) -> (*const Slab, usize) {
+        self.0.get()
+    }
+
+    fn set(&self, v: (*const Slab, usize)) {
+        self.0.set(v);
+    }
+}
+
+impl Drop for CurrentSlab {
+    fn drop(&mut self) {
+        let (slab, _) = self.0.get();
+        if !slab.is_null() {
+            slab_release(slab);
+        }
+    }
 }
 
 /// Released standard-size slabs kept for reuse instead of going back to the system (compressed pointers: a
@@ -606,11 +630,12 @@ fn new_slab(size: usize, live: usize) -> *const Slab {
 fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
     let (current, slab_size) = if large { (&LARGE_SLAB, LARGE_SLAB_SIZE) } else { (&SLAB, SLAB_SIZE) };
     if size > slab_size / 4 {
-        let slab = new_slab(size, 1);
-        // SAFETY: just made.
-        return (unsafe { (*slab).base }, slab);
+        return own_slab(size);
     }
-    let (mut cur, mut bump) = current.with(|s| s.get());
+    // A thread-local destructor that allocates in a region after the thread's slab was released gets a slab of its own.
+    let Ok((mut cur, mut bump)) = current.try_with(CurrentSlab::get) else {
+        return own_slab(size);
+    };
     // SAFETY: the current slab is kept alive by the thread's reference.
     if cur.is_null() || bump + size + CENSUS_GAP > unsafe { (*cur).base.addr() + (*cur).size } {
         if !cur.is_null() {
@@ -627,18 +652,27 @@ fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
     (slab.base.with_addr(bump), cur)
 }
 
+/// A slab for one chunk.
+fn own_slab(size: usize) -> (*mut u8, *const Slab) {
+    let slab = new_slab(size, 1);
+    // SAFETY: just made.
+    (unsafe { (*slab).base }, slab)
+}
+
 /// Moves the thread's slab position back from `end` to `new_end` if the chunk ending at `end` was its last carve.
 fn slab_trim(slab: *const Slab, end: usize, new_end: usize) -> bool {
     [&SLAB, &LARGE_SLAB].into_iter().any(|current| {
-        current.with(|s| {
-            let (cur, bump) = s.get();
-            if cur == slab && bump == end + CENSUS_GAP {
-                s.set((cur, new_end + CENSUS_GAP));
-                true
-            } else {
-                false
-            }
-        })
+        current
+            .try_with(|s| {
+                let (cur, bump) = s.get();
+                if cur == slab && bump == end + CENSUS_GAP {
+                    s.set((cur, new_end + CENSUS_GAP));
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false)
     })
 }
 
@@ -1109,6 +1143,11 @@ pub(crate) fn take_spare_arena() -> Option<&'static Arena> {
 /// names its arena.
 pub(crate) fn no_scope_open() -> bool {
     SCOPES.with(|s| s.borrow().is_empty()) && SCRATCH.with(|s| s.get().0.is_null())
+}
+
+/// `no_scope_open` while the thread exits: the scope stack may be gone already, and with it every scope.
+pub(crate) fn no_scope_open_at_exit() -> bool {
+    SCOPES.try_with(|s| s.borrow().is_empty()).unwrap_or(true) && SCRATCH.with(|s| s.get().0.is_null())
 }
 
 pub(crate) fn give_spare_arena(arena: &'static Arena) {
