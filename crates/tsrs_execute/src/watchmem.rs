@@ -13,6 +13,7 @@ use std::sync::Mutex;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::SourceFile;
+use tsrs_contentmapper::{self as contentmapper, SourceFiles};
 use tsrs_core::arena::Region;
 use tsrs_core::P;
 
@@ -35,6 +36,28 @@ impl FileRegions {
             self.0.lock().unwrap().insert(file.addr(), region);
         }
         Some(file)
+    }
+
+    /// `parse` with a fresh region, for a content-mapped file: its canonical and supplemental files share the region,
+    /// which is freed once none of them is reachable.
+    pub(crate) fn parse_content_mapped(
+        &self,
+        size: usize,
+        parse: impl FnOnce() -> Result<SourceFiles, contentmapper::Error>,
+    ) -> Result<SourceFiles, contentmapper::Error> {
+        let region = Region::new(first_chunk(size));
+        let files = {
+            let _scope = region.enter();
+            parse()
+        }?;
+        region.trim();
+        let mut regions = self.0.lock().unwrap();
+        for file in files.canonical.iter().chain(&files.supplemental) {
+            if Region::containing(file.addr()).is_some_and(|r| r.ptr_eq(&region)) {
+                regions.insert(file.addr(), region.clone());
+            }
+        }
+        Ok(files)
     }
 
     /// Removes the regions of the files that are not in `live` and returns them, to be dropped once nothing that may

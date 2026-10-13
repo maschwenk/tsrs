@@ -126,6 +126,32 @@ fn an_upstream_build_builds_the_program_again() {
     assert!(baseline.contains("TS2322"), "the scenario reports type errors\n{baseline}");
 }
 
+// `--watch` reparses a content-mapped file in every full build. The snapshot of a full build keeps the diagnostics of
+// an unchanged file from the one before, which refer to the previous build's version of the file; that version stays
+// as long as they do (watcher.rs `live_files`), and a later cycle reports them.
+#[test]
+fn kept_diagnostics_of_a_content_mapped_file_outlive_a_full_build() {
+    let config = r#"{ "compilerOptions": { "composite": true, "target": "esnext" }, "contentMappers": [{ "package": "mapper", "extensions": [".vue"] }] }"#;
+    let main = |rest: &str| format!("import {{ v }} from \"./v.vue\";\n{rest}");
+    let baseline = run(
+        "content-mapped-diagnostics",
+        &["-w", "-p", "app", "--runExternalCode"],
+        &[
+            ("app/tsconfig.json", config),
+            ("app/node_modules/mapper/package.json", r#"{ "name": "mapper", "version": "1.0.0", "typescript": { "contentMapper": { "exec": ["verbatim-mapper"] } } }"#),
+            ("app/v.vue", "export const v: number = 's';\n"),
+            ("app/main.ts", &main("export const x = v;\n")),
+        ],
+        vec![
+            ("new file", vec![write("app/b.ts", "export const b = 1;\n")]),
+            ("comment", vec![write("app/main.ts", &main("export const x = v;\n// comment\n"))]),
+            ("another new file", vec![write("app/c.ts", "export const c = 1;\n")]),
+            ("comment again", vec![write("app/main.ts", &main("export const x = v;\n// again\n"))]),
+        ],
+    );
+    assert!(baseline.contains("TS2322"), "the scenario reports the error of v.vue\n{baseline}");
+}
+
 // The events of the files a build wrote (outputs next to their sources, the build info) come after its report; they
 // start no cycle, and the next edit is built as usual.
 #[test]

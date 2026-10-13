@@ -79,7 +79,10 @@ impl CompilerHost for watchCompilerHost {
         parse_options: SourceFileParseOptions,
         mapper: &Mapper,
     ) -> Result<contentmapper::SourceFiles, contentmapper::Error> {
-        self.inner.get_content_mapped_source_files(parse_options, mapper)
+        // Not cached: each full build transforms the file again. Its region lives while a snapshot's kept diagnostics
+        // refer to a version of it, as for the other files (`live_files`).
+        let size = self.inner.fs().stat(&parse_options.file_name).map_or(0, |info| usize::try_from(info.size()).unwrap_or(0));
+        self.regions.parse_content_mapped(size, || self.inner.get_content_mapped_source_files(parse_options, mapper))
     }
     fn content_mapper_project(&self) -> Option<Arc<dyn contentmapper::Project>> {
         self.inner.content_mapper_project()
