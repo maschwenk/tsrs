@@ -14,7 +14,7 @@ use tsrs_contentmapper as contentmapper;
 use tsrs_core::collections::SyncMap;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::arena::Region;
-use tsrs_core::{CompilerOptions, ScriptKind, P};
+use tsrs_core::{CompilerOptions, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_fswatch::EventKind;
 use tsrs_tsoptions::{self as tsoptions, CompilerOptionsValue, Mapper, ParsedCommandLine};
@@ -524,10 +524,24 @@ impl Watcher {
         }
         let program_files = self.compiler_program().files_by_path();
         let before = changed_paths.len();
+        let mut dropped: Vec<Path> = Vec::new();
         changed_paths.retain(|event_path, _| {
             let p = self.to_path(event_path);
-            !self.own_outputs.contains(&p) || program_files.contains_key(&p)
+            let keep = !self.own_outputs.contains(&p) || program_files.contains_key(&p);
+            if !keep {
+                dropped.push(p);
+            }
+            keep
         });
+        // A backend that reports the ancestors of a changed file (the test harness's, FSEvents for a created file)
+        // reports those of the outputs too.
+        if !dropped.is_empty() {
+            let options = self.compare_paths_options();
+            changed_paths.retain(|event_path, _| {
+                let p = self.to_path(event_path);
+                !dropped.iter().any(|output| tspath::contains_path(p.as_str(), output.as_str(), &options))
+            });
+        }
         if changed_paths.len() != before
             && let Some(log) = self.wm.debug_log()
         {
@@ -761,9 +775,11 @@ impl Watcher {
             }
         }
         let Some(changed_path) = changed_path else { return false };
-        let Some(new_program) = reuse_program(old_program, changed_path, &host) else { return false };
-        self.install_program(new_program, host, None);
-        true
+        let (new_program, _, reused) = old_program.reuse_program(changed_path, Arc::clone(&host), None, None);
+        if reused {
+            self.install_program(new_program.unwrap(), host, None);
+        }
+        reused
     }
 
     // tsrs-only (Go's GC): makes `program` the current one and frees the compiler program it replaces, with its
@@ -1033,27 +1049,3 @@ fn parsed_configs_equal(a: &ParsedCommandLine, b: &ParsedCommandLine) -> bool {
         && a.content_mappers == b.content_mappers
 }
 
-// `old_program` with the file at `changed_path` parsed again, if no other file needs to change: `reuse_program`, which
-// also compares the files' imports, and the same implicit JSX runtime import (a `@jsxImportSource` pragma).
-pub(crate) fn reuse_program(old_program: &'static Program, changed_path: &Path, host: &Arc<dyn CompilerHost>) -> Option<&'static Program> {
-    if let Some(&old_file) = old_program.files_by_path().get(changed_path)
-        && let Some(new_file) = host.get_source_file(old_file.parse_options().clone())
-        && !equal_jsx_implicit_import(&old_program.options(), old_file, new_file)
-    {
-        return None;
-    }
-    match old_program.reuse_program(changed_path, Arc::clone(host), None, None) {
-        (Some(program), _, true) => Some(program),
-        _ => None,
-    }
-}
-
-fn equal_jsx_implicit_import(options: &CompilerOptions, old_file: P<SourceFile>, new_file: P<SourceFile>) -> bool {
-    let is_jsx = |file: P<SourceFile>| matches!(file.script_kind(), ScriptKind::JSX | ScriptKind::TSX);
-    if !is_jsx(old_file) && !is_jsx(new_file) {
-        return true;
-    }
-    let old_import = tsrs_ast::get_jsx_runtime_import(&tsrs_ast::get_jsx_implicit_import_base(options, Some(old_file)), options);
-    let new_import = tsrs_ast::get_jsx_runtime_import(&tsrs_ast::get_jsx_implicit_import_base(options, Some(new_file)), options);
-    old_import == new_import
-}

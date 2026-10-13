@@ -12,10 +12,10 @@
 // Results: target/tsctests-results/{pass,fail,crash}.txt and the actual baselines of failures under
 // target/tsctests-results/local/. Content-mapper scenarios run with the in-process test mappers (tsrs_contentmappertest).
 
-mod buildwatch_test;
 mod mockwatch;
 mod readablebuildinfo;
 mod sys;
+mod watch_test;
 
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex};

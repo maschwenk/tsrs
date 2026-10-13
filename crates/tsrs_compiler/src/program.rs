@@ -626,12 +626,7 @@ impl Program {
             return (None, new_file, false);
         }
         let new_file_some = new_file.unwrap();
-        // Cloning does not recompute synthetic helper or JSX-runtime import bookkeeping. Fall back to a full
-        // build whenever either version requires those imports.
-        if self.import_helpers_import_specifiers.contains_key(old_file.path()) || self.needs_import_helpers_import_specifier(new_file_some) {
-            return (None, new_file, false);
-        }
-        if self.jsx_runtime_import_specifiers.contains_key(old_file.path()) || !self.jsx_runtime_import_specifier(new_file_some).is_empty() {
+        if !self.has_same_synthetic_imports(old_file, new_file_some) {
             return (None, new_file, false);
         }
         if old_supplemental_files.len() != new_supplemental_files.len() {
@@ -642,10 +637,7 @@ impl Program {
             if old_supplemental.path() != new_supplemental.path() || !self.can_replace_file_in_program(old_supplemental, Some(new_supplemental)) {
                 return Some((None, new_file, false));
             }
-            if self.import_helpers_import_specifiers.contains_key(old_supplemental.path()) || self.needs_import_helpers_import_specifier(new_supplemental) {
-                return Some((None, new_file, false));
-            }
-            if self.jsx_runtime_import_specifiers.contains_key(old_supplemental.path()) || !self.jsx_runtime_import_specifier(new_supplemental).is_empty() {
+            if !self.has_same_synthetic_imports(old_supplemental, new_supplemental) {
                 return Some((None, new_file, false));
             }
 
@@ -782,6 +774,21 @@ impl Program {
             && equal_func(file1.type_reference_directives.get(), file2.type_reference_directives.get(), |f1, f2| equal_file_references(f1, f2))
             && equal_func(file1.lib_reference_directives.get(), file2.lib_reference_directives.get(), |f1, f2| equal_file_references(f1, f2))
             && equal_check_js_directives(file1.check_js_directive.get(), file2.check_js_directive.get())
+    }
+
+    // Whether `new_file` needs the synthetic imports the file loader made for `old_file`, the version of it in this
+    // program: the import helpers module, and the same JSX runtime module. The program `reuse_program` makes keeps them
+    // and their module resolution (the clone keeps the file's), as it keeps the file's other imports. tsrs-only: Go
+    // builds the program again whenever either version has one, so every edit of a file with JSX (`react-jsx`) or
+    // under `importHelpers` was a full build. The synthetic nodes' parent stays the old version of the file, which
+    // only lends them its path, options and implied format, the same as the new version's (`can_replace_file_in_program`
+    // compares the parse options). The JSX runtime comes from the options and the file's pragmas; whether the file
+    // needs the helpers module, from the options and whether it is a module, which `can_replace_file_in_program`
+    // also compares.
+    fn has_same_synthetic_imports(&self, old_file: P<SourceFile>, new_file: P<SourceFile>) -> bool {
+        let old_jsx_runtime = self.jsx_runtime_import_specifiers.get(old_file.path()).map_or("", |jsx| jsx.module_reference.as_str());
+        self.import_helpers_import_specifiers.contains_key(old_file.path()) == self.needs_import_helpers_import_specifier(new_file)
+            && old_jsx_runtime == self.jsx_runtime_import_specifier(new_file)
     }
 
     // program.go:480

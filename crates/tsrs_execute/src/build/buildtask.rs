@@ -523,7 +523,10 @@ impl BuildTask {
         compiler_host: &Arc<dyn tsrs_compiler::CompilerHost>,
     ) -> Option<&'static tsrs_compiler::Program> {
         let changed = self.single_changed_file(orchestrator, previous, compiler_host.fs())?;
-        crate::watcher::reuse_program(previous, &changed, compiler_host)
+        match previous.reuse_program(&changed, Arc::clone(compiler_host), None, None) {
+            (Some(program), _, true) => Some(program),
+            _ => None,
+        }
     }
 
     // The one file of `previous` whose change made this task out of date, if nothing else could change the program:
