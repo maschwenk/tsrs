@@ -408,6 +408,15 @@ impl Watcher {
                     // Canonical mapped files must be transformed again, and supplemental paths are failed physical
                     // lookups reserved for virtual files. Neither can use single-file AST reuse.
                     Some(source_file) if !source_file.content_mapper().is_empty() => self.force_full_rebuild = true,
+                    // tsrs-only: on a case-insensitive file system a rename that changes only the case keeps the
+                    // file's path, so the single-file fast path would reuse the program with the old spelling (and
+                    // miss TS1149 for imports that spell it the old way). An event spelled unlike the program's
+                    // file reloads the file names and rebuilds. Go (at the pinned commit) has the same fast path;
+                    // the tsgo nightly of 2026-07-07 rebuilds here.
+                    Some(source_file) if !fs.use_case_sensitive_file_names() && source_file.file_name() != event_path.as_str() => {
+                        self.watch_set_dirty = true;
+                        self.force_full_rebuild = true;
+                    }
                     Some(_) => {}
                     // A non-source build dependency changed (a package.json or a previously-missing module path):
                     // module resolution may now differ, so the single-file fast path is unsafe.
