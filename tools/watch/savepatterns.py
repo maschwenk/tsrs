@@ -122,9 +122,15 @@ results = []
 def check(name, act):
     act()
     cycles = next_cycles()
-    same = bool(cycles) and diags(cycles[-1]) == diags(fresh())
+    got, want = (diags(cycles[-1]) if cycles else []), diags(fresh())
+    same = bool(cycles) and got == want
     results.append((name, len(cycles), same))
     print(f"{name:40s} cycles {len(cycles)}  {'SAME' if same else 'DIFF'}", flush=True)
+    if not same:
+        for l in sorted(set(got) - set(want))[:5]:
+            print("   watch only:", l[:200])
+        for l in sorted(set(want) - set(got))[:5]:
+            print("   fresh only:", l[:200])
 
 
 try:
@@ -137,6 +143,12 @@ try:
             continue
         check(name + " (add error)", lambda: save(target, base + ERR))
         check(name + " (remove it)", lambda: save(target, base))
+    if not only or only in "case-only rename":
+        # On a case-insensitive volume FSEvents reports the new spelling; the program may hold the old one.
+        d, n = os.path.split(target)
+        swapped = os.path.join(d, n[0].swapcase() + n[1:])
+        check("case-only rename", lambda: os.rename(os.path.join(proj, target), os.path.join(proj, swapped)))
+        check("case-only rename back", lambda: os.rename(os.path.join(proj, swapped), os.path.join(proj, target)))
     if many_dir and not only:
         files = []
         for root, _, names in os.walk(os.path.join(proj, many_dir)):
