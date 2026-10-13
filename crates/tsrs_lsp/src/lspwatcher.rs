@@ -147,7 +147,7 @@ impl Watcher {
         }
         let watches = st.watches.get_or_insert_with(FxHashMap::default);
         if watches.contains_key(id) {
-            return Err(format!("lspwatcher: watcher {:?} already exists", id));
+            return Err(format!("lspwatcher: watcher {id:?} already exists"));
         }
         // Mark the id as existing before installing any watches so a concurrent
         // WatchFiles for the same id is rejected above.
@@ -172,7 +172,7 @@ impl Watcher {
                 this: Weak::clone(this),
             });
             if let Err(err) = new_watch.reconcile(false /*emitSynthetic*/) {
-                self.logger.logf(format_args!("lspwatcher: failed to register watcher {:?} for {:?}: {}", id, directory, err));
+                self.logger.logf(format_args!("lspwatcher: failed to register watcher {id:?} for {directory:?}: {err}"));
                 new_watch.close();
                 failed = true;
                 break;
@@ -190,7 +190,7 @@ impl Watcher {
             // Roll back the whole id so the session's retry (MarkPending) can
             // cleanly re-register it. The session treats an id as a single unit.
             let _ = self.unwatch_files(id);
-            return Err(format!("lspwatcher: failed to register one or more watchers for {:?}", id));
+            return Err(format!("lspwatcher: failed to register one or more watchers for {id:?}"));
         }
         Ok(())
     }
@@ -200,7 +200,7 @@ impl Watcher {
     pub fn unwatch_files(&self, id: &str) -> Result<(), String> {
         let mut st = self.mu.lock().unwrap();
         let Some(watches) = st.watches.as_mut().and_then(|w| w.remove(id)) else {
-            return Err(format!("lspwatcher: no watcher with id {:?}", id));
+            return Err(format!("lspwatcher: no watcher with id {id:?}"));
         };
         drop(st);
         for watch in watches {
@@ -223,9 +223,11 @@ impl Watcher {
         }
         st.pending = None;
         drop(st);
-        for watches in watches_by_id.into_iter().flat_map(|m| m.into_values()) {
-            for watch in watches {
-                watch.close();
+        if let Some(watches_by_id) = watches_by_id {
+            for watches in watches_by_id.into_values() {
+                for watch in watches {
+                    watch.close();
+                }
             }
         }
     }
@@ -456,12 +458,12 @@ impl watch {
             let mut terminated = false;
             if let Some(err) = err {
                 if err.is(fswatch::ErrOverflow) {
-                    watcher.logger.logf(format_args!("lspwatcher: watch overflow in {:?} (some events may have been dropped): {}", watched_directory, err));
+                    watcher.logger.logf(format_args!("lspwatcher: watch overflow in {watched_directory:?} (some events may have been dropped): {err}"));
                 } else if err.is(fswatch::ErrWatchTerminated) {
                     terminated = true;
-                    watcher.logger.logf(format_args!("lspwatcher: watch terminated in {:?} (directory removed): {}", watched_directory, err));
+                    watcher.logger.logf(format_args!("lspwatcher: watch terminated in {watched_directory:?} (directory removed): {err}"));
                 } else {
-                    watcher.logger.logf(format_args!("lspwatcher: watch error in {:?}: {}", watched_directory, err));
+                    watcher.logger.logf(format_args!("lspwatcher: watch error in {watched_directory:?}: {err}"));
                 }
             }
             if !events.is_empty() {

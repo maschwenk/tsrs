@@ -630,7 +630,7 @@ pub fn diff_maps<K: Hash + Eq, V: PartialEq>(
     on_removed: impl FnMut(&K, &V),
     on_changed: impl FnMut(&K, &V, &V),
 ) {
-    diff_maps_func(m1, m2, |a, b| a == b, Some(on_added), Some(on_removed), Some(on_changed))
+    diff_maps_func(m1, m2, |a, b| a == b, Some(on_added), Some(on_removed), Some(on_changed));
 }
 
 #[expect(

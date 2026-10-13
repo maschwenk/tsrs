@@ -486,7 +486,7 @@ impl Snapshot {
                     let _ = write!(details, " Projects: {:?}", change.resource_request.projects.iter().map(|p| p.0.as_str()).collect::<Vec<_>>());
                 }
                 if let Some(project_tree) = &change.resource_request.project_tree {
-                    let _ = write!(details, " ProjectTree: {:?}", project_tree.projects().iter().map(|p| p.as_str()).collect::<Vec<_>>());
+                    let _ = write!(details, " ProjectTree: {:?}", project_tree.projects().iter().map(tsrs_core::tspath::Path::as_str).collect::<Vec<_>>());
                 }
                 details
             };
@@ -498,22 +498,22 @@ impl Snapshot {
                 )),
                 UpdateReason::DidChangeCompilerOptionsForInferredProjects => logger.log("Reason: DidChangeCompilerOptionsForInferredProjects"),
                 UpdateReason::RequestedLanguageServicePendingChanges => {
-                    logger.logf(format_args!("Reason: RequestedLanguageService (pending file changes) - {}", get_details()))
+                    logger.logf(format_args!("Reason: RequestedLanguageService (pending file changes) - {}", get_details()));
                 }
                 UpdateReason::RequestedLanguageServiceProjectNotLoaded => {
-                    logger.logf(format_args!("Reason: RequestedLanguageService (project not loaded) - {}", get_details()))
+                    logger.logf(format_args!("Reason: RequestedLanguageService (project not loaded) - {}", get_details()));
                 }
                 UpdateReason::RequestedLanguageServiceForFileNotOpen => {
-                    logger.logf(format_args!("Reason: RequestedLanguageService (file not open) - {}", get_details()))
+                    logger.logf(format_args!("Reason: RequestedLanguageService (file not open) - {}", get_details()));
                 }
                 UpdateReason::RequestedLanguageServiceProjectDirty => {
-                    logger.logf(format_args!("Reason: RequestedLanguageService (project dirty) - {}", get_details()))
+                    logger.logf(format_args!("Reason: RequestedLanguageService (project dirty) - {}", get_details()));
                 }
                 UpdateReason::RequestedLoadProjectTree => logger.logf(format_args!("Reason: RequestedLoadProjectTree - {}", get_details())),
                 UpdateReason::IdleCleanDiskCache => logger.log("Reason: IdleCleanDiskCache"),
                 UpdateReason::DidChangeConfigFile => logger.logf(format_args!("Reason: DidChangeConfigFile - {}", get_details())),
                 UpdateReason::DidChangeContentMapperContributions => {
-                    logger.logf(format_args!("Reason: DidChangeContentMapperContributions - {}", get_details()))
+                    logger.logf(format_args!("Reason: DidChangeContentMapperContributions - {}", get_details()));
                 }
                 _ => {}
             }

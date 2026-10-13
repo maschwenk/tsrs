@@ -36,6 +36,9 @@ pub(crate) fn snapshot_to_build_info(
     };
 
     if snapshot.options().is_incremental() {
+        if program.uses_canonical_diagnostics() {
+            to.build_info.tsrs_canonical_check_signature = snapshot.canonical_check_signature.get().cloned().unwrap_or_default();
+        }
         to.collect_root_files();
         to.set_file_info_and_emit_signatures();
         to.set_root_of_incremental_program();
@@ -434,7 +437,7 @@ impl toBuildInfo<'_> {
         result.extend(files.into_iter().filter_map(|file_path| {
             let value = self.snapshot.emit_diagnostics_per_file.load(&file_path).unwrap();
             // Go stores a nil entry when the cache holds no diagnostics (it never does in practice).
-            if let Some(d) = self.to_build_info_diagnostics_of_file(&file_path, &value) { Some(d) } else { None }
+            self.to_build_info_diagnostics_of_file(&file_path, &value)
         }));
         self.build_info.emit_diagnostics_per_file = result;
     }

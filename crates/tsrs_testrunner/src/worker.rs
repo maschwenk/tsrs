@@ -315,5 +315,5 @@ pub fn worker_main() {
 
 /// The message of the last panic caught on this thread (for panics caught inside a test, like Go's RecoverAndFail).
 pub fn take_last_panic_message() -> String {
-    take_panic_info().map(|p| format!("{} at {}", p.message, p.location)).unwrap_or_else(|| "<unknown panic>".to_string())
+    take_panic_info().map_or_else(|| "<unknown panic>".to_string(), |p| format!("{} at {}", p.message, p.location))
 }

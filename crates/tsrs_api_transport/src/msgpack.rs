@@ -72,7 +72,7 @@ impl<R: Read> MessagePackReader<R> {
                 Ok(0) if first => return Err(TransportError::Eof),
                 Ok(0) => return Err(TransportError::UnexpectedEof("msgpack: read tuple")),
                 Ok(_) => return Ok(b[0]),
-                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+                Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
                 Err(e) => return Err(TransportError::Io(e)),
             }
         }

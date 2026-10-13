@@ -38,7 +38,8 @@ impl ParseConfigHost for sysParseConfigHost {
 }
 
 fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
-    sys.write(&format!("error: {} is not supported by tsrs.\n", what));
+    sys.write(&format!("error: {what} is not supported by tsrs.
+"));
     CommandLineResult { watcher: None, status: ExitStatus::NotImplemented }
 }
 
@@ -265,7 +266,7 @@ fn tsc_compilation(
         if testing.is_none() && !tsrs_fswatch::default().available() {
             return not_supported(sys, "watch mode (--watch) on this platform");
         }
-        let backend = testing.and_then(|t| t.watch_backend());
+        let backend = testing.and_then(crate::tsc::CommandLineTesting::watch_backend);
         let watcher = crate::watcher::run_watcher(
             sys,
             config_for_compilation,

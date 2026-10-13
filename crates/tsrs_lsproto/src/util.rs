@@ -94,8 +94,8 @@ fn diagnostic_messages_equal(message1: &StringOrMarkupContent, message2: &String
 pub fn compare_diagnostics<'a>(list1: &'a [Diagnostic], list2: &'a [Diagnostic]) -> (Vec<&'a Diagnostic>, Vec<&'a Diagnostic>) {
     let mut missing_from_list1 = Vec::new();
     let mut missing_from_list2 = Vec::new();
-    missing_from_list2.extend(list1.iter().filter_map(|elem| if !diagnostic_exists_in_slice(elem, list2) { Some(elem) } else { None }));
-    missing_from_list1.extend(list2.iter().filter_map(|elem| if !diagnostic_exists_in_slice(elem, list1) { Some(elem) } else { None }));
+    missing_from_list2.extend(list1.iter().filter(|elem| !diagnostic_exists_in_slice(elem, list2)));
+    missing_from_list1.extend(list2.iter().filter(|elem| !diagnostic_exists_in_slice(elem, list1)));
     (missing_from_list1, missing_from_list2)
 }
 

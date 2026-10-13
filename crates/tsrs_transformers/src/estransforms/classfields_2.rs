@@ -581,7 +581,7 @@ impl classFieldsTransformer {
             );
             statements_out.push(updated);
         } else {
-            let (visited, _) = self.visitor().visit_slice(&statements_in[super_statement_index..super_statement_index + 1]);
+            let (visited, _) = self.visitor().visit_slice(&statements_in[super_statement_index..=super_statement_index]);
             statements_out.extend_from_slice(visited);
 
             // Add the property initializers. Transforms this:
@@ -755,8 +755,7 @@ impl classFieldsTransformer {
             if ast::is_static(property) && !self.should_transform_private_elements_or_class_static_blocks.get() {
                 return None;
             }
-            let statement = self.transform_property_or_class_static_block(property, receiver);
-            if let Some(statement) = statement { Some(statement) } else { None }
+            self.transform_property_or_class_static_block(property, receiver)
         }));
         statements
     }
@@ -1271,12 +1270,12 @@ impl classFieldsTransformer {
         if let Some(class_name) = env.data.class_name.get() {
             let prefix = format!("_{}_", class_name.text());
             identifier = self.factory().new_unique_name_ex(
-                &format!("{}{}", prefix, name_text),
+                &format!("{prefix}{name_text}"),
                 printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic | printer::GeneratedIdentifierFlags::ReservedInNestedScopes, suffix: alloc_str(suffix), ..Default::default() },
             );
         } else {
             identifier = self.factory().new_unique_name_ex(
-                &format!("_{}", name_text),
+                &format!("_{name_text}"),
                 printer::AutoGenerateOptions { flags: printer::GeneratedIdentifierFlags::Optimistic | printer::GeneratedIdentifierFlags::ReservedInNestedScopes, suffix: alloc_str(suffix), ..Default::default() },
             );
         }

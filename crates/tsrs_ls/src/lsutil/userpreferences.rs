@@ -42,7 +42,7 @@ pub fn new_default_user_preferences() -> UserPreferences {
 // and `config:"path.to.setting[,invert]"` (VS Code nested config path), plus `fallbackConfig`. The tags live in
 // USER_PREFERENCES_FIELD_TAGS below. The `,invert` modifier inverts boolean values (e.g., VS Code's "suppress" -> our
 // "include").
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct UserPreferences {
     pub format_code_settings: FormatCodeSettings,
 
@@ -362,7 +362,7 @@ impl UserPreferences {
 }
 
 // userpreferences.go:209
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct InlayHintsPreferences {
     pub include_inlay_parameter_name_hints: IncludeInlayParameterNameHints,
     pub include_inlay_parameter_name_hints_when_argument_matches_name: Tristate,
@@ -375,7 +375,7 @@ pub struct InlayHintsPreferences {
 }
 
 // userpreferences.go:220
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct CodeLensUserPreferences {
     pub references_code_lens_enabled: Tristate,
     pub implementations_code_lens_enabled: Tristate,
@@ -625,7 +625,7 @@ pub(crate) fn type_serializers(field: &FieldRef<'_>) -> Option<Option<Value>> {
         FieldRef::Tristate(v) => match **v {
             Tristate::True => Some(Value::Bool(true)),
             Tristate::False => Some(Value::Bool(false)),
-            _ => None,
+            Tristate::Unknown => None,
         },
         FieldRef::OrganizeImportsSort(v) => Some(Value::String(
             match **v {
@@ -633,7 +633,7 @@ pub(crate) fn type_serializers(field: &FieldRef<'_>) -> Option<Option<Value>> {
                 OrganizeImportsSort::OrdinalIgnoreCase => "ordinalIgnoreCase",
                 OrganizeImportsSort::Natural => "natural",
                 OrganizeImportsSort::NaturalIgnoreCase => "naturalIgnoreCase",
-                _ => "auto",
+                OrganizeImportsSort::Auto => "auto",
             }
             .to_string(),
         )),
@@ -648,7 +648,7 @@ pub(crate) fn type_serializers(field: &FieldRef<'_>) -> Option<Option<Value>> {
             match **v {
                 OrganizeImportsCaseFirst::Lower => "lower",
                 OrganizeImportsCaseFirst::Upper => "upper",
-                _ => "default",
+                OrganizeImportsCaseFirst::False => "default",
             }
             .to_string(),
         )),
@@ -657,7 +657,7 @@ pub(crate) fn type_serializers(field: &FieldRef<'_>) -> Option<Option<Value>> {
                 OrganizeImportsTypeOrder::Last => "last",
                 OrganizeImportsTypeOrder::Inline => "inline",
                 OrganizeImportsTypeOrder::First => "first",
-                _ => "auto",
+                OrganizeImportsTypeOrder::Auto => "auto",
             }
             .to_string(),
         )),
@@ -780,10 +780,8 @@ pub(crate) fn collect_field_infos(fields: &'static [FieldTag]) -> Vec<FieldInfo>
         let config_tag = field.config;
         let fallback_config_tag = field.fallback_config;
 
-        if raw_tag.is_empty() && config_tag.is_empty() {
-            // Go recurses into embedded structs without tags here; the table is already flattened.
-            panic!("raw or config tag required for field {}", field.name);
-        }
+        // Go recurses into embedded structs without tags here; the table is already flattened.
+        assert!(!(raw_tag.is_empty() && config_tag.is_empty()), "raw or config tag required for field {}", field.name);
 
         let mut info = FieldInfo {
             raw_name: "",

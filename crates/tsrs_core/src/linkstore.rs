@@ -71,7 +71,7 @@ impl<V> Default for PagedLinkStore<V> {
 
 impl<V: Default> PagedLinkStore<V> {
     fn new_page() -> &'static [PSlot<V>] {
-        crate::alloc_vec((0..PAGE_SIZE).map(|_| PSlot(V::default())).collect())
+        crate::alloc_vec(std::iter::repeat_with(|| PSlot(V::default())).take(PAGE_SIZE).collect())
     }
 
     pub fn get(&self, key: u64) -> P<V> {

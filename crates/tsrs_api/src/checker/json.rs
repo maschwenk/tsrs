@@ -55,7 +55,7 @@ impl Obj {
     /// Emits the fields in `order` (unknown fields keep their relative order at the end).
     pub(crate) fn build_ordered(mut self, order: &[&str]) -> Value {
         let mut out = OrderedMap::default();
-        out.extend(order.iter().filter_map(|key| if let Some(v) = self.map.shift_remove(*key) { Some((key.to_string(), v)) } else { None }));
+        out.extend(order.iter().filter_map(|key| self.map.shift_remove(*key).map(|v| (key.to_string(), v))));
         out.extend(self.map);
         Value::Object(out)
     }

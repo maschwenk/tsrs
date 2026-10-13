@@ -16,6 +16,7 @@ pub trait BuildInfoReader {
 
 struct buildInfoReader {
     host: Arc<dyn CompilerHost>,
+    canonical_diagnostics: bool,
 }
 
 impl BuildInfoReader for buildInfoReader {
@@ -28,7 +29,7 @@ impl BuildInfoReader for buildInfoReader {
 
         // Read build info file
         let data = tsrs_core::phases::time("BuildInfo read: read file", || self.host.fs().read_file(&build_info_file_name))?;
-        tsrs_core::phases::time("BuildInfo read: unmarshal", || BuildInfo::unmarshal(&data).ok())
+        tsrs_core::phases::time("BuildInfo read: unmarshal", || BuildInfo::unmarshal_with_canonical_diagnostics(&data, self.canonical_diagnostics).ok())
     }
 }
 
@@ -41,7 +42,11 @@ pub fn register_build_info_read_phases() {
 }
 
 pub fn new_build_info_reader(host: Arc<dyn CompilerHost>) -> Box<dyn BuildInfoReader> {
-    Box::new(buildInfoReader { host })
+    new_build_info_reader_with_canonical_diagnostics(host, true)
+}
+
+pub fn new_build_info_reader_with_canonical_diagnostics(host: Arc<dyn CompilerHost>, canonical_diagnostics: bool) -> Box<dyn BuildInfoReader> {
+    Box::new(buildInfoReader { host, canonical_diagnostics })
 }
 
 // incremental.go:44

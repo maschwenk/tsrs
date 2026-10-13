@@ -394,7 +394,8 @@ impl ProjectCollectionBuilder {
         }
         let mut created_entries = Vec::with_capacity(api_request.create_programs.len());
         created_entries.extend(api_request.create_programs.iter().map(|request| {
-            let entry = self.update_or_create_synthetic_project(
+
+            self.update_or_create_synthetic_project(
                 self.next_synthetic_project_id(),
                 request.root_file_names.clone(),
                 request.compiler_options,
@@ -404,8 +405,7 @@ impl ProjectCollectionBuilder {
                 request.module_resolver_id,
                 self.inferred_content_mappers.clone(),
                 logger,
-            );
-            entry
+            )
         }));
         let mut reconfigured_entries = Vec::with_capacity(api_request.reconfigure_programs.len());
         reconfigured_entries.extend(api_request.reconfigure_programs.iter().map(|request| {
@@ -460,7 +460,7 @@ impl ProjectCollectionBuilder {
         self.for_each_project(|entry| {
             let project = self.value_of(entry).value().unwrap();
             if let Some(program) = project.program {
-                module_resolution_error = program.module_resolution_error().map(|e| e.to_string());
+                module_resolution_error = program.module_resolution_error().map(std::string::ToString::to_string);
             }
             module_resolution_error.is_none()
         });
@@ -836,7 +836,7 @@ impl ProjectCollectionBuilder {
 
                     // Load this child project since this is referenced
                     let child_project_entry = self
-                        .find_or_create_project(child_config.config_name(), &child_config.config_file.unwrap().source_file.get().path(), projectLoadKind::Create, logger)
+                        .find_or_create_project(child_config.config_name(), child_config.config_file.unwrap().source_file.get().path(), projectLoadKind::Create, logger)
                         .unwrap();
                     self.update_program(&projectEntry::Configured(Arc::clone(&child_project_entry)), logger);
 
@@ -926,7 +926,7 @@ impl ProjectCollectionBuilder {
             }
 
             if !logger.is_nil() {
-                logger.log(&format!("Updated ATA state for project {}", project_id));
+                logger.log(&format!("Updated ATA state for project {project_id}"));
             }
         }
     }
@@ -978,14 +978,14 @@ impl ProjectCollectionBuilder {
             }
             let project = match &project {
                 Some(p) if self.value_of(p).value().is_some() => p,
-                _ => panic!("project {} affected by config change not found", project_id),
+                _ => panic!("project {project_id} affected by config change not found"),
             };
             self.value_of(project).change_if(
                 &mut |p: &Project| !p.dirty || !p.dirty_file_path.0.is_empty(),
                 &mut |p: &mut Project| {
                     p.dirty = true;
                     p.dirty_file_path = Path::default();
-                    logger.logf(format_args!("Marking project {} as dirty due to change affecting config", project_id));
+                    logger.logf(format_args!("Marking project {project_id} as dirty due to change affecting config"));
                 },
             );
         }
@@ -1311,7 +1311,7 @@ impl ProjectCollectionBuilder {
                         project.value().unwrap().config_file_name(),
                         elapsed
                     )),
-                    None => logger.log(&format!("No default configured project found for {} (searched in {:?})", file_name, elapsed)),
+                    None => logger.log(&format!("No default configured project found for {file_name} (searched in {elapsed:?})")),
                 }
             }
             return result;
@@ -1524,7 +1524,7 @@ impl ProjectCollectionBuilder {
                 return true;
             }
         }
-        let extensions: Vec<&str> = self.inferred_content_mapper_extensions.iter().map(|e| e.as_str()).collect();
+        let extensions: Vec<&str> = self.inferred_content_mapper_extensions.iter().map(std::string::String::as_str).collect();
         tspath::file_extension_is_one_of(file_name, &extensions)
     }
 

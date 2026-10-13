@@ -180,7 +180,7 @@ pub(crate) fn get_token_at_position_worker(
                             st.node_after_left.set(None);
                         }
                         Ordering::Equal => st.next.set(Some(node)),
-                        _ => {}
+                        Ordering::Greater => {}
                     }
                 }
                 Some(node)
@@ -624,9 +624,7 @@ pub fn find_preceding_token_ex(
     };
     let result = find(source_file, position, exclude_jsdoc, node);
     if let Some(result) = result {
-        if ast::is_whitespace_only_jsx_text(result) {
-            panic!("Expected result to be a non-whitespace token.");
-        }
+        assert!(!ast::is_whitespace_only_jsx_text(result), "Expected result to be a non-whitespace token.");
     }
     result
 }

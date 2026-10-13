@@ -5,7 +5,7 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 | package | contents |
 | --- | --- |
 | `tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `dist/` + `vendor/` (the `unstable/*` JS API, see below), `optionalDependencies` on every platform package |
-| `@ts-rs/<os>-<arch>[-<libc>]` | the `tsrs` binary for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
+| `@ts-rs/<os>-<arch>[-<libc>]` | the `tsrs` binary and default TypeScript libraries for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
 | `@ts-rs/wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
 
 Platforms since 0.14.0: `darwin-arm64`, `linux-x64-gnu`, `linux-arm64-gnu`, `linux-x64-musl` and `linux-arm64-musl`
@@ -14,6 +14,8 @@ also know `win32-x64` (see TODO).
 
 The main package name is set in `npm/tsrs/package.json`; platform packages are `@ts-rs/<os>-<cpu>` with `-gnu` or
 `-musl` on Linux. The launcher derives that name from the current platform, architecture and libc at runtime.
+
+The repository's root `README.md` is also the main package README. `npm/build.mjs` copies it into the staged package.
 
 ## How the launcher finds the binary
 
@@ -46,18 +48,23 @@ version = "0.10.0"
 [workspace.metadata.typescript]
 version = "7.1.0-dev.20260929"                         # the TypeScript version the port follows
 commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"    # and its commit (CI checks out its tsc/testdata)
+nightly = "7.1.0-dev.20260930.4"                      # npm nightly used for the compiler's reported version
 ```
 
 npm version: `<version>-ts<typescript version>` = `0.10.0-ts7.1.0-dev.20260929`, for every package including
 `@ts-rs/wasm` (`npm/tsrs-wasm/package.json` holds a placeholder that `npm/build.mjs` replaces). `tsrs --version`
-and `tsrs-wasm --version` print the same, embedded at build time by `crates/tsrs_execute/build.rs`:
+and `tsrs-wasm --version` include the package version, embedded at build time by `crates/tsrs_execute/build.rs`.
+The example package version below illustrates the format; read `Cargo.toml` for the current version:
 
 ```
-Version 7.1.0-dev (tsrs 0.10.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)
+Version 7.1.0-dev.20260930.4 (tsrs 0.10.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)
 ```
 
 To release a fix on the same TypeScript commit, bump `[workspace.package] version`; after porting a newer TypeScript
-commit, update `[workspace.metadata.typescript]`.
+commit, update `[workspace.metadata.typescript]`, including the matching npm `nightly`.
+
+Source builds default to `7.1.0-dev` unless `TSRS_TS_VERSION` is set. Release builds stamp the nightly as the
+compiler version so `.tsbuildinfo` files and `typesVersions` agree with the reference compiler.
 
 ## Building packages locally
 

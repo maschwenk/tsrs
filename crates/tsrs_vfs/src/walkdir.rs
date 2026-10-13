@@ -128,8 +128,8 @@ impl WalkState {
         let entries = file_system.get_accessible_entries(path);
         let mut directories: FxHashSet<&str> = FxHashSet::default();
         directories.extend(entries.directories.iter().map(std::string::String::as_str));
-        let mut names: Vec<&str> = entries.directories.iter().map(|s| s.as_str()).collect();
-        names.extend(entries.files.iter().map(|s| s.as_str()));
+        let mut names: Vec<&str> = entries.directories.iter().map(std::string::String::as_str).collect();
+        names.extend(entries.files.iter().map(std::string::String::as_str));
         names.sort_unstable();
         for name in names {
             let child_path = tspath::combine_paths(path, &[name]);
@@ -187,7 +187,7 @@ impl WalkState {
 
 fn normalize_walk_dir_error(err: Result<(), WalkDirError>) -> Result<(), FsError> {
     match err {
-        Ok(()) | Err(WalkDirError::SkipDir) | Err(WalkDirError::SkipAll) => Ok(()),
+        Ok(()) | Err(WalkDirError::SkipDir | WalkDirError::SkipAll) => Ok(()),
         Err(WalkDirError::Err(e)) => Err(e),
     }
 }

@@ -25,10 +25,10 @@ impl DocumentUri {
         }
         if uri.starts_with("file://") {
             let Ok((host, path)) = parse_file_url(uri) else {
-                panic!("invalid file URI: {}", uri);
+                panic!("invalid file URI: {uri}");
             };
             if !host.is_empty() {
-                return format!("//{}{}", host, path);
+                return format!("//{host}{path}");
             }
             return fix_windows_uri_path(&path).to_string();
         }
@@ -36,20 +36,20 @@ impl DocumentUri {
         // Leave all other URIs escaped so we can round-trip them.
 
         let Some((scheme, path)) = uri.split_once(':') else {
-            panic!("invalid URI: {}", uri);
+            panic!("invalid URI: {uri}");
         };
 
         let mut authority = "ts-nul-authority";
         let mut path = path;
         if let Some(rest) = path.strip_prefix("//") {
             let Some((a, p)) = rest.split_once('/') else {
-                panic!("invalid URI: {}", uri);
+                panic!("invalid URI: {uri}");
             };
             authority = a;
             path = p;
         }
 
-        format!("^/{}/{}/{}", scheme, authority, path)
+        format!("^/{scheme}/{authority}/{path}")
     }
 
     // lsp.go:52
@@ -204,7 +204,7 @@ fn parse_host(host: &str) -> Result<String, String> {
                 Some(zone) => unescape(&hostname[..zone], Encoding::Host)? + &unescape(&hostname[zone..], Encoding::Zone)?,
                 None => unescape(hostname, Encoding::Host)?,
             };
-            Ok(format!("[{}]{}", unescaped_hostname, unescaped_colon_port))
+            Ok(format!("[{unescaped_hostname}]{unescaped_colon_port}"))
         }
         None => {
             if let Some(i) = host.rfind(':') {
@@ -256,7 +256,7 @@ fn unescape(s: &str, mode: Encoding) -> Result<String, String> {
                     return Err(format!("invalid URL escape {}", go_quote(&b[i..i + 3])));
                 }
                 if mode == Encoding::Zone {
-                    let v = unhex(b[i + 1]) << 4 | unhex(b[i + 2]);
+                    let v = (unhex(b[i + 1]) << 4) | unhex(b[i + 2]);
                     if &b[i..i + 3] != b"%25" && v != b' ' && should_escape_host(v) {
                         return Err(format!("invalid URL escape {}", go_quote(&b[i..i + 3])));
                     }
@@ -265,7 +265,7 @@ fn unescape(s: &str, mode: Encoding) -> Result<String, String> {
             }
             c => {
                 if (mode == Encoding::Host || mode == Encoding::Zone) && c < 0x80 && should_escape_host(c) {
-                    return Err(format!("invalid character {} in host name", go_quote(&b[i..i + 1])));
+                    return Err(format!("invalid character {} in host name", go_quote(&b[i..=i])));
                 }
                 i += 1;
             }
@@ -278,7 +278,7 @@ fn unescape(s: &str, mode: Encoding) -> Result<String, String> {
     let mut i = 0;
     while i < b.len() {
         if b[i] == b'%' {
-            t.push(unhex(b[i + 1]) << 4 | unhex(b[i + 2]));
+            t.push((unhex(b[i + 1]) << 4) | unhex(b[i + 2]));
             i += 3;
         } else {
             t.push(b[i]);
@@ -458,16 +458,12 @@ pub(crate) fn err_literal_mismatch(type_name: &str, expected: &str, got: &Value)
 
 // lsp.go:111
 pub(crate) fn assert_only_one(message: &str, count: usize) {
-    if count != 1 {
-        panic!("{}", message);
-    }
+    assert!(count == 1, "{}", message);
 }
 
 // lsp.go:117
 pub(crate) fn assert_at_most_one(message: &str, count: usize) {
-    if count > 1 {
-        panic!("{}", message);
-    }
+    assert!(count <= 1, "{}", message);
 }
 
 // lsp.go:131: the value of a top-level field of a JSON object; None if `data` is not an object or has
@@ -586,11 +582,8 @@ impl RequestMessage {
 
         // The base protocol defines params as `array | object`; reject anything else
         // (absent, null, or a scalar).
-        let raw = match raw {
-            Some(raw @ (Value::Object(_) | Value::Array(_))) => raw,
-            _ => {
-                return Err(Error::wrap_code(ErrorCode::InvalidParams, Error::new("params must be an object or array")));
-            }
+        let Some(raw @ (Value::Object(_) | Value::Array(_))) = raw else {
+            return Err(Error::wrap_code(ErrorCode::InvalidParams, Error::new("params must be an object or array")));
         };
         T::from_json(raw).map_err(|err| Error::wrap_code(ErrorCode::InvalidParams, err))
     }

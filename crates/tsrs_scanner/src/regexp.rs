@@ -586,7 +586,7 @@ impl RegExpParser {
                     self.dec_pos(1);
                     return Cow::Borrowed("\\");
                 }
-                Cow::Owned(ch.map(|ch| rune_string(u32::from(ch))).unwrap_or_else(|| rune_string(RUNE_ERROR)))
+                Cow::Owned(ch.map_or_else(|| rune_string(RUNE_ERROR), |ch| rune_string(u32::from(ch))))
             }
             Some(ch @ (0x5E | 0x24 | 0x2F | 0x5C | 0x2E | 0x2A | 0x2B | 0x3F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x7C)) => {
                 self.inc_pos(1);
@@ -704,7 +704,7 @@ impl RegExpParser {
                 }
                 let (min_character_value, min_size) = stringutil::decode_js_string_rune(&min_character);
                 let (max_character_value, max_size) = stringutil::decode_js_string_rune(&max_character);
-                if min_character.len() == min_size as usize && max_character.len() == max_size as usize && min_character_value > max_character_value {
+                if min_character.len() == min_size && max_character.len() == max_size && min_character_value > max_character_value {
                     self.error(&diagnostics::Range_out_of_order_in_character_class, min_start, self.pos() - min_start, &[]);
                 }
             }
@@ -848,7 +848,7 @@ impl RegExpParser {
                     } else if !operand.is_empty() {
                         let (min_character_value, min_size) = stringutil::decode_js_string_rune(&operand);
                         let (max_character_value, max_size) = stringutil::decode_js_string_rune(&second_operand);
-                        if operand.len() == min_size as usize && second_operand.len() == max_size as usize && min_character_value > max_character_value {
+                        if operand.len() == min_size && second_operand.len() == max_size && min_character_value > max_character_value {
                             self.error(&diagnostics::Range_out_of_order_in_character_class, start, self.pos() - start, &[]);
                         }
                     }
@@ -1273,14 +1273,14 @@ impl RegExpParser {
     }
 
     fn get_spelling_suggestion_for_unicode_property_name(&self, name: &str) -> String {
-        tsrs_core::get_spelling_suggestion_for_strings(name, NON_BINARY_UNICODE_PROPERTIES.iter().map(|&(k, _)| k)).map(|s| s.to_string()).unwrap_or_default()
+        tsrs_core::get_spelling_suggestion_for_strings(name, NON_BINARY_UNICODE_PROPERTIES.iter().map(|&(k, _)| k)).map(std::string::ToString::to_string).unwrap_or_default()
     }
 
     fn get_spelling_suggestion_for_unicode_property_value(&self, property_name: &str, value: &str) -> String {
         let Some(values) = crate::unicodeproperties::values_list_of_non_binary_unicode_properties(property_name) else {
             return String::new();
         };
-        tsrs_core::get_spelling_suggestion_for_strings(value, values.iter().copied()).map(|s| s.to_string()).unwrap_or_default()
+        tsrs_core::get_spelling_suggestion_for_strings(value, values.iter().copied()).map(std::string::ToString::to_string).unwrap_or_default()
     }
 
     fn get_spelling_suggestion_for_unicode_property_name_or_value(&self, name: &str) -> String {
@@ -1288,7 +1288,7 @@ impl RegExpParser {
             name,
             GENERAL_CATEGORY_VALUES.iter().copied().chain(BINARY_UNICODE_PROPERTIES.iter().copied()).chain(BINARY_UNICODE_PROPERTIES_OF_STRINGS.iter().copied()),
         )
-        .map(|s| s.to_string())
+        .map(std::string::ToString::to_string)
         .unwrap_or_default()
     }
 
@@ -1332,7 +1332,7 @@ impl RegExpParser {
                 // Non-BMP character: emit the high surrogate first WITHOUT advancing.
                 // The low surrogate will be emitted on the next call, which also advances.
                 let (high, low) = stringutil::code_point_to_surrogate_pair(ch);
-                self.pending_low_surrogate = Some(low as u32);
+                self.pending_low_surrogate = Some(low);
                 return Cow::Owned(stringutil::encode_js_string_rune(high));
             }
             self.inc_pos(size as u32);
@@ -1387,7 +1387,7 @@ impl RegExpParser {
                 if !self.group_specifiers.is_empty() {
                     let suggestion =
                         tsrs_core::get_spelling_suggestion_for_strings(reference.name, self.group_specifiers_order.iter().copied())
-                            .map(|s| s.to_string())
+                            .map(std::string::ToString::to_string)
                             .unwrap_or_default();
                     if !suggestion.is_empty() {
                         self.error(&diagnostics::Did_you_mean_0, reference.pos, reference.end - reference.pos, &[&suggestion]);

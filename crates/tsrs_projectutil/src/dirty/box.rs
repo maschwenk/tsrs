@@ -92,6 +92,6 @@ impl<T: Cloneable + Clone> Value<T> for Box<T> {
 
     // box.go:56
     fn locked(&self, f: &mut dyn FnMut(&dyn Value<T>)) {
-        f(self)
+        f(self);
     }
 }

@@ -69,7 +69,7 @@ impl<T: Handler + ?Sized> Handler for Arc<T> {
     }
 
     fn handle_notification(&self, cx: &RequestContext, method: &str, params: &[u8]) {
-        (**self).handle_notification(cx, method, params)
+        (**self).handle_notification(cx, method, params);
     }
 }
 

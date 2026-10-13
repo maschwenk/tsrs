@@ -38,7 +38,7 @@ pub(crate) fn go_unicode_is_lower(r: Rune) -> bool {
     if (0..0x80).contains(&r) {
         return (b'a' as Rune..=b'z' as Rune).contains(&r);
     }
-    char::from_u32(r as u32).is_some_and(|c| c.is_lowercase())
+    char::from_u32(r).is_some_and(char::is_lowercase)
 }
 
 // util.go:66
@@ -81,9 +81,7 @@ pub(crate) fn word_indices(s: &str) -> Vec<usize> {
 // util.go:87
 pub(crate) fn get_package_names_in_node_modules(node_modules_dir: &str, fs: &dyn FS) -> Set<String> {
     let mut package_names = Set::new();
-    if tspath::get_base_file_name(node_modules_dir) != "node_modules" {
-        panic!("nodeModulesDir is not a node_modules directory");
-    }
+    assert!(tspath::get_base_file_name(node_modules_dir) == "node_modules", "nodeModulesDir is not a node_modules directory");
     // A missing node_modules directory yields no entries (GetAccessibleEntries returns
     // empty), so there's no need to check existence first: a deleted node_modules is
     // handled upstream in updateBucketAndDirectoryExistence, which drops the bucket.
@@ -269,7 +267,7 @@ pub(crate) fn get_package_realpath_funcs(fs: &'static dyn FS, package_dir: &str)
         // Fast path: files within the package use prefix substitution.
         if is_symlinked {
             if let Some(after) = file_name.strip_prefix(package_dir_owned.as_str()) {
-                return format!("{}{}", real_package_dir_owned, after);
+                return format!("{real_package_dir_owned}{after}");
             }
         }
         // Files outside the package (e.g. re-exports into symlinked deps):
@@ -301,7 +299,7 @@ pub(crate) fn get_package_realpath_funcs(fs: &'static dyn FS, package_dir: &str)
     let package_dir_owned = package_dir.to_string();
     let to_symlink: PathFunc = Arc::new(move |file_name: &str| -> String {
         if let Some(after) = file_name.strip_prefix(real_package_dir.as_str()) {
-            return format!("{}{}", package_dir_owned, after);
+            return format!("{package_dir_owned}{after}");
         }
         file_name.to_string()
     });

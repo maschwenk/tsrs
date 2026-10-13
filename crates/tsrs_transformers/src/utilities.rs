@@ -240,19 +240,10 @@ pub fn is_original_node_single_line(emit_context: P<EmitContext>, node: Option<P
     let Some(source) = ast::get_source_file_of_node(Some(original)) else {
         return false;
     };
-    let start_line = scanner::get_ecma_line_of_position(
-        &*source,
-        original
-            .pos()
-            .expect_source("parsed nodes have source positions"),
-    );
-    let end_line = scanner::get_ecma_line_of_position(
-        &*source,
-        original
-            .end()
-            .expect_source("parsed nodes have source positions"),
-    );
-    start_line == end_line
+    // The most original node can be a synthesized one in a parsed file. Go passes its position (-1) on to
+    // GetECMALineOfPosition, which returns line -1 for it, so two synthesized positions are on the same line.
+    let line_of = |pos: tsrs_core::TextPos| pos.source_offset().map_or(-1, |pos| scanner::get_ecma_line_of_position(&*source, pos) as isize);
+    line_of(original.pos()) == line_of(original.end())
 }
 
 // utilities.go:270

@@ -58,7 +58,7 @@ pub enum ExportSyntax {
 impl ExportSyntax {
     // export_stringer_generated.go
     pub fn string(self) -> String {
-        format!("ExportSyntax{:?}", self)
+        format!("ExportSyntax{self:?}")
     }
 }
 

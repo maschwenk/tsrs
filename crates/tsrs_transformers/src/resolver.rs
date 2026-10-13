@@ -49,7 +49,7 @@ impl Resolver {
     }
 
     pub fn precalculate_declaration_emit_visibility(self, file: P<SourceFile>) {
-        self.lock(|c| self.r.precalculate_declaration_emit_visibility(c, file))
+        self.lock(|c| self.r.precalculate_declaration_emit_visibility(c, file));
     }
 
     pub fn is_import_required_by_augmentation(self, decl: P<Node>) -> bool {
@@ -143,7 +143,7 @@ impl Resolver {
     }
 
     pub fn mark_linked_references_recursively(self, file: P<SourceFile>) {
-        self.lock(|c| self.r.mark_linked_references_recursively(c, Some(file)))
+        self.lock(|c| self.r.mark_linked_references_recursively(c, Some(file)));
     }
 
     pub fn get_external_module_file_from_declaration(self, node: P<Node>) -> Option<P<SourceFile>> {
@@ -167,7 +167,7 @@ impl Resolver {
     }
 
     pub fn set_referenced_import_declaration(self, node: P<Node>, ref_: P<Node>) {
-        self.lock(|c| self.r.set_referenced_import_declaration(c, node, ref_))
+        self.lock(|c| self.r.set_referenced_import_declaration(c, node, ref_));
     }
 
     // binder.ReferenceResolver (embedded in Go's EmitResolver).

@@ -207,8 +207,10 @@ impl LanguageService {
             };
 
             // True for locals; false for globals, module exports from other files, `this.` completions.
-            let should_shadow_later_symbols = (origin.is_none() || origin_is_type_only_alias(origin))
-                && !(symbol.parent().is_none() && !symbol.declarations().iter().any(|&d| ast::get_source_file_of_node(d) == Some(file)));
+            let is_local_or_type_only_alias = origin.is_none() || origin_is_type_only_alias(origin);
+            let is_unowned_symbol_without_local_declaration = symbol.parent().is_none()
+                && symbol.declarations().iter().all(|&declaration| ast::get_source_file_of_node(declaration) != Some(file));
+            let should_shadow_later_symbols = is_local_or_type_only_alias && !is_unowned_symbol_without_local_declaration;
             uniques.insert(name, should_shadow_later_symbols);
             let sym = if include_symbols { Some(symbol) } else { None };
             sorted_entries.push(CompletionItem { completion_item: entry, symbol: sym });
@@ -305,7 +307,7 @@ pub(crate) fn completion_name_for_literal(file: P<SourceFile>, preferences: &Use
             json::marshal(&json::Value::Number(literal.0)).unwrap_or_default()
         }
         LiteralValue::BigInt(literal) => literal.string() + "n",
-        LiteralValue::Boolean(literal) => panic!("Unhandled literal value: {}", literal),
+        LiteralValue::Boolean(literal) => panic!("Unhandled literal value: {literal}"),
     }
 }
 
@@ -328,9 +330,9 @@ fn get_insert_text_and_replacement_span_for_import_completion(
     let replacement_span = import_statement_completion.replacement_span;
 
     match import_kind {
-        lsproto::ImportKind::CommonJS => (format!("import{}{}{} = require({}){}", top_level_type_only_text, name, tab_stop, quoted_module_specifier, suffix), replacement_span),
-        lsproto::ImportKind::Default => (format!("import{}{}{} from {}{}", top_level_type_only_text, name, tab_stop, quoted_module_specifier, suffix), replacement_span),
-        lsproto::ImportKind::Namespace => (format!("import{}* as {} from {}{}", top_level_type_only_text, name, quoted_module_specifier, suffix), replacement_span),
+        lsproto::ImportKind::CommonJS => (format!("import{top_level_type_only_text}{name}{tab_stop} = require({quoted_module_specifier}){suffix}"), replacement_span),
+        lsproto::ImportKind::Default => (format!("import{top_level_type_only_text}{name}{tab_stop} from {quoted_module_specifier}{suffix}"), replacement_span),
+        lsproto::ImportKind::Namespace => (format!("import{top_level_type_only_text}* as {name} from {quoted_module_specifier}{suffix}"), replacement_span),
         lsproto::ImportKind::Named => (
             format!(
                 "import{}{{ {}{}{} }} from {}{}",
@@ -402,14 +404,14 @@ impl LanguageService {
                 if needs_convert_property_access {
                     insert_text = format!("[{}]", quote_property_name(file, &preferences, &name));
                 } else {
-                    insert_text = format!("[{}]", name);
+                    insert_text = format!("[{name}]");
                 }
             } else {
                 insert_text.clone_from(&name);
             }
 
             if insert_question_dot || property_access_to_convert.question_dot_token().is_some() {
-                insert_text = format!("?.{}", insert_text);
+                insert_text = format!("?.{insert_text}");
             }
 
             let mut dot = astnav::find_child_of_kind(property_access_to_convert, Kind::DotToken, file);
@@ -443,7 +445,7 @@ impl LanguageService {
             if insert_text.is_empty() {
                 insert_text.clone_from(&name);
             }
-            insert_text = format!("{{{}}}", insert_text);
+            insert_text = format!("{{{insert_text}}}");
             if let Some(initializer) = data.jsx_initializer.initializer {
                 let (lsp_range, fidelity) = self.create_lsp_range_from_node(initializer, file);
                 if !fidelity.is_exact() {
@@ -581,7 +583,7 @@ impl LanguageService {
             is_snippet = method.is_snippet;
             label_details.clone_from(&method.label_details);
             if !client_supports_item_label_details(ctx) {
-                name = name + method.label_details.as_ref().unwrap().detail.as_ref().unwrap();
+                name.push_str(method.label_details.as_ref().unwrap().detail.as_ref().unwrap());
                 label_details = None;
             }
             source = COMPLETION_SOURCE_OBJECT_LITERAL_METHOD_SNIPPET.to_string();
@@ -636,7 +638,7 @@ impl LanguageService {
             } else if parent_named_import_or_export.kind() == Kind::NamedImports {
                 let possible_token = scanner::string_to_token(&name);
                 if possible_token != Kind::Unknown && (possible_token == Kind::AwaitKeyword || lsutil::is_non_contextual_keyword(possible_token)) {
-                    insert_text = format!("{} as {}_", name, name);
+                    insert_text = format!("{name} as {name}_");
                 }
             }
         }
@@ -864,7 +866,6 @@ impl LanguageService {
                 origin: symbolOriginInfo {
                     kind: symbolOriginInfoKind::ObjectLiteralMethod,
                     data: symbolOriginData::ObjectLiteralMethod(entry),
-                    ..Default::default()
                 },
             })
         }));
@@ -1016,9 +1017,8 @@ impl LanguageService {
         texts.extend(completion_nodes.into_iter().map(|node| {
             let decorators: &[P<Node>] = if Some(node) == decorated_node { &present_modifiers.decorators } else { &[] };
             let node = ast::replace_modifiers(&change_tracker.node_factory, node, create_modifier_list(&change_tracker.node_factory, modifiers, decorators));
-            let text =
-                snippet_printer.print_and_format_node_with_settings(ctx, node, file, change::get_format_code_settings_for_writing(self.format_options(), file));
-            text
+
+            snippet_printer.print_and_format_node_with_settings(ctx, node, file, change::get_format_code_settings_for_writing(self.format_options(), file))
         }));
 
         let insert_text = texts.join(&new_line);
@@ -1242,15 +1242,13 @@ pub(crate) fn get_filter_text(
                     return after.to_string();
                 }
             }
+        } else if word_start == '#' {
+            // `method() { this.#| }`
+            return String::new();
         } else {
-            if word_start == '#' {
-                // `method() { this.#| }`
-                return String::new();
-            } else {
-                // `method() { this.| }`
-                // `method() { | }`
-                return after.to_string();
-            }
+            // `method() { this.| }`
+            // `method() { | }`
+            return after.to_string();
         }
     }
 
@@ -1270,22 +1268,22 @@ pub(crate) fn get_filter_text(
         return dot_accessor.to_string() + &trim_element_access(insert_text);
     }
 
-    if insert_text.starts_with("?.") {
+    if let Some(insert_text) = insert_text.strip_prefix("?.") {
         // Handle this case like the case above:
         // ```
         // const xyz = { 'ab c': 1 } | undefined;
         // xyz.ab|
         // ```
         // filterText should be `.ab c` instead of `?.['ab c']`.
-        if insert_text.starts_with("?.[") {
-            return dot_accessor.to_string() + &trim_element_access(&insert_text[2..]);
+        if insert_text.starts_with('[') {
+            return dot_accessor.to_string() + &trim_element_access(insert_text);
         } else {
             // ```
             // const xyz = { abc: 1 } | undefined;
             // xyz.ab|
             // ```
             // filterText should be `.abc` instead of `?.abc.
-            return dot_accessor.to_string() + &insert_text[2..];
+            return dot_accessor.to_string() + insert_text;
         }
     }
 
@@ -1408,6 +1406,7 @@ fn should_include_symbol(
     if let (Some(closest_symbol_declaration), Some(symbol_declaration)) = (closest_symbol_declaration, symbol_declaration) {
         if ast::is_parameter_declaration(closest_symbol_declaration) && ast::is_parameter_declaration(symbol_declaration) {
             let parameters = closest_symbol_declaration.parent().unwrap().parameter_list().unwrap();
+            #[expect(clippy::suspicious_operation_groupings, reason = "both bounds intentionally compare declaration start positions")]
             if symbol_declaration.pos() >= closest_symbol_declaration.pos() && symbol_declaration.pos() < parameters.end() {
                 return false;
             }
@@ -1420,6 +1419,7 @@ fn should_include_symbol(
             if is_in_type_parameter_default(data.context_token) && !ast::is_infer_type_node(closest_symbol_declaration.parent().unwrap()) {
                 let type_parameters = closest_symbol_declaration.parent().unwrap().type_parameter_list();
                 if let Some(type_parameters) = type_parameters {
+                    #[expect(clippy::suspicious_operation_groupings, reason = "both bounds intentionally compare declaration start positions")]
                     if symbol_declaration.pos() >= closest_symbol_declaration.pos() && symbol_declaration.pos() < type_parameters.end() {
                         return false;
                     }
@@ -1439,16 +1439,16 @@ fn should_include_symbol(
     if file.external_module_indicator().is_some()
         && compiler_options.allow_umd_global_access != Tristate::True
         && symbol != symbol_origin
-        && data.symbol_to_sort_text_map.get(&ast::get_symbol_id(symbol)).map(|s| s.as_str()) == Some(SORT_TEXT_GLOBALS_OR_KEYWORDS)
+        && data.symbol_to_sort_text_map.get(&ast::get_symbol_id(symbol)).map(std::string::String::as_str) == Some(SORT_TEXT_GLOBALS_OR_KEYWORDS)
         && symbol.parent().is_some()
         && checker::is_external_module_symbol(symbol.parent().unwrap())
     {
         return false;
     }
 
-    all_flags = all_flags | symbol_origin.combined_local_and_export_symbol_flags();
+    all_flags |= symbol_origin.combined_local_and_export_symbol_flags();
     if symbol.flags().intersects(SymbolFlags::Alias) {
-        all_flags = all_flags | type_checker.get_symbol_flags_exported(symbol);
+        all_flags |= type_checker.get_symbol_flags_exported(symbol);
     }
 
     // import m = /**/ <-- It can only access namespace (if typing import = x. this would get member symbols and not namespace)
@@ -1642,7 +1642,7 @@ pub(crate) fn is_valid_trigger(
         }
         " " => context_token.is_some_and(|ct| ct.kind() == Kind::ImportKeyword && ct.parent().unwrap().kind() == Kind::SourceFile),
         "*" => crate::jsdoc_snippet::is_potentially_valid_jsdoc_snippet_completion_position(file, position),
-        _ => panic!("Unknown trigger character: {}", trigger_character),
+        _ => panic!("Unknown trigger character: {trigger_character}"),
     }
 }
 

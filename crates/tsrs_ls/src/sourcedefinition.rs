@@ -836,7 +836,7 @@ fn find_closest_declaration_node(source_file: P<SourceFile>, pos: u32) -> P<Node
     let node = astnav::get_touching_property_name(source_file, pos);
     let current = Some(node);
     if let Some(result) = std::iter::successors(current, |cur| cur.parent())
-        .find_map(|cur| if ast::is_declaration(cur) || cur.kind() == Kind::ExportAssignment { Some(cur) } else { None })
+        .find(|&cur| ast::is_declaration(cur) || cur.kind() == Kind::ExportAssignment)
     {
         return result;
     }

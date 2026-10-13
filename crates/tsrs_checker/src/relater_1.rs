@@ -55,7 +55,7 @@ impl Relation {
         assert!(bits <= RELATION_RESULT_MASK, "relation result bits above {RELATION_RESULT_BITS}");
         match key {
             RelationKey::Pair(k) => {
-                let slot = k << RELATION_RESULT_BITS | bits;
+                let slot = (k << RELATION_RESULT_BITS) | bits;
                 let mut pairs = self.pairs.borrow_mut();
                 let hash = pair_slot_hash(k);
                 match pairs.find_mut(hash, |&slot| slot >> RELATION_RESULT_BITS == k) {
@@ -916,7 +916,7 @@ impl Checker {
             return idx;
         }
         if target.flags().intersects(TypeFlags::Union) {
-            let best = self.get_best_matching_type(source, target, |c, s, t| c.compare_types_assignable_simple(s, t));
+            let best = self.get_best_matching_type(source, target, super::checker::Checker::compare_types_assignable_simple);
             if let Some(best) = best {
                 return self.get_indexed_access_type_or_undefined(best, name_type, AccessFlags::None, None, AliasArg::None);
             }
@@ -1038,9 +1038,9 @@ impl Checker {
      *    (this means that 'toString', for example, is not usually a known property).
      * 4. In a union or intersection type,
      *    a property is considered known if it is known in any constituent type.
-     * @param targetType a type to search a given name in
-     * @param name a property name to search
-     * @param isComparingJsxAttributes a boolean flag indicating whether we are searching in JsxAttributesType
+     *    @param targetType a type to search a given name in
+     *    @param name a property name to search
+     *    @param isComparingJsxAttributes a boolean flag indicating whether we are searching in JsxAttributesType
      */
     pub(crate) fn is_known_property(&mut self, target_type: P<Type>, name: &str, is_comparing_jsx_attributes: bool) -> bool {
         if target_type.flags().intersects(TypeFlags::Object) {
@@ -1235,9 +1235,9 @@ const RECURSION_KEY_INTERSECTION: u64 = 4 << 48;
 #[inline]
 fn recursion_key(identity: RecursionId) -> u64 {
     match identity {
-        RecursionId::Node(n) => 1 << 48 | n.pack(),
-        RecursionId::Symbol(s) => 2 << 48 | s.pack(),
-        RecursionId::Type(t) => 3 << 48 | t.pack(),
+        RecursionId::Node(n) => (1 << 48) | n.pack(),
+        RecursionId::Symbol(s) => (2 << 48) | s.pack(),
+        RecursionId::Type(t) => (3 << 48) | t.pack(),
     }
 }
 
@@ -1344,8 +1344,7 @@ pub(crate) fn get_recursion_identity_from_target(t: P<Type>) -> RecursionId {
             }
         }
         if let Some(symbol) = t.symbol() {
-            if !(t.object_flags().intersects(ObjectFlags::Anonymous) && symbol.flags().intersects(SymbolFlags::Class))
-                && !t.object_flags().intersects(ObjectFlags::FromTypeNode)
+            if !(t.object_flags().intersects(ObjectFlags::FromTypeNode) || t.object_flags().intersects(ObjectFlags::Anonymous) && symbol.flags().intersects(SymbolFlags::Class))
             {
                 // We track object types that have a symbol by that symbol (representing the origin of the type), but
                 // exclude the static sides of classes (since they share their symbols with the instance sides) and type
@@ -1465,7 +1464,7 @@ impl Checker {
 
     // relater.go:945
     pub(crate) fn find_best_type_for_object_literal(&mut self, source: P<Type>, union_target: P<Type>) -> Option<P<Type>> {
-        if source.object_flags().intersects(ObjectFlags::ObjectLiteral) && some_type(self, union_target, |c, t| c.is_array_like_type(t)) {
+        if source.object_flags().intersects(ObjectFlags::ObjectLiteral) && some_type(self, union_target, super::checker::Checker::is_array_like_type) {
             for &t in union_target.types() {
                 if !self.is_array_like_type(t) {
                     return Some(t);
@@ -1678,7 +1677,7 @@ pub(crate) fn exclude_properties<'a>(properties: &'a [P<Symbol>], excluded_prope
     properties.into()
 }
 
-impl<'a> TypeDiscriminator<'a> {
+impl TypeDiscriminator<'_> {
     // relater.go:1036
     pub(crate) fn len(&mut self, c: &mut Checker) -> usize {
         let _ = c;
@@ -1713,7 +1712,7 @@ impl Checker {
                 return Some(m);
             }
             let source_properties = self.get_properties_of_type(source);
-            let discriminant_properties = self.find_discriminant_properties(&source_properties, target);
+            let discriminant_properties = self.find_discriminant_properties(source_properties, target);
             if !discriminant_properties.is_empty() {
                 let mut discriminator = TypeDiscriminator { props: discriminant_properties, is_related_to: &mut is_related_to };
                 let discriminated = self.discriminate_type_by_discriminable_items(target, &mut discriminator);
@@ -1926,13 +1925,9 @@ impl Checker {
                 }
             }
             // Turn each Ternary.Maybe into Ternary.False if there was a match. Otherwise, revert to Ternary.True.
-            for i in 0..types.len() {
-                if include[i] == Ternary::Maybe {
-                    if matched {
-                        include[i] = Ternary::False;
-                    } else {
-                        include[i] = Ternary::True;
-                    }
+            for state in &mut include {
+                if *state == Ternary::Maybe {
+                    *state = if matched { Ternary::False } else { Ternary::True };
                 }
             }
         }
@@ -2092,7 +2087,7 @@ impl Checker {
     // returns an empty slice when invoked recursively for the given generic type.
     pub(crate) fn get_variances_worker(&mut self, symbol: P<Symbol>, type_parameters: &'static [P<Type>]) -> Vec<VarianceFlags> {
         let links = self.variance_links.get(symbol);
-        let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, |v| v.len());
+        let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, <[types::VarianceFlags]>::len);
         if links.variances.get().is_none() {
             let stack_index = self.get_variance_stack_index(symbol);
             if stack_index.is_none() {
@@ -2923,7 +2918,7 @@ impl Checker {
             }
         }
         let root_name = if let Some(rest_symbol) = rest_symbol { rest_symbol.name() } else { "arg" };
-        format!("{}_{}", root_name, index)
+        format!("{root_name}_{index}")
     }
 
     // relater.go:1992
@@ -2952,7 +2947,7 @@ impl Checker {
                         if element_flags.intersects(ElementFlags::Variable) {
                             return name.to_string();
                         }
-                        return format!("{}_{}", name, index);
+                        return format!("{name}_{index}");
                     }
                     // given
                     //   (...[x]: [number]) => ...
@@ -2968,7 +2963,7 @@ impl Checker {
                     if element_flags.intersects(ElementFlags::Fixed) {
                         return name.to_string();
                     }
-                    return format!("{}_n", name);
+                    return format!("{name}_n");
                 }
                 Kind::ArrayBindingPattern => {
                     if has_dot_dot_dot_token(node) {
@@ -2995,7 +2990,7 @@ impl Checker {
                 _ => {}
             }
         }
-        format!("arg_{}", index)
+        format!("arg_{index}")
     }
 
     // relater.go:2049
@@ -3157,9 +3152,9 @@ impl Checker {
             if list_index != 0 {
                 return Vec::new();
             }
-            for i in 1..signature_lists.len() {
+            for signature_list in signature_lists.iter().skip(1) {
                 if self
-                    .find_matching_signature(&signature_lists[i], signature, false /*partialMatch*/, false /*ignoreThisTypes*/, false /*ignoreReturnTypes*/)
+                    .find_matching_signature(signature_list, signature, false /*partialMatch*/, false /*ignoreThisTypes*/, false /*ignoreReturnTypes*/)
                     .is_none()
                 {
                     return Vec::new();
@@ -3168,15 +3163,15 @@ impl Checker {
             return vec![signature];
         }
         let mut result: Vec<P<Signature>> = Vec::new();
-        for i in 0..signature_lists.len() {
+        for (i, signature_list) in signature_lists.iter().enumerate() {
             // Allow matching non-generic signatures to have excess parameters (as a fallback if exact parameter match is not found) and different return types.
             // Prefer matching this types if possible.
             let m = if i == list_index {
                 Some(signature)
             } else {
-                let m = self.find_matching_signature(&signature_lists[i], signature, false /*partialMatch*/, false /*ignoreThisTypes*/, true /*ignoreReturnTypes*/);
+                let m = self.find_matching_signature(signature_list, signature, false /*partialMatch*/, false /*ignoreThisTypes*/, true /*ignoreReturnTypes*/);
                 if m.is_none() {
-                    self.find_matching_signature(&signature_lists[i], signature, true /*partialMatch*/, false /*ignoreThisTypes*/, true /*ignoreReturnTypes*/)
+                    self.find_matching_signature(signature_list, signature, true /*partialMatch*/, false /*ignoreThisTypes*/, true /*ignoreReturnTypes*/)
                 } else {
                     m
                 }
@@ -3402,8 +3397,9 @@ impl Checker {
         let target_end = target_texts[target_texts.len() - 1].as_bytes();
         let start_len = source_start.len().min(target_start.len());
         let end_len = source_end.len().min(target_end.len());
-        source_start[..start_len] != target_start[..start_len]
-            || source_end[source_end.len() - end_len..] != target_end[target_end.len() - end_len..]
+        let source_suffix = &source_end[source_end.len() - end_len..];
+        let target_suffix = &target_end[target_end.len() - end_len..];
+        source_start[..start_len] != target_start[..start_len] || source_suffix != target_suffix
     }
 
     // relater.go:2365
@@ -3577,8 +3573,8 @@ impl Checker {
         }
         if source.flags().intersects(TypeFlags::StringLiteral) {
             let value = get_string_literal_value(source);
-            return target.flags().intersects(TypeFlags::Number) && is_valid_number_string(&value, false /*roundTripOnly*/)
-                || target.flags().intersects(TypeFlags::BigInt) && is_valid_big_int_string(&value, false /*roundTripOnly*/)
+            return target.flags().intersects(TypeFlags::Number) && is_valid_number_string(value, false /*roundTripOnly*/)
+                || target.flags().intersects(TypeFlags::BigInt) && is_valid_big_int_string(value, false /*roundTripOnly*/)
                 || target.flags().intersects(TypeFlags::BooleanLiteral | TypeFlags::Nullable)
                     && value == target.as_intrinsic_type().intrinsic_name()
                 || target.flags().intersects(TypeFlags::StringMapping) && self.is_member_of_string_mapping(source, target)

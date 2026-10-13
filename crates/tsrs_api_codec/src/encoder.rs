@@ -533,7 +533,7 @@ pub(crate) fn record_extended_data_source_file(node: P<Node>, cx: &mut EncodeCon
 fn record_template_like(node: P<Node>, text: &str, raw_text: &str, flags: TokenFlags, cx: &mut EncodeContext) {
     let text_index = cx.strs.add(text, node.kind(), node.pos(), node.end());
     let raw_index = cx.strs.add(raw_text, node.kind(), node.pos(), node.end());
-    append_u32s(&mut cx.extended_data, &[text_index, raw_index, flags.bits() as u32]);
+    append_u32s(&mut cx.extended_data, &[text_index, raw_index, flags.bits()]);
 }
 
 pub(crate) fn record_extended_data_template_head(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
@@ -556,7 +556,7 @@ pub(crate) fn record_extended_data_template_tail(node: P<Node>, cx: &mut EncodeC
 
 fn record_literal(node: P<Node>, text: &str, flags: TokenFlags, cx: &mut EncodeContext) {
     let text_index = cx.strs.add(text, node.kind(), node.pos(), node.end());
-    append_u32s(&mut cx.extended_data, &[text_index, flags.bits() as u32]);
+    append_u32s(&mut cx.extended_data, &[text_index, flags.bits()]);
 }
 
 pub(crate) fn record_extended_data_string_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {

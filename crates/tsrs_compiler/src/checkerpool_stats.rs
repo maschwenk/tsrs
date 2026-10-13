@@ -35,7 +35,7 @@ const CATEGORIES: [(Category, &str); 6] = [
 
 fn category(program: &Program, file: P<SourceFile>, project_dir: &str) -> Category {
     let name = file.file_name();
-    if program.is_source_file_default_library(&file.path()) {
+    if program.is_source_file_default_library(file.path()) {
         Category::Lib
     } else if name.contains("/node_modules/") {
         Category::NodeModules
@@ -84,7 +84,7 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
     if std::env::var("TSRS_ASSIGNMENT_STATS").is_ok_and(|v| v == "times") {
         let mut out = String::new();
         for run in state.group_runs.lock().unwrap().iter() {
-            let times: Vec<String> = run.iter().map(|(t, n)| format!("{:.2}s/{}", t, n)).collect();
+            let times: Vec<String> = run.iter().map(|(t, n)| format!("{t:.2}s/{n}")).collect();
             let _ = writeln!(out, "checker group seconds/files: {}", times.join(" "));
         }
         for run in state.group_cpu.lock().unwrap().iter() {
@@ -92,7 +92,7 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
             let _ = writeln!(out, "checker group cpu seconds: {}", times.join(" "));
         }
         for run in state.group_stolen.lock().unwrap().iter() {
-            let counts: Vec<String> = run.iter().map(|n| n.to_string()).collect();
+            let counts: Vec<String> = run.iter().map(std::string::ToString::to_string).collect();
             let _ = writeln!(out, "checker group stolen files: {}", counts.join(" "));
         }
         return out;
@@ -100,8 +100,8 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
     let categories: Vec<Category> = files.iter().map(|&f| category(program, f, &project_dir)).collect();
 
     // work[c][file] = linked nodes + linked symbols
-    let work: Vec<Mutex<Vec<u64>>> = (0..k).map(|_| Mutex::new(Vec::new())).collect();
-    let counters: Vec<Mutex<(u64, u64, u64)>> = (0..k).map(|_| Mutex::new((0, 0, 0))).collect();
+    let work: Vec<Mutex<Vec<u64>>> = std::iter::repeat_with(|| Mutex::new(Vec::new())).take(k).collect();
+    let counters: Vec<Mutex<(u64, u64, u64)>> = std::iter::repeat_with(|| Mutex::new((0, 0, 0))).take(k).collect();
     pool.for_each_checker_parallel(|idx, c| {
         let w: Vec<u64> = files
             .iter()
@@ -122,7 +122,7 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
     let _ = writeln!(out, "\n== checker assignment stats ({} checkers, {} files, project dir {}) ==", k, files.len(), project_dir);
     let runs = state.group_runs.lock().unwrap();
     for (run_index, run) in runs.iter().enumerate() {
-        let times: Vec<String> = run.iter().map(|(t, n)| format!("{:.2}s/{}", t, n)).collect();
+        let times: Vec<String> = run.iter().map(|(t, n)| format!("{t:.2}s/{n}")).collect();
         let _ = writeln!(out, "group run {}: seconds/files per checker: {}", run_index, times.join(" "));
     }
 
@@ -203,7 +203,7 @@ pub(crate) fn report(program: &'static Program, pool: &crate::checkerpool::check
         }
         grand_sum += sum;
         grand_max += max;
-        let mut line = format!("{:>16} {:>7}", name, count);
+        let mut line = format!("{name:>16} {count:>7}");
         for n in 0..=k {
             let _ = write!(line, " {:>14}", format!("{}/{:.2}", by_n_files[n], by_n_work[n] as f64 / 1e6));
         }

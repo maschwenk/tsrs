@@ -101,7 +101,7 @@ impl HeapCensus {
         let mut rows: Vec<&(String, HeapStat)> = self.rows.iter().collect();
         rows.sort_by(|a, b| b.1.bytes.cmp(&a.1.bytes).then_with(|| a.0.cmp(&b.0)));
         let mut out = String::new();
-        let _ = writeln!(out, "heap census {title}: {:.1} MB in {} rows", self.total() as f64 / 1048576.0, self.rows.len());
+        let _ = writeln!(out, "heap census {title}: {:.1} MB in {} rows", self.total() as f64 / 1_048_576.0, self.rows.len());
         let _ = writeln!(out, "| owner | containers | entries | capacity | B/slot | load | MB |");
         let _ = writeln!(out, "| --- | --- | --- | --- | --- | --- | --- |");
         for (name, s) in rows.iter().filter(|r| r.1.bytes >= min_bytes) {
@@ -114,7 +114,7 @@ impl HeapCensus {
                 s.cap,
                 s.slot,
                 load,
-                s.bytes as f64 / 1048576.0
+                s.bytes as f64 / 1_048_576.0
             );
         }
         out

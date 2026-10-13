@@ -205,7 +205,7 @@ pub struct Session {
 
 // session.go:210
 pub fn new_session(init: &SessionInit) -> Arc<Session> {
-    let snapshot_host = new_snapshot_host(&init);
+    let snapshot_host = new_snapshot_host(init);
     let session_logger = init.logger.clone().unwrap_or_else(new_nop_logger);
     let relative_pattern_support = lsproto::get_client_capabilities(&init.background_ctx).workspace.did_change_watched_files.relative_pattern_support;
     let snapshot = snapshot_host.new_root_snapshot_with(0, relative_pattern_support);
@@ -402,7 +402,7 @@ impl Session {
         let configured = snapshot.config_file_registry.content_mappers();
         let mut extensions = configured.extensions.clone();
         extensions.extend(snapshot.inferred_project_content_mapper_extensions.iter().cloned());
-        let extensions: Vec<&str> = extensions.iter().map(|e| e.as_str()).collect();
+        let extensions: Vec<&str> = extensions.iter().map(std::string::String::as_str).collect();
         tspath::file_extension_is_one_of(&uri.file_name(), &extensions)
     }
 
@@ -455,7 +455,7 @@ impl Session {
                         }
                     }
                 } else {
-                    let extensions: Vec<&str> = content_mapper_extensions.iter().map(|e| e.as_str()).collect();
+                    let extensions: Vec<&str> = content_mapper_extensions.iter().map(std::string::String::as_str).collect();
                     if is_relevant_extension(&path_str[i.unwrap()..]) || tspath::file_extension_is_one_of(path_str, &extensions) {
                         has_relevant_change = true;
                     }
@@ -550,7 +550,7 @@ impl Session {
             if let Some(client) = &s.client {
                 if let Err(err) = client.refresh_diagnostics(&s.background_context()) {
                     if s.options.logging_enabled {
-                        s.logger.logf(format_args!("Error refreshing diagnostics: {}", err));
+                        s.logger.logf(format_args!("Error refreshing diagnostics: {err}"));
                     }
                 }
             }
@@ -617,7 +617,7 @@ impl Session {
                 return;
             }
 
-            s.update_snapshot(ctx, overlays, SnapshotChange { reason, file_changes, ata_changes, new_config, ..Default::default() });
+            s.update_snapshot(ctx, overlays, SnapshotChange { reason, file_changes, new_config, ata_changes, ..Default::default() });
         });
     }
 
@@ -798,10 +798,10 @@ impl Session {
             }
             if let Some(file) = snapshot.get_file(&uri.file_name()) {
                 if file.kind() == ScriptKind::Unknown {
-                    return Err(lsproto::Error::new(format!("{}: no project found for URI {}", ErrNoProjectForUnknownScriptKind, uri)));
+                    return Err(lsproto::Error::new(format!("{ErrNoProjectForUnknownScriptKind}: no project found for URI {uri}")));
                 }
             }
-            return Err(lsproto::Error::new(format!("no project found for URI {}", uri)));
+            return Err(lsproto::Error::new(format!("no project found for URI {uri}")));
         };
         let language_service = Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), Arc::<Snapshot>::clone(&snapshot), &uri.file_name()));
         Ok((snapshot, project, language_service))
@@ -904,7 +904,7 @@ impl Session {
         let snapshot =
             self.get_snapshot(ctx, ResourceRequest { documents: vec![uri.clone()], auto_imports: uri.clone(), ..Default::default() }, false /*callerRef*/);
         let Some(project) = snapshot.get_default_project(uri) else {
-            return Err(lsproto::Error::new(format!("no project found for URI {}", uri)));
+            return Err(lsproto::Error::new(format!("no project found for URI {uri}")));
         };
         Ok(Arc::new(new_language_service(ProjectID(project.id().0), project.get_program().unwrap(), snapshot, &uri.file_name())))
     }
@@ -959,7 +959,7 @@ impl Session {
         let Some(project) = new_snapshot.get_default_project(uri) else {
             // Clone's initial ref (1) is released since we won't use this snapshot.
             new_snapshot.deref();
-            return Err(lsproto::Error::new(format!("no project found for URI {}", uri)));
+            return Err(lsproto::Error::new(format!("no project found for URI {uri}")));
         };
 
         self.try_adopt_snapshot_change_in_background(Arc::clone(base_snapshot), Arc::clone(&new_snapshot));
@@ -997,7 +997,7 @@ impl Session {
         if Arc::ptr_eq(&old_snapshot, base_snapshot) {
             // Session hasn't moved on; adopt the new snapshot. The clone's initial
             // ref is transferred to become the session's ref for its current snapshot.
-            *guard = Arc::clone(&new_snapshot);
+            *guard = Arc::clone(new_snapshot);
             old_snapshot.deref();
             drop(guard);
             if self.options.logging_enabled {
@@ -1150,9 +1150,9 @@ impl Session {
                         Err(err) => watch_errors.push(err),
                         Ok(()) => {
                             if old_watcher.is_none() {
-                                self.logger.log(&format!("Added new watch: {}", id));
+                                self.logger.log(&format!("Added new watch: {id}"));
                             } else {
-                                self.logger.log(&format!("Updated watch: {}", id));
+                                self.logger.log(&format!("Updated watch: {id}"));
                             }
                             self.logger.log(&format!("\t{}", file_system_watcher_glob_string(watcher)));
                             self.logger.log("");
@@ -1201,7 +1201,7 @@ impl Session {
                         Err(err) => errors.push(err),
                         Ok(()) => {
                             if new_watcher.is_none() {
-                                self.logger.log(&format!("Removed watch: {}", id));
+                                self.logger.log(&format!("Removed watch: {id}"));
                             }
                         }
                     }
@@ -1451,9 +1451,9 @@ impl Session {
         self.logger.logf(format_args!("Project count:     {:6}", snapshot.project_collection.projects().len()));
         self.logger.logf(format_args!("Config count:      {:6}", snapshot.config_file_registry.configs.len()));
         if self.logger.is_verbose() {
-            self.logger.logf(format_args!("Parse cache size:           {:6}", parse_cache_size));
+            self.logger.logf(format_args!("Parse cache size:           {parse_cache_size:6}"));
             self.logger.logf(format_args!("Program count:              {:6}", self.snapshot_host.program_counter.len()));
-            self.logger.logf(format_args!("Extended config cache size: {:6}", extended_config_count));
+            self.logger.logf(format_args!("Extended config cache size: {extended_config_count:6}"));
 
             self.logger.log("Auto Imports:");
             // Go calls GetCacheStats on the (never nil after an update) registry pointer.
@@ -1474,20 +1474,20 @@ impl Session {
                     if let Some(dirty_packages) = bucket.state.dirty_packages() {
                         #[expect(clippy::iter_over_hash_type, reason = "log lines only; Go ranges the set too")]
                         for package_name in dirty_packages.keys() {
-                            self.logger.logf(format_args!("\t\t\tNeeds granular update: {}", package_name));
+                            self.logger.logf(format_args!("\t\t\tNeeds granular update: {package_name}"));
                         }
                     }
                     match &bucket.dependency_names {
                         Some(dependency_names) => self.logger.logf(format_args!("\t\t\tCollected packages: {}", dependency_names.len())),
                         None => self.logger.logf(format_args!("\t\t\tCollected packages: all, due to no package.json!")),
                     }
-                    self.logger.logf(format_args!("\t\t\tTotal packages: {}", bucket.package_names.as_ref().map_or(0, |p| p.len())));
+                    self.logger.logf(format_args!("\t\t\tTotal packages: {}", bucket.package_names.as_ref().map_or(0, tsrs_core::collections::Set::len)));
                     self.logger.logf(format_args!("\t\t\tFiles: {}", bucket.file_count));
                     self.logger.logf(format_args!("\t\t\tExports: {}", bucket.export_count));
                     match bucket.state.recursive_search_packages() {
                         None => self.logger.log("\t\t\tRecursive search: all"),
                         Some(packages) if packages.len() > 0 => {
-                            self.logger.logf(format_args!("\t\t\tRecursive search: {} packages", packages.len()))
+                            self.logger.logf(format_args!("\t\t\tRecursive search: {} packages", packages.len()));
                         }
                         Some(_) => self.logger.log("\t\t\tRecursive search: none"),
                     }
@@ -1507,7 +1507,7 @@ impl Session {
             if let Some(client) = &self.client {
                 if let Err(err) = client.refresh_inlay_hints(&self.background_context()) {
                     if self.options.logging_enabled {
-                        self.logger.logf(format_args!("Error refreshing inlay hints: {}", err));
+                        self.logger.logf(format_args!("Error refreshing inlay hints: {err}"));
                     }
                 }
             }
@@ -1520,7 +1520,7 @@ impl Session {
             if let Some(client) = &self.client {
                 if let Err(err) = client.refresh_code_lens(&self.background_context()) {
                     if self.options.logging_enabled {
-                        self.logger.logf(format_args!("Error refreshing code lens: {}", err));
+                        self.logger.logf(format_args!("Error refreshing code lens: {err}"));
                     }
                 }
             }
@@ -1637,7 +1637,7 @@ impl Session {
                 lsproto::PublishDiagnosticsParams { uri: lsconv::file_name_to_document_uri(config_file_path), version: None, diagnostics: lsp_diagnostics },
             ) {
                 if self.options.logging_enabled {
-                    self.logger.logf(format_args!("Error publishing diagnostics: {}", err));
+                    self.logger.logf(format_args!("Error publishing diagnostics: {err}"));
                 }
             }
         }
@@ -1720,7 +1720,7 @@ impl Session {
                         if c.err().is_some() {
                             return;
                         }
-                        l.logf(format_args!("Cancelling auto-import warming for file {}", f));
+                        l.logf(format_args!("Cancelling auto-import warming for file {f}"));
                         cancel.call();
                     }));
                 }

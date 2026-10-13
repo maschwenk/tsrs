@@ -144,19 +144,19 @@ impl Diagnostic {
     }
 
     pub fn set_file(&self, file: Option<P<SourceFile>>) {
-        self.file.set(file)
+        self.file.set(file);
     }
     pub fn set_location(&self, loc: TextRange) {
-        self.loc.set(loc.is_valid().then_some(loc))
+        self.loc.set(loc.is_valid().then_some(loc));
     }
     pub fn set_category(&self, category: Category) {
-        self.category.set(category)
+        self.category.set(category);
     }
     pub fn set_skipped_on_no_emit(&self) {
-        self.skipped_on_no_emit.set(true)
+        self.skipped_on_no_emit.set(true);
     }
     pub fn set_repopulate_info(&self, info: RepopulateDiagnosticInfo) {
-        self.repopulate_info.set(Some(tsrs_core::alloc(info)))
+        self.repopulate_info.set(Some(tsrs_core::alloc(info)));
     }
 }
 

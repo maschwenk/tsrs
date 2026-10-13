@@ -1,4 +1,46 @@
-# Status
+# Release notes
+
+Release entries describe changes and evidence recorded for that version. Measurements from an individual
+change are identified separately from measurements of the packaged release. For current support and known gaps,
+see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
+[engineering notes](../notes/README.md). The early development log follows the release entries.
+
+## 2026-10-13: 0.14.1 release
+
+Highlights:
+
+- Fix false diagnostics involving merged interfaces, lazy mapped types and nested instantiation limits.
+- Ship default libraries beside the native binary and report the matching TypeScript nightly version.
+- Stop the language-server and API processes on SIGINT/SIGTERM, and preserve control characters in user strings.
+
+Known limitations: the repository-conformance smoke run still differs on opencode (member order in a message),
+n8n (an export name) and dify (a missing TS2578). The fixes below do not resolve those cases.
+
+Implementation and validation details:
+
+Fixes since 0.14.0. All seven packages use `0.14.1-ts7.1.0-dev.20260929`; the TypeScript source pin remains
+`b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929). Release binaries now report the nightly built from
+that commit instead of `7.1.0-dev`, so tsbuildinfo files and `typesVersions` ranges match the npm `tsgo` (#358).
+
+Checker: merged interfaces no longer report extra TS2320/TS2430 errors in supabase and stagehand; default CLI mode
+reports at tsgo's four-checker sites, API builds keep per-file diagnostics and Go-shaped build info, and incremental
+builds refresh interface errors when file order, imports or skip flags change (#349). Lazy mapped types no longer
+raise false TS5115/TS2456 cycles (#348), a nested check no longer leaves its instantiation count in the caller and
+adds a false TS2589 (#352), and user strings starting with DEL print as written (#351). Measurements are in
+[the incremental diagnostic note](../notes/fix-history-dependent-diagnostics.md); warm incremental wall time on
+stagehand was about 7% higher locally.
+
+Parity with tsgo: the npm packages ship the default libraries beside the binary (#354); a non-array `paths`
+substitution reports TS5063 (#355); `--traceResolution` loads programs in Go's single-threaded order (#356); a closed
+stdout ends the process with SIGPIPE (#357); `--lsp` and `--api` stop on SIGINT/SIGTERM (#360); API `objectFlags` omit
+tsrs-only bits (#359) and the completion error comes back unwrapped (#361).
+
+CI: the release workflow waits for optional dependencies before publishing `tsrs` (#333), Clippy is enforced without
+a baseline (#342) and a 400-repository conformance workflow compares tsrs with tsgo (#345, #350). Its 20-repository
+smoke run is identical on 59 of 62 projects; the three known differences are listed above.
+
+Scanner and binder hot-path changes (#336, #337, #338, #339) and the round-4 checker change (#319) were merged
+without new release measurements.
 
 ## 2026-10-11: 0.14.0 release
 
@@ -343,8 +385,11 @@ thieves keep stealing from one queue (#171, instructions -3 to -15% at 16-32 che
 
 Diagnostics: tsgo runs the merged-interface checks (TS2320, TS2430, index constraints) once per checker, so a merged
 interface declared in several files reported in files that depended on which files shared a checker. By default tsrs
-now runs them at the first declaration of the symbol in each file (#165, notes/fix-history-dependent-diagnostics.md);
-`--checkerAssignment go` keeps Go's placement for byte-identity.
+runs them at the first declaration of the symbol in each file (#165), and reports TS2320 / TS2430 only at the
+declarations where pinned tsgo at its default four checkers does, whatever tsrs's own checker count and assignment
+(notes/fix-history-dependent-diagnostics.md). tsgo at another `--checkers` count can differ; `--checkerAssignment go`
+keeps Go's placement for byte-identity there. Project/API pools retain per-file reporting in default mode. Incremental
+builds refresh interface-file diagnostics when program inputs or file order change, since those can move the report sites.
 
 Front end and start-up: the config is parsed on the worker pool and a CLI run creates no rayon global pool (#156, -64
 threads and -50 MB peak on vscode); checkers are created while files are assigned (#162) and program diagnostics are

@@ -378,7 +378,7 @@ pub(crate) fn get_documentation_from_declaration(
     let is_markdown = content_format == lsproto::MarkupKind::Markdown;
     let mut b = String::new();
     if let Some(jsdoc) = get_jsdoc_or_tag(c, Some(declaration), &mut FxHashSet::default()) {
-        if !(!declaration.flags().intersects(NodeFlags::Reparsed) && contains_typedef_tag(jsdoc)) {
+        if declaration.flags().intersects(NodeFlags::Reparsed) || !contains_typedef_tag(jsdoc) {
             write_comments(get_mapped_location, &mut b, c, jsdoc.comments(), is_markdown);
             if jsdoc.kind() == Kind::JSDoc && !comment_only {
                 if let Some(tags) = jsdoc.as_jsdoc().tags {
@@ -476,7 +476,8 @@ fn should_get_type(node: P<Node>) -> bool {
         Kind::Identifier => {
             // If we're in a JSDoc node with no associated symbol, no binding has taken place for the node and
             // we can't answer questions about types of declaration nodes (such as property declarations).
-            !(node.flags().intersects(NodeFlags::JSDoc) && ast::is_declaration_name(node))
+            let is_unbound_jsdoc_declaration = node.flags().intersects(NodeFlags::JSDoc) && ast::is_declaration_name(node);
+            !is_unbound_jsdoc_declaration
                 && !ast::is_label_name(node)
                 && !ast::is_tag_name(node)
                 && !ast::is_const_type_reference(node.parent().unwrap())
@@ -1170,12 +1171,12 @@ fn write_code(b: &mut String, lang: &str, code: &str) {
     while code.contains(&"`".repeat(ticks)) {
         ticks += 1;
     }
-    b.extend((0..ticks).map(|_| '`'));
+    b.push_str(&"`".repeat(ticks));
     b.push_str(lang);
     b.push('\n');
     b.push_str(code);
     b.push('\n');
-    b.extend((0..ticks).map(|_| '`'));
+    b.push_str(&"`".repeat(ticks));
     b.push('\n');
 }
 

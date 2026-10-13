@@ -21,7 +21,7 @@ impl LanguageService {
     ) -> Result<Option<P<Symbol>>, lsproto::Error> {
         let (program, file) = self.try_get_program_and_file(file_name);
         let Some(file) = file else {
-            return Err(lsproto::Error::new(format!("{}: {}", ERR_NO_SOURCE_FILE, file_name)));
+            return Err(lsproto::Error::new(format!("{ERR_NO_SOURCE_FILE}: {file_name}")));
         };
         // Go checks the token for nil; astnav.GetTokenAtPosition never returns nil.
         let node = astnav::get_token_at_position(file, position);

@@ -216,7 +216,7 @@ impl EmitTextWriter for ChangeTrackerWriter {
     }
     // changetrackerwriter.go:185
     fn write_comment(&mut self, text: &str) {
-        self.text_writer.write_comment(text)
+        self.text_writer.write_comment(text);
     }
     // changetrackerwriter.go:186
     fn write_keyword(&mut self, text: &str) {
@@ -267,19 +267,19 @@ impl EmitTextWriter for ChangeTrackerWriter {
     }
     // changetrackerwriter.go:225
     fn write_line(&mut self) {
-        self.text_writer.write_line()
+        self.text_writer.write_line();
     }
     // changetrackerwriter.go:226
     fn write_line_force(&mut self, force: bool) {
-        self.text_writer.write_line_force(force)
+        self.text_writer.write_line_force(force);
     }
     // changetrackerwriter.go:227
     fn increase_indent(&mut self) {
-        self.text_writer.increase_indent()
+        self.text_writer.increase_indent();
     }
     // changetrackerwriter.go:228
     fn decrease_indent(&mut self) {
-        self.text_writer.decrease_indent()
+        self.text_writer.decrease_indent();
     }
     // changetrackerwriter.go:229
     fn clear(&mut self) {

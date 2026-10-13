@@ -735,7 +735,7 @@ impl forawaitTransformer {
         async_body = f.update_block(async_body, ec.end_and_merge_variable_environment_list(async_body.statement_list()).unwrap(), async_body.as_block().multi_line);
 
         // Substitute super property accesses with _super/_superIndex helpers
-        let emit_super_helpers = s.captured_super_properties.borrow().as_ref().unwrap().len() > 0 || s.has_super_element_access.get();
+        let emit_super_helpers = !s.captured_super_properties.borrow().as_ref().unwrap().is_empty() || s.has_super_element_access.get();
         if emit_super_helpers {
             async_body = s.substitute_super_accesses_in_body(async_body);
         }
@@ -764,7 +764,7 @@ impl forawaitTransformer {
         )));
 
         ec.start_variable_environment();
-        if emit_super_helpers && s.captured_super_properties.borrow().as_ref().unwrap().len() > 0 {
+        if emit_super_helpers && !s.captured_super_properties.borrow().as_ref().unwrap().is_empty() {
             ec.add_initialization_statement(s.create_super_access_variable_statement());
         }
 

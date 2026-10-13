@@ -555,7 +555,7 @@ fn span_for_import_export_elements(ctx: &Context, node: P<Node>, source_file: P<
         Kind::ImportAttributes => Some(node.as_import_attributes().attributes.nodes()),
         _ => None,
     };
-    if elements.is_none_or(|e| e.is_empty()) {
+    if elements.is_none_or(<[tsrs_core::P<tsrs_ast::Node>]>::is_empty) {
         return None;
     }
     let open_token = astnav::find_child_of_kind(node, Kind::OpenBraceToken, source_file);

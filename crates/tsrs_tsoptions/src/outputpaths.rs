@@ -181,7 +181,7 @@ pub fn for_each_emitted_file(
 }
 
 fn extension_refs(extensions: &[String]) -> Vec<&str> {
-    extensions.iter().map(|s| s.as_str()).collect()
+    extensions.iter().map(std::string::String::as_str).collect()
 }
 
 pub fn get_output_js_file_name(input_file_name: &str, options: &CompilerOptions, host: &dyn OutputPathsHost) -> String {

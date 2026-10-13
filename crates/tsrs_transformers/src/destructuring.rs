@@ -110,7 +110,7 @@ struct restIdElemPair {
     element: P<Node>,
 }
 
-impl<'a> flattener<'a> {
+impl flattener<'_> {
     fn factory(&self) -> &'static printer::NodeFactory {
         self.tx.factory()
     }
@@ -446,15 +446,15 @@ impl<'a> flattener<'a> {
                 } else {
                     binding_elements.push(element);
                 }
-            } else if ast::is_omitted_expression(element) {
-                continue;
-            } else if get_rest_indicator_of_binding_or_assignment_element(element).is_none() {
-                let f = self.factory();
-                let rhs_value = f.new_element_access_expression(value, None, f.new_numeric_literal(alloc_str(&i.to_string()), TokenFlags::None), NodeFlags::None);
-                self.flatten_binding_or_assignment_element(element, Some(rhs_value), element.loc(), false);
-            } else if i == num_elements - 1 {
-                let rhs_value = self.factory().new_array_slice_call(value, i);
-                self.flatten_binding_or_assignment_element(element, Some(rhs_value), element.loc(), false);
+            } else if !ast::is_omitted_expression(element) {
+                if get_rest_indicator_of_binding_or_assignment_element(element).is_none() {
+                    let f = self.factory();
+                    let rhs_value = f.new_element_access_expression(value, None, f.new_numeric_literal(alloc_str(&i.to_string()), TokenFlags::None), NodeFlags::None);
+                    self.flatten_binding_or_assignment_element(element, Some(rhs_value), element.loc(), false);
+                } else if i == num_elements - 1 {
+                    let rhs_value = self.factory().new_array_slice_call(value, i);
+                    self.flatten_binding_or_assignment_element(element, Some(rhs_value), element.loc(), false);
+                }
             }
         }
         if !binding_elements.is_empty() {

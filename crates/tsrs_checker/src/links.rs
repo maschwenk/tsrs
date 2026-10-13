@@ -125,8 +125,8 @@ impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let index = self.len;
         self.slots.insert_unique(Self::hash(key), LinkSlot { key, index }, |slot| Self::hash(slot.key));
-        if index as usize % LINK_CHUNK == 0 {
-            self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+        if (index as usize).is_multiple_of(LINK_CHUNK) {
+            self.chunks.push(PSlot::first(alloc_vec(std::iter::repeat_with(|| PSlot(V::default())).take(LINK_CHUNK).collect())));
         }
         self.len += 1;
         if let Some(frozen) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN).and_then(|p| p.index_by_pkey(key).map(|i| p.at(i))) {
@@ -270,8 +270,8 @@ impl<K: 'static, V: KeyedLinks + Default + LinkCopy + 'static> KeyedLinkStore<K,
     fn create(&mut self, key: PKey) -> P<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let index = self.len;
-        if index as usize % LINK_CHUNK == 0 {
-            self.chunks.push(PSlot::first(alloc_vec((0..LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+        if (index as usize).is_multiple_of(LINK_CHUNK) {
+            self.chunks.push(PSlot::first(alloc_vec(std::iter::repeat_with(|| PSlot(V::default())).take(LINK_CHUNK).collect())));
         }
         self.len += 1;
         let value = keyed_at(&self.chunks, index);
@@ -516,11 +516,11 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
     fn create(&mut self, id: u64) -> P<V> {
         tsrs_core::sitecount::hit("links", std::any::type_name::<V>());
         let slot = self.len;
-        if slot as usize % ID_LINK_CHUNK == 0 {
-            self.chunks.push(PSlot::first(alloc_vec((0..ID_LINK_CHUNK).map(|_| PSlot(V::default())).collect())));
+        if (slot as usize).is_multiple_of(ID_LINK_CHUNK) {
+            self.chunks.push(PSlot::first(alloc_vec(std::iter::repeat_with(|| PSlot(V::default())).take(ID_LINK_CHUNK).collect())));
         }
         self.len += 1;
-        if id <= u32::MAX as u64 {
+        if u32::try_from(id).is_ok() {
             let group_index = (id >> ID_GROUP_SHIFT) as usize;
             if group_index >= self.index.len() {
                 // Grow by a quarter, not double: ids keep arriving in every checker's blocks for the whole run, so the
@@ -642,7 +642,7 @@ impl<V: 'static> InlineIdStore<V> {
             tables.containers += 1;
             tables.cap += INLINE_BLOCK_GROUPS as u64;
             tables.bytes += std::mem::size_of::<InlineBlock<V>>() as u64;
-            for group in block.get().iter().filter_map(|g| g.get()) {
+            for group in block.get().iter().filter_map(std::cell::Cell::get) {
                 tables.len += 1;
                 groups.containers += 1;
                 groups.len += INLINE_GROUP as u64;

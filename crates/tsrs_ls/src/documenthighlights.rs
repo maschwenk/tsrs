@@ -114,7 +114,7 @@ impl LanguageService {
             if !seen_files.add_if_absent(file_name.clone()) {
                 return None;
             }
-            if let Some(sf) = program.get_source_file(&file_name) { Some(sf) } else { None }
+            program.get_source_file(&file_name)
         }));
         if source_files.is_empty() {
             source_files = vec![source_file];
@@ -190,11 +190,7 @@ impl LanguageService {
         let mut result: Vec<lsproto::MultiDocumentHighlight> = Vec::new();
         result.extend(source_files.iter().filter_map(|sf| {
             let file_name = sf.original_file_name();
-            if let Some(highlights) = file_highlights.remove(file_name) {
-                Some(lsproto::MultiDocumentHighlight { uri: lsconv::file_name_to_document_uri(file_name), highlights })
-            } else {
-                None
-            }
+            file_highlights.remove(file_name).map(|highlights| lsproto::MultiDocumentHighlight { uri: lsconv::file_name_to_document_uri(file_name), highlights })
         }));
         result
     }
@@ -445,10 +441,7 @@ fn get_return_occurrences(node: P<Node>, source_file: P<SourceFile>) -> Vec<P<No
 
         // Get all throw statements not in a try block
         let throw_statements = aggregate_owned_throw_statements(body, source_file);
-        keywords.extend(throw_statements.into_iter().filter_map(|throw| {
-            let keyword = astnav::find_child_of_kind(throw, Kind::ThrowKeyword, source_file);
-            if let Some(keyword) = keyword { Some(keyword) } else { None }
-        }));
+        keywords.extend(throw_statements.into_iter().filter_map(|throw| astnav::find_child_of_kind(throw, Kind::ThrowKeyword, source_file)));
     }
     keywords
 }
@@ -505,10 +498,7 @@ fn get_throw_occurrences(node: P<Node>, source_file: P<SourceFile>) -> Vec<P<Nod
 
     // Aggregate all throw statements "owned" by this owner.
     let throw_statements = aggregate_owned_throw_statements(owner, source_file);
-    keywords.extend(throw_statements.into_iter().filter_map(|throw| {
-        let keyword = astnav::find_child_of_kind(throw, Kind::ThrowKeyword, source_file);
-        if let Some(keyword) = keyword { Some(keyword) } else { None }
-    }));
+    keywords.extend(throw_statements.into_iter().filter_map(|throw| astnav::find_child_of_kind(throw, Kind::ThrowKeyword, source_file)));
 
     // If the "owner" is a function, then we equate 'return' and 'throw' statements in their
     // ability to "jump out" of the function, and include occurrences for both
@@ -786,10 +776,7 @@ fn get_modifier_occurrences(kind: Kind, node: P<Node>, _source_file: P<SourceFil
     let mut result: Vec<P<Node>> = Vec::new();
 
     let nodes_to_search = get_nodes_to_search_for_modifier(node, ast::modifier_to_flag(kind));
-    result.extend(nodes_to_search.into_iter().filter_map(|n| {
-        let modifier = find_modifier(n, kind);
-        if let Some(modifier) = modifier { Some(modifier) } else { None }
-    }));
+    result.extend(nodes_to_search.into_iter().filter_map(|node| find_modifier(node, kind)));
     result
 }
 

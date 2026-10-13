@@ -31,7 +31,7 @@ impl IterationStatementBase {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -57,7 +57,7 @@ impl DeclarationBase {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.symbol.set(value)
+        self.symbol.set(value);
     }
 }
 
@@ -72,7 +72,7 @@ impl ExportableBase {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.local_symbol.set(value)
+        self.local_symbol.set(value);
     }
 }
 
@@ -87,7 +87,7 @@ impl ModifiersBase {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers.set(value)
+        self.modifiers.set(value);
     }
 }
 
@@ -103,7 +103,7 @@ impl LocalsContainerBase {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals.set(value)
+        self.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -111,7 +111,7 @@ impl LocalsContainerBase {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.next_container.set(value)
+        self.next_container.set(value);
     }
 }
 
@@ -126,7 +126,7 @@ impl FlowNodeBase {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node.set(value)
+        self.flow_node.set(value);
     }
 }
 
@@ -145,7 +145,7 @@ impl FunctionLikeBase {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.type_parameters.set(value)
+        self.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -153,7 +153,7 @@ impl FunctionLikeBase {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.parameters.set(value)
+        self.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -161,7 +161,7 @@ impl FunctionLikeBase {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -169,7 +169,7 @@ impl FunctionLikeBase {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.full_signature.set(value)
+        self.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -177,7 +177,7 @@ impl FunctionLikeBase {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -185,7 +185,7 @@ impl FunctionLikeBase {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -210,7 +210,7 @@ impl BodyBase {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.end_flow_node.set(value)
+        self.end_flow_node.set(value);
     }
 }
 
@@ -235,7 +235,7 @@ impl ClassLikeBase {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.type_parameters.set(value)
+        self.type_parameters.set(value);
     }
     #[inline]
     pub fn heritage_clauses(&self) -> Option<P<NodeList>> {
@@ -243,7 +243,7 @@ impl ClassLikeBase {
     }
     #[inline]
     pub fn set_heritage_clauses(&self, value: Option<P<NodeList>>) {
-        self.heritage_clauses.set(value)
+        self.heritage_clauses.set(value);
     }
     #[inline]
     pub fn members(&self) -> P<NodeList> {
@@ -255,7 +255,7 @@ impl ClassLikeBase {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -263,7 +263,7 @@ impl ClassLikeBase {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -271,7 +271,7 @@ impl ClassLikeBase {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -279,7 +279,7 @@ impl ClassLikeBase {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -299,7 +299,7 @@ impl LiteralLikeNodeBase {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.token_flags.set(value)
+        self.token_flags.set(value);
     }
 }
 
@@ -328,7 +328,7 @@ impl TemplateLiteralLikeNodeBase {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.literal_like_node_base.token_flags.set(value)
+        self.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -353,7 +353,7 @@ impl NamedMemberBase {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -431,7 +431,7 @@ impl QualifiedName {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -468,7 +468,7 @@ impl EmptyStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -498,7 +498,7 @@ impl IfStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -522,7 +522,7 @@ impl DoStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.iteration_statement_base.flow_node_base.flow_node.set(value)
+        self.iteration_statement_base.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -546,7 +546,7 @@ impl WhileStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.iteration_statement_base.flow_node_base.flow_node.set(value)
+        self.iteration_statement_base.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -581,7 +581,7 @@ impl ForStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.iteration_statement_base.flow_node_base.flow_node.set(value)
+        self.iteration_statement_base.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -589,7 +589,7 @@ impl ForStatement {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -597,7 +597,7 @@ impl ForStatement {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -633,7 +633,7 @@ impl ForInOrOfStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -641,7 +641,7 @@ impl ForInOrOfStatement {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -649,7 +649,7 @@ impl ForInOrOfStatement {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -669,7 +669,7 @@ impl BreakStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -689,7 +689,7 @@ impl ContinueStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -705,7 +705,7 @@ impl ReturnStatement {
     }
     #[inline]
     pub fn set_expression(&self, value: Option<P<Node>>) {
-        self.expression.set(value)
+        self.expression.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -713,7 +713,7 @@ impl ReturnStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -738,7 +738,7 @@ impl WithStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -763,7 +763,7 @@ impl SwitchStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -783,7 +783,7 @@ impl CaseBlock {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -791,7 +791,7 @@ impl CaseBlock {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -816,7 +816,7 @@ impl CaseOrDefaultClause {
     }
     #[inline]
     pub fn set_fallthrough_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.fallthrough_flow_node.set(value)
+        self.fallthrough_flow_node.set(value);
     }
 }
 
@@ -836,7 +836,7 @@ impl ThrowStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -866,7 +866,7 @@ impl TryStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -891,7 +891,7 @@ impl CatchClause {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -899,7 +899,7 @@ impl CatchClause {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -914,7 +914,7 @@ impl DebuggerStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -939,7 +939,7 @@ impl LabeledStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -959,7 +959,7 @@ impl ExpressionStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -985,7 +985,7 @@ impl Block {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -993,7 +993,7 @@ impl Block {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -1001,7 +1001,7 @@ impl Block {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -1022,7 +1022,7 @@ impl VariableStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1030,7 +1030,7 @@ impl VariableStatement {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -1066,7 +1066,7 @@ impl VariableDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
@@ -1074,7 +1074,7 @@ impl VariableDeclaration {
     }
     #[inline]
     pub fn set_initializer(&self, value: Option<P<Node>>) {
-        self.initializer.set(value)
+        self.initializer.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1082,7 +1082,7 @@ impl VariableDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -1090,7 +1090,7 @@ impl VariableDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
 }
 
@@ -1149,7 +1149,7 @@ impl ParameterDeclaration {
     }
     #[inline]
     pub fn set_question_token(&self, value: Option<P<Node>>) {
-        self.question_token.set(value)
+        self.question_token.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -1157,7 +1157,7 @@ impl ParameterDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
@@ -1169,7 +1169,7 @@ impl ParameterDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1177,7 +1177,7 @@ impl ParameterDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -1222,7 +1222,7 @@ impl BindingElement {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -1230,7 +1230,7 @@ impl BindingElement {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -1238,7 +1238,7 @@ impl BindingElement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -1255,7 +1255,7 @@ impl MissingDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1263,7 +1263,7 @@ impl MissingDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1271,7 +1271,7 @@ impl MissingDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -1297,7 +1297,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_return_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.return_flow_node.set(value)
+        self.return_flow_node.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -1305,7 +1305,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1313,7 +1313,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -1321,7 +1321,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1329,7 +1329,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -1337,7 +1337,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -1345,7 +1345,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -1353,7 +1353,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -1361,7 +1361,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -1369,7 +1369,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -1377,7 +1377,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -1393,7 +1393,7 @@ impl FunctionDeclaration {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
 }
 
@@ -1410,7 +1410,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1418,7 +1418,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> Option<P<Node>> {
@@ -1430,7 +1430,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.class_like_base.type_parameters.set(value)
+        self.class_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn heritage_clauses(&self) -> Option<P<NodeList>> {
@@ -1438,7 +1438,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_heritage_clauses(&self, value: Option<P<NodeList>>) {
-        self.class_like_base.heritage_clauses.set(value)
+        self.class_like_base.heritage_clauses.set(value);
     }
     #[inline]
     pub fn members(&self) -> P<NodeList> {
@@ -1450,7 +1450,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.class_like_base.exportable_base.local_symbol.set(value)
+        self.class_like_base.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1458,7 +1458,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.class_like_base.modifiers_base.modifiers.set(value)
+        self.class_like_base.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -1466,7 +1466,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.class_like_base.locals_container_base.locals.set(value)
+        self.class_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -1474,7 +1474,7 @@ impl ClassDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.class_like_base.locals_container_base.next_container.set(value)
+        self.class_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -1490,7 +1490,7 @@ impl ClassExpression {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> Option<P<Node>> {
@@ -1502,7 +1502,7 @@ impl ClassExpression {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.class_like_base.type_parameters.set(value)
+        self.class_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn heritage_clauses(&self) -> Option<P<NodeList>> {
@@ -1510,7 +1510,7 @@ impl ClassExpression {
     }
     #[inline]
     pub fn set_heritage_clauses(&self, value: Option<P<NodeList>>) {
-        self.class_like_base.heritage_clauses.set(value)
+        self.class_like_base.heritage_clauses.set(value);
     }
     #[inline]
     pub fn members(&self) -> P<NodeList> {
@@ -1522,7 +1522,7 @@ impl ClassExpression {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.class_like_base.exportable_base.local_symbol.set(value)
+        self.class_like_base.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1530,7 +1530,7 @@ impl ClassExpression {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.class_like_base.modifiers_base.modifiers.set(value)
+        self.class_like_base.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -1538,7 +1538,7 @@ impl ClassExpression {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.class_like_base.locals_container_base.locals.set(value)
+        self.class_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -1546,7 +1546,7 @@ impl ClassExpression {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.class_like_base.locals_container_base.next_container.set(value)
+        self.class_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -1566,7 +1566,7 @@ impl HeritageClause {
     }
     #[inline]
     pub fn set_types(&self, value: P<NodeList>) {
-        self.types.set(value)
+        self.types.set(value);
     }
 }
 
@@ -1604,7 +1604,7 @@ impl InterfaceDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1612,7 +1612,7 @@ impl InterfaceDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -1620,7 +1620,7 @@ impl InterfaceDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1628,7 +1628,7 @@ impl InterfaceDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -1654,7 +1654,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.type_parameters.set(value)
+        self.type_parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -1662,7 +1662,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -1670,7 +1670,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1678,7 +1678,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -1686,7 +1686,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1694,7 +1694,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -1702,7 +1702,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -1710,7 +1710,7 @@ impl TypeAliasDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -1731,7 +1731,7 @@ impl EnumMember {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -1747,7 +1747,7 @@ impl EnumMember {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -1775,7 +1775,7 @@ impl EnumDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1783,7 +1783,7 @@ impl EnumDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -1791,7 +1791,7 @@ impl EnumDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1799,7 +1799,7 @@ impl EnumDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -1819,7 +1819,7 @@ impl ModuleBlock {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -1834,7 +1834,7 @@ impl NotEmittedStatement {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -1849,7 +1849,7 @@ impl NotEmittedTypeElement {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -1889,7 +1889,7 @@ impl ImportDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -1897,7 +1897,7 @@ impl ImportDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -1905,7 +1905,7 @@ impl ImportDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -1937,7 +1937,7 @@ impl NamespaceImport {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -1945,7 +1945,7 @@ impl NamespaceImport {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
 }
 
@@ -1980,7 +1980,7 @@ impl ExportAssignment {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn expression(&self) -> P<Node> {
@@ -1988,7 +1988,7 @@ impl ExportAssignment {
     }
     #[inline]
     pub fn set_expression(&self, value: P<Node>) {
-        self.expression.set(value)
+        self.expression.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -1996,7 +1996,7 @@ impl ExportAssignment {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -2004,7 +2004,7 @@ impl ExportAssignment {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -2012,7 +2012,7 @@ impl ExportAssignment {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -2034,7 +2034,7 @@ impl NamespaceExportDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -2042,7 +2042,7 @@ impl NamespaceExportDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -2050,7 +2050,7 @@ impl NamespaceExportDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -2070,7 +2070,7 @@ impl NamespaceExport {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -2112,7 +2112,7 @@ impl ExportSpecifier {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -2120,7 +2120,7 @@ impl ExportSpecifier {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
 }
 
@@ -2136,7 +2136,7 @@ impl CallSignatureDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2144,7 +2144,7 @@ impl CallSignatureDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2152,7 +2152,7 @@ impl CallSignatureDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2160,7 +2160,7 @@ impl CallSignatureDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2168,7 +2168,7 @@ impl CallSignatureDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2176,7 +2176,7 @@ impl CallSignatureDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2184,7 +2184,7 @@ impl CallSignatureDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -2200,7 +2200,7 @@ impl ConstructSignatureDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2208,7 +2208,7 @@ impl ConstructSignatureDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2216,7 +2216,7 @@ impl ConstructSignatureDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2224,7 +2224,7 @@ impl ConstructSignatureDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2232,7 +2232,7 @@ impl ConstructSignatureDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2240,7 +2240,7 @@ impl ConstructSignatureDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2248,7 +2248,7 @@ impl ConstructSignatureDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -2267,7 +2267,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_return_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.return_flow_node.set(value)
+        self.return_flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -2275,7 +2275,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -2283,7 +2283,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2291,7 +2291,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2299,7 +2299,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2307,7 +2307,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2315,7 +2315,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2323,7 +2323,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2331,7 +2331,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -2347,7 +2347,7 @@ impl ConstructorDeclaration {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
 }
 
@@ -2366,7 +2366,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -2382,7 +2382,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2390,7 +2390,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2398,7 +2398,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2406,7 +2406,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2414,7 +2414,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2422,7 +2422,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2430,7 +2430,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -2446,7 +2446,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -2454,7 +2454,7 @@ impl GetAccessorDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -2473,7 +2473,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -2489,7 +2489,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2497,7 +2497,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2505,7 +2505,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2513,7 +2513,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2521,7 +2521,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2529,7 +2529,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2537,7 +2537,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -2553,7 +2553,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -2561,7 +2561,7 @@ impl SetAccessorDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -2578,7 +2578,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -2586,7 +2586,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2594,7 +2594,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2602,7 +2602,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2610,7 +2610,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2618,7 +2618,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2626,7 +2626,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2634,7 +2634,7 @@ impl IndexSignatureDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -2651,7 +2651,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -2667,7 +2667,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2675,7 +2675,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2683,7 +2683,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2691,7 +2691,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2699,7 +2699,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2707,7 +2707,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2715,7 +2715,7 @@ impl MethodSignatureDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -2734,7 +2734,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -2750,7 +2750,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -2758,7 +2758,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -2766,7 +2766,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -2774,7 +2774,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -2782,7 +2782,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2790,7 +2790,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2798,7 +2798,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -2814,7 +2814,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -2822,7 +2822,7 @@ impl MethodDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -2848,7 +2848,7 @@ impl PropertySignatureDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
@@ -2860,7 +2860,7 @@ impl PropertySignatureDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -2876,7 +2876,7 @@ impl PropertySignatureDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -2894,7 +2894,7 @@ impl PropertyDeclaration {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
@@ -2902,7 +2902,7 @@ impl PropertyDeclaration {
     }
     #[inline]
     pub fn set_initializer(&self, value: Option<P<Node>>) {
-        self.initializer.set(value)
+        self.initializer.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -2910,7 +2910,7 @@ impl PropertyDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -2926,7 +2926,7 @@ impl PropertyDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -2941,7 +2941,7 @@ impl SemicolonClassElement {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -2964,7 +2964,7 @@ impl ClassStaticBlockDeclaration {
     }
     #[inline]
     pub fn set_return_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.return_flow_node.set(value)
+        self.return_flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -2972,7 +2972,7 @@ impl ClassStaticBlockDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -2980,7 +2980,7 @@ impl ClassStaticBlockDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -2988,7 +2988,7 @@ impl ClassStaticBlockDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -2996,7 +2996,7 @@ impl ClassStaticBlockDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -3013,7 +3013,7 @@ impl KeywordExpression {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -3032,7 +3032,7 @@ impl StringLiteral {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.literal_like_node_base.token_flags.set(value)
+        self.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -3051,7 +3051,7 @@ impl NumericLiteral {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.literal_like_node_base.token_flags.set(value)
+        self.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -3070,7 +3070,7 @@ impl BigIntLiteral {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.literal_like_node_base.token_flags.set(value)
+        self.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -3089,7 +3089,7 @@ impl RegularExpressionLiteral {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.literal_like_node_base.token_flags.set(value)
+        self.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -3117,7 +3117,7 @@ impl NoSubstitutionTemplateLiteral {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -3125,7 +3125,7 @@ impl NoSubstitutionTemplateLiteral {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -3149,7 +3149,7 @@ impl BinaryExpression {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn operator_token(&self) -> P<Node> {
@@ -3161,7 +3161,7 @@ impl BinaryExpression {
     }
     #[inline]
     pub fn set_right(&self, value: P<Node>) {
-        self.right.set(value)
+        self.right.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -3169,7 +3169,7 @@ impl BinaryExpression {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -3177,7 +3177,7 @@ impl BinaryExpression {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -3249,7 +3249,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -3257,7 +3257,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -3265,7 +3265,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -3273,7 +3273,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -3281,7 +3281,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -3289,7 +3289,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -3297,7 +3297,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -3305,7 +3305,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -3321,7 +3321,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -3329,7 +3329,7 @@ impl ArrowFunction {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -3354,7 +3354,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_return_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.return_flow_node.set(value)
+        self.return_flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -3362,7 +3362,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -3370,7 +3370,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -3378,7 +3378,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -3386,7 +3386,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -3394,7 +3394,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -3402,7 +3402,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -3410,7 +3410,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -3418,7 +3418,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -3434,7 +3434,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
     #[inline]
     pub fn flow_node(&self) -> Option<P<FlowNode>> {
@@ -3442,7 +3442,7 @@ impl FunctionExpression {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -3543,7 +3543,7 @@ impl PropertyAccessExpression {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -3581,7 +3581,7 @@ impl ElementAccessExpression {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -3624,7 +3624,7 @@ impl CallExpression {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -3678,7 +3678,7 @@ impl MetaProperty {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
 }
 
@@ -3773,7 +3773,7 @@ impl ParenthesizedExpression {
     }
     #[inline]
     pub fn set_expression(&self, value: P<Node>) {
-        self.expression.set(value)
+        self.expression.set(value);
     }
 }
 
@@ -3814,7 +3814,7 @@ impl ObjectLiteralExpression {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -3834,7 +3834,7 @@ impl SpreadAssignment {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -3852,7 +3852,7 @@ impl PropertyAssignment {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn initializer(&self) -> P<Node> {
@@ -3860,7 +3860,7 @@ impl PropertyAssignment {
     }
     #[inline]
     pub fn set_initializer(&self, value: P<Node>) {
-        self.initializer.set(value)
+        self.initializer.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -3868,7 +3868,7 @@ impl PropertyAssignment {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -3884,7 +3884,7 @@ impl PropertyAssignment {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -3903,7 +3903,7 @@ impl ShorthandPropertyAssignment {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.type_.set(value)
+        self.type_.set(value);
     }
     #[inline]
     pub fn equals_token(&self) -> Option<P<Node>> {
@@ -3915,7 +3915,7 @@ impl ShorthandPropertyAssignment {
     }
     #[inline]
     pub fn set_object_assignment_initializer(&self, value: Option<P<Node>>) {
-        self.object_assignment_initializer.set(value)
+        self.object_assignment_initializer.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -3923,7 +3923,7 @@ impl ShorthandPropertyAssignment {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn name(&self) -> P<Node> {
@@ -3939,7 +3939,7 @@ impl ShorthandPropertyAssignment {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.named_member_base.modifiers_base.modifiers.set(value)
+        self.named_member_base.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -4058,7 +4058,7 @@ impl ConditionalTypeNode {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -4066,7 +4066,7 @@ impl ConditionalTypeNode {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -4156,7 +4156,7 @@ impl ExpressionWithTypeArguments {
     }
     #[inline]
     pub fn set_type_arguments(&self, value: Option<P<NodeList>>) {
-        self.type_arguments.set(value)
+        self.type_arguments.set(value);
     }
 }
 
@@ -4289,7 +4289,7 @@ impl MappedTypeNode {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -4297,7 +4297,7 @@ impl MappedTypeNode {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -4305,7 +4305,7 @@ impl MappedTypeNode {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
 }
 
@@ -4325,7 +4325,7 @@ impl TypeLiteralNode {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -4371,7 +4371,7 @@ impl NamedTupleMember {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -4421,7 +4421,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -4429,7 +4429,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -4437,7 +4437,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -4445,7 +4445,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -4453,7 +4453,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -4461,7 +4461,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -4469,7 +4469,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -4477,7 +4477,7 @@ impl FunctionTypeNode {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -4494,7 +4494,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -4502,7 +4502,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -4510,7 +4510,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -4518,7 +4518,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -4526,7 +4526,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -4534,7 +4534,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -4542,7 +4542,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -4550,7 +4550,7 @@ impl ConstructorTypeNode {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -4577,7 +4577,7 @@ impl TemplateHead {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -4604,7 +4604,7 @@ impl TemplateMiddle {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -4631,7 +4631,7 @@ impl TemplateTail {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value)
+        self.template_literal_like_node_base.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -4736,7 +4736,7 @@ impl JsxAttributes {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -4844,7 +4844,7 @@ impl JsxAttribute {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -4864,7 +4864,7 @@ impl JsxSpreadAttribute {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -4915,7 +4915,7 @@ impl JsxText {
     }
     #[inline]
     pub fn set_token_flags(&self, value: TokenFlags) {
-        self.literal_like_node_base.token_flags.set(value)
+        self.literal_like_node_base.token_flags.set(value);
     }
 }
 
@@ -5405,7 +5405,7 @@ impl JSDocSignature {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn type_parameters(&self) -> Option<P<NodeList>> {
@@ -5413,7 +5413,7 @@ impl JSDocSignature {
     }
     #[inline]
     pub fn set_type_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.type_parameters.set(value)
+        self.function_like_base.type_parameters.set(value);
     }
     #[inline]
     pub fn parameters(&self) -> Option<P<NodeList>> {
@@ -5421,7 +5421,7 @@ impl JSDocSignature {
     }
     #[inline]
     pub fn set_parameters(&self, value: Option<P<NodeList>>) {
-        self.function_like_base.parameters.set(value)
+        self.function_like_base.parameters.set(value);
     }
     #[inline]
     pub fn type_(&self) -> Option<P<Node>> {
@@ -5429,7 +5429,7 @@ impl JSDocSignature {
     }
     #[inline]
     pub fn set_type(&self, value: Option<P<Node>>) {
-        self.function_like_base.type_.set(value)
+        self.function_like_base.type_.set(value);
     }
     #[inline]
     pub fn full_signature(&self) -> Option<P<Node>> {
@@ -5437,7 +5437,7 @@ impl JSDocSignature {
     }
     #[inline]
     pub fn set_full_signature(&self, value: Option<P<Node>>) {
-        self.function_like_base.full_signature.set(value)
+        self.function_like_base.full_signature.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -5445,7 +5445,7 @@ impl JSDocSignature {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.function_like_base.locals_container_base.locals.set(value)
+        self.function_like_base.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -5453,7 +5453,7 @@ impl JSDocSignature {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.function_like_base.locals_container_base.next_container.set(value)
+        self.function_like_base.locals_container_base.next_container.set(value);
     }
 }
 
@@ -5499,7 +5499,7 @@ impl ModuleDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -5507,7 +5507,7 @@ impl ModuleDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -5515,7 +5515,7 @@ impl ModuleDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -5523,7 +5523,7 @@ impl ModuleDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
     #[inline]
     pub fn locals(&self) -> Option<P<SymbolTable>> {
@@ -5531,7 +5531,7 @@ impl ModuleDeclaration {
     }
     #[inline]
     pub fn set_locals(&self, value: Option<P<SymbolTable>>) {
-        self.locals_container_base.locals.set(value)
+        self.locals_container_base.locals.set(value);
     }
     #[inline]
     pub fn next_container(&self) -> Option<P<Node>> {
@@ -5539,7 +5539,7 @@ impl ModuleDeclaration {
     }
     #[inline]
     pub fn set_next_container(&self, value: Option<P<Node>>) {
-        self.locals_container_base.next_container.set(value)
+        self.locals_container_base.next_container.set(value);
     }
     #[inline]
     pub fn asterisk_token(&self) -> Option<P<Node>> {
@@ -5555,7 +5555,7 @@ impl ModuleDeclaration {
     }
     #[inline]
     pub fn set_end_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.body_base.end_flow_node.set(value)
+        self.body_base.end_flow_node.set(value);
     }
 }
 
@@ -5588,7 +5588,7 @@ impl ImportEqualsDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -5596,7 +5596,7 @@ impl ImportEqualsDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -5604,7 +5604,7 @@ impl ImportEqualsDeclaration {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -5612,7 +5612,7 @@ impl ImportEqualsDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -5649,7 +5649,7 @@ impl ExportDeclaration {
     }
     #[inline]
     pub fn set_flow_node(&self, value: Option<P<FlowNode>>) {
-        self.flow_node_base.flow_node.set(value)
+        self.flow_node_base.flow_node.set(value);
     }
     #[inline]
     pub fn symbol(&self) -> Option<P<Symbol>> {
@@ -5657,7 +5657,7 @@ impl ExportDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -5665,7 +5665,7 @@ impl ExportDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -5715,7 +5715,7 @@ impl ImportClause {
     }
     #[inline]
     pub fn set_phase_modifier(&self, value: Kind) {
-        self.phase_modifier.set(value)
+        self.phase_modifier.set(value);
     }
     #[inline]
     pub fn name(&self) -> Option<P<Node>> {
@@ -5731,7 +5731,7 @@ impl ImportClause {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -5739,7 +5739,7 @@ impl ImportClause {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
 }
 
@@ -5778,7 +5778,7 @@ impl ImportSpecifier {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn local_symbol(&self) -> Option<P<Symbol>> {
@@ -5786,7 +5786,7 @@ impl ImportSpecifier {
     }
     #[inline]
     pub fn set_local_symbol(&self, value: Option<P<Symbol>>) {
-        self.exportable_base.local_symbol.set(value)
+        self.exportable_base.local_symbol.set(value);
     }
 }
 
@@ -5881,7 +5881,7 @@ impl TypeParameterDeclaration {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
     #[inline]
     pub fn modifiers(&self) -> Option<P<ModifierList>> {
@@ -5889,7 +5889,7 @@ impl TypeParameterDeclaration {
     }
     #[inline]
     pub fn set_modifiers(&self, value: Option<P<ModifierList>>) {
-        self.modifiers_base.modifiers.set(value)
+        self.modifiers_base.modifiers.set(value);
     }
 }
 
@@ -5930,7 +5930,7 @@ impl JSDocTypeLiteral {
     }
     #[inline]
     pub fn set_symbol(&self, value: Option<P<Symbol>>) {
-        self.declaration_base.symbol.set(value)
+        self.declaration_base.symbol.set(value);
     }
 }
 
@@ -7137,1360 +7137,972 @@ impl Node {
 
     #[inline]
     pub fn as_token(&self) -> &'static Token {
-        if self.data_tag() != NodeDataTag::Token {
-            panic!("as_token called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::Token, "as_token called on {:?}", self.kind());
         &Token
     }
     #[inline]
     pub fn as_identifier(&self) -> &'static Identifier {
-        if self.data_tag() != NodeDataTag::Identifier {
-            panic!("as_identifier called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::Identifier, "as_identifier called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_private_identifier(&self) -> &'static PrivateIdentifier {
-        if self.data_tag() != NodeDataTag::PrivateIdentifier {
-            panic!("as_private_identifier called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PrivateIdentifier, "as_private_identifier called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_qualified_name(&self) -> &'static QualifiedName {
-        if self.data_tag() != NodeDataTag::QualifiedName {
-            panic!("as_qualified_name called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::QualifiedName, "as_qualified_name called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_computed_property_name(&self) -> &'static ComputedPropertyName {
-        if self.data_tag() != NodeDataTag::ComputedPropertyName {
-            panic!("as_computed_property_name called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ComputedPropertyName, "as_computed_property_name called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_decorator(&self) -> &'static Decorator {
-        if self.data_tag() != NodeDataTag::Decorator {
-            panic!("as_decorator called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::Decorator, "as_decorator called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_empty_statement(&self) -> &'static EmptyStatement {
-        if self.data_tag() != NodeDataTag::EmptyStatement {
-            panic!("as_empty_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::EmptyStatement, "as_empty_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_if_statement(&self) -> &'static IfStatement {
-        if self.data_tag() != NodeDataTag::IfStatement {
-            panic!("as_if_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::IfStatement, "as_if_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_do_statement(&self) -> &'static DoStatement {
-        if self.data_tag() != NodeDataTag::DoStatement {
-            panic!("as_do_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::DoStatement, "as_do_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_while_statement(&self) -> &'static WhileStatement {
-        if self.data_tag() != NodeDataTag::WhileStatement {
-            panic!("as_while_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::WhileStatement, "as_while_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_for_statement(&self) -> &'static ForStatement {
-        if self.data_tag() != NodeDataTag::ForStatement {
-            panic!("as_for_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ForStatement, "as_for_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_for_in_or_of_statement(&self) -> &'static ForInOrOfStatement {
-        if self.data_tag() != NodeDataTag::ForInOrOfStatement {
-            panic!("as_for_in_or_of_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ForInOrOfStatement, "as_for_in_or_of_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_break_statement(&self) -> &'static BreakStatement {
-        if self.data_tag() != NodeDataTag::BreakStatement {
-            panic!("as_break_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::BreakStatement, "as_break_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_continue_statement(&self) -> &'static ContinueStatement {
-        if self.data_tag() != NodeDataTag::ContinueStatement {
-            panic!("as_continue_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ContinueStatement, "as_continue_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_return_statement(&self) -> &'static ReturnStatement {
-        if self.data_tag() != NodeDataTag::ReturnStatement {
-            panic!("as_return_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ReturnStatement, "as_return_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_with_statement(&self) -> &'static WithStatement {
-        if self.data_tag() != NodeDataTag::WithStatement {
-            panic!("as_with_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::WithStatement, "as_with_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_switch_statement(&self) -> &'static SwitchStatement {
-        if self.data_tag() != NodeDataTag::SwitchStatement {
-            panic!("as_switch_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SwitchStatement, "as_switch_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_case_block(&self) -> &'static CaseBlock {
-        if self.data_tag() != NodeDataTag::CaseBlock {
-            panic!("as_case_block called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::CaseBlock, "as_case_block called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_case_or_default_clause(&self) -> &'static CaseOrDefaultClause {
-        if self.data_tag() != NodeDataTag::CaseOrDefaultClause {
-            panic!("as_case_or_default_clause called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::CaseOrDefaultClause, "as_case_or_default_clause called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_throw_statement(&self) -> &'static ThrowStatement {
-        if self.data_tag() != NodeDataTag::ThrowStatement {
-            panic!("as_throw_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ThrowStatement, "as_throw_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_try_statement(&self) -> &'static TryStatement {
-        if self.data_tag() != NodeDataTag::TryStatement {
-            panic!("as_try_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TryStatement, "as_try_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_catch_clause(&self) -> &'static CatchClause {
-        if self.data_tag() != NodeDataTag::CatchClause {
-            panic!("as_catch_clause called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::CatchClause, "as_catch_clause called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_debugger_statement(&self) -> &'static DebuggerStatement {
-        if self.data_tag() != NodeDataTag::DebuggerStatement {
-            panic!("as_debugger_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::DebuggerStatement, "as_debugger_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_labeled_statement(&self) -> &'static LabeledStatement {
-        if self.data_tag() != NodeDataTag::LabeledStatement {
-            panic!("as_labeled_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::LabeledStatement, "as_labeled_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_expression_statement(&self) -> &'static ExpressionStatement {
-        if self.data_tag() != NodeDataTag::ExpressionStatement {
-            panic!("as_expression_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ExpressionStatement, "as_expression_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_block(&self) -> &'static Block {
-        if self.data_tag() != NodeDataTag::Block {
-            panic!("as_block called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::Block, "as_block called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_variable_statement(&self) -> &'static VariableStatement {
-        if self.data_tag() != NodeDataTag::VariableStatement {
-            panic!("as_variable_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::VariableStatement, "as_variable_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_variable_declaration(&self) -> &'static VariableDeclaration {
-        if self.data_tag() != NodeDataTag::VariableDeclaration {
-            panic!("as_variable_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::VariableDeclaration, "as_variable_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_variable_declaration_list(&self) -> &'static VariableDeclarationList {
-        if self.data_tag() != NodeDataTag::VariableDeclarationList {
-            panic!("as_variable_declaration_list called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::VariableDeclarationList, "as_variable_declaration_list called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_binding_pattern(&self) -> &'static BindingPattern {
-        if self.data_tag() != NodeDataTag::BindingPattern {
-            panic!("as_binding_pattern called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::BindingPattern, "as_binding_pattern called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_parameter_declaration(&self) -> &'static ParameterDeclaration {
-        if self.data_tag() != NodeDataTag::ParameterDeclaration {
-            panic!("as_parameter_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ParameterDeclaration, "as_parameter_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_binding_element(&self) -> &'static BindingElement {
-        if self.data_tag() != NodeDataTag::BindingElement {
-            panic!("as_binding_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::BindingElement, "as_binding_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_missing_declaration(&self) -> &'static MissingDeclaration {
-        if self.data_tag() != NodeDataTag::MissingDeclaration {
-            panic!("as_missing_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::MissingDeclaration, "as_missing_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_function_declaration(&self) -> &'static FunctionDeclaration {
-        if self.data_tag() != NodeDataTag::FunctionDeclaration {
-            panic!("as_function_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::FunctionDeclaration, "as_function_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_class_declaration(&self) -> &'static ClassDeclaration {
-        if self.data_tag() != NodeDataTag::ClassDeclaration {
-            panic!("as_class_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ClassDeclaration, "as_class_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_class_expression(&self) -> &'static ClassExpression {
-        if self.data_tag() != NodeDataTag::ClassExpression {
-            panic!("as_class_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ClassExpression, "as_class_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_heritage_clause(&self) -> &'static HeritageClause {
-        if self.data_tag() != NodeDataTag::HeritageClause {
-            panic!("as_heritage_clause called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::HeritageClause, "as_heritage_clause called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_interface_declaration(&self) -> &'static InterfaceDeclaration {
-        if self.data_tag() != NodeDataTag::InterfaceDeclaration {
-            panic!("as_interface_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::InterfaceDeclaration, "as_interface_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_alias_declaration(&self) -> &'static TypeAliasDeclaration {
-        if self.data_tag() != NodeDataTag::TypeAliasDeclaration {
-            panic!("as_type_alias_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeAliasDeclaration, "as_type_alias_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_enum_member(&self) -> &'static EnumMember {
-        if self.data_tag() != NodeDataTag::EnumMember {
-            panic!("as_enum_member called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::EnumMember, "as_enum_member called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_enum_declaration(&self) -> &'static EnumDeclaration {
-        if self.data_tag() != NodeDataTag::EnumDeclaration {
-            panic!("as_enum_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::EnumDeclaration, "as_enum_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_module_block(&self) -> &'static ModuleBlock {
-        if self.data_tag() != NodeDataTag::ModuleBlock {
-            panic!("as_module_block called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ModuleBlock, "as_module_block called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_not_emitted_statement(&self) -> &'static NotEmittedStatement {
-        if self.data_tag() != NodeDataTag::NotEmittedStatement {
-            panic!("as_not_emitted_statement called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NotEmittedStatement, "as_not_emitted_statement called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_not_emitted_type_element(&self) -> &'static NotEmittedTypeElement {
-        if self.data_tag() != NodeDataTag::NotEmittedTypeElement {
-            panic!("as_not_emitted_type_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NotEmittedTypeElement, "as_not_emitted_type_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_import_declaration(&self) -> &'static ImportDeclaration {
-        if self.data_tag() != NodeDataTag::ImportDeclaration {
-            panic!("as_import_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ImportDeclaration, "as_import_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_external_module_reference(&self) -> &'static ExternalModuleReference {
-        if self.data_tag() != NodeDataTag::ExternalModuleReference {
-            panic!("as_external_module_reference called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ExternalModuleReference, "as_external_module_reference called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_namespace_import(&self) -> &'static NamespaceImport {
-        if self.data_tag() != NodeDataTag::NamespaceImport {
-            panic!("as_namespace_import called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NamespaceImport, "as_namespace_import called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_named_imports(&self) -> &'static NamedImports {
-        if self.data_tag() != NodeDataTag::NamedImports {
-            panic!("as_named_imports called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NamedImports, "as_named_imports called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_export_assignment(&self) -> &'static ExportAssignment {
-        if self.data_tag() != NodeDataTag::ExportAssignment {
-            panic!("as_export_assignment called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ExportAssignment, "as_export_assignment called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_namespace_export_declaration(&self) -> &'static NamespaceExportDeclaration {
-        if self.data_tag() != NodeDataTag::NamespaceExportDeclaration {
-            panic!("as_namespace_export_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NamespaceExportDeclaration, "as_namespace_export_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_namespace_export(&self) -> &'static NamespaceExport {
-        if self.data_tag() != NodeDataTag::NamespaceExport {
-            panic!("as_namespace_export called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NamespaceExport, "as_namespace_export called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_named_exports(&self) -> &'static NamedExports {
-        if self.data_tag() != NodeDataTag::NamedExports {
-            panic!("as_named_exports called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NamedExports, "as_named_exports called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_export_specifier(&self) -> &'static ExportSpecifier {
-        if self.data_tag() != NodeDataTag::ExportSpecifier {
-            panic!("as_export_specifier called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ExportSpecifier, "as_export_specifier called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_call_signature_declaration(&self) -> &'static CallSignatureDeclaration {
-        if self.data_tag() != NodeDataTag::CallSignatureDeclaration {
-            panic!("as_call_signature_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::CallSignatureDeclaration, "as_call_signature_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_construct_signature_declaration(&self) -> &'static ConstructSignatureDeclaration {
-        if self.data_tag() != NodeDataTag::ConstructSignatureDeclaration {
-            panic!("as_construct_signature_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ConstructSignatureDeclaration, "as_construct_signature_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_constructor_declaration(&self) -> &'static ConstructorDeclaration {
-        if self.data_tag() != NodeDataTag::ConstructorDeclaration {
-            panic!("as_constructor_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ConstructorDeclaration, "as_constructor_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_get_accessor_declaration(&self) -> &'static GetAccessorDeclaration {
-        if self.data_tag() != NodeDataTag::GetAccessorDeclaration {
-            panic!("as_get_accessor_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::GetAccessorDeclaration, "as_get_accessor_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_set_accessor_declaration(&self) -> &'static SetAccessorDeclaration {
-        if self.data_tag() != NodeDataTag::SetAccessorDeclaration {
-            panic!("as_set_accessor_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SetAccessorDeclaration, "as_set_accessor_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_index_signature_declaration(&self) -> &'static IndexSignatureDeclaration {
-        if self.data_tag() != NodeDataTag::IndexSignatureDeclaration {
-            panic!("as_index_signature_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::IndexSignatureDeclaration, "as_index_signature_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_method_signature_declaration(&self) -> &'static MethodSignatureDeclaration {
-        if self.data_tag() != NodeDataTag::MethodSignatureDeclaration {
-            panic!("as_method_signature_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::MethodSignatureDeclaration, "as_method_signature_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_method_declaration(&self) -> &'static MethodDeclaration {
-        if self.data_tag() != NodeDataTag::MethodDeclaration {
-            panic!("as_method_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::MethodDeclaration, "as_method_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_property_signature_declaration(&self) -> &'static PropertySignatureDeclaration {
-        if self.data_tag() != NodeDataTag::PropertySignatureDeclaration {
-            panic!("as_property_signature_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PropertySignatureDeclaration, "as_property_signature_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_property_declaration(&self) -> &'static PropertyDeclaration {
-        if self.data_tag() != NodeDataTag::PropertyDeclaration {
-            panic!("as_property_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PropertyDeclaration, "as_property_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_semicolon_class_element(&self) -> &'static SemicolonClassElement {
-        if self.data_tag() != NodeDataTag::SemicolonClassElement {
-            panic!("as_semicolon_class_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SemicolonClassElement, "as_semicolon_class_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_class_static_block_declaration(&self) -> &'static ClassStaticBlockDeclaration {
-        if self.data_tag() != NodeDataTag::ClassStaticBlockDeclaration {
-            panic!("as_class_static_block_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ClassStaticBlockDeclaration, "as_class_static_block_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_omitted_expression(&self) -> &'static OmittedExpression {
-        if self.data_tag() != NodeDataTag::OmittedExpression {
-            panic!("as_omitted_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::OmittedExpression, "as_omitted_expression called on {:?}", self.kind());
         &OmittedExpression
     }
     #[inline]
     pub fn as_keyword_expression(&self) -> &'static KeywordExpression {
-        if self.data_tag() != NodeDataTag::KeywordExpression {
-            panic!("as_keyword_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::KeywordExpression, "as_keyword_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_string_literal(&self) -> &'static StringLiteral {
-        if self.data_tag() != NodeDataTag::StringLiteral {
-            panic!("as_string_literal called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::StringLiteral, "as_string_literal called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_numeric_literal(&self) -> &'static NumericLiteral {
-        if self.data_tag() != NodeDataTag::NumericLiteral {
-            panic!("as_numeric_literal called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NumericLiteral, "as_numeric_literal called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_big_int_literal(&self) -> &'static BigIntLiteral {
-        if self.data_tag() != NodeDataTag::BigIntLiteral {
-            panic!("as_big_int_literal called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::BigIntLiteral, "as_big_int_literal called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_regular_expression_literal(&self) -> &'static RegularExpressionLiteral {
-        if self.data_tag() != NodeDataTag::RegularExpressionLiteral {
-            panic!("as_regular_expression_literal called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::RegularExpressionLiteral, "as_regular_expression_literal called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_no_substitution_template_literal(&self) -> &'static NoSubstitutionTemplateLiteral {
-        if self.data_tag() != NodeDataTag::NoSubstitutionTemplateLiteral {
-            panic!("as_no_substitution_template_literal called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NoSubstitutionTemplateLiteral, "as_no_substitution_template_literal called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_binary_expression(&self) -> &'static BinaryExpression {
-        if self.data_tag() != NodeDataTag::BinaryExpression {
-            panic!("as_binary_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::BinaryExpression, "as_binary_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_prefix_unary_expression(&self) -> &'static PrefixUnaryExpression {
-        if self.data_tag() != NodeDataTag::PrefixUnaryExpression {
-            panic!("as_prefix_unary_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PrefixUnaryExpression, "as_prefix_unary_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_postfix_unary_expression(&self) -> &'static PostfixUnaryExpression {
-        if self.data_tag() != NodeDataTag::PostfixUnaryExpression {
-            panic!("as_postfix_unary_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PostfixUnaryExpression, "as_postfix_unary_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_yield_expression(&self) -> &'static YieldExpression {
-        if self.data_tag() != NodeDataTag::YieldExpression {
-            panic!("as_yield_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::YieldExpression, "as_yield_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_arrow_function(&self) -> &'static ArrowFunction {
-        if self.data_tag() != NodeDataTag::ArrowFunction {
-            panic!("as_arrow_function called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ArrowFunction, "as_arrow_function called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_function_expression(&self) -> &'static FunctionExpression {
-        if self.data_tag() != NodeDataTag::FunctionExpression {
-            panic!("as_function_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::FunctionExpression, "as_function_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_as_expression(&self) -> &'static AsExpression {
-        if self.data_tag() != NodeDataTag::AsExpression {
-            panic!("as_as_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::AsExpression, "as_as_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_satisfies_expression(&self) -> &'static SatisfiesExpression {
-        if self.data_tag() != NodeDataTag::SatisfiesExpression {
-            panic!("as_satisfies_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SatisfiesExpression, "as_satisfies_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_conditional_expression(&self) -> &'static ConditionalExpression {
-        if self.data_tag() != NodeDataTag::ConditionalExpression {
-            panic!("as_conditional_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ConditionalExpression, "as_conditional_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_property_access_expression(&self) -> &'static PropertyAccessExpression {
-        if self.data_tag() != NodeDataTag::PropertyAccessExpression {
-            panic!("as_property_access_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PropertyAccessExpression, "as_property_access_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_element_access_expression(&self) -> &'static ElementAccessExpression {
-        if self.data_tag() != NodeDataTag::ElementAccessExpression {
-            panic!("as_element_access_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ElementAccessExpression, "as_element_access_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_call_expression(&self) -> &'static CallExpression {
-        if self.data_tag() != NodeDataTag::CallExpression {
-            panic!("as_call_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::CallExpression, "as_call_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_new_expression(&self) -> &'static NewExpression {
-        if self.data_tag() != NodeDataTag::NewExpression {
-            panic!("as_new_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NewExpression, "as_new_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_meta_property(&self) -> &'static MetaProperty {
-        if self.data_tag() != NodeDataTag::MetaProperty {
-            panic!("as_meta_property called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::MetaProperty, "as_meta_property called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_non_null_expression(&self) -> &'static NonNullExpression {
-        if self.data_tag() != NodeDataTag::NonNullExpression {
-            panic!("as_non_null_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NonNullExpression, "as_non_null_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_spread_element(&self) -> &'static SpreadElement {
-        if self.data_tag() != NodeDataTag::SpreadElement {
-            panic!("as_spread_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SpreadElement, "as_spread_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_template_expression(&self) -> &'static TemplateExpression {
-        if self.data_tag() != NodeDataTag::TemplateExpression {
-            panic!("as_template_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TemplateExpression, "as_template_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_template_span(&self) -> &'static TemplateSpan {
-        if self.data_tag() != NodeDataTag::TemplateSpan {
-            panic!("as_template_span called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TemplateSpan, "as_template_span called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_tagged_template_expression(&self) -> &'static TaggedTemplateExpression {
-        if self.data_tag() != NodeDataTag::TaggedTemplateExpression {
-            panic!("as_tagged_template_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TaggedTemplateExpression, "as_tagged_template_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_parenthesized_expression(&self) -> &'static ParenthesizedExpression {
-        if self.data_tag() != NodeDataTag::ParenthesizedExpression {
-            panic!("as_parenthesized_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ParenthesizedExpression, "as_parenthesized_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_array_literal_expression(&self) -> &'static ArrayLiteralExpression {
-        if self.data_tag() != NodeDataTag::ArrayLiteralExpression {
-            panic!("as_array_literal_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ArrayLiteralExpression, "as_array_literal_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_object_literal_expression(&self) -> &'static ObjectLiteralExpression {
-        if self.data_tag() != NodeDataTag::ObjectLiteralExpression {
-            panic!("as_object_literal_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ObjectLiteralExpression, "as_object_literal_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_spread_assignment(&self) -> &'static SpreadAssignment {
-        if self.data_tag() != NodeDataTag::SpreadAssignment {
-            panic!("as_spread_assignment called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SpreadAssignment, "as_spread_assignment called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_property_assignment(&self) -> &'static PropertyAssignment {
-        if self.data_tag() != NodeDataTag::PropertyAssignment {
-            panic!("as_property_assignment called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PropertyAssignment, "as_property_assignment called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_shorthand_property_assignment(&self) -> &'static ShorthandPropertyAssignment {
-        if self.data_tag() != NodeDataTag::ShorthandPropertyAssignment {
-            panic!("as_shorthand_property_assignment called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ShorthandPropertyAssignment, "as_shorthand_property_assignment called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_delete_expression(&self) -> &'static DeleteExpression {
-        if self.data_tag() != NodeDataTag::DeleteExpression {
-            panic!("as_delete_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::DeleteExpression, "as_delete_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_of_expression(&self) -> &'static TypeOfExpression {
-        if self.data_tag() != NodeDataTag::TypeOfExpression {
-            panic!("as_type_of_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeOfExpression, "as_type_of_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_void_expression(&self) -> &'static VoidExpression {
-        if self.data_tag() != NodeDataTag::VoidExpression {
-            panic!("as_void_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::VoidExpression, "as_void_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_await_expression(&self) -> &'static AwaitExpression {
-        if self.data_tag() != NodeDataTag::AwaitExpression {
-            panic!("as_await_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::AwaitExpression, "as_await_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_assertion(&self) -> &'static TypeAssertion {
-        if self.data_tag() != NodeDataTag::TypeAssertion {
-            panic!("as_type_assertion called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeAssertion, "as_type_assertion called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_keyword_type_node(&self) -> &'static KeywordTypeNode {
-        if self.data_tag() != NodeDataTag::KeywordTypeNode {
-            panic!("as_keyword_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::KeywordTypeNode, "as_keyword_type_node called on {:?}", self.kind());
         &KeywordTypeNode
     }
     #[inline]
     pub fn as_union_type_node(&self) -> &'static UnionTypeNode {
-        if self.data_tag() != NodeDataTag::UnionTypeNode {
-            panic!("as_union_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::UnionTypeNode, "as_union_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_intersection_type_node(&self) -> &'static IntersectionTypeNode {
-        if self.data_tag() != NodeDataTag::IntersectionTypeNode {
-            panic!("as_intersection_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::IntersectionTypeNode, "as_intersection_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_conditional_type_node(&self) -> &'static ConditionalTypeNode {
-        if self.data_tag() != NodeDataTag::ConditionalTypeNode {
-            panic!("as_conditional_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ConditionalTypeNode, "as_conditional_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_operator_node(&self) -> &'static TypeOperatorNode {
-        if self.data_tag() != NodeDataTag::TypeOperatorNode {
-            panic!("as_type_operator_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeOperatorNode, "as_type_operator_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_infer_type_node(&self) -> &'static InferTypeNode {
-        if self.data_tag() != NodeDataTag::InferTypeNode {
-            panic!("as_infer_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::InferTypeNode, "as_infer_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_array_type_node(&self) -> &'static ArrayTypeNode {
-        if self.data_tag() != NodeDataTag::ArrayTypeNode {
-            panic!("as_array_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ArrayTypeNode, "as_array_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_indexed_access_type_node(&self) -> &'static IndexedAccessTypeNode {
-        if self.data_tag() != NodeDataTag::IndexedAccessTypeNode {
-            panic!("as_indexed_access_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::IndexedAccessTypeNode, "as_indexed_access_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_reference_node(&self) -> &'static TypeReferenceNode {
-        if self.data_tag() != NodeDataTag::TypeReferenceNode {
-            panic!("as_type_reference_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeReferenceNode, "as_type_reference_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_expression_with_type_arguments(&self) -> &'static ExpressionWithTypeArguments {
-        if self.data_tag() != NodeDataTag::ExpressionWithTypeArguments {
-            panic!("as_expression_with_type_arguments called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ExpressionWithTypeArguments, "as_expression_with_type_arguments called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_literal_type_node(&self) -> &'static LiteralTypeNode {
-        if self.data_tag() != NodeDataTag::LiteralTypeNode {
-            panic!("as_literal_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::LiteralTypeNode, "as_literal_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_this_type_node(&self) -> &'static ThisTypeNode {
-        if self.data_tag() != NodeDataTag::ThisTypeNode {
-            panic!("as_this_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ThisTypeNode, "as_this_type_node called on {:?}", self.kind());
         &ThisTypeNode
     }
     #[inline]
     pub fn as_type_predicate_node(&self) -> &'static TypePredicateNode {
-        if self.data_tag() != NodeDataTag::TypePredicateNode {
-            panic!("as_type_predicate_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypePredicateNode, "as_type_predicate_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_import_attribute(&self) -> &'static ImportAttribute {
-        if self.data_tag() != NodeDataTag::ImportAttribute {
-            panic!("as_import_attribute called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ImportAttribute, "as_import_attribute called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_import_attributes(&self) -> &'static ImportAttributes {
-        if self.data_tag() != NodeDataTag::ImportAttributes {
-            panic!("as_import_attributes called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ImportAttributes, "as_import_attributes called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_query_node(&self) -> &'static TypeQueryNode {
-        if self.data_tag() != NodeDataTag::TypeQueryNode {
-            panic!("as_type_query_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeQueryNode, "as_type_query_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_mapped_type_node(&self) -> &'static MappedTypeNode {
-        if self.data_tag() != NodeDataTag::MappedTypeNode {
-            panic!("as_mapped_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::MappedTypeNode, "as_mapped_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_literal_node(&self) -> &'static TypeLiteralNode {
-        if self.data_tag() != NodeDataTag::TypeLiteralNode {
-            panic!("as_type_literal_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeLiteralNode, "as_type_literal_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_tuple_type_node(&self) -> &'static TupleTypeNode {
-        if self.data_tag() != NodeDataTag::TupleTypeNode {
-            panic!("as_tuple_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TupleTypeNode, "as_tuple_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_named_tuple_member(&self) -> &'static NamedTupleMember {
-        if self.data_tag() != NodeDataTag::NamedTupleMember {
-            panic!("as_named_tuple_member called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::NamedTupleMember, "as_named_tuple_member called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_optional_type_node(&self) -> &'static OptionalTypeNode {
-        if self.data_tag() != NodeDataTag::OptionalTypeNode {
-            panic!("as_optional_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::OptionalTypeNode, "as_optional_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_rest_type_node(&self) -> &'static RestTypeNode {
-        if self.data_tag() != NodeDataTag::RestTypeNode {
-            panic!("as_rest_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::RestTypeNode, "as_rest_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_parenthesized_type_node(&self) -> &'static ParenthesizedTypeNode {
-        if self.data_tag() != NodeDataTag::ParenthesizedTypeNode {
-            panic!("as_parenthesized_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ParenthesizedTypeNode, "as_parenthesized_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_function_type_node(&self) -> &'static FunctionTypeNode {
-        if self.data_tag() != NodeDataTag::FunctionTypeNode {
-            panic!("as_function_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::FunctionTypeNode, "as_function_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_constructor_type_node(&self) -> &'static ConstructorTypeNode {
-        if self.data_tag() != NodeDataTag::ConstructorTypeNode {
-            panic!("as_constructor_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ConstructorTypeNode, "as_constructor_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_template_head(&self) -> &'static TemplateHead {
-        if self.data_tag() != NodeDataTag::TemplateHead {
-            panic!("as_template_head called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TemplateHead, "as_template_head called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_template_middle(&self) -> &'static TemplateMiddle {
-        if self.data_tag() != NodeDataTag::TemplateMiddle {
-            panic!("as_template_middle called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TemplateMiddle, "as_template_middle called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_template_tail(&self) -> &'static TemplateTail {
-        if self.data_tag() != NodeDataTag::TemplateTail {
-            panic!("as_template_tail called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TemplateTail, "as_template_tail called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_template_literal_type_node(&self) -> &'static TemplateLiteralTypeNode {
-        if self.data_tag() != NodeDataTag::TemplateLiteralTypeNode {
-            panic!("as_template_literal_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TemplateLiteralTypeNode, "as_template_literal_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_template_literal_type_span(&self) -> &'static TemplateLiteralTypeSpan {
-        if self.data_tag() != NodeDataTag::TemplateLiteralTypeSpan {
-            panic!("as_template_literal_type_span called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TemplateLiteralTypeSpan, "as_template_literal_type_span called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_synthetic_expression(&self) -> &'static SyntheticExpression {
-        if self.data_tag() != NodeDataTag::SyntheticExpression {
-            panic!("as_synthetic_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SyntheticExpression, "as_synthetic_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_partially_emitted_expression(&self) -> &'static PartiallyEmittedExpression {
-        if self.data_tag() != NodeDataTag::PartiallyEmittedExpression {
-            panic!("as_partially_emitted_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::PartiallyEmittedExpression, "as_partially_emitted_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_element(&self) -> &'static JsxElement {
-        if self.data_tag() != NodeDataTag::JsxElement {
-            panic!("as_jsx_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxElement, "as_jsx_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_attributes(&self) -> &'static JsxAttributes {
-        if self.data_tag() != NodeDataTag::JsxAttributes {
-            panic!("as_jsx_attributes called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxAttributes, "as_jsx_attributes called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_namespaced_name(&self) -> &'static JsxNamespacedName {
-        if self.data_tag() != NodeDataTag::JsxNamespacedName {
-            panic!("as_jsx_namespaced_name called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxNamespacedName, "as_jsx_namespaced_name called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_opening_element(&self) -> &'static JsxOpeningElement {
-        if self.data_tag() != NodeDataTag::JsxOpeningElement {
-            panic!("as_jsx_opening_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxOpeningElement, "as_jsx_opening_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_self_closing_element(&self) -> &'static JsxSelfClosingElement {
-        if self.data_tag() != NodeDataTag::JsxSelfClosingElement {
-            panic!("as_jsx_self_closing_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxSelfClosingElement, "as_jsx_self_closing_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_fragment(&self) -> &'static JsxFragment {
-        if self.data_tag() != NodeDataTag::JsxFragment {
-            panic!("as_jsx_fragment called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxFragment, "as_jsx_fragment called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_opening_fragment(&self) -> &'static JsxOpeningFragment {
-        if self.data_tag() != NodeDataTag::JsxOpeningFragment {
-            panic!("as_jsx_opening_fragment called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxOpeningFragment, "as_jsx_opening_fragment called on {:?}", self.kind());
         &JsxOpeningFragment
     }
     #[inline]
     pub fn as_jsx_closing_fragment(&self) -> &'static JsxClosingFragment {
-        if self.data_tag() != NodeDataTag::JsxClosingFragment {
-            panic!("as_jsx_closing_fragment called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxClosingFragment, "as_jsx_closing_fragment called on {:?}", self.kind());
         &JsxClosingFragment
     }
     #[inline]
     pub fn as_jsx_attribute(&self) -> &'static JsxAttribute {
-        if self.data_tag() != NodeDataTag::JsxAttribute {
-            panic!("as_jsx_attribute called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxAttribute, "as_jsx_attribute called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_spread_attribute(&self) -> &'static JsxSpreadAttribute {
-        if self.data_tag() != NodeDataTag::JsxSpreadAttribute {
-            panic!("as_jsx_spread_attribute called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxSpreadAttribute, "as_jsx_spread_attribute called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_closing_element(&self) -> &'static JsxClosingElement {
-        if self.data_tag() != NodeDataTag::JsxClosingElement {
-            panic!("as_jsx_closing_element called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxClosingElement, "as_jsx_closing_element called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_expression(&self) -> &'static JsxExpression {
-        if self.data_tag() != NodeDataTag::JsxExpression {
-            panic!("as_jsx_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxExpression, "as_jsx_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsx_text(&self) -> &'static JsxText {
-        if self.data_tag() != NodeDataTag::JsxText {
-            panic!("as_jsx_text called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JsxText, "as_jsx_text called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_syntax_list(&self) -> &'static SyntaxList {
-        if self.data_tag() != NodeDataTag::SyntaxList {
-            panic!("as_syntax_list called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SyntaxList, "as_syntax_list called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc(&self) -> &'static JSDoc {
-        if self.data_tag() != NodeDataTag::JSDoc {
-            panic!("as_jsdoc called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDoc, "as_jsdoc called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_type_expression(&self) -> &'static JSDocTypeExpression {
-        if self.data_tag() != NodeDataTag::JSDocTypeExpression {
-            panic!("as_jsdoc_type_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocTypeExpression, "as_jsdoc_type_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_non_nullable_type(&self) -> &'static JSDocNonNullableType {
-        if self.data_tag() != NodeDataTag::JSDocNonNullableType {
-            panic!("as_jsdoc_non_nullable_type called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocNonNullableType, "as_jsdoc_non_nullable_type called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_nullable_type(&self) -> &'static JSDocNullableType {
-        if self.data_tag() != NodeDataTag::JSDocNullableType {
-            panic!("as_jsdoc_nullable_type called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocNullableType, "as_jsdoc_nullable_type called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_all_type(&self) -> &'static JSDocAllType {
-        if self.data_tag() != NodeDataTag::JSDocAllType {
-            panic!("as_jsdoc_all_type called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocAllType, "as_jsdoc_all_type called on {:?}", self.kind());
         &JSDocAllType
     }
     #[inline]
     pub fn as_jsdoc_variadic_type(&self) -> &'static JSDocVariadicType {
-        if self.data_tag() != NodeDataTag::JSDocVariadicType {
-            panic!("as_jsdoc_variadic_type called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocVariadicType, "as_jsdoc_variadic_type called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_optional_type(&self) -> &'static JSDocOptionalType {
-        if self.data_tag() != NodeDataTag::JSDocOptionalType {
-            panic!("as_jsdoc_optional_type called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocOptionalType, "as_jsdoc_optional_type called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_type_tag(&self) -> &'static JSDocTypeTag {
-        if self.data_tag() != NodeDataTag::JSDocTypeTag {
-            panic!("as_jsdoc_type_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocTypeTag, "as_jsdoc_type_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_unknown_tag(&self) -> &'static JSDocUnknownTag {
-        if self.data_tag() != NodeDataTag::JSDocUnknownTag {
-            panic!("as_jsdoc_unknown_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocUnknownTag, "as_jsdoc_unknown_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_template_tag(&self) -> &'static JSDocTemplateTag {
-        if self.data_tag() != NodeDataTag::JSDocTemplateTag {
-            panic!("as_jsdoc_template_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocTemplateTag, "as_jsdoc_template_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_return_tag(&self) -> &'static JSDocReturnTag {
-        if self.data_tag() != NodeDataTag::JSDocReturnTag {
-            panic!("as_jsdoc_return_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocReturnTag, "as_jsdoc_return_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_public_tag(&self) -> &'static JSDocPublicTag {
-        if self.data_tag() != NodeDataTag::JSDocPublicTag {
-            panic!("as_jsdoc_public_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocPublicTag, "as_jsdoc_public_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_private_tag(&self) -> &'static JSDocPrivateTag {
-        if self.data_tag() != NodeDataTag::JSDocPrivateTag {
-            panic!("as_jsdoc_private_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocPrivateTag, "as_jsdoc_private_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_protected_tag(&self) -> &'static JSDocProtectedTag {
-        if self.data_tag() != NodeDataTag::JSDocProtectedTag {
-            panic!("as_jsdoc_protected_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocProtectedTag, "as_jsdoc_protected_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_readonly_tag(&self) -> &'static JSDocReadonlyTag {
-        if self.data_tag() != NodeDataTag::JSDocReadonlyTag {
-            panic!("as_jsdoc_readonly_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocReadonlyTag, "as_jsdoc_readonly_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_override_tag(&self) -> &'static JSDocOverrideTag {
-        if self.data_tag() != NodeDataTag::JSDocOverrideTag {
-            panic!("as_jsdoc_override_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocOverrideTag, "as_jsdoc_override_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_deprecated_tag(&self) -> &'static JSDocDeprecatedTag {
-        if self.data_tag() != NodeDataTag::JSDocDeprecatedTag {
-            panic!("as_jsdoc_deprecated_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocDeprecatedTag, "as_jsdoc_deprecated_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_see_tag(&self) -> &'static JSDocSeeTag {
-        if self.data_tag() != NodeDataTag::JSDocSeeTag {
-            panic!("as_jsdoc_see_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocSeeTag, "as_jsdoc_see_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_implements_tag(&self) -> &'static JSDocImplementsTag {
-        if self.data_tag() != NodeDataTag::JSDocImplementsTag {
-            panic!("as_jsdoc_implements_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocImplementsTag, "as_jsdoc_implements_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_augments_tag(&self) -> &'static JSDocAugmentsTag {
-        if self.data_tag() != NodeDataTag::JSDocAugmentsTag {
-            panic!("as_jsdoc_augments_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocAugmentsTag, "as_jsdoc_augments_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_satisfies_tag(&self) -> &'static JSDocSatisfiesTag {
-        if self.data_tag() != NodeDataTag::JSDocSatisfiesTag {
-            panic!("as_jsdoc_satisfies_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocSatisfiesTag, "as_jsdoc_satisfies_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_throws_tag(&self) -> &'static JSDocThrowsTag {
-        if self.data_tag() != NodeDataTag::JSDocThrowsTag {
-            panic!("as_jsdoc_throws_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocThrowsTag, "as_jsdoc_throws_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_this_tag(&self) -> &'static JSDocThisTag {
-        if self.data_tag() != NodeDataTag::JSDocThisTag {
-            panic!("as_jsdoc_this_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocThisTag, "as_jsdoc_this_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_import_tag(&self) -> &'static JSDocImportTag {
-        if self.data_tag() != NodeDataTag::JSDocImportTag {
-            panic!("as_jsdoc_import_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocImportTag, "as_jsdoc_import_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_callback_tag(&self) -> &'static JSDocCallbackTag {
-        if self.data_tag() != NodeDataTag::JSDocCallbackTag {
-            panic!("as_jsdoc_callback_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocCallbackTag, "as_jsdoc_callback_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_overload_tag(&self) -> &'static JSDocOverloadTag {
-        if self.data_tag() != NodeDataTag::JSDocOverloadTag {
-            panic!("as_jsdoc_overload_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocOverloadTag, "as_jsdoc_overload_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_typedef_tag(&self) -> &'static JSDocTypedefTag {
-        if self.data_tag() != NodeDataTag::JSDocTypedefTag {
-            panic!("as_jsdoc_typedef_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocTypedefTag, "as_jsdoc_typedef_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_signature(&self) -> &'static JSDocSignature {
-        if self.data_tag() != NodeDataTag::JSDocSignature {
-            panic!("as_jsdoc_signature called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocSignature, "as_jsdoc_signature called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_name_reference(&self) -> &'static JSDocNameReference {
-        if self.data_tag() != NodeDataTag::JSDocNameReference {
-            panic!("as_jsdoc_name_reference called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocNameReference, "as_jsdoc_name_reference called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_source_file(&self) -> &'static SourceFile {
-        if self.data_tag() != NodeDataTag::SourceFile {
-            panic!("as_source_file called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SourceFile, "as_source_file called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_module_declaration(&self) -> &'static ModuleDeclaration {
-        if self.data_tag() != NodeDataTag::ModuleDeclaration {
-            panic!("as_module_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ModuleDeclaration, "as_module_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_import_equals_declaration(&self) -> &'static ImportEqualsDeclaration {
-        if self.data_tag() != NodeDataTag::ImportEqualsDeclaration {
-            panic!("as_import_equals_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ImportEqualsDeclaration, "as_import_equals_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_export_declaration(&self) -> &'static ExportDeclaration {
-        if self.data_tag() != NodeDataTag::ExportDeclaration {
-            panic!("as_export_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ExportDeclaration, "as_export_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_import_type_node(&self) -> &'static ImportTypeNode {
-        if self.data_tag() != NodeDataTag::ImportTypeNode {
-            panic!("as_import_type_node called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ImportTypeNode, "as_import_type_node called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_import_clause(&self) -> &'static ImportClause {
-        if self.data_tag() != NodeDataTag::ImportClause {
-            panic!("as_import_clause called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ImportClause, "as_import_clause called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_import_specifier(&self) -> &'static ImportSpecifier {
-        if self.data_tag() != NodeDataTag::ImportSpecifier {
-            panic!("as_import_specifier called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::ImportSpecifier, "as_import_specifier called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_text(&self) -> &'static JSDocText {
-        if self.data_tag() != NodeDataTag::JSDocText {
-            panic!("as_jsdoc_text called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocText, "as_jsdoc_text called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_link(&self) -> &'static JSDocLink {
-        if self.data_tag() != NodeDataTag::JSDocLink {
-            panic!("as_jsdoc_link called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocLink, "as_jsdoc_link called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_link_plain(&self) -> &'static JSDocLinkPlain {
-        if self.data_tag() != NodeDataTag::JSDocLinkPlain {
-            panic!("as_jsdoc_link_plain called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocLinkPlain, "as_jsdoc_link_plain called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_link_code(&self) -> &'static JSDocLinkCode {
-        if self.data_tag() != NodeDataTag::JSDocLinkCode {
-            panic!("as_jsdoc_link_code called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocLinkCode, "as_jsdoc_link_code called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_type_parameter_declaration(&self) -> &'static TypeParameterDeclaration {
-        if self.data_tag() != NodeDataTag::TypeParameterDeclaration {
-            panic!("as_type_parameter_declaration called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::TypeParameterDeclaration, "as_type_parameter_declaration called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_synthetic_reference_expression(&self) -> &'static SyntheticReferenceExpression {
-        if self.data_tag() != NodeDataTag::SyntheticReferenceExpression {
-            panic!("as_synthetic_reference_expression called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::SyntheticReferenceExpression, "as_synthetic_reference_expression called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_type_literal(&self) -> &'static JSDocTypeLiteral {
-        if self.data_tag() != NodeDataTag::JSDocTypeLiteral {
-            panic!("as_jsdoc_type_literal called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocTypeLiteral, "as_jsdoc_type_literal called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_jsdoc_parameter_or_property_tag(&self) -> &'static JSDocParameterOrPropertyTag {
-        if self.data_tag() != NodeDataTag::JSDocParameterOrPropertyTag {
-            panic!("as_jsdoc_parameter_or_property_tag called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::JSDocParameterOrPropertyTag, "as_jsdoc_parameter_or_property_tag called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_flow_switch_clause_data(&self) -> &'static FlowSwitchClauseData {
-        if self.data_tag() != NodeDataTag::FlowSwitchClauseData {
-            panic!("as_flow_switch_clause_data called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::FlowSwitchClauseData, "as_flow_switch_clause_data called on {:?}", self.kind());
         self.payload()
     }
     #[inline]
     pub fn as_flow_reduce_label_data(&self) -> &'static FlowReduceLabelData {
-        if self.data_tag() != NodeDataTag::FlowReduceLabelData {
-            panic!("as_flow_reduce_label_data called on {:?}", self.kind());
-        }
+        assert!(self.data_tag() == NodeDataTag::FlowReduceLabelData, "as_flow_reduce_label_data called on {:?}", self.kind());
         self.payload()
     }
 
@@ -9423,8 +9035,8 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            left: left,
-            right: right,
+            left,
+            right,
         })
     }
 
@@ -9438,7 +9050,7 @@ impl NodeFactory {
 
     pub fn new_computed_property_name(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ComputedPropertyName, ComputedPropertyName {
-            expression: expression,
+            expression,
         })
     }
 
@@ -9452,7 +9064,7 @@ impl NodeFactory {
 
     pub fn new_decorator(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::Decorator, Decorator {
-            expression: expression,
+            expression,
         })
     }
 
@@ -9477,9 +9089,9 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            expression: expression,
-            then_statement: then_statement,
-            else_statement: else_statement,
+            expression,
+            then_statement,
+            else_statement,
         })
     }
 
@@ -9497,9 +9109,9 @@ impl NodeFactory {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                statement: statement,
+                statement,
             },
-            expression: expression,
+            expression,
         })
     }
 
@@ -9517,9 +9129,9 @@ impl NodeFactory {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                statement: statement,
+                statement,
             },
-            expression: expression,
+            expression,
         })
     }
 
@@ -9537,15 +9149,15 @@ impl NodeFactory {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                statement: statement,
+                statement,
             },
             locals_container_base: LocalsContainerBase {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            initializer: initializer,
-            condition: condition,
-            incrementor: incrementor,
+            initializer,
+            condition,
+            incrementor,
         })
     }
 
@@ -9566,10 +9178,10 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            await_modifier: await_modifier,
-            initializer: initializer,
-            expression: expression,
-            statement: statement,
+            await_modifier,
+            initializer,
+            expression,
+            statement,
         })
     }
 
@@ -9586,7 +9198,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            label: label,
+            label,
         })
     }
 
@@ -9603,7 +9215,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            label: label,
+            label,
         })
     }
 
@@ -9637,8 +9249,8 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            expression: expression,
-            statement: statement,
+            expression,
+            statement,
         })
     }
 
@@ -9655,8 +9267,8 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            expression: expression,
-            case_block: case_block,
+            expression,
+            case_block,
         })
     }
 
@@ -9674,7 +9286,7 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            clauses: clauses,
+            clauses,
         })
     }
 
@@ -9688,8 +9300,8 @@ impl NodeFactory {
 
     pub fn new_case_or_default_clause(&self, kind: Kind, expression: Option<P<Node>>, statements: P<NodeList>) -> P<Node> {
         self.new_node(kind, CaseOrDefaultClause {
-            expression: expression,
-            statements: statements,
+            expression,
+            statements,
             fallthrough_flow_node: OwnedCell::new(None),
         })
     }
@@ -9707,7 +9319,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            expression: expression,
+            expression,
         })
     }
 
@@ -9724,9 +9336,9 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            try_block: try_block,
-            catch_clause: catch_clause,
-            finally_block: finally_block,
+            try_block,
+            catch_clause,
+            finally_block,
         })
     }
 
@@ -9744,8 +9356,8 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            variable_declaration: variable_declaration,
-            block: block,
+            variable_declaration,
+            block,
         })
     }
 
@@ -9770,8 +9382,8 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            label: label,
-            statement: statement,
+            label,
+            statement,
         })
     }
 
@@ -9788,7 +9400,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            expression: expression,
+            expression,
         })
     }
 
@@ -9809,8 +9421,8 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            statements: statements,
-            multi_line: multi_line,
+            statements,
+            multi_line,
         })
     }
 
@@ -9830,7 +9442,7 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            declaration_list: declaration_list,
+            declaration_list,
         })
     }
 
@@ -9851,11 +9463,11 @@ impl NodeFactory {
                 exportable_base: ExportableBase {
                     local_symbol: OwnedCell::new(None),
                 },
-                name: name,
+                name,
                 type_: OwnedCell::new(type_node),
                 initializer: OwnedCell::new(initializer),
             }, VariableDeclarationRare {
-                exclamation_token: exclamation_token,
+                exclamation_token,
             })
         } else {
             self.new_node(Kind::VariableDeclaration, VariableDeclaration {
@@ -9865,7 +9477,7 @@ impl NodeFactory {
                 exportable_base: ExportableBase {
                     local_symbol: OwnedCell::new(None),
                 },
-                name: name,
+                name,
                 type_: OwnedCell::new(type_node),
                 initializer: OwnedCell::new(initializer),
             })
@@ -9882,7 +9494,7 @@ impl NodeFactory {
 
     pub fn new_variable_declaration_list(&self, declarations: P<NodeList>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::VariableDeclarationList, VariableDeclarationList {
-            declarations: declarations,
+            declarations,
         });
         node.flags.set(flags);
         node
@@ -9898,7 +9510,7 @@ impl NodeFactory {
 
     pub fn new_binding_pattern(&self, kind: Kind, elements: P<NodeList>) -> P<Node> {
         self.new_node(kind, BindingPattern {
-            elements: elements,
+            elements,
         })
     }
 
@@ -9919,12 +9531,12 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
+                name,
                 question_token: OwnedCell::new(question_token),
                 type_: OwnedCell::new(type_node),
             }, ParameterDeclarationRare {
-                dot_dot_dot_token: dot_dot_dot_token,
-                initializer: initializer,
+                dot_dot_dot_token,
+                initializer,
             })
         } else {
             self.new_node(Kind::Parameter, ParameterDeclaration {
@@ -9934,7 +9546,7 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
+                name,
                 question_token: OwnedCell::new(question_token),
                 type_: OwnedCell::new(type_node),
             })
@@ -9961,11 +9573,11 @@ impl NodeFactory {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                name: name,
+                name,
             }, BindingElementRare {
-                dot_dot_dot_token: dot_dot_dot_token,
-                property_name: property_name,
-                initializer: initializer,
+                dot_dot_dot_token,
+                property_name,
+                initializer,
             })
         } else {
             self.new_node(Kind::BindingElement, BindingElement {
@@ -9978,7 +9590,7 @@ impl NodeFactory {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                name: name,
+                name,
             })
         }
     }
@@ -10038,11 +9650,11 @@ impl NodeFactory {
                 full_signature: OwnedCell::new(full_signature),
             },
             body_base: BodyBase {
-                asterisk_token: asterisk_token,
-                body: body,
+                asterisk_token,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
-            name: name,
+            name,
             return_flow_node: OwnedCell::new(None),
         })
     }
@@ -10074,10 +9686,10 @@ impl NodeFactory {
                     locals: OwnedCell::new(None),
                     next_container: OwnedCell::new(None),
                 },
-                name: name,
+                name,
                 type_parameters: OwnedCell::new(type_parameters),
                 heritage_clauses: OwnedCell::new(heritage_clauses),
-                members: members,
+                members,
             },
         })
     }
@@ -10106,10 +9718,10 @@ impl NodeFactory {
                     locals: OwnedCell::new(None),
                     next_container: OwnedCell::new(None),
                 },
-                name: name,
+                name,
                 type_parameters: OwnedCell::new(type_parameters),
                 heritage_clauses: OwnedCell::new(heritage_clauses),
-                members: members,
+                members,
             },
         })
     }
@@ -10124,7 +9736,7 @@ impl NodeFactory {
 
     pub fn new_heritage_clause(&self, token: Kind, types: P<NodeList>) -> P<Node> {
         self.new_node(Kind::HeritageClause, HeritageClause {
-            token: token,
+            token,
             types: OwnedCell::new(types),
         })
     }
@@ -10151,10 +9763,10 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            name: name,
-            type_parameters: type_parameters,
-            heritage_clauses: heritage_clauses,
-            members: members,
+            name,
+            type_parameters,
+            heritage_clauses,
+            members,
         })
     }
 
@@ -10184,7 +9796,7 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            name: name,
+            name,
             type_parameters: OwnedCell::new(type_parameters),
             type_: OwnedCell::new(type_node),
         })
@@ -10208,7 +9820,7 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            name: name,
+            name,
             type_parameters: OwnedCell::new(type_parameters),
             type_: OwnedCell::new(type_node),
         })
@@ -10236,10 +9848,10 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(None),
                 },
-                name: name,
+                name,
                 postfix_token: None,
             },
-            initializer: initializer,
+            initializer,
         })
     }
 
@@ -10265,8 +9877,8 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            name: name,
-            members: members,
+            name,
+            members,
         })
     }
 
@@ -10283,7 +9895,7 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            statements: statements,
+            statements,
         })
     }
 
@@ -10323,10 +9935,10 @@ impl NodeFactory {
                 declaration_base: DeclarationBase {
                     symbol: OwnedCell::new(None),
                 },
-                import_clause: import_clause,
-                module_specifier: module_specifier,
+                import_clause,
+                module_specifier,
             }, ImportDeclarationRare {
-                attributes: attributes,
+                attributes,
             })
         } else {
             self.new_node(Kind::ImportDeclaration, ImportDeclaration {
@@ -10339,8 +9951,8 @@ impl NodeFactory {
                 declaration_base: DeclarationBase {
                     symbol: OwnedCell::new(None),
                 },
-                import_clause: import_clause,
-                module_specifier: module_specifier,
+                import_clause,
+                module_specifier,
             })
         }
     }
@@ -10357,10 +9969,10 @@ impl NodeFactory {
                 declaration_base: DeclarationBase {
                     symbol: OwnedCell::new(None),
                 },
-                import_clause: import_clause,
-                module_specifier: module_specifier,
+                import_clause,
+                module_specifier,
             }, ImportDeclarationRare {
-                attributes: attributes,
+                attributes,
             })
         } else {
             self.new_node(Kind::JSImportDeclaration, ImportDeclaration {
@@ -10373,8 +9985,8 @@ impl NodeFactory {
                 declaration_base: DeclarationBase {
                     symbol: OwnedCell::new(None),
                 },
-                import_clause: import_clause,
-                module_specifier: module_specifier,
+                import_clause,
+                module_specifier,
             })
         }
     }
@@ -10394,7 +10006,7 @@ impl NodeFactory {
 
     pub fn new_external_module_reference(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::ExternalModuleReference, ExternalModuleReference {
-            expression: expression,
+            expression,
         })
     }
 
@@ -10414,7 +10026,7 @@ impl NodeFactory {
             exportable_base: ExportableBase {
                 local_symbol: OwnedCell::new(None),
             },
-            name: name,
+            name,
         })
     }
 
@@ -10428,7 +10040,7 @@ impl NodeFactory {
 
     pub fn new_named_imports(&self, elements: P<NodeList>) -> P<Node> {
         self.new_node(Kind::NamedImports, NamedImports {
-            elements: elements,
+            elements,
         })
     }
 
@@ -10451,7 +10063,7 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            is_export_equals: is_export_equals,
+            is_export_equals,
             type_: OwnedCell::new(type_node),
             expression: OwnedCell::new(expression),
         })
@@ -10476,7 +10088,7 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            name: name,
+            name,
         })
     }
 
@@ -10493,7 +10105,7 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            name: name,
+            name,
         })
     }
 
@@ -10507,7 +10119,7 @@ impl NodeFactory {
 
     pub fn new_named_exports(&self, elements: P<NodeList>) -> P<Node> {
         self.new_node(Kind::NamedExports, NamedExports {
-            elements: elements,
+            elements,
         })
     }
 
@@ -10527,9 +10139,9 @@ impl NodeFactory {
             exportable_base: ExportableBase {
                 local_symbol: OwnedCell::new(None),
             },
-            is_type_only: is_type_only,
-            property_name: property_name,
-            name: name,
+            is_type_only,
+            property_name,
+            name,
         })
     }
 
@@ -10613,7 +10225,7 @@ impl NodeFactory {
             },
             body_base: BodyBase {
                 asterisk_token: None,
-                body: body,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
             return_flow_node: OwnedCell::new(None),
@@ -10637,7 +10249,7 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
+                name,
                 postfix_token: None,
             },
             function_like_base: FunctionLikeBase {
@@ -10652,7 +10264,7 @@ impl NodeFactory {
             },
             body_base: BodyBase {
                 asterisk_token: None,
-                body: body,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
             flow_node_base: FlowNodeBase {
@@ -10678,7 +10290,7 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
+                name,
                 postfix_token: None,
             },
             function_like_base: FunctionLikeBase {
@@ -10693,7 +10305,7 @@ impl NodeFactory {
             },
             body_base: BodyBase {
                 asterisk_token: None,
-                body: body,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
             flow_node_base: FlowNodeBase {
@@ -10748,8 +10360,8 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
-                postfix_token: postfix_token,
+                name,
+                postfix_token,
             },
             function_like_base: FunctionLikeBase {
                 locals_container_base: LocalsContainerBase {
@@ -10781,8 +10393,8 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
-                postfix_token: postfix_token,
+                name,
+                postfix_token,
             },
             function_like_base: FunctionLikeBase {
                 locals_container_base: LocalsContainerBase {
@@ -10795,8 +10407,8 @@ impl NodeFactory {
                 full_signature: OwnedCell::new(full_signature),
             },
             body_base: BodyBase {
-                asterisk_token: asterisk_token,
-                body: body,
+                asterisk_token,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
             flow_node_base: FlowNodeBase {
@@ -10823,12 +10435,12 @@ impl NodeFactory {
                     modifiers_base: ModifiersBase {
                         modifiers: OwnedCell::new(modifiers),
                     },
-                    name: name,
-                    postfix_token: postfix_token,
+                    name,
+                    postfix_token,
                 },
                 type_: OwnedCell::new(type_node),
             }, PropertySignatureDeclarationRare {
-                initializer: initializer,
+                initializer,
             })
         } else {
             self.new_node(Kind::PropertySignature, PropertySignatureDeclaration {
@@ -10839,8 +10451,8 @@ impl NodeFactory {
                     modifiers_base: ModifiersBase {
                         modifiers: OwnedCell::new(modifiers),
                     },
-                    name: name,
-                    postfix_token: postfix_token,
+                    name,
+                    postfix_token,
                 },
                 type_: OwnedCell::new(type_node),
             })
@@ -10864,8 +10476,8 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
-                postfix_token: postfix_token,
+                name,
+                postfix_token,
             },
             type_: OwnedCell::new(type_node),
             initializer: OwnedCell::new(initializer),
@@ -10900,7 +10512,7 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            body: body,
+            body,
             return_flow_node: OwnedCell::new(None),
         })
     }
@@ -10990,9 +10602,9 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            left: left,
+            left,
             type_: OwnedCell::new(type_node),
-            operator_token: operator_token,
+            operator_token,
             right: OwnedCell::new(right),
         })
     }
@@ -11007,8 +10619,8 @@ impl NodeFactory {
 
     pub fn new_prefix_unary_expression(&self, operator: Kind, operand: P<Node>) -> P<Node> {
         self.new_node(Kind::PrefixUnaryExpression, PrefixUnaryExpression {
-            operator: operator,
-            operand: operand,
+            operator,
+            operand,
         })
     }
 
@@ -11022,8 +10634,8 @@ impl NodeFactory {
 
     pub fn new_postfix_unary_expression(&self, operand: P<Node>, operator: Kind) -> P<Node> {
         self.new_node(Kind::PostfixUnaryExpression, PostfixUnaryExpression {
-            operand: operand,
-            operator: operator,
+            operand,
+            operator,
         })
     }
 
@@ -11037,8 +10649,8 @@ impl NodeFactory {
 
     pub fn new_yield_expression(&self, asterisk_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::YieldExpression, YieldExpression {
-            asterisk_token: asterisk_token,
-            expression: expression,
+            asterisk_token,
+            expression,
         })
     }
 
@@ -11070,13 +10682,13 @@ impl NodeFactory {
             },
             body_base: BodyBase {
                 asterisk_token: None,
-                body: body,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            equals_greater_than_token: equals_greater_than_token,
+            equals_greater_than_token,
         })
     }
 
@@ -11107,14 +10719,14 @@ impl NodeFactory {
                 full_signature: OwnedCell::new(full_signature),
             },
             body_base: BodyBase {
-                asterisk_token: asterisk_token,
-                body: body,
+                asterisk_token,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            name: name,
+            name,
             return_flow_node: OwnedCell::new(None),
         })
     }
@@ -11129,7 +10741,7 @@ impl NodeFactory {
 
     pub fn new_as_expression(&self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::AsExpression, AsExpression {
-            expression: expression,
+            expression,
             type_: type_node,
         })
     }
@@ -11144,7 +10756,7 @@ impl NodeFactory {
 
     pub fn new_satisfies_expression(&self, expression: P<Node>, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::SatisfiesExpression, SatisfiesExpression {
-            expression: expression,
+            expression,
             type_: type_node,
         })
     }
@@ -11159,11 +10771,11 @@ impl NodeFactory {
 
     pub fn new_conditional_expression(&self, condition: P<Node>, question_token: P<Node>, when_true: P<Node>, colon_token: P<Node>, when_false: P<Node>) -> P<Node> {
         self.new_node(Kind::ConditionalExpression, ConditionalExpression {
-            condition: condition,
-            question_token: question_token,
-            when_true: when_true,
-            colon_token: colon_token,
-            when_false: when_false,
+            condition,
+            question_token,
+            when_true,
+            colon_token,
+            when_false,
         })
     }
 
@@ -11181,18 +10793,18 @@ impl NodeFactory {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                expression: expression,
-                name: name,
+                expression,
+                name,
             }, PropertyAccessExpressionRare {
-                question_dot_token: question_dot_token,
+                question_dot_token,
             })
         } else {
             self.new_node(Kind::PropertyAccessExpression, PropertyAccessExpression {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                expression: expression,
-                name: name,
+                expression,
+                name,
             })
         };
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
@@ -11213,18 +10825,18 @@ impl NodeFactory {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                expression: expression,
-                argument_expression: argument_expression,
+                expression,
+                argument_expression,
             }, ElementAccessExpressionRare {
-                question_dot_token: question_dot_token,
+                question_dot_token,
             })
         } else {
             self.new_node(Kind::ElementAccessExpression, ElementAccessExpression {
                 flow_node_base: FlowNodeBase {
                     flow_node: OwnedCell::new(None),
                 },
-                expression: expression,
-                argument_expression: argument_expression,
+                expression,
+                argument_expression,
             })
         };
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
@@ -11245,19 +10857,19 @@ impl NodeFactory {
                 declaration_base: DeclarationBase {
                     symbol: OwnedCell::new(None),
                 },
-                expression: expression,
-                arguments: arguments,
+                expression,
+                arguments,
             }, CallExpressionRare {
-                question_dot_token: question_dot_token,
-                type_arguments: type_arguments,
+                question_dot_token,
+                type_arguments,
             })
         } else {
             self.new_node(Kind::CallExpression, CallExpression {
                 declaration_base: DeclarationBase {
                     symbol: OwnedCell::new(None),
                 },
-                expression: expression,
-                arguments: arguments,
+                expression,
+                arguments,
             })
         };
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
@@ -11275,15 +10887,15 @@ impl NodeFactory {
     pub fn new_new_expression(&self, expression: P<Node>, type_arguments: Option<P<NodeList>>, arguments: Option<P<NodeList>>) -> P<Node> {
         if type_arguments.is_some() {
             self.new_node_with_rare(Kind::NewExpression, NewExpression {
-                expression: expression,
-                arguments: arguments,
+                expression,
+                arguments,
             }, NewExpressionRare {
-                type_arguments: type_arguments,
+                type_arguments,
             })
         } else {
             self.new_node(Kind::NewExpression, NewExpression {
-                expression: expression,
-                arguments: arguments,
+                expression,
+                arguments,
             })
         }
     }
@@ -11301,8 +10913,8 @@ impl NodeFactory {
             flow_node_base: FlowNodeBase {
                 flow_node: OwnedCell::new(None),
             },
-            keyword_token: keyword_token,
-            name: name,
+            keyword_token,
+            name,
         })
     }
 
@@ -11316,7 +10928,7 @@ impl NodeFactory {
 
     pub fn new_non_null_expression(&self, expression: P<Node>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::NonNullExpression, NonNullExpression {
-            expression: expression,
+            expression,
         });
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
@@ -11332,7 +10944,7 @@ impl NodeFactory {
 
     pub fn new_spread_element(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::SpreadElement, SpreadElement {
-            expression: expression,
+            expression,
         })
     }
 
@@ -11346,8 +10958,8 @@ impl NodeFactory {
 
     pub fn new_template_expression(&self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
         self.new_node(Kind::TemplateExpression, TemplateExpression {
-            head: head,
-            template_spans: template_spans,
+            head,
+            template_spans,
         })
     }
 
@@ -11361,8 +10973,8 @@ impl NodeFactory {
 
     pub fn new_template_span(&self, expression: P<Node>, literal: P<Node>) -> P<Node> {
         self.new_node(Kind::TemplateSpan, TemplateSpan {
-            expression: expression,
-            literal: literal,
+            expression,
+            literal,
         })
     }
 
@@ -11376,10 +10988,10 @@ impl NodeFactory {
 
     pub fn new_tagged_template_expression(&self, tag: P<Node>, question_dot_token: Option<P<Node>>, type_arguments: Option<P<NodeList>>, template: P<Node>, flags: NodeFlags) -> P<Node> {
         let node = self.new_node(Kind::TaggedTemplateExpression, TaggedTemplateExpression {
-            tag: tag,
-            question_dot_token: question_dot_token,
-            type_arguments: type_arguments,
-            template: template,
+            tag,
+            question_dot_token,
+            type_arguments,
+            template,
         });
         node.flags.set(node.flags.get() | (flags & NodeFlags::OptionalChain));
         node
@@ -11409,8 +11021,8 @@ impl NodeFactory {
 
     pub fn new_array_literal_expression(&self, elements: P<NodeList>, multi_line: bool) -> P<Node> {
         self.new_node(Kind::ArrayLiteralExpression, ArrayLiteralExpression {
-            elements: elements,
-            multi_line: multi_line,
+            elements,
+            multi_line,
         })
     }
 
@@ -11427,8 +11039,8 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            properties: properties,
-            multi_line: multi_line,
+            properties,
+            multi_line,
         })
     }
 
@@ -11445,7 +11057,7 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            expression: expression,
+            expression,
         })
     }
 
@@ -11466,8 +11078,8 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
-                postfix_token: postfix_token,
+                name,
+                postfix_token,
             },
             type_: OwnedCell::new(type_node),
             initializer: OwnedCell::new(initializer),
@@ -11491,11 +11103,11 @@ impl NodeFactory {
                 modifiers_base: ModifiersBase {
                     modifiers: OwnedCell::new(modifiers),
                 },
-                name: name,
-                postfix_token: postfix_token,
+                name,
+                postfix_token,
             },
             type_: OwnedCell::new(type_node),
-            equals_token: equals_token,
+            equals_token,
             object_assignment_initializer: OwnedCell::new(object_assignment_initializer),
         })
     }
@@ -11510,7 +11122,7 @@ impl NodeFactory {
 
     pub fn new_delete_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::DeleteExpression, DeleteExpression {
-            expression: expression,
+            expression,
         })
     }
 
@@ -11524,7 +11136,7 @@ impl NodeFactory {
 
     pub fn new_type_of_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::TypeOfExpression, TypeOfExpression {
-            expression: expression,
+            expression,
         })
     }
 
@@ -11538,7 +11150,7 @@ impl NodeFactory {
 
     pub fn new_void_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::VoidExpression, VoidExpression {
-            expression: expression,
+            expression,
         })
     }
 
@@ -11552,7 +11164,7 @@ impl NodeFactory {
 
     pub fn new_await_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::AwaitExpression, AwaitExpression {
-            expression: expression,
+            expression,
         })
     }
 
@@ -11567,7 +11179,7 @@ impl NodeFactory {
     pub fn new_type_assertion(&self, type_node: P<Node>, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::TypeAssertionExpression, TypeAssertion {
             type_: type_node,
-            expression: expression,
+            expression,
         })
     }
 
@@ -11586,7 +11198,7 @@ impl NodeFactory {
     pub fn new_union_type_node(&self, types: P<NodeList>) -> P<Node> {
         self.new_node(Kind::UnionType, UnionTypeNode {
             union_or_intersection_type_node_base: UnionOrIntersectionTypeNodeBase {
-                types: types,
+                types,
             },
         })
     }
@@ -11602,7 +11214,7 @@ impl NodeFactory {
     pub fn new_intersection_type_node(&self, types: P<NodeList>) -> P<Node> {
         self.new_node(Kind::IntersectionType, IntersectionTypeNode {
             union_or_intersection_type_node_base: UnionOrIntersectionTypeNodeBase {
-                types: types,
+                types,
             },
         })
     }
@@ -11621,10 +11233,10 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            check_type: check_type,
-            extends_type: extends_type,
-            true_type: true_type,
-            false_type: false_type,
+            check_type,
+            extends_type,
+            true_type,
+            false_type,
         })
     }
 
@@ -11638,7 +11250,7 @@ impl NodeFactory {
 
     pub fn new_type_operator_node(&self, operator: Kind, type_node: P<Node>) -> P<Node> {
         self.new_node(Kind::TypeOperator, TypeOperatorNode {
-            operator: operator,
+            operator,
             type_: type_node,
         })
     }
@@ -11653,7 +11265,7 @@ impl NodeFactory {
 
     pub fn new_infer_type_node(&self, type_parameter: P<Node>) -> P<Node> {
         self.new_node(Kind::InferType, InferTypeNode {
-            type_parameter: type_parameter,
+            type_parameter,
         })
     }
 
@@ -11667,7 +11279,7 @@ impl NodeFactory {
 
     pub fn new_array_type_node(&self, element_type: P<Node>) -> P<Node> {
         self.new_node(Kind::ArrayType, ArrayTypeNode {
-            element_type: element_type,
+            element_type,
         })
     }
 
@@ -11681,8 +11293,8 @@ impl NodeFactory {
 
     pub fn new_indexed_access_type_node(&self, object_type: P<Node>, index_type: P<Node>) -> P<Node> {
         self.new_node(Kind::IndexedAccessType, IndexedAccessTypeNode {
-            object_type: object_type,
-            index_type: index_type,
+            object_type,
+            index_type,
         })
     }
 
@@ -11697,9 +11309,9 @@ impl NodeFactory {
     pub fn new_type_reference_node(&self, type_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::TypeReference, TypeReferenceNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
-                type_arguments: type_arguments,
+                type_arguments,
             },
-            type_name: type_name,
+            type_name,
         })
     }
 
@@ -11713,7 +11325,7 @@ impl NodeFactory {
 
     pub fn new_expression_with_type_arguments(&self, expression: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::ExpressionWithTypeArguments, ExpressionWithTypeArguments {
-            expression: expression,
+            expression,
             type_arguments: OwnedCell::new(type_arguments),
         })
     }
@@ -11728,7 +11340,7 @@ impl NodeFactory {
 
     pub fn new_literal_type_node(&self, literal: P<Node>) -> P<Node> {
         self.new_node(Kind::LiteralType, LiteralTypeNode {
-            literal: literal,
+            literal,
         })
     }
 
@@ -11746,8 +11358,8 @@ impl NodeFactory {
 
     pub fn new_type_predicate_node(&self, asserts_modifier: Option<P<Node>>, parameter_name: P<Node>, type_node: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::TypePredicate, TypePredicateNode {
-            asserts_modifier: asserts_modifier,
-            parameter_name: parameter_name,
+            asserts_modifier,
+            parameter_name,
             type_: type_node,
         })
     }
@@ -11762,8 +11374,8 @@ impl NodeFactory {
 
     pub fn new_import_attribute(&self, name: Option<P<Node>>, value: P<Node>) -> P<Node> {
         self.new_node(Kind::ImportAttribute, ImportAttribute {
-            name: name,
-            value: value,
+            name,
+            value,
         })
     }
 
@@ -11777,9 +11389,9 @@ impl NodeFactory {
 
     pub fn new_import_attributes(&self, token: Kind, attributes: P<NodeList>, multi_line: bool) -> P<Node> {
         self.new_node(Kind::ImportAttributes, ImportAttributes {
-            token: token,
-            attributes: attributes,
-            multi_line: multi_line,
+            token,
+            attributes,
+            multi_line,
         })
     }
 
@@ -11794,9 +11406,9 @@ impl NodeFactory {
     pub fn new_type_query_node(&self, expr_name: P<Node>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::TypeQuery, TypeQueryNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
-                type_arguments: type_arguments,
+                type_arguments,
             },
-            expr_name: expr_name,
+            expr_name,
         })
     }
 
@@ -11817,12 +11429,12 @@ impl NodeFactory {
                 locals: OwnedCell::new(None),
                 next_container: OwnedCell::new(None),
             },
-            readonly_token: readonly_token,
-            type_parameter: type_parameter,
-            name_type: name_type,
-            question_token: question_token,
+            readonly_token,
+            type_parameter,
+            name_type,
+            question_token,
             type_: type_node,
-            members: members,
+            members,
         })
     }
 
@@ -11839,7 +11451,7 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            members: members,
+            members,
         })
     }
 
@@ -11853,7 +11465,7 @@ impl NodeFactory {
 
     pub fn new_tuple_type_node(&self, elements: P<NodeList>) -> P<Node> {
         self.new_node(Kind::TupleType, TupleTypeNode {
-            elements: elements,
+            elements,
         })
     }
 
@@ -11870,9 +11482,9 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            dot_dot_dot_token: dot_dot_dot_token,
-            name: name,
-            question_token: question_token,
+            dot_dot_dot_token,
+            name,
+            question_token,
             type_: type_node,
         })
     }
@@ -11993,7 +11605,7 @@ impl NodeFactory {
                     text: PackedStr::new(text),
                     token_flags: OwnedCell::new(TokenFlags::None),
                 },
-                raw_text: raw_text,
+                raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
             },
         })
@@ -12007,7 +11619,7 @@ impl NodeFactory {
                     text: PackedStr::new(text),
                     token_flags: OwnedCell::new(TokenFlags::None),
                 },
-                raw_text: raw_text,
+                raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
             },
         })
@@ -12021,7 +11633,7 @@ impl NodeFactory {
                     text: PackedStr::new(text),
                     token_flags: OwnedCell::new(TokenFlags::None),
                 },
-                raw_text: raw_text,
+                raw_text,
                 template_flags: template_flags & TokenFlags::TemplateLiteralLikeFlags,
             },
         })
@@ -12029,8 +11641,8 @@ impl NodeFactory {
 
     pub fn new_template_literal_type_node(&self, head: P<Node>, template_spans: P<NodeList>) -> P<Node> {
         self.new_node(Kind::TemplateLiteralType, TemplateLiteralTypeNode {
-            head: head,
-            template_spans: template_spans,
+            head,
+            template_spans,
         })
     }
 
@@ -12045,7 +11657,7 @@ impl NodeFactory {
     pub fn new_template_literal_type_span(&self, type_node: P<Node>, literal: P<Node>) -> P<Node> {
         self.new_node(Kind::TemplateLiteralTypeSpan, TemplateLiteralTypeSpan {
             type_: type_node,
-            literal: literal,
+            literal,
         })
     }
 
@@ -12060,8 +11672,8 @@ impl NodeFactory {
     pub fn new_synthetic_expression(&self, type_node: &'static dyn Any, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::SyntheticExpression, SyntheticExpression {
             type_: type_node,
-            is_spread: is_spread,
-            tuple_name_source: tuple_name_source,
+            is_spread,
+            tuple_name_source,
         })
     }
 
@@ -12075,7 +11687,7 @@ impl NodeFactory {
 
     pub fn new_partially_emitted_expression(&self, expression: P<Node>) -> P<Node> {
         self.new_node(Kind::PartiallyEmittedExpression, PartiallyEmittedExpression {
-            expression: expression,
+            expression,
         })
     }
 
@@ -12089,9 +11701,9 @@ impl NodeFactory {
 
     pub fn new_jsx_element(&self, opening_element: P<Node>, children: P<NodeList>, closing_element: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxElement, JsxElement {
-            opening_element: opening_element,
-            children: children,
-            closing_element: closing_element,
+            opening_element,
+            children,
+            closing_element,
         })
     }
 
@@ -12108,7 +11720,7 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            properties: properties,
+            properties,
         })
     }
 
@@ -12122,8 +11734,8 @@ impl NodeFactory {
 
     pub fn new_jsx_namespaced_name(&self, namespace: P<Node>, name: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxNamespacedName, JsxNamespacedName {
-            namespace: namespace,
-            name: name,
+            namespace,
+            name,
         })
     }
 
@@ -12137,9 +11749,9 @@ impl NodeFactory {
 
     pub fn new_jsx_opening_element(&self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxOpeningElement, JsxOpeningElement {
-            tag_name: tag_name,
-            type_arguments: type_arguments,
-            attributes: attributes,
+            tag_name,
+            type_arguments,
+            attributes,
         })
     }
 
@@ -12153,9 +11765,9 @@ impl NodeFactory {
 
     pub fn new_jsx_self_closing_element(&self, tag_name: P<Node>, type_arguments: Option<P<NodeList>>, attributes: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxSelfClosingElement, JsxSelfClosingElement {
-            tag_name: tag_name,
-            type_arguments: type_arguments,
-            attributes: attributes,
+            tag_name,
+            type_arguments,
+            attributes,
         })
     }
 
@@ -12169,9 +11781,9 @@ impl NodeFactory {
 
     pub fn new_jsx_fragment(&self, opening_fragment: P<Node>, children: P<NodeList>, closing_fragment: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxFragment, JsxFragment {
-            opening_fragment: opening_fragment,
-            children: children,
-            closing_fragment: closing_fragment,
+            opening_fragment,
+            children,
+            closing_fragment,
         })
     }
 
@@ -12196,8 +11808,8 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            name: name,
-            initializer: initializer,
+            name,
+            initializer,
         })
     }
 
@@ -12214,7 +11826,7 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            expression: expression,
+            expression,
         })
     }
 
@@ -12228,7 +11840,7 @@ impl NodeFactory {
 
     pub fn new_jsx_closing_element(&self, tag_name: P<Node>) -> P<Node> {
         self.new_node(Kind::JsxClosingElement, JsxClosingElement {
-            tag_name: tag_name,
+            tag_name,
         })
     }
 
@@ -12242,8 +11854,8 @@ impl NodeFactory {
 
     pub fn new_jsx_expression(&self, dot_dot_dot_token: Option<P<Node>>, expression: Option<P<Node>>) -> P<Node> {
         self.new_node(Kind::JsxExpression, JsxExpression {
-            dot_dot_dot_token: dot_dot_dot_token,
-            expression: expression,
+            dot_dot_dot_token,
+            expression,
         })
     }
 
@@ -12262,13 +11874,13 @@ impl NodeFactory {
                 text: PackedStr::new(text),
                 token_flags: OwnedCell::new(TokenFlags::None),
             },
-            contains_only_trivia_white_spaces: contains_only_trivia_white_spaces,
+            contains_only_trivia_white_spaces,
         })
     }
 
     pub fn new_syntax_list(&self, children: &'static [P<Node>]) -> P<Node> {
         self.new_node(Kind::SyntaxList, SyntaxList {
-            children: children,
+            children,
         })
     }
 
@@ -12282,8 +11894,8 @@ impl NodeFactory {
 
     pub fn new_jsdoc(&self, comment: P<NodeList>, tags: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDoc, JSDoc {
-            comment: comment,
-            tags: tags,
+            comment,
+            tags,
         })
     }
 
@@ -12372,10 +11984,10 @@ impl NodeFactory {
     pub fn new_jsdoc_type_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocTypeTag, JSDocTypeTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
+            type_expression,
         })
     }
 
@@ -12390,8 +12002,8 @@ impl NodeFactory {
     pub fn new_jsdoc_unknown_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocUnknownTag, JSDocUnknownTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
         })
     }
@@ -12407,11 +12019,11 @@ impl NodeFactory {
     pub fn new_jsdoc_template_tag(&self, tag_name: P<Node>, constraint: Option<P<Node>>, type_parameters: P<NodeList>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocTemplateTag, JSDocTemplateTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            constraint: constraint,
-            type_parameters: type_parameters,
+            constraint,
+            type_parameters,
         })
     }
 
@@ -12426,10 +12038,10 @@ impl NodeFactory {
     pub fn new_jsdoc_return_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocReturnTag, JSDocReturnTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
+            type_expression,
         })
     }
 
@@ -12444,8 +12056,8 @@ impl NodeFactory {
     pub fn new_jsdoc_public_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocPublicTag, JSDocPublicTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
         })
     }
@@ -12461,8 +12073,8 @@ impl NodeFactory {
     pub fn new_jsdoc_private_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocPrivateTag, JSDocPrivateTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
         })
     }
@@ -12478,8 +12090,8 @@ impl NodeFactory {
     pub fn new_jsdoc_protected_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocProtectedTag, JSDocProtectedTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
         })
     }
@@ -12495,8 +12107,8 @@ impl NodeFactory {
     pub fn new_jsdoc_readonly_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocReadonlyTag, JSDocReadonlyTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
         })
     }
@@ -12512,8 +12124,8 @@ impl NodeFactory {
     pub fn new_jsdoc_override_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocOverrideTag, JSDocOverrideTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
         })
     }
@@ -12529,8 +12141,8 @@ impl NodeFactory {
     pub fn new_jsdoc_deprecated_tag(&self, tag_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocDeprecatedTag, JSDocDeprecatedTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
         })
     }
@@ -12546,10 +12158,10 @@ impl NodeFactory {
     pub fn new_jsdoc_see_tag(&self, tag_name: P<Node>, name_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocSeeTag, JSDocSeeTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            name_expression: name_expression,
+            name_expression,
         })
     }
 
@@ -12564,10 +12176,10 @@ impl NodeFactory {
     pub fn new_jsdoc_implements_tag(&self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocImplementsTag, JSDocImplementsTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            class_name: class_name,
+            class_name,
         })
     }
 
@@ -12582,10 +12194,10 @@ impl NodeFactory {
     pub fn new_jsdoc_augments_tag(&self, tag_name: P<Node>, class_name: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocAugmentsTag, JSDocAugmentsTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            class_name: class_name,
+            class_name,
         })
     }
 
@@ -12600,10 +12212,10 @@ impl NodeFactory {
     pub fn new_jsdoc_satisfies_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocSatisfiesTag, JSDocSatisfiesTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
+            type_expression,
         })
     }
 
@@ -12618,10 +12230,10 @@ impl NodeFactory {
     pub fn new_jsdoc_throws_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocThrowsTag, JSDocThrowsTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
+            type_expression,
         })
     }
 
@@ -12636,10 +12248,10 @@ impl NodeFactory {
     pub fn new_jsdoc_this_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocThisTag, JSDocThisTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
+            type_expression,
         })
     }
 
@@ -12654,12 +12266,12 @@ impl NodeFactory {
     pub fn new_jsdoc_import_tag(&self, tag_name: P<Node>, import_clause: Option<P<Node>>, module_specifier: P<Node>, attributes: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocImportTag, JSDocImportTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            import_clause: import_clause,
-            module_specifier: module_specifier,
-            attributes: attributes,
+            import_clause,
+            module_specifier,
+            attributes,
         })
     }
 
@@ -12674,11 +12286,11 @@ impl NodeFactory {
     pub fn new_jsdoc_callback_tag(&self, tag_name: P<Node>, type_expression: P<Node>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocCallbackTag, JSDocCallbackTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
-            name: name,
+            type_expression,
+            name,
         })
     }
 
@@ -12693,10 +12305,10 @@ impl NodeFactory {
     pub fn new_jsdoc_overload_tag(&self, tag_name: P<Node>, type_expression: P<Node>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocOverloadTag, JSDocOverloadTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
+            type_expression,
         })
     }
 
@@ -12711,11 +12323,11 @@ impl NodeFactory {
     pub fn new_jsdoc_typedef_tag(&self, tag_name: P<Node>, type_expression: Option<P<Node>>, name: Option<P<Node>>, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::JSDocTypedefTag, JSDocTypedefTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            type_expression: type_expression,
-            name: name,
+            type_expression,
+            name,
         })
     }
 
@@ -12755,7 +12367,7 @@ impl NodeFactory {
 
     pub fn new_jsdoc_name_reference(&self, name: P<Node>) -> P<Node> {
         self.new_node(Kind::JSDocNameReference, JSDocNameReference {
-            name: name,
+            name,
         })
     }
 
@@ -12787,12 +12399,12 @@ impl NodeFactory {
             },
             body_base: BodyBase {
                 asterisk_token: None,
-                body: body,
+                body,
                 end_flow_node: OwnedCell::new(None),
             },
-            keyword: keyword,
-            name: name,
-            attributes: attributes,
+            keyword,
+            name,
+            attributes,
         })
     }
 
@@ -12818,9 +12430,9 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            is_type_only: is_type_only,
-            name: name,
-            module_reference: module_reference,
+            is_type_only,
+            name,
+            module_reference,
         })
     }
 
@@ -12843,10 +12455,10 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            is_type_only: is_type_only,
-            export_clause: export_clause,
-            module_specifier: module_specifier,
-            attributes: attributes,
+            is_type_only,
+            export_clause,
+            module_specifier,
+            attributes,
         })
     }
 
@@ -12861,12 +12473,12 @@ impl NodeFactory {
     pub fn new_import_type_node(&self, is_type_of: bool, argument: P<Node>, attributes: Option<P<Node>>, qualifier: Option<P<Node>>, type_arguments: Option<P<NodeList>>) -> P<Node> {
         self.new_node(Kind::ImportType, ImportTypeNode {
             node_with_type_arguments_base: NodeWithTypeArgumentsBase {
-                type_arguments: type_arguments,
+                type_arguments,
             },
-            is_type_of: is_type_of,
-            argument: argument,
-            attributes: attributes,
-            qualifier: qualifier,
+            is_type_of,
+            argument,
+            attributes,
+            qualifier,
         })
     }
 
@@ -12887,8 +12499,8 @@ impl NodeFactory {
                 local_symbol: OwnedCell::new(None),
             },
             phase_modifier: OwnedCell::new(phase_modifier),
-            name: name,
-            named_bindings: named_bindings,
+            name,
+            named_bindings,
         })
     }
 
@@ -12909,10 +12521,10 @@ impl NodeFactory {
                 exportable_base: ExportableBase {
                     local_symbol: OwnedCell::new(None),
                 },
-                is_type_only: is_type_only,
-                name: name,
+                is_type_only,
+                name,
             }, ImportSpecifierRare {
-                property_name: property_name,
+                property_name,
             })
         } else {
             self.new_node(Kind::ImportSpecifier, ImportSpecifier {
@@ -12922,8 +12534,8 @@ impl NodeFactory {
                 exportable_base: ExportableBase {
                     local_symbol: OwnedCell::new(None),
                 },
-                is_type_only: is_type_only,
-                name: name,
+                is_type_only,
+                name,
             })
         }
     }
@@ -12940,7 +12552,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocText, JSDocText {
             jsdoc_comment_base: JSDocCommentBase {
-                text: text,
+                text,
             },
         })
     }
@@ -12949,9 +12561,9 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocLink, JSDocLink {
             jsdoc_comment_base: JSDocCommentBase {
-                text: text,
+                text,
             },
-            name: name,
+            name,
         })
     }
 
@@ -12967,9 +12579,9 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocLinkPlain, JSDocLinkPlain {
             jsdoc_comment_base: JSDocCommentBase {
-                text: text,
+                text,
             },
-            name: name,
+            name,
         })
     }
 
@@ -12985,9 +12597,9 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         self.new_node(Kind::JSDocLinkCode, JSDocLinkCode {
             jsdoc_comment_base: JSDocCommentBase {
-                text: text,
+                text,
             },
-            name: name,
+            name,
         })
     }
 
@@ -13007,10 +12619,10 @@ impl NodeFactory {
             modifiers_base: ModifiersBase {
                 modifiers: OwnedCell::new(modifiers),
             },
-            name: name,
-            constraint: constraint,
-            expression: expression,
-            default_type: default_type,
+            name,
+            constraint,
+            expression,
+            default_type,
         })
     }
 
@@ -13024,8 +12636,8 @@ impl NodeFactory {
 
     pub fn new_synthetic_reference_expression(&self, expression: P<Node>, this_arg: P<Node>) -> P<Node> {
         self.new_node(Kind::SyntheticReferenceExpression, SyntheticReferenceExpression {
-            expression: expression,
-            this_arg: this_arg,
+            expression,
+            this_arg,
         })
     }
 
@@ -13042,8 +12654,8 @@ impl NodeFactory {
             declaration_base: DeclarationBase {
                 symbol: OwnedCell::new(None),
             },
-            jsdoc_property_tags: jsdoc_property_tags,
-            is_array_type: is_array_type,
+            jsdoc_property_tags,
+            is_array_type,
         })
     }
 
@@ -13058,13 +12670,13 @@ impl NodeFactory {
     pub fn new_jsdoc_parameter_or_property_tag(&self, kind: Kind, tag_name: P<Node>, name: P<Node>, is_bracketed: bool, type_expression: Option<P<Node>>, is_name_first: bool, comment: Option<P<NodeList>>) -> P<Node> {
         self.new_node(kind, JSDocParameterOrPropertyTag {
             jsdoc_tag_base: JSDocTagBase {
-                tag_name: tag_name,
-                comment: comment,
+                tag_name,
+                comment,
             },
-            name: name,
-            is_bracketed: is_bracketed,
-            type_expression: type_expression,
-            is_name_first: is_name_first,
+            name,
+            is_bracketed,
+            type_expression,
+            is_name_first,
         })
     }
 

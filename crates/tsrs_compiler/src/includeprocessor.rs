@@ -62,14 +62,14 @@ impl includeProcessor {
             return existing;
         }
         let loc: &'static referenceFileLocation = Box::leak(Box::new(get_referenced_location(r, program)));
-        *self.reason_to_reference_location.lock().unwrap().entry(r).or_insert(loc)
+        self.reason_to_reference_location.lock().unwrap().entry(r).or_insert(loc)
     }
 
     pub(crate) fn get_compiler_options_object_literal_syntax(&self, program: &Program) -> Option<P<Node>> {
         *self.compiler_options_syntax.get_or_init(|| {
             let config_file = program.opts.config.config_file.as_ref()?;
             let compiler_options_property =
-                tsoptions::for_each_ts_config_prop_array(Some(config_file.source_file), "compilerOptions", |p| Some(p))?;
+                tsoptions::for_each_ts_config_prop_array(Some(config_file.source_file), "compilerOptions", Some)?;
             let initializer = compiler_options_property.initializer()?;
             if ast::is_object_literal_expression(initializer) {
                 Some(initializer)

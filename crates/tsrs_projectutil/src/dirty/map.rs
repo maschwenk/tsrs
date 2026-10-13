@@ -41,9 +41,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> MapEntry<K, T> {
     pub fn change(self: &Arc<Self>, apply: impl FnOnce(&mut T)) {
         let (mut value, register) = {
             let mut st = self.st.lock().unwrap();
-            if st.delete {
-                panic!("tried to change a deleted entry");
-            }
+            assert!(!st.delete, "tried to change a deleted entry");
             let mut register = false;
             if !st.dirty {
                 st.value = Some(st.value.as_ref().unwrap().clone_shared());
@@ -63,9 +61,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> MapEntry<K, T> {
     pub fn replace(self: &Arc<Self>, new_value: Shared<T>) {
         let register = {
             let mut st = self.st.lock().unwrap();
-            if st.delete {
-                panic!("tried to change a deleted entry");
-            }
+            assert!(!st.delete, "tried to change a deleted entry");
             let register = !st.dirty;
             st.dirty = true;
             st.value = Some(new_value);
@@ -130,7 +126,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> Value<T> for Arc<MapEntry<K, T>
     }
 
     fn change(&self, apply: &mut dyn FnMut(&mut T)) {
-        MapEntry::change(self, |v| apply(v))
+        MapEntry::change(self, |v| apply(v));
     }
 
     fn change_if(&self, cond: &mut dyn FnMut(&T) -> bool, apply: &mut dyn FnMut(&mut T)) -> bool {
@@ -138,12 +134,12 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> Value<T> for Arc<MapEntry<K, T>
     }
 
     fn delete(&self) {
-        MapEntry::delete(self)
+        MapEntry::delete(self);
     }
 
     // map.go:48
     fn locked(&self, f: &mut dyn FnMut(&dyn Value<T>)) {
-        f(self)
+        f(self);
     }
 }
 
@@ -212,9 +208,7 @@ impl<K: Hash + Eq + Clone, T: Cloneable + Clone> Map<K, T> {
 
     // map.go:114
     pub fn delete(&self, key: &K) {
-        if !self.try_delete(key) {
-            panic!("tried to delete a non-existent entry");
-        }
+        assert!(self.try_delete(key), "tried to delete a non-existent entry");
     }
 
     // map.go:120

@@ -307,18 +307,14 @@ impl Parser {
                         state = JsdocState::SavingComments;
                         push_comment!(asterisk);
                     } else {
-                        if state != JsdocState::BeginningOfLine {
-                            panic!("state must be BeginningOfLine");
-                        }
+                        assert!(state == JsdocState::BeginningOfLine, "state must be BeginningOfLine");
                         // Ignore the first asterisk on a line
                         state = JsdocState::SawAsterisk;
                         indent += asterisk.len() as u32;
                     }
                 }
                 Kind::WhitespaceTrivia => {
-                    if state == JsdocState::SavingComments || state == JsdocState::SavingBackticks {
-                        panic!("whitespace shouldn't come from the scanner while saving top-level comment text");
-                    }
+                    assert!(!(state == JsdocState::SavingComments || state == JsdocState::SavingBackticks), "whitespace shouldn't come from the scanner while saving top-level comment text");
                     // only collect whitespace if we're already saving comments or have just crossed the comment indent margin
                     let whitespace = self.scanner.token_text();
                     let whitespace_len = whitespace.len() as u32;
@@ -477,16 +473,15 @@ impl Parser {
     }
 
     pub(crate) fn parse_tag(&mut self, tags: &[P<Node>], margin: u32) -> P<Node> {
-        if self.token != Kind::AtToken {
-            panic!("should be called only at the start of a tag");
-        }
+        assert!(self.token == Kind::AtToken, "should be called only at the start of a tag");
         let start = self.scanner.token_start();
         self.next_token_jsdoc();
 
         let tag_name = self.parse_jsdoc_identifier_name(Some(&diagnostics::Identifier_expected));
         let indent_text = self.skip_whitespace_or_asterisk();
 
-        let tag = match tag_name.text() {
+
+        match tag_name.text() {
             "implements" => self.parse_implements_tag(start, tag_name, margin, &indent_text),
             "augments" | "extends" => self.parse_augments_tag(start, tag_name, margin, &indent_text),
             "public" => self.parse_simple_tag(
@@ -549,8 +544,7 @@ impl Parser {
             "exception" | "throws" => self.parse_throws_tag(start, tag_name, margin, &indent_text),
             "import" => self.parse_import_tag(start, tag_name, margin, &indent_text),
             _ => self.parse_unknown_tag(start, tag_name, margin, &indent_text),
-        };
-        tag
+        }
     }
 
     pub(crate) fn parse_trailing_tag_comments(
@@ -640,9 +634,7 @@ impl Parser {
                     break;
                 }
                 Kind::WhitespaceTrivia => {
-                    if state == JsdocState::SavingComments || state == JsdocState::SavingBackticks {
-                        panic!("whitespace shouldn't come from the scanner while saving comment text");
-                    }
+                    assert!(!(state == JsdocState::SavingComments || state == JsdocState::SavingBackticks), "whitespace shouldn't come from the scanner while saving comment text");
                     let whitespace = self.scanner.token_text();
                     // if the whitespace crosses the margin, take only the whitespace that passes the margin
                     let whitespace_len = whitespace.len() as u32;
@@ -809,7 +801,7 @@ impl Parser {
             && token_is_identifier_or_keyword(self.next_token_jsdoc())
         {
             let kind = self.scanner.token_value();
-            if is_jsdoc_link_tag(&kind) {
+            if is_jsdoc_link_tag(kind) {
                 return Some(kind);
             }
         }
@@ -1469,9 +1461,7 @@ impl Parser {
         target: PropertyLikeParse,
         indent: u32,
     ) -> Option<P<Node>> {
-        if self.token != Kind::AtToken {
-            panic!("should only be called when at @");
-        }
+        assert!(self.token == Kind::AtToken, "should only be called when at @");
         let start = self.scanner.token_full_start();
         self.next_token_jsdoc();
 
@@ -1644,7 +1634,7 @@ fn trim_end(s: &str) -> &str {
 fn remove_trailing_whitespace(comments: &mut Vec<&'static str>) {
     let mut end = comments.len();
     for (i, element) in comments.iter_mut().enumerate().rev() {
-        let trimmed = trim_end(*element);
+        let trimmed = trim_end(element);
         if trimmed.is_empty() {
             end = i;
         } else {

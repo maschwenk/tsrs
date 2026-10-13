@@ -147,7 +147,7 @@ impl NodeFactory {
             };
             text = format_generated_name(true /*privateName*/, options.prefix, &text, options.suffix);
         } else if !text.starts_with('#') {
-            panic!("First character of private identifier must be #: {}", text);
+            panic!("First character of private identifier must be #: {text}");
         }
 
         let name = self.new_private_identifier(alloc_str(&text));

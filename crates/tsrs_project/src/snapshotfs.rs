@@ -659,7 +659,7 @@ impl snapshotFSBuilder {
         if content_mapper_watched_files.is_some_and(|w| w.has(&(self.to_path)(&file_name))) {
             return true;
         }
-        let extensions: Vec<&str> = content_mapper_extensions.iter().map(|e| e.as_str()).collect();
+        let extensions: Vec<&str> = content_mapper_extensions.iter().map(std::string::String::as_str).collect();
         if tspath::file_extension_is_one_of(&file_name, &extensions) {
             return true;
         }

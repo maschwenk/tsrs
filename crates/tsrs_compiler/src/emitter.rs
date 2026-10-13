@@ -40,7 +40,7 @@ pub(crate) fn source_file_may_be_emitted(source_file: P<SourceFile>, host: &Prog
 
     // Check other conditions for file emit
     // Source files from referenced projects are not emitted
-    if host.get_project_reference_from_source(&source_file.path()).is_some() {
+    if host.get_project_reference_from_source(source_file.path()).is_some() {
         return false;
     }
 

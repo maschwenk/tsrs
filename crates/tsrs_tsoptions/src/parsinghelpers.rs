@@ -309,7 +309,7 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
         "allowArbitraryExtensions" => all_options.allow_arbitrary_extensions = parse_tristate(value),
         "alwaysStrict" => all_options.always_strict = parse_tristate(value),
         "assumeChangesOnlyAffectDirectDependencies" => {
-            all_options.assume_changes_only_affect_direct_dependencies = parse_tristate(value)
+            all_options.assume_changes_only_affect_direct_dependencies = parse_tristate(value);
         }
         "baseUrl" => all_options.base_url = parse_string(value),
         "build" => all_options.build = parse_tristate(value),
@@ -321,7 +321,7 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
         "diagnostics" => all_options.diagnostics = parse_tristate(value),
         "disableSizeLimit" => all_options.disable_size_limit = parse_tristate(value),
         "disableSourceOfProjectReferenceRedirect" => {
-            all_options.disable_source_of_project_reference_redirect = parse_tristate(value)
+            all_options.disable_source_of_project_reference_redirect = parse_tristate(value);
         }
         "disableSolutionSearching" => all_options.disable_solution_searching = parse_tristate(value),
         "disableReferencedProjectLoad" => all_options.disable_referenced_project_load = parse_tristate(value),
@@ -392,7 +392,7 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
         "paths" => all_options.paths = parse_string_map(value),
         "plugins" => {
             // Native TypeScript does not load plugins; retain them only so tools can report the incompatibility.
-            if let CompilerOptionsValue::NilArray = value {
+            if matches!(value, CompilerOptionsValue::NilArray) {
                 all_options.plugins = None;
             }
             if let CompilerOptionsValue::Array(plugins) = value {

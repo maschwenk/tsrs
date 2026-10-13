@@ -261,7 +261,7 @@ pub fn truncate_by_runes(str: &str, max_length: usize) -> &str {
     if max_length == 0 {
         return "";
     }
-    if let Some((i, _)) = str.char_indices().nth(max_length as usize) {
+    if let Some((i, _)) = str.char_indices().nth(max_length) {
         return &str[..i];
     }
     str
@@ -286,13 +286,13 @@ pub fn is_surrogate(ch: Rune) -> bool {
 
 pub fn surrogate_pair_to_code_point(r1: Rune, r2: Rune) -> Rune {
     if (0xD800..0xDC00).contains(&r1) && (0xDC00..0xE000).contains(&r2) {
-        return ((r1 - 0xD800) << 10 | (r2 - 0xDC00)) + 0x10000;
+        return (((r1 - 0xD800) << 10) | (r2 - 0xDC00)) + 0x10000;
     }
     0xFFFD
 }
 
 pub fn code_point_to_surrogate_pair(r: Rune) -> (Rune, Rune) {
-    if r < 0x10000 || r > 0x10FFFF {
+    if !(0x0001_0000..=0x0010_FFFF).contains(&r) {
         return (0xFFFD, 0xFFFD);
     }
     let r = r - 0x10000;
@@ -349,7 +349,7 @@ pub fn decode_js_string_rune_bytes(s: &[u8]) -> (Rune, usize) {
         && s[2] >= UTF8_CONT_MARKER
         && s[2] <= UTF8_CONT_MAX
     {
-        return (SURROGATE_UTF8_LEAD_BITS | ((s[1] & UTF8_CONT_MASK) as Rune) << 6 | (s[2] & UTF8_CONT_MASK) as Rune, 3);
+        return (SURROGATE_UTF8_LEAD_BITS | (((s[1] & UTF8_CONT_MASK) as Rune) << 6) | (s[2] & UTF8_CONT_MASK) as Rune, 3);
     }
     decode_rune(s)
 }

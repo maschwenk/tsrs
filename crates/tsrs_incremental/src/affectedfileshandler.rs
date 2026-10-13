@@ -87,9 +87,7 @@ impl affectedFilesHandler<'_> {
         let done = self.program.begin_nested_emit();
         let program = self.program;
         let write_file = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
-            if !tspath::is_declaration_file_name(file_name) {
-                panic!("File extension for signature expected to be dts, got : {file_name}");
-            }
+            assert!(tspath::is_declaration_file_name(file_name), "File extension for signature expected to be dts, got : {file_name}");
             *signature.lock().unwrap() = program.snapshot.compute_signature_with_diagnostics(file, text, data);
             Ok(())
         };
@@ -110,9 +108,7 @@ impl affectedFilesHandler<'_> {
         let done = self.program.begin_nested_emit();
         let program = self.program;
         let write_file = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
-            if !tspath::is_declaration_file_name(file_name) {
-                panic!("File extension for signature expected to be dts, got : {file_name}");
-            }
+            assert!(tspath::is_declaration_file_name(file_name), "File extension for signature expected to be dts, got : {file_name}");
             let file = data.source_file.expect("declaration output of a source file");
             let signature = program.snapshot.compute_signature_with_diagnostics(file, text, data);
             signatures.lock().unwrap().insert(file, signature);

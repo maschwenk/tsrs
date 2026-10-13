@@ -710,7 +710,7 @@ pub(crate) fn is_node_import(node: P<Node>) -> bool {
             parent.property_name().is_none()
         }
         Kind::ImportClause | Kind::NamespaceImport => {
-            assert!(parent.name() == Some(node));
+            assert_eq!(parent.name(), Some(node));
             true
         }
         Kind::BindingElement => ast::is_in_js_file(Some(node)) && ast::is_variable_declaration_initialized_to_bare_or_accessed_require(parent.parent().unwrap().parent().unwrap()),

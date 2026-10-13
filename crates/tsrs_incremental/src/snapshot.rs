@@ -14,7 +14,7 @@ use tsrs_diagnostics::{Category, Key};
 use crate::emit::WriteFileData;
 use crate::referencemap::ReferenceMap;
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FileInfo {
     pub(crate) version: String,
     pub(crate) signature: String,
@@ -126,7 +126,7 @@ pub(crate) fn get_pending_emit_kind(emit_kind: FileEmitKind, old_emit_kind: File
 
 // Signature (Hash of d.ts emitted), is string if it was emitted using same d.ts.map option as what compilerOptions indicate,
 // otherwise tuple of string
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct EmitSignature {
     pub(crate) signature: String,
     pub(crate) signature_with_different_options: Option<Vec<String>>,
@@ -386,9 +386,13 @@ pub struct Snapshot {
     // Looked up package.json files from
     pub(crate) package_jsons: RefCell<Option<Vec<String>>>,
     pub(crate) missing_package_jsons: RefCell<Option<Vec<String>>>,
+    // tsrs-only, versioned proof of canonical report placement; absent in Go-compatible history.
+    pub(crate) canonical_check_signature: OnceLock<String>,
 
     // Additional fields that are not serialized but needed to track state
 
+    // Program order, also recoverable from build info's fileNames/fileInfos, for history-dependent diagnostics.
+    pub(crate) file_order: Vec<Path>,
     // true if build info emit is pending
     pub(crate) build_info_emit_pending: Cell<bool>,
     pub(crate) has_errors_from_old_state: Cell<Tristate>,
@@ -489,7 +493,7 @@ pub(crate) fn get_text_handling_source_map_for_signature<'a>(
 }
 
 // snapshot.go:413
-fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<SourceFile>, builder: &mut String) {
+pub(crate) fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<SourceFile>, builder: &mut String) {
     let Some(diagnostic) = diagnostic else {
         return;
     };
@@ -504,7 +508,8 @@ fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, file: P<Sourc
         )));
     }
     if diagnostic.file().is_some() {
-        let _ = write!(builder, "({:?},{:?}): ", diagnostic.pos(), diagnostic.len());
+        // Go prints the raw ints: a synthetic position is -1, and its length 0.
+        let _ = write!(builder, "({},{}): ", diagnostic.pos().map_or(-1, i64::from), diagnostic.len().map_or(0, i64::from));
     }
     builder.push_str(diagnostic.category().name());
     let _ = write!(builder, "{}: ", diagnostic.code());

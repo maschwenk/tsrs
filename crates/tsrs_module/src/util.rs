@@ -66,7 +66,7 @@ pub fn mangle_scoped_package_name(package_name: &str) -> String {
 
 pub fn unmangle_scoped_package_name(package_name: &str) -> String {
     if let Some((before, after)) = package_name.split_once("__") {
-        return format!("@{}/{}", before, after);
+        return format!("@{before}/{after}");
     }
     package_name.to_string()
 }

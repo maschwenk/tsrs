@@ -282,7 +282,7 @@ pub(crate) static COMMAND_LINE_OPTION_DEPRECATED: LazyLock<FxHashMap<&'static st
     let mut m = FxHashMap::default();
     m.insert("module", ["none", "amd", "system", "umd"].into_iter().collect());
     m.insert("moduleResolution", ["node", "classic", "node10"].into_iter().collect());
-    m.insert("target", ["es5"].into_iter().collect());
+    m.insert("target", std::iter::once("es5").collect());
     m
 });
 

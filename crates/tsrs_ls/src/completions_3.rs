@@ -1442,7 +1442,7 @@ pub(crate) fn filter_class_members_list(
             !existing_member_names.contains(ast::symbol_name(property_symbol))
                 && !property_symbol.declarations().is_empty()
                 && !checker::get_declaration_modifier_flags_from_symbol_exported(property_symbol).intersects(ModifierFlags::Private)
-                && !(property_symbol.value_declaration().is_some() && ast::is_private_identifier_class_element_declaration(property_symbol.value_declaration().unwrap()))
+                && property_symbol.value_declaration().is_none_or(|declaration| !ast::is_private_identifier_class_element_declaration(declaration))
         })
         .collect()
 }

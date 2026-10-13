@@ -30,7 +30,7 @@ struct workerPoolState {
 fn get_pool() -> &'static workerPool {
     static POOL: OnceLock<workerPool> = OnceLock::new();
     POOL.get_or_init(|| {
-        let parallelism = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(1);
+        let parallelism = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
         workerPool { state: Mutex::new(workerPoolState { jobs: VecDeque::new(), threads: 0, idle: 0 }), cond: Condvar::new(), max_threads: parallelism.max(4) }
     })
 }
@@ -45,7 +45,7 @@ pub(crate) fn go(f: impl FnOnce() + Send + 'static) {
         let n = state.threads;
         drop(state);
         std::thread::Builder::new()
-            .name(format!("lsp-worker-{}", n))
+            .name(format!("lsp-worker-{n}"))
             .stack_size(WORKER_STACK_SIZE)
             .spawn(|| worker_loop(get_pool()))
             .expect("failed to spawn a language server worker thread");
@@ -55,6 +55,7 @@ pub(crate) fn go(f: impl FnOnce() + Send + 'static) {
     }
 }
 
+#[expect(clippy::infinite_loop, reason = "language-server workers wait for jobs until process exit")]
 fn worker_loop(pool: &'static workerPool) {
     let mut state = pool.state.lock().unwrap();
     loop {

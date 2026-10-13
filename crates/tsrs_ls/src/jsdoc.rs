@@ -97,7 +97,7 @@ fn get_jsdoc_tag_text(tag: P<Node>) -> String {
         if comment.is_empty() {
             return s;
         }
-        format!("{} {}", s, comment)
+        format!("{s} {comment}")
     };
     match tag.kind() {
         Kind::JSDocThrowsTag => {
@@ -233,22 +233,20 @@ pub(crate) fn get_jsdoc_or_tag(c: &mut Checker, node: Option<P<Node>>, seen_symb
                             }
                         }
                     }
-                } else {
-                    if let Some(result) = c.get_base_types_exported(class_type).iter().find_map(|&base_type| {
-                        if let Some(prop) = c.get_property_of_type_exported(base_type, symbol.name()) {
-                            if let Some(value_declaration) = prop.value_declaration() {
-                                if seen_symbols.insert(prop) {
-                                    if let Some(js_doc) = get_jsdoc_or_tag(c, Some(value_declaration), seen_symbols) {
-                                        return Some(Some(js_doc));
-                                    }
+                } else if let Some(result) = c.get_base_types_exported(class_type).iter().find_map(|&base_type| {
+                    if let Some(prop) = c.get_property_of_type_exported(base_type, symbol.name()) {
+                        if let Some(value_declaration) = prop.value_declaration() {
+                            if seen_symbols.insert(prop) {
+                                if let Some(js_doc) = get_jsdoc_or_tag(c, Some(value_declaration), seen_symbols) {
+                                    return Some(Some(js_doc));
                                 }
                             }
                         }
-
-                        None
-                    }) {
-                        return result;
                     }
+
+                    None
+                }) {
+                    return result;
                 }
             }
         }
@@ -295,7 +293,7 @@ fn get_jsdoc_parameter_tag_by_position(c: &mut Checker, param: P<Node>) -> Optio
     // Collect all @param tags in order
     let tags = jsdoc.as_jsdoc().tags?;
 
-    if let Some(&tag) = tags.nodes().iter().filter(|tag| tag.kind() == Kind::JSDocParameterTag).nth(param_index as usize) {
+    if let Some(&tag) = tags.nodes().iter().filter(|tag| tag.kind() == Kind::JSDocParameterTag).nth(param_index) {
         return Some(tag);
     }
     None

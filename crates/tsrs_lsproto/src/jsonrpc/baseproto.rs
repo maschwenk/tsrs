@@ -70,14 +70,14 @@ impl<R: Read> Reader<R> {
                     Err(err) => {
                         return Err(Error::tagged(
                             ErrorTag::InvalidContentLength,
-                            format!("{}: parse error: {}", ERR_INVALID_CONTENT_LENGTH, err),
+                            format!("{ERR_INVALID_CONTENT_LENGTH}: parse error: {err}"),
                         ));
                     }
                 };
                 if content_length < 0 {
                     return Err(Error::tagged(
                         ErrorTag::InvalidContentLength,
-                        format!("{}: negative value {}", ERR_INVALID_CONTENT_LENGTH, content_length),
+                        format!("{ERR_INVALID_CONTENT_LENGTH}: negative value {content_length}"),
                     ));
                 }
             }

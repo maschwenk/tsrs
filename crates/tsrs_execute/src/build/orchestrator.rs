@@ -7,6 +7,7 @@
 // Mutex/atomic; the shared host caches are Mutex-guarded. At the pinned commit Go's builders iterate `order`, not
 // ScheduleOrder() (whose comment says otherwise); this port does the same.
 
+use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
@@ -67,9 +68,13 @@ impl OrchestratorResult {
         }
         if report_files_to_delete {
             if let Some(files_to_delete) = &self.files_to_delete {
+                let mut file_list = String::new();
+                for file in files_to_delete {
+                    let _ = write!(file_list, "\r\n * {file}");
+                }
                 o.create_builder_status_reporter(None)(new_compiler_diagnostic(
                     &diagnostics::A_non_dry_build_would_delete_the_following_files_Colon_0,
-                    &[&files_to_delete.iter().map(|f| format!("\r\n * {f}")).collect::<String>()],
+                    &[&file_list],
                 ));
             }
         }
@@ -105,7 +110,7 @@ pub struct Orchestrator {
     // region collected here, so the whole orchestrator (configs, programs, checkers' arenas, diagnostics) can be
     // freed at once (`free_api_orchestrator`). Off for the CLI, whose single build runs to process exit.
     regions: Mutex<Vec<tsrs_core::arena::Region>>,
-    use_regions: AtomicBool,
+    api_mode: AtomicBool,
     // API clean existence answers, kept until the next build (which uses a fresh orchestrator): Go's `Clean` asks
     // the orchestrator's cachedvfs, which only `Build`'s recheck clears, so a later clean reuses them.
     api_clean_exists: Mutex<FxHashMap<String, bool>>,
@@ -346,17 +351,21 @@ impl Orchestrator {
         // Under the test harness a watch session returns after the first build; the harness drives the cycles.
         let watcher = (self.opts.command.compiler_options.watch.is_true() && self.opts.testing.is_some())
             .then(|| Box::new(orchestratorWatcher(self)) as Box<dyn tsc::Watcher>);
-        CommandLineResult { watcher, status }
+        CommandLineResult { status, watcher }
     }
 
-    /// Makes this orchestrator allocate in collectable regions (API builds; see `regions`).
-    pub fn enable_api_regions(&self) {
-        self.use_regions.store(true, Ordering::SeqCst);
+    /// Makes this orchestrator allocate in collectable regions and retain per-file API diagnostics.
+    pub fn enable_api_mode(&self) {
+        self.api_mode.store(true, Ordering::SeqCst);
+    }
+
+    pub(crate) fn uses_canonical_diagnostics(&self) -> bool {
+        !self.api_mode.load(Ordering::SeqCst)
     }
 
     // A fresh region for the calling thread, registered for `free_api_orchestrator`; `None` for CLI builds.
     pub(crate) fn enter_api_region(&self) -> Option<tsrs_core::arena::RegionScope> {
-        if !self.use_regions.load(Ordering::SeqCst) {
+        if !self.api_mode.load(Ordering::SeqCst) {
             return None;
         }
         let region = tsrs_core::arena::Region::new(1 << 20);
@@ -408,9 +417,10 @@ impl Orchestrator {
             };
             let inputs: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
             let outputs = resolved.get_output_file_names().into_iter().chain([resolved.get_build_info_file_name()]);
-            let deleted = outputs.fold(false, |deleted, output_file| {
-                self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic) || deleted
-            });
+            let mut deleted = false;
+            for output_file in outputs {
+                deleted = self.clean_project_output_for_api(&output_file, &inputs, dry, &mut files_to_delete, &report_diagnostic) || deleted;
+            }
             if deleted {
                 task.reset_status();
                 task.set_build_info_entry(None);
@@ -519,13 +529,17 @@ impl Orchestrator {
     fn build_or_clean_order(&'static self, order: &[String]) -> OrchestratorResult {
         let build_options = &self.opts.command.build_options;
         if !build_options.clean.is_true() && build_options.verbose.is_true() {
+            let mut project_list = String::new();
+            for project in order {
+                let _ = write!(project_list, "\r\n    * {}", self.relative_file_name(project));
+            }
             self.create_builder_status_reporter(None)(new_compiler_diagnostic(
                 &diagnostics::Projects_in_this_build_Colon_0,
-                &[&order.iter().map(|p| format!("\r\n    * {}", self.relative_file_name(p))).collect::<String>()],
+                &[&project_list],
             ));
         }
         let mut build_result = OrchestratorResult::default();
-        if self.errors.lock().unwrap().is_empty() && self.use_regions.load(Ordering::SeqCst) {
+        if self.errors.lock().unwrap().is_empty() && self.api_mode.load(Ordering::SeqCst) {
             // API builds: one builder, run on the calling thread (a builder thread per build would leave its
             // never-freed thread arena behind), then report in Order() like the reporter below. Everything outside
             // the task regions goes to a region of this call (single thread: nothing else enters it).
@@ -592,7 +606,7 @@ impl Orchestrator {
     // orchestrator.go:925
     fn range_tasks(&'static self, order: &[String], f: &(dyn Fn(&Path, P<BuildTask>) + Sync)) {
         let mut num_routines = 4;
-        if self.use_regions.load(Ordering::SeqCst) {
+        if self.api_mode.load(Ordering::SeqCst) {
             // API builds: one task region is entered at a time. Concurrent tasks could each wait to enter the
             // other's region (`arena::enter_owner` for lazily filled data of a shared source file), so the API
             // runs one builder.
@@ -673,7 +687,7 @@ impl Orchestrator {
             // The program is only needed by Testing.OnProgram at report time; drop it now so a task
             // that has finished but is not yet reported does not keep its program alive.
             let program = task.result.lock().unwrap().as_mut().unwrap().program.take();
-            if let (true, Some(program)) = (self.use_regions.load(Ordering::SeqCst), program) {
+            if let (true, Some(program)) = (self.api_mode.load(Ordering::SeqCst), program) {
                 // API builds free each project's program once it is built (its arenas go with the task region when
                 // the orchestrator is freed; this frees the heap side: program, checkers, processed data). It is a
                 // full build that shares nothing, and nothing reads it after its task (statistics and diagnostics are
@@ -990,13 +1004,13 @@ impl Orchestrator {
 
     // tsrs-only (see `check_tasks_for_event_changes`).
     fn file_names_may_change(&self, resolved: &tsrs_tsoptions::ParsedCommandLine, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>) -> bool {
-        if resolved.config_file.is_none() || resolved.wildcard_directories().is_none_or(|w| w.is_empty()) {
+        if resolved.config_file.is_none() || resolved.wildcard_directories().is_none_or(tsrs_core::collections::OrderedMap::is_empty) {
             return false;
         }
         let fs = CompilerHost::fs(self.host());
         let names = resolved.file_names_by_path();
         let cwd = self.opts.sys.get_current_directory();
-        let may_change = changed_paths.keys().any(|p| {
+        changed_paths.keys().any(|p| {
             let listed = names.get(&self.to_path(p));
             let is_name = listed.is_some();
             if fs.file_exists(p) {
@@ -1010,8 +1024,7 @@ impl Orchestrator {
                 // A listed file went, or a directory came or went (a directory exists, or it is gone like a file).
                 is_name || fs.directory_exists(p) || resolved.possibly_matches_directory_name(&self.to_path(p)) || resolved.possibly_matches_file_name(p)
             }
-        });
-        may_change
+        })
     }
 
     // The tsconfig, an extended config, or a content mapper's package manifest changed.
@@ -1270,16 +1283,16 @@ fn add_package_json_watch_dirs(desired_dirs: &mut DirWatchSet, package_json: &st
     }
 }
 
-/// Frees an orchestrator created with `enable_api_regions` and everything its builds allocated.
+/// Frees an orchestrator created with `enable_api_mode` and everything its builds allocated.
 ///
 /// # Safety
-/// `o` came from `new_orchestrator`, `enable_api_regions` was called before its first build, no build or clean
+/// `o` came from `new_orchestrator`, `enable_api_mode` was called before its first build, no build or clean
 /// is running, and nothing obtained from it (results, programs, diagnostics) is used afterwards.
 pub unsafe fn free_api_orchestrator(o: &'static Orchestrator) {
     // The lock may be poisoned if the build unwound (`CliOrchestrator::build`); the list itself is intact.
-    let regions = std::mem::take(&mut *o.regions.lock().unwrap_or_else(|e| e.into_inner()));
+    let regions = std::mem::take(&mut *o.regions.lock().unwrap_or_else(std::sync::PoisonError::into_inner));
     if std::env::var_os("TSRS_REGION_LOG").is_some() {
-        eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(|r| r.allocated_bytes()).sum::<usize>() >> 10);
+        eprintln!("regions: api orchestrator freed ({} regions, {} KiB)", regions.len(), regions.iter().map(tsrs_core::arena::Region::allocated_bytes).sum::<usize>() >> 10);
     }
     let h = o.host();
     // Order: the host and orchestrator are dropped before the regions. Their destructors only free heap containers
@@ -1308,7 +1321,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
     let freer = crate::watchmem::Freer::new(opts.testing.is_some());
     let fs = sys.fs();
     let wm = WatchManager::new(Arc::new(move |t: &str| sys.write(t)), Box::new(move |d: &str| fs.directory_exists(d)));
-    if watch && let Some(backend) = opts.testing.and_then(|t| t.watch_backend()) {
+    if watch && let Some(backend) = opts.testing.and_then(tsc::CommandLineTesting::watch_backend) {
         WatchManager::set_backend(&mut wm.lock(), backend);
     }
     let orchestrator: &'static Orchestrator = Box::leak(Box::new(Orchestrator {
@@ -1329,7 +1342,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         wanted_watch_dirs: Mutex::new(FxHashSet::default()),
         realpaths: Mutex::new(FxHashMap::default()),
         regions: Mutex::new(Vec::new()),
-        use_regions: AtomicBool::new(false),
+        api_mode: AtomicBool::new(false),
         api_clean_exists: Mutex::new(FxHashMap::default()),
         content_mapper_host: Mutex::new(None),
     }));

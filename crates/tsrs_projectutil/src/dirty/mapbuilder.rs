@@ -59,7 +59,7 @@ impl<K: Hash + Eq + Clone, VBase: Clone, VBuilder: Clone> MapBuilder<K, VBase, V
     // mapbuilder.go:59
     #[expect(clippy::iter_over_hash_type, reason = "removes, then inserts, distinct keys")]
     pub fn build(&self) -> Arc<FxHashMap<K, VBase>> {
-        if self.dirty.is_empty() && self.deleted.as_ref().is_none_or(|d| d.is_empty()) {
+        if self.dirty.is_empty() && self.deleted.as_ref().is_none_or(FxHashSet::is_empty) {
             return Arc::clone(&self.base);
         }
         let mut result: FxHashMap<K, VBase> = (*self.base).clone();

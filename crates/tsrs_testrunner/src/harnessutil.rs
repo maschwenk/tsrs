@@ -91,7 +91,7 @@ pub fn enumerate_files(folder: &Path, test_regex: &Regex, recursive: bool) -> st
 fn list_files_worker(spec: &Regex, recursive: bool, folder: &Path, paths: &mut Vec<String>) -> std::io::Result<()> {
     let mut entries: Vec<_> = std::fs::read_dir(folder)?.collect::<Result<_, _>>()?;
     // os.ReadDir returns entries sorted by filename.
-    entries.sort_by_key(|e| e.file_name());
+    entries.sort_by_key(std::fs::DirEntry::file_name);
     for entry in entries {
         let path = entry.path();
         if !entry.file_type()?.is_dir() {

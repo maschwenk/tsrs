@@ -141,9 +141,7 @@ impl Program {
 
     // program.go:113
     fn panic_if_no_program(&self, method: &str) {
-        if self.program.is_none() {
-            panic!("{method}: should not be called without program");
-        }
+        assert!(self.program.is_some(), "{method}: should not be called without program");
     }
 
     // program.go:119
@@ -183,9 +181,7 @@ impl Program {
             .collect();
         let stored = std::sync::atomic::AtomicUsize::new(0);
         let write_file = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
-            if !tspath::is_declaration_file_name(file_name) {
-                panic!("File extension for signature expected to be dts, got : {file_name}");
-            }
+            assert!(tspath::is_declaration_file_name(file_name), "File extension for signature expected to be dts, got : {file_name}");
             let file = data.source_file.expect("declaration output of a source file");
             let signature = snapshot.compute_signature_with_diagnostics(file, text, data);
             if let Some(mut info) = snapshot.file_infos.load(file.path())
@@ -535,7 +531,7 @@ impl Program {
             // The realpath calls are independent file system lookups, and both lists are sorted below, so they run on
             // the worker pool.
             let resolve = |value: &P<tsrs_module::packagejson::InfoCacheEntry>| {
-                let mut package_json = tspath::combine_paths(&value.package_directory, &["package.json"]);
+                let mut package_json = tspath::combine_paths(value.package_directory, &["package.json"]);
                 if value.exists() || value.directory_exists {
                     package_json = program.host().fs().realpath(&package_json);
                 }
@@ -572,7 +568,7 @@ impl Program {
 
         let mut package_jsons = Vec::new();
         program.package_json_cache_entries(|_key, value| {
-            let mut package_json = tspath::combine_paths(&value.package_directory, &["package.json"]);
+            let mut package_json = tspath::combine_paths(value.package_directory, &["package.json"]);
             if value.exists() || value.directory_exists {
                 package_json = program.host().fs().realpath(&package_json);
             }

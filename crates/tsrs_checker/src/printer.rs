@@ -123,12 +123,12 @@ impl Checker {
         // Go's deferred calls: restore the verbosity, then release.
         node_builder.verbosity.set(old_verbosity);
         release(self);
-        if max_length > 0 && !result.is_empty() && result.len() >= max_length as usize {
+        if max_length > 0 && !result.is_empty() && result.len() >= max_length {
             if let Some(vc) = vc {
                 vc.truncated.set(true);
             }
             // Go slices bytes; a cut inside a multi-byte character yields U+FFFD here instead of the raw bytes.
-            let cut = &result.as_bytes()[0..max_length as usize - "...".len()];
+            let cut = &result.as_bytes()[0..max_length - "...".len()];
             return tsrs_core::utf8::from_utf8_lossy(cut).into_owned() + "...";
         }
         result
@@ -517,7 +517,7 @@ impl Checker {
         additional_containers.extend(
             container_declarations
                 .iter()
-                .filter_map(|&d| if let Some(s) = self.get_file_symbol_if_file_symbol_export_equals_container(d, container) { Some(s) } else { None }),
+                .filter_map(|&d| self.get_file_symbol_if_file_symbol_export_equals_container(d, container)),
         );
         let mut reexport_containers = Vec::new();
         if enclosing_declaration.is_some() {
@@ -758,7 +758,6 @@ impl Checker {
                         candidates.push(sym);
                     }
                 }
-                continue;
             }
         }
         if candidates.is_empty() {
@@ -811,7 +810,7 @@ impl Checker {
                     exports
                         .values()
                         .into_iter()
-                        .filter_map(|exported| if self.get_symbol_if_same_reference(exported, symbol).is_some() { Some(exported) } else { None }),
+                        .filter(|&exported| self.get_symbol_if_same_reference(exported, symbol).is_some()),
                 );
             }
         }
@@ -1130,7 +1129,7 @@ impl Checker {
         }
         let mut aliases: Vec<P<Symbol>> = Vec::new();
         if let Some(symbols) = symbols {
-            aliases.extend(symbols.values().into_iter().filter_map(|sym| if sym.flags().intersects(SymbolFlags::Alias) { Some(sym) } else { None }));
+            aliases.extend(symbols.values().into_iter().filter(|sym| sym.flags().intersects(SymbolFlags::Alias)));
         }
         if kind == stKindGlobals || kind == stKindExports || kind == stKindResolvedExports {
             self.symbol_table_alias_cache.insert(table_id, alloc_slice(&aliases));
@@ -1175,7 +1174,7 @@ impl Checker {
                     // If `!useOnlyExternalAliasing`, we can use any type of alias to get the name
                     && (!ctx.use_only_external_aliasing || declarations.iter().any(|&d| ast::is_external_module_import_equals_declaration(d)))
                     // If we're looking up a local name to reference directly, omit namespace reexports, otherwise when we're trawling through an export list to make a dotted name, we can keep it
-                    && (is_local_name_lookup && !declarations.iter().any(|&d| is_namespace_reexport_declaration(d)) || !is_local_name_lookup)
+                    && (!is_local_name_lookup || !declarations.iter().any(|&d| is_namespace_reexport_declaration(d)))
                     // While exports are generally considered to be in scope, export-specifier declared symbols are _not_
                     // See similar comment in `resolveName` for details
                     && (ignore_qualification || get_declarations_of_kind(symbol_from_symbol_table, Kind::ExportSpecifier).is_empty())
@@ -1374,7 +1373,7 @@ impl Checker {
             }
             match loc.kind() {
                 Kind::SourceFile | Kind::ModuleDeclaration => {
-                    if !(ast::is_source_file(loc) && !ast::is_external_or_common_js_module(loc.as_source_file_p())) {
+                    if !ast::is_source_file(loc) || ast::is_external_or_common_js_module(loc.as_source_file_p()) {
                         let sym = self.get_symbol_of_declaration(ast::get_reparsed_node_for_node(loc).unwrap()).unwrap();
                         if callback(self, sym.exports(), symbol_table_id_from_exports(sym), false, true, Some(loc)) {
                             return true;
@@ -1507,13 +1506,8 @@ impl Checker {
 // symboltracker.go:14
 pub fn new_symbol_tracker_impl(context: P<NodeBuilderContext>, tracker: Option<&'static dyn SymbolTracker>) -> P<SymbolTrackerImpl> {
     let mut tracker = tracker;
-    if tracker.is_some() {
-        loop {
-            let Some(t) = tracker.and_then(|t| t.as_symbol_tracker_impl()) else {
-                break;
-            };
-            tracker = t.inner;
-        }
+    while let Some(t) = tracker.and_then(|t| t.as_symbol_tracker_impl()) {
+        tracker = t.inner;
     }
 
     P::new_scratch(SymbolTrackerImpl { context, inner: tracker, disable_track_symbol: Cell::new(false) })

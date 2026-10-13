@@ -64,7 +64,7 @@ impl Checker {
             d.property_cache_for_write(skip_object_function_property_augment).set(key, prop);
             if skip_object_function_property_augment
                 && !prop.check_flags.get().intersects(CheckFlags::Partial)
-                && d.property_cache(false).map_or(true, |c| c.lookup(name).is_none())
+                && d.property_cache(false).is_none_or(|c| c.lookup(name).is_none())
             {
                 self.lazy_member_stats.prop_cache_copies_avoided += 1;
             }
@@ -197,10 +197,7 @@ impl Checker {
             // No property was found
             return None;
         };
-        if is_union
-            && (!prop_set.values.is_empty() || check_flags.intersects(CheckFlags::Partial))
-            && check_flags.intersects(CheckFlags::ContainsPrivate | CheckFlags::ContainsProtected | CheckFlags::ContainsWritePrivate | CheckFlags::ContainsWriteProtected)
-            && !(!prop_set.values.is_empty() && self.has_common_declaration(&prop_set.values))
+        if (!self.has_common_declaration(&prop_set.values) || prop_set.values.is_empty()) && (check_flags.intersects(CheckFlags::Partial) || !prop_set.values.is_empty()) && check_flags.intersects(CheckFlags::ContainsPrivate | CheckFlags::ContainsProtected | CheckFlags::ContainsWritePrivate | CheckFlags::ContainsWriteProtected) && is_union
         {
             // A property in a union has a private or protected declaration in one constituent, but is missing
             // or has a different declaration in another constituent. If the private or protected declaration is
@@ -394,7 +391,7 @@ impl Checker {
                 return false;
             }
             if common_declarations.is_empty() {
-                common_declarations.extend(symbol_declarations.iter().map(|&d| d));
+                common_declarations.extend(symbol_declarations.iter().copied());
                 continue;
             }
             common_declarations.retain(|d| symbol_declarations.contains(d));
@@ -540,15 +537,15 @@ impl Checker {
             return d.resolved_apparent_type().unwrap();
         }
         let key = CachedTypeKey { kind: CachedTypeKind::ApparentType, type_id: this_argument.id };
-        let result = match self.cached_types.get(&key).copied() {
+
+        match self.cached_types.get(&key).copied() {
             Some(result) => result,
             None => {
                 let result = self.get_type_with_this_argument(t, Some(this_argument), true /*needApparentType*/);
                 self.cached_types.insert(key, result);
                 result
             }
-        };
-        result
+        }
     }
 
     /**
@@ -727,7 +724,7 @@ impl Checker {
                 .iter()
                 .copied()
                 .into_iter()
-                .find_map(|prop| if self.is_discriminant_with_never_type(prop) { Some(prop) } else { None })
+                .find(|&prop| self.is_discriminant_with_never_type(prop))
             {
                 never_prop = Some(prop);
             }
@@ -1059,14 +1056,18 @@ impl Checker {
             // or expression. There is a very high likelihood we're dealing with a combination of infinite generic types
             // that perpetually generate new type identities, so we stop the recursion here by yielding the error type.
             let circular_type_names = self.get_circular_type_names();
-            if circular_type_names.len() == 1 {
-                self.error(self.current_node, &diagnostics::Instantiations_of_type_0_appear_infinitely_circular, &[&circular_type_names[0]]);
-            } else if circular_type_names.len() > 1 {
-                let names: Vec<&str> = circular_type_names.iter().map(|s| s.as_str()).collect();
-                let quoted = quoted_and_comma_separated(&names);
-                self.error(self.current_node, &diagnostics::Instantiations_of_the_following_types_appear_infinitely_circular_Colon_0, &[&quoted]);
-            } else {
-                self.error(self.current_node, &diagnostics::Type_instantiation_is_excessively_deep_and_possibly_infinite, &[]);
+            match circular_type_names.len().cmp(&1) {
+                std::cmp::Ordering::Equal => {
+                    self.error(self.current_node, &diagnostics::Instantiations_of_type_0_appear_infinitely_circular, &[&circular_type_names[0]]);
+                }
+                std::cmp::Ordering::Greater => {
+                    let names: Vec<&str> = circular_type_names.iter().map(std::string::String::as_str).collect();
+                    let quoted = quoted_and_comma_separated(&names);
+                    self.error(self.current_node, &diagnostics::Instantiations_of_the_following_types_appear_infinitely_circular_Colon_0, &[&quoted]);
+                }
+                std::cmp::Ordering::Less => {
+                    self.error(self.current_node, &diagnostics::Type_instantiation_is_excessively_deep_and_possibly_infinite, &[]);
+                }
             }
             return self.error_type;
         }
@@ -1075,7 +1076,7 @@ impl Checker {
         // stored only when the mapper was already active), so its lookup can only miss: no key is built for it.
         let key = if index.is_none() {
             self.push_active_mapper(m);
-            debug_assert!(self.active_type_mappers_caches.last().is_some_and(|cache| cache.is_empty()));
+            debug_assert!(self.active_type_mappers_caches.last().is_some_and(super::packedmap::PackedMap::is_empty));
             None
         } else {
             let key = active_mapper_cache_key(t, alias);
@@ -1392,14 +1393,14 @@ impl Checker {
                             filtered.extend(
                                 type_parameters
                                     .into_iter()
-                                    .filter_map(|tp| if self.is_type_parameter_possibly_referenced(tp, declaration) { Some(tp) } else { None }),
+                                    .filter(|&tp| self.is_type_parameter_possibly_referenced(tp, declaration)),
                             );
                             type_parameters = filtered;
                         } else if target.symbol().unwrap().flags().intersects(SymbolFlags::Method | SymbolFlags::TypeLiteral) {
                             let mut filtered = Vec::new();
                             let declarations = t.symbol().unwrap().declarations();
-                            filtered.extend(type_parameters.into_iter().filter_map(|tp| {
-                                if declarations.iter().any(|&d| self.is_type_parameter_possibly_referenced(tp, d)) { Some(tp) } else { None }
+                            filtered.extend(type_parameters.into_iter().filter(|&tp| {
+                                declarations.iter().any(|&d| self.is_type_parameter_possibly_referenced(tp, d))
                             }));
                             type_parameters = filtered;
                         }
@@ -1417,8 +1418,8 @@ impl Checker {
         // instantiation cache key from the type IDs of the type arguments.
         let mut type_arguments = self.free_type_lists.pop().unwrap_or_default();
         type_arguments.extend(type_parameters.iter().map(|&tp| {
-            let mapped = self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap());
-            mapped
+
+            self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap())
         }));
         let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), m) } else { None };
         let new_alias = AliasArg::given_or_pending(alias, &pending);
@@ -1770,7 +1771,7 @@ impl Checker {
     pub(crate) fn has_array_or_type_type_constraint(&mut self, type_variable: P<Type>) -> bool {
         let constraint = self.get_constraint_of_type_parameter(type_variable);
         match constraint {
-            Some(constraint) => every_type(self, constraint, |c, t| c.is_array_or_tuple_type(t)),
+            Some(constraint) => every_type(self, constraint, super::checker::Checker::is_array_or_tuple_type),
             None => false,
         }
     }
@@ -1994,7 +1995,7 @@ impl Checker {
 
     // checker.go:23192
     pub(crate) fn instantiate_types(&mut self, types: &[P<Type>], m: Option<P<TypeMapper>>) -> Vec<P<Type>> {
-        self.instantiate_list(types, m, |c, t, m| c.instantiate_type(t, m))
+        self.instantiate_list(types, m, super::checker::Checker::instantiate_type)
     }
 
     /// `instantiate_types` for callers that only read the result: `None` when no element changed (where Go's
@@ -2009,8 +2010,8 @@ impl Checker {
                 result.extend_from_slice(&types[..i]);
                 result.push(mapped);
                 result.extend(types[i + 1..].iter().map(|&t| {
-                    let mapped = self.instantiate_type(t, Some(m));
-                    mapped
+
+                    self.instantiate_type(t, Some(m))
                 }));
                 return Some(result);
             }
@@ -2027,18 +2028,18 @@ impl Checker {
 
     // checker.go:23196
     pub(crate) fn instantiate_symbols(&mut self, symbols: &[P<Symbol>], m: P<TypeMapper>) -> Vec<P<Symbol>> {
-        self.instantiate_list(symbols, Some(m), |c, s, m| c.instantiate_symbol(s, m))
+        self.instantiate_list(symbols, Some(m), super::checker::Checker::instantiate_symbol)
     }
 
     // checker.go:23200
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn instantiate_signatures(&mut self, signatures: &[P<Signature>], m: P<TypeMapper>) -> Vec<P<Signature>> {
-        self.instantiate_list(signatures, Some(m), |c, s, m| c.instantiate_signature(s, m))
+        self.instantiate_list(signatures, Some(m), super::checker::Checker::instantiate_signature)
     }
 
     // checker.go:23204
     pub(crate) fn instantiate_index_infos(&mut self, index_infos: &[P<IndexInfo>], m: P<TypeMapper>) -> Vec<P<IndexInfo>> {
-        self.instantiate_list(index_infos, Some(m), |c, info, m| c.instantiate_index_info(info, m))
+        self.instantiate_list(index_infos, Some(m), super::checker::Checker::instantiate_index_info)
     }
 
     // Returns a copy of `values` when nothing changed (Go returns `values` itself); callers that need Go's
@@ -2798,8 +2799,8 @@ impl TupleNormalizer {
                 types
             });
             self.types[first] = c.get_union_type(&types);
-            self.types.drain(first + 1..last + 1);
-            self.infos.drain(first + 1..last + 1);
+            self.types.drain((first + 1)..=last);
+            self.infos.drain((first + 1)..=last);
         }
         true
     }
@@ -2843,12 +2844,12 @@ pub(crate) fn get_start_element_count(t: &'static TupleType, flags: ElementFlags
 // checker.go:23916
 pub(crate) fn get_end_element_count(t: &'static TupleType, flags: ElementFlags) -> usize {
     let element_infos = t.element_infos();
-    let count = element_infos
+
+    element_infos
         .iter()
         .rev()
         .take_while(|info| info.flags.intersects(flags))
-        .count();
-    count
+        .count()
 }
 
 // checker.go:23925

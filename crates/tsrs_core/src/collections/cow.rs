@@ -75,7 +75,7 @@ impl<K: Hash + Eq + Clone> CopyOnWriteSet<K> {
     }
 
     pub fn exit_scope(&mut self, scope: CopyOnWriteScope<K, ()>) {
-        self.m.exit_scope(scope)
+        self.m.exit_scope(scope);
     }
 }
 

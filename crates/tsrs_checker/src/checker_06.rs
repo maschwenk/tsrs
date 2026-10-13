@@ -492,7 +492,7 @@ impl Checker {
         let has_declarations = !target_symbol.declarations().is_empty();
         if has_declarations && self.is_deprecated_symbol(target_symbol) && self.is_uncalled_function_reference(node, target_symbol) {
             let declarations = target_symbol.declarations();
-            self.add_deprecated_suggestion(node, &declarations, node.text());
+            self.add_deprecated_suggestion(node, declarations, node.text());
         }
         let mut declaration = local_or_export_symbol.value_declaration();
         let immediate_declaration = declaration;
@@ -511,7 +511,7 @@ impl Checker {
         let assignment_kind = get_assignment_target_kind(node);
         if assignment_kind != AssignmentKind::None {
             let flags = local_or_export_symbol.flags();
-            if !flags.intersects(SymbolFlags::Variable) && !(ast::is_in_js_file(node) && flags.intersects(SymbolFlags::ValueModule)) {
+            if !(flags.intersects(SymbolFlags::Variable) || ast::is_in_js_file(node) && flags.intersects(SymbolFlags::ValueModule)) {
                 let assignment_error: &'static Message = if flags.intersects(SymbolFlags::Enum) {
                     &diagnostics::Cannot_assign_to_0_because_it_is_an_enum
                 } else if flags.intersects(SymbolFlags::Class) {
@@ -863,7 +863,7 @@ impl Checker {
                 let target_prop_symbol = self.resolve_alias_with_deprecation_check(prop, right);
                 if self.is_deprecated_symbol(target_prop_symbol) && self.is_uncalled_function_reference(node, target_prop_symbol) && !target_prop_symbol.declarations().is_empty() {
                     let declarations = target_prop_symbol.declarations();
-                    self.add_deprecated_suggestion(right, &declarations, right.text());
+                    self.add_deprecated_suggestion(right, declarations, right.text());
                 }
                 self.check_property_not_used_before_declaration(prop, node, right);
                 let is_self_type_access = self.is_self_type_access(left, parent_symbol);
@@ -896,8 +896,7 @@ impl Checker {
             return self.remove_missing_type(prop_type, prop.is_some_and(|p| p.flags().intersects(SymbolFlags::Optional)));
         }
         if let Some(p) = prop {
-            if !p.flags().intersects(SymbolFlags::Variable | SymbolFlags::Property | SymbolFlags::Accessor)
-                && !(p.flags().intersects(SymbolFlags::Method) && prop_type.flags().intersects(TypeFlags::Union))
+            if !(p.flags().intersects(SymbolFlags::Variable | SymbolFlags::Property | SymbolFlags::Accessor) || p.flags().intersects(SymbolFlags::Method) && prop_type.flags().intersects(TypeFlags::Union))
             {
                 return prop_type;
             }
@@ -1104,7 +1103,7 @@ impl Checker {
         if self.type_has_static_property(prop_node.text(), containing_type) {
             let prop_name = tsrs_scanner::declaration_name_to_string(Some(prop_node));
             let type_name = self.type_to_string_exported(containing_type);
-            let static_name = format!("{}.{}", type_name, prop_name);
+            let static_name = format!("{type_name}.{prop_name}");
             diagnostic = Some(new_diagnostic_chain_for_node(
                 diagnostic,
                 prop_node,
@@ -1307,10 +1306,7 @@ impl Checker {
         }
         let mut diagnostic: Option<P<Diagnostic>> = None;
         let declaration_name = right.text();
-        if self.is_in_property_initializer_or_class_static_block(node, false /*ignoreArrowFunctions*/)
-            && !self.is_optional_property_declaration(value_declaration)
-            && !(ast::is_access_expression(node) && ast::is_access_expression(node.expression().unwrap()))
-            && !self.is_block_scoped_name_declared_before_use(value_declaration, right)
+        if !(!self.is_in_property_initializer_or_class_static_block(node, false /*ignoreArrowFunctions*/) || self.is_optional_property_declaration(value_declaration) || self.is_block_scoped_name_declared_before_use(value_declaration, right) || ast::is_access_expression(node) && ast::is_access_expression(node.expression().unwrap()))
             && !(ast::is_method_declaration(value_declaration) && self.get_combined_modifier_flags_cached(value_declaration).intersects(ModifierFlags::Static))
             && (self.compiler_options.get_use_define_for_class_fields() || !self.is_property_declared_in_ancestor_class(prop))
         {
@@ -2445,7 +2441,7 @@ impl Checker {
             return Some(self.check_destructuring_assignment(expr, t, CheckMode::Normal, false));
         }
         if ast::is_spread_assignment(property) {
-            if (property_index as usize) < properties.len() - 1 {
+            if property_index < properties.len() - 1 {
                 self.error(Some(property), &diagnostics::A_rest_element_must_be_last_in_a_destructuring_pattern, &[]);
                 return None;
             }
@@ -2541,12 +2537,7 @@ impl Checker {
                     let t = if every_type(self, source_type, |_, t| is_tuple_type(t)) {
                         self.map_type(source_type, |c, t| {
                             Some(
-                                c.slice_tuple_type(
-                                    t,
-                                    usize::try_from(element_index)
-                                        .expect("array element index is nonnegative"),
-                                    0,
-                                ),
+                                c.slice_tuple_type(t, element_index, 0),
                             )
                         })
                         .unwrap()
@@ -2595,7 +2586,7 @@ impl Checker {
         let mut effective_left = left_type;
         let mut effective_right = right_type;
         if !would_work_with_await {
-            if let Some(is_related) = is_related.as_deref_mut() {
+            if let Some(is_related) = is_related {
                 (effective_left, effective_right) = self.get_base_types_if_unrelated(left_type, right_type, is_related);
             }
         }
@@ -2733,7 +2724,7 @@ impl Checker {
             if ast::is_entity_name_expression(expression) {
                 entity_name = crate::entity_name_to_string(expression);
             }
-            let suggestion = format!("{}Number.isNaN({})", operator_string, entity_name);
+            let suggestion = format!("{operator_string}Number.isNaN({entity_name})");
             err.add_related_info(create_diagnostic_for_node(Some(location), &diagnostics::Did_you_mean_0, &[&suggestion]));
         }
     }

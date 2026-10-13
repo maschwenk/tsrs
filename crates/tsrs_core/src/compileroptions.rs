@@ -13,7 +13,7 @@ pub struct PluginImport {
 // CompilerOptions contains the compiler options exposed by the API.
 //
 // Go `[]string` options are `Option<Vec<String>>` because the Go code distinguishes nil (unset) from empty.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CompilerOptions {
     /// API only (`gojson`): `moduleDetection` and `newLine` numbers decoded from the wire with no Rust variant (Go
     /// keeps any int32), by JSON name. The typed field stays at its default (which behaves like Go's fallback) and
@@ -297,11 +297,9 @@ impl CompilerOptions {
         let base_dir = if !self.config_file_path.is_empty() {
             tspath::get_directory_path(&self.config_file_path)
         } else {
-            if current_directory.is_empty() {
-                // This was accounted for in the TS codebase, but only for third-party API usage
-                // where the module resolution host does not provide a getCurrentDirectory().
-                panic!("cannot get effective type roots without a config file path or current directory");
-            }
+            // This was accounted for in the TS codebase, but only for third-party API usage
+            // where the module resolution host does not provide a getCurrentDirectory().
+            assert!(!current_directory.is_empty(), "cannot get effective type roots without a config file path or current directory");
             current_directory.to_string()
         };
 
@@ -350,7 +348,7 @@ impl CompilerOptions {
     }
 
     pub fn get_paths_base_path(&self, current_directory: &str) -> String {
-        if self.paths.as_ref().map_or(0, |p| p.len()) == 0 {
+        if self.paths.as_ref().map_or(0, indexmap::IndexMap::len) == 0 {
             return String::new();
         }
         if !self.paths_base_path.is_empty() {

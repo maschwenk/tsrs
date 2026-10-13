@@ -60,7 +60,7 @@ impl host {
         }
         // Before reading: a write after this stat changes the time again, and the next cycle reads the file.
         let info = self.host.fs().stat(&opts.file_name);
-        let mod_time = info.as_ref().and_then(|s| s.mod_time());
+        let mod_time = info.as_ref().and_then(tsrs_vfs::FileInfo::mod_time);
         if let Some((file, cached_time)) = cached {
             if mod_time.is_some() && mod_time == cached_time {
                 return Some(file);
@@ -84,7 +84,7 @@ impl host {
     }
 
     fn o(&self) -> &'static Orchestrator {
-        *self.orchestrator.get().unwrap()
+        self.orchestrator.get().unwrap()
     }
 
     // host.go:118

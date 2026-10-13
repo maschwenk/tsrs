@@ -74,7 +74,7 @@ static EXTENSIONS_TO_REMOVE: &[&str] = &[
 
 pub fn remove_file_extension(path: &str) -> &str {
     // Remove any known extension even if it has more than one dot
-    if let Some(result) = EXTENSIONS_TO_REMOVE.iter().find_map(|ext| if path.ends_with(ext) { Some(&path[..path.len() - ext.len()]) } else { None }) {
+    if let Some(result) = EXTENSIONS_TO_REMOVE.iter().find_map(|&ext| path.strip_suffix(ext)) {
         return result;
     }
 
@@ -94,7 +94,7 @@ pub fn remove_any_file_extension(path: &str) -> &str {
 }
 
 pub fn try_get_extension_from_path(p: &str) -> &'static str {
-    if let Some(result) = EXTENSIONS_TO_REMOVE.iter().find_map(|ext| if file_extension_is(p, ext) { Some(ext) } else { None }) {
+    if let Some(result) = EXTENSIONS_TO_REMOVE.iter().copied().find(|ext| file_extension_is(p, ext)) {
         return result;
     }
     ""
@@ -109,7 +109,7 @@ pub fn file_extension_is_one_of(path: &str, extensions: &[&str]) -> bool {
 }
 
 pub fn try_extract_ts_extension(file_name: &str) -> &'static str {
-    if let Some(result) = SUPPORTED_TS_EXTENSIONS_FOR_EXTRACT_EXTENSION.iter().find_map(|ext| if file_extension_is(file_name, ext) { Some(ext) } else { None })
+    if let Some(result) = SUPPORTED_TS_EXTENSIONS_FOR_EXTRACT_EXTENSION.iter().copied().find(|ext| file_extension_is(file_name, ext))
     {
         return result;
     }

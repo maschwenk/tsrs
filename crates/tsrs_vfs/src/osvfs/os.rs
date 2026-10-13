@@ -81,7 +81,7 @@ static IS_FILE_SYSTEM_CASE_SENSITIVE: LazyLock<bool> = LazyLock::new(|| {
     // but this is largely good enough for our purposes (and what sys.ts used to do with __filename).
     let exe = match std::env::current_exe() {
         Ok(exe) => exe,
-        Err(err) => panic!("vfs: failed to get executable path: {}", err),
+        Err(err) => panic!("vfs: failed to get executable path: {err}"),
     };
     let exe = exe.to_string_lossy().into_owned();
 
@@ -91,7 +91,7 @@ static IS_FILE_SYSTEM_CASE_SENSITIVE: LazyLock<bool> = LazyLock::new(|| {
         if err.kind() == io::ErrorKind::NotFound {
             return true;
         }
-        panic!("vfs: failed to stat {:?}: {}", swapped, err);
+        panic!("vfs: failed to stat {swapped:?}: {err}");
     }
     false
 });
@@ -164,13 +164,11 @@ fn os_fs_realpath(path: &str) -> String {
 
     let orig = path;
     let path = from_slash(path);
-    let path = match native_realpath(&path) {
-        Ok(p) => p,
-        Err(_) => return orig.to_string(),
+    let Ok(path) = native_realpath(&path) else {
+        return orig.to_string();
     };
-    let path = match abs(&path) {
-        Ok(p) => p,
-        Err(_) => return orig.to_string(),
+    let Ok(path) = abs(&path) else {
+        return orig.to_string();
     };
     tspath::normalize_slashes(&path)
 }
@@ -334,7 +332,7 @@ fn abs(path: &str) -> io::Result<String> {
         return Ok(clean(path));
     }
     let wd = std::env::current_dir()?.to_string_lossy().into_owned();
-    Ok(clean(&format!("{}/{}", wd, path)))
+    Ok(clean(&format!("{wd}/{path}")))
 }
 
 // path.Clean (Unix semantics; on Windows the realpath result is already clean).
@@ -486,6 +484,7 @@ fn io_error(e: io::Error) -> FsError {
     }
 }
 
+#[expect(clippy::filetype_is_file, reason = "regular files must remain distinct from the special-file modes handled below")]
 fn file_type_mode(ft: fs::FileType) -> FileMode {
     if ft.is_dir() {
         return FileMode::Dir;

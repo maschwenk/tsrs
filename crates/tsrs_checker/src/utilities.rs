@@ -545,7 +545,7 @@ impl Checker {
     fn source_file_and_index_of_node(&mut self, n: P<Node>) -> (tsrs_core::ptr::PKey, usize) {
         const BITS: u32 = 12;
         let key = n.key();
-        let slot = ((key as u32).wrapping_mul(0x9E37_79B1) >> (32 - BITS)) as usize;
+        let slot = (key.wrapping_mul(0x9E37_79B1) >> (32 - BITS)) as usize;
         if self.node_file_cache.is_empty() {
             self.node_file_cache = vec![(0, 0, 0); 1 << BITS];
         }
@@ -1028,13 +1028,13 @@ pub(crate) fn compare_tuple_types(t1: &'static TupleType, t2: &'static TupleType
         return e1.len().cmp(&e2.len());
     }
     for (i, element) in e1.iter().enumerate() {
-        let r = (*element).flags.bits().cmp(&e2[i].flags.bits());
+        let r = element.flags.bits().cmp(&e2[i].flags.bits());
         if r != Ordering::Equal {
             return r;
         }
     }
     for (i, element) in e1.iter().enumerate() {
-        let r = compare_element_labels((*element).labeled_declaration, e2[i].labeled_declaration);
+        let r = compare_element_labels(element.labeled_declaration, e2[i].labeled_declaration);
         if r != Ordering::Equal {
             return r;
         }
@@ -1245,7 +1245,7 @@ impl<T: Copy + Eq + std::hash::Hash> orderedSet<T> {
                 return;
             }
             let mut m = FxHashSet::with_capacity_and_hasher(self.values.len(), Default::default());
-            m.extend(self.values[..self.values.len() - 1].iter().map(|&v| v));
+            m.extend(self.values[..self.values.len() - 1].iter().copied());
             self.values_by_key = Some(m);
         }
         self.values_by_key.as_mut().unwrap().insert(value);
@@ -1254,7 +1254,7 @@ impl<T: Copy + Eq + std::hash::Hash> orderedSet<T> {
 
 // utilities.go:908
 pub(crate) fn get_containing_function_or_class_static_block(node: P<Node>) -> Option<P<Node>> {
-    ast::find_ancestor(node.parent(), |n| ast::is_function_like_or_class_static_block_declaration(n))
+    ast::find_ancestor(node.parent(), ast::is_function_like_or_class_static_block_declaration)
 }
 
 // utilities.go:912
@@ -1819,14 +1819,14 @@ pub(crate) fn contains_non_missing_undefined_type(c: &mut Checker, t: P<Type>) -
 
 // utilities.go:1657
 pub(crate) fn get_any_import_syntax(node: P<Node>) -> Option<P<Node>> {
-    let import_node = match node.kind() {
+
+    match node.kind() {
         Kind::ImportEqualsDeclaration => Some(node),
         Kind::ImportClause => node.parent(),
         Kind::NamespaceImport => node.parent().unwrap().parent(),
         Kind::ImportSpecifier => node.parent().unwrap().parent().unwrap().parent(),
         _ => return None,
-    };
-    import_node
+    }
 }
 
 // A reserved member name consists of the byte 0xFE (which is an invalid UTF-8 encoding) followed by one or more
@@ -1887,9 +1887,7 @@ impl Checker {
 
     // utilities.go:1716
     pub(crate) fn check_not_canceled(&mut self) {
-        if self.was_canceled {
-            panic!("Checker was previously cancelled");
-        }
+        assert!(!self.was_canceled, "Checker was previously cancelled");
     }
 }
 
@@ -1951,8 +1949,7 @@ impl Checker {
                         }
                     },
                 };
-                return !(Some(file) != declaration_file && declaration_file.is_some() && ast::is_global_source_file(declaration_file.unwrap().as_node()))
-                    && !(exclude_classes && matches!(suggestion, Some(s) if s.flags().intersects(SymbolFlags::Class)) && suggestion_has_no_extends_or_decorators)
+                return !(Some(file) != declaration_file && declaration_file.is_some() && ast::is_global_source_file(declaration_file.unwrap().as_node()) || exclude_classes && matches!(suggestion, Some(s) if s.flags().intersects(SymbolFlags::Class)) && suggestion_has_no_extends_or_decorators)
                     && !(matches!(node, Some(n) if exclude_classes && ast::is_property_access_expression(n) && n.expression().unwrap().kind() == Kind::ThisKeyword)
                         && suggestion_has_no_extends_or_decorators);
             }
@@ -2089,7 +2086,7 @@ pub fn get_set_accessor_value_parameter(accessor: P<Node>) -> Option<P<Node>> {
     let parameters = accessor.parameters();
     if !parameters.is_empty() {
         let has_this = parameters.len() == 2 && ast::is_this_parameter(parameters[0]);
-        return Some(parameters[if has_this { 1 } else { 0 }]);
+        return Some(parameters[usize::from(has_this)]);
     }
     None
 }

@@ -665,15 +665,15 @@ fn packed_type_list_key(tag: u64, types: &[P<Type>], flag: bool) -> Option<Cache
         return None;
     }
     let id = |i: usize| types.get(i).map_or(0, |t| u64::from(t.id.0));
-    let hi = tag << 48 | u64::from(flag) << 34 | (types.len() as u64) << 32 | id(2);
-    let y = ((id(0) | id(1) << 32) ^ hi.wrapping_mul(0x9e37_79b9_7f4a_7c15)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
-    Some(CacheHashKey { hi, lo: y ^ y >> 32 })
+    let hi = (tag << 48) | (u64::from(flag) << 34) | ((types.len() as u64) << 32) | id(2);
+    let y = ((id(0) | (id(1) << 32)) ^ hi.wrapping_mul(0x9e37_79b9_7f4a_7c15)).wrapping_mul(0xbf58_476d_1ce4_e5b9);
+    Some(CacheHashKey { hi, lo: y ^ (y >> 32) })
 }
 
 // checker.go:17910
 #[inline]
 pub(crate) fn get_type_instantiation_key(type_arguments: &[P<Type>], alias: AliasArg<'_>, single_signature: bool) -> CacheHashKey {
-    if let AliasArg::None = alias {
+    if matches!(alias, AliasArg::None) {
         if let Some(key) = packed_type_list_key(PACKED_INSTANTIATION_KEY_TAG, type_arguments, single_signature) {
             return key;
         }
@@ -993,7 +993,7 @@ impl Checker {
             members.set(prop.name(), s);
         }
         let index_infos = self.get_index_infos_of_type(source);
-        let result = self.new_anonymous_type(symbol, Some(members), &[], &[], &index_infos);
+        let result = self.new_anonymous_type(symbol, Some(members), &[], &[], index_infos);
         result.object_flags.set(result.object_flags.get_lazy() | ObjectFlags::ObjectRestType);
         result
     }
@@ -1512,7 +1512,7 @@ impl Checker {
                             .iter()
                             .position(|&p| p == declaration)
                             .expect("parameter belongs to its declaration");
-                        let new_name = format!("arg{}", index);
+                        let new_name = format!("arg{index}");
                         let type_name = tsrs_scanner::declaration_name_to_string(Some(param.name()))
                             + if param.dot_dot_dot_token().is_some() { "[]" } else { "" };
                         self.error_or_suggestion(
@@ -1686,7 +1686,7 @@ impl Checker {
         }
         let index_infos: Vec<P<IndexInfo>> = self
             .get_index_infos_of_type(t)
-            .into_iter()
+            .iter()
             .map(|info| {
                 let value_type = self.get_widened_type(info.value_type());
                 self.new_index_info(info.key_type(), value_type, info.is_readonly(), info.declaration(), info.components.get())
@@ -2130,7 +2130,7 @@ impl Checker {
                 .iter_mut()
                 .skip(resolution_cycle_start_index)
             {
-                (*element).result = false;
+                element.result = false;
             }
             return false;
         }
@@ -2255,12 +2255,12 @@ impl Checker {
             for &current in d.types.get() {
                 props.extend(self.get_properties_of_type(current).iter().filter_map(|&prop| {
                     if checked.insert(prop.name()) {
-                        let combined_prop = self.get_property_of_union_or_intersection_type(
+
+                        self.get_property_of_union_or_intersection_type(
                             t,
                             prop.name(),
                             t.flags().intersects(TypeFlags::Intersection), /*skipObjectFunctionPropertyAugment*/
-                        );
-                        if let Some(combined_prop) = combined_prop { Some(combined_prop) } else { None }
+                        )
                     } else {
                         None
                     }
@@ -2568,7 +2568,7 @@ impl Checker {
     // checker.go:19331
     pub fn get_index_info_of_type(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> {
         let index_infos = self.get_index_infos_of_type(t);
-        find_index_info(&index_infos, key_type)
+        find_index_info(index_infos, key_type)
     }
 
     // Return the index type of the given kind in the given type. Creates synthetic union index types when necessary and
@@ -2593,7 +2593,7 @@ impl Checker {
     // checker.go:19352
     pub(crate) fn get_applicable_index_info(&mut self, t: P<Type>, key_type: P<Type>) -> Option<P<IndexInfo>> {
         let index_infos = self.get_index_infos_of_type(t);
-        self.find_applicable_index_info(&index_infos, key_type)
+        self.find_applicable_index_info(index_infos, key_type)
     }
 
     // checker.go:19356
@@ -2606,7 +2606,7 @@ impl Checker {
             return None; // most types: the name's literal type is not needed
         }
         let key_type = self.get_string_literal_type(name);
-        self.find_applicable_index_info(&index_infos, key_type)
+        self.find_applicable_index_info(index_infos, key_type)
     }
 
     // checker.go:19363
@@ -2656,7 +2656,7 @@ impl Checker {
             || target == self.string_type && self.is_type_assignable_to(source, self.number_type)
             || target == self.number_type
                 && (source == self.numeric_string_type
-                    || source.flags().intersects(TypeFlags::StringLiteral) && is_numeric_literal_name(&get_string_literal_value(source)))
+                    || source.flags().intersects(TypeFlags::StringLiteral) && is_numeric_literal_name(get_string_literal_value(source)))
     }
 
     // checker.go:19406
@@ -2802,7 +2802,7 @@ impl Checker {
                     instantiated_base_type = self.get_type_with_this_argument(inst, this_argument, false /*needsApparentType*/);
                 }
                 let base_properties = self.get_properties_of_type(instantiated_base_type);
-                members = self.add_inherited_members(members, &base_properties);
+                members = self.add_inherited_members(members, base_properties);
                 self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
             }
         }
@@ -2981,8 +2981,7 @@ impl Checker {
         let source = t.object_target();
         if source.is_none()
             || source == Some(t)
-            || !source.unwrap().object_flags().intersects(ObjectFlags::ClassOrInterface)
-                && !(self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple))
+            || !(source.unwrap().object_flags().intersects(ObjectFlags::ClassOrInterface) || self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple))
             || !self.lazy_tuples && source.unwrap().object_flags().intersects(ObjectFlags::Tuple)
             || t.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::ValueModule))
         {
@@ -3200,7 +3199,7 @@ impl Checker {
         let ready = lm.ready.get().unwrap();
         for &base_type in ready.base_types.get() {
             let base_properties = self.get_properties_of_type(base_type);
-            members = self.add_inherited_members(members, &base_properties);
+            members = self.add_inherited_members(members, base_properties);
         }
         self.set_structured_type_members(t, members, ready.call_signatures.get(), ready.construct_signatures.get(), ready.index_infos.get());
         self.lazy_member_tables.remove(&t);

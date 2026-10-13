@@ -249,7 +249,7 @@ impl PseudoObjectElement {
             PseudoObjectElementKind::Method => Some(self.as_pseudo_object_method().signature),
             PseudoObjectElementKind::SetAccessor => Some(self.as_pseudo_set_accessor().signature),
             PseudoObjectElementKind::GetAccessor => Some(self.as_pseudo_get_accessor().signature),
-            _ => None,
+            PseudoObjectElementKind::PropertyAssignment => None,
         }
     }
 

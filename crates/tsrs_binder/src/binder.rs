@@ -369,9 +369,7 @@ impl Binder {
         match symbol.parent() {
             None => symbol.set_parent(parent),
             Some(existing_parent) => {
-                if Some(existing_parent) != parent {
-                    panic!("Existing symbol parent should match new one");
-                }
+                assert!(Some(existing_parent) == parent, "Existing symbol parent should match new one");
             }
         }
         symbol
@@ -405,7 +403,7 @@ impl Binder {
                         ));
                     }
                 }
-                return alloc_str(&format!("\"{}\"", module_name));
+                return alloc_str(&format!("\"{module_name}\""));
             }
             if ast::is_private_identifier(name) {
                 // containingClass exists because private names only allowed inside classes
@@ -811,7 +809,7 @@ impl Binder {
             }
             Kind::PropertyDeclaration | Kind::PropertySignature => self.bind_property_worker(node),
             Kind::PropertyAssignment | Kind::ShorthandPropertyAssignment => {
-                self.bind_property_or_method_or_accessor(node, SymbolFlags::Property, SymbolFlags::PropertyExcludes)
+                self.bind_property_or_method_or_accessor(node, SymbolFlags::Property, SymbolFlags::PropertyExcludes);
             }
             Kind::EnumMember => self.bind_property_or_method_or_accessor(node, SymbolFlags::EnumMember, SymbolFlags::EnumMemberExcludes),
             Kind::CallSignature | Kind::ConstructSignature | Kind::IndexSignature => {
@@ -1367,10 +1365,12 @@ impl Binder {
             }
         } else {
             let this_container = self.this_container.unwrap();
-            if this_container.kind() != Kind::FunctionDeclaration && this_container.kind() != Kind::FunctionExpression {
-                // !!! constructor functions
-                panic!("Unhandled case in bindThisPropertyAssignment: {:?}", this_container.kind());
-            }
+            // !!! constructor functions
+            assert!(
+                !(this_container.kind() != Kind::FunctionDeclaration && this_container.kind() != Kind::FunctionExpression),
+                "Unhandled case in bindThisPropertyAssignment: {:?}",
+                this_container.kind()
+            );
         }
     }
 
@@ -1459,7 +1459,7 @@ impl Binder {
             self.bind_anonymous_declaration(
                 node,
                 SymbolFlags::FunctionScopedVariable,
-                alloc_str(&format!("__{}", index)),
+                alloc_str(&format!("__{index}")),
             );
         } else {
             self.declare_symbol_and_add_to_symbol_table(node, SymbolFlags::FunctionScopedVariable, SymbolFlags::ParameterExcludes);
@@ -2203,7 +2203,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_condition(&mut self, node: Option<P<Node>>, true_target: Option<P<FlowNode>>, false_target: Option<P<FlowNode>>) {
-        self.do_with_conditional_branches(|b, n| b.bind(n), node, true_target, false_target);
+        self.do_with_conditional_branches(Binder::bind, node, true_target, false_target);
         let is_logical_like = match node {
             None => false,
             Some(node) => {
@@ -2625,12 +2625,9 @@ impl Binder {
     pub(crate) fn bind_prefix_unary_expression_flow(&mut self, node: P<Node>) {
         let expr = node.as_prefix_unary_expression();
         if expr.operator() == Kind::ExclamationToken {
-            let save_true_target = self.current_true_target;
-            self.current_true_target = self.current_false_target;
-            self.current_false_target = save_true_target;
+            std::mem::swap(&mut self.current_true_target, &mut self.current_false_target);
             self.bind_each_child(node);
-            self.current_false_target = self.current_true_target;
-            self.current_true_target = save_true_target;
+            std::mem::swap(&mut self.current_true_target, &mut self.current_false_target);
         } else {
             self.bind_each_child(node);
             if expr.operator() == Kind::PlusPlusToken || expr.operator() == Kind::MinusMinusToken {
@@ -2721,7 +2718,7 @@ impl Binder {
         self.current_flow = Some(self.finish_local_flow_label(pre_right_label));
         self.bind(expr.operator_token());
         if ast::is_logical_or_coalescing_assignment_operator(expr.operator_token().kind()) {
-            self.do_with_conditional_branches(|b, n| b.bind(n), Some(expr.right()), true_target, false_target);
+            self.do_with_conditional_branches(Binder::bind, Some(expr.right()), true_target, false_target);
             self.bind_assignment_target_flow(expr.left());
             let true_condition = self.create_flow_condition(FlowFlags::TrueCondition, self.current_flow(), Some(node));
             self.add_antecedent(true_target, true_condition);
@@ -2847,7 +2844,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_optional_expression(&mut self, node: P<Node>, true_target: Option<P<FlowNode>>, false_target: Option<P<FlowNode>>) {
-        self.do_with_conditional_branches(|b, n| b.bind(n), Some(node), true_target, false_target);
+        self.do_with_conditional_branches(Binder::bind, Some(node), true_target, false_target);
         if !ast::is_optional_chain(node) || ast::is_outermost_optional_chain(node) {
             let true_condition = self.create_flow_condition(FlowFlags::TrueCondition, self.current_flow(), Some(node));
             self.add_antecedent(true_target, true_condition);
@@ -3276,7 +3273,9 @@ pub(crate) fn is_top_level_logical_expression(node: P<Node>) -> bool {
         }
     }
     let parent = node.parent().unwrap();
-    !is_statement_condition(node) && !ast::is_logical_expression(parent) && !(ast::is_optional_chain(parent) && parent.expression() == Some(node))
+    !(is_statement_condition(node)
+        || ast::is_logical_expression(parent)
+        || (ast::is_optional_chain(parent) && parent.expression() == Some(node)))
 }
 
 pub(crate) fn is_assignment_declaration(decl: P<Node>) -> bool {

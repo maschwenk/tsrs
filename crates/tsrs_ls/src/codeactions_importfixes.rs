@@ -112,7 +112,7 @@ fn get_all_import_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> R
     let all_diagnostics = fix_context.program.get_semantic_diagnostics(ctx, Some(fix_context.source_file));
 
     let mut import_diags: Vec<P<Diagnostic>> = Vec::new();
-    import_diags.extend(all_diagnostics.into_iter().filter_map(|diag| if is_fixable_diagnostic(diag, import_fix_error_codes()) { Some(diag) } else { None }));
+    import_diags.extend(all_diagnostics.into_iter().filter(|&diag| is_fixable_diagnostic(diag, import_fix_error_codes())));
 
     if import_diags.is_empty() {
         return Ok(None);
@@ -213,11 +213,7 @@ fn get_fix_infos(
             if !sn.is_type_only {
                 return None;
             }
-            if let Some(fix) = get_type_only_promotion_fix(fix_context.source_file, symbol_token, &sn.name, ch) {
-                Some(fixInfo { fix: Arc::new(fix), symbol_name: sn.name.clone(), is_jsx_namespace_fix: false })
-            } else {
-                None
-            }
+            get_type_only_promotion_fix(fix_context.source_file, symbol_token, &sn.name, ch).map(|fix| fixInfo { fix: Arc::new(fix), symbol_name: sn.name.clone(), is_jsx_namespace_fix: false })
         }));
 
         // For JSX opening tags, there can be separate type-only errors for both the tag name

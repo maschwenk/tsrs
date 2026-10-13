@@ -19,7 +19,7 @@ use crate::tsconfigparsing::{ParseConfigHost, ResolverHost};
 // Definition is a content mapper as declared in a tsconfig's "contentMappers": the npm package that
 // implements the mapper and the otherwise unsupported file extensions it registers.
 // contentmapper.go:30
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Definition {
     pub package: String,
     pub extensions: Vec<String>,
@@ -31,7 +31,7 @@ pub struct Definition {
 // (which form the mapper's identity), the argv used to run it, and the compiler options it declares it
 // depends on.
 // contentmapper.go:39
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Manifest {
     pub name: String,
     pub version: String,
@@ -43,7 +43,7 @@ pub struct Manifest {
 // Mapper is a resolved content mapper: its tsconfig Definition combined with the Manifest resolved from
 // the package's package.json, plus the package directory used as the mapper's working directory.
 // contentmapper.go:49
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Mapper {
     pub definition: Definition,
     pub manifest: Manifest,
@@ -195,18 +195,15 @@ pub(crate) fn resolve_content_mapper_manifest(
             Some(new_compiler_diagnostic(&diagnostics::The_content_mapper_package_0_could_not_be_resolved, &[&package_name])),
         );
     };
-    let fields = match packagejson::parse(&contents) {
-        Ok(fields) => fields,
-        Err(_) => {
-            return (
-                Manifest::default(),
-                package_directory,
-                Some(new_compiler_diagnostic(
-                    &diagnostics::The_package_json_of_the_content_mapper_package_0_could_not_be_parsed,
-                    &[&package_name],
-                )),
-            );
-        }
+    let Ok(fields) = packagejson::parse(&contents) else {
+        return (
+            Manifest::default(),
+            package_directory,
+            Some(new_compiler_diagnostic(
+                &diagnostics::The_package_json_of_the_content_mapper_package_0_could_not_be_parsed,
+                &[&package_name],
+            )),
+        );
     };
     // Go `name, _ := fields.Name.GetValue()`: the decoded value whether or not it was valid.
     let name = fields.name.value.clone();

@@ -1041,7 +1041,7 @@ fn sorted_keys(changed_paths: &FxHashMap<String, EventKind>) -> Vec<&String> {
 // (`P`'s equality is identity).
 fn parsed_configs_equal(a: &ParsedCommandLine, b: &ParsedCommandLine) -> bool {
     let (a, b) = (&a.parsed_config, &b.parsed_config);
-    a.compiler_options.as_ref().map(|o| &**o) == b.compiler_options.as_ref().map(|o| &**o)
+    a.compiler_options.as_deref() == b.compiler_options.as_deref()
         && a.watch_options == b.watch_options
         && a.type_acquisition == b.type_acquisition
         && a.file_names == b.file_names

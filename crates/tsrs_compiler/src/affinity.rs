@@ -225,7 +225,7 @@ impl ModuleAffinity {
             let mut moved = false;
             for &g in &order {
                 let from = group_checkers[g];
-                held.iter_mut().for_each(|h| *h = 0.0);
+                held.fill(0.0);
                 let (mut only_here, mut held_everywhere) = (0.0, 0.0);
                 for &m in self.group_modules(g) {
                     let m = m as usize;

@@ -287,7 +287,7 @@ impl isolatedDeclarationsFixer<'_> {
                 return None;
             }
             // skip symbols that already have a variable declaration
-            if symbol.value_declaration().is_some_and(|d| ast::is_variable_declaration(d)) {
+            if symbol.value_declaration().is_some_and(ast::is_variable_declaration) {
                 return None;
             }
 

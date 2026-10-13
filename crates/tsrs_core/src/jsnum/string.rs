@@ -295,10 +295,7 @@ pub(crate) fn trim_trailing_zeros(s: &str) -> &str {
 
 pub(crate) fn string_to_float64(s: &str) -> f64 {
     // Out-of-range values parse to ±Inf (Go reports ErrRange alongside ±Inf).
-    match s.parse::<f64>() {
-        Ok(f) => f,
-        Err(_) => f64::NAN,
-    }
+    s.parse::<f64>().unwrap_or(f64::NAN)
 }
 
 pub(crate) fn is_all_digits(s: &str) -> bool {

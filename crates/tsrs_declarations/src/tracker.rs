@@ -203,8 +203,8 @@ impl SymbolTrackerImpl {
             self.class_symbol_tracked.set(true);
             return false;
         }
-        let issued_diagnostic = self.handle_symbol_accessibility_error(&self.resolver.is_symbol_accessible(c, symbol, enclosing_declaration, meaning, true /*shouldComputeAliasToMarkVisible*/));
-        issued_diagnostic
+
+        self.handle_symbol_accessibility_error(&self.resolver.is_symbol_accessible(c, symbol, enclosing_declaration, meaning, true /*shouldComputeAliasToMarkVisible*/))
     }
 
     // tracker.go:204

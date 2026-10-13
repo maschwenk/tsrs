@@ -227,7 +227,7 @@ impl esDecoratorTransformer {
     // esdecorator.go:244
     pub(crate) fn enter_other(&self) {
         if let Some(top) = self.top.get().filter(|t| t.kind == lexicalEntryKind::Other) {
-            assert!(self.pending_expressions.borrow().as_ref().map_or(0, |p| p.len()) == 0);
+            assert_eq!(self.pending_expressions.borrow().as_ref().map_or(0, std::vec::Vec::len), 0);
             top.depth.set(top.depth.get() + 1);
         } else {
             let saved = self.pending_expressions.borrow_mut().take();
@@ -242,7 +242,7 @@ impl esDecoratorTransformer {
         assert!(top.is_some_and(|t| t.kind == lexicalEntryKind::Other), "Incorrect value for top.kind. Expected top.kind to be 'other'");
         let top = top.unwrap();
         if top.depth.get() > 0 {
-            assert!(self.pending_expressions.borrow().as_ref().map_or(0, |p| p.len()) == 0);
+            assert_eq!(self.pending_expressions.borrow().as_ref().map_or(0, std::vec::Vec::len), 0);
             top.depth.set(top.depth.get() - 1);
         } else {
             *self.pending_expressions.borrow_mut() = top.saved_pending_expressions.borrow_mut().take();
@@ -406,18 +406,18 @@ pub(crate) fn get_helper_variable_name(ec: P<EmitContext>, node: P<Node>) -> Str
     };
 
     if ast::is_get_accessor_declaration(node) {
-        declaration_name = format!("get_{}", declaration_name);
+        declaration_name = format!("get_{declaration_name}");
     }
     if ast::is_set_accessor_declaration(node) {
-        declaration_name = format!("set_{}", declaration_name);
+        declaration_name = format!("set_{declaration_name}");
     }
-    if name.is_some_and(|n| ast::is_private_identifier(n)) {
-        declaration_name = format!("private_{}", declaration_name);
+    if name.is_some_and(ast::is_private_identifier) {
+        declaration_name = format!("private_{declaration_name}");
     }
     if ast::is_static(node) {
-        declaration_name = format!("static_{}", declaration_name);
+        declaration_name = format!("static_{declaration_name}");
     }
-    format!("_{}", declaration_name)
+    format!("_{declaration_name}")
 }
 
 impl esDecoratorTransformer {
@@ -664,8 +664,8 @@ impl esDecoratorTransformer {
                 if expr.subtree_facts().intersects(SubtreeFacts::ContainsLexicalThis) {
                     expr = self.outer_this_visitor.get().unwrap().clone().visit_node(Some(expr)).unwrap();
                 }
-                let statement = f.new_expression_statement(expr);
-                statement
+
+                f.new_expression_statement(expr)
             }));
             if let Some(outer_this) = self.outer_this.get() {
                 class_definition_statements.insert(0, self.create_let(outer_this, Some(f.new_this_expression())));
@@ -1038,7 +1038,7 @@ impl esDecoratorTransformer {
         let super_statement_index = super_path[super_path_depth];
         // Visit statements before super
         if super_statement_index > statement_offset {
-            statements_out.extend(statements_in[statement_offset..super_statement_index].iter().flat_map(|s| self.base.visitor().visit_node(Some(*s))));
+            statements_out.extend(statements_in[statement_offset..super_statement_index].iter().filter_map(|s| self.base.visitor().visit_node(Some(*s))));
         }
 
         let super_statement = statements_in[super_statement_index];
@@ -1065,7 +1065,7 @@ impl esDecoratorTransformer {
 
         // Visit statements after super
         if super_statement_index + 1 < statements_in.len() {
-            statements_out.extend(statements_in[super_statement_index + 1..].iter().flat_map(|s| self.base.visitor().visit_node(Some(*s))));
+            statements_out.extend(statements_in[super_statement_index + 1..].iter().filter_map(|s| self.base.visitor().visit_node(Some(*s))));
         }
         statements_out
     }

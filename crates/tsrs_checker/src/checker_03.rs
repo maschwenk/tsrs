@@ -132,7 +132,7 @@ impl Checker {
             return;
         }
         let file = get_source_file_of_node(node);
-        for &j in node.eager_jsdoc(file.map(|f| f.get())) {
+        for &j in node.eager_jsdoc(file.map(tsrs_core::P::get)) {
             let Some(tags) = j.as_jsdoc().tags else {
                 continue;
             };
@@ -262,7 +262,7 @@ impl Checker {
     // checker.go:4538
     pub(crate) fn check_base_type_accessibility(&mut self, t: P<Type>, node: P<Node>) {
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
-        let accessibility_error = self.get_constructor_accessibility_error(node, &signatures, ModifierFlags::Private);
+        let accessibility_error = self.get_constructor_accessibility_error(node, signatures, ModifierFlags::Private);
         if let Some(accessibility_error) = accessibility_error {
             let name = self.get_fully_qualified_name(accessibility_error.declaring_class.symbol().unwrap(), None);
             self.error(Some(node), &diagnostics::Cannot_extend_a_class_0_Class_constructor_is_marked_as_private, &[&name]);
@@ -389,7 +389,7 @@ impl Checker {
                             .unwrap_or_default();
                         missed_properties.push(self.symbol_to_string(base_property));
                         let map = not_implemented_info.get_or_insert_with(Default::default);
-                        map.insert(derived_class_decl, MemberInfo { base_type_name, type_name, missed_properties });
+                        map.insert(derived_class_decl, MemberInfo { missed_properties, base_type_name, type_name });
                     }
                 }
             } else {
@@ -405,7 +405,7 @@ impl Checker {
                 if !base_property_flags.is_empty() && !derived_property_flags.is_empty() {
                     // property/accessor is overridden with property/accessor
                     if base.check_flags().intersects(CheckFlags::Mapped)
-                        || derived.value_declaration().is_some_and(|d| is_binary_expression(d))
+                        || derived.value_declaration().is_some_and(is_binary_expression)
                         || self.are_properties_abstract_or_interface(base, base_declaration_flags)
                     {
                         // when the base property is abstract or from an interface, base/derived flags don't need to match
@@ -478,7 +478,7 @@ impl Checker {
                     self.error(error_node, &diagnostics::Non_abstract_class_0_does_not_implement_inherited_abstract_member_1_from_class_2, &[&member_info.type_name, missed_property, &member_info.base_type_name]);
                 }
             } else if member_info.missed_properties.len() > 5 {
-                let items: Vec<&str> = member_info.missed_properties[..4].iter().map(|s| s.as_str()).collect();
+                let items: Vec<&str> = member_info.missed_properties[..4].iter().map(std::string::String::as_str).collect();
                 let missed_properties = quoted_and_comma_separated(&items);
                 let remaining_missed_properties = member_info.missed_properties.len() - 4;
                 if is_class_expression(error_node.unwrap()) {
@@ -487,7 +487,7 @@ impl Checker {
                     self.error(error_node, &diagnostics::Non_abstract_class_0_is_missing_implementations_for_the_following_members_of_1_Colon_2_and_3_more, &[&member_info.type_name, &member_info.base_type_name, &missed_properties, &remaining_missed_properties]);
                 }
             } else {
-                let items: Vec<&str> = member_info.missed_properties.iter().map(|s| s.as_str()).collect();
+                let items: Vec<&str> = member_info.missed_properties.iter().map(std::string::String::as_str).collect();
                 let missed_properties = quoted_and_comma_separated(&items);
                 if is_class_expression(error_node.unwrap()) {
                     self.error(error_node, &diagnostics::Non_abstract_class_expression_is_missing_implementations_for_the_following_members_of_0_Colon_1, &[&member_info.base_type_name, &missed_properties]);
@@ -659,7 +659,7 @@ impl Checker {
     // checker.go:4873
     pub(crate) fn get_suggested_symbol_for_nonexistent_class_member(&mut self, name: &str, base_type: P<Type>) -> Option<P<Symbol>> {
         let properties = self.get_properties_of_type(base_type);
-        self.get_spelling_suggestion_for_name(name, &properties, SymbolFlags::ClassMember)
+        self.get_spelling_suggestion_for_name(name, properties, SymbolFlags::ClassMember)
     }
 
     // checker.go:4877
@@ -698,7 +698,7 @@ impl Checker {
     pub(crate) fn check_index_constraint_for_property(&mut self, t: P<Type>, prop: P<Symbol>, prop_name_type: P<Type>, prop_type: P<Type>) {
         let declaration = prop.value_declaration();
         let name = get_name_of_declaration(declaration);
-        if name.is_some_and(|n| is_private_identifier(n)) {
+        if name.is_some_and(is_private_identifier) {
             return;
         }
         let index_infos = self.get_applicable_index_infos(t, prop_name_type);
@@ -710,7 +710,7 @@ impl Checker {
             interface_declaration = get_declaration_of_kind(t.symbol().unwrap(), Kind::InterfaceDeclaration);
         }
         let mut prop_declaration: Option<P<Node>> = None;
-        if declaration.is_some_and(|d| is_binary_expression(d)) || name.is_some_and(|n| is_computed_property_name(n)) {
+        if declaration.is_some_and(is_binary_expression) || name.is_some_and(is_computed_property_name) {
             prop_declaration = declaration;
         }
         let mut local_prop_declaration: Option<P<Node>> = None;
@@ -948,11 +948,12 @@ impl Checker {
         if self.is_interface_check_site(symbol, node) {
             let t = self.get_declared_type_of_symbol(symbol);
             let type_with_this = self.get_type_with_this_argument(t, None, false);
+            let error_node = if self.reports_interface_check_errors(symbol, node, t) { node.name() } else { None };
             // run subsequent checks only if first set succeeded
-            if self.check_inherited_properties_are_identical(t, node.name().unwrap()) {
+            if self.check_inherited_properties_are_identical(t, error_node) {
                 for &base_type in self.get_base_types(t) {
                     let base_with_this = self.get_type_with_this_argument(base_type, t.as_interface_type().this_type.get(), false);
-                    self.check_type_assignable_to(type_with_this, base_with_this, node.name(), Some(&diagnostics::Interface_0_incorrectly_extends_interface_1));
+                    self.check_type_assignable_to(type_with_this, base_with_this, error_node, Some(&diagnostics::Interface_0_incorrectly_extends_interface_1));
                 }
                 self.check_index_constraints(t, symbol /*isStaticIndex*/, false);
             }
@@ -972,12 +973,12 @@ impl Checker {
         self.register_for_unused_identifiers_check(node);
     }
 
-    // Whether `node` runs the checks of its merged interface that report at the declaration being checked (TS2320,
-    // TS2430). Go runs them once per checker, at whichever declaration that checker visits first
-    // (`interfaceChecked`), so with declarations in several files the errors depend on which files share a checker and
-    // in what order it visits them (notes/fix-history-dependent-diagnostics.md). By default they run at the first
-    // interface declaration of the symbol in each file: every file that declares the interface reports, whatever
-    // checked it before. `go_compatible_history()` keeps Go's flag.
+    // Whether `node` runs the checks of its merged interface (TS2320, TS2430, index constraints). Go runs them once per
+    // checker, at whichever declaration that checker visits first (`interfaceChecked`), so with declarations in several
+    // files the errors depend on which files share a checker and in what order it visits them
+    // (notes/fix-history-dependent-diagnostics.md). By default they run at the first interface declaration of the symbol
+    // in each file, so each file gets the index-constraint errors at its own declarations whatever checked it before;
+    // `reports_interface_check_errors` decides where TS2320 and TS2430 go. `go_compatible_history()` keeps Go's flag.
     fn is_interface_check_site(&mut self, symbol: P<Symbol>, node: P<Node>) -> bool {
         if tsrs_core::compat::go_compatible_history() {
             let links = self.declared_type_links.get(symbol);
@@ -991,8 +992,35 @@ impl Checker {
         symbol.declarations().iter().copied().find(|&d| is_interface_declaration(d) && get_source_file_of_node(d) == file) == Some(node)
     }
 
+    // Whether the checks running at `node` report TS2320 and TS2430, which go to the declaration being checked. Under
+    // Go's flag, always. By default, where tsgo's compiler at its default checker count reports them: at `node` only if
+    // no earlier file of the program that tsgo type checks on the same checker declares the interface
+    // (`Program::tsgo_default_check_slot`). That depends on the program alone, not on tsrs's checkers.
+    fn reports_interface_check_errors(&mut self, symbol: P<Symbol>, node: P<Node>, t: P<Type>) -> bool {
+        if tsrs_core::compat::go_compatible_history() || self.get_base_types(t).is_empty() {
+            return true;
+        }
+        let file = get_source_file_of_node(node).unwrap();
+        let mut other_files = symbol
+            .declarations()
+            .iter()
+            .filter(|&&d| is_interface_declaration(d))
+            .map(|&d| get_source_file_of_node(d).unwrap())
+            .filter(|&f| f != file)
+            .peekable();
+        // Declared in this file only: avoid building the program-wide slot map.
+        if other_files.peek().is_none() {
+            return true;
+        }
+        let Some((checker, index)) = self.program.tsgo_default_check_slot(file) else {
+            return true;
+        };
+        !other_files.any(|other| self.program.tsgo_default_check_slot(other).is_some_and(|(c, i)| c == checker && i < index))
+    }
+
     // checker.go:5127
-    pub(crate) fn check_inherited_properties_are_identical(&mut self, t: P<Type>, type_node: P<Node>) -> bool {
+    // `type_node` is None where the checks run without reporting (`reports_interface_check_errors`).
+    pub(crate) fn check_inherited_properties_are_identical(&mut self, t: P<Type>, type_node: Option<P<Node>>) -> bool {
         let base_types = self.get_base_types(t);
         if base_types.len() < 2 {
             return true;
@@ -1021,6 +1049,7 @@ impl Checker {
                         let is_inherited_property = existing_containing_type != t;
                         if is_inherited_property && !self.is_property_identical_to(existing_prop, prop) {
                             identical = false;
+                            let Some(type_node) = type_node else { continue };
                             let type_name1 = self.type_to_string(existing_containing_type, None);
                             let type_name2 = self.type_to_string(base, None);
                             let a0 = self.symbol_to_string(prop);
@@ -1037,7 +1066,7 @@ impl Checker {
 
     // checker.go:5159
     pub(crate) fn is_property_identical_to(&mut self, source_prop: P<Symbol>, target_prop: P<Symbol>) -> bool {
-        self.compare_properties(source_prop, target_prop, |c, s, t| c.compare_types_identical(s, t)) != Ternary::False
+        self.compare_properties(source_prop, target_prop, super::checker::Checker::compare_types_identical) != Ternary::False
     }
 
     // checker.go:5163
@@ -2163,9 +2192,7 @@ impl Checker {
         let symbol = self.get_symbol_of_declaration(node).unwrap();
         let name = node.name().unwrap();
         if symbol.flags().intersects(SymbolFlags::FunctionScopedVariable) {
-            if !is_identifier(name) {
-                panic!("Identifier expected");
-            }
+            assert!(is_identifier(name), "Identifier expected");
             let local_declaration_symbol = self.resolve_name(Some(node), name.text(), SymbolFlags::Variable, None /*nameNotFoundMessage*/, false /*isUse*/, false);
             if let Some(local_declaration_symbol) = local_declaration_symbol {
                 if local_declaration_symbol != symbol && local_declaration_symbol.flags().intersects(SymbolFlags::BlockScopedVariable) {

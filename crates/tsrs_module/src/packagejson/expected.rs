@@ -143,7 +143,7 @@ pub struct Expected<T> {
 
 impl<T: ExpectedValue> Expected<T> {
     pub(crate) fn unmarshal_json(&mut self, data: &Json) {
-        if let Json::Null = data {
+        if matches!(data, Json::Null) {
             *self = Expected { actual_json_type: "null", null: true, valid: false, value: T::default() };
             return;
         }

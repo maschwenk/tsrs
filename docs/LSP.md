@@ -48,15 +48,15 @@ attaches, the type error of the opened file arrives as a diagnostic, and hover r
 `:checkhealth vim.lsp` shows the attached client; `vim.lsp.set_log_level('debug')` logs the protocol.
 
 What to expect: diagnostics are pull-based (`textDocument/diagnostic`; both clients support it) and tsconfig errors
-are pushed; everything in the Progress table works; see Known gaps. Memory: see the memory plan (program versions,
-checkers and old file versions are freed).
+are pushed; see [known gaps](#known-gaps) for unsupported features and
+[memory management](#memory-management) for program, checker and file-version lifetimes.
 
 ## Implementation
 
 Port of Go's language server: `tsgo --lsp -stdio` (`cmd/tsc/lsp.go` -> `internal/lsp` -> `internal/project` ->
 `internal/ls`). Same rules as the rest of the port (PORTING.md): function-by-function from Go, same names in
-snake_case, `// file.go:LINE` origin markers, Go quirks preserved, no redesign. This file is the design record,
-crate map, progress table and list of known gaps.
+snake_case, `// file.go:LINE` origin markers, Go quirks preserved, no redesign. This guide covers editor setup, the implementation contracts, validation and known gaps.
+The [initial port log](history/LSP.md) records the completed phases and their measurements.
 
 ## Crate map
 
@@ -69,15 +69,10 @@ crate map, progress table and list of known gaps.
 | `project/dirty`, `project/logging` | `tsrs_projectutil` (re-exported as `tsrs_project::{dirty, logging}`) | leaf packages that `ls/autoimport` imports too |
 | `ls` (+ `lsconv`, `lsutil`, `change`, `autoimport`) | `tsrs_ls` (`tsrs_ls::lsconv`, `::lsutil`, `::change`, `::autoimport`, …) | one Rust file per Go file, same base names |
 | `astnav`, `format`, `sourcemap` | `tsrs_astnav` and `tsrs_sourcemap` (crates of their own, re-exported as `tsrs_ls::astnav` / `::sourcemap`), `tsrs_ls::format` | `tsrs_astnav` is also used by the checker and the API, `tsrs_sourcemap` by emit; `format` is used by the language service and by the API's `formatNodeForInsertion` (`tsrs_api/src/printing.rs`) |
-| `fourslash` (+ the tests in `fourslash/tests`) | `tsrs_fourslash` | phase 2: harness + tests generated from the Go test files by `tools/gen-fourslash` |
-| `checker/services.go`, `checker/exports.go` | `tsrs_checker` (`services.rs`, `exports.rs`) | the checker API the language service calls; the batch port skipped most of it |
+| `fourslash` (+ the tests in `fourslash/tests`) | `tsrs_fourslash` | harness + tests generated from the Go test files by `tools/gen-fourslash` |
+| `checker/services.go`, `checker/exports.go` | `tsrs_checker` (`services.rs`, `exports.rs`) | the checker API the language service calls |
 | `compiler` (program reuse, pluggable checker pool) | `tsrs_compiler` | `UpdateProgram` / `ReuseProgram`, `ProgramOptions.CreateCheckerPool`, the `CheckerPool` interface |
 | `cmd/tsc/lsp.go` | `tsrs_cli` (`lsp.rs`) | `tsrs --lsp -stdio` |
-
-Out of scope until further notice: API sessions attached to the language server (the standalone `tsrs --api`
-server is ported, `docs/NODE_API.md`), content mappers in the language server (`tsc` and `tsc -b` run them,
-notes/contentmappers.md; the server never registers one, so every "is this file content-mapped" branch takes the
-plain path; the branch structure is kept), ATA (`project/ata`), telemetry, pprof requests, localization (English only).
 
 ## Protocol types and JSON
 
@@ -126,6 +121,12 @@ and file affinity, idle disposal after 30 s), behind the `tsrs_compiler::Checker
 keeps its own pool. `ls.LanguageService` borrows a checker exactly like Go (`program.GetTypeCheckerForFile(ctx,
 file)` returns the checker and a release function -> a guard object that releases on drop).
 
+Nested checker acquisition: Go's call hierarchy (and a few other ls paths) acquires a second
+checker while holding one. The project pool (what the server uses) hands out a different query checker, as in Go.
+The compiler's built-in pool (CLI, compiler-level tests) locks each checker, where Go's non-exclusive getter returns
+it unlocked and aliases it; a nested acquisition on the same checker would deadlock there. Accepted: no language
+service path runs on the built-in pool; aliasing a `&mut Checker` is not expressible soundly in Rust.
+
 Cancellation (`$/cancelRequest`): as in Go, the read loop cancels the request's `Context`; the checker polls it at
 Go's points (`checkSourceElements`, deferred nodes, contextual deprecations, the unused checks; `c.ctx` is set by
 `checkSourceFile` and cleared when it returns) and records `wasCanceled`; a canceled checker panics on reuse
@@ -140,14 +141,14 @@ default `fswatch` backend is fast-recursive (FSEvents on macOS; Windows in Go), 
 for directories that do not exist yet, synthetic creates on promotion, 75 ms batching, then
 `Session.DidChangeWatchedFiles` like a client notification. Elsewhere (Linux) watching is disabled, as in Go.
 
-## Memory plan for a long-lived server
+## Memory management
 
-The batch compiler never frees arena memory (PORTING.md "Memory model"): `P<T>` points into per-thread leak arenas,
-and destructors of arena values never run. A server that rebuilds programs on every edit cannot live with that.
-Phase 4 (notes/lsp-mem.md) frees what Go's GC frees after an edit, with **regions**: arenas that are freed as a
-whole. The CLI never creates one and allocates exactly as before.
+The server rebuilds programs after edits and uses regions to release old versions once nothing refers to them.
+Each region owns its arena allocations and releases them together. The ownership rules below replace Go's GC
+for server data; see [the memory design](../notes/lsp-mem.md) and
+[lifetime corrections](../notes/lsp-memfix.md).
 
-| object | Go lifetime | tsrs (phase 4) |
+| object | Go lifetime | tsrs lifetime |
 | --- | --- | --- |
 | a parsed file version (text, AST, symbols, flow nodes, and its lazily filled data) | until neither the parse cache nor a live program refers to it | **file region**: the parse cache's parse function runs parse + bind in a fresh region; the cache entry owns it until its final `Deref`, and so does every program owner whose program contains the file |
 | types, signatures, links, transient symbols, synthetic nodes of a program's checkers | until the program's pool is unreachable | **checker region** per pooled checker: the holder's allocation target while it is created and while it is held; freed with the pool when the program is freed (a disposed checker is parked until then, see below) |
@@ -171,7 +172,7 @@ entered (parse workers fill the cache while the building thread holds the full b
 chunks are carved from per-thread slabs, and a file region is trimmed after binding: tens of thousands of file
 regions would otherwise each cost a partly used page.
 
-Two corrections to the original plan:
+Two ownership constraints matter when changing this code:
 
 - A program is not freed when Go's refcount drops it (snapshot dispose -> `ParseCache.Deref`): a request that got a
   language service from an older snapshot holds no snapshot reference in Go either and relies on the GC. The owner
@@ -186,54 +187,36 @@ snapshot): a freed region is recorded as would-free and kept, and nothing reacha
 options carry uninitialized payload bytes; long-lived ones (process-wide completion caches, registry buckets and
 entrypoints) are zeroed in census builds (`tsrs_core::census_scrub_none`).
 
-Measured (notes/lsp-mem.md, notes/lsp-memfix.md; 200 edits, release build): RSS is flat under edits with and without
-completion requests on xstate and on the private monorepo (registry updates included).
+The memory notes record edit and completion measurements on xstate, including registry updates. The server
+has also been run on a large private monorepo.
 
-## Gates
+## Validation
 
 - `tools/oracle/lsp`: drives `tsgo-ref --lsp -stdio` and `tsrs --lsp -stdio` with the same scripted session
   (initialize, open, edits, requests), answers server->client requests identically, drops `window/logMessage`
   and timing-dependent notifications, and diffs the JSON responses (and `publishDiagnostics` per URI and version).
 - Conformance stays byte-identical (`tsrs-test run --suite all`, both lazy modes): the LSP work does not change
   checker semantics; any checker change made for the language service API is additive.
-- Phase 2 on: fourslash pass counts (below).
+- Fourslash exercises the production server in-process; its recorded results and remaining failures are below.
 
-## Progress
+The [initial port log](history/LSP.md) includes the oracle results for diagnostics, navigation and watched-file
+invalidation. `lsp_oracle.py --closed GLOB --disk-edits N [--disk-edit-at REGEX] [--watch-client]` tests a closed
+file changing on disk through client notifications or the builtin watcher; fixtures are in
+`tools/oracle/lsp/fixtures`.
 
-| phase | content | state |
-| --- | --- | --- |
-| 1 | transport, protocol types, session skeleton, document sync, project discovery, program update, push + pull diagnostics, hover, definition; LSP oracle | done (2026-10-02, below) |
-| 2 | fourslash harness + generated tests | done: all 4,546 Go tests generated and run on the in-process server (below) |
-| 3 | references, rename, completions, signature help, symbols, semantic tokens, folding, selection ranges, inlay hints, code actions, formatting | done: fourslash 4,066 / 4,546 pass; the 63 failures are 55 content-mapper tests (out of scope) and 8 `@tsc` tests (harness helper not ported yet), see Known gaps |
-| 4 | watchers, multi-project, program reuse, cancellation, memory regions, editor setup | cancellation, builtin watcher, watched-file invalidation and state baselines done (robust wave, notes/lsp-robust.md); memory regions done (mem + memfix waves: RSS flat under edits, census 0 violations); watched-file / multi-project oracle sessions identical; exit behavior identical (`exit_check.py`); editor setup documented, Neovim verified headless |
+## Auto-import ownership
 
-### Phase 1 gates (2026-10-02, `lsp` 3c95d59+)
+The `tsrs_ls::autoimport` registry builds buckets sequentially where Go fans out to
+goroutines (discovery, extraction, bucket building; same results, the extraction checker pool holds one checker).
+`autoimport.ProjectID` (a Go `fmt.Stringer` interface) is a string newtype. Go shares one `*checker.Checker` between
+a request, its `autoimport.View` and the import adder built on the view; the view keeps the checker's address
+(`View::checker`, one `unsafe` with a SAFETY comment), because callers keep using the checker while the view is
+alive. The registry's clone host is only valid during `Registry::clone_registry`; the module resolvers, alias
+resolvers and checkers built from it live in the update's scratch region, freed before it returns. The
+extraction checker's `compareSymbols` is not a total order (files outside the alias resolver's root files map to
+index 0, as in Go), so `sort_symbols` uses Go's pdqsort port there (`checker::Program::source_files_complete`).
 
-`tools/oracle/lsp/lsp_oracle.py`, `tsgo-ref --lsp -stdio` vs `tsrs --lsp -stdio`, sequential sessions with an edit round
-(insert a character in an identifier, re-request, revert, re-request):
-
-| session | files | diagnostic | hover | definition | typeDefinition | publishDiagnostics | initialize |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 20 conformance cases (generics, async, abstract classes, enums, mapped/conditional/template literal types, JSX, control flow, decorators, module resolution, overloads) | 20 | 87/87 | 2334/2334 | 2334/2334 | 2334/2334 | 20/20 | 20/20 |
-| xstate (bench), 30 files of `packages/core` + `xstate-react` | 30 | 120/120 | 3308/3308 | 3308/3308 | 3308/3308 | 1/1 | 1/1 |
-
-16,875 responses, all JSON-identical (1,440 + 2,308 non-null hovers; 67 + 12 diagnostic reports with items). Conformance
-suite unchanged in both lazy modes (13,458 pass / 2 codes / 2 fail; `.types` / `.symbols` 12,779 / 12,779, pass lists
-identical). Unit tests: `tsrs_lsproto` 33 (+ 6,869-case Go codec oracle), `tsrs_ls` 87, `tsrs_project` 105, `tsrs_lsp` 26.
-
-### Watched files (phase 4, robust wave)
-
-`lsp_oracle.py --closed GLOB --disk-edits N [--disk-edit-at REGEX] [--watch-client]`: after the request rounds, a
-closed file is edited on disk, the client sends `workspace/didChangeWatchedFiles` (`--watch-client`, dynamic
-registration) or the servers' builtin watchers (FSEvents) pick the change up, every open file is re-requested, the
-edit is reverted and everything requested again. Fixtures in `tools/oracle/lsp/fixtures`:
-
-| session | client watching | builtin watcher |
-| --- | --- | --- |
-| `multi` (3 files; edit `a.ts`, `b.ts` gets TS2459) | 128/128 equal | 128/128 equal |
-| `refs` (app references lib; edit `lib/src/math.ts`, `app/src/main.ts` gets TS2305) | 65/65 equal | 65/65 equal |
-
-### Fourslash
+## Fourslash
 
 `tools/gen-fourslash` (Go, `go/types`) converts every Go fourslash test that `go test` builds
 (`internal/fourslash/tests/*_test.go`, 4,546 `Test*` functions; files excluded by Go build constraints, such as the 13
@@ -243,138 +226,36 @@ function in `crates/tsrs_fourslash/src/tests/gen/` plus a registry (name, file, 
 is left untranslated. The harness (`tsrs_fourslash::fourslash`) mirrors Go's `FourslashTest` method for method and
 drives the real server in-process (`tsrs_lsp::lsptestutil`, Go's `testutil/lsptestutil`: framed JSON over byte
 pipes, in-memory `vfstest` file system wrapped with the bundled libs, shared parse cache, compiler options from the
-test's `// @option` lines via `harnessutil.SetOptionsFromTestConfig`). Methods for language-service features that are
-not ported yet fail with `feature not ported: <feature> (<Method>)`. The test-data parser is a full port (checked
+test's `// @option` lines via `harnessutil.SetOptionsFromTestConfig`). Unsupported harness features fail with
+`feature not ported: <feature> (<Method>)`. The test-data parser is a full port (checked
 against Go's `ParseTestData`, `tools/oracle/fourslash-parser`). Run with
 `tsrs-fourslash run [--filter <regex>] [--include-skipped] [-j N] [-v]` (results in
 `target/fourslash-results/{pass,fail,skip}.txt`, full failure messages in `failures/<name>.txt`, baseline actuals in `target/fourslash-results/local/`). Tests run
 in worker processes (`tsrs-fourslash worker`, replaced after a crash, a 120 s timeout or 200 tests): the server ends
-the process on an unrecovered panic in one of its threads, like a Go program, and programs are never freed. Mapping
-rules and deviations: notes/lsp-fsgen.md.
+the process on an unrecovered panic in one of its threads, like a Go program. Recycling workers bounds retained
+test state. See [the generator mapping rules and deviations](../notes/lsp-fsgen.md).
 
-| date | total | pass | fail | skip |
-| --- | --- | --- | --- | --- |
-| 2026-10-01 (no server yet) | 4,559 | 0 | 4,173 | 386 |
-| 2026-10-02 (in-process server; hover, definition, diagnostics, formatting, edits) | 4,546 | 1,172 | 2,957 | 417 |
-| 2026-10-02 (+ refs wave; completions, signature help, linked editing, closing tags) | 4,546 | 3,037 | 1,092 | 417 |
-| 2026-10-02 (+ fix1: compiler project references) | 4,546 | 3,040 | 1,089 | 417 |
-| 2026-10-02 (+ document/workspace symbols, semantic tokens, folding, selection ranges, inlay hints, code lens) | 4,546 | 3,321 | 808 | 417 |
-| 2026-10-02 (merged: refs + compl + misc + fix1) | 4,546 | 3,325 | 804 | 417 |
-| 2026-10-02 (+ change tracker, organize imports, auto-import registry, code actions, file rename) | 4,546 | 4,048 | 81 | 417 |
-| 2026-10-02 (+ robust: state baselines; notes/lsp-robust.md; alone on the 3,325 base) | 4,546 | 3,342 | 787 | 417 |
-| 2026-10-02 (merged: + actions + robust) | 4,546 | 4,066 | 63 | 417 |
+Recorded result: **4,066 pass, 63 fail and 417 skip**, out of 4,546 generated tests. The
+[port log](history/LSP.md#fourslash) retains the earlier runs and verify-family breakdown.
 
 Skips: 386 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
 node10/classic, `esModuleInterop`/`allowSyntheticDefaultImports` false, `baseUrl`, ES5 target, `alwaysStrict` false).
 Failures (63, the CI gate's maximum in `.github/scripts/fourslash-gate.sh`): 55 content-mapper tests (out of scope)
-and 8 tests with `@tsc` command lines (not ported yet), see Known gaps. These 63 fail before the session starts, so
+and 8 tests with `@tsc` command lines (not ported yet); see [known gaps](#known-gaps). These 63 fail before the session starts, so
 with the gate green no failure is a divergence in a ported feature.
-
-Passing tests per verify family (tests that call the method and pass / tests that call it):
-
-| method | pass / calling tests |
-| --- | --- |
-| VerifyBaselineGoToDefinition | 226 / 249 |
-| VerifyQuickInfoAt | 190 / 325 |
-| FormatDocument | 157 / 177 |
-| VerifyBaselineHover | 142 / 148 |
-| VerifyCurrentLineContent | 133 / 136 |
-| Insert (typing + on-type formatting) | 112 / 226 |
-| VerifyCurrentFileContent | 94 / 112 |
-| VerifyBaselineGoToSourceDefinition | 89 / 89 |
-| VerifyBaselineHoverWithVerbosity | 56 / 56 |
-| VerifyNoErrors | 48 / 109 |
-| VerifyNumberOfErrorsInCurrentFile | 41 / 49 |
-| VerifySuggestionDiagnostics | 39 / 42 |
-| DeleteAtCaret | 25 / 26 |
-| VerifyBaselineNonSuggestionDiagnostics | 24 / 30 |
-| FormatSelection | 21 / 36 |
-| VerifyBaselineGoToTypeDefinition | 20 / 24 |
-| VerifyQuickInfoExists | 19 / 22 |
-| InsertLine | 18 / 25 |
-| VerifyQuickInfoIs | 15 / 41 |
-| VerifyErrorExistsBetweenMarkers | 11 / 15 |
-| VerifyNonSuggestionDiagnostics | 9 / 16 |
-| VerifyNotQuickInfoExists | 6 / 9 |
-| VerifyBaselineVSHover | 5 / 5 |
-| Backspace / Paste / ReplaceLine | 4 / 18, 4 / 4, 2 / 11 |
-| VerifyBaselineDocumentSymbol | 83 / 85 |
-| VerifyBaselineInlayHints | 64 / 65 |
-| VerifySemanticTokens | 46 / 46 |
-| VerifyBaselineSelectionRanges | 36 / 37 |
-| VerifyOutliningSpans / VerifyFoldingRangeLines | 32 / 33, 2 / 6 |
-| VerifyWorkspaceSymbol / VerifyBaselineWorkspaceSymbol | 14 / 15, 0 / 1 |
-| VerifyBaselineCodeLens | 7 / 13 |
-| VerifyCompletions / GetCompletions | 986 / 1,143, 8 / 9 |
-| VerifyOrganizeImports / WithRequestKind | 92 / 92, 1 / 1 |
-| VerifyCodeFix | 136 / 152 |
-| VerifyCodeFixAvailable / NotAvailable / AvailableExact | 18 / 25, 85 / 89, 1 / 1 |
-| VerifyCodeFixAll / VerifySourceFixAll | 17 / 22, 1 / 1 |
-| VerifyImportFixAtPosition | 143 / 171 |
-| VerifyImportFixModuleSpecifiers | 52 / 64 |
-| VerifyRangeAfterCodeFix | 4 / 70 (66 skipped in Go) |
-| BaselineAutoImportsCompletions | 36 / 39 |
-| VerifyApplyCodeActionFromCompletion | 56 / 70 |
-| VerifyWillRenameFilesEdits / VerifyRename | 31 / 33, 4 / 7 |
-
-(These counts are historical and understate the current run, in which every calling test that does not pass is
-skipped, a content-mapper test or an `@tsc` test.) Earlier divergences in ported features:
-`TestRewriteRelativeImportExtensionsProjectReferences{1,2,3}` (diagnostic baselines) were tsrs_compiler not resolving
-project references; fixed by porting them (fix1).
-
-After the completions wave (fix1, 2026-10-02): of the 1,089 failures, 153 do not stop at an unported feature, and
-none of them is a divergence in ported code: 152 expect auto-import data that the placeholder registry cannot
-produce (auto-import completion items, `AdditionalTextEdits` from the import adder in class member / override /
-exhaustive case snippets, `VerifyApplyCodeActionFromCompletion` import fixes, `BaselineAutoImportsCompletions`; in
-JS files a missing auto-import entry also lets the name-table entry of the same name through), and 1 reaches
-`workspace/willRenameFiles` from rename (`TestGetEditsForFileRename_cssImport4`). `TestCodeLensOnFunctionAcrossProjects1` (code lens, misc wave) had the same root cause and passes after the merge.
-Full failure messages: `target/fourslash-results/failures/<test>.txt`. The symbol / folding / selection / inlay hint /
-code lens failures not counted as passing are content-mapper, state-baseline or Go-skipped tests.
-
-After the actions wave (2026-10-02): every one of the 81 failures stops at an out-of-scope
-feature (55 content mappers, 20 state baselines, 6 `@tsc` command lines); every non-passing test of the code action,
-organize imports, auto-import and file rename families above is skipped in Go or a content-mapper test. The real
-auto-import registry also fixed the 152 auto-import divergences listed above, and `Program.comparePathsOptions` is now
-Go's zero value (tsrs_compiler set a current directory, which made `IsGlobalTypingsFile` true for every `.d.ts` when no
-typings location is configured and hid them from auto-imports); the conformance suite is unchanged (13,458 pass both
-before and after; lazy-off `.types` / `.symbols` 12,779 / 12,779).
 
 ## Known gaps
 
-- Content mappers in the language server (phase 2 of notes/contentmappers.md; the 55 content-mapper fourslash
-  tests), LSP-attached API sessions, ATA, telemetry, pprof requests: not ported (see above; standalone `tsrs --api`
-  is in `docs/NODE_API.md`).
-- Memory: see the memory plan (regions; phase 4).
-- Cancellation: ported (robust wave): the checker polls the request context at Go's points; canceled checkers are disposed.
-- `tsrs_ls::autoimport` (ported, actions wave): the registry builds buckets sequentially where Go fans out to
-  goroutines (discovery, extraction, bucket building; same results, the extraction checker pool holds one checker).
-  `autoimport.ProjectID` (a Go `fmt.Stringer` interface) is a string newtype. Go shares one `*checker.Checker` between
-  a request, its `autoimport.View` and the import adder built on the view; the view keeps the checker's address
-  (`View::checker`, one `unsafe` with a SAFETY comment), because callers keep using the checker while the view is
-  alive. The registry's clone host is only valid during `Registry::clone_registry`; the module resolvers, alias
-  resolvers and checkers built from it live in the update's scratch region, freed before it returns. The
-  extraction checker's `compareSymbols` is not a total order (files outside the alias resolver's root files map to
-  index 0, as in Go), so `sort_symbols` uses Go's pdqsort port there (`checker::Program::source_files_complete`).
-- Builtin watcher backends: `fanotify_linux.go` (Linux uses inotify, Go's own fallback without fanotify) and
-  `windows.go` are not ported. The server only uses the builtin watcher with a fast-recursive backend, so this
-  changes nothing on Linux (watching disabled without client support, as in Go).
-- Fourslash `@tsc` command lines (8 tests): the harness does not yet run `tsc --build` into the test file system
-  before the session starts (Go `tsctests.GetFileMapWithBuild`). Emit and the `tsc` / `tsc -b` test harness are
-  ported (`tsrs_execute::tsctests`, test-only); the fourslash harness still stops these tests with
-  `feature not ported` (`crates/tsrs_fourslash/src/fourslash.rs`).
-- `tsrs_ls::spanmap` re-exports `tsrs_spanmap` (Go `internal/spanmap`), but the language server never loads a
-  content-mapped file (content mappers in the language server are phase 2 of notes/contentmappers.md): its scripts
-  report no span map, so the content-mapped branches are kept but never taken.
-- Nested checker acquisition (decided 2026-10-02): Go's call hierarchy (and a few other ls paths) acquires a second
-  checker while holding one. The project pool (what the server uses) hands out a different query checker, as in Go.
-  The compiler's built-in pool (CLI, compiler-level tests) locks each checker, where Go's non-exclusive getter returns
-  it unlocked and aliases it; a nested acquisition on the same checker would deadlock there. Accepted: no language
-  service path runs on the built-in pool; aliasing a `&mut Checker` is not expressible soundly in Rust.
-- Cross-project orchestration (`handle_cross_project`, references / rename across projects) searches projects
-  sequentially; Go fans out to goroutines. Results are merged in the same order, so responses are identical; only
-  latency differs on multi-project workspaces. Revisit in phase 4 (worker pool).
-- `project/dirty` and `project/logging` live in crate `tsrs_projectutil` (re-exported by `tsrs_project`), because
-  `ls/autoimport` imports them and `tsrs_ls` sits below `tsrs_project`.
+- Content mappers are not loaded by the language server; 55 fourslash cases fail before the session starts.
+  CLI checks and builds support them ([content-mapper note](../notes/contentmappers.md)). The language service's
+  span-map branches are retained but receive no content-mapped scripts.
+- LSP-attached API sessions, automatic type acquisition, telemetry, profiling requests and localized messages
+  are not ported. The standalone API server is available; see [NODE_API.md](NODE_API.md).
+- Fourslash `@tsc` command lines (8 cases) need the harness to run `tsc --build` into its test file system before
+  the session starts (`tsctests.GetFileMapWithBuild` in Go). The CLI emit and build drivers are ported; this
+  harness helper still reports `feature not ported`.
+- Builtin watcher backends for Windows and Linux fanotify are not ported. Linux uses inotify, Go's fallback;
+  the server enables builtin watching only with a fast-recursive backend, so Linux needs client watch support.
 
 ## Deviations from Go
 
@@ -396,3 +277,6 @@ Checked in the code on 2026-10-10; collected from the porting waves' notes.
   expando targets, so that path is not verified against Go.
 - Code lens resolve after a recovered panic returns an empty `CodeLens` where Go returns nil (the Rust response type
   is not nullable); the request was already answered with the recover's error.
+- Cross-project orchestration (`handle_cross_project`, references / rename across projects) searches projects
+  sequentially; Go fans out to goroutines. Results are merged in the same order, so responses are identical; only
+  latency differs on multi-project workspaces.

@@ -181,9 +181,7 @@ impl InlayHintState<'_> {
                     let required_args = element_flags
                         .iter()
                         .position(|f| !f.intersects(ElementFlags::Required))
-                        .unwrap_or_else(|| {
-                            usize::try_from(fixed_length).expect("tuple fixed length is negative")
-                        });
+                        .unwrap_or(fixed_length);
                     if required_args > 0 {
                         spread_args = required_args;
                     }
@@ -236,7 +234,9 @@ impl InlayHintState<'_> {
 
     // inlay_hints.go:228
     fn visit_variable_like_declaration(&mut self, decl: P<Node>) {
-        if decl.initializer().is_none() && !(ast::is_property_declaration(decl) && !self.checker.get_type_at_location(decl).flags().intersects(TypeFlags::Any))
+        let missing_initializer_without_specific_property_type = decl.initializer().is_none()
+            && (!ast::is_property_declaration(decl) || self.checker.get_type_at_location(decl).flags().intersects(TypeFlags::Any));
+        if missing_initializer_without_specific_property_type
             || ast::is_binding_pattern(decl.name().unwrap())
             || (ast::is_variable_declaration(decl) && !is_hintable_declaration(decl))
         {
@@ -943,8 +943,8 @@ impl InlayHintState<'_> {
             let element_infos = rest_type.target().unwrap().as_tuple_type().element_infos();
             let mut associated_names: Vec<Option<P<Node>>> = Vec::with_capacity(element_infos.len());
             associated_names.extend(element_infos.iter().map(|element_info| {
-                let labeled_element = element_info.labeled_declaration();
-                labeled_element
+
+                element_info.labeled_declaration()
             }));
             let index = pos - param_count;
             if index < associated_names.len() {

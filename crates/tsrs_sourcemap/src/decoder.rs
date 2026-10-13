@@ -85,6 +85,7 @@ impl MappingsDecoder {
 
     // decoder.go:85
     // Go returns (value, done); None is done.
+    #[expect(clippy::should_implement_trait, reason = "this is the Go source-map decoder's stateful Next API, not a general Rust iterator")]
     pub fn next(&mut self) -> Option<Mapping> {
         while !self.done && self.pos < self.mappings.len() {
             let ch = self.mappings.as_bytes()[self.pos];

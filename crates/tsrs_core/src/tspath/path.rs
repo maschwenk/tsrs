@@ -169,7 +169,7 @@ fn path_components(path: &str, root_length: usize) -> Vec<String> {
     }
     let mut result = Vec::with_capacity(rest.len() + 1);
     result.push(root.to_string());
-    result.extend(rest.into_iter().map(|s| s.to_string()));
+    result.extend(rest.into_iter().map(std::string::ToString::to_string));
     result
 }
 
@@ -816,7 +816,7 @@ pub fn get_path_components_relative_to(from: &str, to: &str, options: &ComparePa
 
     result.push(String::new());
     // Add all the relative components until we hit a common directory.
-    result.extend((0..num_dot_dot_slashes).map(|_| "..".to_string()));
+    result.extend(std::iter::repeat_with(|| "..".to_string()).take(num_dot_dot_slashes));
     // Now add all the remaining components of the "to" path.
     result.extend(to_components[start..].iter().cloned());
 
@@ -824,9 +824,7 @@ pub fn get_path_components_relative_to(from: &str, to: &str, options: &ComparePa
 }
 
 pub fn get_relative_path_from_directory(from_directory: &str, to: &str, options: &ComparePathsOptions) -> String {
-    if (get_root_length(from_directory) > 0) != (get_root_length(to) > 0) {
-        panic!("paths must either both be absolute or both be relative");
-    }
+    assert!((get_root_length(from_directory) > 0) == (get_root_length(to) > 0), "paths must either both be absolute or both be relative");
     let path_components = get_path_components_relative_to(from_directory, to, options);
     get_path_from_path_components(&path_components)
 }
@@ -1201,9 +1199,7 @@ pub fn get_common_parents(
     get_path_components: fn(&str, &str) -> Vec<String>,
     options: &ComparePathsOptions,
 ) -> (Vec<String>, FxHashSet<String>) {
-    if min_components < 1 {
-        panic!("minComponents must be at least 1");
-    }
+    assert!(min_components >= 1, "minComponents must be at least 1");
     if paths.is_empty() {
         return (Vec::new(), FxHashSet::default());
     }
@@ -1266,7 +1262,7 @@ fn get_common_parents_worker(component_groups: &[Vec<String>], min_components: u
                                 entry.insert(Default::default())
                             }
                         };
-                        entry.0 = g[..last_common_index + 1].to_vec();
+                        entry.0 = g[..=last_common_index].to_vec();
                         entry.1.push(g[last_common_index + 1..].to_vec());
                     }
                     ordered_groups.sort();

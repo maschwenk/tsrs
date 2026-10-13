@@ -135,7 +135,7 @@ fn compile_glob_pattern(spec: &str, base_path: &str, usage: Usage, case_sensitiv
     let mut parts = tspath::get_normalized_path_components(spec, base_path);
 
     // "src/**" without a filename matches nothing (for include patterns)
-    if usage != Usage::Exclude && parts.last().map(|s| s.as_str()).unwrap_or("") == "**" {
+    if usage != Usage::Exclude && parts.last().map_or("", std::string::String::as_str) == "**" {
         return None;
     }
 
@@ -143,7 +143,7 @@ fn compile_glob_pattern(spec: &str, base_path: &str, usage: Usage, case_sensitiv
     parts[0] = tspath::remove_trailing_directory_separator(&parts[0]).to_string();
 
     // Directories implicitly match all files: "src" -> "src/**/*"
-    if is_implicit_glob(parts.last().map(|s| s.as_str()).unwrap_or("")) {
+    if is_implicit_glob(parts.last().map_or("", std::string::String::as_str)) {
         parts.push("**".to_string());
         parts.push("*".to_string());
     }
@@ -271,9 +271,7 @@ impl GlobPattern {
                     continue;
                 }
                 ComponentKind::Literal => {
-                    if comp.skip_package_folders && is_package_folder(path_part) {
-                        panic!("unreachable: literal components never have skipPackageFolders");
-                    }
+                    assert!(!(comp.skip_package_folders && is_package_folder(path_part)), "unreachable: literal components never have skipPackageFolders");
                     if !self.strings_equal(comp.literal.as_bytes(), path_part.as_bytes()) {
                         return false;
                     }
@@ -540,7 +538,7 @@ fn is_package_folder(name: &str) -> bool {
 
 fn ensure_trailing_slash(s: &str) -> String {
     if !s.is_empty() && !s.ends_with('/') {
-        return format!("{}/", s);
+        return format!("{s}/");
     }
     s.to_string()
 }
@@ -583,12 +581,12 @@ fn new_glob_matcher(include_specs: &[impl AsRef<str>], exclude_specs: &[impl AsR
     m.includes.extend(
         include_specs
             .iter()
-            .filter_map(|spec| if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, usage, case_sensitive) { Some(p) } else { None }),
+            .filter_map(|spec| compile_glob_pattern(spec.as_ref(), base_path, usage, case_sensitive)),
     );
     m.excludes.extend(
         exclude_specs
             .iter()
-            .filter_map(|spec| if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, Usage::Exclude, case_sensitive) { Some(p) } else { None }),
+            .filter_map(|spec| compile_glob_pattern(spec.as_ref(), base_path, Usage::Exclude, case_sensitive)),
     );
     m
 }
@@ -714,7 +712,7 @@ impl GlobVisitor {
                 if let Some(symlinks) = &entries.symlinks {
                     for (dir, &matched) in entries.directories.iter().zip(&directories) {
                         if matched && !symlinks.contains(dir) {
-                            let child = format!("{}{}", prefix, dir);
+                            let child = format!("{prefix}{dir}");
                             let (live_files, live_directories) = (live_files.clone(), live_directories.clone());
                             s.spawn(move |s| walk(s, w, child, child_depth, Some(&live_files), Some(&live_directories)));
                         }
@@ -776,7 +774,7 @@ impl GlobVisitor {
                     continue;
                 }
                 if let Some(idx) = self.file_matcher.matches_file_parts(&abs_prefix, file) {
-                    self.results[idx].push(format!("{}{}", path_prefix, file));
+                    self.results[idx].push(format!("{path_prefix}{file}"));
                 }
             }
         }
@@ -796,7 +794,7 @@ impl GlobVisitor {
             if !matched {
                 continue;
             }
-            let abs_dir = format!("{}{}", abs_prefix, dir);
+            let abs_dir = format!("{abs_prefix}{dir}");
             let mut child_real_path = String::new();
             if let Some(symlinks) = &entries.symlinks {
                 if !symlinks.contains(dir) {
@@ -807,7 +805,7 @@ impl GlobVisitor {
             }
             // If Symlinks is None, the FS doesn't track symlinks;
             // leave childRealPath empty to call Realpath (preserving old behavior).
-            self.visit(host, extensions, &format!("{}{}", path_prefix, dir), &abs_dir, depth, &child_real_path);
+            self.visit(host, extensions, &format!("{path_prefix}{dir}"), &abs_dir, depth, &child_real_path);
         }
     }
 }
@@ -884,7 +882,7 @@ pub fn new_spec_matcher(specs: &[impl AsRef<str>], base_path: &str, usage: Usage
     patterns.extend(
         specs
             .iter()
-            .filter_map(|spec| if let Some(p) = compile_glob_pattern(spec.as_ref(), base_path, usage, use_case_sensitive_file_names) { Some(p) } else { None }),
+            .filter_map(|spec| compile_glob_pattern(spec.as_ref(), base_path, usage, use_case_sensitive_file_names)),
     );
     if patterns.is_empty() {
         return None;

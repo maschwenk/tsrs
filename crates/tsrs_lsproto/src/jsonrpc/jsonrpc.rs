@@ -80,9 +80,7 @@ impl ID {
 
     // jsonrpc.go:84
     pub fn must_int(&self) -> i32 {
-        if !self.str.is_empty() {
-            panic!("ID is not an integer");
-        }
+        assert!(self.str.is_empty(), "ID is not an integer");
         self.int
     }
 }

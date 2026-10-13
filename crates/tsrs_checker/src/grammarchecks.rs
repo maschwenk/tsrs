@@ -318,9 +318,7 @@ impl Checker {
 
                 // if we've already seen leading decorators and leading modifiers, then trailing decorators are an invalid position
                 if has_leading_decorators && flags.intersects(ModifierFlags::Modifier) {
-                    if first_decorator.is_none() {
-                        panic!("Expected firstDecorator to be set");
-                    }
+                    assert!(first_decorator.is_some(), "Expected firstDecorator to be set");
                     let source_file = ast::get_source_file_of_node(modifier).unwrap();
                     if !self.has_parse_diagnostics(source_file) {
                         let err = self.error(Some(modifier), &diagnostics::Decorators_may_not_appear_after_export_or_export_default_if_they_also_appear_before_export, &[]);
@@ -934,7 +932,7 @@ impl Checker {
         if some_type(self, t, |_, t| t.flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique)) || self.is_generic_type(t) {
             return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_type_cannot_be_a_literal_type_or_generic_type_Consider_using_a_mapped_object_type_instead, &[]);
         }
-        if !every_type(self, t, |c, t| c.is_valid_index_key_type(t)) {
+        if !every_type(self, t, super::checker::Checker::is_valid_index_key_type) {
             return self.grammar_error_on_node(parameter.name, &diagnostics::An_index_signature_parameter_type_must_be_string_number_symbol_or_a_template_literal_type, &[]);
         }
         if index_signature.function_like_base.type_.get().is_none() {
@@ -1050,9 +1048,7 @@ impl Checker {
 
                         seen_extends_clause = true;
                     } else {
-                        if heritage_clause.token != Kind::ImplementsKeyword {
-                            panic!("Unexpected token {:?}", heritage_clause.token);
-                        }
+                        assert!(heritage_clause.token == Kind::ImplementsKeyword, "Unexpected token {:?}", heritage_clause.token);
                         if seen_implements_clause {
                             return self.grammar_error_on_first_token(heritage_clause_node, &diagnostics::X_implements_clause_already_seen, &[]);
                         }
@@ -1115,9 +1111,7 @@ impl Checker {
     pub(crate) fn check_grammar_for_generator(&mut self, node: P<Node>) -> bool {
         if let Some(body_data) = node.body_data() {
             if let Some(asterisk_token) = body_data.asterisk_token {
-                if node.kind() != Kind::FunctionDeclaration && node.kind() != Kind::FunctionExpression && node.kind() != Kind::MethodDeclaration {
-                    panic!("Unexpected node kind {:?}", node.kind());
-                }
+                assert!(!(node.kind() != Kind::FunctionDeclaration && node.kind() != Kind::FunctionExpression && node.kind() != Kind::MethodDeclaration), "Unexpected node kind {:?}", node.kind());
                 if node.flags().intersects(NodeFlags::Ambient) {
                     return self.grammar_error_on_node(asterisk_token, &diagnostics::Generators_are_not_allowed_in_an_ambient_context, &[]);
                 }
@@ -1363,7 +1357,7 @@ impl Checker {
                                 ModuleKind::ES2022 | ModuleKind::ESNext | ModuleKind::Preserve | ModuleKind::System => fallthrough_es = true,
                                 _ => fallthrough_default = true,
                             }
-                            if fallthrough_es && !(self.language_version >= ScriptTarget::ES2017) {
+                            if fallthrough_es && (self.language_version < ScriptTarget::ES2017) {
                                 fallthrough_default = true;
                             }
                             if fallthrough_default {
@@ -1519,7 +1513,7 @@ impl Checker {
     pub(crate) fn does_accessor_have_correct_parameter_count(&mut self, accessor: P<Node>) -> bool {
         // `getAccessorThisParameter` returns `nil` if the accessor's arity is incorrect,
         // even if there is a `this` parameter declared.
-        self.get_accessor_this_parameter(accessor).is_some() || accessor.parameters().len() == if accessor.kind() == Kind::GetAccessor { 0 } else { 1 }
+        self.get_accessor_this_parameter(accessor).is_some() || accessor.parameters().len() == usize::from(accessor.kind() != Kind::GetAccessor)
     }
 
     // grammarchecks.go:1351
@@ -1817,16 +1811,14 @@ impl Checker {
             if name.text() == "__esModule" {
                 return self.grammar_error_on_node_skipped_on_no_emit(name, &diagnostics::Identifier_expected_esModule_is_reserved_as_an_exported_marker_when_transforming_ECMAScript_modules, &[]);
             }
-        } else {
-            if let Some(result) = name.elements().iter().find_map(|&element| {
-                if let Some(element_name) = element.name() {
-                    return Some(self.check_grammar_for_es_module_marker_in_binding_name(element_name));
-                }
-
-                None
-            }) {
-                return result;
+        } else if let Some(result) = name.elements().iter().find_map(|&element| {
+            if let Some(element_name) = element.name() {
+                return Some(self.check_grammar_for_es_module_marker_in_binding_name(element_name));
             }
+
+            None
+        }) {
+            return result;
         }
         false
     }
@@ -1976,7 +1968,7 @@ impl Checker {
                         ModuleKind::ES2022 | ModuleKind::ESNext | ModuleKind::Preserve | ModuleKind::System => fallthrough_es = true,
                         _ => fallthrough_default = true,
                     }
-                    if fallthrough_es && !(self.language_version >= ScriptTarget::ES2017) {
+                    if fallthrough_es && (self.language_version < ScriptTarget::ES2017) {
                         fallthrough_default = true;
                     }
                     if fallthrough_default {
@@ -2183,10 +2175,8 @@ impl Checker {
             if self.check_grammar_for_invalid_dynamic_name(property_name, &diagnostics::A_computed_property_name_in_an_interface_must_refer_to_an_expression_whose_type_is_a_literal_type_or_a_unique_symbol_type) {
                 return true;
             }
-            if !ast::is_property_signature_declaration(node) {
-                // Interfaces cannot contain property declarations
-                panic!("Unexpected node kind {:?}", node.kind());
-            }
+            // Interfaces cannot contain property declarations
+            assert!(ast::is_property_signature_declaration(node), "Unexpected node kind {:?}", node.kind());
             if let Some(initializer) = node.initializer() {
                 return self.grammar_error_on_node(initializer, &diagnostics::An_interface_property_cannot_have_an_initializer, &[]);
             }
@@ -2194,10 +2184,8 @@ impl Checker {
             if self.check_grammar_for_invalid_dynamic_name(node.name().unwrap(), &diagnostics::A_computed_property_name_in_a_type_literal_must_refer_to_an_expression_whose_type_is_a_literal_type_or_a_unique_symbol_type) {
                 return true;
             }
-            if !ast::is_property_signature_declaration(node) {
-                // Type literals cannot contain property declarations
-                panic!("Unexpected node kind {:?}", node.kind());
-            }
+            // Type literals cannot contain property declarations
+            assert!(ast::is_property_signature_declaration(node), "Unexpected node kind {:?}", node.kind());
             if let Some(initializer) = node.initializer() {
                 return self.grammar_error_on_node(initializer, &diagnostics::A_type_literal_property_cannot_have_an_initializer, &[]);
             }

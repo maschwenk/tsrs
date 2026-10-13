@@ -16,7 +16,7 @@ pub fn binary_search_func<E, T: ?Sized>(
     let n = x.len();
     let (mut i, mut j) = (0usize, n);
     while i < j {
-        let h = (i + j) >> 1;
+        let h = usize::midpoint(i, j);
         if cmp(&x[h], target) == Ordering::Less {
             i = h + 1;
         } else {
@@ -88,7 +88,7 @@ fn sym_merge_cmp_func<E>(
     if m - a == 1 {
         let (mut i, mut j) = (m, b);
         while i < j {
-            let h = (i + j) >> 1;
+            let h = usize::midpoint(i, j);
             if cmp(&data[h], &data[a]) == Ordering::Less {
                 i = h + 1;
             } else {
@@ -105,8 +105,8 @@ fn sym_merge_cmp_func<E>(
     if b - m == 1 {
         let (mut i, mut j) = (a, m);
         while i < j {
-            let h = (i + j) >> 1;
-            if !(cmp(&data[m], &data[h]) == Ordering::Less) {
+            let h = usize::midpoint(i, j);
+            if cmp(&data[m], &data[h]) != Ordering::Less {
                 i = h + 1;
             } else {
                 j = h;
@@ -119,13 +119,13 @@ fn sym_merge_cmp_func<E>(
         }
         return;
     }
-    let mid = (a + b) >> 1;
+    let mid = usize::midpoint(a, b);
     let n = mid + m;
     let (mut start, mut r) = if m > mid { (n - b, mid) } else { (a, m) };
     let p = n - 1;
     while start < r {
-        let c = (start + r) >> 1;
-        if !(cmp(&data[p - c], &data[c]) == Ordering::Less) {
+        let c = usize::midpoint(start, r);
+        if cmp(&data[p - c], &data[c]) != Ordering::Less {
             start = c + 1;
         } else {
             r = c;
@@ -206,7 +206,7 @@ fn sift_down_cmp_func<E>(
         if child + 1 < hi && cmp(&data[first + child], &data[first + child + 1]) == Ordering::Less {
             child += 1;
         }
-        if !(cmp(&data[first + root], &data[first + child]) == Ordering::Less) {
+        if cmp(&data[first + root], &data[first + child]) != Ordering::Less {
             return;
         }
         data.swap(first + root, first + child);
@@ -277,7 +277,7 @@ fn pdqsort_cmp_func<E>(
             }
         }
 
-        if a > 0 && !(cmp(&data[a - 1], &data[pivot]) == Ordering::Less) {
+        if a > 0 && (cmp(&data[a - 1], &data[pivot]) != Ordering::Less) {
             let mid = partition_equal_cmp_func(data, a, b, pivot, cmp);
             a = mid;
             continue;
@@ -313,7 +313,7 @@ fn partition_cmp_func<E>(
     while i <= j && cmp(&data[i as usize], &data[a]) == Ordering::Less {
         i += 1;
     }
-    while i <= j && !(cmp(&data[j as usize], &data[a]) == Ordering::Less) {
+    while i <= j && (cmp(&data[j as usize], &data[a]) != Ordering::Less) {
         j -= 1;
     }
     if i > j {
@@ -328,7 +328,7 @@ fn partition_cmp_func<E>(
         while i <= j && cmp(&data[i as usize], &data[a]) == Ordering::Less {
             i += 1;
         }
-        while i <= j && !(cmp(&data[j as usize], &data[a]) == Ordering::Less) {
+        while i <= j && (cmp(&data[j as usize], &data[a]) != Ordering::Less) {
             j -= 1;
         }
         if i > j {
@@ -353,7 +353,7 @@ fn partition_equal_cmp_func<E>(
     let (mut i, mut j) = (a as isize + 1, b as isize - 1);
 
     loop {
-        while i <= j && !(cmp(&data[a], &data[i as usize]) == Ordering::Less) {
+        while i <= j && (cmp(&data[a], &data[i as usize]) != Ordering::Less) {
             i += 1;
         }
         while i <= j && cmp(&data[a], &data[j as usize]) == Ordering::Less {
@@ -380,7 +380,7 @@ fn partial_insertion_sort_cmp_func<E>(
     let mut i = a + 1;
     for _ in 0..MAX_STEPS {
         i += (i..b)
-            .take_while(|&index| !(cmp(&data[index], &data[index - 1]) == Ordering::Less))
+            .take_while(|&index| cmp(&data[index], &data[index - 1]) != Ordering::Less)
             .count();
 
         if i == b {
@@ -397,7 +397,7 @@ fn partial_insertion_sort_cmp_func<E>(
         if i - a >= 2 {
             let mut j = i - 1;
             while j >= 1 {
-                if !(cmp(&data[j], &data[j - 1]) == Ordering::Less) {
+                if cmp(&data[j], &data[j - 1]) != Ordering::Less {
                     break;
                 }
                 data.swap(j, j - 1);
@@ -407,7 +407,7 @@ fn partial_insertion_sort_cmp_func<E>(
         if b - i >= 2 {
             let mut j = i + 1;
             while j < b {
-                if !(cmp(&data[j], &data[j - 1]) == Ordering::Less) {
+                if cmp(&data[j], &data[j - 1]) != Ordering::Less {
                     break;
                 }
                 data.swap(j, j - 1);

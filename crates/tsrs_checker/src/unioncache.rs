@@ -208,7 +208,7 @@ fn make_key(types: &[P<Type>], reduction: UnionReduction, alias: AliasArg<'_>, s
         }
     }
     h ^= h >> 29;
-    let meta = 1 | (reduction as u16) << 1 | (types.len() as u16) << 3 | u16::from(has_alias) << 7;
+    let meta = 1 | ((reduction as u16) << 1) | ((types.len() as u16) << 3) | (u16::from(has_alias) << 7);
     Some((key, meta, (h >> shift) as usize))
 }
 
@@ -227,14 +227,14 @@ fn make_long_key(words: &mut Vec<PKey>, types: &[P<Type>], reduction: UnionReduc
         words.push(symbol?.key());
         words.extend(type_arguments.iter().map(|t| t.key()));
     }
-    let mut h: u64 = reduction as u64 | (types.len() as u64) << 2;
+    let mut h: u64 = reduction as u64 | ((types.len() as u64) << 2);
     h = words.iter().fold(h, |mut h, &k| {
         h = (h ^ k as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15);
 
         h
     });
     h ^= h >> 29;
-    Some((reduction as u16 | u16::from(has_alias) << 2, h))
+    Some((reduction as u16 | (u16::from(has_alias) << 2), h))
 }
 
 impl Checker {
@@ -263,9 +263,7 @@ impl Checker {
             if cache.mode == UnionCacheMode::Shadow {
                 count(cache.stats, &SHADOW_CHECKS);
                 let fresh = self.get_union_type_ex_uncached(types, union_reduction, alias, None);
-                if fresh != cached {
-                    panic!("TSRS_UNION_CACHE=shadow: union of {} types ({union_reduction:?}, alias {}): cached type {}, fresh type {}", types.len(), !alias.is_none(), cached.id.0, fresh.id.0);
-                }
+                assert!(fresh == cached, "TSRS_UNION_CACHE=shadow: union of {} types ({union_reduction:?}, alias {}): cached type {}, fresh type {}", types.len(), !alias.is_none(), cached.id.0, fresh.id.0);
             }
             return cached;
         }
@@ -314,17 +312,15 @@ impl Checker {
             if cache.mode == UnionCacheMode::Shadow {
                 count(cache.stats, &SHADOW_CHECKS);
                 let fresh = self.get_union_type_ex_uncached(types, union_reduction, alias, None);
-                if fresh != cached {
-                    panic!(
-                        "TSRS_UNION_CACHE=shadow: union of [{}] ({union_reduction:?}, alias {}): cached type {} (flags {:?}), fresh type {} (flags {:?})",
-                        types.iter().map(|t| t.id.0.to_string()).collect::<Vec<_>>().join(", "),
-                        !alias.is_none(),
-                        cached.id.0,
-                        cached.flags(),
-                        fresh.id.0,
-                        fresh.flags()
-                    );
-                }
+                assert!(fresh == cached,
+                    "TSRS_UNION_CACHE=shadow: union of [{}] ({union_reduction:?}, alias {}): cached type {} (flags {:?}), fresh type {} (flags {:?})",
+                    types.iter().map(|t| t.id.0.to_string()).collect::<Vec<_>>().join(", "),
+                    !alias.is_none(),
+                    cached.id.0,
+                    cached.flags(),
+                    fresh.id.0,
+                    fresh.flags()
+                );
             }
             return cached;
         }

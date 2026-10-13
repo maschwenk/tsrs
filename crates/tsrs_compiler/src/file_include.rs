@@ -259,7 +259,7 @@ fn compute_diagnostic(r: P<FileIncludeReason>, program: &Program, to_file_name: 
                     } else {
                         new_compiler_diagnostic(
                             &diagnostics::Matched_by_include_pattern_0_in_1,
-                            &[&matched_include_spec, &to_file_name(&config.config_name())],
+                            &[&matched_include_spec, &to_file_name(config.config_name())],
                         )
                     }
                 } else {

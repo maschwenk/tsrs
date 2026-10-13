@@ -73,7 +73,7 @@ pub struct DiagAndArgs {
 
 impl Tracer {
     fn write(&mut self, diag: &'static Message, args: &[&dyn fmt::Display]) {
-        self.traces.push(DiagAndArgs { message: diag, args: args.iter().map(|a| a.to_string()).collect() });
+        self.traces.push(DiagAndArgs { message: diag, args: args.iter().map(std::string::ToString::to_string).collect() });
     }
 
     fn write_strings(&mut self, diag: &'static Message, args: &[String]) {
@@ -709,7 +709,7 @@ impl<'r> ResolutionState<'r> {
 
     fn resolve_node_like(&mut self) -> ResolvedModule {
         if let Some(t) = self.tracer.as_mut() {
-            let conditions = self.conditions.iter().map(|c| format!("'{}'", c)).collect::<Vec<_>>().join(", ");
+            let conditions = self.conditions.iter().map(|c| format!("'{c}'")).collect::<Vec<_>>().join(", ");
             if self.esm_mode {
                 t.write(&diagnostics::Resolving_in_0_mode_with_conditions_1, &[&"ESM", &conditions]);
             } else {
@@ -804,7 +804,7 @@ impl<'r> ResolutionState<'r> {
         }
         let trailing_parts = &parts[name_parts.len()..];
         let subpath = if !trailing_parts.is_empty() {
-            let trailing: Vec<&str> = trailing_parts.iter().map(|s| s.as_str()).collect();
+            let trailing: Vec<&str> = trailing_parts.iter().map(std::string::String::as_str).collect();
             tspath::combine_paths(".", &trailing)
         } else {
             ".".to_string()
@@ -951,9 +951,8 @@ impl<'r> ResolutionState<'r> {
                     true,
                     potential_target,
                 ));
-            } else if module_name.starts_with(potential_target) {
+            } else if let Some(subpath) = module_name.strip_prefix(potential_target) {
                 let target = &lookup_table[potential_target];
-                let subpath = &module_name[potential_target.len()..];
                 return Some(self.load_module_from_target_export_or_import(
                     extensions,
                     module_name,
@@ -994,7 +993,7 @@ impl<'r> ResolutionState<'r> {
                 }
                 if !target_string.starts_with("./") {
                     if is_imports && !target_string.starts_with("../") && !target_string.starts_with('/') && !tspath::is_rooted_disk_path(target_string) {
-                        let combined_lookup = if is_pattern { target_string.replace('*', subpath) } else { format!("{}{}", target_string, subpath) };
+                        let combined_lookup = if is_pattern { target_string.replace('*', subpath) } else { format!("{target_string}{subpath}") };
                         let scope_containing_directory = tspath::ensure_trailing_directory_separator(scope.package_directory);
                         if let Some(t) = self.tracer.as_mut() {
                             t.write(&diagnostics::Using_0_subpath_1_with_target_2, &[&"imports", &key, &combined_lookup]);
@@ -1040,13 +1039,13 @@ impl<'r> ResolutionState<'r> {
                 }
 
                 if let Some(t) = self.tracer.as_mut() {
-                    let message_target = if is_pattern { target_string.replace('*', subpath) } else { format!("{}{}", target_string, subpath) };
+                    let message_target = if is_pattern { target_string.replace('*', subpath) } else { format!("{target_string}{subpath}") };
                     t.write(&diagnostics::Using_0_subpath_1_with_target_2, &[&if is_imports { "imports" } else { "exports" }, &key, &message_target]);
                 }
                 let final_path = if is_pattern {
                     tspath::get_normalized_absolute_path(&resolved_target.replace('*', subpath), self.current_directory())
                 } else {
-                    tspath::get_normalized_absolute_path(&format!("{}{}", resolved_target, subpath), self.current_directory())
+                    tspath::get_normalized_absolute_path(&format!("{resolved_target}{subpath}"), self.current_directory())
                 };
                 let mut input_link =
                     self.try_load_input_file_for_path(&final_path, subpath, &tspath::combine_paths(scope.package_directory, &["package.json"]), is_imports);
@@ -1444,9 +1443,7 @@ impl<'r> ResolutionState<'r> {
 
         if resolved.is_resolved() {
             let resolved = resolved.unwrap();
-            if !tspath::extension_is_ts(&resolved.extension) {
-                panic!("expected a TypeScript file extension");
-            }
+            assert!(tspath::extension_is_ts(&resolved.extension), "expected a TypeScript file extension");
             resolved_type_reference_directive.resolved_file_name = alloc_string(&resolved.path);
             resolved_type_reference_directive.primary = primary;
             resolved_type_reference_directive.package_id = resolved.package_id;
@@ -1529,7 +1526,7 @@ impl<'r> ResolutionState<'r> {
             let matched_star = matched_pattern.matched_text(module_name);
             trace!(self.tracer, diagnostics::Module_name_0_matched_pattern_1, module_name, matched_pattern.text);
             for subst in paths.get(matched_pattern.text.as_str()).map_or(&[][..], PathSubstitutions::substitutions) {
-                let path = subst.replacen('*', &matched_star, 1);
+                let path = subst.replacen('*', matched_star, 1);
                 let candidate = tspath::normalize_path(&tspath::combine_paths(containing_directory, &[&path]));
                 trace!(self.tracer, diagnostics::Trying_substitution_0_candidate_module_location_Colon_1, subst, path);
                 // A path mapping may have an extension
@@ -1679,7 +1676,7 @@ impl<'r> ResolutionState<'r> {
         let mut extensionless = tspath::remove_file_extension(candidate);
         if extensionless == candidate {
             // Once TS native extensions are handled, handle arbitrary extensions for declaration file mapping
-            let extra_extensions: Vec<&str> = self.resolver.extra_extensions.iter().map(|s| s.as_str()).collect();
+            let extra_extensions: Vec<&str> = self.resolver.extra_extensions.iter().map(std::string::String::as_str).collect();
             let mut extension = tspath::get_longest_extension_from_path(candidate, &extra_extensions, false);
             if extension.is_empty() {
                 extension = candidate[candidate.rfind('.').unwrap()..].to_string();
@@ -1860,8 +1857,8 @@ impl<'r> ResolutionState<'r> {
                         return resolved;
                     }
                 }
-                if extensions.intersects(Extensions::Declaration) && !tspath::is_declaration_file_name(&format!("{}{}", extensionless, original_extension)) {
-                    let resolved = self.try_extension(&format!(".d{}.ts", original_extension), extensionless, false);
+                if extensions.intersects(Extensions::Declaration) && !tspath::is_declaration_file_name(&format!("{extensionless}{original_extension}")) {
+                    let resolved = self.try_extension(&format!(".d{original_extension}.ts"), extensionless, false);
                     if !resolved.should_continue_searching() {
                         return resolved;
                     }
@@ -2011,10 +2008,8 @@ impl<'r> ResolutionState<'r> {
                     loader(r, extensions, candidate, &package_file)
                 });
                 if let Some(result) = result {
-                    if !result.package_id.name.is_empty() {
-                        // !!! are these asserts really necessary?
-                        panic!("expected packageId to be empty");
-                    }
+                    // !!! are these asserts really necessary?
+                    assert!(result.package_id.name.is_empty(), "expected packageId to be empty");
                     return Some(result);
                 }
             }
@@ -2023,10 +2018,8 @@ impl<'r> ResolutionState<'r> {
         if !package_file.is_empty() {
             let package_file_result = loader(self, ext, &package_file, &package_file);
             if let Some(package_file_result) = package_file_result {
-                if !package_file_result.package_id.name.is_empty() {
-                    // !!! are these asserts really necessary?
-                    panic!("expected packageId to be empty");
-                }
+                // !!! are these asserts really necessary?
+                assert!(package_file_result.package_id.name.is_empty(), "expected packageId to be empty");
                 return Some(package_file_result);
             }
         }
@@ -2176,7 +2169,7 @@ impl<'r> ResolutionState<'r> {
         names.sort();
         let mut builder = String::new();
         for name in names {
-            let peer_package_json = self.get_package_json_info(&format!("{}{}", node_modules, name));
+            let peer_package_json = self.get_package_json_info(&format!("{node_modules}{name}"));
             if peer_package_json.exists() {
                 let version = &peer_package_json.unwrap().contents.unwrap().get().version.value;
                 builder.push('+');
@@ -2525,7 +2518,7 @@ fn static_extension(extension: &str) -> &'static str {
         tspath::EXTENSION_CTS,
         tspath::EXTENSION_DCTS,
     ];
-    if let Some(result) = KNOWN.iter().find_map(|known| if *known == extension { Some(known) } else { None }) {
+    if let Some(result) = KNOWN.iter().copied().find(|known| *known == extension) {
         return result;
     }
     alloc_string(extension)

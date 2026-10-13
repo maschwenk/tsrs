@@ -1,4 +1,3 @@
-use std::io::Write as _;
 use std::ops::Deref;
 use std::sync::Arc;
 
@@ -489,15 +488,15 @@ pub fn file_name_to_document_uri(file_name: &str) -> lsproto::DocumentUri {
     }
     if tspath::is_dynamic_file_name(file_name) {
         let Some((scheme, rest)) = file_name[2..].split_once('/') else {
-            panic!("invalid file name: {}", file_name);
+            panic!("invalid file name: {file_name}");
         };
         let Some((authority, path)) = rest.split_once('/') else {
-            panic!("invalid file name: {}", file_name);
+            panic!("invalid file name: {file_name}");
         };
         if authority == "ts-nul-authority" {
-            return lsproto::DocumentUri(format!("{}:{}", scheme, path));
+            return lsproto::DocumentUri(format!("{scheme}:{path}"));
         }
-        return lsproto::DocumentUri(format!("{}://{}/{}", scheme, authority, path));
+        return lsproto::DocumentUri(format!("{scheme}://{authority}/{path}"));
     }
 
     let (mut volume, file_name) = match tspath::split_volume_path(file_name) {
@@ -648,7 +647,7 @@ impl Converters {
 fn utf16_rune_len(r: stringutil::Rune) -> Option<u32> {
     if (0..0xd800).contains(&r) || (0xe000..0x10000).contains(&r) {
         Some(1)
-    } else if (0x10000..=0x10ffff).contains(&r) {
+    } else if (0x1_0000..=0x10_ffff).contains(&r) {
         Some(2)
     } else {
         None
@@ -861,7 +860,7 @@ fn diagnostic_severity(category: Category) -> lsproto::DiagnosticSeverity {
         Category::Suggestion => lsproto::DiagnosticSeverity::Hint,
         Category::Message => lsproto::DiagnosticSeverity::Information,
         Category::Warning => lsproto::DiagnosticSeverity::Warning,
-        _ => lsproto::DiagnosticSeverity::Error,
+        Category::Error => lsproto::DiagnosticSeverity::Error,
     }
 }
 
@@ -872,7 +871,6 @@ fn message_chain_to_string(diagnostic: P<Diagnostic>) -> String {
     }
     let mut b: Vec<u8> = Vec::new();
     tsrs_compiler::diagnosticwriter::write_flattened_diagnostic_message(&mut b, diagnostic, "\n");
-    b.flush().ok();
     tsrs_core::utf8::into_string(b).unwrap()
 }
 

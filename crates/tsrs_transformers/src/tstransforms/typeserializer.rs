@@ -126,7 +126,7 @@ impl MetadataSerializer {
 
         let mut expressions: Vec<P<Node>> = Vec::new();
         let parameters = get_parameters_of_decorated_declaration(value_declaration, container);
-        expressions.extend(parameters.map(|p| p.nodes()).unwrap_or(&[]).iter().enumerate().filter_map(|(i, parameter)| {
+        expressions.extend(parameters.map_or(&[] as &[P<Node>], |p| p.nodes()).iter().enumerate().filter_map(|(i, parameter)| {
             let parameter = *parameter;
             if i == 0 && ast::is_identifier(parameter.name().unwrap()) && parameter.name().unwrap().text() == "this" {
                 return None;

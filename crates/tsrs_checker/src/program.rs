@@ -49,4 +49,12 @@ pub trait Program: Send + Sync {
     fn source_files_complete(&self) -> bool {
         true
     }
+
+    /// Not in Go: where tsgo's compiler, at its default checker count, type checks `file`: the checker's index and the
+    /// file's index in the program (each checker visits its files in program order). None when it does not type check
+    /// the file, or for an external project/API pool with no fixed assignment (then every declaring file counts as
+    /// visited first).
+    fn tsgo_default_check_slot(&self, _file: P<SourceFile>) -> Option<(u32, u32)> {
+        None
+    }
 }

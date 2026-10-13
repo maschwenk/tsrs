@@ -1,7 +1,10 @@
 # Contributing to tsrs
 
-tsrs is a Rust port of the TypeScript 7 type checker (the Go code in microsoft/TypeScript, `tsc/internal`). Bug
-reports with a small reproduction are the most useful contribution; fixes are welcome too.
+tsrs is a Rust port of the TypeScript 7 type checker (the Go code in microsoft/TypeScript, `tsc/internal`).
+
+Issues and pull requests are currently disabled until we have the bandwidth to triage them. This guide covers
+building from source, reproducing bugs and the checks required for changes. When contributions reopen, a small
+reproduction will be the most useful starting point for a bug report.
 
 The port was written largely by AI coding agents, directed and reviewed by Max Schwenk. Its correctness rests on
 the [conformance results](docs/COMPATIBILITY.md#conformance) rather than on review alone.
@@ -72,7 +75,7 @@ For a bug outside the suite, add a reproduction under `testdata/regressions/<nam
 
 ## Landing changes
 
-- External contributors: open a pull request against `main`. CI (`.depot/workflows/ci.yml`, on Depot CI) runs on pushes
+- Changes target `main`. CI (`.depot/workflows/ci.yml`, on Depot CI) runs on pushes
   to `main`, on pull requests into `main` (drafts too) and by manual dispatch, and must pass. Depot CI does not run
   pull requests from forks, so those run only the macOS job of `.github/workflows/node-api.yml`, after a
   maintainer's approval, and never get repository secrets.

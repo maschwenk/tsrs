@@ -100,7 +100,7 @@ impl Session {
 }
 
 fn panic_message(p: &(dyn std::any::Any + Send)) -> String {
-    p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_else(|| "unknown panic".to_string())
+    p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(std::string::ToString::to_string)).unwrap_or_else(|| "unknown panic".to_string())
 }
 
 /// The printer's panics print a node kind with `{:?}` (`TypeLiteral`); Go's `%v` of `ast.Kind` prints

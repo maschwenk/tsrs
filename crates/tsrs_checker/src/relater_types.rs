@@ -142,7 +142,7 @@ impl RelationKey {
     #[inline]
     pub(crate) fn pair(source: TypeId, target: TypeId, intersection_state: IntersectionState) -> Option<RelationKey> {
         let (s, t, i) = (source.0 as u64, target.0 as u64, intersection_state.bits() as u64);
-        (s >> Self::ID_BITS == 0 && t >> Self::ID_BITS == 0 && i >> 2 == 0).then(|| RelationKey::Pair(s | t << Self::ID_BITS | i << (2 * Self::ID_BITS)))
+        (s >> Self::ID_BITS == 0 && t >> Self::ID_BITS == 0 && i >> 2 == 0).then_some(RelationKey::Pair(s | (t << Self::ID_BITS) | (i << (2 * Self::ID_BITS))))
     }
 }
 

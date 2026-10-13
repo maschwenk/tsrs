@@ -119,7 +119,7 @@ impl Tracker {
                 trackerEditKind::ReplaceWithSingleNode => {
                     self.get_formatted_text_of_node(change.node.unwrap(), target_source_file, projection, pos, &change.options)
                 }
-                _ => panic!("change kind {} should have been handled earlier", change.kind as i32),
+                trackerEditKind::Text => panic!("change kind {} should have been handled earlier", change.kind as i32),
             };
             // Strip initial indentation if text will be inserted in the middle of the line.
             let mut no_indent: &str = &text;
@@ -181,7 +181,7 @@ impl Tracker {
             return text;
         }
         let pos = pos as usize;
-        let line_start = original[..pos].rfind(['\r', '\n']).map(|i| i + 1).unwrap_or(0);
+        let line_start = original[..pos].rfind(['\r', '\n']).map_or(0, |i| i + 1);
         let before_point = &original[line_start..pos];
         if before_point.is_empty() {
             // At the start of a line: the existing text keeps its indentation, and the inserted line needs it —
@@ -196,7 +196,7 @@ impl Tracker {
             return text;
         }
         // Just past the indentation: the inserted line already has it, the text pushed down needs it back.
-        format!("{}{}", text, before_point)
+        format!("{text}{before_point}")
     }
 
     // trackerimpl.go:262

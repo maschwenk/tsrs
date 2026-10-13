@@ -140,6 +140,11 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Unconditionally refreshing loaded interface diagnostic caches to cover canonical report-placement changes:
+  Stagehand warm default 136 -> 402 ms, 9.14 -> 26.50 G instructions, 424 -> 879 MiB. Persisting a versioned
+  signature of the actual virtual check slots restores reuse while preserving export-alias invalidation
+  (`notes/fix-history-dependent-diagnostics.md`).
+
 - Combined symbol lookup/insert APIs from PR 338 (`notes/perf-lookup-insert.md`): the repository-wide refactor
   originally increased single-threaded instructions on 11/17 public projects. Restoring the existing symbol-table
   lookup/insertion paths and binder/checker symbol creation, while keeping ordinary map-entry cleanup, leaves all

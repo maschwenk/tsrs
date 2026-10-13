@@ -26,7 +26,8 @@ pub enum ErrorTag {
     Sentinel(&'static str),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[expect(clippy::error_impl_error, reason = "the public name mirrors Go's package-level error value used throughout the protocol port")]
 pub struct Error {
     pub message: String,
     pub tags: Vec<ErrorTag>,

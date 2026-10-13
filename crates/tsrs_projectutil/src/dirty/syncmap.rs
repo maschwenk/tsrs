@@ -55,7 +55,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> Value<T> for lock
 
     // syncmap.go:42
     fn locked(&self, f: &mut dyn FnMut(&dyn Value<T>)) {
-        f(self)
+        f(self);
     }
 }
 
@@ -228,7 +228,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> SyncMapEntry<K, T
     // syncmap.go:180
     pub fn delete_if(self: &Arc<Self>, cond: impl FnOnce(&T) -> bool) {
         let mut cond = Some(cond);
-        self.delete_if_dyn(&mut |v| (cond.take().unwrap())(v))
+        self.delete_if_dyn(&mut |v| (cond.take().unwrap())(v));
     }
 
     fn delete_if_dyn(self: &Arc<Self>, cond: &mut dyn FnMut(&T) -> bool) {
@@ -262,7 +262,7 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> Value<T> for Arc<
     }
 
     fn change(&self, apply: &mut dyn FnMut(&mut T)) {
-        self.change_dyn(apply)
+        self.change_dyn(apply);
     }
 
     fn change_if(&self, cond: &mut dyn FnMut(&T) -> bool, apply: &mut dyn FnMut(&mut T)) -> bool {
@@ -270,11 +270,11 @@ impl<K: Hash + Eq + Clone + Send + Sync, T: Cloneable + Clone> Value<T> for Arc<
     }
 
     fn delete(&self) {
-        SyncMapEntry::delete(self)
+        SyncMapEntry::delete(self);
     }
 
     fn locked(&self, f: &mut dyn FnMut(&dyn Value<T>)) {
-        SyncMapEntry::locked(self, f)
+        SyncMapEntry::locked(self, f);
     }
 }
 

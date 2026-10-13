@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "module": "nodenext",
+    "noEmit": true,
+    "traceResolution": true,
+    "types": []
+  },
+  "files": ["a.ts", "b.ts"]
+}

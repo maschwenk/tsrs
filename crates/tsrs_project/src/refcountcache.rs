@@ -48,10 +48,10 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
     //
     // The caller is responsible for calling Deref when done with the value.
     pub fn acquire(&self, identity: &K, acquire_args: AcquireArgs) -> V {
-        self.load_or_store_new_locked_entry(&identity, |entry, loaded| {
+        self.load_or_store_new_locked_entry(identity, |entry, loaded| {
             if !loaded {
                 // New entry - parse the value
-                let value = (self.parse)(&identity, acquire_args);
+                let value = (self.parse)(identity, acquire_args);
                 entry.value = Some(value.clone());
                 return value;
             }
@@ -87,7 +87,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
     //
     // The caller is responsible for calling Deref when a value is returned without error.
     pub fn acquire_or_error<E>(&self, identity: &K, produce: impl FnOnce() -> Result<V, E>) -> Result<V, E> {
-        self.load_or_store_new_locked_entry(&identity, |entry, loaded| {
+        self.load_or_store_new_locked_entry(identity, |entry, loaded| {
             if loaded {
                 return Ok(entry.value.clone().unwrap());
             }
@@ -95,7 +95,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
                 Err(err) => {
                     // Undo the speculative entry so failures are not cached.
                     entry.ref_count = 0;
-                    self.entries.delete(&identity);
+                    self.entries.delete(identity);
                     Err(err)
                 }
                 Ok(value) => {
@@ -110,7 +110,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
     // Ref increments the reference count for an existing entry.
     // Panics if the entry does not exist.
     pub fn ref_(&self, identity: &K) {
-        let Some(entry) = self.entries.load(&identity) else {
+        let Some(entry) = self.entries.load(identity) else {
             panic!("cache entry not found");
         };
         let mut st = entry.mu.lock().unwrap();
@@ -120,7 +120,7 @@ impl<K: Hash + Eq + Clone, V: Clone, AcquireArgs> RefCountCache<K, V, AcquireArg
             if let (Some(on_revive), Some(value)) = (&self.on_revive, &value) {
                 on_revive(value);
             }
-            self.load_or_store_new_locked_entry(&identity, |new_entry, _| {
+            self.load_or_store_new_locked_entry(identity, |new_entry, _| {
                 new_entry.value = value;
             });
             return;

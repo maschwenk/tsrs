@@ -274,7 +274,7 @@ impl SplitFile {
                 "TS{} at {:?}: {:?}",
                 d.code(),
                 d.pos(),
-                d.message().map(|m| m.text())
+                d.message().map(tsrs_diagnostics::Message::text)
             )
         };
         if let Some(&d) = others.iter().find(|&&d| !contains(whole, d)) {

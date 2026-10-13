@@ -107,7 +107,7 @@ impl esDecoratorTransformer {
                 property_name_computed,
                 property_name_expr.unwrap(),
                 ast::is_static(member),
-                member_name.is_some_and(|n| ast::is_private_identifier(n)),
+                member_name.is_some_and(ast::is_private_identifier),
                 // 15.7.3 CreateDecoratorAccessObject (kind, name)
                 // 2. If _kind_ is ~field~, ~method~, ~accessor~, or ~getter~, then ...
                 ast::is_property_declaration(member) || ast::is_get_accessor_declaration(member) || ast::is_method_declaration(member),
@@ -179,7 +179,7 @@ impl esDecoratorTransformer {
             self.exit_name();
         }
 
-        if result.modifiers.map_or(true, |m| m.nodes().is_empty()) && (ast::is_method_declaration(member) || ast::is_property_declaration(member)) {
+        if result.modifiers.is_none_or(|m| m.nodes().is_empty()) && (ast::is_method_declaration(member) || ast::is_property_declaration(member)) {
             // Don't emit leading comments on the name for methods and properties without modifiers, otherwise we
             // will end up printing duplicate comments.
             ec.set_emit_flags(result.name.unwrap(), EmitFlags::NoLeadingComments);

@@ -85,7 +85,7 @@ impl CheckerRegistry {
     fn lock(&self) -> std::sync::MutexGuard<'_, RegistryState> {
         // A panic while holding this short-lived lock cannot leave the maps half-updated in a way that
         // matters (every operation is a single insert/lookup), so recover from poisoning.
-        self.state.lock().unwrap_or_else(|e| e.into_inner())
+        self.state.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn check_live(st: &RegistryState) -> CheckerResult<()> {

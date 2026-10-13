@@ -157,9 +157,7 @@ pub fn parse_test_files_and_symlinks_with_options<T>(
                 // First metadata marker in the file
                 let has_content_before_first_filename =
                     !current_file_content.is_empty() && skip_trivia(&current_file_content, 0) != current_file_content.len();
-                if has_content_before_first_filename && !options.allow_implicit_first_file {
-                    panic!("Non-comment test content appears before the first '// @Filename' directive");
-                }
+                assert!(!has_content_before_first_filename || options.allow_implicit_first_file, "Non-comment test content appears before the first '// @Filename' directive");
 
                 // If we have content before the first @Filename and AllowImplicitFirstFile is true,
                 // we need to save it as an implicit first file before starting the new file

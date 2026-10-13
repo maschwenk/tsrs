@@ -15,12 +15,12 @@ use crate::ErrorCode;
 
 // A decoding error. Boxed so that every `Result<T, JsonError>` the decoders pass around stays small; the
 // fields are reached through `Deref`.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct JsonError(Box<SemanticError>);
 
 // json/v2's `SemanticError` (plus plain syntactic errors). `pointer` holds the JSON pointer tokens
 // innermost first; `within` appends as the error propagates outwards.
-#[derive(Clone, Debug, PartialEq, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, Default)]
 pub struct SemanticError {
     pub go_type: String,
     pub json_kind: u8,

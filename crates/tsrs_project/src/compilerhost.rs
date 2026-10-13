@@ -68,9 +68,7 @@ impl compilerHost {
     // after the snapshot has been finalized. See the usage in snapshot.go for more details.
     pub(crate) fn freeze(&self, snapshot_fs: Arc<SnapshotFS>, config_file_registry: Arc<ConfigFileRegistry>) {
         let mut builder = self.builder.write().unwrap();
-        if builder.is_none() {
-            panic!("freeze can only be called once");
-        }
+        assert!(!builder.is_none(), "freeze can only be called once");
         self.source_fs.set_source(snapshot_fs);
         self.source_fs.disable_tracking();
         *self.config_file_registry.write().unwrap() = Some(config_file_registry);
@@ -81,9 +79,7 @@ impl compilerHost {
 
     // compilerhost.go:69
     fn ensure_alive(&self) {
-        if self.builder.read().unwrap().is_none() || self.project.read().unwrap().is_none() {
-            panic!("method must not be called after snapshot initialization");
-        }
+        assert!(!(self.builder.read().unwrap().is_none() || self.project.read().unwrap().is_none()), "method must not be called after snapshot initialization");
     }
 
     /// The builder's parse cache and the journal of the references its programs take.

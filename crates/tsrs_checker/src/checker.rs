@@ -542,7 +542,7 @@ impl InferenceContext {
             return;
         }
         if let TypeMapperData::Inference { n, .. } = m.data() {
-            debug_assert!(n.mapper.get() == Some(m));
+            debug_assert_eq!(n.mapper.get(), Some(m));
             InferenceContext::recycle(n);
         }
     }
@@ -1411,8 +1411,8 @@ pub struct Checker {
     pub global_builtin_async_iterator_types_cache: Option<&'static [P<Type>]>,
     pub sync_iteration_types_resolver: P<IterationTypesResolver>,
     pub async_iteration_types_resolver: P<IterationTypesResolver>,
-    pub _jsx_namespace: String,
-    pub _jsx_factory_entity: Option<P<Node>>,
+    pub jsx_namespace: String,
+    pub jsx_factory_entity: Option<P<Node>>,
     pub skip_direct_inference_nodes: Set<P<Node>>,
     pub ctx: Option<Context>, // Go nil until checkSourceFile
     pub active_mappers: Vec<P<TypeMapper>>,
@@ -1527,7 +1527,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         can_collect_symbol_alias_accessibility_data: compiler_options.verbatim_module_syntax.is_false_or_unknown(),
         was_canceled: false,
         array_variances: alloc_slice(&[VarianceFlags::Covariant]),
-        globals: SymbolTable::with_capacity(count_global_symbols(files) as usize),
+        globals: SymbolTable::with_capacity(count_global_symbols(files)),
         string_literal_types: StringLiteralTypes::default(),
         number_literal_types: FxHashMap::default(),
         nan_type: None,
@@ -1821,8 +1821,8 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         global_builtin_async_iterator_types_cache: None,
         sync_iteration_types_resolver: dummy_iteration_resolver,
         async_iteration_types_resolver: dummy_iteration_resolver,
-        _jsx_namespace: String::new(),
-        _jsx_factory_entity: None,
+        jsx_namespace: String::new(),
+        jsx_factory_entity: None,
         skip_direct_inference_nodes: Set::new(),
         ctx: None,
         active_mappers: Vec::new(),
@@ -1901,11 +1901,11 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
     c.numeric_string_type = c.get_template_literal_type(&["", ""], &[c.number_type]); // The `${number}` type
     c.template_constraint_type = c.get_union_type(&[c.string_type, c.number_type, c.boolean_type, c.bigint_type, c.null_type, c.undefined_type]);
     c.unique_literal_type = c.new_intrinsic_type(TypeFlags::Never, "never"); // Special `never` flagged by union reduction to behave as a literal
-    c.unique_literal_mapper = new_function_type_mapper(|c, t| c.get_unique_literal_type_for_type_parameter(t));
-    c.report_unreliable_mapper = new_function_type_mapper(|c, t| c.report_unreliable_worker(t));
-    c.report_unmeasurable_mapper = new_function_type_mapper(|c, t| c.report_unmeasurable_worker(t));
-    c.restrictive_mapper = new_function_type_mapper(|c, t| c.restrictive_mapper_worker(t));
-    c.permissive_mapper = new_function_type_mapper(|c, t| c.permissive_mapper_worker(t));
+    c.unique_literal_mapper = new_function_type_mapper(Checker::get_unique_literal_type_for_type_parameter);
+    c.report_unreliable_mapper = new_function_type_mapper(Checker::report_unreliable_worker);
+    c.report_unmeasurable_mapper = new_function_type_mapper(Checker::report_unmeasurable_worker);
+    c.restrictive_mapper = new_function_type_mapper(Checker::restrictive_mapper_worker);
+    c.permissive_mapper = new_function_type_mapper(Checker::permissive_mapper_worker);
     c.empty_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.empty_jsx_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
     c.empty_fresh_jsx_object_type = c.new_anonymous_type(None /*symbol*/, None, &[], &[], &[]);
@@ -2319,8 +2319,8 @@ impl Checker {
             global_builtin_async_iterator_types_cache: base.global_builtin_async_iterator_types_cache.clone(),
             sync_iteration_types_resolver: base.sync_iteration_types_resolver.clone(),
             async_iteration_types_resolver: base.async_iteration_types_resolver.clone(),
-            _jsx_namespace: base._jsx_namespace.clone(),
-            _jsx_factory_entity: base._jsx_factory_entity.clone(),
+            jsx_namespace: base.jsx_namespace.clone(),
+            jsx_factory_entity: base.jsx_factory_entity,
             skip_direct_inference_nodes: base.skip_direct_inference_nodes.clone(),
             ctx: None,
             active_mappers: Vec::new(),
@@ -3087,7 +3087,7 @@ impl Checker {
     pub fn relation_cache_entries(&self) -> usize {
         [self.subtype_relation, self.strict_subtype_relation, self.assignable_relation, self.comparable_relation, self.identity_relation]
             .iter()
-            .map(|r| r.size() as usize)
+            .map(|r| r.size())
             .sum()
     }
 

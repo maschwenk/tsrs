@@ -77,7 +77,7 @@ impl Checker {
             } else if t.object_flags().intersects(ObjectFlags::Reference) {
                 if t.as_type_reference().node.get().is_some() {
                     let type_arguments = self.get_type_arguments(t);
-                    n = self.create_type_reference(t.target().unwrap(), &type_arguments);
+                    n = self.create_type_reference(t.target().unwrap(), type_arguments);
                 } else {
                     n = match self.get_single_base_for_non_augmenting_subtype(t) {
                         Some(n) => n,
@@ -316,13 +316,13 @@ impl Checker {
     // checker.go:28543
     pub(crate) fn get_normalized_tuple_type(&mut self, t: P<Type>, writing: bool) -> P<Type> {
         let elements = self.get_element_types(t);
-        let normalized_elements = same_map(&elements, |&t| {
+        let normalized_elements = same_map(elements, |&t| {
             if t.flags().intersects(TypeFlags::Simplifiable) {
                 return self.get_simplified_type(t, writing);
             }
             t
         });
-        if !same(&elements, &normalized_elements) {
+        if !same(elements, &normalized_elements) {
             let normalized_elements = normalized_elements.into_owned();
             return self.create_normalized_tuple_type(t.target().unwrap(), &normalized_elements);
         }
@@ -370,7 +370,7 @@ impl Checker {
         }
         let type_arguments = self.get_type_arguments(t);
         if type_arguments.len() > type_parameters.len() {
-            instantiated_base = self.get_type_with_this_argument(instantiated_base, last_or_nil(&type_arguments), false);
+            instantiated_base = self.get_type_with_this_argument(instantiated_base, last_or_nil(type_arguments), false);
         }
         self.cached_types.insert(key, instantiated_base);
         Some(instantiated_base)
@@ -422,7 +422,7 @@ impl Checker {
             return cached;
         }
         let resolved = self.resolve_structured_type_members(t).unwrap();
-        let members = self.transform_type_of_members(t, |c, t| c.get_regular_type_of_object_literal(t));
+        let members = self.transform_type_of_members(t, super::checker::Checker::get_regular_type_of_object_literal);
         let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
         regular.flags.set(t.flags());
@@ -969,7 +969,7 @@ impl Checker {
         } else {
             panic!("Unrecognized helper")
         };
-        names.iter().map(|s| s.to_string()).collect()
+        names.iter().map(std::string::ToString::to_string).collect()
     }
 
     // checker.go:29143
@@ -1531,7 +1531,7 @@ impl Checker {
         state.new_texts.push(stringutil::combine_surrogate_pairs(sb).into_owned());
         let new_texts = state.new_texts;
         let new_types = state.new_types;
-        if new_texts.iter().all(|t| t.is_empty()) {
+        if new_texts.iter().all(std::string::String::is_empty) {
             if new_types.iter().all(|t| t.flags().intersects(TypeFlags::String)) {
                 return self.string_type;
             }
@@ -1540,17 +1540,17 @@ impl Checker {
                 return new_types[0];
             }
         }
-        let new_text_refs: Vec<&str> = new_texts.iter().map(|s| s.as_str()).collect();
+        let new_text_refs: Vec<&str> = new_texts.iter().map(std::string::String::as_str).collect();
         let key = get_template_type_key(&new_text_refs, &new_types);
-        let t = match self.template_literal_types.get(&key) {
+
+        match self.template_literal_types.get(&key) {
             Some(t) => t,
             None => {
                 let t = self.new_template_literal_type(&new_text_refs, &new_types);
                 self.template_literal_types.insert(key, t);
                 t
             }
-        };
-        t
+        }
     }
 
     // checker.go:29702
@@ -1571,10 +1571,10 @@ impl Checker {
         if t.flags().intersects(TypeFlags::Union | TypeFlags::Never) {
             self.map_type(t, |c, t| Some(c.get_string_mapping_type(symbol, t))).unwrap()
         } else if t.flags().intersects(TypeFlags::StringLiteral) {
-            self.get_string_literal_type(&apply_string_mapping(symbol, &get_string_literal_value(t)))
+            self.get_string_literal_type(&apply_string_mapping(symbol, get_string_literal_value(t)))
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
             let (texts, types) = self.apply_template_string_mapping(symbol, t.as_template_literal_type().texts.get(), t.as_template_literal_type().types.get());
-            let text_refs: Vec<&str> = texts.iter().map(|s| s.as_str()).collect();
+            let text_refs: Vec<&str> = texts.iter().map(std::string::String::as_str).collect();
             self.get_template_literal_type(&text_refs, &types)
         } else if t.flags().intersects(TypeFlags::StringMapping) && Some(symbol) == t.symbol() {
             t
@@ -1657,15 +1657,15 @@ impl Checker {
             }
             IntrinsicTypeKind::Capitalize | IntrinsicTypeKind::Uncapitalize => {
                 if !texts[0].is_empty() {
-                    let mut new_texts: Vec<String> = texts.iter().map(|t| t.to_string()).collect();
+                    let mut new_texts: Vec<String> = texts.iter().map(std::string::ToString::to_string).collect();
                     new_texts[0] = apply_string_mapping(symbol, &new_texts[0]);
                     return (new_texts, types.to_vec());
                 }
                 let mut new_types = types.to_vec();
                 new_types[0] = self.get_string_mapping_type(symbol, new_types[0]);
-                (texts.iter().map(|t| t.to_string()).collect(), new_types)
+                (texts.iter().map(std::string::ToString::to_string).collect(), new_types)
             }
-            _ => (texts.iter().map(|t| t.to_string()).collect(), types.to_vec()),
+            _ => (texts.iter().map(std::string::ToString::to_string).collect(), types.to_vec()),
         }
     }
 
@@ -1958,8 +1958,7 @@ impl Checker {
         }
         let mut types: Vec<P<Type>> = Vec::new();
         let mut infos: Vec<TupleElementInfo> = Vec::new();
-        for i in index..arg_count {
-            let arg = args[i];
+        for (i, &arg) in args.iter().enumerate().take(arg_count).skip(index) {
             let t: P<Type>;
             let mut info = TupleElementInfo::default();
             if is_spread_argument(arg) {
@@ -2009,7 +2008,7 @@ impl Checker {
             types.push(t);
             infos.push(info);
         }
-        let readonly = in_const_context && !some_type(self, rest_type, |c, t| c.is_mutable_array_like_type(t));
+        let readonly = in_const_context && !some_type(self, rest_type, super::checker::Checker::is_mutable_array_like_type);
         self.create_tuple_type_ex(&types, &infos, readonly)
     }
 
@@ -2026,7 +2025,7 @@ impl Checker {
         }
         if is_tuple_type(t) {
             let element_types = self.get_element_types(t);
-            return self.create_tuple_type_ex(&element_types, t.target_tuple_type().element_infos.get(), false /*readonly*/);
+            return self.create_tuple_type_ex(element_types, t.target_tuple_type().element_infos.get(), false /*readonly*/);
         }
         self.create_tuple_type_ex(&[t], &[TupleElementInfo { flags: ElementFlags::Variadic, labeled_declaration: None }], false)
     }
@@ -2098,7 +2097,7 @@ impl Checker {
                 }
                 if function_flags.intersects(FunctionFlags::Async) {
                     // Get the awaited type without the `Awaited<T>` alias
-                    let contextual_awaited_type = self.map_type(contextual_return_type, |c, t| c.get_awaited_type_no_alias(t));
+                    let contextual_awaited_type = self.map_type(contextual_return_type, super::checker::Checker::get_awaited_type_no_alias);
                     let Some(contextual_awaited_type) = contextual_awaited_type else {
                         return None;
                     };
@@ -2465,7 +2464,7 @@ impl Checker {
                     t,
                     |c, t| {
                         let index_infos = c.get_index_infos_of_structured_type(t);
-                        let index_info = c.find_applicable_index_info(&index_infos, name_type);
+                        let index_info = c.find_applicable_index_info(index_infos, name_type);
                         index_info.map(|info| info.value_type())
                     },
                     true, /*noReductions*/

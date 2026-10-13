@@ -5,7 +5,7 @@ use std::hash::Hash;
 // The Go implementation visits each level in parallel but always picks the lowest-index result,
 // so this sequential port produces the same results.
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BreadthFirstSearchResult<N> {
     pub stopped: bool,
     pub path: Vec<N>,
@@ -131,7 +131,7 @@ pub fn breadth_first_search_parallel_ex<K: Hash + Eq + Clone, N: Clone + 'static
             }
         }
 
-        let count = next.iter().map(|n| n.len()).sum();
+        let count = next.iter().map(std::vec::Vec::len).sum();
         let mut next_jobs: OrderedMap<K, P<BreadthFirstSearchJob<N>>> = new_ordered_map_with_size_hint(count);
         for jobs in next {
             for j in jobs {

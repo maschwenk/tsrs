@@ -163,7 +163,7 @@ pub fn try_get_ambient_module_name_from_symbol_name(s: &str) -> Option<&str> {
     if let Some(name) = s.strip_circumfix('"', '"') {
         return Some(name);
     }
-    let pattern_prefix = format!("{}\"", InternalSymbolNamePrefix);
+    let pattern_prefix = format!("{InternalSymbolNamePrefix}\"");
     let rest = s.strip_prefix(pattern_prefix.as_str())?;
     let marker_index = rest.rfind("\"pattern@")?;
     if marker_index < 1 {
@@ -993,7 +993,7 @@ pub(crate) fn get_module_instance_state_worker(
                         state = ModuleInstanceState::Instantiated;
                         true
                     }
-                    _ => panic!("Unhandled case in getModuleInstanceStateWorker"),
+                    ModuleInstanceState::Unknown => panic!("Unhandled case in getModuleInstanceStateWorker"),
                 }
             });
             return state;
@@ -1297,10 +1297,7 @@ pub(crate) fn find_import_or_require(text: &str, start: u32) -> Option<(u32, u32
     if let Some(i) = REQUIRE.find(&bytes[index..require_end]) {
         return Some(((index + i) as u32, 7));
     }
-    match import {
-        Some(i) => Some((i as u32, 6)),
-        None => None,
-    }
+    import.map(|i| (i as u32, 6))
 }
 
 pub fn for_each_dynamic_import_or_require_call(

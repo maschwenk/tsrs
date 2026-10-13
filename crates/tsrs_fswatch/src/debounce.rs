@@ -151,7 +151,7 @@ impl debounce {
     }
 
     // debounce.go:76
-    fn loop_(&self) {
+    fn loop_(&self) -> ! {
         loop {
             self.latch_wait();
             self.notify_if_ready();

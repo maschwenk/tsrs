@@ -208,7 +208,7 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
             if nested_emit_time > check_time.get() {
                 check_time.set(std::time::Duration::ZERO);
             } else {
-                check_time.set(check_time.get() - nested_emit_time);
+                check_time.set(check_time.get().checked_sub(nested_emit_time).unwrap());
             }
             emit_time.set(emit_time.get() + nested_emit_time);
             diags
@@ -241,6 +241,6 @@ fn emit_files_and_report_errors_incremental(input: &EmitInput, program_like: P<t
     (input.report_error_summary)(&all_diagnostics);
     // Go reads EmitResult.EmitSkipped through a nil result here only when the incremental program was cancelled.
     let emitted_files = emit_result.as_ref().map(|r| r.emitted_files.clone()).unwrap_or_default();
-    let emit_skipped = emit_result.map(|r| r.emit_skipped).unwrap_or(false);
+    let emit_skipped = emit_result.is_some_and(|r| r.emit_skipped);
     CompileAndEmitResult { diagnostics: all_diagnostics, emit_skipped, emitted_files, status: ExitStatus::Success, times }
 }

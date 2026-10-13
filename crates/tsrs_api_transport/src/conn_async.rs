@@ -71,7 +71,7 @@ pub struct AsyncConn {
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
-    m.lock().unwrap_or_else(|e| e.into_inner())
+    m.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl AsyncConn {
@@ -142,7 +142,7 @@ impl AsyncConn {
             }
             // Messages that are none of the three kinds (no id and no method) are ignored, as in Go.
         };
-        let cause = result.as_ref().err().map(|e| e.to_string());
+        let cause = result.as_ref().err().map(std::string::ToString::to_string);
         {
             let mut pending = lock(&self.pending);
             pending.record_terminal(cause);

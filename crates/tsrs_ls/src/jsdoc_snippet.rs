@@ -171,12 +171,12 @@ fn get_doc_comment_template_at_position(
     }
 
     if !tags.is_empty() && !has_jsdoc_tags(comment_owner, source_file) {
-        let preamble = format!("/**{}{} * ", new_line, indentation);
+        let preamble = format!("/**{new_line}{indentation} * ");
         let mut end_line = String::new();
         if token_start == position {
-            end_line = format!("{}{}", new_line, indentation);
+            end_line = format!("{new_line}{indentation}");
         }
-        return Some(docCommentTemplate { new_text: format!("{}{}{}{} */{}", preamble, new_line, tags, indentation, end_line) });
+        return Some(docCommentTemplate { new_text: format!("{preamble}{new_line}{tags}{indentation} */{end_line}") });
     }
     Some(docCommentTemplate { new_text: "/** */".to_string() })
 }
@@ -332,7 +332,7 @@ fn get_right_hand_side_of_assignment(right_hand_side: Option<P<Node>>) -> Option
 fn parameter_doc_comments(parameters: &[P<Node>], is_java_script_file: bool, indentation: &str, new_line: &str) -> String {
     let mut b = String::new();
     for (i, &parameter) in parameters.iter().enumerate() {
-        let mut param_name = format!("param{}", i);
+        let mut param_name = format!("param{i}");
         if ast::is_identifier(parameter.name().unwrap()) {
             param_name = parameter.name().unwrap().text().to_string();
         }
@@ -355,7 +355,7 @@ fn parameter_doc_comments(parameters: &[P<Node>], is_java_script_file: bool, ind
 
 // jsdoc_snippet.go:328
 fn returns_doc_comment(indentation: &str, new_line: &str) -> String {
-    format!("{} * @returns{}", indentation, new_line)
+    format!("{indentation} * @returns{new_line}")
 }
 
 // jsdoc_snippet.go:332
@@ -398,7 +398,7 @@ fn has_jsdoc_tags(node: P<Node>, file: P<SourceFile>) -> bool {
 // jsdoc_snippet.go:366
 fn template_to_snippet(template: &str, new_line: &str) -> String {
     if template == "/** */" {
-        return format!("/**{} * $0{} */", new_line, new_line);
+        return format!("/**{new_line} * $0{new_line} */");
     }
 
     let mut snippet_index = 1;
@@ -409,13 +409,13 @@ fn template_to_snippet(template: &str, new_line: &str) -> String {
 
 // jsdoc_snippet.go:377
 fn strip_jsdoc_template_indentation(template: &str, new_line: &str) -> String {
-    let mut lines: Vec<String> = template.split(new_line).map(|s| s.to_string()).collect();
+    let mut lines: Vec<String> = template.split(new_line).map(std::string::ToString::to_string).collect();
     for line in lines.iter_mut() {
         let trimmed = line.trim_start_matches([' ', '\t']).to_string();
         if trimmed.starts_with('/') {
             *line = trimmed;
         } else if trimmed.starts_with('*') {
-            *line = format!(" {}", trimmed);
+            *line = format!(" {trimmed}");
         }
     }
     lines.join(new_line)
@@ -427,7 +427,7 @@ fn transform_jsdoc_template_lines(
     new_line: &str,
     snippet_index: &mut usize,
 ) -> String {
-    let mut lines: Vec<String> = template.split(new_line).map(|s| s.to_string()).collect();
+    let mut lines: Vec<String> = template.split(new_line).map(std::string::ToString::to_string).collect();
     for i in 0..lines.len() {
         if i > 0 && lines[i - 1].starts_with("/**") && line_has_only_jsdoc_asterisk(&lines[i]) {
             lines[i] = format!("{}$0", lines[i]);
@@ -470,7 +470,7 @@ fn transform_jsdoc_param_line(line: &str, snippet_index: &mut usize) -> Option<S
     let mut type_text = String::new();
     if rest.starts_with('{') {
         let close_brace = rest.find('}')?;
-        type_text = format!(" {}", &rest[..close_brace + 1]);
+        type_text = format!(" {}", &rest[..=close_brace]);
         rest = &rest[close_brace + 1..];
         if !starts_with_single_line_whitespace(rest) {
             return None;
@@ -483,12 +483,12 @@ fn transform_jsdoc_param_line(line: &str, snippet_index: &mut usize) -> Option<S
         return None;
     }
 
-    let mut out = format!("{}* @param ", prefix);
+    let mut out = format!("{prefix}* @param ");
     if type_text == " {any}" || type_text == " {*}" {
         let _ = write!(out, "{{${{{}:*}}}} ", *snippet_index);
         *snippet_index += 1;
     } else if !type_text.is_empty() {
-        let _ = write!(out, "{} ", type_text);
+        let _ = write!(out, "{type_text} ");
     }
     let _ = write!(out, "{} ${{{}}}", param_name, *snippet_index);
     *snippet_index += 1;

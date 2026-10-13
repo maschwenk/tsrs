@@ -63,9 +63,11 @@ With more than one checker, tsrs assigns files to checkers by directory locality
 (`--checkerAssignment locality`, notes/mem-assignment.md); Go uses FENNEL over single files. Diagnostics and emitted
 files do not depend on the assignment (notes/perf-order-independence.md), but multi-checker
 symbol/type/instantiation counters and peak memory do: compare them against `tsgo-ref` with `--checkerAssignment go`
-(or `TSRS_CHECKER_ASSIGNMENT=go`). `go` also restores Go's check history in the one cache where tsgo's output depends on
-what a checker saw first (`tsrs_core::compat`), so it is the mode for byte-identity with tsgo. The conformance,
-fourslash and tsc harnesses run in it; set `TSRS_CHECKER_ASSIGNMENT=locality` to run them in the default mode.
+(or `TSRS_CHECKER_ASSIGNMENT=go`). `go` also preserves Go's checker history (`tsrs_core::compat`), so it is the mode
+for byte-identity with tsgo (with `--noLazyMembers`
+where an instantiation depth limit is reached: lazy members change which instantiations a checker has cached,
+notes/open-history-dependence.md section 6). The conformance, fourslash and tsc harnesses run in it; set
+`TSRS_CHECKER_ASSIGNMENT=locality` to run them in the default mode.
 `TSRS_CHECKER_ASSIGNMENT=random:<seed>` puts each file on a random checker with a random visit order in each checker:
 the default mode must print the same text for every seed and checker count. Single-threaded runs have no assignment.
 Without a named assignment the type-check pass also steals work: a checker that has run out of files takes unstarted

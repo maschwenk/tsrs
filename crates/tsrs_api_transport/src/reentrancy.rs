@@ -102,12 +102,12 @@ impl CallbackState {
     }
 
     fn notify(&self) {
-        let _g = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let _g = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.changed.notify_all();
     }
 
     fn wait_for_change(&self, timeout: Duration) {
-        let g = self.lock.lock().unwrap_or_else(|e| e.into_inner());
+        let g = self.lock.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let _ = self.changed.wait_timeout(g, timeout);
     }
 }
@@ -194,7 +194,7 @@ fn holder_possibly_stuck(holder: &Arc<RequestState>, conn: &CallbackState) -> bo
         if r.waiting.load(Ordering::SeqCst) > 0 {
             return true;
         }
-        let next = r.blocked_on.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        let next = r.blocked_on.lock().unwrap_or_else(std::sync::PoisonError::into_inner).clone();
         match next {
             Some(n) if Arc::ptr_eq(&n, holder) => return true,
             Some(n) => r = n,
@@ -232,7 +232,7 @@ impl ContentionWait {
             self.holder = h;
             self.stuck_since = None;
             if let Some(me) = &self.registered {
-                (*me.blocked_on.lock().unwrap_or_else(|e| e.into_inner())).clone_from(&self.holder);
+                (*me.blocked_on.lock().unwrap_or_else(std::sync::PoisonError::into_inner)).clone_from(&self.holder);
             }
         }
     }
@@ -243,7 +243,7 @@ impl ContentionWait {
     pub fn may_deadlock(&mut self) -> bool {
         let Some(cx) = current_request() else { return false };
         if self.registered.is_none() {
-            (*cx.state.blocked_on.lock().unwrap_or_else(|e| e.into_inner())).clone_from(&self.holder);
+            (*cx.state.blocked_on.lock().unwrap_or_else(std::sync::PoisonError::into_inner)).clone_from(&self.holder);
             self.registered = Some(Arc::clone(&cx.state));
         }
         let stuck = match &self.holder {
@@ -266,7 +266,7 @@ impl ContentionWait {
 impl Drop for ContentionWait {
     fn drop(&mut self) {
         if let Some(me) = &self.registered {
-            *me.blocked_on.lock().unwrap_or_else(|e| e.into_inner()) = None;
+            *me.blocked_on.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = None;
         }
     }
 }
@@ -294,7 +294,7 @@ pub fn blocking_may_deadlock() -> bool {
     }
     let key = Arc::as_ptr(&cx.state) as usize;
     let now = Instant::now();
-    let start = match EPISODE.with(|e| e.get()) {
+    let start = match EPISODE.with(std::cell::Cell::get) {
         Some((k, start, last)) if k == key && now.duration_since(last) < EPISODE_GAP => start,
         _ => now,
     };
@@ -314,7 +314,7 @@ pub fn reentrancy_error(resource: &str) -> ApiError {
 static LOCK_HOLDERS: Mutex<Option<FxHashMap<usize, Arc<RequestState>>>> = Mutex::new(None);
 
 fn lock_holders() -> MutexGuard<'static, Option<FxHashMap<usize, Arc<RequestState>>>> {
-    LOCK_HOLDERS.lock().unwrap_or_else(|e| e.into_inner())
+    LOCK_HOLDERS.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// Guard returned by `lock_for_request`; derefs to the locked value.
@@ -353,7 +353,7 @@ impl<T> Drop for RequestGuard<'_, T> {
 pub fn lock_for_request<'a, T>(mutex: &'a Mutex<T>, resource: &str) -> Result<RequestGuard<'a, T>, ApiError> {
     let key = std::ptr::from_ref::<Mutex<T>>(mutex) as usize;
     let Some(cx) = current_request() else {
-        return Ok(RequestGuard { key: None, guard: mutex.lock().unwrap_or_else(|e| e.into_inner()) });
+        return Ok(RequestGuard { key: None, guard: mutex.lock().unwrap_or_else(std::sync::PoisonError::into_inner) });
     };
     let acquired = |guard: MutexGuard<'a, T>| {
         lock_holders().get_or_insert_with(FxHashMap::default).insert(key, Arc::clone(&cx.state));

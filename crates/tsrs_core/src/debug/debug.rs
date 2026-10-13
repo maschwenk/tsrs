@@ -7,12 +7,12 @@ pub fn fail(reason: &str) -> ! {
 
 /// Go takes the node (for its `KindString()`) and optional message parts.
 pub fn fail_bad_syntax_kind(kind_string: &str, message: &[&dyn Display]) -> ! {
-    let msg = if message.is_empty() { "Unexpected node.".to_string() } else { message.iter().map(|m| m.to_string()).collect::<String>() };
+    let msg = if message.is_empty() { "Unexpected node.".to_string() } else { message.iter().map(std::string::ToString::to_string).collect::<String>() };
     fail(&format!("{msg}\nNode {kind_string} was unexpected."));
 }
 
 pub fn assert_never(member: &dyn Display, message: &[&dyn Display]) -> ! {
-    let msg = if message.is_empty() { "Illegal value:".to_string() } else { message.iter().map(|m| m.to_string()).collect::<String>() };
+    let msg = if message.is_empty() { "Illegal value:".to_string() } else { message.iter().map(std::string::ToString::to_string).collect::<String>() };
     fail(&format!("{msg} {member}"));
 }
 
@@ -27,7 +27,7 @@ pub fn assert(value: bool, message: &[&dyn Display]) {
 #[cold]
 fn assert_slow(message: &[&dyn Display]) {
     let msg = if !message.is_empty() {
-        format!("False expression: {}", message.iter().map(|m| m.to_string()).collect::<String>())
+        format!("False expression: {}", message.iter().map(std::string::ToString::to_string).collect::<String>())
     } else {
         "False expression.".to_string()
     };

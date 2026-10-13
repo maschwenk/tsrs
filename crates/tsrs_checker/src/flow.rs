@@ -130,7 +130,7 @@ impl Checker {
         let census_t0 = self.census_mut().map(|c| c.now_ns());
         if census_t0.is_some() {
             census_container = ast::get_containing_function(reference);
-            let sampled = (census_container.map_or(0, |n| n.to_bits()) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60 == 0;
+            let sampled = (census_container.map_or(0, tsrs_core::P::to_bits) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60 == 0;
             let key = sampled.then(|| {
                 let text = if !reference.pos().is_synthetic()
                     && ast::get_source_file_of_node(reference).is_some()
@@ -142,7 +142,7 @@ impl Checker {
                 let mut bytes = text.into_bytes();
                 bytes.extend_from_slice(&declared_type.id.0.to_le_bytes());
                 bytes.extend_from_slice(&initial_type.id.0.to_le_bytes());
-                bytes.extend_from_slice(&(census_container.map_or(0, |n| n.to_bits()) as u64).to_le_bytes());
+                bytes.extend_from_slice(&(census_container.map_or(0, tsrs_core::P::to_bits) as u64).to_le_bytes());
                 xxhash_rust::xxh3::xxh3_64(&bytes)
             });
             let census = self.census.as_mut().unwrap();
@@ -390,10 +390,7 @@ impl Checker {
             let container = flow.node();
             if let Some(container) = container {
                 let reference = f.ref_node();
-                if Some(container) != f.flow_container.get()
-                    && !ast::is_property_access_expression(reference)
-                    && !ast::is_element_access_expression(reference)
-                    && !(reference.kind() == Kind::ThisKeyword && !ast::is_arrow_function(container))
+                if !(Some(container) == f.flow_container.get() || ast::is_property_access_expression(reference) || ast::is_element_access_expression(reference) || reference.kind() == Kind::ThisKeyword && !ast::is_arrow_function(container))
                 {
                     assert!(container.has_flow_node_data());
                     return FlowStep::Next(container.flow_node().unwrap());
@@ -751,7 +748,7 @@ impl Checker {
                     }
                     if self.strict_null_checks
                         && self.optional_chain_contains_reference(predicate_argument, f.ref_node())
-                        && (assume_true && !self.has_type_facts(predicate_type, TypeFacts::EQUndefined) || !assume_true && every_type(self, predicate_type, |c, t| c.is_nullable_type(t)))
+                        && (assume_true && !self.has_type_facts(predicate_type, TypeFacts::EQUndefined) || !assume_true && every_type(self, predicate_type, super::checker::Checker::is_nullable_type))
                     {
                         t = self.get_adjusted_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
                     }
@@ -1065,7 +1062,7 @@ impl Checker {
             return self.get_adjusted_type_with_facts(t, facts);
         }
         if assume_true {
-            if !double_equals && (t.flags().intersects(TypeFlags::Unknown) || some_type(self, t, |c, t| c.is_empty_anonymous_object_type(t))) {
+            if !double_equals && (t.flags().intersects(TypeFlags::Unknown) || some_type(self, t, super::checker::Checker::is_empty_anonymous_object_type)) {
                 if value_type.flags().intersects(TypeFlags::Primitive | TypeFlags::NonPrimitive) || self.is_empty_anonymous_object_type(value_type) {
                     return value_type;
                 }
@@ -1214,10 +1211,8 @@ impl Checker {
         if remove_nullable {
             non_null_type = self.get_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
         }
-        let prop_type = self.get_type_of_property_of_type(non_null_type, &prop_name);
-        let mut prop_type = match prop_type {
-            Some(prop_type) => prop_type,
-            None => return t,
+        let Some(mut prop_type) = self.get_type_of_property_of_type(non_null_type, &prop_name) else {
+            return t;
         };
         if remove_nullable && optional_chain {
             prop_type = self.get_optional_type(prop_type, false);
@@ -1254,10 +1249,8 @@ impl Checker {
             return t;
         }
         // Get the prototype property of the type identifier so we can find out its type.
-        let prototype_property = self.get_property_of_type(identifier_type, "prototype");
-        let prototype_property = match prototype_property {
-            Some(prototype_property) => prototype_property,
-            None => return t,
+        let Some(prototype_property) = self.get_property_of_type(identifier_type, "prototype") else {
+            return t;
         };
         // Get the type of the prototype, if it is undefined, or the global `Object` or `Function` types then do not narrow.
         let prototype_type = self.get_type_of_symbol(prototype_property);
@@ -1339,7 +1332,7 @@ impl Checker {
         // Don't narrow from `any` if the target type is exactly `Object` or `Function`, and narrow
         // in the false branch only if the target is a non-empty object type.
         if is_type_any(Some(t)) && (instance_type == self.global_object_type || instance_type == self.global_function_type)
-            || !assume_true && !(instance_type.flags().intersects(TypeFlags::Object) && !self.is_empty_anonymous_object_type(instance_type))
+            || !(assume_true || instance_type.flags().intersects(TypeFlags::Object) && !self.is_empty_anonymous_object_type(instance_type))
         {
             return t;
         }
@@ -1495,10 +1488,8 @@ impl Checker {
         if !self.is_matching_reference(f.ref_node(), target) {
             return t;
         }
-        let symbol = self.get_symbol_for_private_identifier_expression(binary.left);
-        let symbol = match symbol {
-            Some(symbol) => symbol,
-            None => return t,
+        let Some(symbol) = self.get_symbol_for_private_identifier_expression(binary.left) else {
+            return t;
         };
         let class_symbol = symbol.parent().unwrap();
         let target_type = if ast::has_static_modifier(symbol.value_declaration().unwrap()) {
@@ -1675,10 +1666,8 @@ impl Checker {
     // flow.go:1157
     pub(crate) fn narrow_type_by_switch_on_type_of(&mut self, t: P<Type>, data: P<Node>) -> P<Type> {
         let data = data.as_flow_switch_clause_data();
-        let witnesses = self.get_switch_clause_type_of_witnesses(data.switch_statement);
-        let witnesses = match witnesses {
-            Some(witnesses) => witnesses,
-            None => return t,
+        let Some(witnesses) = self.get_switch_clause_type_of_witnesses(data.switch_statement) else {
+            return t;
         };
         let clauses = data.switch_statement.as_switch_statement().case_block.as_case_block().clauses.nodes();
         // Equal start and end denotes implicit fallthrough; undefined marks explicit default clause.
@@ -1756,10 +1745,10 @@ impl Checker {
         let data = data.as_flow_switch_clause_data();
         let every_clause_checks = data.clause_start != data.clause_end && {
             let switch_types = self.get_switch_clause_types(data.switch_statement);
-            let every = !(switch_types[data.clause_start..data.clause_end]
+
+            !(switch_types[data.clause_start..data.clause_end]
                 .iter()
-                .any(|&s| !clause_check(self, s)));
-            every
+                .any(|&s| !clause_check(self, s)))
         };
         if every_clause_checks {
             return self.get_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
@@ -2440,9 +2429,8 @@ impl Checker {
             Some(symbol) if self.is_constant_variable(symbol) || symbol.flags().intersects(SymbolFlags::EnumMember) => symbol,
             _ => return (String::new(), false),
         };
-        let declaration = match symbol.value_declaration() {
-            Some(declaration) => declaration,
-            None => return (String::new(), false),
+        let Some(declaration) = symbol.value_declaration() else {
+            return (String::new(), false);
         };
         let t = self.try_get_type_from_type_node(declaration);
         if let Some(t) = t {
@@ -2677,10 +2665,8 @@ impl Checker {
     pub(crate) fn compute_exhaustive_switch_statement(&mut self, node: P<Node>) -> bool {
         let expression = node.expression().unwrap();
         if ast::is_type_of_expression(expression) {
-            let witnesses = self.get_switch_clause_type_of_witnesses(node);
-            let witnesses = match witnesses {
-                Some(witnesses) => witnesses,
-                None => return false,
+            let Some(witnesses) = self.get_switch_clause_type_of_witnesses(node) else {
+                return false;
             };
             let operand_type = self.check_expression_cached(expression.expression().unwrap());
             let operand_constraint = self.get_base_constraint_or_type(operand_type);
@@ -3117,7 +3103,7 @@ impl Checker {
         t: P<Type>,
         index: usize,
     ) -> P<Type> {
-        if every_type(self, t, |c, t| c.is_tuple_like_type(t)) {
+        if every_type(self, t, super::checker::Checker::is_tuple_like_type) {
             if let Some(element_type) = self.get_tuple_element_type(t, index) {
                 return element_type;
             }
@@ -3284,7 +3270,7 @@ impl Checker {
             self.error(symbol.value_declaration(), &diagnostics::Member_0_implicitly_has_an_1_type, &[&symbol_string, &type_string]);
         }
         // We don't infer a type if assignments are only null or undefined.
-        if every_type(self, flow_type, |c, t| c.is_nullable_type(t)) {
+        if every_type(self, flow_type, super::checker::Checker::is_nullable_type) {
             return None;
         }
         Some(self.convert_auto_to_any(flow_type))
@@ -3312,7 +3298,7 @@ impl Checker {
                 self.error(symbol.value_declaration(), &diagnostics::Member_0_implicitly_has_an_1_type, &[&symbol_string, &type_string]);
             }
             // We don't infer a type if assignments are only null or undefined.
-            if every_type(self, flow_type, |c, t| c.is_nullable_type(t)) {
+            if every_type(self, flow_type, super::checker::Checker::is_nullable_type) {
                 return None;
             }
             Some(Some(self.convert_auto_to_any(flow_type)))
@@ -3385,9 +3371,8 @@ impl Checker {
                 }
                 return false;
             } else if flags.intersects(FlowFlags::LoopLabel) {
-                let antecedents = match flow.antecedents() {
-                    Some(antecedents) => antecedents,
-                    None => return false,
+                let Some(antecedents) = flow.antecedents() else {
+                    return false;
                 };
                 // A loop is reachable if the control flow path that leads to the top is reachable.
                 flow = antecedents.flow;
@@ -3522,10 +3507,8 @@ impl Checker {
 
     // flow.go:2674
     pub(crate) fn ensure_assignments_marked(&mut self, symbol: P<Symbol>) {
-        let parent = ast::find_ancestor(symbol.value_declaration(), ast::is_function_or_source_file);
-        let parent = match parent {
-            Some(parent) => parent,
-            None => return,
+        let Some(parent) = ast::find_ancestor(symbol.value_declaration(), ast::is_function_or_source_file) else {
+            return;
         };
         let links = self.node_links.get(parent);
         if !links.flags.get().intersects(NodeCheckFlags::AssignmentsMarked) {

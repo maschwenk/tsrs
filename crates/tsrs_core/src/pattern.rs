@@ -53,9 +53,7 @@ impl Pattern {
     }
 
     pub fn matched_text<'a>(&self, candidate: &'a str) -> &'a str {
-        if !self.matches(candidate) {
-            panic!("candidate does not match pattern");
-        }
+        assert!(self.matches(candidate), "candidate does not match pattern");
         match self.kind {
             PatternKind::Exact => "",
             PatternKind::Wildcard(star) => {

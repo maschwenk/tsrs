@@ -131,9 +131,7 @@ impl ESModuleTransformer {
             return None;
         }
 
-        if !ast::is_external_module_import_equals_declaration(node) {
-            panic!("import= for internal module references should be handled in an earlier transformer.");
-        }
+        assert!(ast::is_external_module_import_equals_declaration(node), "import= for internal module references should be handled in an earlier transformer.");
 
         let f = self.factory();
         let var_statement = f.new_variable_statement(

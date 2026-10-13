@@ -213,16 +213,14 @@ impl LanguageService {
                         let r = payload
                             .downcast_ref::<String>()
                             .cloned()
-                            .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+                            .or_else(|| payload.downcast_ref::<&str>().map(std::string::ToString::to_string))
                             .unwrap_or_default();
                         let stack = std::backtrace::Backtrace::force_capture();
-                        panics_occurred.push(format!("panic handling request: {}\n{}", r, stack));
+                        panics_occurred.push(format!("panic handling request: {r}\n{stack}"));
                     }
                 }
             }
-            if !panics_occurred.is_empty() {
-                panic!("Panics occurred during cross-project handling: {:?}", panics_occurred);
-            }
+            assert!(panics_occurred.is_empty(), "Panics occurred during cross-project handling: {panics_occurred:?}");
             if let Some(e) = ctx.err() {
                 return Err(e.into());
             }

@@ -114,7 +114,7 @@ impl LanguageService {
             // could otherwise put len(oldPath) out of range of path.
             if let Some(suffix) = tspath::trim_file_path_prefix(path, &trimmed_old_path, self.use_case_sensitive_file_names()) {
                 if suffix.starts_with('/') || suffix.starts_with('\\') {
-                    return Some(format!("{}{}", new_path, suffix));
+                    return Some(format!("{new_path}{suffix}"));
                 }
             }
             None
@@ -206,11 +206,7 @@ impl LanguageService {
 
         let mut moved_files: Vec<movedFile> = Vec::new();
         moved_files.extend(all_files.iter().filter_map(|&source_file| {
-            if let Some(new_file_name) = old_to_new(crate::lsconv::Script::original_file_name(&source_file)) {
-                Some(movedFile { source_file, new_file_name })
-            } else {
-                None
-            }
+            old_to_new(crate::lsconv::Script::original_file_name(&source_file)).map(|new_file_name| movedFile { source_file, new_file_name })
         }));
 
         for &source_file in all_files {
@@ -281,7 +277,8 @@ impl LanguageService {
         };
 
         // Optimization: neither the importing or imported file changed.
-        if !target.updated && !(importing_source_file_moved && tspath::is_external_module_name_relative(import_literal.text())) {
+        let importing_relative_module_moved = importing_source_file_moved && tspath::is_external_module_name_relative(import_literal.text());
+        if !target.updated && !importing_relative_module_moved {
             return String::new();
         }
 

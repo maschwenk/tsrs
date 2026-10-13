@@ -33,7 +33,7 @@ impl CompilerHost for compilerHost {
     }
 
     fn trace(&self, msg: &'static Message, args: &[&dyn std::fmt::Display]) {
-        (self.trace)(msg, args)
+        (self.trace)(msg, args);
     }
 
     fn get_source_file(&self, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {

@@ -30,7 +30,7 @@ impl<K: Hash + Eq, V> MultiMap<K, V> {
     }
 
     pub fn get(&self, key: &K) -> &[V] {
-        self.m.get(key).map(|v| v.as_slice()).unwrap_or(&[])
+        self.m.get(key).map_or(&[], std::vec::Vec::as_slice)
     }
 
     pub fn add(&mut self, key: K, value: V) {

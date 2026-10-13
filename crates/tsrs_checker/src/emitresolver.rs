@@ -130,10 +130,7 @@ impl EmitResolver {
                 }
                 let parent = ast::get_declaration_container(node).unwrap();
                 // If the node is not exported or it is not ambient module element (except import declaration)
-                if !c.get_combined_modifier_flags_cached(node).intersects(ModifierFlags::Export)
-                    && !(node.kind() != Kind::ImportEqualsDeclaration
-                        && parent.kind() != Kind::SourceFile
-                        && parent.flags().intersects(NodeFlags::Ambient))
+                if !(c.get_combined_modifier_flags_cached(node).intersects(ModifierFlags::Export) || node.kind() != Kind::ImportEqualsDeclaration && parent.kind() != Kind::SourceFile && parent.flags().intersects(NodeFlags::Ambient))
                 {
                     return ast::is_global_source_file(parent);
                 }

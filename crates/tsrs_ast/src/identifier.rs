@@ -44,11 +44,10 @@ static SOURCE_TEXT_COUNT: AtomicU32 = AtomicU32::new(0);
 /// Registers a file's text for compact identifiers; `NO_SOURCE_TEXT` once the table is full (identifiers of later
 /// files then store their text).
 pub fn register_source_text(text: &'static str) -> u32 {
-    let index = match SOURCE_TEXT_COUNT.try_update(Relaxed, Relaxed, |n| {
+    let Ok(index) = SOURCE_TEXT_COUNT.try_update(Relaxed, Relaxed, |n| {
         ((n as usize) < SOURCE_TEXTS_CAP).then(|| n + 1)
-    }) {
-        Ok(index) => index,
-        Err(_) => return NO_SOURCE_TEXT,
+    }) else {
+        return NO_SOURCE_TEXT;
     };
     let slot = &SOURCE_TEXTS[index as usize];
     slot.ptr.store(text.as_ptr().cast_mut(), Relaxed);
@@ -135,7 +134,7 @@ pub(crate) fn identifier_alloc_size(n: &Node) -> usize {
 pub(crate) fn census_layout() {
     use std::mem::offset_of;
     let word = offset_of!(Identifier, word);
-    let field = |data: usize| tsrs_core::CensusField::X8 { off: data + word, modes: 1 << MODE_SOURCE_FLOW | 1 << MODE_TEXT };
+    let field = |data: usize| tsrs_core::CensusField::X8 { off: data + word, modes: (1 << MODE_SOURCE_FLOW) | (1 << MODE_TEXT) };
     tsrs_core::census_layout(std::any::type_name::<NodeAlloc<Identifier>>(), &[field(offset_of!(NodeAlloc<Identifier>, data))]);
     let data = offset_of!(NodeAlloc<IdentifierWithText>, data) + offset_of!(IdentifierWithText, identifier);
     tsrs_core::census_layout(std::any::type_name::<NodeAlloc<IdentifierWithText>>(), &[field(data)]);
@@ -240,8 +239,8 @@ impl Identifier {
             SIDE_FLOW.lock().unwrap().remove(&(std::ptr::from_ref::<Identifier>(self) as usize));
         }
         let word = match flow {
-            None => MODE_SOURCE << MODE_SHIFT | len | index as u64,
-            Some(f) if f.text_index() == index => MODE_SOURCE_FLOW << MODE_SHIFT | len | flow_slot(flow),
+            None => (MODE_SOURCE << MODE_SHIFT) | len | index as u64,
+            Some(f) if f.text_index() == index => (MODE_SOURCE_FLOW << MODE_SHIFT) | len | flow_slot(flow),
             Some(f) => {
                 match SIDE_FLOW.lock().unwrap().entry(std::ptr::from_ref::<Identifier>(self) as usize) {
                     Entry::Occupied(mut e) => *e.get_mut() = f,
@@ -249,7 +248,7 @@ impl Identifier {
                         e.insert(f);
                     }
                 }
-                MODE_SOURCE_SIDE << MODE_SHIFT | len | index as u64
+                (MODE_SOURCE_SIDE << MODE_SHIFT) | len | index as u64
             }
         };
         self.word.set(word);
@@ -299,7 +298,7 @@ impl NodeFactory {
         self.text_count.set(self.text_count.get() + 1);
         let node = self.new_node(
             Kind::Identifier,
-            Identifier { word: OwnedCell::new(MODE_SOURCE << MODE_SHIFT | (text.len() as u64) << LEN_SHIFT | text_index as u64) },
+            Identifier { word: OwnedCell::new((MODE_SOURCE << MODE_SHIFT) | ((text.len() as u64) << LEN_SHIFT) | text_index as u64) },
         );
         node.loc.set(loc);
         node
@@ -309,12 +308,10 @@ impl NodeFactory {
 /// `Node::set_loc` of an identifier to a range with another end.
 #[cold]
 pub(crate) fn check_source_identifier_loc(node: &Node, loc: TextRange) {
-    if node.as_identifier().is_source_text() {
-        panic!(
-            "the range end of identifier {:?} cannot change ({:?} -> {:?})",
-            node.as_identifier().text(),
-            node.end(),
-            loc.end()
-        );
-    }
+    assert!(!node.as_identifier().is_source_text(),
+        "the range end of identifier {:?} cannot change ({:?} -> {:?})",
+        node.as_identifier().text(),
+        node.end(),
+        loc.end()
+    );
 }

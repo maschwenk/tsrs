@@ -12,9 +12,7 @@ pub fn position_belongs_to_node(candidate: P<Node>, position: u32, file: P<Sourc
     let candidate_pos = candidate
         .pos()
         .expect_source("parsed nodes have source positions");
-    if candidate_pos > position {
-        panic!("Expected candidate.pos <= position");
-    }
+    assert!(candidate_pos <= position, "Expected candidate.pos <= position");
     position
         < candidate
             .end()

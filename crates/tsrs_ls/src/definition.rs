@@ -401,7 +401,7 @@ pub(crate) fn get_declarations_from_location(c: &mut Checker, node: P<Node>) -> 
                     types
                         .into_iter()
                         .filter_map(|union_type| {
-                            if let Some(prop) = c.get_property_of_type_exported(union_type, &name) { Some(prop.declarations().iter().copied()) } else { None }
+                            c.get_property_of_type_exported(union_type, &name).map(|prop| prop.declarations().iter().copied())
                         })
                         .flatten(),
                 );

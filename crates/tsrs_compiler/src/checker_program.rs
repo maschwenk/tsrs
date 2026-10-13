@@ -20,7 +20,7 @@ impl tsrs_checker::Program for Program {
     }
 
     fn bind_source_files(&self) {
-        Program::bind_source_files(self)
+        Program::bind_source_files(self);
     }
 
     fn file_exists(&self, file_name: &str) -> bool {
@@ -114,6 +114,13 @@ impl tsrs_checker::Program for Program {
     fn as_module_specifier_generation_host(&self) -> &dyn tsrs_modulespecifiers::ModuleSpecifierGenerationHost {
         self
     }
+
+    fn tsgo_default_check_slot(&self, file: P<SourceFile>) -> Option<(u32, u32)> {
+        if !self.uses_canonical_diagnostics() {
+            return None;
+        }
+        self.tsgo_check_slots.get_or_init(|| crate::checkerpool::tsgo_default_check_slots(self)).get(&file).copied()
+    }
 }
 
 // Go `*compiler.Program` satisfies `modulespecifiers.ModuleSpecifierGenerationHost` structurally (its supertrait
@@ -137,7 +144,7 @@ impl tsrs_modulespecifiers::ModuleSpecifierGenerationHost for Program {
     }
 
     fn get_source_of_project_reference_if_output_included(&self, file: P<SourceFile>) -> String {
-        Program::get_source_of_project_reference_if_output_included(self, file.file_name(), &file.path())
+        Program::get_source_of_project_reference_if_output_included(self, file.file_name(), file.path())
     }
 
     fn file_exists(&self, path: &str) -> bool {

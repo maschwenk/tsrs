@@ -2,7 +2,8 @@
 //
 // Go marshals these types with encoding/json/v2 (`omitzero` fields, custom MarshalJSON for the tuple shapes).
 // Rust builds the same `json::Value` tree by hand, field by field in Go's declaration order, so that
-// `json::marshal` produces Go's exact bytes. Unmarshaling follows the Go `UnmarshalJSON` fallbacks.
+// `json::marshal` produces Go's exact bytes in Go-compatible history. Unmarshaling follows the Go
+// `UnmarshalJSON` fallbacks; default history adds an optional tsrs canonical-cache proof.
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::RepopulateDiagnosticKind;
@@ -25,7 +26,7 @@ pub type BuildInfoFileIdListId = u32;
 //
 // - for non incremental program buildinfo
 //   - string that is the root file name
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoRoot {
     pub start: BuildInfoFileId,
     pub end: BuildInfoFileId,
@@ -68,7 +69,7 @@ impl BuildInfoRoot {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct buildInfoFileInfoNoSignature {
     pub version: String,
     pub no_signature: bool,
@@ -79,7 +80,7 @@ pub struct buildInfoFileInfoNoSignature {
 //	 Signature is
 //		 - undefined if FileInfo.version === FileInfo.signature
 //		 - string actual signature
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct buildInfoFileInfoWithSignature {
     pub version: String,
     pub signature: String,
@@ -87,7 +88,7 @@ pub struct buildInfoFileInfoWithSignature {
     pub implied_node_format: ResolutionMode,
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoFileInfo {
     signature: String,
     no_signature: Option<buildInfoFileInfoNoSignature>,
@@ -210,7 +211,7 @@ impl BuildInfoFileInfo {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoReferenceMapEntry {
     pub file_id: BuildInfoFileId,
     pub file_id_list_id: BuildInfoFileIdListId,
@@ -293,10 +294,10 @@ impl BuildInfoDiagnostic {
             o.set("messageArgs", Value::Array(self.message_args.iter().map(|a| Value::String(a.clone())).collect()));
         }
         if !self.message_chain.is_empty() {
-            o.set("messageChain", Value::Array(self.message_chain.iter().map(|d| d.marshal_json()).collect()));
+            o.set("messageChain", Value::Array(self.message_chain.iter().map(BuildInfoDiagnostic::marshal_json).collect()));
         }
         if !self.related_information.is_empty() {
-            o.set("relatedInformation", Value::Array(self.related_information.iter().map(|d| d.marshal_json()).collect()));
+            o.set("relatedInformation", Value::Array(self.related_information.iter().map(BuildInfoDiagnostic::marshal_json).collect()));
         }
         o.bool("reportsUnnecessary", self.reports_unnecessary);
         o.bool("reportsDeprecated", self.reports_deprecated);
@@ -333,7 +334,7 @@ impl BuildInfoDiagnostic {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct BuildInfoRepopulateInfo {
     pub kind: RepopulateDiagnosticKind,
     pub module_reference: String,
@@ -377,7 +378,7 @@ impl BuildInfoDiagnosticsOfFile {
     // buildInfo.go:234
     pub fn marshal_json(&self) -> Value {
         // Go marshals a nil []*BuildInfoDiagnostic inside []any as null.
-        Value::Array(vec![num(self.file_id), Value::Array(self.diagnostics.iter().map(|d| d.marshal_json()).collect())])
+        Value::Array(vec![num(self.file_id), Value::Array(self.diagnostics.iter().map(BuildInfoDiagnostic::marshal_json).collect())])
     }
 
     // buildInfo.go:241
@@ -433,7 +434,7 @@ impl BuildInfoSemanticDiagnostic {
 // fileId if pending emit is same as what compilerOptions suggest
 // [fileId] if pending emit is only dts file emit
 // [fileId, emitKind] if any other type emit is pending
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoFilePendingEmit {
     pub file_id: BuildInfoFileId,
     pub emit_kind: FileEmitKind,
@@ -480,7 +481,7 @@ impl BuildInfoFilePendingEmit {
 
 // [fileId, signature] if different from file's signature
 // fileId if file wasnt emitted
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoEmitSignature {
     pub file_id: BuildInfoFileId,
     pub signature: String,             // Signature if it is different from file's Signature
@@ -566,7 +567,7 @@ impl BuildInfoEmitSignature {
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct BuildInfoResolvedRoot {
     pub resolved: BuildInfoFileId,
     pub root: BuildInfoFileId,
@@ -600,6 +601,8 @@ pub struct BuildInfo {
     pub package_jsons: Option<Vec<String>>,
     pub missing_package_jsons: Option<Vec<String>>,
     pub content_mapper_identities: Option<Vec<String>>,
+    // Default-history cache proof; Go-compatible history leaves it empty and omits it.
+    pub tsrs_canonical_check_signature: String,
 
     // IncrementalProgram info
     pub file_names: Vec<String>,
@@ -632,6 +635,7 @@ impl BuildInfo {
         o.opt_strings("packageJsons", &self.package_jsons);
         o.opt_strings("missingPackageJsons", &self.missing_package_jsons);
         o.opt_strings("contentMapperIdentities", &self.content_mapper_identities);
+        o.str("tsrsCanonicalCheckSignature", &self.tsrs_canonical_check_signature);
         if !self.file_names.is_empty() {
             o.set("fileNames", strings(&self.file_names));
         }
@@ -657,7 +661,15 @@ impl BuildInfo {
 
     // Go `json.Unmarshal(data, &buildInfo)`.
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfo, String> {
+        Self::unmarshal_json_with_canonical_diagnostics(data, true)
+    }
+
+    fn unmarshal_json_with_canonical_diagnostics(data: &Value, canonical_diagnostics: bool) -> Result<BuildInfo, String> {
         let o = as_object(data)?;
+        // tsrs-only: tagged CLI diagnostics cannot be reused by API or Go history, even with a malformed proof.
+        if (!canonical_diagnostics || tsrs_core::compat::go_compatible_history()) && o.contains_key("tsrsCanonicalCheckSignature") {
+            return Err("canonical build info cannot be reused with this diagnostic policy".to_string());
+        }
         Ok(BuildInfo {
             version: get_string(o, "version")?,
             errors: get_bool(o, "errors")?,
@@ -666,6 +678,12 @@ impl BuildInfo {
             package_jsons: get_opt_string_array(o, "packageJsons")?,
             missing_package_jsons: get_opt_string_array(o, "missingPackageJsons")?,
             content_mapper_identities: get_opt_string_array(o, "contentMapperIdentities")?,
+            tsrs_canonical_check_signature: match o.get("tsrsCanonicalCheckSignature") {
+                Some(Value::String(signature)) if signature.strip_prefix("go4-v1:").is_some_and(|hash| {
+                    hash.len() == 32 && hash.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b))
+                }) => signature.clone(),
+                _ => String::new(),
+            },
             file_names: get_string_array(o, "fileNames")?,
             file_infos: get_array(o, "fileInfos", BuildInfoFileInfo::unmarshal_json)?,
             file_infos_non_nil: matches!(o.get("fileInfos"), Some(Value::Array(_))),
@@ -721,6 +739,7 @@ impl BuildInfo {
         w.opt_strings("packageJsons", &self.package_jsons);
         w.opt_strings("missingPackageJsons", &self.missing_package_jsons);
         w.opt_strings("contentMapperIdentities", &self.content_mapper_identities);
+        w.str("tsrsCanonicalCheckSignature", &self.tsrs_canonical_check_signature);
         if !self.file_names.is_empty() {
             w.strings("fileNames", &self.file_names);
         }
@@ -756,6 +775,10 @@ impl BuildInfo {
 
     pub fn unmarshal(text: &str) -> Result<BuildInfo, String> {
         BuildInfo::unmarshal_json(&tsrs_core::json::unmarshal(text)?)
+    }
+
+    pub(crate) fn unmarshal_with_canonical_diagnostics(text: &str, canonical_diagnostics: bool) -> Result<BuildInfo, String> {
+        Self::unmarshal_json_with_canonical_diagnostics(&tsrs_core::json::unmarshal(text)?, canonical_diagnostics)
     }
 
     // buildInfo.go:500
@@ -1240,6 +1263,7 @@ mod tests {
             package_jsons: Some(vec!["../package.json".into()]),
             missing_package_jsons: Some(vec![]),
             content_mapper_identities: None,
+            tsrs_canonical_check_signature: "go4-v1:0123456789abcdef0123456789abcdef".into(),
             file_names: vec!["lib.d.ts".into(), "../src/a.ts".into(), "../src/ü \"q\".ts".into()],
             file_infos: vec![
                 info("v1", "v1", false, ModuleKind::CommonJS),
@@ -1267,6 +1291,7 @@ mod tests {
         for build_info in [full, empty, bare] {
             let expected = tsrs_core::json::marshal(&build_info.marshal_json()).unwrap();
             assert_eq!(build_info.marshal(), expected);
+            assert_eq!(BuildInfo::unmarshal(&expected).unwrap().tsrs_canonical_check_signature, build_info.tsrs_canonical_check_signature);
         }
     }
 }

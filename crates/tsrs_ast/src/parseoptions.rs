@@ -37,7 +37,7 @@ pub fn get_external_module_indicator_options(
             jsx: options.jsx == JsxEmit::ReactJSX || options.jsx == JsxEmit::ReactJSXDev,
             force: is_file_forced_to_be_module_by_format(file_name, options, metadata),
         },
-        _ => ExternalModuleIndicatorOptions::default(),
+        ModuleDetectionKind::None => ExternalModuleIndicatorOptions::default(),
     }
 }
 

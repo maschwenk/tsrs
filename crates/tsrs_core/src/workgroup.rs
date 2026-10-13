@@ -13,9 +13,7 @@ pub fn new_work_group<'a>(_single_threaded: bool) -> WorkGroup<'a> {
 
 impl<'a> WorkGroup<'a> {
     pub fn queue(&self, f: impl FnOnce() + 'a) {
-        if self.done.get() {
-            panic!("Queue called after RunAndWait returned");
-        }
+        assert!(!self.done.get(), "Queue called after RunAndWait returned");
         self.fns.borrow_mut().push(Box::new(f));
     }
 

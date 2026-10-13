@@ -19,7 +19,7 @@ use tsrs_vfs::{bundled, vfstest, FS};
 use crate::compiler_runner::{self, Outcome, TestItem};
 use crate::diagnosticwriter::{Diag, FileLike};
 use crate::harnessutil::{HarnessOptions, OptionTable, TestConfiguration, TestFile, TEST_LIB_FOLDER};
-use crate::test_case_parser::{self};
+use crate::test_case_parser;
 use crate::tsbaseline;
 use crate::options::{parse_test_ts_config, test_compiler_options, unsupported_reason};
 
@@ -45,15 +45,13 @@ impl CompilerHost for CachedCompilerHost {
         self.inner.get_current_directory()
     }
     fn trace(&self, msg: &'static tsrs_diagnostics::Message, args: &[&dyn std::fmt::Display]) {
-        self.inner.trace(msg, args)
+        self.inner.trace(msg, args);
     }
     fn get_source_file(&self, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
         let text = self.fs().read_file(&opts.file_name)?;
         let script_kind = tsrs_core::get_script_kind_from_file_name(&opts.file_name);
-        if script_kind == ScriptKind::Unknown {
-            panic!("Unknown script kind for file  {}", opts.file_name);
-        }
-        let key = (opts.file_name.clone(), opts.path.as_str().to_string(), opts.external_module_indicator_options.jsx, opts.external_module_indicator_options.force, format!("{:?}{}", script_kind, text));
+        assert!(script_kind != ScriptKind::Unknown, "Unknown script kind for file  {}", opts.file_name);
+        let key = (opts.file_name.clone(), opts.path.as_str().to_string(), opts.external_module_indicator_options.jsx, opts.external_module_indicator_options.force, format!("{script_kind:?}{text}"));
         if let Some(cached) = SOURCE_FILE_CACHE.with(|c| c.borrow().get(&key).copied()) {
             return Some(cached);
         }

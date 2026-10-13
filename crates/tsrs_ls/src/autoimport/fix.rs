@@ -87,9 +87,7 @@ impl Fix {
             }
             lsproto::AutoImportFixKind::AddToExisting => {
                 let import_index = import_index_from_protocol(self.import_index);
-                if file.imports().len() <= import_index {
-                    panic!("import index out of range");
-                }
+                assert!(file.imports().len() > import_index, "import index out of range");
                 let existing_fix = get_add_to_existing_import_fix(file, self);
                 add_to_existing_import(
                     &mut tracker,
@@ -202,9 +200,7 @@ pub(crate) fn add_namespace_qualifier(f: &Fix, tracker: &mut change::Tracker, fi
 
 // fix.go:160
 pub(crate) fn get_add_to_existing_import_fix(file: P<SourceFile>, fix: &Fix) -> addToExistingImportFix {
-    if fix.kind != lsproto::AutoImportFixKind::AddToExisting {
-        panic!("expected add to existing import fix");
-    }
+    assert!(fix.kind == lsproto::AutoImportFixKind::AddToExisting, "expected add to existing import fix");
     let module_specifier = file.imports()[import_index_from_protocol(fix.import_index)];
     let Some(import_node) = ast::try_get_import_from_module_specifier(module_specifier) else {
         panic!("expected import declaration");
@@ -215,9 +211,7 @@ pub(crate) fn get_add_to_existing_import_fix(file: P<SourceFile>, fix: &Fix) -> 
             None => panic!("expected import clause"),
         },
         Kind::CallExpression => {
-            if !ast::is_variable_declaration_initialized_to_require(import_node.parent().unwrap()) {
-                panic!("expected require call expression to be in variable declaration");
-            }
+            assert!(ast::is_variable_declaration_initialized_to_require(import_node.parent().unwrap()), "expected require call expression to be in variable declaration");
             match import_node.parent().unwrap().name() {
                 Some(n) if ast::is_object_binding_pattern(n) => n,
                 _ => panic!("expected object binding pattern in variable declaration"),
@@ -453,9 +447,7 @@ pub(crate) fn get_new_imports(
         };
         statements.push(declaration);
     }
-    if statements.is_empty() {
-        panic!("No statements to insert for new imports");
-    }
+    assert!(!statements.is_empty(), "No statements to insert for new imports");
     statements
 }
 
@@ -508,7 +500,7 @@ pub(crate) fn get_new_requires(
         statements.push(declaration);
     }
 
-    assert!(!statements.is_empty());
+    assert_ne!(statements, [] as [tsrs_core::P<tsrs_ast::Node>; 0]);
     statements
 }
 
@@ -686,7 +678,7 @@ impl View {
         }
 
         let existing_imports = self.get_existing_imports();
-        let matching_declarations = existing_imports.get(&export.module_id).map(|v| v.as_slice()).unwrap_or(&[]);
+        let matching_declarations = existing_imports.get(&export.module_id).map_or(&[] as &[existingImport], std::vec::Vec::as_slice);
         if let Some(result) = matching_declarations.iter().find_map(|existing_import| {
             let namespace_prefix = get_namespace_like_import_text(existing_import.node);
             if namespace_prefix.is_empty() || existing_import.module_specifier.is_empty() {
@@ -744,7 +736,7 @@ impl View {
     // fix.go:690
     fn try_add_to_existing_import(&self, export: &Export, is_valid_type_only_use_site: bool) -> Option<Fix> {
         let existing_imports = self.get_existing_imports();
-        let matching_declarations = existing_imports.get(&export.module_id).map(|v| v.as_slice()).unwrap_or(&[]);
+        let matching_declarations = existing_imports.get(&export.module_id).map_or(&[] as &[existingImport], std::vec::Vec::as_slice);
         if matching_declarations.is_empty() {
             return None;
         }
@@ -902,7 +894,7 @@ fn get_import_kind(importing_file: P<SourceFile>, export: &Export, program: &Pro
             }
             lsproto::ImportKind::CommonJS
         }
-        _ => panic!("unhandled export syntax kind: {}", export.syntax.string()),
+        ExportSyntax::None => panic!("unhandled export syntax kind: {}", export.syntax.string()),
     }
 }
 

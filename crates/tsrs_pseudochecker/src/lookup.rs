@@ -137,7 +137,7 @@ impl PseudoChecker {
         if let (Some(init), Some(symbol)) = (init, declaration.symbol()) {
             let qualifies = {
                 let decls = symbol.declarations();
-                decls.len() == 1 || count_where(&decls, |d| is_variable_declaration(*d)) == 1
+                decls.len() == 1 || count_where(decls, |d| is_variable_declaration(*d)) == 1
             };
             if qualifies && !is_contextually_typed(declaration) {
                 // TODO: also should bail on expando declarations; reuse syntactic expando check used in declaration emit
@@ -161,7 +161,7 @@ impl PseudoChecker {
     pub(crate) fn type_from_accessor(&self, accessor: P<Node>) -> Option<P<PseudoType>> {
         let accessor_declarations = {
             let decls = accessor.declaration_data().unwrap().symbol().unwrap().declarations();
-            get_all_accessor_declarations_for_declaration(accessor, &decls)
+            get_all_accessor_declarations_for_declaration(accessor, decls)
         };
         let accessor_type = self.get_type_annotation_from_all_accessor_declarations(accessor, accessor_declarations);
         if let Some(accessor_type) = accessor_type {
@@ -379,10 +379,7 @@ impl PseudoChecker {
                 e.as_property_assignment().postfix_token().is_some_and(|t| t.kind() == Kind::QuestionToken),
                 self.type_from_expression(e.initializer().unwrap()).unwrap(),
             )),
-            Kind::SetAccessor | Kind::GetAccessor => {
-                let member = self.get_accessor_member(e, e.name().unwrap());
-                if let Some(member) = member { Some(member) } else { None }
-            }
+            Kind::SetAccessor | Kind::GetAccessor => self.get_accessor_member(e, e.name().unwrap()),
             _ => None,
         }));
         new_pseudo_type_object_literal(&results)
@@ -393,7 +390,7 @@ impl PseudoChecker {
     pub(crate) fn get_accessor_member(&self, accessor: P<Node>, name: P<Node>) -> Option<P<PseudoObjectElement>> {
         let all_accessors = {
             let decls = accessor.symbol().unwrap().declarations();
-            get_all_accessor_declarations_for_declaration(accessor, &decls) // TODO: node preservation for late-bound accessor pairs?
+            get_all_accessor_declarations_for_declaration(accessor, decls) // TODO: node preservation for late-bound accessor pairs?
         };
 
         // TODO: handle pseudo-annotations from get accessor return positions?

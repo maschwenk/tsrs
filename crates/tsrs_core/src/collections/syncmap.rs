@@ -20,7 +20,7 @@ pub struct SyncMap<K: Hash + Eq, V> {
 
 impl<K: Hash + Eq, V> Default for SyncMap<K, V> {
     fn default() -> Self {
-        SyncMap { shards: (0..SHARDS).map(|_| RwLock::new(HashTable::new())).collect() }
+        SyncMap { shards: std::iter::repeat_with(|| RwLock::new(HashTable::new())).take(SHARDS).collect() }
     }
 }
 

@@ -37,7 +37,7 @@ static HARNESS_COMPILER_OPTIONS: LazyLock<Vec<&'static CommandLineOption>> = Laz
 
 static HARNESS_COMMAND_LINE_OPTIONS: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::new(|| {
     let opt = new_option;
-    use CommandLineOptionKind::*;
+    use CommandLineOptionKind::{Boolean, String, List};
     vec![
         opt("useCaseSensitiveFileNames", Boolean),
         opt("baselineFile", String),
@@ -157,7 +157,7 @@ fn parse_harness_option(key: &str, value: &CompilerOptionsValue, harness_options
         "includeBuiltFile" => harness_options.include_built_file = s(),
         "fileName" => harness_options.file_name = s(),
         "libFiles" => {
-            harness_options.lib_files = value.as_array().map(|a| a.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default()
+            harness_options.lib_files = value.as_array().map(|a| a.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default();
         }
         "noImplicitReferences" => harness_options.no_implicit_references = b(),
         "currentDirectory" => harness_options.current_directory = s(),

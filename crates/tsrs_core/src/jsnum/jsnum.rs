@@ -61,7 +61,7 @@ impl Neg for Number {
 }
 
 pub fn nan() -> Number {
-    Number(f64::from_bits(0x7FF8000000000001))
+    Number(f64::from_bits(0x7FF8_0000_0000_0001))
 }
 
 impl Number {
@@ -86,7 +86,7 @@ impl Number {
 
 pub(crate) fn is_non_finite(x: f64) -> bool {
     // This is equivalent to checking `math.IsNaN(x) || math.IsInf(x, 0)` in one operation.
-    const mask: u64 = 0x7FF0000000000000;
+    const mask: u64 = 0x7FF0_0000_0000_0000;
     x.to_bits() & mask == mask
 }
 

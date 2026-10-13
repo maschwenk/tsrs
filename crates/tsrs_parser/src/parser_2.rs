@@ -2056,10 +2056,7 @@ impl Parser {
         self.context_flags &= !NodeFlags::DecoratorContext;
         let pos = self.node_pos();
         let mut expr = self.parse_assignment_expression_or_higher();
-        loop {
-            let Some(operator_token) = self.parse_optional_token(Kind::CommaToken) else {
-                break;
-            };
+        while let Some(operator_token) = self.parse_optional_token(Kind::CommaToken) {
             let right = self.parse_assignment_expression_or_higher();
             expr = self.make_binary_expression(expr, operator_token, right, pos);
         }

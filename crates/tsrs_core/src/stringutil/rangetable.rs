@@ -28,7 +28,7 @@ fn is16(ranges: &[Range16], r: u16) -> bool {
             if r < range.lo {
                 Some(false)
             } else if r <= range.hi {
-                Some(range.stride == 1 || (r - range.lo) % range.stride == 0)
+                Some(range.stride == 1 || (r - range.lo).is_multiple_of(range.stride))
             } else {
                 None
             }
@@ -42,7 +42,7 @@ fn is16(ranges: &[Range16], r: u16) -> bool {
         let m = lo + (hi - lo) / 2;
         let range = &ranges[m];
         if range.lo <= r && r <= range.hi {
-            return range.stride == 1 || (r - range.lo) % range.stride == 0;
+            return range.stride == 1 || (r - range.lo).is_multiple_of(range.stride);
         }
         if r < range.lo {
             hi = m;
@@ -59,7 +59,7 @@ fn is32(ranges: &[Range32], r: u32) -> bool {
             if r < range.lo {
                 Some(false)
             } else if r <= range.hi {
-                Some(range.stride == 1 || (r - range.lo) % range.stride == 0)
+                Some(range.stride == 1 || (r - range.lo).is_multiple_of(range.stride))
             } else {
                 None
             }
@@ -73,7 +73,7 @@ fn is32(ranges: &[Range32], r: u32) -> bool {
         let m = lo + (hi - lo) / 2;
         let range = &ranges[m];
         if range.lo <= r && r <= range.hi {
-            return range.stride == 1 || (r - range.lo) % range.stride == 0;
+            return range.stride == 1 || (r - range.lo).is_multiple_of(range.stride);
         }
         if r < range.lo {
             hi = m;
@@ -150,7 +150,7 @@ pub fn unicode_to_upper(r: Rune) -> Rune {
 /// wrapping around to the smallest. Go first consults its `asciiFold` table for ASCII; that table agrees with
 /// `CASE_ORBIT` (K, S, k, s) and the ToLower/ToUpper fallback, so it is not copied.
 pub fn unicode_simple_fold(r: Rune) -> Rune {
-    if r > 0x10FFFF {
+    if r > 0x0010_FFFF {
         return r;
     }
     if let Ok(i) = CASE_ORBIT.binary_search_by_key(&r, |&(from, _)| from as Rune) {
@@ -208,7 +208,7 @@ pub fn decode_rune(s: &[u8]) -> (Rune, usize) {
     };
     if (0xC2..=0xDF).contains(&b0) {
         if let Some(c1) = cont(1, 0x80, 0xBF) {
-            return (((b0 & 0x1F) as u32) << 6 | c1, 2);
+            return ((((b0 & 0x1F) as u32) << 6) | c1, 2);
         }
         return (RUNE_ERROR, 1);
     }
@@ -219,7 +219,7 @@ pub fn decode_rune(s: &[u8]) -> (Rune, usize) {
             _ => (0x80, 0xBF),
         };
         if let (Some(c1), Some(c2)) = (cont(1, lo, hi), cont(2, 0x80, 0xBF)) {
-            return (((b0 & 0x0F) as u32) << 12 | c1 << 6 | c2, 3);
+            return ((((b0 & 0x0F) as u32) << 12) | (c1 << 6) | c2, 3);
         }
         return (RUNE_ERROR, 1);
     }
@@ -230,7 +230,7 @@ pub fn decode_rune(s: &[u8]) -> (Rune, usize) {
             _ => (0x80, 0xBF),
         };
         if let (Some(c1), Some(c2), Some(c3)) = (cont(1, lo, hi), cont(2, 0x80, 0xBF), cont(3, 0x80, 0xBF)) {
-            return (((b0 & 0x07) as u32) << 18 | c1 << 12 | c2 << 6 | c3, 4);
+            return ((((b0 & 0x07) as u32) << 18) | (c1 << 12) | (c2 << 6) | c3, 4);
         }
         return (RUNE_ERROR, 1);
     }

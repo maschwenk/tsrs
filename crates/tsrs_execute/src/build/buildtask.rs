@@ -294,9 +294,7 @@ impl BuildTask {
     fn wait_on_upstream(&self, orchestrator: &Orchestrator) {
         let upstream: Vec<P<BuildTask>> = self.up_stream.lock().unwrap().iter().map(|u| u.task).collect();
         for task in upstream {
-            if !task.done.wait(&orchestrator.aborted) {
-                panic!("build aborted: a builder thread panicked");
-            }
+            assert!(task.done.wait(&orchestrator.aborted), "build aborted: a builder thread panicked");
         }
     }
 
@@ -382,7 +380,7 @@ impl BuildTask {
     }
 
     // buildtask.go:184
-    fn update_downstream(&self, orchestrator: &Orchestrator, _path: &Path) {
+    fn update_downstream(&self, orchestrator: &Orchestrator, path: &Path) {
         if self.is_initial_cycle.load(Ordering::SeqCst) {
             return;
         }
@@ -424,7 +422,7 @@ impl BuildTask {
                             }
                             upToDateStatusType::UpstreamErrors => {
                                 let ref_config = tsrs_core::resolve_config_file_name_of_project_reference(&current.upstream_errors().ref_);
-                                if orchestrator.to_path(&ref_config) == *_path {
+                                if orchestrator.to_path(&ref_config) == *path {
                                     reset = true;
                                 }
                             }
@@ -641,6 +639,7 @@ impl BuildTask {
         let mut regions = None;
         let program = reused.unwrap_or_else(|| {
             let mut program_options = ProgramOptions::new(self.resolved(), compiler_host);
+            program_options.canonical_diagnostics = orchestrator.uses_canonical_diagnostics();
             // Watch mode frees the program when the task builds again (`replace_watch_program`), with the diagnostics
             // its checkers make: the task's errors are cleared first, and the snapshot that keeps some copies them.
             program_options.checker_regions = watch;
@@ -922,7 +921,7 @@ impl BuildTask {
                 let mut current_version = String::new();
                 if build_info.is_incremental() {
                     let (build_info_file_info, resolved_input_path) = get_build_info_root_info_reader().get_build_info_file_info(&input_path);
-                    if let Some(file_info) = build_info_file_info.map(|i| i.get_file_info()) {
+                    if let Some(file_info) = build_info_file_info.map(tsrs_incremental::BuildInfoFileInfo::get_file_info) {
                         if !file_info.version().is_empty() {
                             version = file_info.version().to_string();
                             if let Some(text) = tsrs_compiler::CompilerHost::fs(host).read_file(&resolved_input_path) {
@@ -1164,7 +1163,7 @@ impl BuildTask {
         let status = self.status();
         match status.kind {
             upToDateStatusType::ConfigFileNotFound => {
-                self.report_status(diag(&diagnostics::Project_0_is_out_of_date_because_config_file_does_not_exist, &[&config]))
+                self.report_status(diag(&diagnostics::Project_0_is_out_of_date_because_config_file_does_not_exist, &[&config]));
             }
             upToDateStatusType::UpstreamErrors => {
                 let upstream_status = status.upstream_errors();
@@ -1175,7 +1174,7 @@ impl BuildTask {
                         &diagnostics::Project_0_can_t_be_built_because_its_dependency_1_has_errors
                     },
                     &[&config, &rel(&upstream_status.ref_)],
-                ))
+                ));
             }
             upToDateStatusType::BuildErrors => self.report_status(diag(&diagnostics::Project_0_is_out_of_date_because_it_has_errors, &[&config])),
             upToDateStatusType::UpToDate => {
@@ -1189,7 +1188,7 @@ impl BuildTask {
                 }
             }
             upToDateStatusType::UpToDateWithUpstreamTypes => {
-                self.report_status(diag(&diagnostics::Project_0_is_up_to_date_with_d_ts_files_from_its_dependencies, &[&config]))
+                self.report_status(diag(&diagnostics::Project_0_is_up_to_date_with_d_ts_files_from_its_dependencies, &[&config]));
             }
             upToDateStatusType::UpToDateWithInputFileText => self.report_status(diag(
                 &diagnostics::Project_0_is_up_to_date_but_needs_to_update_timestamps_of_output_files_that_are_older_than_input_files,
@@ -1208,7 +1207,7 @@ impl BuildTask {
                 self.report_status(diag(
                     &diagnostics::Project_0_is_out_of_date_because_output_1_is_older_than_input_2,
                     &[&config, &rel(&input_output.output), &rel(&input_output.input)],
-                ))
+                ));
             }
             upToDateStatusType::OutOfDateBuildInfoWithPendingEmit => self.report_status(diag(
                 &diagnostics::Project_0_is_out_of_date_because_buildinfo_file_1_indicates_that_some_of_the_changes_were_not_emitted,
@@ -1227,7 +1226,7 @@ impl BuildTask {
                 self.report_status(diag(
                     &diagnostics::Project_0_is_out_of_date_because_buildinfo_file_1_indicates_that_file_2_was_root_file_of_compilation_but_not_any_more,
                     &[&config, &rel(&input_output.output), &rel(&input_output.input)],
-                ))
+                ));
             }
             upToDateStatusType::TsVersionOutputOfDate => self.report_status(diag(
                 &diagnostics::Project_0_is_out_of_date_because_output_for_it_was_generated_with_version_1_that_differs_with_current_version_2,
@@ -1248,7 +1247,7 @@ impl BuildTask {
 
     // buildtask.go:739
     fn update_time_stamps(&self, orchestrator: &Orchestrator, emitted_files: &[String], verbose_message: &'static Message) {
-        let emitted: Set<&str> = new_set_from_items(emitted_files.iter().map(|s| s.as_str()));
+        let emitted: Set<&str> = new_set_from_items(emitted_files.iter().map(std::string::String::as_str));
         let mut verbose_message_reported = false;
         let build_info_name = self.resolved().get_build_info_file_name();
         let now = orchestrator.opts.sys.now_time();
@@ -1329,7 +1328,12 @@ impl BuildTask {
                 return (entry.build_info.clone(), entry.m_time);
             }
         }
-        let build_info = tsrs_incremental::new_build_info_reader(Arc::clone(&orchestrator.host().host)).read_build_info(&self.resolved()).map(Arc::new);
+        let build_info = tsrs_incremental::new_build_info_reader_with_canonical_diagnostics(
+            Arc::clone(&orchestrator.host().host),
+            orchestrator.uses_canonical_diagnostics(),
+        )
+        .read_build_info(&self.resolved())
+        .map(Arc::new);
         let m_time = if build_info.is_some() { orchestrator.host().get_m_time(build_info_file_name) } else { None };
         *entry = Some(buildInfoEntry { build_info: build_info.clone(), path, m_time, dts_time: None });
         (build_info, m_time)

@@ -27,7 +27,7 @@ impl fmt::Display for JSONValueType {
             JSONValueType::Boolean => f.write_str("boolean"),
             JSONValueType::Array => f.write_str("array"),
             JSONValueType::Object => f.write_str("object"),
-            _ => write!(f, "unknown({})", *self as i8),
+            JSONValueType::NotPresent => write!(f, "unknown({})", *self as i8),
         }
     }
 }

@@ -320,37 +320,37 @@ impl SymbolTracker for wrappingTracker {
         wrappingTracker::track_symbol(self, c, symbol, enclosing_declaration, meaning)
     }
     fn report_inaccessible_this_error(&self) {
-        wrappingTracker::report_inaccessible_this_error(self)
+        wrappingTracker::report_inaccessible_this_error(self);
     }
     fn report_private_in_base_of_class_expression(&self, property_name: &str) {
-        wrappingTracker::report_private_in_base_of_class_expression(self, property_name)
+        wrappingTracker::report_private_in_base_of_class_expression(self, property_name);
     }
     fn report_inaccessible_unique_symbol_error(&self) {
-        wrappingTracker::report_inaccessible_unique_symbol_error(self)
+        wrappingTracker::report_inaccessible_unique_symbol_error(self);
     }
     fn report_cyclic_structure_error(&self) {
-        wrappingTracker::report_cyclic_structure_error(self)
+        wrappingTracker::report_cyclic_structure_error(self);
     }
     fn report_likely_unsafe_import_required_error(&self, specifier: &str, symbol_name: &str) {
-        wrappingTracker::report_likely_unsafe_import_required_error(self, specifier, symbol_name)
+        wrappingTracker::report_likely_unsafe_import_required_error(self, specifier, symbol_name);
     }
     fn report_truncation_error(&self) {
-        wrappingTracker::report_truncation_error(self)
+        wrappingTracker::report_truncation_error(self);
     }
     fn report_nonlocal_augmentation(&self, containing_file: P<SourceFile>, parent_symbol: P<Symbol>, augmenting_symbol: P<Symbol>) {
-        wrappingTracker::report_nonlocal_augmentation(self, containing_file, parent_symbol, augmenting_symbol)
+        wrappingTracker::report_nonlocal_augmentation(self, containing_file, parent_symbol, augmenting_symbol);
     }
     fn report_non_serializable_property(&self, property_name: &str) {
-        wrappingTracker::report_non_serializable_property(self, property_name)
+        wrappingTracker::report_non_serializable_property(self, property_name);
     }
     fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) {
-        wrappingTracker::report_inference_fallback(self, c, node)
+        wrappingTracker::report_inference_fallback(self, c, node);
     }
     fn push_error_fallback_node(&self, node: Option<P<Node>>) {
-        wrappingTracker::push_error_fallback_node(self, node)
+        wrappingTracker::push_error_fallback_node(self, node);
     }
     fn pop_error_fallback_node(&self) {
-        wrappingTracker::pop_error_fallback_node(self)
+        wrappingTracker::pop_error_fallback_node(self);
     }
 }
 

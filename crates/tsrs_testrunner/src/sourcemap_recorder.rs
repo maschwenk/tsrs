@@ -114,7 +114,7 @@ pub(crate) fn new_source_map_span_writer<'a>(source_map_recorder: &'a mut writer
                 Ok(content) => content,
                 Err(err) => panic!("{}", err),
             };
-            source_map_recorder.write_line(&format!("sourcesContent: {}", content));
+            source_map_recorder.write_line(&format!("sourcesContent: {content}"));
         }
     }
     source_map_recorder.write_line("===================================================================");
@@ -205,9 +205,7 @@ impl sourceMapSpanWriter<'_> {
 
         self.record_source_map_span(source_map_span);
 
-        if self.spans_on_single_line.len() != 1 {
-            panic!("expected a single span");
-        }
+        assert!(self.spans_on_single_line.len() == 1, "expected a single span");
 
         self.source_map_recorder.write_line("-------------------------------------------------------------------");
         if continues_line {
@@ -292,9 +290,7 @@ impl recordedSpanWriter<'_, '_> {
     fn get_marker_id(&self, marker_index: usize) -> String {
         let mut marker_id;
         if self.w.span_marker_continues {
-            if marker_index != 0 {
-                panic!("expected markerIndex to be 0");
-            }
+            assert!(marker_index == 0, "expected markerIndex to be 0");
             marker_id = "1->".to_string();
         } else {
             marker_id = (marker_index + 1).to_string();

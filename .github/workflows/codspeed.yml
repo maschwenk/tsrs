@@ -47,7 +47,7 @@ jobs:
         run: echo "work=$(python3 bench/run.py --print-cache-keys --projects "$PROJECTS" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
 
       - name: Cache the bench projects
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: |
             bench/.work/suite

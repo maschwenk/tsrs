@@ -19,7 +19,7 @@ pub fn base64_encode(data: &[u8]) -> String {
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     out.extend(data.chunks(3).flat_map(|chunk| {
         let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
-        let n = (b[0] as u32) << 16 | (b[1] as u32) << 8 | b[2] as u32;
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
         [
             T[(n >> 18) as usize & 63] as char,
             T[(n >> 12) as usize & 63] as char,
@@ -33,7 +33,7 @@ pub fn base64_encode(data: &[u8]) -> String {
 /// Go `base64.StdEncoding.DecodeString` (padding required, no whitespace).
 pub fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
     let b = text.as_bytes();
-    if b.len() % 4 != 0 {
+    if !b.len().is_multiple_of(4) {
         return Err(format!("illegal base64 data at input byte {}", b.len() - b.len() % 4));
     }
     let val = |c: u8| -> Option<u32> {
@@ -56,7 +56,7 @@ pub fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
         let mut n = 0u32;
         for (i, &c) in chunk.iter().enumerate() {
             let v = if i >= 4 - pad { 0 } else { val(c).ok_or_else(|| format!("illegal base64 data at input byte {}", ci * 4 + i))? };
-            n = n << 6 | v;
+            n = (n << 6) | v;
         }
         out.push((n >> 16) as u8);
         if pad < 2 {

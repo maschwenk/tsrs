@@ -83,8 +83,8 @@ fn compute_snapshot_changes(prev: &Snapshot, next: &Snapshot) -> Value {
                     continue;
                 }
                 let empty = FxHashMap::default();
-                let old_files = old.get_program().map(|p| p.files_by_path()).unwrap_or(&empty);
-                let new_files = new.get_program().map(|p| p.files_by_path()).unwrap_or(&empty);
+                let old_files = old.get_program().map_or(&empty, tsrs_compiler::Program::files_by_path);
+                let new_files = new.get_program().map_or(&empty, tsrs_compiler::Program::files_by_path);
                 let mut changed_files: Vec<&Path> = Vec::new();
                 let mut deleted_files: Vec<&Path> = Vec::new();
                 #[expect(clippy::iter_over_hash_type, reason = "both lists are sorted before they are serialized")]

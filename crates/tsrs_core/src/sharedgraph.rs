@@ -149,7 +149,7 @@ pub fn freeze(ranges: &[(usize, usize)]) {
     let lo = ranges.iter().map(|r| r.0).min().unwrap_or(0);
     let hi = ranges.iter().map(|r| r.0 + r.1).max().unwrap_or(0);
     let words = ((hi - lo) >> 6).div_ceil(64) + 1;
-    let dirty: &'static mut [AtomicU64] = Box::leak((0..words).map(|_| AtomicU64::new(0)).collect());
+    let dirty: &'static mut [AtomicU64] = Box::leak(std::iter::repeat_with(|| AtomicU64::new(0)).take(words).collect());
     // Relaxed (both): published by the Release store of the span below.
     DIRTY.store(dirty.as_mut_ptr(), Ordering::Relaxed);
     FROZEN_LO.store(lo, Ordering::Relaxed);
@@ -438,7 +438,7 @@ impl<T> OvThinSliceCell<T> {
     }
     #[inline]
     pub fn set(&self, s: &'static [T]) {
-        self.0.set(crate::ThinSlice::new(s))
+        self.0.set(crate::ThinSlice::new(s));
     }
 }
 
@@ -462,7 +462,7 @@ impl<T> OvOptionThinSliceCell<T> {
     }
     #[inline]
     pub fn set(&self, s: Option<&'static [T]>) {
-        self.0.set(s.map(crate::ThinSlice::new))
+        self.0.set(s.map(crate::ThinSlice::new));
     }
 }
 

@@ -208,36 +208,36 @@ impl SymbolTracker for SymbolTrackerImpl {
         SymbolTrackerImpl::track_symbol(self, c, symbol, enclosing_declaration, meaning)
     }
     fn report_inaccessible_this_error(&self) {
-        SymbolTrackerImpl::report_inaccessible_this_error(self)
+        SymbolTrackerImpl::report_inaccessible_this_error(self);
     }
     fn report_private_in_base_of_class_expression(&self, property_name: &str) {
-        SymbolTrackerImpl::report_private_in_base_of_class_expression(self, property_name)
+        SymbolTrackerImpl::report_private_in_base_of_class_expression(self, property_name);
     }
     fn report_inaccessible_unique_symbol_error(&self) {
-        SymbolTrackerImpl::report_inaccessible_unique_symbol_error(self)
+        SymbolTrackerImpl::report_inaccessible_unique_symbol_error(self);
     }
     fn report_cyclic_structure_error(&self) {
-        SymbolTrackerImpl::report_cyclic_structure_error(self)
+        SymbolTrackerImpl::report_cyclic_structure_error(self);
     }
     fn report_likely_unsafe_import_required_error(&self, specifier: &str, symbol_name: &str) {
-        SymbolTrackerImpl::report_likely_unsafe_import_required_error(self, specifier, symbol_name)
+        SymbolTrackerImpl::report_likely_unsafe_import_required_error(self, specifier, symbol_name);
     }
     fn report_truncation_error(&self) {
-        SymbolTrackerImpl::report_truncation_error(self)
+        SymbolTrackerImpl::report_truncation_error(self);
     }
     fn report_nonlocal_augmentation(&self, containing_file: P<SourceFile>, parent_symbol: P<Symbol>, augmenting_symbol: P<Symbol>) {
-        SymbolTrackerImpl::report_nonlocal_augmentation(self, containing_file, parent_symbol, augmenting_symbol)
+        SymbolTrackerImpl::report_nonlocal_augmentation(self, containing_file, parent_symbol, augmenting_symbol);
     }
     fn report_non_serializable_property(&self, property_name: &str) {
-        SymbolTrackerImpl::report_non_serializable_property(self, property_name)
+        SymbolTrackerImpl::report_non_serializable_property(self, property_name);
     }
     fn report_inference_fallback(&self, c: &mut Checker, node: P<Node>) {
-        SymbolTrackerImpl::report_inference_fallback(self, c, node)
+        SymbolTrackerImpl::report_inference_fallback(self, c, node);
     }
     fn push_error_fallback_node(&self, node: Option<P<Node>>) {
-        SymbolTrackerImpl::push_error_fallback_node(self, node)
+        SymbolTrackerImpl::push_error_fallback_node(self, node);
     }
     fn pop_error_fallback_node(&self) {
-        SymbolTrackerImpl::pop_error_fallback_node(self)
+        SymbolTrackerImpl::pop_error_fallback_node(self);
     }
 }

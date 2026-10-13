@@ -211,7 +211,7 @@ impl Selection {
 
 fn cmd_run(mut args: Args) {
     let sel = Selection::from_args(&mut args);
-    let jobs = args.num("--jobs").unwrap_or_else(|| std::thread::available_parallelism().map_or(4, |n| n.get()));
+    let jobs = args.num("--jobs").unwrap_or_else(|| std::thread::available_parallelism().map_or(4, std::num::NonZero::get));
     let timeout = Duration::from_secs_f64(args.value("--timeout").map_or(20.0, |v| v.parse().unwrap_or(20.0)));
     let recycle = args.num("--recycle").unwrap_or(200);
     let mem_limit_mb = args.num("--mem-limit").unwrap_or(6144) as u64;
@@ -406,7 +406,7 @@ fn cmd_show(mut args: Args) {
 fn cmd_crashes(mut args: Args) {
     let top = args.num("--top").unwrap_or(30);
     let examples = args.num("--examples").unwrap_or(2);
-    let json_path = args.value("--json").map(PathBuf::from).unwrap_or_else(|| worker::results_dir().join("summary.json"));
+    let json_path = args.value("--json").map_or_else(|| worker::results_dir().join("summary.json"), PathBuf::from);
     check_no_extra(&args);
     let summary = report::load_summary(&json_path);
     if summary.is_empty() {

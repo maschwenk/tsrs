@@ -13,6 +13,7 @@ bitflags::bitflags! {
         const JsxAttributeEscape = 1 << 1;
         const TerminateUnterminatedLiterals = 1 << 2;
         const AllowNumericSeparator = 1 << 3;
+        const InternalSymbolName = 1 << 4; // Port-only: see `EmitFlags::InternalSymbolName`.
     }
 }
 
@@ -53,14 +54,14 @@ fn escaped_chars_map(ch: stringutil::Rune) -> Option<&'static str> {
 }
 
 fn encode_jsx_character_entity(b: &mut String, char_code: stringutil::Rune) {
-    let hex_char_code = format!("{:X}", char_code);
+    let hex_char_code = format!("{char_code:X}");
     b.push_str("&#x");
     b.push_str(&hex_char_code);
     b.push(';');
 }
 
 fn encode_utf16_escape_sequence(b: &mut String, char_code: stringutil::Rune) {
-    let hex_char_code = format!("{:X}", char_code);
+    let hex_char_code = format!("{char_code:X}");
     b.push_str("\\u");
     b.extend((hex_char_code.len()..4).map(|_| '0'));
     b.push_str(&hex_char_code);
@@ -74,18 +75,17 @@ pub(crate) fn escape_string_worker(s: &str, quote_char: QuoteChar, flags: getLit
     let mut pos = 0;
     let mut i = 0;
     while i < bytes.len() {
-        let (mut ch, mut size) = if i == 0 && bytes.len() > 1 && bytes[0] == InternalSymbolNamePrefixByte {
-            // An internal symbol name (a symbol name that the node builder put into a string literal, e.g.
-            // `(typeof E)["�missing"]`): the port's prefix U+007F stands in for Go's invalid byte 0xFE, which
-            // Go decodes as a stray RuneError. Internal names start with the prefix and have a non-empty rest; a
-            // U+007F anywhere else is user text (`"\177"`), which Go leaves unescaped.
+        let (mut ch, mut size) = if i == 0 && flags.intersects(getLiteralTextFlags::InternalSymbolName) && bytes[0] == InternalSymbolNamePrefixByte {
+            // An internal symbol name the node builder put into a string literal (`(typeof E)["�missing"]`):
+            // Go's prefix is the invalid byte 0xFE, which it decodes as a stray RuneError. Any other U+007F is user
+            // text (`"\u{7F}\b"`), which Go leaves unescaped.
             (0xFFFD, 1)
         } else {
             stringutil::decode_js_string_rune_bytes(&bytes[i..])
         };
 
         let mut escape = false;
-        if ch >= 0xD800 && ch <= 0xDFFF {
+        if (0xD800..=0xDFFF).contains(&ch) {
             escape = true;
         } else if ch == 0xFFFD && size == 1 {
             // A stray byte that is not valid UTF-8 (for example, a fragment of a
@@ -141,9 +141,9 @@ pub(crate) fn escape_string_worker(s: &str, quote_char: QuoteChar, flags: getLit
             } else if ch > 0xffff {
                 // encode as surrogate pair
                 ch -= 0x10000;
-                encode_utf16_escape_sequence(b, ((ch & 0b11111111110000000000) >> 10) + 0xD800);
-                encode_utf16_escape_sequence(b, (ch & 0b00000000001111111111) + 0xDC00);
-            } else if ch >= 0xD800 && ch <= 0xDFFF {
+                encode_utf16_escape_sequence(b, ((ch & 0b1111_1111_1100_0000_0000) >> 10) + 0xD800);
+                encode_utf16_escape_sequence(b, (ch & 0b0000_0000_0011_1111_1111) + 0xDC00);
+            } else if (0xD800..=0xDFFF).contains(&ch) {
                 encode_utf16_escape_sequence(b, ch);
             } else if ch == 0 {
                 if i + 1 < bytes.len() && stringutil::is_digit(u32::from(bytes[i + 1])) {
@@ -312,7 +312,7 @@ pub(crate) fn get_literal_text(node: P<Node>, source_file: Option<P<SourceFile>>
                 } else {
                     b = String::with_capacity(1 + text.len());
                     b.push_str(text);
-                    b.push_str("/");
+                    b.push('/');
                 }
                 return b;
             }
@@ -747,7 +747,7 @@ pub(crate) fn ensure_leading_hash(text: &str) -> String {
     if has_leading_hash(text) {
         text.to_string()
     } else {
-        format!("#{}", text)
+        format!("#{text}")
     }
 }
 

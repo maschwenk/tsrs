@@ -99,11 +99,11 @@ impl WatchManager {
     }
 
     pub fn lock(&self) -> MutexGuard<'_, WatchState> {
-        self.mu.lock().unwrap_or_else(|e| e.into_inner())
+        self.mu.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     fn changed(&self) -> MutexGuard<'_, changedState> {
-        self.changed.lock().unwrap_or_else(|e| e.into_inner())
+        self.changed.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
     }
 
     pub fn set_debug_log(&self, log: SyncWriter) {
@@ -164,7 +164,7 @@ impl WatchManager {
     }
 
     fn signal_do_cycle(&self) {
-        *self.do_cycle.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        *self.do_cycle.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = true;
         self.do_cycle_cv.notify_one();
     }
 
@@ -367,15 +367,15 @@ impl WatchManager {
     pub fn run_loop(&self, mut do_cycle: impl FnMut()) {
         loop {
             {
-                let mut pending = self.do_cycle.lock().unwrap_or_else(|e| e.into_inner());
+                let mut pending = self.do_cycle.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
                 while !*pending {
-                    if *self.stopped.lock().unwrap_or_else(|e| e.into_inner()) {
+                    if *self.stopped.lock().unwrap_or_else(std::sync::PoisonError::into_inner) {
                         drop(pending);
                         self.close_all_watches();
                         return;
                     }
                     // No timeout: an idle watch must not wake up (Go selects on its channels too); `stop` notifies.
-                    pending = self.do_cycle_cv.wait(pending).unwrap_or_else(|e| e.into_inner());
+                    pending = self.do_cycle_cv.wait(pending).unwrap_or_else(std::sync::PoisonError::into_inner);
                 }
                 *pending = false;
             }
@@ -385,10 +385,10 @@ impl WatchManager {
 
     /// Ends `run_loop` (Go: cancelling the context).
     pub fn stop(&self) {
-        *self.stopped.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        *self.stopped.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = true;
         // Under `do_cycle`'s lock: `run_loop` checks `stopped` and starts waiting while it holds it, so the notification
         // cannot fall between the two.
-        let _pending = self.do_cycle.lock().unwrap_or_else(|e| e.into_inner());
+        let _pending = self.do_cycle.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         self.do_cycle_cv.notify_all();
     }
 }

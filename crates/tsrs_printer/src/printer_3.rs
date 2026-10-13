@@ -362,61 +362,61 @@ impl borrowedWriter {
 
 impl EmitTextWriter for borrowedWriter {
     fn write(&mut self, s: &str) {
-        self.w().write(s)
+        self.w().write(s);
     }
     fn write_trailing_semicolon(&mut self, text: &str) {
-        self.w().write_trailing_semicolon(text)
+        self.w().write_trailing_semicolon(text);
     }
     fn write_comment(&mut self, text: &str) {
-        self.w().write_comment(text)
+        self.w().write_comment(text);
     }
     fn write_keyword(&mut self, text: &str) {
-        self.w().write_keyword(text)
+        self.w().write_keyword(text);
     }
     fn write_operator(&mut self, text: &str) {
-        self.w().write_operator(text)
+        self.w().write_operator(text);
     }
     fn write_punctuation(&mut self, text: &str) {
-        self.w().write_punctuation(text)
+        self.w().write_punctuation(text);
     }
     fn write_space(&mut self, text: &str) {
-        self.w().write_space(text)
+        self.w().write_space(text);
     }
     fn write_string_literal(&mut self, text: &str) {
-        self.w().write_string_literal(text)
+        self.w().write_string_literal(text);
     }
     fn write_parameter(&mut self, text: &str) {
-        self.w().write_parameter(text)
+        self.w().write_parameter(text);
     }
     fn write_property(&mut self, text: &str) {
-        self.w().write_property(text)
+        self.w().write_property(text);
     }
     fn write_symbol(&mut self, text: &str, symbol: P<Symbol>) {
-        self.w().write_symbol(text, symbol)
+        self.w().write_symbol(text, symbol);
     }
     fn write_line(&mut self) {
-        self.w().write_line()
+        self.w().write_line();
     }
     fn write_line_force(&mut self, force: bool) {
-        self.w().write_line_force(force)
+        self.w().write_line_force(force);
     }
     fn increase_indent(&mut self) {
-        self.w().increase_indent()
+        self.w().increase_indent();
     }
     fn decrease_indent(&mut self) {
-        self.w().decrease_indent()
+        self.w().decrease_indent();
     }
     fn clear(&mut self) {
-        self.w().clear()
+        self.w().clear();
     }
     fn string(&self) -> String {
         self.r().string()
     }
     fn raw_write(&mut self, s: &str) {
-        self.w().raw_write(s)
+        self.w().raw_write(s);
     }
     fn write_literal(&mut self, s: &str) {
-        self.w().write_literal(s)
+        self.w().write_literal(s);
     }
     fn get_text_pos(&self) -> u32 {
         self.r().get_text_pos()
@@ -440,7 +440,7 @@ impl EmitTextWriter for borrowedWriter {
         self.r().has_trailing_whitespace()
     }
     fn grow(&mut self, n: usize) {
-        self.w().grow(n)
+        self.w().grow(n);
     }
 }
 
@@ -490,7 +490,7 @@ impl Printer {
         let saved_source_map_line_char_cache = self.source_map_line_char_cache.take();
 
         self.source_maps_disabled = source_map_generator.is_none();
-        self.source_map_generator = source_map_generator.map(|g| std::ptr::from_mut::<SourceMapGenerator>(g));
+        self.source_map_generator = source_map_generator.map(std::ptr::from_mut::<SourceMapGenerator>);
         self.source_map_source = None;
         self.source_map_source_index = tsrs_sourcemap::SourceIndex::Missing;
         self.source_map_line_char_cache = None;
@@ -957,16 +957,15 @@ impl Printer {
 
         let mut pos = pos;
         // skip detached comments
-        if let Some(info) = self.detached_comments_info.last() {
-            if info.node_pos == pos {
-                pos = self.detached_comments_info.pop().unwrap().detached_comment_end_pos;
-            }
+        if let Some(info) = self.detached_comments_info.pop_if(|info| info.node_pos == pos) {
+            pos = info.detached_comment_end_pos;
         }
 
         let mut comments: Vec<CommentRange> = Vec::new();
-        comments.extend(scanner::get_leading_comment_ranges(current_source_file.text(), pos.expect_source("source comments have source positions"), ).filter_map(|comment| {
-            if self.should_write_comment(comment) && self.should_emit_comment_if_triple_slash(comment, triple_slash) { Some(comment) } else { None }
-        }));
+        comments.extend(
+            scanner::get_leading_comment_ranges(current_source_file.text(), pos.expect_source("source comments have source positions"))
+                .filter(|&comment| self.should_write_comment(comment) && self.should_emit_comment_if_triple_slash(comment, triple_slash)),
+        );
 
         if !comments.is_empty()
             && self.should_emit_new_line_before_leading_comment_of_position(
@@ -985,7 +984,7 @@ impl Printer {
         match triple_slash {
             Tristate::True => self.is_triple_slash_comment(comment),
             Tristate::False => !self.is_triple_slash_comment(comment),
-            _ => true,
+            Tristate::Unknown => true,
         }
     }
 
@@ -1035,13 +1034,7 @@ impl Printer {
                 current_source_file.text(),
                 pos.expect_source("source comments have source positions"),
             )
-            .filter_map(|comment| {
-                if self.should_write_comment(comment) {
-                    Some(comment)
-                } else {
-                    None
-                }
-            }),
+            .filter(|&comment| self.should_write_comment(comment)),
         );
 
         // trailing comments are normally emitted as space/*trailing comment1*/space/*trailing comment2*/
@@ -1133,13 +1126,7 @@ impl Printer {
                             .pos()
                             .expect_source("detached comment ranges have source positions"),
                     )
-                    .filter_map(|comment| {
-                        if is_pinned_comment(text, comment) {
-                            Some(comment)
-                        } else {
-                            None
-                        }
-                    }),
+                    .filter(|&comment| is_pinned_comment(text, comment)),
                 );
             }
         } else {
@@ -1816,7 +1803,7 @@ pub(crate) fn get_opening_bracket(format: ListFormat) -> &'static str {
     } else if brackets == ListFormat::SquareBrackets {
         "["
     } else {
-        panic!("Unexpected bracket: {:?}", brackets)
+        panic!("Unexpected bracket: {brackets:?}")
     }
 }
 
@@ -1831,6 +1818,6 @@ pub(crate) fn get_closing_bracket(format: ListFormat) -> &'static str {
     } else if brackets == ListFormat::SquareBrackets {
         "]"
     } else {
-        panic!("Unexpected bracket: {:?}", brackets)
+        panic!("Unexpected bracket: {brackets:?}")
     }
 }

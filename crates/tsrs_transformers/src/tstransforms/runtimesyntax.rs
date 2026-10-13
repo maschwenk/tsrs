@@ -646,8 +646,7 @@ impl RuntimeSyntaxTransformer {
                         let expression = flatten_destructuring_assignment(&self.base, visited, false /*needsValue*/, FlattenLevel::All, Some(&callback));
                         Some(expression)
                     } else {
-                        let expression = convert_variable_declaration_to_assignment_expression(self.emit_context(), declaration);
-                        if let Some(expression) = expression { Some(expression) } else { None }
+                        convert_variable_declaration_to_assignment_expression(self.emit_context(), declaration)
                     }
                 },
             ));
@@ -933,7 +932,7 @@ impl RuntimeSyntaxTransformer {
             self.pop_node(grandparent_of_try_statement);
         } else {
             // visit the statement containing `super`
-            statements_out.extend_from_slice(self.visitor().visit_slice(&statements_in[super_statement_index..super_statement_index + 1]).0);
+            statements_out.extend_from_slice(self.visitor().visit_slice(&statements_in[super_statement_index..=super_statement_index]).0);
 
             // insert the initializer statements
             statements_out.extend_from_slice(initializer_statements);

@@ -403,6 +403,7 @@ pub const ERR_PROJECT_UNAVAILABLE: &str = "content mapper project is unavailable
 // operands here never are one of the typed errors), is `Other` with Go's text; an error from the mapper
 // connection is `Ipc`, which keeps the ipc sentinels (`ipc::ErrorTag`) for errors.Is.
 #[derive(Clone, Debug)]
+#[expect(clippy::error_impl_error, reason = "the public name mirrors Go's package-level content-mapper error value")]
 pub enum Error {
     // *TransformError
     Transform(TransformError),

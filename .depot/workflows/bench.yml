@@ -11,10 +11,10 @@
 # `--checkers 16` on one 16-vCPU machine, with `bun check` as a third column; `merge` joins the partial results into
 # one result file (bench/run.py --merge), flags regressions and commits.
 #
-# Loop guards: the results commit only touches bench/RESULTS.md, bench/large-projects.svg and bench/results/**
-# (excluded by `paths`), and carries [skip ci], which the build job's `if` also checks (the commit is pushed by
-# Depot's GitHub app, which may trigger
-# Depot CI); the other jobs need the build job, so they are skipped with it.
+# The push trigger is limited to the Rust source tree and build inputs: documentation, benchmark reports and other
+# repository-only changes do not need a fresh measurement. The results commit also carries [skip ci], which the build
+# job's `if` checks as a second loop guard (the commit is pushed by Depot's GitHub app, which may trigger Depot CI);
+# the other jobs need the build job, so they are skipped with it.
 
 name: Bench
 
@@ -22,11 +22,10 @@ on:
   push:
     branches: [main]
     paths:
-      - "**"
-      - "!README.md"
-      - "!bench/RESULTS.md"
-      - "!bench/large-projects.svg"
-      - "!bench/results/**"
+      - "crates/**"
+      - "Cargo.lock"
+      - "Cargo.toml"
+      - "rust-toolchain.toml"
   workflow_dispatch:
     inputs:
       commit:

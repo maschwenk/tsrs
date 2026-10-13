@@ -196,7 +196,7 @@ impl projectReferenceFileMapper {
         let mut seen_ref: FxHashSet<Path> = FxHashSet::with_capacity_and_hasher(self.references_in_config_file.len(), Default::default());
         let root_config_path = self.root_config_path();
         seen_ref.insert(root_config_path.clone());
-        let refs = self.references_in_config_file.get(&root_config_path).map(|v| v.as_slice()).unwrap_or(&[]);
+        let refs = self.references_in_config_file.get(&root_config_path).map_or(&[] as &[Path], std::vec::Vec::as_slice);
         self.range_resolved_reference_worker(refs, &mut f, self.config, &mut seen_ref)
     }
 
@@ -216,7 +216,7 @@ impl projectReferenceFileMapper {
             if !f(path, config, parent, index) {
                 return true;
             }
-            let child_refs = self.references_in_config_file.get(path).map(|v| v.as_slice()).unwrap_or(&[]);
+            let child_refs = self.references_in_config_file.get(path).map_or(&[] as &[Path], std::vec::Vec::as_slice);
             // A reference that did not resolve has no references of its own (Go recurses with a nil parent over
             // an empty list).
             if let Some(config) = config {
@@ -246,7 +246,7 @@ impl projectReferenceFileMapper {
         };
         let mut seen_ref: FxHashSet<Path> = FxHashSet::with_capacity_and_hasher(self.references_in_config_file.len(), Default::default());
         seen_ref.insert(child_config_file.source_file.path().clone());
-        let refs = self.references_in_config_file.get(child_config_file.source_file.path()).map(|v| v.as_slice()).unwrap_or(&[]);
+        let refs = self.references_in_config_file.get(child_config_file.source_file.path()).map_or(&[] as &[Path], std::vec::Vec::as_slice);
         self.range_resolved_reference_worker(refs, &mut f, self.config, &mut seen_ref)
     }
 }
