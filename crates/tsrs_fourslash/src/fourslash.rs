@@ -2,6 +2,7 @@
 // the real language server (tsrs_lsp) in-process over framed byte pipes (tsrs_lsp::lsptestutil, Go's
 // testutil/lsptestutil). Unported features fail the test with "feature not ported: <name>".
 
+use std::fmt::Write as _;
 use std::sync::{Arc, LazyLock, Mutex, OnceLock, RwLock};
 
 use rustc_hash::FxHashMap;
@@ -165,14 +166,6 @@ impl TextLengthChange {
     }
 }
 
-// fourslash.go:101
-#[derive(Clone, Copy, Debug, Default)]
-pub(crate) struct TextEditSpan {
-    pub(crate) start: u32,
-    pub(crate) end: u32,
-    pub(crate) length: u32,
-}
-
 // fourslash.go:107
 pub(crate) fn new_script_info(file_name: &str, content: &str) -> ScriptInfo {
     ScriptInfo { file_name: file_name.to_string(), content: content.to_string(), line_map: lsconv::compute_lsp_line_starts(content), version: 1 }
@@ -180,6 +173,7 @@ pub(crate) fn new_script_info(file_name: &str, content: &str) -> ScriptInfo {
 
 impl ScriptInfo {
     // fourslash.go:116
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub(crate) fn edit_content(&mut self, change: TextChange) {
         self.content = change.apply_to(&self.content);
         self.line_map = lsconv::compute_lsp_line_starts(&self.content);
@@ -308,7 +302,7 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
         })
         .collect();
     let fs_from_map = Arc::new(tsrs_vfs::vfstest::from_map(entries, harness_options.use_case_sensitive_file_names));
-    let fs: Arc<dyn FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(fs_from_map.clone()));
+    let fs: Arc<dyn FS> = Arc::new(tsrs_vfs::bundled::wrap_fs(Arc::clone(&fs_from_map)));
 
     if options.content_mapper_spawner.is_some() {
         // serverOpts.Spawn = options.ContentMapperSpawner.Spawn: content mappers are out of scope (docs/LSP.md).
@@ -320,7 +314,7 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
         err: Box::new(std::io::sink()),
 
         cwd: "/".to_string(),
-        fs: Some(fs.clone()),
+        fs: Some(Arc::clone(&fs)),
         default_library_path: tsrs_vfs::bundled::lib_path(),
         typings_location: String::new(),
 
@@ -331,9 +325,9 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
     };
 
     let script_infos = Arc::new(RwLock::new(script_infos));
-    let shared = script_infos.clone();
+    let shared = Arc::clone(&script_infos);
     let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |file_name| {
-        shared.read().unwrap().get(file_name).map(|s| s.line_map.clone())
+        shared.read().unwrap().get(file_name).map(|s| Arc::clone(&s.line_map))
     }));
 
     let user_preferences = lsutil::new_default_user_preferences();
@@ -346,7 +340,7 @@ fn new_fourslash_impl(t: &T, content: &str, options: Option<FourslashOptions>, t
         state_enable_formatting: true,
         report_format_on_type_crash: true,
         user_preferences,
-        shared_user_preferences: shared_user_preferences.clone(),
+        shared_user_preferences: Arc::clone(&shared_user_preferences),
         script_infos,
         converters,
         baselines: OrderedMap::default(),
@@ -448,7 +442,7 @@ fn handle_server_request(user_preferences: &Mutex<lsutil::UserPreferences>, req:
 // fourslash.go:346
 pub(crate) fn get_base_file_name_from_test(t: &T) -> String {
     let name = t.name();
-    let mut name = name.split('/').last().unwrap_or("").to_string();
+    let mut name = name.split('/').next_back().unwrap_or("").to_string();
     name = name.strip_prefix("Test").unwrap_or(&name).to_string();
     name = stringutil::lower_first_char(&name);
 
@@ -597,7 +591,7 @@ static DEFAULT_HOVER_CAPABILITIES: LazyLock<lsproto::HoverClientCapabilities> = 
 });
 
 static DEFAULT_EXPERIMENTAL_CAPABILITIES: LazyLock<lsproto::ExperimentalClientCapabilities> =
-    LazyLock::new(|| lsproto::ExperimentalClientCapabilities { hover_verbosity_level: ptr_true(), ..Default::default() });
+    LazyLock::new(|| lsproto::ExperimentalClientCapabilities { hover_verbosity_level: ptr_true() });
 
 static DEFAULT_SIGNATURE_HELP_CAPABILITIES: LazyLock<lsproto::SignatureHelpClientCapabilities> =
     LazyLock::new(|| lsproto::SignatureHelpClientCapabilities {
@@ -659,7 +653,7 @@ pub fn get_default_capabilities() -> Option<lsproto::ClientCapabilities> {
             position_encodings: Some(vec![lsproto::PositionEncodingKind::UTF8]),
             ..Default::default()
         }),
-        experimental: Some(lsproto::ExperimentalClientCapabilities { hover_verbosity_level: ptr_true(), ..Default::default() }),
+        experimental: Some(lsproto::ExperimentalClientCapabilities { hover_verbosity_level: ptr_true() }),
         text_document: Some(lsproto::TextDocumentClientCapabilities {
             completion: Some(lsproto::CompletionClientCapabilities {
                 completion_item: Some(lsproto::ClientCompletionItemOptions {
@@ -754,7 +748,7 @@ pub fn get_default_capabilities_with_options(options: Option<ClientCapabilitiesO
             target.commit_characters_support = completion_item_options.commit_characters_support;
         }
         if completion_item_options.documentation_format.is_some() {
-            target.documentation_format = completion_item_options.documentation_format.clone();
+            target.documentation_format.clone_from(&completion_item_options.documentation_format);
         }
         if completion_item_options.deprecated_support.is_some() {
             target.deprecated_support = completion_item_options.deprecated_support;
@@ -763,16 +757,16 @@ pub fn get_default_capabilities_with_options(options: Option<ClientCapabilitiesO
             target.preselect_support = completion_item_options.preselect_support;
         }
         if completion_item_options.tag_support.is_some() {
-            target.tag_support = completion_item_options.tag_support.clone();
+            target.tag_support.clone_from(&completion_item_options.tag_support);
         }
         if completion_item_options.insert_replace_support.is_some() {
             target.insert_replace_support = completion_item_options.insert_replace_support;
         }
         if completion_item_options.resolve_support.is_some() {
-            target.resolve_support = completion_item_options.resolve_support.clone();
+            target.resolve_support.clone_from(&completion_item_options.resolve_support);
         }
         if completion_item_options.insert_text_mode_support.is_some() {
-            target.insert_text_mode_support = completion_item_options.insert_text_mode_support.clone();
+            target.insert_text_mode_support.clone_from(&completion_item_options.insert_text_mode_support);
         }
         if completion_item_options.label_details_support.is_some() {
             target.label_details_support = completion_item_options.label_details_support;
@@ -790,7 +784,7 @@ pub(crate) fn get_capabilities_with_defaults(capabilities: Option<&lsproto::Clie
     capabilities_with_defaults.general =
         Some(lsproto::GeneralClientCapabilities { position_encodings: Some(vec![lsproto::PositionEncodingKind::UTF8]), ..Default::default() });
     if capabilities_with_defaults.experimental.is_none() {
-        capabilities_with_defaults.experimental = Some(DEFAULT_EXPERIMENTAL_CAPABILITIES.clone());
+        capabilities_with_defaults.experimental = Some(*DEFAULT_EXPERIMENTAL_CAPABILITIES);
     }
     let text_document = capabilities_with_defaults.text_document.get_or_insert_with(Default::default);
     if text_document.completion.is_none() {
@@ -826,13 +820,13 @@ pub(crate) fn get_capabilities_with_defaults(capabilities: Option<&lsproto::Clie
     }
     let text_document = capabilities_with_defaults.text_document.as_mut().unwrap();
     if text_document.definition.is_none() {
-        text_document.definition = Some(DEFAULT_DEFINITION_CAPABILITIES.clone());
+        text_document.definition = Some(*DEFAULT_DEFINITION_CAPABILITIES);
     }
     if text_document.type_definition.is_none() {
-        text_document.type_definition = Some(DEFAULT_TYPE_DEFINITION_CAPABILITIES.clone());
+        text_document.type_definition = Some(*DEFAULT_TYPE_DEFINITION_CAPABILITIES);
     }
     if text_document.implementation.is_none() {
-        text_document.implementation = Some(DEFAULT_IMPLEMENTATION_CAPABILITIES.clone());
+        text_document.implementation = Some(*DEFAULT_IMPLEMENTATION_CAPABILITIES);
     }
     if text_document.hover.is_none() {
         text_document.hover = Some(DEFAULT_HOVER_CAPABILITIES.clone());
@@ -908,7 +902,7 @@ pub struct CompletionsExpectedItems {
 }
 
 // fourslash.go:1147
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CompletionsExpectedCodeAction {
     pub name: String,
     pub source: String,
@@ -923,7 +917,7 @@ pub struct VerifyCompletionsResult {
 }
 
 // fourslash.go:1675
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VerifyCodeFixOptions {
     pub description: String,
     pub new_file_content: String,
@@ -934,14 +928,14 @@ pub struct VerifyCodeFixOptions {
 }
 
 // fourslash.go:1685
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VerifyCodeFixAllOptions {
     pub fix_id: String,
     pub new_file_content: String,
 }
 
 // fourslash.go:2212
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ApplyCodeActionFromCompletionOptions {
     pub name: String,
     pub source: String,
@@ -953,14 +947,14 @@ pub struct ApplyCodeActionFromCompletionOptions {
 }
 
 // fourslash.go:2900
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct FoldingRangeLineExpected {
     pub start_line: u32,
     pub end_line: u32,
 }
 
 // fourslash.go:4329
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VerifySignatureHelpOptions {
     // Text is the full signature text (e.g., "fn(x: string, y: number): void")
     pub text: String,
@@ -1009,7 +1003,7 @@ pub(crate) fn is_no_text_edits(edits: &Option<Vec<lsproto::TextEdit>>) -> bool {
 }
 
 // fourslash.go:5718
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct VerifyWorkspaceSymbolCase {
     pub pattern: String,
     pub includes: Option<Vec<lsproto::SymbolInformation>>,
@@ -1031,6 +1025,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:807
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn configure(&mut self, t: &T, config: lsutil::UserPreferences) {
         // We send 'js/ts' by default because that is what we expect the primary config to be in vscode and VS (one
         // set of preferences for both languages). This should be fine in fourslash since tests that need
@@ -1050,6 +1045,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:827
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn go_to_marker_or_range(&mut self, t: &T, marker_or_range: MarkerOrRange) {
         self.go_to_marker_impl(t, &marker_or_range);
     }
@@ -1120,7 +1116,7 @@ impl FourslashTest {
             }));
         }
         for (i, marker) in markers.into_iter().enumerate() {
-            self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+            self.go_to_marker_impl(t, &MarkerOrRange::Marker(Arc::clone(&marker)));
             action(self, marker, i);
         }
     }
@@ -1135,6 +1131,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:895
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn go_to_range_start(&mut self, t: &T, range_marker: Arc<RangeMarker>) {
         self.open_file(t, &range_marker.file_name());
         self.go_to_position_impl(t, range_marker.ls_range.start);
@@ -1157,8 +1154,9 @@ impl FourslashTest {
     }
 
     // fourslash.go:917
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn go_to_select_range(&mut self, t: &T, range_marker: Arc<RangeMarker>) {
-        self.go_to_range_start(t, range_marker.clone());
+        self.go_to_range_start(t, Arc::clone(&range_marker));
         self.selection_end = Some(range_marker.ls_range.end);
     }
 
@@ -1194,7 +1192,7 @@ impl FourslashTest {
     // fourslash.go:948 (Go returns nil for an unknown name; the tests only ask for existing markers)
     pub fn marker_by_name(&self, t: &T, name: &str) -> Arc<Marker> {
         match self.test_data.marker_positions.get(name) {
-            Some(m) => m.clone(),
+            Some(m) => Arc::clone(m),
             None => t.fatal(&format!("Marker '{name}' not found")),
         }
     }
@@ -1209,7 +1207,7 @@ impl FourslashTest {
         let mut ranges_in_file = Vec::new();
         ranges_in_file.extend(self.test_data.ranges.iter().filter_map(
             |range_marker| {
-                if range_marker.file_name == file_name { Some(range_marker.clone()) } else { None }
+                if range_marker.file_name == file_name { Some(Arc::clone(range_marker)) } else { None }
             },
         ));
         ranges_in_file
@@ -1235,7 +1233,7 @@ impl FourslashTest {
             self.active_filename = String::new();
         }
         if let Some(index) = self.test_data.files.iter().position(|f| f.file_name == marker.file_name()) {
-            let test_file = self.test_data.files[index].clone();
+            let test_file = Arc::clone(&self.test_data.files[index]);
             self.script_infos.write().unwrap().insert(test_file.file_name.clone(), new_script_info(&test_file.file_name, &test_file.content));
         } else {
             self.script_infos.write().unwrap().remove(&marker.file_name());
@@ -1268,7 +1266,7 @@ impl FourslashTest {
                 text_document: lsproto::TextDocumentItem {
                     uri: lsconv::file_name_to_document_uri(filename),
                     language_id: get_language_kind(filename),
-                    text: script.content.clone(),
+                    text: script.content,
                     ..Default::default()
                 },
             },
@@ -1348,6 +1346,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:1164
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_completions(&mut self, t: &T, marker_input: Any, expected: Option<CompletionsExpectedList>) -> VerifyCompletionsResult {
         t.helper();
         let mut list: Option<lsproto::CompletionList> = None;
@@ -1357,7 +1356,7 @@ impl FourslashTest {
                 list = self.verify_completions_worker(t, expected.as_ref());
             }
             Any::Marker(marker) => {
-                self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                self.go_to_marker_impl(t, &MarkerOrRange::Marker(Arc::clone(marker)));
                 list = self.verify_completions_worker(t, expected.as_ref());
             }
             Any::StringSlice(markers) => {
@@ -1368,7 +1367,7 @@ impl FourslashTest {
             }
             Any::MarkerSlice(markers) => {
                 for marker in markers {
-                    self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                    self.go_to_marker_impl(t, &MarkerOrRange::Marker(Arc::clone(marker)));
                     self.verify_completions_worker(t, expected.as_ref());
                 }
             }
@@ -1454,6 +1453,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:1250
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_jsdoc_completion(
         &mut self,
         t: &T,
@@ -1501,6 +1501,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:1285
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_no_jsdoc_completion(&mut self, t: &T, marker_input: Any) {
         t.helper();
         self.go_to_marker_input(t, &marker_input);
@@ -1636,7 +1637,7 @@ impl FourslashTest {
                         let item_index = actual_items.iter().position(|actual_item| {
                             let err = self.verify_completion_item(t, prefix, actual_item, item);
                             if !err.is_empty() {
-                                mismatch_prefix += &format!("\n    {err}");
+                                write!(mismatch_prefix, "\n    {err}").unwrap();
                                 return false;
                             }
                             true
@@ -1684,7 +1685,7 @@ impl FourslashTest {
                     let item_index = actual_items.iter().position(|actual_item| {
                         let err = self.verify_completion_item(t, prefix, actual_item, item);
                         if !err.is_empty() {
-                            mismatch_prefix += &format!("\n    {err}");
+                            write!(mismatch_prefix, "\n    {err}").unwrap();
                             return false;
                         }
                         true
@@ -1757,7 +1758,7 @@ impl FourslashTest {
                 return err;
             }
             if is_any_text_edits(&expected.additional_text_edits) {
-                if !actual.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty()) {
+                if actual.additional_text_edits.as_ref().is_none_or(std::vec::Vec::is_empty) {
                     return "Expected non-nil AdditionalTextEdits for auto-import completion item".to_string();
                 }
             } else if is_no_text_edits(&expected.additional_text_edits) && actual.additional_text_edits.as_ref().is_some_and(|e| !e.is_empty()) {
@@ -1778,7 +1779,7 @@ impl FourslashTest {
                 return err;
             }
             if is_any_text_edits(&expected.additional_text_edits) {
-                if actual.additional_text_edits.as_ref().is_none_or(|e| e.is_empty()) {
+                if actual.additional_text_edits.as_ref().is_none_or(std::vec::Vec::is_empty) {
                     return "Expected non-empty AdditionalTextEdits for completion item".to_string();
                 }
             } else {
@@ -1825,6 +1826,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:1691
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_code_fix(&mut self, t: &T, options: VerifyCodeFixOptions) {
         t.helper();
 
@@ -1846,7 +1848,7 @@ impl FourslashTest {
         let mut matching_action = actions[options.index].clone();
         if matching_action.title != options.description {
             let mut found = false;
-            if let Some(action) = actions.iter().find_map(|action| if action.title == options.description { Some(action) } else { None }) {
+            if let Some(action) = actions.iter().find(|action| action.title == options.description) {
                 matching_action = action.clone();
                 found = true;
             }
@@ -2007,7 +2009,7 @@ impl FourslashTest {
             let found = actions.iter().any(|action| action.title == *expected);
             if !found {
                 let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
-                t.fatal(&format!("Expected code fix with description {:?} not found. Available fixes: {:?}", expected, titles));
+                t.fatal(&format!("Expected code fix with description {expected:?} not found. Available fixes: {titles:?}"));
             }
         }
     }
@@ -2023,12 +2025,12 @@ impl FourslashTest {
             }
 
             let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
-            t.fatal(&format!("Expected no code fixes, but got: {:?}", titles));
+            t.fatal(&format!("Expected no code fixes, but got: {titles:?}"));
         }
         for title in expected {
             for action in &actions {
                 if action.title == *title {
-                    t.fatal(&format!("Expected code fix with description {:?} not to be available.", title));
+                    t.fatal(&format!("Expected code fix with description {title:?} not to be available."));
                 }
             }
         }
@@ -2054,12 +2056,13 @@ impl FourslashTest {
             let found = actions.iter().any(|action| action.title == *expected);
             if !found {
                 let titles: Vec<&str> = actions.iter().map(|a| a.title.as_str()).collect();
-                t.fatal(&format!("Expected code fix with description {:?} not found. Available fixes: {:?}", expected, titles));
+                t.fatal(&format!("Expected code fix with description {expected:?} not found. Available fixes: {titles:?}"));
             }
         }
     }
 
     // fourslash.go:1918
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_code_fix_all(&mut self, t: &T, options: VerifyCodeFixAllOptions) {
         t.helper();
 
@@ -2072,7 +2075,7 @@ impl FourslashTest {
         // "Add all missing imports" when multiple diagnostics match the same provider.
         // We look for actions that are NOT single-diagnostic fixes (i.e., have no Diagnostics attached).
         let fix_all_candidates: Vec<&lsproto::CodeAction> =
-            actions.iter().filter(|action| action.diagnostics.as_ref().is_none_or(|d| d.is_empty())).collect();
+            actions.iter().filter(|action| action.diagnostics.as_ref().is_none_or(std::vec::Vec::is_empty)).collect();
 
         let mut fix_all_action: Option<&lsproto::CodeAction> = None;
         if fix_all_candidates.len() == 1 {
@@ -2081,7 +2084,7 @@ impl FourslashTest {
             // If there are multiple fix-all candidates, match by FixID in the title.
             if let Some(action) = fix_all_candidates
                 .iter()
-                .find_map(|action| if action.title.to_lowercase().contains(&options.fix_id.to_lowercase()) { Some(action) } else { None })
+                .find(|action| action.title.to_lowercase().contains(&options.fix_id.to_lowercase()))
             {
                 fix_all_action = Some(action);
             }
@@ -2345,7 +2348,7 @@ impl FourslashTest {
         if let Some(changes) = organize_action.edit.and_then(|e| e.changes) {
             for (uri, edits) in changes {
                 if uri != expected_uri {
-                    t.fatal(&format!("Organize imports changed unexpected file: {} (expected {})", uri, expected_uri));
+                    t.fatal(&format!("Organize imports changed unexpected file: {uri} (expected {expected_uri})"));
                 }
                 self.apply_text_edits(t, edits);
             }
@@ -2353,7 +2356,7 @@ impl FourslashTest {
 
         let actual_content = self.get_script_info(&active).content;
         if actual_content != expected_content {
-            t.fatal(&format!("Organize imports result doesn't match.\nExpected:\n{}\n\nActual:\n{}", expected_content, actual_content));
+            t.fatal(&format!("Organize imports result doesn't match.\nExpected:\n{expected_content}\n\nActual:\n{actual_content}"));
         }
         if let Some(reset) = reset {
             reset(self, t);
@@ -2368,7 +2371,7 @@ impl FourslashTest {
         }
         if let Some(result) = items.iter().find_map(|item| {
             let resolved_item = self.resolve_completion_item_impl(t, item.clone());
-            if resolved_item.additional_text_edits.as_ref().is_none_or(|e| e.is_empty()) {
+            if resolved_item.additional_text_edits.as_ref().is_none_or(std::vec::Vec::is_empty) {
                 return None;
             }
             if !description.is_empty() && !resolved_item.detail.as_ref().is_some_and(|d| d.contains(description)) {
@@ -2382,6 +2385,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:2241
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_apply_code_action_from_completion(&mut self, t: &T, marker_name: Option<String>, options: Option<ApplyCodeActionFromCompletionOptions>) {
         t.helper();
         let nil = || -> ! { panic!("runtime error: invalid memory address or nil pointer dereference") };
@@ -2546,7 +2550,7 @@ impl FourslashTest {
         }
         for (i, expected) in expected_texts.iter().enumerate() {
             let actual = &actual_text_array[i];
-            crate::go::assert::equal(t, *expected, actual.as_str(), &format!("Import fix at index {} doesn't match.\n", i));
+            crate::go::assert::equal(t, *expected, actual.as_str(), &format!("Import fix at index {i} doesn't match.\n"));
         }
         if let Some(reset) = reset {
             reset(self, t);
@@ -2614,8 +2618,7 @@ impl FourslashTest {
         for (i, expected) in expected_module_specifiers.iter().enumerate() {
             if i >= actual_module_specifiers.len() || actual_module_specifiers[i] != *expected {
                 t.fatal(&format!(
-                    "Module specifier mismatch at index {}.\nExpected: {:?}\nActual: {:?}",
-                    i, expected_module_specifiers, actual_module_specifiers
+                    "Module specifier mismatch at index {i}.\nExpected: {expected_module_specifiers:?}\nActual: {actual_module_specifiers:?}"
                 ));
             }
         }
@@ -2972,7 +2975,7 @@ impl FourslashTest {
 
         let annotated = self.annotate_content_with_tooltips(t, &markers_and_items, "quickinfo", get_range, get_tooltip_lines);
         self.add_result_to_baseline(t, QUICK_INFO_CMD, &annotated);
-        let json = Value::Array(markers_and_items.iter().map(|m| marker_and_item_to_json(m, |h| h.as_ref().map_or(Value::Null, |h| h.to_json()))).collect());
+        let json = Value::Array(markers_and_items.iter().map(|m| marker_and_item_to_json(m, |h| h.as_ref().map_or(Value::Null, tsrs_lsproto::Json::to_json))).collect());
         match tsrs_core::json::marshal_indent(&json, "", "  ") {
             Ok(json_str) => self.write_to_baseline(QUICK_INFO_CMD, &json_str),
             Err(err) => t.fatal(&format!("Failed to stringify markers and items for baseline: {err}")),
@@ -3014,7 +3017,7 @@ impl FourslashTest {
 
         let annotated = self.annotate_content_with_tooltips(t, &markers_and_items, "vsquickinfo", get_range, get_tooltip_lines);
         self.add_result_to_baseline(t, VS_QUICK_INFO_CMD, &annotated);
-        let json = Value::Array(markers_and_items.iter().map(|m| marker_and_item_to_json(m, |h| h.as_ref().map_or(Value::Null, |h| h.to_json()))).collect());
+        let json = Value::Array(markers_and_items.iter().map(|m| marker_and_item_to_json(m, |h| h.as_ref().map_or(Value::Null, tsrs_lsproto::Json::to_json))).collect());
         match tsrs_core::json::marshal_indent(&json, "", "  ") {
             Ok(json_str) => self.write_to_baseline(VS_QUICK_INFO_CMD, &json_str),
             Err(err) => t.fatal(&format!("Failed to stringify markers and items for baseline: {err}")),
@@ -3022,6 +3025,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:3084
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_baseline_hover_with_verbosity(&mut self, t: &T, verbosity_levels: OrderedMap<String, Vec<i32>>) {
         let mut markers_and_items: Vec<MarkerAndItem<Option<HoverWithVerbosity>>> = Vec::new();
         for marker in self.markers() {
@@ -3067,7 +3071,7 @@ impl FourslashTest {
                         }
                     }
                 }
-                markers_and_items.push(MarkerAndItem { marker: marker.clone(), item: Some(item) });
+                markers_and_items.push(MarkerAndItem { marker: Arc::clone(&marker), item: Some(item) });
             }
         }
 
@@ -3097,7 +3101,7 @@ impl FourslashTest {
                         None => Value::Null,
                         Some(h) => {
                             let mut o = OrderedMap::default();
-                            o.insert("hover".to_string(), h.hover.as_ref().map_or(Value::Null, |h| h.to_json()));
+                            o.insert("hover".to_string(), h.hover.as_ref().map_or(Value::Null, tsrs_lsproto::Json::to_json));
                             o.insert("verbosityLevel".to_string(), Value::Number(h.verbosity_level as f64));
                             Value::Object(o)
                         }
@@ -3174,9 +3178,9 @@ impl FourslashTest {
 
                     if let Some(documentation) = &active_param.documentation {
                         if let Some(markup_content) = &documentation.markup_content {
-                            active_param_line = markup_content.value.clone();
+                            active_param_line.clone_from(&markup_content.value);
                         } else if let Some(s) = &documentation.string {
-                            active_param_line = s.clone();
+                            active_param_line.clone_from(s);
                         }
 
                         active_param_line = format!("- `{active_param_label}`: {active_param_line}");
@@ -3209,7 +3213,7 @@ impl FourslashTest {
 
         let annotated = self.annotate_content_with_tooltips(t, &markers_and_items, "signaturehelp", get_range, get_tooltip_lines);
         self.add_result_to_baseline(t, SIGNATURE_HELP_CMD, &annotated);
-        let json = Value::Array(markers_and_items.iter().map(|m| marker_and_item_to_json(m, |h| h.as_ref().map_or(Value::Null, |h| h.to_json()))).collect());
+        let json = Value::Array(markers_and_items.iter().map(|m| marker_and_item_to_json(m, |h| h.as_ref().map_or(Value::Null, tsrs_lsproto::Json::to_json))).collect());
         match tsrs_core::json::marshal_indent(&json, "", "  ") {
             Ok(json_str) => self.write_to_baseline(SIGNATURE_HELP_CMD, &json_str),
             Err(err) => t.fatal(&format!("Failed to stringify markers and items for baseline: {err}")),
@@ -3301,9 +3305,9 @@ impl FourslashTest {
 
                 // Remove blank lines
                 let mut non_blank_lines: Vec<&str> = Vec::new();
-                non_blank_lines.extend(masked_str.split('\n').filter_map(|line| {
+                non_blank_lines.extend(masked_str.split('\n').filter(|line| {
                     let trimmed = line.trim_matches(go_is_space);
-                    if !trimmed.is_empty() && trimmed != "↲" { Some(line) } else { None }
+                    !trimmed.is_empty() && trimmed != "↲"
                 }));
                 masked_str = non_blank_lines.join("\n");
 
@@ -3318,7 +3322,7 @@ impl FourslashTest {
                     if leading_width <= trailing_width {
                         // Clean up middle section
                         let prefix: String = masked_runes[..leading_width].iter().collect();
-                        let middle: String = masked_runes[leading_width..trailing_width + 1].iter().collect();
+                        let middle: String = masked_runes[leading_width..=trailing_width].iter().collect();
                         let suffix: String = masked_runes[trailing_width + 1..].iter().collect();
 
                         let middle = middle.replace('•', " ").replace('↲', "");
@@ -3392,11 +3396,11 @@ impl FourslashTest {
         let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
         marker_or_ranges.extend(marker_or_range_or_names.iter().filter_map(|marker_or_range_or_name| match marker_or_range_or_name {
             Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
-                Some(marker) => Some(MarkerOrRange::Marker(marker.clone())),
+                Some(marker) => Some(MarkerOrRange::Marker(Arc::clone(marker))),
                 None => t.fatal(&format!("Marker '{name}' not found")),
             },
-            Any::Marker(marker) => Some(MarkerOrRange::Marker(marker.clone())),
-            Any::RangeMarker(range) => Some(MarkerOrRange::RangeMarker(range.clone())),
+            Any::Marker(marker) => Some(MarkerOrRange::Marker(Arc::clone(marker))),
+            Any::RangeMarker(range) => Some(MarkerOrRange::RangeMarker(Arc::clone(range))),
             other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
         }));
 
@@ -3432,7 +3436,7 @@ impl FourslashTest {
                 spans.extend(multi_highlights.iter().flat_map(|mh| mh.highlights.iter().map(|h| lsproto::Location { uri: mh.uri.clone(), range: h.range })));
 
                 header.push_str("// filesToSearch:\n");
-                header.extend(files_to_search.iter().map(|file| format!("//   {}\n", file)));
+                header.extend(files_to_search.iter().map(|file| format!("//   {file}\n")));
                 header.push('\n');
             } else {
                 // Single-file: use the standard LSP method.
@@ -3601,6 +3605,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4255
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_jsx_closing_tag(&mut self, t: &T, markers_to_new_text: OrderedMap<String, Option<String>>) {
         for (marker, expected_text) in markers_to_new_text.iter() {
             self.go_to_marker(t, marker);
@@ -3608,7 +3613,6 @@ impl FourslashTest {
                 vs_text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
                 vs_position: self.current_caret_position,
                 vs_ch: ">".to_string(),
-                ..Default::default()
             };
 
             let request_result = self.send_request(t, lsproto::TEXT_DOCUMENT_VS_ON_AUTO_INSERT_INFO, params);
@@ -3647,7 +3651,6 @@ impl FourslashTest {
                 vs_text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name) },
                 vs_position: marker.ls_position,
                 vs_ch: ">".to_string(),
-                ..Default::default()
             };
 
             let result = self.send_request(t, lsproto::TEXT_DOCUMENT_VS_ON_AUTO_INSERT_INFO, params);
@@ -3676,6 +3679,7 @@ impl FourslashTest {
 
     // VerifySignatureHelp verifies signature help at the current position matches the expected options.
     // fourslash.go:4353
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_signature_help(&mut self, t: &T, expected: VerifySignatureHelpOptions) {
         t.helper();
         let prefix = self.get_current_position_prefix();
@@ -3846,6 +3850,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4546
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_no_signature_help_for_markers_with_context(&mut self, t: &T, context: Option<lsproto::SignatureHelpContext>, markers: &[&str]) {
         for marker in markers {
             self.go_to_marker(t, marker);
@@ -3871,6 +3876,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4572
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_signature_help_present_for_markers(&mut self, t: &T, context: Option<lsproto::SignatureHelpContext>, markers: &[&str]) {
         for marker in markers {
             self.go_to_marker(t, marker);
@@ -3897,7 +3903,7 @@ impl FourslashTest {
                     self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref());
                 }
                 Any::Marker(marker) => {
-                    self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                    self.go_to_marker_impl(t, &MarkerOrRange::Marker(Arc::clone(marker)));
                     self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref());
                 }
                 Any::StringSlice(markers) => {
@@ -3908,7 +3914,7 @@ impl FourslashTest {
                 }
                 Any::MarkerSlice(markers) => {
                     for marker in markers {
-                        self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone()));
+                        self.go_to_marker_impl(t, &MarkerOrRange::Marker(Arc::clone(marker)));
                         self.verify_signature_help_impl(t, option.context.clone(), option.expected.as_ref());
                     }
                 }
@@ -3944,8 +3950,8 @@ impl FourslashTest {
             lsutil::UserPreferences {
                 include_completions_for_module_exports: Tristate::True,
                 include_completions_for_import_statements: Tristate::True,
-                import_module_specifier_preference: self.user_preferences.import_module_specifier_preference.clone(),
-                import_module_specifier_ending: self.user_preferences.import_module_specifier_ending.clone(),
+                import_module_specifier_preference: self.user_preferences.import_module_specifier_preference,
+                import_module_specifier_ending: self.user_preferences.import_module_specifier_ending,
                 auto_import_specifier_exclude_regexes: self.user_preferences.auto_import_specifier_exclude_regexes.clone(),
                 auto_import_file_exclude_patterns: self.user_preferences.auto_import_file_exclude_patterns.clone(),
                 prefer_type_only_auto_imports: self.user_preferences.prefer_type_only_auto_imports,
@@ -3973,7 +3979,7 @@ impl FourslashTest {
                     t.fatal(&format!("{prefix}Failed to read file {active} for auto-import baseline"));
                 };
 
-                let marker = self.test_data.marker_positions[marker_name].clone();
+                let marker = Arc::clone(&self.test_data.marker_positions[marker_name]);
                 let ext = tspath::get_any_extension_from_path(&active, &[], true);
                 let ext = ext.strip_prefix('.').unwrap_or(&ext);
                 let lang = if ext == "mts" || ext == "cts" {
@@ -3991,8 +3997,8 @@ impl FourslashTest {
                 );
 
                 let current_file = new_script_info(&active, &file_content);
-                let line_map = current_file.line_map.clone();
-                let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(line_map.clone())));
+                let line_map = Arc::clone(&current_file.line_map);
+                let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(Arc::clone(&line_map))));
                 let list: Vec<lsproto::CompletionItem> = match result.items.filter(|items| !items.is_empty()) {
                     Some(items) => items,
                     None => match result.list.filter(|list| !list.items.is_empty()) {
@@ -4040,11 +4046,11 @@ impl FourslashTest {
         let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
         marker_or_ranges.extend(marker_or_name_or_ranges.iter().filter_map(|marker_or_name_or_range| match marker_or_name_or_range {
             Any::String(name) => match self.test_data.marker_positions.get(name.as_str()) {
-                Some(marker) => Some(MarkerOrRange::Marker(marker.clone())),
+                Some(marker) => Some(MarkerOrRange::Marker(Arc::clone(marker))),
                 None => t.fatal(&format!("Marker '{name}' not found")),
             },
-            Any::Marker(marker) => Some(MarkerOrRange::Marker(marker.clone())),
-            Any::RangeMarker(range) => Some(MarkerOrRange::RangeMarker(range.clone())),
+            Any::Marker(marker) => Some(MarkerOrRange::Marker(Arc::clone(marker))),
+            Any::RangeMarker(range) => Some(MarkerOrRange::RangeMarker(Arc::clone(range))),
             other => t.fatal(&format!("Invalid marker or range type: {}. Expected string, *Marker, or *RangeMarker.", other.type_name())),
         }));
 
@@ -4052,6 +4058,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4780
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     fn verify_baseline_rename_impl(&mut self, t: &T, preferences: Option<lsutil::UserPreferences>, marker_or_ranges: Vec<MarkerOrRange>) {
         let reset = preferences.clone().map(|preferences| self.configure_with_reset(t, preferences));
 
@@ -4081,16 +4088,16 @@ impl FourslashTest {
             let mut rename_options = String::new();
             if let Some(preferences) = &preferences {
                 if preferences.use_aliases_for_rename != Tristate::Unknown {
-                    rename_options.push_str(&format!("// @useAliasesForRename: {}\n", preferences.use_aliases_for_rename.is_true()));
+                    writeln!(rename_options, "// @useAliasesForRename: {}", preferences.use_aliases_for_rename.is_true()).unwrap();
                 }
                 if preferences.quote_preference != lsutil::QuotePreference::Unknown {
-                    rename_options.push_str(&format!("// @quotePreference: {}\n", preferences.quote_preference.as_str()));
+                    writeln!(rename_options, "// @quotePreference: {}", preferences.quote_preference.as_str()).unwrap();
                 }
             }
 
             let span_to_text = Arc::new(span_to_text);
-            let prefix_texts = span_to_text.clone();
-            let suffix_texts = span_to_text.clone();
+            let prefix_texts = Arc::clone(&span_to_text);
+            let suffix_texts = Arc::clone(&span_to_text);
             let baseline_file_content = self.get_baseline_for_grouped_spans_with_file_contents(
                 &file_to_span,
                 &BaselineFourslashLocationsOptions {
@@ -4313,6 +4320,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:5055
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_rename(&mut self, t: &T, marker_name: &str, new_name: &str, expected_file_contents: OrderedMap<String, String>) {
         t.helper();
         self.go_to_marker(t, marker_name);
@@ -4331,6 +4339,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:5068
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_will_rename_files_edits(
         &mut self,
         t: &T,
@@ -4349,13 +4358,13 @@ impl FourslashTest {
 
         for (file_name, expected_content) in &expected_file_contents {
             let Some(script) = self.get_or_load_script_info(file_name) else {
-                t.fatal(&format!("Expected script info for {}, but got nil", file_name));
+                t.fatal(&format!("Expected script info for {file_name}, but got nil"));
             };
             crate::go::assert::equal(
                 t,
                 script.content.as_str(),
                 expected_content.as_str(),
-                &format!("File content after workspace/willRenameFiles edits did not match expected content for {}.", file_name),
+                &format!("File content after workspace/willRenameFiles edits did not match expected content for {file_name}."),
             );
         }
         if let Some(reset) = reset {
@@ -4410,7 +4419,7 @@ impl FourslashTest {
         let mut marker_or_ranges: Vec<MarkerOrRange> = Vec::new();
         marker_or_ranges = texts.iter().fold(marker_or_ranges, |mut marker_or_ranges, text| {
             let ranges_by_text = self.get_ranges_by_text();
-            marker_or_ranges.extend(ranges_by_text.get(&text.to_string()).iter().map(|r| MarkerOrRange::RangeMarker(r.clone())));
+            marker_or_ranges.extend(ranges_by_text.get(&text.to_string()).iter().map(|r| MarkerOrRange::RangeMarker(Arc::clone(r))));
             marker_or_ranges
         });
         self.verify_baseline_rename_impl(t, preferences, marker_or_ranges);
@@ -4419,15 +4428,15 @@ impl FourslashTest {
     // fourslash.go:5239
     pub fn get_ranges_by_text(&self) -> Arc<MultiMap<String, Arc<RangeMarker>>> {
         if let Some(r) = self.ranges_by_text.get() {
-            return r.clone();
+            return Arc::clone(r);
         }
         let mut ranges_by_text: MultiMap<String, Arc<RangeMarker>> = MultiMap::default();
         for r in &self.test_data.ranges {
             let range_text = self.get_range_text(r);
-            ranges_by_text.add(range_text, r.clone());
+            ranges_by_text.add(range_text, Arc::clone(r));
         }
         let r = Arc::new(ranges_by_text);
-        let _ = self.ranges_by_text.set(r.clone());
+        let _ = self.ranges_by_text.set(Arc::clone(&r));
         r
     }
 
@@ -4513,7 +4522,7 @@ impl FourslashTest {
                     Err(err) => t.fatal(&format!("{prefix}Failed to stringify inlay hint for baseline: {err}")),
                 };
                 let mut annotation = file_lines[hint.position.line as usize].to_string();
-                annotation += &format!("\n{underline}\n{hint_json}");
+                write!(annotation, "\n{underline}\n{hint_json}").unwrap();
                 annotations.push(annotation);
             }
         }
@@ -4534,7 +4543,7 @@ impl FourslashTest {
         // write to baseline in order of file appearance in test data
         for file in self.test_data.files.clone() {
             baseline_builder.push_str("// === Linked Editing ===\n");
-            baseline_builder.push_str(&format!("=== {} ===\n", file.file_name()));
+            writeln!(baseline_builder, "=== {} ===", file.file_name()).unwrap();
             let mut results: Vec<lsproto::LinkedEditingRanges> = Vec::new();
             let mut found: FxHashMap<lsproto::Range, bool> = FxHashMap::default();
 
@@ -4561,7 +4570,7 @@ impl FourslashTest {
             }
 
             if results.is_empty() {
-                baseline_builder.push_str(&format!("{}\n\n--No linked edits found--\n\n\n", file.content));
+                write!(baseline_builder, "{}\n\n--No linked edits found--\n\n\n", file.content).unwrap();
                 continue;
             }
 
@@ -4577,7 +4586,7 @@ impl FourslashTest {
                 baseline_details.push((edit.ranges[1].end, "|]".to_string()));
 
                 let json = tsrs_core::json::marshal_indent(&edit.to_json(), "", "  ").expect("stringify linked editing ranges");
-                found_edit_info_builder.push_str(&format!("\n\n=== {offset} ===\n{json}"));
+                write!(found_edit_info_builder, "\n\n=== {offset} ===\n{json}").unwrap();
                 offset += 1;
             }
 
@@ -4593,13 +4602,14 @@ impl FourslashTest {
                 last_position = current_position;
             }
             baseline_builder.push_str(&file.content[last_position..]);
-            baseline_builder.push_str(&format!("{found_edit_info_builder}\n\n\n"));
+            write!(baseline_builder, "{found_edit_info_builder}\n\n\n").unwrap();
         }
 
         self.write_to_baseline(LINKED_EDITING_CMD, &baseline_builder);
     }
 
     // fourslash.go:5407
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_linked_editing(&mut self, t: &T, marker_names_to_expected: OrderedMap<String, Vec<lsproto::Range>>) {
         for (marker_name, expected_ranges) in marker_names_to_expected.iter() {
             self.go_to_marker(t, marker_name);
@@ -4614,7 +4624,6 @@ impl FourslashTest {
                 if let Some(actual_ranges) = actual_ranges.as_ref().filter(|r| !r.ranges.is_empty()) {
                     t.fatal(&format!("Expected no linked editing ranges for marker '{marker_name}', but found {actual_ranges:?}"));
                 }
-                continue;
             } else {
                 let Some(actual_ranges) = actual_ranges.filter(|r| !r.ranges.is_empty()) else {
                     t.fatal(&format!("Expected linked editing ranges for marker '{marker_name}', but found none"));
@@ -4801,6 +4810,7 @@ impl FourslashTest {
     // VerifyErrorExistsAtRange verifies that an error with the given code exists at the given range.
 
     // fourslash.go:5901
+    #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_error_exists_at_range(&mut self, t: &T, range_marker: Arc<RangeMarker>, code: i32, message: &str) {
         let diagnostics = self.get_diagnostics(t, &range_marker.file_name());
         for diag in &diagnostics {
@@ -5019,7 +5029,7 @@ impl FourslashTest {
         t.helper();
         match marker_input {
             Any::String(marker) => self.go_to_marker(t, marker),
-            Any::Marker(marker) => self.go_to_marker_impl(t, &MarkerOrRange::Marker(marker.clone())),
+            Any::Marker(marker) => self.go_to_marker_impl(t, &MarkerOrRange::Marker(Arc::clone(marker))),
             _ => t.fatal(&format!("Invalid marker input type: {}. Expected string or *Marker.", marker_input.type_name())),
         }
     }
@@ -5055,9 +5065,7 @@ impl FourslashTest {
                 result_as_spans = definition_links
                     .iter()
                     .map(|link| {
-                        if origin_range.is_some() && (link.origin_selection_range.is_none() || origin_range != link.origin_selection_range) {
-                            panic!("multiple different origin ranges in definition links");
-                        }
+                        assert!(!(origin_range.is_some() && (link.origin_selection_range.is_none() || origin_range != link.origin_selection_range)), "multiple different origin ranges in definition links");
                         origin_range = link.origin_selection_range;
                         let mut context_span: Option<lsproto::Range> = None;
                         if link.target_range != link.target_selection_range && !self.is_strada_server {
@@ -5091,12 +5099,12 @@ impl FourslashTest {
     // fourslash.go:3854
     pub(crate) fn lookup_markers_or_get_ranges(&self, t: &T, markers: &[&str]) -> Vec<MarkerOrRange> {
         if markers.is_empty() {
-            self.test_data.ranges.iter().map(|r| MarkerOrRange::RangeMarker(r.clone())).collect()
+            self.test_data.ranges.iter().map(|r| MarkerOrRange::RangeMarker(Arc::clone(r))).collect()
         } else {
             markers
                 .iter()
                 .map(|marker_name| match self.test_data.marker_positions.get(*marker_name) {
-                    Some(marker) => MarkerOrRange::Marker(marker.clone()),
+                    Some(marker) => MarkerOrRange::Marker(Arc::clone(marker)),
                     None => t.fatal(&format!("Marker '{marker_name}' not found")),
                 })
                 .collect()
@@ -5156,7 +5164,7 @@ impl FourslashTest {
         let mut total_offset = TextLengthChange::Same;
         let mut current_caret_position = self
             .converters
-            .line_and_character_to_position(script.clone(), self.current_caret_position);
+            .line_and_character_to_position(script, self.current_caret_position);
         // Apply edits in reverse order to avoid affecting the positions of earlier edits.
         for edit in edits.iter().rev() {
             // (Go's `script` is the shared *scriptInfo: positions are converted against the edited text.)
@@ -5283,7 +5291,7 @@ impl FourslashTest {
     pub(crate) fn edit_script_and_update_markers_worker(&mut self, t: &T, file_name: &str, changes: &[TextChange]) {
         // Sort changes by position (ascending) so we can apply in reverse
         let mut sorted_changes = changes.to_vec();
-        sorted_changes.sort_by_key(|c| c.pos());
+        sorted_changes.sort_by_key(tsrs_core::TextChange::pos);
 
         // Apply changes in reverse order to preserve positions of earlier changes
         for change in sorted_changes.iter().rev() {
@@ -5297,13 +5305,13 @@ impl FourslashTest {
                     updated.position = update_position(updated.position, edit_start, edit_end, &change.new_text);
                     updated.ls_position = self.converters.position_to_line_and_character(&script, updated.position);
                     let updated = Arc::new(updated);
-                    replaced.insert(Arc::as_ptr(marker), updated.clone());
+                    replaced.insert(Arc::as_ptr(marker), Arc::clone(&updated));
                     *marker = updated;
                 }
             }
             for (_, marker) in self.test_data.marker_positions.iter_mut() {
                 if let Some(updated) = replaced.get(&Arc::as_ptr(marker)) {
-                    *marker = updated.clone();
+                    *marker = Arc::clone(updated);
                 }
             }
             for range_marker in self.test_data.ranges.iter_mut() {
@@ -5730,8 +5738,6 @@ pub(crate) struct FourslashDiagnostic {
     pub(crate) category: tsrs_diagnostics::Category,
     pub(crate) message: String,
     pub(crate) related_diagnostics: Vec<FourslashDiagnostic>,
-    pub(crate) reports_unnecessary: bool,
-    pub(crate) reports_deprecated: bool,
 }
 
 // fourslash.go:5525 (file = harnessutil.TestFile{UnitName, Content}; the ECMA line map is computed eagerly)
@@ -5745,7 +5751,7 @@ fn new_fourslash_diagnostic_file(unit_name: &str, content: &str) -> Arc<Fourslas
     Arc::new(FourslashDiagnosticFile {
         file_name: unit_name.to_string(),
         content: content.to_string(),
-        ecma_line_map: tsrs_core::compute_ecma_line_starts(content).to_vec(),
+        ecma_line_map: tsrs_core::compute_ecma_line_starts(content),
     })
 }
 
@@ -5775,8 +5781,6 @@ impl FourslashTest {
                     category,
                     message: info.message.clone(),
                     related_diagnostics: Vec::new(),
-                    reports_unnecessary: false,
-                    reports_deprecated: false,
                 };
                 Some(related_diagnostic)
             }));
@@ -5789,8 +5793,6 @@ impl FourslashTest {
             category,
             message: lsp_diagnostic.message.as_string(),
             related_diagnostics,
-            reports_unnecessary: false,
-            reports_deprecated: false,
         }
     }
 }
@@ -5830,7 +5832,7 @@ fn compare_related_diagnostics(
         return c;
     }
     for (i, element) in d1.iter().enumerate() {
-        let c = compare_diagnostics(&(*element), &d2[i]);
+        let c = compare_diagnostics(element, &d2[i]);
         if !c.is_eq() {
             return c;
         }
@@ -5844,7 +5846,7 @@ fn verify_exact_symbols(t: &T, actual: &[lsproto::SymbolInformation], expected: 
         t.fatal(&format!("{}: Expected {} symbols, but got {}:\n{:?}\n{:?}", prefix, expected.len(), actual.len(), actual, expected));
     }
     for (i, element) in actual.iter().enumerate() {
-        assert_deep_equal(t, &(*element), &expected[i], prefix);
+        assert_deep_equal(t, element, &expected[i], prefix);
     }
 }
 
@@ -5864,7 +5866,7 @@ fn verify_includes_symbols(t: &T, actual: &[lsproto::SymbolInformation], include
 // fourslash.go:5830
 fn write_document_symbol_details(symbols: &[lsproto::DocumentSymbol], indent: usize, builder: &mut String) {
     for symbol in symbols {
-        builder.push_str(&format!("{}({}) {}\n", "  ".repeat(indent), symbol.kind.string(), symbol.name));
+        writeln!(builder, "{}({}) {}", "  ".repeat(indent), symbol.kind.string(), symbol.name).unwrap();
         if let Some(children) = &symbol.children {
             write_document_symbol_details(children, indent + 1, builder);
         }
@@ -5975,12 +5977,12 @@ fn format_call_hierarchy_item(
     }
 
     let trailing_prefix = prefix;
-    result.push_str(&format!("{}╭ name: {}\n", prefix, call_hierarchy_item.name));
-    result.push_str(&format!("{}├ kind: {}\n", prefix, symbol_kind_to_lowercase(call_hierarchy_item.kind)));
+    writeln!(result, "{}╭ name: {}", prefix, call_hierarchy_item.name).unwrap();
+    writeln!(result, "{}├ kind: {}", prefix, symbol_kind_to_lowercase(call_hierarchy_item.kind)).unwrap();
     if let Some(detail) = call_hierarchy_item.detail.as_ref().filter(|d| !d.is_empty()) {
-        result.push_str(&format!("{}├ containerName: {}\n", prefix, detail));
+        writeln!(result, "{prefix}├ containerName: {detail}").unwrap();
     }
-    result.push_str(&format!("{}├ file: {}\n", prefix, call_hierarchy_item.uri.file_name()));
+    writeln!(result, "{}├ file: {}", prefix, call_hierarchy_item.uri.file_name()).unwrap();
     result.push_str(prefix);
     result.push_str("├ span:\n");
     format_call_hierarchy_item_span(f, file, result, call_hierarchy_item.range, &format!("{prefix}│ "), &format!("{prefix}│ "));
@@ -6090,7 +6092,7 @@ fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>,
     // Calculate line number padding
     let line_num_width = (context_end_line + 1).to_string().len() + 2;
 
-    result.push_str(&format!("{}╭ {}:{}:{}-{}:{}\n", prefix, file.file_name, start_lc.line + 1, start_lc.character + 1, end_lc.line + 1, end_lc.character + 1));
+    writeln!(result, "{}╭ {}:{}:{}-{}:{}", prefix, file.file_name, start_lc.line + 1, start_lc.character + 1, end_lc.line + 1, end_lc.character + 1).unwrap();
 
     for line_num in context_start_line..=context_end_line {
         let line_start = line_starts[line_num];
@@ -6106,9 +6108,9 @@ fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>,
         let line_num_str = format!("{}:", line_num + 1);
         let padded_line_num = " ".repeat(line_num_width - line_num_str.len() - 1) + &line_num_str;
         if line_content.is_empty() {
-            result.push_str(&format!("{}│ {}\n", prefix, padded_line_num));
+            writeln!(result, "{prefix}│ {padded_line_num}").unwrap();
         } else {
-            result.push_str(&format!("{}│ {} {}\n", prefix, padded_line_num, line_content));
+            writeln!(result, "{prefix}│ {padded_line_num} {line_content}").unwrap();
         }
 
         // Add selection carets if this line contains part of the span
@@ -6128,7 +6130,7 @@ fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>,
             if is_empty {
                 // For empty selections, show a single "<" character
                 let padding = " ".repeat(line_num_width + sel_start);
-                result.push_str(&format!("{}│ {}<\n", prefix, padding));
+                writeln!(result, "{prefix}│ {padding}<").unwrap();
             } else {
                 // Calculate selection length (at least 1)
                 let mut sel_length = sel_end as isize - sel_start as isize;
@@ -6143,7 +6145,7 @@ fn format_call_hierarchy_item_span(f: &FourslashTest, file: Option<&ScriptInfo>,
 
                 let padding = " ".repeat(line_num_width + sel_start);
                 let carets = "^".repeat(sel_length.max(0) as usize);
-                result.push_str(&format!("{}│ {}{}\n", prefix, padding, carets));
+                writeln!(result, "{prefix}│ {padding}{carets}").unwrap();
             }
         }
     }
@@ -6347,12 +6349,7 @@ fn position_after_edit(position: u32, edit_start: u32, edit_end: u32, new_text_l
 // fourslash.go:6023
 fn remove_whitespace(text: &str) -> String {
     let mut builder = String::new();
-    builder.extend(text.chars().filter_map(|ch| {
-        if tsrs_core::stringutil::is_white_space_like(ch as u32) {
-            return None;
-        }
-        Some(ch)
-    }));
+    builder.extend(text.chars().filter(|&ch| !tsrs_core::stringutil::is_white_space_like(ch as u32)));
     builder
 }
 

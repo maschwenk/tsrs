@@ -450,7 +450,7 @@ mod tests {
 
     #[cfg(debug_assertions)]
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "FrozenCell already borrowed")]
     fn aliasing_is_detected() {
         let c = FrozenCell::new(vec![1]);
         let _r = c.borrow();

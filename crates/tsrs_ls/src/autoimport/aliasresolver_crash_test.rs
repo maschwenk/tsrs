@@ -21,7 +21,7 @@ impl ResolutionHost for fakeCloneHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }

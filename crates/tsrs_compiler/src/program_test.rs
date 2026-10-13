@@ -19,7 +19,7 @@ impl ParseConfigHost for parseConfigHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -33,7 +33,7 @@ fn config_for(files: &[(&str, &str)]) -> P<tsoptions::ParsedCommandLine> {
     let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true));
     let host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, host, None);
-    assert!(diagnostics.is_empty());
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     P::new(config.unwrap())
 }
 
@@ -50,7 +50,7 @@ impl CheckerPool for testPool {
         self.acquired.fetch_add(1, Ordering::Relaxed);
         let mut checker = self.idle.lock().unwrap().pop().unwrap_or_else(|| PooledChecker::new(tsrs_checker::new_checker(self.program)));
         let ptr = checker.as_non_null();
-        let idle = self.idle.clone();
+        let idle = std::sync::Arc::clone(&self.idle);
         // SAFETY: the checker is out of the idle list (held) until the release function puts it back.
         unsafe { CheckerHandle::from_raw(ptr, move || idle.lock().unwrap().push(checker)) }
     }
@@ -70,12 +70,12 @@ fn program_hosts_and_factories() {
     let pools = Arc::new(AtomicUsize::new(0));
     let resolvers = Arc::new(AtomicUsize::new(0));
     let mut opts = ProgramOptions::new(config, host_for(&files));
-    let pools_c = pools.clone();
+    let pools_c = std::sync::Arc::clone(&pools);
     opts.create_checker_pool = Some(Arc::new(move |p: &'static Program| -> Box<dyn CheckerPool> {
         pools_c.fetch_add(1, Ordering::Relaxed);
         Box::new(checkerPool::new(p))
     }));
-    let resolvers_c = resolvers.clone();
+    let resolvers_c = std::sync::Arc::clone(&resolvers);
     opts.create_module_resolver = Some(Arc::new(move |options: tsrs_module::ResolverOptions| -> Box<dyn tsrs_module::Resolver> {
         resolvers_c.fetch_add(1, Ordering::Relaxed);
         Box::new(tsrs_module::new_resolver(options))
@@ -94,8 +94,8 @@ fn program_hosts_and_factories() {
     let new_index = format!("\n{index}");
     let new_files = [files[0], ("/src/index.ts", new_index.as_str()), files[2], files[3], ("/probe/package.json", r#"{"name":"new-host"}"#)];
     let new_host = host_for(&new_files);
-    let pools_c = pools.clone();
-    let new_host_c = new_host.clone();
+    let pools_c = std::sync::Arc::clone(&pools);
+    let new_host_c = std::sync::Arc::clone(&new_host);
     let create: CreateCheckerPool = Arc::new(move |p: &'static Program| -> Box<dyn CheckerPool> {
         pools_c.fetch_add(1, Ordering::Relaxed);
         assert!(Arc::ptr_eq(p.host(), &new_host_c));
@@ -104,7 +104,7 @@ fn program_hosts_and_factories() {
     });
     let (cloned, changed, reused) = p.reuse_program(
         &Path::from("/src/index.ts"),
-        new_host.clone(),
+        std::sync::Arc::clone(&new_host),
         Some(create),
         Some(Arc::new(|_| panic!("cloning must reuse resolution data without invoking construction callbacks"))),
     );
@@ -118,20 +118,20 @@ fn program_hosts_and_factories() {
         cloned.get_resolved_type_reference_directive_from_type_reference_directive(changed.type_reference_directives.get()[0], changed),
         Some(resolved_type_ref)
     );
-    assert!(cloned.resolution_data != p.resolution_data);
+    assert_ne!(cloned.resolution_data, p.resolution_data);
     assert!(cloned.get_package_json_info("/probe/package.json").is_some());
     assert!(p.get_package_json_info("/probe/package.json").is_none(), "new lazy lookups must not populate the old generation's cache");
     assert_eq!(pools.load(Ordering::Relaxed), 2);
     assert_eq!(resolvers.load(Ordering::Relaxed), 1);
 
-    let (defaults, _, reused) = cloned.reuse_program(&Path::from("/src/index.ts"), new_host.clone(), None, None);
+    let (defaults, _, reused) = cloned.reuse_program(&Path::from("/src/index.ts"), std::sync::Arc::clone(&new_host), None, None);
     assert!(reused);
     assert!(defaults.unwrap().compiler_checker_pool().is_some());
     assert_eq!(pools.load(Ordering::Relaxed), 2);
 
     let rebuild_files = [files[0], ("/src/index.ts", "import \"./other.js\";"), files[2], files[3], ("/src/other.ts", "export {};")];
     let rebuild_host = host_for(&rebuild_files);
-    let (rebuilt, _, reused) = p.update_program(&Path::from("/src/index.ts"), rebuild_host.clone(), None, None);
+    let (rebuilt, _, reused) = p.update_program(&Path::from("/src/index.ts"), std::sync::Arc::clone(&rebuild_host), None, None);
     assert!(!reused);
     assert!(rebuilt.compiler_checker_pool().is_some());
     assert!(Arc::ptr_eq(rebuilt.host(), &rebuild_host));
@@ -154,9 +154,9 @@ fn external_checker_pool_diagnostics() {
     let idle = Arc::new(Mutex::new(Vec::new()));
     let acquired = Arc::new(AtomicUsize::new(0));
     let mut opts = ProgramOptions::new(config, host_for(&files));
-    let (idle_c, acquired_c) = (idle.clone(), acquired.clone());
+    let (idle_c, acquired_c) = (std::sync::Arc::clone(&idle), std::sync::Arc::clone(&acquired));
     opts.create_checker_pool = Some(Arc::new(move |program: &'static Program| -> Box<dyn CheckerPool> {
-        Box::new(testPool { program, idle: idle_c.clone(), acquired: acquired_c.clone() })
+        Box::new(testPool { program, idle: std::sync::Arc::clone(&idle_c), acquired: std::sync::Arc::clone(&acquired_c) })
     }));
     let external = new_program(opts);
     assert!(external.compiler_checker_pool().is_none());
@@ -181,7 +181,7 @@ fn external_checker_pool_diagnostics() {
     let file = external.get_source_file("/src/b.ts").unwrap();
     let single: Vec<i32> = external.get_semantic_diagnostics(&ctx, Some(file)).iter().map(|d| d.code()).collect();
     assert_eq!(single, vec![2322, 2578]);
-    assert!(external.get_global_diagnostics(&ctx).is_empty());
+    assert_eq!(external.get_global_diagnostics(&ctx), [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     {
         let mut c = external.get_type_checker_for_file(&ctx, file);
         assert!(!c.was_canceled());

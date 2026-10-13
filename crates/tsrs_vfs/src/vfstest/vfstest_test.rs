@@ -177,7 +177,7 @@ fn test_stress() {
         },
     ];
 
-    let threads = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
     std::thread::scope(|s| {
         for t in 0..threads {
             let fs = &fs;
@@ -344,7 +344,7 @@ fn test_bom() {
 
         let fs = from_map([("/foo.ts", buf)], true);
 
-        assert_eq!(fs.read_file("/foo.ts").as_deref(), Some(EXPECTED), "{}", name);
+        assert_eq!(fs.read_file("/foo.ts").as_deref(), Some(EXPECTED), "{name}");
     }
 
     // UTF8

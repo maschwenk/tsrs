@@ -14,7 +14,7 @@ fn test_dynamic_queue_fifo() {
 
     for i in 0..1000 {
         let got = q.get(&ctx).unwrap();
-        assert_eq!(got, i, "Get() = {}, want {}", got, i);
+        assert_eq!(got, i, "Get() = {got}, want {i}");
     }
 }
 
@@ -53,14 +53,14 @@ fn test_dynamic_queue_put_cancellation_while_state_unavailable() {
 #[test]
 fn test_dynamic_queue_get_blocks_until_put_or_cancel() {
     let q = std::sync::Arc::new(new_dynamic_queue::<i32>());
-    let q2 = q.clone();
+    let q2 = std::sync::Arc::clone(&q);
     let t = std::thread::spawn(move || q2.get(&Context::background()));
     std::thread::sleep(std::time::Duration::from_millis(20));
     q.put(&Context::background(), 7).unwrap();
     assert_eq!(t.join().unwrap(), Ok(7));
 
     let (ctx, cancel) = Context::background().with_cancel();
-    let q3 = q.clone();
+    let q3 = std::sync::Arc::clone(&q);
     let t = std::thread::spawn(move || q3.get(&ctx));
     std::thread::sleep(std::time::Duration::from_millis(20));
     cancel.call();

@@ -33,6 +33,7 @@ pub mod baseline {
     pub const NO_CONTENT: &str = "<no content>";
 
     // baseline.go:23
+    #[expect(clippy::needless_pass_by_value, reason = "The baseline API takes its options by value, matching the Go harness.")]
     pub fn run(t: &T, file_name: &str, actual: &str, opts: Options) {
         let subfolder = &opts.subfolder;
         let local_path = local_root().join(subfolder).join(file_name);
@@ -42,9 +43,7 @@ pub mod baseline {
 
     // baseline.go:42
     fn write_comparison(t: &T, actual_content: &str, local: &Path, reference: &Path) {
-        if actual_content.is_empty() {
-            panic!("the generated content was \"\". Return 'baseline.NoContent' if no baselining is required.");
-        }
+        assert!(!actual_content.is_empty(), "the generated content was \"\". Return 'baseline.NoContent' if no baselining is required.");
         if let Err(err) = fs::create_dir_all(local.parent().unwrap()) {
             t.error(&format!("failed to create directories for the local baseline file {}: {}", local.display(), err));
             return;

@@ -63,15 +63,15 @@ fn path_comparer() {
             let want = if ignore_case { ignore_case_want } else { exact };
             let got = comparer.suffix(root, path);
             if got.is_some() != want || got.as_deref().is_some_and(|s| s != suffix) {
-                failures.push(format!("suffix({:?}, {:?}), ignoreCase={}: got {:?}, want ({:?}, {})", root, path, ignore_case, got, suffix, want));
+                failures.push(format!("suffix({root:?}, {path:?}), ignoreCase={ignore_case}: got {got:?}, want ({suffix:?}, {want})"));
             }
             if comparer.contains(root, path) != want {
-                failures.push(format!("contains({:?}, {:?}), ignoreCase={}: want {}", root, path, ignore_case, want));
+                failures.push(format!("contains({root:?}, {path:?}), ignoreCase={ignore_case}: want {want}"));
             }
             failures.extend((["/display", "/"]).into_iter().filter_map(|to| {
                 let rebased = comparer.rebase(path, root, to);
                 if rebased.is_some() != want || rebased.as_ref().is_some_and(|r| *r != join_path_suffix(to, suffix)) {
-                    Some(format!("rebase({:?}, {:?}, {:?}), ignoreCase={}: got {:?}", path, root, to, ignore_case, rebased))
+                    Some(format!("rebase({path:?}, {root:?}, {to:?}), ignoreCase={ignore_case}: got {rebased:?}"))
                 } else {
                     None
                 }
@@ -87,7 +87,7 @@ fn file_callback_case_sensitivity() {
     for ignore_case in [false, true] {
         let got: Arc<Mutex<Vec<Event>>> = Arc::new(Mutex::new(Vec::new()));
         let dw = dirWatch::new("/root".to_string(), "/root".to_string(), &debounce::new(), pathComparer { ignore_case }, None, true);
-        let sink = got.clone();
+        let sink = std::sync::Arc::clone(&got);
         let cb: WatchCallback = Arc::new(move |events: Vec<Event>, _: Option<Error>| sink.lock().unwrap().extend(events));
         dw.add_callback("/root", "/root", false, cb, None, "/root/file.ts");
         dw.events.update("/root/FILE.ts");
@@ -95,9 +95,9 @@ fn file_callback_case_sensitivity() {
         dw.trigger_callbacks_for_test();
         let got = got.lock().unwrap();
         if ignore_case {
-            assert!(got.len() == 1 && got[0].path == "/root/file.ts", "case-insensitive callback: got {:?}", got);
+            assert!(got.len() == 1 && got[0].path == "/root/file.ts", "case-insensitive callback: got {got:?}");
         } else {
-            assert!(got.is_empty(), "case-sensitive callback: got {:?}", got);
+            assert!(got.is_empty(), "case-sensitive callback: got {got:?}");
         }
         dw.destroy_debounce_for_test();
     }
@@ -125,7 +125,7 @@ fn rebase_path_cases() {
         ("/from/child", "/from", "/", "/child"),
     ];
     for (path, from, to, want) in cases {
-        assert_eq!(rebase_path(path, from, to), want, "rebasePath({:?}, {:?}, {:?})", path, from, to);
+        assert_eq!(rebase_path(path, from, to), want, "rebasePath({path:?}, {from:?}, {to:?})");
     }
 }
 
@@ -134,13 +134,13 @@ fn rebase_path_cases() {
 fn physical_dir_for_resolves_symlink_ancestor() {
     let mut t = TestT::new(1);
     let root = t.temp_dir();
-    let target = format!("{}/target", root);
-    std::fs::create_dir_all(format!("{}/nested", target)).unwrap();
-    let link = format!("{}/link", root);
+    let target = format!("{root}/target");
+    std::fs::create_dir_all(format!("{target}/nested")).unwrap();
+    let link = format!("{root}/link");
     std::os::unix::fs::symlink(&target, &link).unwrap();
 
-    let dir = format!("{}/nested", link);
-    let want = physical_dir_for(&format!("{}/nested", target));
+    let dir = format!("{link}/nested");
+    let want = physical_dir_for(&format!("{target}/nested"));
     assert_eq!(physical_dir_for(&dir), want);
 }
 
@@ -157,7 +157,7 @@ fn is_in_directory_or_self_cases() {
         ("", "/parent/child", false),
     ];
     for (dir, path, want) in cases {
-        assert_eq!(is_in_directory_or_self(dir, path), want, "isInDirectoryOrSelf({:?}, {:?})", dir, path);
+        assert_eq!(is_in_directory_or_self(dir, path), want, "isInDirectoryOrSelf({dir:?}, {path:?})");
     }
 }
 
@@ -171,7 +171,7 @@ fn watch_file_create() {
         let (r, _) = subscribe_for(t, &dir, w)?;
         let f = sub_path(&dir);
         write(&f, "hello")?;
-        expect_event_sequence(&r, vec![want(EventKind::Update, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Update, &f)])?;
         Ok(())
     });
 }
@@ -186,7 +186,7 @@ fn watch_file_update() {
         write(&f, "v1")?;
         let _ = r.wait_for_event(r.deadline(), |_| true); // consume the create event
         write(&f, "v2-longer")?;
-        expect_event_sequence(&r, vec![want(EventKind::Update, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Update, &f)])?;
         Ok(())
     });
 }
@@ -215,7 +215,7 @@ fn watch_file_delete() {
         write(&f, "x")?;
         let (r, _) = subscribe_for(t, &dir, w)?;
         std::fs::remove_file(&f).map_err(|e| e.to_string())?;
-        expect_event_sequence(&r, vec![want(EventKind::Delete, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Delete, &f)])?;
         Ok(())
     });
 }
@@ -230,7 +230,7 @@ fn subscribe_dir_create() {
         let (r, _) = subscribe_for(t, &dir, w)?;
         let f = sub_path(&dir);
         mkdir(&f)?;
-        expect_event_sequence(&r, vec![want(EventKind::Update, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Update, &f)])?;
         Ok(())
     });
 }
@@ -241,12 +241,12 @@ fn subscribe_non_ascii_path() {
     run_for_each_watcher("TestSubscribeNonASCIIPath", |t, w| {
         let parent = new_tmp_dir(t);
         // "café" + "résumé"; both precomposed NFC.
-        let dir = format!("{}/caf\u{00e9}-dir", parent);
+        let dir = format!("{parent}/caf\u{00e9}-dir");
         mkdir(&dir)?;
         let (r, _) = subscribe_for(t, &dir, w)?;
-        let child = format!("{}/r\u{00e9}sum\u{00e9}.txt", dir);
+        let child = format!("{dir}/r\u{00e9}sum\u{00e9}.txt");
         write(&child, "hi")?;
-        expect_event_sequence(&r, vec![want(EventKind::Update, &child)])?;
+        expect_event_sequence(&r, &[want(EventKind::Update, &child)])?;
         Ok(())
     });
 }
@@ -260,7 +260,7 @@ fn subscribe_dir_delete() {
         mkdir(&f)?;
         let (r, _) = subscribe_for(t, &dir, w)?;
         std::fs::remove_dir_all(&f).map_err(|e| e.to_string())?;
-        expect_event_sequence(&r, vec![want(EventKind::Delete, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Delete, &f)])?;
         Ok(())
     });
 }
@@ -272,7 +272,7 @@ fn subscribe_watched_dir_deleted() {
         let dir = new_tmp_dir(t);
         let (r, _) = subscribe_for(t, &dir, w)?;
         std::fs::remove_dir_all(&dir).map_err(|e| e.to_string())?;
-        expect_event_sequence(&r, vec![want(EventKind::Delete, &dir)])?;
+        expect_event_sequence(&r, &[want(EventKind::Delete, &dir)])?;
 
         // Give the backend a moment to surface ErrWatchTerminated alongside
         // the delete; some backends batch the error into a later debounce
@@ -310,7 +310,7 @@ fn subscribe_subfile_create() {
         std::thread::sleep(Duration::from_millis(100));
         let f = sub_path(&sub);
         write(&f, "hi")?;
-        expect_event_sequence(&r, vec![want(EventKind::Update, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Update, &f)])?;
         Ok(())
     });
 }
@@ -362,7 +362,7 @@ fn subscribe_multiple_same_dir() {
         std::thread::sleep(Duration::from_millis(100));
         let f = sub_path(&dir);
         write(&f, "hi")?;
-        let res = assert_event_sequence(&r1.next(r1.deadline()), &[want(EventKind::Update, &f)]).and_then(|_| assert_event_sequence(&r2.next(r2.deadline()), &[want(EventKind::Update, &f)]));
+        let res = assert_event_sequence(&r1.next(r1.deadline()), &[want(EventKind::Update, &f)]).and_then(|()| assert_event_sequence(&r2.next(r2.deadline()), &[want(EventKind::Update, &f)]));
         let _ = s1.close();
         let _ = s2.close();
         res
@@ -434,12 +434,12 @@ fn subscribe_close_then_re_subscribe() {
         s1.close().map_err(|e| e.to_string())?;
 
         let r2 = new_recorder(t, Some(w));
-        let s2 = w.watch_directory(&dir, r2.callback(), vec![]).map_err(|e| format!("re-WatchDirectory after Close: {}", e))?;
+        let s2 = w.watch_directory(&dir, r2.callback(), vec![]).map_err(|e| format!("re-WatchDirectory after Close: {e}"))?;
         std::thread::sleep(settle_sleep(w));
 
         let f = sub_path(&dir);
         write(&f, "hi")?;
-        let res = expect_event_sequence(&r2, vec![want(EventKind::Update, &f)]);
+        let res = expect_event_sequence(&r2, &[want(EventKind::Update, &f)]);
         let _ = s2.close();
         res?;
 
@@ -503,7 +503,7 @@ fn non_recursive_file_create() {
         let (r, _) = subscribe_for_opts(t, &dir, w, vec![])?;
         let f = sub_path(&dir);
         write(&f, "hello")?;
-        expect_event_sequence(&r, vec![want(EventKind::Update, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Update, &f)])?;
         Ok(())
     });
 }
@@ -513,7 +513,7 @@ fn non_recursive_file_create() {
 fn non_recursive_grandchild_ignored() {
     run_for_each_watcher("TestNonRecursiveGrandchildIgnored", |t, w| {
         let dir = new_tmp_dir(t);
-        let sub = format!("{}/child", dir);
+        let sub = format!("{dir}/child");
         mkdir(&sub)?;
         let (r, _) = subscribe_for_opts(t, &dir, w, vec![])?;
         let grandchild = sub_path(&sub);
@@ -531,10 +531,10 @@ fn non_recursive_grandchild_ignored() {
 fn file_watch_create() {
     run_for_each_watcher("TestFileWatchCreate", |t, w| {
         let dir = new_tmp_dir(t);
-        let f = format!("{}/target.txt", dir);
+        let f = format!("{dir}/target.txt");
         let (r, _) = subscribe_file_for(t, &f, w)?;
         write(&f, "hello")?;
-        expect_event_sequence(&r, vec![want(EventKind::Update, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Update, &f)])?;
         Ok(())
     });
 }
@@ -544,11 +544,11 @@ fn file_watch_create() {
 fn file_watch_delete() {
     run_for_each_watcher("TestFileWatchDelete", |t, w| {
         let dir = new_tmp_dir(t);
-        let f = format!("{}/target.txt", dir);
+        let f = format!("{dir}/target.txt");
         write(&f, "x")?;
         let (r, _) = subscribe_file_for(t, &f, w)?;
         std::fs::remove_file(&f).map_err(|e| e.to_string())?;
-        expect_event_sequence(&r, vec![want(EventKind::Delete, &f)])?;
+        expect_event_sequence(&r, &[want(EventKind::Delete, &f)])?;
         Ok(())
     });
 }
@@ -558,8 +558,8 @@ fn file_watch_delete() {
 fn file_watch_ignores_siblings() {
     run_for_each_watcher("TestFileWatchIgnoresSiblings", |t, w| {
         let dir = new_tmp_dir(t);
-        let target = format!("{}/target.txt", dir);
-        let sibling = format!("{}/sibling.txt", dir);
+        let target = format!("{dir}/target.txt");
+        let sibling = format!("{dir}/sibling.txt");
         let (r, _) = subscribe_file_for(t, &target, w)?;
         let (witness, _) = subscribe_for_opts(t, &dir, w, vec![])?;
         write(&sibling, "noise")?;
@@ -573,10 +573,10 @@ fn file_watch_ignores_siblings() {
 fn atomic_save() {
     run_for_each_watcher("TestAtomicSave", |t, w| {
         let dir = new_tmp_dir(t);
-        let target = format!("{}/config.json", dir);
+        let target = format!("{dir}/config.json");
         write(&target, r#"{"v":1}"#)?;
         let (r, _) = subscribe_for(t, &dir, w)?;
-        let tmp = format!("{}.tmp", target);
+        let tmp = format!("{target}.tmp");
         write(&tmp, r#"{"v":2}"#)?;
         std::fs::rename(&tmp, &target).map_err(|e| e.to_string())?;
         let got = r.wait_for_event(r.deadline(), |e| e.path == target);

@@ -25,7 +25,7 @@ impl Write for Capture {
 }
 
 fn setup(files: &[(&str, &str)]) -> MutexGuard<'static, ()> {
-    let guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+    let guard = LOCK.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
     reset(files);
     guard
 }
@@ -39,7 +39,7 @@ fn reset(files: &[(&str, &str)]) {
 
 fn request(cwd: &str, flags: u32, args: &[&str]) -> Vec<u8> {
     let mut fields = vec![cwd.to_string(), flags.to_string()];
-    fields.extend(args.iter().map(|a| a.to_string()));
+    fields.extend(args.iter().map(std::string::ToString::to_string));
     fields.join("\0").into_bytes()
 }
 

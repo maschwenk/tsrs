@@ -4,6 +4,7 @@ import (
 	"go/ast"
 	"go/constant"
 	"go/types"
+	"regexp"
 	"strings"
 )
 
@@ -157,7 +158,7 @@ func (g *gen) methodCall(e *ast.CallExpr, fun *ast.SelectorExpr, sel *types.Sele
 		case "Name":
 			return recv + ".name()"
 		case "Skip", "Fatal", "Error", "Log":
-			return recv + "." + ident(name) + "(&" + g.sprint(e.Args) + ")"
+			return recv + "." + ident(name) + "(" + g.message(e.Args) + ")"
 		case "Fatalf", "Errorf", "Logf", "Skipf":
 			return recv + "." + ident(strings.TrimSuffix(name, "f")) + "(&" + g.sprintf(e.Args) + ")"
 		case "Run":
@@ -283,11 +284,11 @@ func (g *gen) qualifiedCall(e *ast.CallExpr, f *types.Func) string {
 		case "Equal", "DeepEqual":
 			parts = append(parts, g.expr(e.Args[1], g.typeOf(e.Args[1]), mOwned), g.expr(e.Args[2], g.typeOf(e.Args[1]), mOwned))
 			rest := e.Args[3:]
-			parts = append(parts, "&"+g.sprint(rest))
+			parts = append(parts, g.message(rest))
 			return "go::assert::" + ident(name) + "(" + strings.Join(parts, ", ") + ")"
 		case "Assert", "Check":
 			parts = append(parts, g.expr(e.Args[1], types.Typ[types.Bool], mOwned))
-			parts = append(parts, "&"+g.sprint(e.Args[2:]))
+			parts = append(parts, g.message(e.Args[2:]))
 			return "go::assert::" + ident(name) + "(" + strings.Join(parts, ", ") + ")"
 		}
 	case lsutilPath:
@@ -558,7 +559,48 @@ func (g *gen) sprintf(args []ast.Expr) string {
 	if len(rargs) == 0 {
 		return "format!(" + lit + ")"
 	}
-	return "format!(" + lit + ", " + strings.Join(rargs, ", ") + ")"
+	return formatCall(out.String(), rargs)
+}
+
+var formatIdent = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*$`)
+
+// Capture plain locals in format strings; retain positional arguments for expressions.
+func formatCall(format string, args []string) string {
+	var out strings.Builder
+	var remaining []string
+	arg := 0
+	for i := 0; i < len(format); i++ {
+		c := format[i]
+		if c == '{' && i+1 < len(format) {
+			if format[i+1] == '{' {
+				out.WriteString("{{")
+				i++
+				continue
+			}
+			end := strings.IndexByte(format[i:], '}')
+			if end >= 0 && arg < len(args) {
+				out.WriteByte('{')
+				if formatIdent.MatchString(args[arg]) && !rustKeywords[args[arg]] && args[arg] != "_" {
+					out.WriteString(args[arg])
+				} else {
+					remaining = append(remaining, args[arg])
+				}
+				out.WriteString(format[i+1 : i+end+1])
+				i += end
+				arg++
+				continue
+			}
+		}
+		out.WriteByte(c)
+	}
+	lit, ok := rustStr(out.String())
+	if !ok {
+		fail("non-UTF-8 format")
+	}
+	if len(remaining) == 0 {
+		return "format!(" + lit + ")"
+	}
+	return "format!(" + lit + ", " + strings.Join(remaining, ", ") + ")"
 }
 
 func (g *gen) fmtArg(a ast.Expr, at types.Type) string {
@@ -572,6 +614,16 @@ func (g *gen) fmtArg(a ast.Expr, at types.Type) string {
 }
 
 // sprint: fmt.Sprint-like concatenation of arguments (t.Fatal, t.Skip, assert messages).
+func (g *gen) message(args []ast.Expr) string {
+	if len(args) == 0 {
+		return `""`
+	}
+	if len(args) == 1 && isString(g.typeOf(args[0])) {
+		return g.expr(args[0], g.typeOf(args[0]), mParam)
+	}
+	return "&" + g.sprint(args)
+}
+
 func (g *gen) sprint(args []ast.Expr) string {
 	if len(args) == 0 {
 		return "String::new()"

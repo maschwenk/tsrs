@@ -315,6 +315,7 @@ mod tests {
         for suite in SUITES {
             paths.extend(enumerate_test_files(suite).into_iter().map(|p| (format!("{suite}/{}", tspath::get_base_file_name(&p)), p)));
         }
+        let variant_suffix = regex::Regex::new(r"\(.*\)").unwrap();
         for line in diags.lines() {
             let v: serde_json::Value = serde_json::from_str(line).unwrap();
             if v.get("error").is_some() || v.get("files").is_none() {
@@ -322,7 +323,7 @@ mod tests {
             }
             let suite = v["suite"].as_str().unwrap();
             let name = v["name"].as_str().unwrap();
-            let file = regex::Regex::new(r"\(.*\)").unwrap().replace(name, "").into_owned();
+            let file = variant_suffix.replace(name, "").into_owned();
             let path = &paths[&format!("{suite}/{file}")];
             let content = read_test_file(path);
             let stem = baseline_stem(name);

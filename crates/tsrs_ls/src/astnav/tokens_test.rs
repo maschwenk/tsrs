@@ -92,6 +92,7 @@ fn baseline_go_tokens_json(
         for pos in 0..max_pos {
             let token = get_go_token(file, u32::try_from(pos).expect("test position fits in u32"));
             match (&mut current, &token) {
+                #[expect(clippy::suspicious_operation_groupings, reason = "A TokenRun records a token's positions under different field names; all three identity components are compared.")]
                 (Some(c), Some(t)) if c.kind == t.kind && c.node_pos == t.pos && c.node_end == t.end => {
                     c.end_pos = pos;
                 }
@@ -135,7 +136,7 @@ fn ts_tokens(function: &str, file_text: &str, positions: &[usize]) -> Option<Vec
     let dir = repo_root().join(format!("target/scratch/lsfound/jstest/{function}"));
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("file.ts"), file_text).unwrap();
-    let positions_json = format!("[{}]", positions.iter().map(|p| p.to_string()).collect::<Vec<_>>().join(","));
+    let positions_json = format!("[{}]", positions.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(","));
     std::fs::write(dir.join("positions.json"), positions_json).unwrap();
     let call = match function {
         "GetTokenAtPosition" => "ts.getTokenAtPosition(file, position)",
@@ -204,7 +205,7 @@ fn baseline_tokens(
 ) {
     for file_name in test_files() {
         let file_text = std::fs::read_to_string(&file_name).unwrap();
-        let positions: Vec<usize> = (0..file_text.len() + if include_eof { 1 } else { 0 }).collect();
+        let positions: Vec<usize> = (0..file_text.len() + usize::from(include_eof)).collect();
         let Some(ts_tokens) = ts_tokens(test_name, &file_text, &positions) else {
             eprintln!("skipping {test_name} TS comparison: TSRS_TYPESCRIPT_JS not set");
             return;
@@ -282,7 +283,7 @@ fn write_range_diff(
     let start_line = ts_start_line.min(go_start_line);
     let end_line = ts_end_line.max(go_end_line);
     let mut marker_lines = [ts_start_line, ts_end_line, go_start_line, go_end_line];
-    marker_lines.sort();
+    marker_lines.sort_unstable();
     let context_start = start_line.saturating_sub(context_lines);
     let context_end = (lines.len() - 1).min(end_line + context_lines);
     let digits = (context_end).to_string().len();

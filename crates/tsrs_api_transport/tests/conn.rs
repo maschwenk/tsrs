@@ -61,7 +61,7 @@ fn oversized_frames_are_rejected_without_allocating() {
     // bin32 declaring 4 GiB - 1 with a 1 MiB limit.
     let frame = [0x93, 0x01, 0xc4, 0x01, b'a', 0xc6, 0xff, 0xff, 0xff, 0xff];
     let err = MessagePackReader::with_limit(&frame[..], 1 << 20).read_message().unwrap_err();
-    assert!(matches!(err, TransportError::FrameTooLarge { declared: 0xffff_ffff, limit: 1048576 }), "{err:?}");
+    assert!(matches!(err, TransportError::FrameTooLarge { declared: 0xffff_ffff, limit: 1_048_576 }), "{err:?}");
     let header = b"Content-Length: 1000000000000\r\n\r\n";
     let err = FrameReader::with_limit(&header[..], 1 << 20).read_message().unwrap_err();
     assert!(matches!(err, TransportError::FrameTooLarge { .. }), "{err:?}");
@@ -136,11 +136,11 @@ fn start_sync() -> (MsgpackClient, thread::JoinHandle<Result<(), TransportError>
     let (server_r, client_w) = std::io::pipe().unwrap();
     let (client_r, server_w) = std::io::pipe().unwrap();
     let late = LateCaller::new();
-    let handler = Arc::new(CallingHandler { caller: late.clone(), log: Mutex::new(Vec::new()) });
+    let handler = Arc::new(CallingHandler { caller: std::sync::Arc::<tsrs_api_transport::LateCaller>::clone(&late), log: Mutex::new(Vec::new()) });
     let conn = SyncConn::new(
         Box::new(MessagePackReader::new(server_r)),
         Box::new(MessagePackWriter::new(server_w)),
-        handler.clone(),
+        std::sync::Arc::<CallingHandler>::clone(&handler),
         ConnOptions::default(),
     );
     late.set(conn.caller());
@@ -224,11 +224,11 @@ fn start_async() -> (JsonClient, thread::JoinHandle<Result<(), TransportError>>,
     let (server_r, client_w) = std::io::pipe().unwrap();
     let (client_r, server_w) = std::io::pipe().unwrap();
     let late = LateCaller::new();
-    let handler = Arc::new(CallingHandler { caller: late.clone(), log: Mutex::new(Vec::new()) });
+    let handler = Arc::new(CallingHandler { caller: std::sync::Arc::<tsrs_api_transport::LateCaller>::clone(&late), log: Mutex::new(Vec::new()) });
     let conn = AsyncConn::new(
         Box::new(FrameReader::new(server_r)),
         Box::new(FrameWriter::new(server_w)),
-        handler.clone(),
+        std::sync::Arc::<CallingHandler>::clone(&handler),
         ConnOptions::default(),
         None,
     );
@@ -287,7 +287,7 @@ fn caller_after_connection_dropped_is_closed() {
     assert!(matches!(late.call("readFile", None), Err(TransportError::Closed(_))));
     let (r, _w) = std::io::pipe().unwrap();
     let (_r2, w) = std::io::pipe().unwrap();
-    let handler = Arc::new(CallingHandler { caller: late.clone(), log: Mutex::new(Vec::new()) });
+    let handler = Arc::new(CallingHandler { caller: late, log: Mutex::new(Vec::new()) });
     let conn = SyncConn::new(Box::new(MessagePackReader::new(r)), Box::new(MessagePackWriter::new(w)), handler, ConnOptions::default());
     let caller = conn.caller();
     drop(conn);

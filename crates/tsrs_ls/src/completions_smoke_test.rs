@@ -40,7 +40,7 @@ impl Host for TestHost {
         self.fs.read_file(path)
     }
     fn converters(&self) -> Arc<Converters> {
-        self.converters.clone()
+        std::sync::Arc::clone(&self.converters)
     }
     fn get_preferences(&self, _active_file: &str) -> UserPreferences {
         self.preferences.clone()
@@ -73,7 +73,7 @@ impl ParseConfigHost for parseConfigHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -84,7 +84,7 @@ fn project_files() -> Vec<(String, String)> {
         for entry in std::fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap();
             let name = entry.file_name().into_string().unwrap();
-            let path = format!("{}/{}", rel, name);
+            let path = format!("{rel}/{name}");
             if entry.file_type().unwrap().is_dir() {
                 walk(&entry.path(), &path, files);
             } else {
@@ -99,12 +99,12 @@ fn project_files() -> Vec<(String, String)> {
 fn setup(spec: &Value) -> (LanguageService, Context, Vec<(String, String)>) {
     let files = project_files();
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|(k, v)| (k.as_str(), v.as_str())), true)));
-    let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
+    let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: std::sync::Arc::clone(&fs) }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
-    assert!(diagnostics.is_empty());
-    let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None, None);
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
+    let host: Arc<dyn CompilerHost> = new_compiler_host("/", std::sync::Arc::clone(&fs), &bundled::lib_path(), None, None, None);
     let program: &'static Program = new_program(ProgramOptions::new(P::new(config.unwrap()), host));
-    let fs_for_lines = fs.clone();
+    let fs_for_lines = std::sync::Arc::clone(&fs);
     let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF16, move |file_name| fs_for_lines.read_file(file_name).map(|text| compute_lsp_line_starts(&text)));
     // Go: lsutil.ParseUserPreferences(map[string]any{"js/ts": initializationOptions.userPreferences})
     let mut items: OrderedMap<String, Value> = OrderedMap::default();
@@ -136,7 +136,7 @@ fn position_of(text: &str, caret: &str) -> lsproto::Position {
     let offset = text.find(&needle).unwrap_or_else(|| panic!("caret not found: {caret}")) + caret.find('|').unwrap();
     let before = &text[..offset];
     let line = before.matches('\n').count() as u32;
-    let character = before[before.rfind('\n').map(|i| i + 1).unwrap_or(0)..].encode_utf16().count() as u32;
+    let character = before[before.rfind('\n').map_or(0, |i| i + 1)..].encode_utf16().count() as u32;
     lsproto::Position { line, character }
 }
 
@@ -150,7 +150,7 @@ fn normalize(result: &Value) -> String {
                 .map(|i| lsproto::CompletionItem::from_json(i).unwrap())
                 .collect();
             parsed.sort_by(compare_completion_entries);
-            let sorted: Vec<Value> = parsed.iter().map(|i| i.to_json()).collect();
+            let sorted: Vec<Value> = parsed.iter().map(tsrs_lsproto::Json::to_json).collect();
             m.insert("items".to_string(), Value::Array(sorted));
         }
     }
@@ -232,7 +232,7 @@ fn run_profile(name: &str) {
                         vs_text_document: lsproto::TextDocumentIdentifier { uri },
                         vs_position: position,
                         vs_ch: str_field(case, "ch").to_string(),
-                        ..Default::default()
+
                     };
                     ls.provide_on_auto_insert(&ctx, &params).unwrap().to_json()
                 }

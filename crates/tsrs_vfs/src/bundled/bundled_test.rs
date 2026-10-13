@@ -8,7 +8,7 @@ fn test_testing_lib_path() {
 
     std::fs::metadata(&p).unwrap();
 
-    let libdts = format!("{}/lib.d.ts", p);
+    let libdts = format!("{p}/lib.d.ts");
 
     std::fs::metadata(libdts).unwrap();
 }
@@ -31,17 +31,17 @@ fn test_embedded_contents_match_source() {
     assert!(is_bundled(&lib));
     assert!(fs.directory_exists(&lib));
     for name in LIB_NAMES {
-        let path = format!("{}/{}", lib, name);
+        let path = format!("{lib}/{name}");
         assert!(fs.file_exists(&path));
         let contents = fs.read_file(&path).unwrap();
         let expected = os.read_file(&format!("{}/{}", testing_lib_path(), name)).unwrap();
-        assert_eq!(contents, expected, "{}", name);
+        assert_eq!(contents, expected, "{name}");
         let stat = fs.stat(&path).unwrap();
         assert_eq!(stat.name(), *name);
         assert_eq!(stat.size(), contents.len() as i64);
         assert_eq!(fs.realpath(&path), path);
     }
-    assert!(!fs.file_exists(&format!("{}/lib.nope.d.ts", lib)));
+    assert!(!fs.file_exists(&format!("{lib}/lib.nope.d.ts")));
     assert_eq!(fs.get_accessible_entries("bundled:///").directories, vec!["libs"]);
 }
 

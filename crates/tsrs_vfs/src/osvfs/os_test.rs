@@ -129,7 +129,7 @@ fn test_clean() {
         ("abc//./../def", "def"),
         ("abc/../../././../def", "../../def"),
     ] {
-        assert_eq!(clean(input), want, "clean({:?})", input);
+        assert_eq!(clean(input), want, "clean({input:?})");
     }
 }
 

@@ -670,11 +670,11 @@ mod tests {
         let raw = br#"{"snapshot":9007199254740993,"inner":{"snapshot":9007199254740992},"list":[{"snapshot":9007199254740995}]}"#;
         let root = tsrs_core::json::unmarshal(std::str::from_utf8(raw).unwrap()).unwrap();
         let _g = super::enter_request(raw, super::number_lexemes(raw), &root);
-        assert_eq!(super::exact_u64(&root, "snapshot"), Some(9007199254740993));
+        assert_eq!(super::exact_u64(&root, "snapshot"), Some(9_007_199_254_740_993));
         let Value::Object(o) = &root else { unreachable!() };
-        assert_eq!(super::exact_u64(o.get("inner").unwrap(), "snapshot"), Some(9007199254740992));
+        assert_eq!(super::exact_u64(o.get("inner").unwrap(), "snapshot"), Some(9_007_199_254_740_992));
         let Value::Array(list) = o.get("list").unwrap() else { unreachable!() };
-        assert_eq!(super::exact_u64(&list[0], "snapshot"), Some(9007199254740995));
+        assert_eq!(super::exact_u64(&list[0], "snapshot"), Some(9_007_199_254_740_995));
         // A copy outside the tree has no recorded literal.
         let copy = o.get("inner").unwrap().clone();
         assert_eq!(super::exact_u64(&copy, "snapshot"), None);

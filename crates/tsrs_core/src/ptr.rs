@@ -1775,8 +1775,8 @@ mod tests {
     fn identity_and_mutation() {
         let a = P::new(Thing { n: Cell::new(1), next: Cell::new(None) });
         let b = P::new(Thing { n: Cell::new(1), next: Cell::new(None) });
-        assert!(a != b);
-        assert!(a == a);
+        assert_ne!(a, b);
+        assert_eq!(a, a);
         a.next.set(Some(b));
         b.next.set(Some(a));
         a.next.get().unwrap().n.set(5);

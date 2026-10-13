@@ -1,6 +1,5 @@
 // Shared helpers for tsrs_api integration tests: a real session over the OS filesystem (with bundled libs)
 // and a temp project directory.
-#![allow(dead_code)]
 
 use std::path::PathBuf;
 use std::sync::Arc;

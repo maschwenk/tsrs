@@ -119,5 +119,5 @@ impl Drop for ApiCheckerLease {
 
 #[cfg(test)]
 pub(crate) fn is_tracked(program: &'static Program) -> bool {
-    lock_gates().as_ref().is_some_and(|m| m.contains_key(&(program as *const Program as usize)))
+    lock_gates().as_ref().is_some_and(|m| m.contains_key(&(std::ptr::from_ref::<Program>(program) as usize)))
 }

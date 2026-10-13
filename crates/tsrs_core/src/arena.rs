@@ -1455,13 +1455,26 @@ mod retired {
         merged
     }
 
+    /// Gives back `calls` (whole pages of retired spans, `spans_of`); `pages`, the ones not given back before, are
+    /// what `stats` counts.
+    fn give_back(pages: &[(usize, usize)], calls: &[(usize, usize)]) {
+        for &(first, last) in calls {
+            // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
+            // again; `first` is page aligned (and so is `last - first`).
+            unsafe { crate::reserve::discard(std::ptr::with_exposed_provenance_mut::<u8>(first), last - first) };
+        }
+        // Relaxed: counters (see `stats`).
+        CALLS.fetch_add(calls.len(), Ordering::Relaxed);
+        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
+    }
+
     #[cfg(test)]
     mod tests {
         use super::{spans_of, take_pages, State};
         use std::collections::BTreeMap;
 
         fn batch(s: &mut State, ranges: &[(usize, usize)]) -> Vec<(usize, usize)> {
-            s.pending.extend(ranges.into_iter().map(|&(start, end)| (start, end)));
+            s.pending.extend(ranges.iter().map(|&(start, end)| (start, end)));
             take_pages(s)
         }
 
@@ -1495,19 +1508,6 @@ mod retired {
             assert_eq!(pages, [(8 * p, 10 * p), (12 * p, 14 * p), (30 * p, 31 * p)]);
             assert_eq!(spans_of(&s, &pages), [(8 * p, 14 * p), (30 * p, 31 * p)]);
         }
-    }
-
-    /// Gives back `calls` (whole pages of retired spans, `spans_of`); `pages`, the ones not given back before, are
-    /// what `stats` counts.
-    fn give_back(pages: &[(usize, usize)], calls: &[(usize, usize)]) {
-        for &(first, last) in calls {
-            // SAFETY: whole pages inside retired spans: chunks and slabs nothing uses any more, never handed out
-            // again; `first` is page aligned (and so is `last - first`).
-            unsafe { crate::reserve::discard(std::ptr::with_exposed_provenance_mut::<u8>(first), last - first) };
-        }
-        // Relaxed: counters (see `stats`).
-        CALLS.fetch_add(calls.len(), Ordering::Relaxed);
-        BYTES.fetch_add(pages.iter().map(|&(first, last)| last - first).sum(), Ordering::Relaxed);
     }
 }
 
@@ -1654,12 +1654,14 @@ mod tests {
             let _scope = region.enter();
             let a = P::new([1u64, 2]);
             let a_addr = a.addr();
+            // SAFETY: a is no longer accessed after this call, so its region block can be recycled.
             unsafe { free!(a) };
             let b = P::new_recycled([3u64, 4]);
             assert_eq!(b.addr(), a_addr);
             // A value that needs drop is not recycled in a region: its drop entry stays.
             let c = P::new(Rc::clone(&counter));
             let c_addr = c.addr();
+            // SAFETY: c is no longer accessed; its region retains the drop entry for the Rc payload.
             unsafe { free!(c) };
             let d = P::new_recycled(Rc::clone(&counter));
             assert_ne!(d.addr(), c_addr);
@@ -1734,6 +1736,7 @@ mod tests {
         }
         let big = crate::alloc_slice(&vec![0u8; 4 * SIZE]);
         assert!(!range.contains(&(big.as_ptr() as usize)) && !range.contains(&(big.as_ptr() as usize + big.len() - 1)));
+        drop(later);
     }
 
     #[test]

@@ -71,7 +71,7 @@ fn callback_module_resolver_calls_client() {
     assert!(e.contains("API connection is not initialized"), "{e}");
 
     let conn = Arc::new(FakeConn { target: target.clone(), calls: Mutex::new(Vec::new()) });
-    s.set_connection(conn.clone());
+    s.set_connection(Arc::<FakeConn>::clone(&conn));
     let r = call(&s, "createSnapshot", &req);
     let snap = json::marshal(get(&r, "snapshot")).unwrap();
     let project = str_of(get(&r, "operation.createdPrograms.0")).to_string();

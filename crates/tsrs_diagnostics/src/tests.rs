@@ -56,7 +56,7 @@ fn category_names() {
 #[test]
 fn key_lookup() {
     let m = key_to_message("Identifier_expected_1003").unwrap();
-    assert!(std::ptr::eq(m, &diagnostics::Identifier_expected));
+    assert!(std::ptr::eq(m, &raw const diagnostics::Identifier_expected));
     assert!(key_to_message("Removed_diagnostic_99999").is_none());
     assert_eq!(localize(None, Key("_0_expected_1005"), &[")".to_string()]), "')' expected.");
     assert_eq!(localize(None, Key("Identifier_expected_1003"), &[]), "Identifier expected.");

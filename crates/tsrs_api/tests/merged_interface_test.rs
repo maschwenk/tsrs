@@ -1,6 +1,7 @@
 // Whole-program API diagnostics share a worker pool and one diagnostics checker. Merged interfaces must neither
 // schedule nested pool work while holding that checker nor lose errors in single-file requests to a CLI check slot.
 
+#[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]
 mod common;
 use common::*;
 use tsrs_core::json::Value;

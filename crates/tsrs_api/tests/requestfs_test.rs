@@ -32,7 +32,7 @@ fn create_snapshot_uses_full_file_system_and_layers() {
     assert_eq!(str_of(get(&r, "projects.0.configFileName")), cfg);
     let project = str_of(get(&r, "projects.0.id")).to_string();
     let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
-    assert_eq!(call(&s, "getSourceFileNames", &format!("{{{sp}}}")), Value::Array(vec![Value::String(index.clone())]));
+    assert_eq!(call(&s, "getSourceFileNames", &format!("{{{sp}}}")), Value::Array(vec![Value::String(index)]));
     let d = call(&s, "getSemanticDiagnostics", &format!("{{{sp}}}"));
     assert_eq!(get(&d, "0.code"), &Value::Number(2322.0));
     // The full filesystem is total: host files are invisible.

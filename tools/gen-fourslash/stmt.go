@@ -2,16 +2,56 @@ package main
 
 import (
 	"go/ast"
+	"go/constant"
 	"go/token"
 	"go/types"
+	"regexp"
 	"strings"
 )
 
+var fixtureFormat = regexp.MustCompile(`\{[a-zA-Z_][a-zA-Z0-9_]*:[0-9]+\}`)
+
 func (g *gen) stmts(list []ast.Stmt) {
 	for i, s := range list {
+		if decl, ok := s.(*ast.DeclStmt); ok {
+			gd := decl.Decl.(*ast.GenDecl)
+			if gd.Tok == token.VAR {
+				for _, spec := range gd.Specs {
+					vs := spec.(*ast.ValueSpec)
+					if len(vs.Values) != 0 {
+						continue
+					}
+					for _, name := range vs.Names {
+						obj := g.info.Defs[name]
+						if end, ok := g.assignedBeforeRead(obj, list[i+1:]); ok {
+							g.uninitialized[obj] = true
+							g.assigned[obj] = false
+							for _, rest := range list[i+2+end:] {
+								if g.refersTo(obj, rest) {
+									// Later uses may assign again; keep the original mutability when they do.
+									ast.Inspect(rest, func(n ast.Node) bool {
+										if a, ok := n.(*ast.AssignStmt); ok {
+											for _, lhs := range a.Lhs {
+												if g.refersTo(obj, lhs) {
+													g.assigned[obj] = true
+												}
+											}
+										}
+										return true
+									})
+								}
+							}
+						}
+					}
+				}
+			}
+		}
 		if d, ok := s.(*ast.DeferStmt); ok {
 			g.deferStmt(d, list[i+1:])
 			return
+		}
+		if g.literalFormattingFixture(s) {
+			g.line("#[expect(clippy::literal_string_with_formatting_args, reason = \"These braces are TypeScript fixture syntax, not Rust format placeholders.\")]")
 		}
 		g.stmt(s)
 	}
@@ -114,7 +154,11 @@ func (g *gen) stmt(s ast.Stmt) {
 						val = "Default::default()"
 					}
 					g.declare(obj, name)
-					g.line("let %s: %s = %s;", g.binding(name, obj), g.localType(obj.Type()), val)
+					if g.uninitialized[obj] {
+						g.line("let %s: %s;", g.binding(name, obj), g.localType(obj.Type()))
+					} else {
+						g.line("let %s: %s = %s;", g.binding(name, obj), g.localType(obj.Type()), val)
+					}
 				}
 			}
 		case token.TYPE:
@@ -171,6 +215,64 @@ func (g *gen) stmt(s ast.Stmt) {
 	default:
 		fail("statement %T", s)
 	}
+}
+
+func (g *gen) refersTo(obj types.Object, n ast.Node) bool {
+	if n == nil {
+		return false
+	}
+	found := false
+	ast.Inspect(n, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && g.info.Uses[id] == obj {
+			found = true
+		}
+		return !found
+	})
+	return found
+}
+
+// Omit Go's zero initialization only when an assignment, or both branches of an if, replace it before a read.
+func (g *gen) assignedBeforeRead(obj types.Object, list []ast.Stmt) (int, bool) {
+	for i, s := range list {
+		if !g.refersTo(obj, s) {
+			continue
+		}
+		switch s := s.(type) {
+		case *ast.AssignStmt:
+			if s.Tok != token.ASSIGN {
+				return 0, false
+			}
+			for _, rhs := range s.Rhs {
+				if g.refersTo(obj, rhs) {
+					return 0, false
+				}
+			}
+			for _, lhs := range s.Lhs {
+				if id, ok := lhs.(*ast.Ident); ok && g.info.Uses[id] == obj {
+					return i, true
+				}
+			}
+		case *ast.IfStmt:
+			if s.Init != nil && g.refersTo(obj, s.Init) || g.refersTo(obj, s.Cond) {
+				return 0, false
+			}
+			if _, ok := g.assignedBeforeRead(obj, s.Body.List); !ok {
+				return 0, false
+			}
+			var other []ast.Stmt
+			switch e := s.Else.(type) {
+			case *ast.BlockStmt:
+				other = e.List
+			case *ast.IfStmt:
+				other = []ast.Stmt{e}
+			}
+			if _, ok := g.assignedBeforeRead(obj, other); ok {
+				return i, true
+			}
+		}
+		return 0, false
+	}
+	return 0, false
 }
 
 func (g *gen) localType(t types.Type) string {
@@ -263,6 +365,14 @@ func (g *gen) assign(s *ast.AssignStmt) {
 			}
 			name := ident(id.Name)
 			if isOptionPtr(obj.Type()) {
+				if !g.assigned[obj] {
+					if inner, ok := g.ptrLiteral(s.Rhs[i]); ok {
+						vi := g.declare(obj, name)
+						vi.kind = kDeref
+						g.line("let %s = %s;", name, inner)
+						continue
+					}
+				}
 				if c, k := g.naturalIfPlace(s.Rhs[i]); k == kDeref {
 					vi := g.declare(obj, name)
 					vi.kind = kDeref
@@ -320,6 +430,25 @@ func (g *gen) assign(s *ast.AssignStmt) {
 	default:
 		fail("assignment %s", s.Tok)
 	}
+}
+
+func (g *gen) literalFormattingFixture(n ast.Node) bool {
+	found := false
+	ast.Inspect(n, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		if _, ok := n.(*ast.FuncLit); ok {
+			return false
+		}
+		if e, ok := n.(ast.Expr); ok {
+			if tv := g.info.Types[e]; tv.Value != nil && tv.Value.Kind() == constant.String && !g.isNamedConstRef(e) {
+				found = fixtureFormat.MatchString(constant.StringVal(tv.Value))
+			}
+		}
+		return !found
+	})
+	return found
 }
 
 func sameExpr(a, b ast.Expr) bool {
@@ -402,6 +531,20 @@ func (g *gen) rangeStmt(s *ast.RangeStmt) {
 		}
 	case *types.Slice:
 		src := g.expr(s.X, xt, mOwned)
+		borrowed := false
+		if id, ok := s.X.(*ast.Ident); ok {
+			if vi := g.vars[g.info.Uses[id]]; vi != nil && vi.kind == kSlice && vObj != nil {
+				src = vi.name + ".iter().cloned()"
+				borrowed = true
+			}
+		}
+		if lit, ok := s.X.(*ast.CompositeLit); ok && vObj != nil {
+			var parts []string
+			for _, el := range lit.Elts {
+				parts = append(parts, g.elem(el, u.Elem()))
+			}
+			src = "[" + strings.Join(parts, ", ") + "]"
+		}
 		if vObj == nil {
 			if kObj == nil {
 				g.line("for _ in 0..%s.len() {", parenIfNeeded(src))
@@ -413,7 +556,11 @@ func (g *gen) rangeStmt(s *ast.RangeStmt) {
 			g.line("for %s in %s {", vName, src)
 			g.declare(vObj, vName)
 		} else {
-			g.line("for (%s, %s) in %s.into_iter().enumerate() {", kName, vName, parenIfNeeded(src))
+			iter := src
+			if !borrowed {
+				iter = parenIfNeeded(src) + ".into_iter()"
+			}
+			g.line("for (%s, %s) in %s.enumerate() {", kName, vName, iter)
 			g.indent++
 			g.line("let %s = %s as i32;", kName, kName)
 			g.indent--

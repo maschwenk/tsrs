@@ -152,7 +152,7 @@ struct TestFileWithMarkers {
 
 // test_parser.go:110
 pub(crate) fn is_state_baselining_enabled(global_options: &OrderedMap<String, String>) -> bool {
-    global_options.get("statebaseline").map(|s| s.as_str()) == Some("true")
+    global_options.get("statebaseline").map(std::string::String::as_str) == Some("true")
 }
 
 // test_parser.go:114
@@ -180,7 +180,7 @@ pub fn parse_test_data(t: &T, contents: &str, file_name: &str) -> TestData {
 
     let mut has_ts_config = false;
     for file in files_with_marker {
-        files.push(file.file.clone());
+        files.push(Arc::clone(&file.file));
         has_ts_config = has_ts_config || is_config_file(&file.file.file_name);
 
         markers.extend(file.markers.iter().cloned());
@@ -202,7 +202,7 @@ pub fn parse_test_data(t: &T, contents: &str, file_name: &str) -> TestData {
                     name, marker.position, existing.position
                 ));
             }
-            marker_positions.insert(name.clone(), marker.clone());
+            marker_positions.insert(name.clone(), Arc::clone(marker));
         }
     }
 
@@ -241,7 +241,7 @@ struct RangeLocationInformation {
 }
 
 // test_parser.go:200
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct TestFileInfo {
     pub(crate) file_name: String,
     // The contents of the file (with markers, etc stripped out)
@@ -502,15 +502,15 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
     let output_string = output;
     // Set LS positions for markers
     let line_map = lsconv::compute_lsp_line_starts(&output_string);
-    let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(line_map.clone())));
+    let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(Arc::clone(&line_map))));
 
-    let emit = file_options.get(EMIT_THIS_FILE_OPTION).map(|s| s.as_str()) == Some("true");
+    let emit = file_options.get(EMIT_THIS_FILE_OPTION).map(std::string::String::as_str) == Some("true");
 
     let test_file_info = TestFileInfo {
         file_name: file_name.clone(),
         content: output_string,
         emit,
-        open: file_options.get(NO_OPEN_FILE_OPTION).map(|s| s.as_str()) != Some("true"),
+        open: file_options.get(NO_OPEN_FILE_OPTION).map(std::string::String::as_str) != Some("true"),
     };
 
     // slices.SortStableFunc: by start, then the longer range first
@@ -550,7 +550,7 @@ fn parse_file_content(file_name: &str, content: &str, file_options: &OrderedMap<
                     start: converters.position_to_line_and_character(&test_file_info, range.pos()),
                     end: converters.position_to_line_and_character(&test_file_info, range.end()),
                 },
-                marker: marker.map(|i| markers[i].clone()),
+                marker: marker.map(|i| Arc::clone(&markers[i])),
             })
         })
         .collect();

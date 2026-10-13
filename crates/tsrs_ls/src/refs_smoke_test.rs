@@ -60,7 +60,7 @@ impl Host for testHost {
         self.fs.read_file(path)
     }
     fn converters(&self) -> Arc<Converters> {
-        self.converters.clone()
+        std::sync::Arc::clone(&self.converters)
     }
     fn get_preferences(&self, _active_file: &str) -> UserPreferences {
         new_default_user_preferences()
@@ -93,7 +93,7 @@ impl ParseConfigHost for parseConfigHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -136,10 +136,10 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
     let a_path = format!("/{}", d.a_name);
     let files = [("/tsconfig.json", d.tsconfig), (a_path.as_str(), d.a), ("/b.ts", d.b)];
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true)));
-    let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
+    let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: std::sync::Arc::clone(&fs) }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
-    assert!(diagnostics.is_empty());
-    let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None, None);
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
+    let host: Arc<dyn CompilerHost> = new_compiler_host("/", std::sync::Arc::clone(&fs), &bundled::lib_path(), None, None, None);
     let mut options = ProgramOptions::new(P::new(config.unwrap()), host);
     options.create_checker_pool = Some(Arc::new(|program: &'static Program| {
         let state: &'static testPoolState = Box::leak(Box::new(testPoolState { program, slots: Mutex::new(Vec::new()) }));
@@ -147,21 +147,20 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
     }));
     let program: &'static Program = new_program(options);
     program.bind_source_files();
-    let fs_for_lines = fs.clone();
+    let fs_for_lines = std::sync::Arc::clone(&fs);
     // Cached like the project system's snapshot line maps (keyword references land thousands of times in the libs).
     let line_maps: Mutex<rustc_hash::FxHashMap<String, Arc<lsconv::LSPLineMap>>> = Mutex::new(Default::default());
     let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF16, move |file_name| {
         if let Some(line_map) = line_maps.lock().unwrap().get(file_name) {
-            return Some(line_map.clone());
+            return Some(std::sync::Arc::clone(line_map));
         }
         let line_map = fs_for_lines.read_file(file_name).map(|text| compute_lsp_line_starts(&text))?;
-        line_maps.lock().unwrap().insert(file_name.to_string(), line_map.clone());
+        line_maps.lock().unwrap().insert(file_name.to_string(), std::sync::Arc::clone(&line_map));
         Some(line_map)
     });
     let host = Arc::new(testHost { fs, converters });
     let ls = new_language_service(ProjectID("/tsconfig.json".to_string()), program, host, "/b.ts");
-    let mut caps = lsproto::ResolvedClientCapabilities::default();
-    caps.vs_supports_visual_studio_extensions = d.vs;
+    let mut caps = lsproto::ResolvedClientCapabilities { vs_supports_visual_studio_extensions: d.vs, ..Default::default() };
     caps.text_document.implementation.link_support = d.vs;
     let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(caps));
     (ls, ctx)
@@ -171,7 +170,7 @@ fn position_of(text: &str, marker: &str, off: usize) -> Value {
     let offset = text.find(marker).unwrap() + off;
     let before = &text[..offset];
     let line = before.matches('\n').count();
-    let character = offset - before.rfind('\n').map(|i| i + 1).unwrap_or(0);
+    let character = offset - before.rfind('\n').map_or(0, |i| i + 1);
     let mut pos = tsrs_core::collections::OrderedMap::default();
     pos.insert("line".to_string(), Value::Number(line as f64));
     pos.insert("character".to_string(), Value::Number(character as f64));
@@ -238,7 +237,7 @@ fn run(d: &dataset) {
         let text = if file == d.a_name { d.a } else { d.b };
         let mut params = tsrs_core::collections::OrderedMap::default();
         let mut text_document = tsrs_core::collections::OrderedMap::default();
-        text_document.insert("uri".to_string(), Value::String(format!("file:///{}", file)));
+        text_document.insert("uri".to_string(), Value::String(format!("file:///{file}")));
         params.insert("textDocument".to_string(), Value::Object(text_document));
         params.insert("position".to_string(), position_of(text, at, off));
         if let Some(Value::Object(extra)) = get(r, "params") {
@@ -281,11 +280,11 @@ fn run(d: &dataset) {
                     to_line(&ls.provide_call_hierarchy_outgoing_calls(&ctx, &items[0]).unwrap())
                 }
             }
-            _ => panic!("unknown method {}", method),
+            _ => panic!("unknown method {method}"),
         };
         if std::env::var("REFS_SMOKE_TIMES").is_ok() { eprintln!("{:?} {} {}", started.elapsed(), method, at); }
         if got != want {
-            failures.push(format!("{} {} {:?}\n  want: {}\n  got:  {}", method, file, at, want, got));
+            failures.push(format!("{method} {file} {at:?}\n  want: {want}\n  got:  {got}"));
         }
     }
     assert!(failures.is_empty(), "{} of {} responses differ:\n{}", failures.len(), d.expected.lines().count(), failures.join("\n"));

@@ -535,6 +535,7 @@ mod tests {
         }
     }
 
+    #[derive(Clone, Copy)]
     struct TestGoodBad<'a> {
         good: &'a [&'a str],
         bad: &'a [&'a str],
@@ -586,7 +587,7 @@ mod tests {
 
     #[test]
     fn test_comparators_of_version_ranges() {
-        let comparators_tests: &[(&str, &str, bool)] = &[
+        const COMPARATORS_TESTS: &[(&str, &str, bool)] = &[
             // empty (matches everything)
             ("", "2.0.0", true),
             ("", "2.0.0-0", true),
@@ -1249,7 +1250,7 @@ mod tests {
             ("<4.9", "4.9.0-beta", false),
             ("<=4.8", "4.9.0-beta", false),
         ];
-        for &(range_text, version_text, expected) in comparators_tests {
+        for &(range_text, version_text, expected) in COMPARATORS_TESTS {
             assert_range_test("comparators", range_text, version_text, expected);
         }
     }

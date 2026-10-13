@@ -1,6 +1,7 @@
 // Port of execute/tsctests/sys.go and fs.go (non-watch), plus testutil/fsbaselineutil (FSDiffer) and
 // harnessutil.TracerForBaselining.
 
+use std::fmt::Write as _;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
@@ -216,7 +217,7 @@ impl TestSys {
         let mut result = String::new();
         let include = std::mem::take(&mut *self.program_include_baselines.lock().unwrap());
         if !include.is_empty() {
-            result += &format!("\n\n{header}\n!!! Include reasons expectations don't match pls review!!!\n");
+            write!(result, "\n\n{header}\n!!! Include reasons expectations don't match pls review!!!\n").unwrap();
             result += &include;
             baseline.push_str(&result);
         }
@@ -313,8 +314,8 @@ impl TestSys {
             if let Some(s) = msg.strip_suffix("' does not exist.") {
                 let file = s.strip_prefix("File '").unwrap_or(s);
                 let file_path = opts(file);
-                if !cache.contains_key(&file_path) {
-                    cache.insert(file_path, false);
+                if let std::collections::hash_map::Entry::Vacant(e) = cache.entry(file_path) {
+                    e.insert(false);
                     return msg.to_string();
                 }
                 return format!("File '{file}' does not exist according to earlier cached lookups.");
@@ -322,8 +323,8 @@ impl TestSys {
             if let Some(s) = msg.strip_prefix("Found 'package.json' at '") {
                 let file = s.strip_suffix("'.").unwrap_or(s);
                 let file_path = opts(file);
-                if !cache.contains_key(&file_path) {
-                    cache.insert(file_path, true);
+                if let std::collections::hash_map::Entry::Vacant(e) = cache.entry(file_path) {
+                    e.insert(true);
                     return msg.to_string();
                 }
                 return format!("File '{file}' exists according to earlier cached lookups.");
@@ -385,7 +386,7 @@ pub(crate) fn sanitize_internal_symbol_name(s: &str) -> String {
         // [^@]+@[0-9]+
         let name_end = after.find('@');
         let matched = name_end.filter(|&n| n > 0).and_then(|n| {
-            let digits = after[n + 1..].bytes().take_while(|b| b.is_ascii_digit()).count();
+            let digits = after[n + 1..].bytes().take_while(u8::is_ascii_digit).count();
             (digits > 0).then_some((n, digits))
         });
         match matched {
@@ -467,7 +468,7 @@ impl outputSanitizer<'_> {
 
 impl System for TestSys {
     fn fs(&self) -> Arc<dyn FS> {
-        self.fs.clone()
+        Arc::<testFs>::clone(&self.fs)
     }
     fn default_library_path(&self) -> &str {
         &self.default_library_path
@@ -598,7 +599,7 @@ impl CommandLineTesting for TestSys {
         let mut file_not_in_program_with_include_reason: Vec<String> = include_reasons
             .keys()
             .filter(|path| p.get_source_file_by_path(path).is_none() && !p.is_missing_path(path))
-            .map(|path| path.to_string())
+            .map(std::string::ToString::to_string)
             .collect();
         file_not_in_program_with_include_reason.sort();
         if !files_without_include_reason.is_empty() || !file_not_in_program_with_include_reason.is_empty() {

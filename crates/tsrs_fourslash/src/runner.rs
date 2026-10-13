@@ -220,7 +220,7 @@ fn spawn_worker(include_skipped: bool) -> WorkerProcess {
         }
     });
     let last_stderr = Arc::new(Mutex::new(String::new()));
-    let last = last_stderr.clone();
+    let last = Arc::clone(&last_stderr);
     std::thread::spawn(move || {
         for line in BufReader::new(stderr).lines() {
             let Ok(line) = line else { break };
@@ -240,7 +240,7 @@ fn run_in_worker(worker: &mut Option<WorkerProcess>, entry: &TestEntry, include_
     }
     let w = worker.get_or_insert_with(|| spawn_worker(include_skipped));
     w.tests_run += 1;
-    if writeln!(w.stdin, "{}", entry.name).and_then(|_| w.stdin.flush()).is_err() {
+    if writeln!(w.stdin, "{}", entry.name).and_then(|()| w.stdin.flush()).is_err() {
         let mut w = worker.take().unwrap();
         let _ = w.child.kill();
         let _ = w.child.wait();
@@ -266,7 +266,7 @@ fn run_in_worker(worker: &mut Option<WorkerProcess>, entry: &TestEntry, include_
         }
         Err(mpsc::RecvTimeoutError::Disconnected) => {
             let mut w = worker.take().unwrap();
-            let status = w.child.wait().map(|s| s.code().unwrap_or(-1)).unwrap_or(-1);
+            let status = w.child.wait().map_or(-1, |s| s.code().unwrap_or(-1));
             std::thread::sleep(Duration::from_millis(20));
             let last = w.last_stderr.lock().unwrap().clone();
             Outcome::Fail(format!("crash: worker exited with status {status}: {last}"))
@@ -334,7 +334,7 @@ pub fn run(registry: &'static [TestEntry], opts: &RunOptions) -> usize {
         match r.unwrap() {
             Outcome::Pass => {
                 remove_failure_file(e.name);
-                pass.push(e.name.to_string())
+                pass.push(e.name.to_string());
             }
             Outcome::Fail(msg) => {
                 // Crashes and timeouts never reach the worker's own report.
@@ -347,7 +347,7 @@ pub fn run(registry: &'static [TestEntry], opts: &RunOptions) -> usize {
             }
             Outcome::Skip(msg) => {
                 remove_failure_file(e.name);
-                skip.push(format!("{}\t{}", e.name, msg.lines().next().unwrap_or("")))
+                skip.push(format!("{}\t{}", e.name, msg.lines().next().unwrap_or("")));
             }
         }
     }

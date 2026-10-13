@@ -11,9 +11,9 @@ fn raw(sources: &[&str], mappings: &str, names: &[&str], sources_content: Option
         version: 3,
         file: "main.js".to_string(),
         source_root: "/".to_string(),
-        sources: sources.iter().map(|s| s.to_string()).collect(),
+        sources: sources.iter().map(std::string::ToString::to_string).collect(),
         mappings: mappings.to_string(),
-        names: names.iter().map(|s| s.to_string()).collect(),
+        names: names.iter().map(std::string::ToString::to_string).collect(),
         sources_content: sources_content.map(|v| v.into_iter().map(|s| s.map(str::to_string)).collect()),
     }
 }

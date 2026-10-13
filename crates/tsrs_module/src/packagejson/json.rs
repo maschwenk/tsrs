@@ -301,6 +301,7 @@ mod tests {
 
     #[test]
     fn rejects_invalid_json() {
+        #[expect(clippy::literal_string_with_formatting_args, reason = "These are deliberately malformed JSON fixtures, including an unquoted property name.")]
         for text in ["", "{", "{,}", "[1,]", "{\"a\":1,}", "01", "1.", "'a'", "{} x", "\"\u{1}\"", "{a:1}", "\"\\ud800\"", "1e999"] {
             assert!(parse(text).is_err(), "{text:?}");
         }

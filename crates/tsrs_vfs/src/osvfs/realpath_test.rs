@@ -6,11 +6,11 @@ use super::*;
 fn setup_symlinks() -> (String, String) {
     let tmp = temp_dir();
 
-    let target = format!("{}/target", tmp);
-    let target_file = format!("{}/file", target);
+    let target = format!("{tmp}/target");
+    let target_file = format!("{target}/file");
 
-    let link = format!("{}/link", tmp);
-    let link_file = format!("{}/file", link);
+    let link = format!("{tmp}/link");
+    let link_file = format!("{link}/file");
 
     std::fs::create_dir_all(&target).unwrap();
     std::fs::write(&target_file, "hello").unwrap();
@@ -38,48 +38,48 @@ fn test_symlink_realpath() {
 #[test]
 fn test_realpath_relative_symlink_and_missing() {
     let tmp = tspath::normalize_slashes(&temp_dir());
-    std::fs::create_dir_all(format!("{}/real/sub", tmp)).unwrap();
-    std::fs::write(format!("{}/real/sub/f.ts", tmp), "").unwrap();
-    mklink("real/sub", &format!("{}/rel", tmp), true);
+    std::fs::create_dir_all(format!("{tmp}/real/sub")).unwrap();
+    std::fs::write(format!("{tmp}/real/sub/f.ts"), "").unwrap();
+    mklink("real/sub", &format!("{tmp}/rel"), true);
 
     let fs = fs();
-    let real = fs.realpath(&format!("{}/real/sub/f.ts", tmp));
-    assert_eq!(fs.realpath(&format!("{}/rel/f.ts", tmp)), real);
+    let real = fs.realpath(&format!("{tmp}/real/sub/f.ts"));
+    assert_eq!(fs.realpath(&format!("{tmp}/rel/f.ts")), real);
     // ".." after a symlink is physical (EvalSymlinks semantics): rel/.. is real/, so this does not exist.
-    let dotdot = format!("{}/rel/../real/sub/f.ts", tmp);
+    let dotdot = format!("{tmp}/rel/../real/sub/f.ts");
     assert_eq!(fs.realpath(&dotdot), dotdot);
-    assert_eq!(fs.realpath(&format!("{}/rel/../sub/f.ts", tmp)), real);
+    assert_eq!(fs.realpath(&format!("{tmp}/rel/../sub/f.ts")), real);
 
     // A path that does not exist is returned unchanged.
-    let missing = format!("{}/does/not/exist.ts", tmp);
+    let missing = format!("{tmp}/does/not/exist.ts");
     assert_eq!(fs.realpath(&missing), missing);
 }
 
 #[test]
 fn test_get_accessible_entries() {
     let tmp = temp_dir();
-    let target = format!("{}/target", tmp);
-    let link = format!("{}/link", tmp);
+    let target = format!("{tmp}/target");
+    let link = format!("{tmp}/link");
 
     std::fs::create_dir_all(&target).unwrap();
     std::fs::create_dir_all(&link).unwrap();
 
-    let target_file1 = format!("{}/file1", target);
-    let target_file2 = format!("{}/file2", target);
+    let target_file1 = format!("{target}/file1");
+    let target_file2 = format!("{target}/file2");
 
     std::fs::write(&target_file1, "hello").unwrap();
     std::fs::write(&target_file2, "world").unwrap();
 
-    let target_dir1 = format!("{}/dir1", target);
-    let target_dir2 = format!("{}/dir2", target);
+    let target_dir1 = format!("{target}/dir1");
+    let target_dir2 = format!("{target}/dir2");
 
     std::fs::create_dir_all(&target_dir1).unwrap();
     std::fs::create_dir_all(&target_dir2).unwrap();
 
-    mklink(&target_file1, &format!("{}/file1", link), false);
-    mklink(&target_file2, &format!("{}/file2", link), false);
-    mklink(&target_dir1, &format!("{}/dir1", link), true);
-    mklink(&target_dir2, &format!("{}/dir2", link), true);
+    mklink(&target_file1, &format!("{link}/file1"), false);
+    mklink(&target_file2, &format!("{link}/file2"), false);
+    mklink(&target_dir1, &format!("{link}/dir1"), true);
+    mklink(&target_dir2, &format!("{link}/dir2"), true);
 
     let fs = fs();
 
@@ -90,7 +90,7 @@ fn test_get_accessible_entries() {
     let symlinks = entries.symlinks.expect("expected Symlinks to be set for directory with symlinks");
     assert_eq!(symlinks.len(), 4);
     for name in ["file1", "file2", "dir1", "dir2"] {
-        assert!(symlinks.contains(name), "expected {:?} to be in Symlinks", name);
+        assert!(symlinks.contains(name), "expected {name:?} to be in Symlinks");
     }
 
     // Non-symlink directory should have empty Symlinks.

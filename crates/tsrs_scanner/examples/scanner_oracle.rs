@@ -15,7 +15,7 @@ fn escape(sb: &mut String, s: &str) {
         if (0x20..0x7f).contains(&b) && b != b'\\' {
             sb.push(b as char);
         } else {
-            let _ = write!(sb, "\\x{:02x}", b);
+            let _ = write!(sb, "\\x{b:02x}");
         }
     }
 }
@@ -136,6 +136,7 @@ fn dump(path: &str) -> Result<String, String> {
     let data = std::fs::read(path).map_err(|e| e.to_string())?;
     let text = String::from_utf8(data).map_err(|_| format!("{path}: not UTF-8"))?;
     let text: &'static str = Box::leak(text.into_boxed_str());
+    #[expect(clippy::case_sensitive_file_extension_comparisons, reason = "The oracle follows Go's case-sensitive fixture suffix selection for JSX scanning.")]
     let variant = if path.ends_with(".tsx") || path.ends_with(".jsx") { LanguageVariant::JSX } else { LanguageVariant::Standard };
     let mut sb = String::new();
     for mode in 1..=4 {
@@ -145,10 +146,10 @@ fn dump(path: &str) -> Result<String, String> {
 }
 
 fn fnv64a(data: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in data {
         h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
+        h = h.wrapping_mul(0x0100_0000_01b3);
     }
     h
 }

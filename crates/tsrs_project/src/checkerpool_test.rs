@@ -57,7 +57,7 @@ fn setup_checker_pool_session(opts: CheckerPoolOptions) -> (Arc<Session>, Arc<ch
     let pool = project.checker_pool.clone().expect("expected checker pool");
     // Go's GC keeps the program alive through the pool's program pointer for as long as the test uses the pool; here
     // the project values own it (memregions.rs), and the session may replace this project's snapshot meanwhile.
-    std::mem::forget(project.clone());
+    let _ = std::mem::ManuallyDrop::new(project);
     (session, pool)
 }
 
@@ -131,7 +131,7 @@ fn checker_pool_same_request_contention() {
         let p1 = ptr(&c1) as usize;
         let acquired = Arc::new(AtomicBool::new(false));
         std::thread::scope(|s| {
-            let (pool, ctx, acquired2) = (&pool, &ctx, acquired.clone());
+            let (pool, ctx, acquired2) = (&pool, &ctx, std::sync::Arc::clone(&acquired));
             s.spawn(move || {
                 let c2 = pool.get_checker(ctx, None);
                 assert_eq!(p1, ptr(&c2) as usize);
@@ -511,7 +511,7 @@ fn checker_pool_discard_idempotent() {
 #[test]
 fn checker_pool_get_global_diagnostics_empty() {
     let (_, pool) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(10) });
-    assert!(pool.get_global_diagnostics().is_empty());
+    assert_eq!(pool.get_global_diagnostics(), [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
 }
 
 // checkerpool_test.go:1235

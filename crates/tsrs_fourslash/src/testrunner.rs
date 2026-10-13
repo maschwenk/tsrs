@@ -77,7 +77,7 @@ pub fn parse_test_files_and_symlinks_with_options<U, E>(
             let meta_data_name = test_meta_data[1].to_lowercase();
             let meta_data_value = test_meta_data[2].trim().to_string();
             if meta_data_name == "currentdirectory" {
-                current_directory = meta_data_value.clone();
+                current_directory.clone_from(&meta_data_value);
             }
             if meta_data_name != "filename" {
                 if meta_data_name == "symlink" && !current_file_name.is_empty() {
@@ -120,9 +120,7 @@ pub fn parse_test_files_and_symlinks_with_options<U, E>(
                 // First metadata marker in the file
                 let has_content_before_first_filename = !current_file_content.is_empty()
                     && tsrs_scanner::skip_trivia(&current_file_content, 0) as usize != current_file_content.len();
-                if has_content_before_first_filename && !options.allow_implicit_first_file {
-                    panic!("Non-comment test content appears before the first '// @Filename' directive");
-                }
+                assert!(!has_content_before_first_filename || options.allow_implicit_first_file, "Non-comment test content appears before the first '// @Filename' directive");
 
                 // If we have content before the first @Filename and AllowImplicitFirstFile is true,
                 // we need to save it as an implicit first file before starting the new file

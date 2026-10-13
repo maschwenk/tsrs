@@ -75,12 +75,12 @@ pub(crate) fn run_with_retry(name: &str, body: &dyn Fn(&mut TestT) -> TestResult
         match body(&mut t) {
             Ok(()) => return,
             Err(msg) => {
-                eprintln!("{}: attempt {}/{} failed: {}", name, attempt, retryAttempts, msg);
+                eprintln!("{name}: attempt {attempt}/{retryAttempts} failed: {msg}");
                 last = msg;
             }
         }
     }
-    panic!("{}: retry: gave up after {} attempts: {}", name, retryAttempts, last);
+    panic!("{name}: retry: gave up after {retryAttempts} attempts: {last}");
 }
 
 // watcher_test.go:97
@@ -119,7 +119,7 @@ static nameCounter: AtomicU64 = AtomicU64::new(0);
 pub(crate) fn sub_path(dir: &str) -> String {
     let n = nameCounter.fetch_add(1, Ordering::Relaxed);
     let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().subsec_nanos();
-    format!("{}/test{}{}", dir, n, nanos)
+    format!("{dir}/test{n}{nanos}")
 }
 
 // watcher_test.go:167
@@ -151,8 +151,8 @@ pub(crate) fn subscribe_for(t: &mut TestT, dir: &str, w: &'static dyn Watcher) -
 pub(crate) fn subscribe_file_for(t: &mut TestT, path: &str, w: &'static dyn Watcher) -> Result<subscription, String> {
     std::thread::sleep(pre_subscribe_sleep(w));
     let r = new_recorder(t, Some(w));
-    let sub: Arc<dyn Watch> = Arc::from(w.watch_file(path, r.callback()).map_err(|e| format!("subscribeFile: {}", e))?);
-    let s = sub.clone();
+    let sub: Arc<dyn Watch> = Arc::from(w.watch_file(path, r.callback()).map_err(|e| format!("subscribeFile: {e}"))?);
+    let s = std::sync::Arc::clone(&sub);
     t.cleanup(move || {
         let _ = s.close();
     });
@@ -164,8 +164,8 @@ pub(crate) fn subscribe_file_for(t: &mut TestT, path: &str, w: &'static dyn Watc
 pub(crate) fn subscribe_for_opts(t: &mut TestT, dir: &str, w: &'static dyn Watcher, opts: Vec<WatchOption>) -> Result<subscription, String> {
     std::thread::sleep(pre_subscribe_sleep(w));
     let r = new_recorder(t, Some(w));
-    let sub: Arc<dyn Watch> = Arc::from(w.watch_directory(dir, r.callback(), opts).map_err(|e| format!("subscribe: {}", e))?);
-    let s = sub.clone();
+    let sub: Arc<dyn Watch> = Arc::from(w.watch_directory(dir, r.callback(), opts).map_err(|e| format!("subscribe: {e}"))?);
+    let s = std::sync::Arc::clone(&sub);
     t.cleanup(move || {
         let _ = s.close();
     });
@@ -204,7 +204,7 @@ impl recordingWatcher {
 
     // watcher_test.go:256
     pub(crate) fn callback(self: &Arc<Self>) -> WatchCallback {
-        let r = self.clone();
+        let r = std::sync::Arc::clone(self);
         Arc::new(move |events: Vec<Event>, err: Option<Error>| {
             let mut st = r.mu.lock().unwrap();
             if let Some(err) = err {
@@ -303,9 +303,9 @@ pub(crate) fn expect_event_set(r: &recordingWatcher, want: Vec<wantEvent>) -> Re
 }
 
 // watcher_test.go:454
-pub(crate) fn expect_event_sequence(r: &recordingWatcher, want: Vec<wantEvent>) -> Result<Vec<Event>, String> {
-    let got = r.wait_for_all(r.deadline(), &want);
-    assert_event_sequence(&got, &want)?;
+pub(crate) fn expect_event_sequence(r: &recordingWatcher, want: &[wantEvent]) -> Result<Vec<Event>, String> {
+    let got = r.wait_for_all(r.deadline(), want);
+    assert_event_sequence(&got, want)?;
     Ok(got)
 }
 

@@ -21,7 +21,7 @@ fn test_progress_notifications_end_to_end() {
     let (client, close_client) = new_lsp_client(test_server_options("/home/projects", &files), Some(acknowledge_registrations()));
 
     {
-        let progress_notifications = progress_notifications.clone();
+        let progress_notifications = std::sync::Arc::clone(&progress_notifications);
         *client.on_server_notification.lock().unwrap() = Some(Box::new(move |req: &lsproto::RequestMessage| {
             if req.method == lsproto::Method::Progress {
                 if let Ok(params) = req.unmarshal_params::<lsproto::ProgressParams>() {
@@ -86,7 +86,7 @@ fn test_progress_notifications_end_to_end() {
     let first_token = token_string(&notifications[0].token);
     assert!(!first_token.is_empty(), "expected non-empty progress token");
     for (i, n) in notifications.iter().enumerate() {
-        assert_eq!(token_string(&n.token), first_token, "notification {} has different token", i);
+        assert_eq!(token_string(&n.token), first_token, "notification {i} has different token");
     }
 
     close_client.close().unwrap();

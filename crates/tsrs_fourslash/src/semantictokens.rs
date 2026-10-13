@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tsrs_ls::lsconv;
 use tsrs_lsproto as lsproto;
 
@@ -6,7 +8,7 @@ use crate::go::quote;
 use crate::testing::T;
 
 // semantictokens.go:12
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SemanticToken {
     pub type_: String,
     pub text: String,
@@ -61,13 +63,11 @@ impl FourslashTest {
 
 // semantictokens.go:55
 pub(crate) fn decode_semantic_tokens(f: &FourslashTest, data: &[u32], token_types: &[String], token_modifiers: &[String]) -> Vec<SemanticToken> {
-    if data.len() % 5 != 0 {
-        panic!("Invalid semantic tokens data length: {}", data.len());
-    }
+    assert!(data.len().is_multiple_of(5), "Invalid semantic tokens data length: {}", data.len());
 
     let script_info = f.get_script_info(&f.active_filename);
-    let line_map = script_info.line_map.clone();
-    let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(line_map.clone())));
+    let line_map = Arc::clone(&script_info.line_map);
+    let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(Arc::clone(&line_map))));
 
     let mut tokens = Vec::new();
     let mut prev_line: u32 = 0;
@@ -86,9 +86,7 @@ pub(crate) fn decode_semantic_tokens(f: &FourslashTest, data: &[u32], token_type
         let char = if delta_line == 0 { prev_char + delta_char } else { delta_char };
 
         // Get token type
-        if token_type_idx as usize >= token_types.len() {
-            panic!("Token type index out of range: {token_type_idx}");
-        }
+        assert!((token_type_idx as usize) < token_types.len(), "Token type index out of range: {token_type_idx}");
         let token_type = &token_types[token_type_idx as usize];
 
         // Get modifiers

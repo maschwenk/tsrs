@@ -254,11 +254,11 @@ mod tests {
         for len in 0..=9 {
             for mut code in 0..3usize.pow(len) {
                 bytes.clear();
-                bytes.extend((0..len).map(|_| {
+                bytes.extend(std::iter::repeat_with(|| {
                     let byte = alphabet[code % 3];
                     code /= 3;
                     byte
-                }));
+                }).take(len as usize));
                 let name = std::str::from_utf8(&bytes).unwrap();
                 assert_eq!(valid_path(name), by_elements(name), "{name}");
             }

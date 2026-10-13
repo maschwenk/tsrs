@@ -709,6 +709,38 @@ pub fn compare_diagnostics(d1: P<Diagnostic>, d2: P<Diagnostic>) -> Ordering {
     compare_related_info(d1.related_information(), d2.related_information())
 }
 
+// diagnostic.go NewDiagnosticFromText: a diagnostic whose message is already-localized text (the native API
+// receives these from clients, e.g. `configFileParsingDiagnostics`).
+pub fn new_diagnostic_from_text(
+    file: Option<P<SourceFile>>,
+    loc: TextRange,
+    code: i32,
+    category: Category,
+    message_text: &str,
+    message_chain: &[P<Diagnostic>],
+    related_information: &[P<Diagnostic>],
+    reports_unnecessary: bool,
+    reports_deprecated: bool,
+) -> P<Diagnostic> {
+    P::new(Diagnostic {
+        file: OwnedCell::new(file),
+        loc: OwnedCell::new(loc.is_valid().then_some(loc)),
+        code,
+        category: OwnedCell::new(category),
+        source: OwnedCell::new(""),
+        message: None,
+        message_text: OwnedCell::new(alloc_str(message_text)),
+        message_key: Key::default(),
+        message_args: Vec::new(),
+        message_chain: OwnedCell::new(alloc_slice(message_chain)),
+        related_information: OwnedCell::new(alloc_slice(related_information)),
+        reports_unnecessary,
+        reports_deprecated,
+        skipped_on_no_emit: OwnedCell::new(false),
+        repopulate_info: OwnedCell::new(None),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -799,36 +831,4 @@ mod tests {
             .set_external_data("mapper", "");
         assert_eq!(external.localize(), "Cannot find name '__alias'.");
     }
-}
-
-// diagnostic.go NewDiagnosticFromText: a diagnostic whose message is already-localized text (the native API
-// receives these from clients, e.g. `configFileParsingDiagnostics`).
-pub fn new_diagnostic_from_text(
-    file: Option<P<SourceFile>>,
-    loc: TextRange,
-    code: i32,
-    category: Category,
-    message_text: &str,
-    message_chain: &[P<Diagnostic>],
-    related_information: &[P<Diagnostic>],
-    reports_unnecessary: bool,
-    reports_deprecated: bool,
-) -> P<Diagnostic> {
-    P::new(Diagnostic {
-        file: OwnedCell::new(file),
-        loc: OwnedCell::new(loc.is_valid().then_some(loc)),
-        code,
-        category: OwnedCell::new(category),
-        source: OwnedCell::new(""),
-        message: None,
-        message_text: OwnedCell::new(alloc_str(message_text)),
-        message_key: Key::default(),
-        message_args: Vec::new(),
-        message_chain: OwnedCell::new(alloc_slice(message_chain)),
-        related_information: OwnedCell::new(alloc_slice(related_information)),
-        reports_unnecessary,
-        reports_deprecated,
-        skipped_on_no_emit: OwnedCell::new(false),
-        repopulate_info: OwnedCell::new(None),
-    })
 }

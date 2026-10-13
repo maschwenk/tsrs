@@ -35,7 +35,7 @@ fn kill(pid: u32) {
 // the same stdout first, where Go's test binary is silent.)
 #[test]
 fn test_child_process_close_does_not_wait_for_launcher_descendants() {
-    match std::env::args().last().as_deref() {
+    match std::env::args().next_back().as_deref() {
         Some(LAUNCHER_ARG) => {
             let command = self_command(DESCENDANT_ARG);
             let mut cmd = Command::new(&command[0]).args(&command[1..]).spawn().unwrap();
@@ -101,7 +101,7 @@ fn header_mapper(exec: &[&str]) -> &'static Mapper {
         manifest: Manifest {
             name: "header-mapper".to_string(),
             version: "1.0.0".to_string(),
-            exec: exec.iter().map(|arg| arg.to_string()).collect(),
+            exec: exec.iter().map(std::string::ToString::to_string).collect(),
             ..Default::default()
         },
         package_directory: header_mapper_directory(),
@@ -145,7 +145,7 @@ fn test_process_spawner_runs_header_mapper() {
             features: Feature::All,
         }]
     );
-    assert!(result.diagnostics.is_empty());
+    assert_eq!(result.diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
 
     let content = "const y = 2;\n//!mapper-error\n";
     let result = host.transform(mapper, Request { file_name: "/project/b.hdr", content }).unwrap();

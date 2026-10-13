@@ -31,7 +31,7 @@ fn run_baseline(test_name: &str, baseline_name: &str) -> String {
     let input = baseline_input(&expected);
     let output = sanitize_stack_trace(&input);
     let actual = sanitized_stack_trace_baseline_contents(test_name, &input, &output);
-    assert_eq!(actual, expected, "baseline {} differs", baseline_name);
+    assert_eq!(actual, expected, "baseline {baseline_name} differs");
     output
 }
 

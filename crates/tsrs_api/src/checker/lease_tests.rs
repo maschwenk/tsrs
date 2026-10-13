@@ -172,7 +172,7 @@ impl Async {
         let conn = transport::AsyncConn::new(
             Box::new(FrameReader::new(server_r)),
             Box::new(FrameWriter::new(server_w)),
-            Arc::new(H { s, caller: late.clone(), ctl: ctl.clone() }),
+            Arc::new(H { s, caller: std::sync::Arc::clone(&late), ctl: std::sync::Arc::clone(&ctl) }),
             transport::ConnOptions { reentrancy_grace: grace, ..Default::default() },
             None,
         );
@@ -246,7 +246,7 @@ fn async_genuine_reentry_fails_after_the_grace_period_and_lease_free_requests_pr
         a.answer(&cb, "\"done\"");
         assert_eq!(result(&a.read()), Value::String("done".into()));
         a.send(4, "getTypeAtPosition", &needs);
-        assert_eq!(get(&result(&a.read()), "flags"), Value::Number(1048576.0));
+        assert_eq!(get(&result(&a.read()), "flags"), Value::Number(1_048_576.0));
         a.finish();
     });
 }
@@ -335,10 +335,10 @@ fn async_two_waits_in_one_request_each_get_the_full_grace_period() {
         thread::sleep(g * 6 / 10);
         a.answer(&cb_q, "\"q\"");
         let mut got = Vec::new();
-        got.extend((0..2).map(|_| {
+        got.extend(std::iter::repeat_with(|| {
             let v = a.read();
             (get(&v, "id"), result(&v))
-        }));
+        }).take(2));
         let (_, waits) = got.iter().find(|(id, _)| *id == Value::Number(3.0)).expect("twoWaits response").clone();
         let Value::Array(w) = waits else { panic!("{waits:?}") };
         assert!(ms(&w[1]) >= (g * 11 / 10).as_millis(), "the two waits together exceed the grace period: {w:?}");
@@ -377,7 +377,7 @@ fn sync_genuine_reentry_fails_immediately_and_lease_free_requests_proceed() {
         let conn = transport::SyncConn::new(
             Box::new(MessagePackReader::new(server_r)),
             Box::new(MessagePackWriter::new(server_w)),
-            Arc::new(H { s, caller: late.clone(), ctl: Arc::new(Ctl::default()) }),
+            Arc::new(H { s, caller: std::sync::Arc::clone(&late), ctl: Arc::new(Ctl::default()) }),
             transport::ConnOptions { reentrancy_grace: Duration::from_secs(600), ..Default::default() },
         );
         late.set(conn.caller());
@@ -413,7 +413,7 @@ fn sync_genuine_reentry_fails_immediately_and_lease_free_requests_proceed() {
 fn gate_entries_are_dropped_once_unused() {
     let s = session_with(&[], &["/p/tsconfig.json"]);
     let sd = s.session.snapshot_data(s.snapshot as u64).unwrap();
-    let program = sd.get_program(&tsrs_project::ID(s.project.clone())).unwrap();
+    let program = sd.get_program(&tsrs_project::ID(s.project)).unwrap();
     drop(lease::acquire(program).unwrap());
     assert!(!lease::is_tracked(program));
 }
@@ -431,7 +431,7 @@ fn sync_nested_request_reads_its_own_exact_uint64_literals() {
         let conn = transport::SyncConn::new(
             Box::new(MessagePackReader::new(server_r)),
             Box::new(MessagePackWriter::new(server_w)),
-            Arc::new(H { s, caller: late.clone(), ctl: Arc::new(Ctl::default()) }),
+            Arc::new(H { s, caller: std::sync::Arc::clone(&late), ctl: Arc::new(Ctl::default()) }),
             transport::ConnOptions::default(),
         );
         late.set(conn.caller());

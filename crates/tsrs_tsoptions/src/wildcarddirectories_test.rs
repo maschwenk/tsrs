@@ -4,7 +4,7 @@ use tsrs_core::tspath::ComparePathsOptions;
 use crate::wildcarddirectories::get_wildcard_directories;
 
 fn strings(a: &[&str]) -> Vec<String> {
-    a.iter().map(|s| s.to_string()).collect()
+    a.iter().map(std::string::ToString::to_string).collect()
 }
 
 #[test]

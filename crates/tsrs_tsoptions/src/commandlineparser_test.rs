@@ -80,7 +80,7 @@ pub(crate) fn parse_command_line_test_worker(
 }
 
 fn args(a: &[&str]) -> Vec<String> {
-    a.iter().map(|s| s.to_string()).collect()
+    a.iter().map(std::string::ToString::to_string).collect()
 }
 
 fn format_new_baseline(command_line: &[String], opts: &str, file_names: &str, errors: &str) -> String {

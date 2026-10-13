@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 use std::process::Command;
 
-const EXPECTED: &str = r#"======== Resolving module './a' from '<DIR>/index.ts'. ========
+const EXPECTED: &str = r"======== Resolving module './a' from '<DIR>/index.ts'. ========
 Explicitly specified module resolution kind: 'Bundler'.
 Resolving in CJS mode with conditions 'import', 'types'.
 Loading module as file / folder, candidate module location '<DIR>/a', target file types: TypeScript, JavaScript, Declaration, JSON.
@@ -53,7 +53,7 @@ File '<DIR>/node_modules/pkg/index.d.ts' exists - use it as a name resolution re
 'package.json' does not have a 'peerDependencies' field.
 Resolving real path for '<DIR>/node_modules/pkg/index.d.ts', result '<DIR>/node_modules/pkg/index.d.ts'.
 ======== Module name 'pkg' was successfully resolved to '<DIR>/node_modules/pkg/index.d.ts' with Package ID 'pkg/index.d.ts@1.0.0'. ========
-"#;
+";
 
 fn scratch(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("tsrs-trace-order-{}-{}", name, std::process::id()));

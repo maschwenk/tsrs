@@ -9,7 +9,7 @@
 // escaped name of a well-known-symbol member (`__@iterator@<id>`). Node handles, content hashes, flags, names, values,
 // field presence (encoding/json v2 omitempty / nil-slice rules) and error texts are compared as is.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::Arc;
 
 use tsrs_core::json::{self, Value};
@@ -32,9 +32,9 @@ const ID_ARRAY_KEYS: &[&str] = &["typeParameters", "outerTypeParameters", "local
 
 #[derive(Default)]
 struct Ids {
-    numbers: HashMap<u64, usize>,
-    symbols: HashMap<u64, usize>,
-    strings: HashMap<String, usize>,
+    numbers: FxHashMap<u64, usize>,
+    symbols: FxHashMap<u64, usize>,
+    strings: FxHashMap<String, usize>,
 }
 
 /// Keys whose object values are symbol references (their `id` is a symbol id, a separate counter).
@@ -70,7 +70,7 @@ fn normalize(v: &Value, ids: &mut Ids, in_symbol: bool) -> Value {
                     (key, Value::Array(a)) if ID_ARRAY_KEYS.contains(&key) => {
                         Value::Array(a.iter().map(|x| if let Value::Number(n) = x { ids.num(*n) } else { x.clone() }).collect())
                     }
-                    ("file", Value::String(s)) | ("nodeId", Value::String(s)) => ids.str(s),
+                    ("file" | "nodeId", Value::String(s)) => ids.str(s),
                     // Escaped names of well-known-symbol members embed the unique ES symbol's
                     // process-wide symbol id: `__@iterator@1360`.
                     ("name", Value::String(s)) if s.starts_with("__@") && s.rfind('@').is_some_and(|i| i > 2 && s[i + 1..].bytes().all(|b| b.is_ascii_digit())) => {
@@ -140,6 +140,7 @@ impl S {
         get(&self.call("getSymbolAtPosition", &self.at(needle)).unwrap(), "reference")
     }
 
+    #[expect(clippy::needless_pass_by_value, reason = "Probe requests take temporary owned JSON fixtures, matching the request-building API throughout this suite.")]
     fn shape(&mut self, label: &str, method: &str, params: Value) -> Value {
         match self.call(method, &params) {
             Ok(r) => {
@@ -153,6 +154,7 @@ impl S {
         }
     }
 
+    #[expect(clippy::needless_pass_by_value, reason = "Probe requests take temporary owned JSON fixtures, matching the request-building API throughout this suite.")]
     fn wrong(&mut self, label: &str, method: &str, params: Value) {
         let r = match self.call(method, &params) {
             Ok(r) => obj(&[("result", r)]),
@@ -302,7 +304,7 @@ fn shapes() -> Vec<(String, Value)> {
     s.wrong("getSignaturesOfType(kind 7)", "getSignaturesOfType", p);
     let p = s.sp(&[("type", obj_id.clone()), ("kind", n(7))]);
     s.wrong("getIndexInfoOfType(kind 7)", "getIndexInfoOfType", p);
-    let p = s.sp(&[("signature", get(&sig0, "id")), ("kind", n(100000))]);
+    let p = s.sp(&[("signature", get(&sig0, "id")), ("kind", n(100_000))]);
     s.wrong("signatureToSignatureDeclaration(kind 100000)", "signatureToSignatureDeclaration", p);
     let p = s.sp(&[("signature", get(&sig0, "id")), ("index", n(-1))]);
     s.wrong("getParameterType(index -1)", "getParameterType", p);
@@ -340,7 +342,7 @@ fn shapes() -> Vec<(String, Value)> {
 
 #[test]
 fn session_responses_match_pinned_go() {
-    let ours: HashMap<String, Value> = shapes().into_iter().collect();
+    let ours: FxHashMap<String, Value> = shapes().into_iter().collect();
     if let Ok(out) = std::env::var("TSRS_CHECKER_SHAPES_OUT") {
         let mut text = String::new();
         text = ours.iter().fold(text, |mut text, (q, r)| {
@@ -454,8 +456,8 @@ fn type_flags_and_tuple_targets_match_pinned_go() {
     ];
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|(k, v)| (k.to_string(), v.to_string())), false)));
     let session = Session::new(SessionOptions::new("/".to_string(), bundled::lib_path(), fs, false));
-    let s = S { session: session.clone(), snapshot: 0.0, project: String::new(), lines: Vec::new() };
-    let mut snaps = HashMap::new();
+    let s = S { session: std::sync::Arc::clone(&session), snapshot: 0.0, project: String::new(), lines: Vec::new() };
+    let mut snaps = FxHashMap::default();
     snaps.extend((["t", "m"]).into_iter().map(|fx| {
         let r = s.call("createSnapshot", &obj(&[("openProjects", Value::Array(vec![Value::String(format!("/{fx}/tsconfig.json"))]))])).unwrap();
         let Value::Number(snap) = get(&r, "snapshot") else { panic!() };

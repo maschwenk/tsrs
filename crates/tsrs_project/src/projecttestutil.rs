@@ -19,6 +19,7 @@ pub(crate) const TestTypingsLocation: &str = "/home/src/Library/Caches/typescrip
 
 #[derive(Clone)]
 pub(crate) struct WatchFilesCall {
+    #[expect(dead_code, reason = "Retained with the Go test helper record; the currently ported tests do not inspect this field.")]
     pub(crate) id: WatcherID,
     pub(crate) watchers: Vec<lsproto::FileSystemWatcher>,
 }
@@ -42,12 +43,14 @@ impl ClientMock {
     pub(crate) fn watch_files_calls(&self) -> Vec<WatchFilesCall> {
         self.watch_files_calls.lock().unwrap().clone()
     }
+    #[expect(dead_code, reason = "Part of the Go project-test helper API; the currently ported cases do not call this accessor.")]
     pub(crate) fn unwatch_files_calls(&self) -> Vec<WatcherID> {
         self.unwatch_files_calls.lock().unwrap().clone()
     }
     pub(crate) fn refresh_diagnostics_calls(&self) -> usize {
         *self.refresh_diagnostics_calls.lock().unwrap()
     }
+    #[expect(dead_code, reason = "Part of the Go project-test helper API; the currently ported cases do not call this accessor.")]
     pub(crate) fn publish_diagnostics_calls(&self) -> Vec<lsproto::PublishDiagnosticsParams> {
         self.publish_diagnostics_calls.lock().unwrap().clone()
     }
@@ -104,10 +107,12 @@ impl Client for ClientMock {
 }
 
 pub(crate) struct SessionUtils {
+    #[expect(dead_code, reason = "Retained with the Go test helper record; the currently ported tests do not inspect this field.")]
     current_directory: String,
     fs_from_file_map: Arc<tsrs_vfs::iovfs::IoVFS<vfstest::MapFS>>,
     fs: Arc<dyn FS>,
     client: Arc<ClientMock>,
+    #[expect(dead_code, reason = "Retained with the Go test helper record; the currently ported tests do not inspect this field.")]
     logger: Arc<dyn LogCollector>,
 }
 
@@ -156,6 +161,7 @@ impl SessionUtils {
         &self.client
     }
 
+    #[expect(dead_code, reason = "Part of the Go project-test helper API; the currently ported cases do not call this accessor.")]
     pub(crate) fn to_path(&self, file_name: &str) -> Path {
         tspath::to_path(file_name, &self.current_directory, self.fs.use_case_sensitive_file_names())
     }
@@ -164,6 +170,7 @@ impl SessionUtils {
         &self.fs
     }
 
+    #[expect(dead_code, reason = "Part of the Go project-test helper API; the currently ported cases do not call this accessor.")]
     pub(crate) fn logs(&self) -> String {
         self.logger.string()
     }
@@ -202,10 +209,10 @@ pub(crate) fn get_session_init_options(files: &[(&str, &str)], options: Option<S
         }),
         false, /*useCaseSensitiveFileNames*/
     ));
-    let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(fs_from_file_map.clone()));
+    let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(std::sync::Arc::clone(&fs_from_file_map)));
     let client_mock = Arc::new(ClientMock::default());
     let logger = new_test_logger();
-    let session_utils = SessionUtils { fs_from_file_map, current_directory: "/".to_string(), fs: fs.clone(), client: client_mock.clone(), logger: logger.clone() };
+    let session_utils = SessionUtils { fs_from_file_map, current_directory: "/".to_string(), fs: std::sync::Arc::clone(&fs), client: std::sync::Arc::clone(&client_mock), logger: std::sync::Arc::clone(&logger) };
 
     // Use provided options or create default ones
     let options = options.unwrap_or_else(default_session_options);

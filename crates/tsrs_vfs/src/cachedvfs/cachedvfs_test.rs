@@ -157,7 +157,7 @@ fn test_directory_exists() {
 fn test_file_exists() {
     check_cached(
         |c, p| {
-            c.file_exists(&format!("{}/file.txt", p));
+            c.file_exists(&format!("{p}/file.txt"));
         },
         |c| c.file_exists.len(),
         "/other/path",

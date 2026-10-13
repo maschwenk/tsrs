@@ -127,9 +127,7 @@ impl Gate {
     fn wait(&self, description: &str) {
         let guard = self.open.lock().unwrap();
         let (guard, timeout) = self.cv.wait_timeout_while(guard, Duration::from_secs(10), |open| !*open).unwrap();
-        if timeout.timed_out() && !*guard {
-            panic!("timed out waiting for {description}");
-        }
+        assert!(!timeout.timed_out() || *guard, "timed out waiting for {description}");
     }
 }
 

@@ -20,7 +20,7 @@ fn test_escape_string() {
         ("\u{001f}", QuoteChar::Backtick, "\\u001F"),
     ];
     for (i, &(s, quote_char, expected)) in data.iter().enumerate() {
-        assert_eq!(escape_string(s, quote_char), expected, "[{}] escapeString({:?}, {:?})", i, s, quote_char);
+        assert_eq!(escape_string(s, quote_char), expected, "[{i}] escapeString({s:?}, {quote_char:?})");
     }
 }
 
@@ -40,7 +40,7 @@ fn test_escape_non_ascii_string() {
         ("𝟘𝟙", QuoteChar::DoubleQuote, "\\uD835\\uDFD8\\uD835\\uDFD9"),
     ];
     for (i, &(s, quote_char, expected)) in data.iter().enumerate() {
-        assert_eq!(escape_non_ascii_string(s, quote_char), expected, "[{}] escapeNonAsciiString({:?}, {:?})", i, s, quote_char);
+        assert_eq!(escape_non_ascii_string(s, quote_char), expected, "[{i}] escapeNonAsciiString({s:?}, {quote_char:?})");
     }
 }
 
@@ -59,7 +59,7 @@ fn test_escape_jsx_attribute_string() {
         ("𝟘𝟙", QuoteChar::DoubleQuote, "𝟘𝟙"),
     ];
     for (i, &(s, quote_char, expected)) in data.iter().enumerate() {
-        assert_eq!(escape_jsx_attribute_string(s, quote_char), expected, "[{}] escapeJsxAttributeString({:?}, {:?})", i, s, quote_char);
+        assert_eq!(escape_jsx_attribute_string(s, quote_char), expected, "[{i}] escapeJsxAttributeString({s:?}, {quote_char:?})");
     }
 }
 
@@ -126,6 +126,6 @@ fn test_is_recognized_triple_slash_comment() {
                 has_trailing_new_line: false,
             },
         };
-        assert_eq!(is_recognized_triple_slash_comment(s, comment_range), expected, "[{}] isRecognizedTripleSlashComment({:?})", i, s);
+        assert_eq!(is_recognized_triple_slash_comment(s, comment_range), expected, "[{i}] isRecognizedTripleSlashComment({s:?})");
     }
 }

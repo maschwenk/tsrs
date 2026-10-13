@@ -82,7 +82,7 @@ static COMPILER_OPTIONS: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::n
 
 // harnessutil.go:340
 static HARNESS_COMMAND_LINE_OPTIONS: LazyLock<Vec<&'static CommandLineOption>> = LazyLock::new(|| {
-    use CommandLineOptionKind::*;
+    use CommandLineOptionKind::{Boolean, String, List};
     vec![
         new_option("useCaseSensitiveFileNames", Boolean),
         new_option("baselineFile", String),
@@ -118,7 +118,7 @@ fn parse_harness_option(t: &T, key: &str, value: &CompilerOptionsValue, harness_
         "includeBuiltFile" => harness_options.include_built_file = s(),
         "fileName" => harness_options.file_name = s(),
         "libFiles" => {
-            harness_options.lib_files = value.as_array().map(|a| a.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default()
+            harness_options.lib_files = value.as_array().map(|a| a.iter().map(|v| v.as_str().unwrap_or("").to_string()).collect()).unwrap_or_default();
         }
         "noImplicitReferences" => harness_options.no_implicit_references = b(),
         "currentDirectory" => harness_options.current_directory = s(),

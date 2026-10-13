@@ -59,6 +59,9 @@ type gen struct {
 	anyVariants        map[string]int
 	localTypes         map[*types.TypeName]string
 	assigned           map[types.Object]bool
+	uninitialized      map[types.Object]bool
+	lastUses           map[types.Object]*ast.Ident
+	movableUses        map[*ast.Ident]bool
 	resultTypes        []types.Type
 	inResultFunc       bool
 }
@@ -180,7 +183,6 @@ func generate(l *Loaded, out string, perFile int) error {
 		start, end := chunks[chunk].start, chunks[chunk].end
 		var b strings.Builder
 		b.WriteString(header)
-		b.WriteString("// `var x T` is zero-initialized as in Go, even where every branch assigns it before use.\n#![allow(unused_assignments)]\n\n")
 		chunkName := fmt.Sprintf("gen_%02d", chunk)
 		for _, f := range files[start:end] {
 			f.code = modRefRe.ReplaceAllStringFunc(f.code, func(m string) string {
@@ -439,7 +441,9 @@ func (g *gen) genFunc(d *ast.FuncDecl, isTest bool) (code string, skip string, s
 	g.curF, g.curT = "", ""
 	g.tmp = 0
 	g.assigned = map[types.Object]bool{}
+	g.uninitialized = map[types.Object]bool{}
 	g.collectAssigned(d.Body)
+	g.collectLastUses(d.Body)
 	var b strings.Builder
 	g.buf = &b
 	g.indent = 0
@@ -580,6 +584,88 @@ func (g *gen) params(sig *types.Signature, fl *ast.FieldList, closure bool, over
 
 func (g *gen) objectUsed(obj types.Object) bool {
 	return g.used[obj]
+}
+
+// A Go value copy can become a Rust move at the local's last use. Loop bodies and closures may run again,
+// so only locals declared inside them can move there; captured values must remain available.
+func (g *gen) collectLastUses(body *ast.BlockStmt) {
+	g.lastUses = map[types.Object]*ast.Ident{}
+	g.movableUses = map[*ast.Ident]bool{}
+	var stack []ast.Node
+	ast.Inspect(body, func(n ast.Node) bool {
+		if n == nil {
+			stack = stack[:len(stack)-1]
+			return false
+		}
+		stack = append(stack, n)
+		id, ok := n.(*ast.Ident)
+		if !ok {
+			return true
+		}
+		obj, ok := g.info.Uses[id].(*types.Var)
+		if !ok || obj.Pkg() != nil && obj.Parent() == obj.Pkg().Scope() {
+			return true
+		}
+		g.lastUses[obj] = id
+		movable := true
+		for _, parent := range stack {
+			switch p := parent.(type) {
+			case *ast.RangeStmt:
+				if id.Pos() < p.Body.Pos() {
+					continue // The range expression is evaluated once, before the loop.
+				}
+				key, keyOK := p.Key.(*ast.Ident)
+				value, valueOK := p.Value.(*ast.Ident)
+				binding := keyOK && g.info.Defs[key] == obj || valueOK && g.info.Defs[value] == obj
+				if !binding && obj.Pos() < p.Body.Pos() {
+					movable = false
+				}
+			case *ast.ForStmt:
+				if p.Init != nil && id.Pos() >= p.Init.Pos() && id.Pos() < p.Init.End() {
+					continue // The initializer runs once, unlike the condition, post statement and body.
+				}
+				if obj.Pos() < p.Body.Pos() {
+					movable = false
+				}
+			case *ast.FuncLit:
+				if obj.Pos() < parent.Pos() {
+					movable = false
+				}
+			}
+		}
+		g.movableUses[id] = movable
+		return true
+	})
+}
+
+func (g *gen) canMove(e ast.Expr) bool {
+	root := e
+	for {
+		sel, ok := root.(*ast.SelectorExpr)
+		if !ok {
+			break
+		}
+		if _, ptr := types.Unalias(g.typeOf(sel.X)).(*types.Pointer); ptr {
+			return false // Pointer fields are borrowed through Option or Arc in Rust.
+		}
+		root = sel.X
+	}
+	id, ok := root.(*ast.Ident)
+	if !ok {
+		return false
+	}
+	obj := g.info.Uses[id]
+	vi := g.vars[obj]
+	if vi == nil || vi.kind != kPlace && vi.kind != kDeref || g.lastUses[obj] != id || !g.movableUses[id] {
+		return false
+	}
+	if root != e {
+		_, ptr := types.Unalias(obj.Type()).(*types.Pointer)
+		if ptr {
+			return false
+		}
+	}
+	return true
 }
 
 func (g *gen) binding(name string, obj types.Object) string {

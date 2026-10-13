@@ -69,7 +69,7 @@ fn run(s: &Value) -> Value {
         }));
     }
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files, case_sensitive)));
-    let host = new_compiler_host(&cwd, fs.clone(), &bundled::lib_path(), None, None, None);
+    let host = new_compiler_host(&cwd, std::sync::Arc::clone(&fs), &bundled::lib_path(), None, None, None);
     let parse_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs, cwd: cwd.clone() }));
     let (config, errors) =
         tsoptions::get_parsed_command_line_of_config_file(&str_field(s, "config"), Some(&CompilerOptions::default()), None, parse_host, None);

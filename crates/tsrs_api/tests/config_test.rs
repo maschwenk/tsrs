@@ -25,7 +25,7 @@ fn parse_config_file_reads_options_and_files() {
     let a = dir.write("src/a.ts", "export const a = 1;");
     let s = session(&dir.dir(), false);
     let r = call(&s, "parseConfigFile", &format!("{{\"file\":{}}}", quote(&cfg)));
-    assert_eq!(get(&r, "fileNames"), &Value::Array(vec![Value::String(a.clone())]));
+    assert_eq!(get(&r, "fileNames"), &Value::Array(vec![Value::String(a)]));
     assert_eq!(get(&r, "options.strict"), &Value::Bool(true));
     assert_eq!(get(&r, "options.target"), &Value::Number(7.0));
     assert_eq!(str_of(get(&r, "options.outDir")), dir.path("out"));
@@ -78,7 +78,7 @@ fn strict_json_params_like_go() {
     call(&s, "initialize", "not json");
     match tsrs_api::Handler::handle_request(&*s, "echo", br#""x\ud800""#).unwrap() {
         tsrs_api::Response::Binary(b) => assert_eq!(b, br#""x\ud800""#.to_vec()),
-        r => panic!("{r:?}"),
+        r @ tsrs_api::Response::Json(_) => panic!("{r:?}"),
     }
 }
 
@@ -327,7 +327,7 @@ fn external_struct_decoding_matches_go_classes() {
     }
     // Project references: pinned Go crashes on these; tsrs answers a stable error (relative/null) or reports
     // the missing project as a program diagnostic, and stays up.
-    for refs in [r#"[{"path":"../q"}]"#, r#"[null]"#, r#"[{"path":"x"}]"#] {
+    for refs in [r#"[{"path":"../q"}]"#, r"[null]", r#"[{"path":"x"}]"#] {
         let e = call_err(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{}},"options":{{"projectReferences":{refs}}}}}]}}"#));
         assert!(e.starts_with("api: client error: projectReferences[0].path must be an absolute path"), "{refs}: {e}");
     }
@@ -350,7 +350,7 @@ fn unknown_enum_values_and_go_int_options_match_go() {
         Ok(_) => unreachable!(),
         Err(e) => Err(e.to_string()),
     };
-    let input = r#"class C { x = 1; #p = 2; m() { return this.#p ** 2; } }\nasync function f() { await 1; for await (const z of []) {} }\nexport const o: any = {}; export const v = o?.b ?? 1;\n"#;
+    let input = r"class C { x = 1; #p = 2; m() { return this.#p ** 2; } }\nasync function f() { await 1; for await (const z of []) {} }\nexport const o: any = {}; export const v = o?.b ?? 1;\n";
     let transpile = |options: &str| raw("transpileModule", &format!(r#"{{"input":"{input}","options":{{"compilerOptions":{options}}}}}"#)).unwrap();
     // target: Go's switch defaults transform maximally; comparisons see the raw number.
     for target in ["12345", "-1", "2147483647"] {
@@ -359,7 +359,7 @@ fn unknown_enum_values_and_go_int_options_match_go() {
     }
     assert!(!transpile(r#"{"target":99}"#).contains("__awaiter"));
     // module: Go's default module transformer is CommonJS.
-    let module_input = r#"import { y } from './y';\nexport const x = y;\n"#;
+    let module_input = r"import { y } from './y';\nexport const x = y;\n";
     for module in ["12345", "-1"] {
         let out = raw("transpileModule", &format!(r#"{{"input":"{module_input}","options":{{"compilerOptions":{{"module":{module},"target":99}}}}}}"#)).unwrap();
         assert!(out.contains("require(") && out.contains("exports"), "module {module}: {out}");

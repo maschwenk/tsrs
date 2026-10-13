@@ -18,16 +18,16 @@ impl ParseConfigHost for ConfigHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
 
 fn emit(files: &[(&str, &str)], file: &str, transforms: &[TransformerFactory]) -> String {
     let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true));
-    let host: &'static ConfigHost = Box::leak(Box::new(ConfigHost { fs: fs.clone() }));
+    let host: &'static ConfigHost = Box::leak(Box::new(ConfigHost { fs: std::sync::Arc::clone(&fs) }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, host, None);
-    assert!(diagnostics.is_empty());
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     let config = P::new(config.unwrap());
     let program = new_program(ProgramOptions::new(config, new_compiler_host("/", fs, "", None, None, None)));
     let ctx = Context::default();

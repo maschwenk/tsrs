@@ -115,7 +115,7 @@ fn check_case(expected: &Value) -> Result<(), String> {
     if let Some(result) = td.ranges.iter().zip(want_ranges).into_iter().find_map(|(r, w)| {
         let marker_index = match &r.marker {
             None => -1,
-            Some(m) => td.markers.iter().position(|x| std::sync::Arc::ptr_eq(x, m)).map(|i| i as i64).unwrap_or(-2),
+            Some(m) => td.markers.iter().position(|x| std::sync::Arc::ptr_eq(x, m)).map_or(-2, |i| i as i64),
         };
         let got = (
             r.file_name.clone(),
@@ -171,9 +171,7 @@ fn test_parser_oracle() {
         }
     }
     assert!(count > 0);
-    if !failures.is_empty() {
-        panic!("{} of {} parser cases differ from Go:\n{}", failures.len(), count, failures.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
-    }
+    assert!(failures.is_empty(), "{} of {} parser cases differ from Go:\n{}", failures.len(), count, failures.iter().take(20).cloned().collect::<Vec<_>>().join("\n"));
     eprintln!("{count} parser cases match Go");
 }
 

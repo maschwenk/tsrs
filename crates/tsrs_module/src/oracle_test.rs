@@ -238,7 +238,7 @@ fn oracle_handcrafted() {
 
 // The full corpus-derived set, generated locally (see the top of this file).
 #[test]
-#[ignore]
+#[ignore = "Requires the separately generated full module-oracle corpus."]
 fn oracle_scenarios() {
     let dir = std::env::var("TSRS_MODULE_ORACLE_DIR").unwrap_or_else(|_| concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/scratch/module").to_string());
     run_oracle_dir(&dir);

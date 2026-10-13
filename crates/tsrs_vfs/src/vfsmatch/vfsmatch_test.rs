@@ -557,6 +557,7 @@ fn test_read_directory() {
         ReadDirTestCase {
             extensions: vec![".ts"],
             ..rd("mixed extensions only ts", mixed_extension_host, |name, got| {
+                #[expect(clippy::case_sensitive_file_extension_comparisons, reason = "These assertions require the exact fixture extension casing returned by the Go-compatible matcher.")]
                 for f in got {
                     assert!(f.ends_with(".ts"), "{name}: should only have .ts files: {f}");
                 }
@@ -565,6 +566,7 @@ fn test_read_directory() {
         ReadDirTestCase {
             extensions: vec![".ts", ".tsx"],
             ..rd("mixed extensions ts and tsx", mixed_extension_host, |name, got| {
+                #[expect(clippy::case_sensitive_file_extension_comparisons, reason = "These assertions require the exact fixture extension casing returned by the Go-compatible matcher.")]
                 for f in got {
                     assert!(f.ends_with(".ts") || f.ends_with(".tsx"), "{name}: should only have .ts or .tsx files: {f}");
                 }
@@ -573,6 +575,7 @@ fn test_read_directory() {
         ReadDirTestCase {
             extensions: vec![".js", ".jsx"],
             ..rd("mixed extensions js and jsx", mixed_extension_host, |name, got| {
+                #[expect(clippy::case_sensitive_file_extension_comparisons, reason = "These assertions require the exact fixture extension casing returned by the Go-compatible matcher.")]
                 for f in got {
                     assert!(f.ends_with(".js") || f.ends_with(".jsx"), "{name}: should only have .js or .jsx files: {f}");
                 }
@@ -633,6 +636,7 @@ fn test_read_directory() {
             extensions: ts_exts(),
             includes: vec!["*.tsx"],
             ..rd("same named declarations include tsx", same_named_declarations_host, |name, got| {
+                #[expect(clippy::case_sensitive_file_extension_comparisons, reason = "These assertions require the exact fixture extension casing returned by the Go-compatible matcher.")]
                 for f in got {
                     assert!(f.ends_with(".tsx"), "{name}: should only have .tsx files: {f}");
                 }
@@ -652,7 +656,7 @@ fn test_read_directory() {
         ReadDirTestCase {
             extensions: vec![],
             ..rd("empty extensions slice returns all files", case_insensitive_host, |name, got| {
-                assert!(!got.is_empty(), "{name}: expected files to be returned")
+                assert!(!got.is_empty(), "{name}: expected files to be returned");
             })
         },
     ];

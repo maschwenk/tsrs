@@ -2800,7 +2800,7 @@ mod tests {
     }
 
     #[test]
-    #[should_panic]
+    #[should_panic(expected = "as_binary_expression called on")]
     fn cast_mismatch_panics() {
         let f = NodeFactory::default();
         let a = f.new_identifier("a");
@@ -2862,7 +2862,7 @@ mod tests {
         let bin = f.new_binary_expression(None, a, None, plus, b);
         bin.set_loc(TextRange::new(3, 8));
 
-        let copy = bin.clone_node(&mut f);
+        let copy = bin.clone_node(&f);
         assert_ne!(copy, bin);
         assert_eq!(copy.loc(), bin.loc());
         assert_eq!(copy.as_binary_expression().left(), a);

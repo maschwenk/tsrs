@@ -12,7 +12,6 @@ pub struct SkipPanic;
 struct TState {
     failed: bool,
     skipped: bool,
-    finished: bool,
     logs: Vec<String>,
 }
 

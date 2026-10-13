@@ -649,7 +649,7 @@ impl checkerPool {
     pub(crate) fn test_state<R>(&self, f: impl FnOnce(&checkerPoolTestView) -> R) -> R {
         let st = self.mu.lock().unwrap();
         let view = checkerPoolTestView {
-            checkers: st.checkers.iter().map(|c| c.is_some()).collect(),
+            checkers: st.checkers.iter().map(std::option::Option::is_some).collect(),
             held_by: st.held_by.clone(),
             file_associations: st.file_associations.clone(),
             request_associations: st.request_associations.clone(),
@@ -665,12 +665,14 @@ impl checkerPool {
 #[cfg(test)]
 pub(crate) struct checkerPoolTestView {
     pub(crate) checkers: Vec<bool>,
+    #[expect(dead_code, reason = "Retained in the Go-shaped pool test view; the currently ported cases inspect other fields.")]
     pub(crate) held_by: Vec<String>,
     pub(crate) file_associations: FxHashMap<P<SourceFile>, usize>,
     pub(crate) request_associations: FxHashMap<String, usize>,
     pub(crate) has_cleanup_timer: bool,
     pub(crate) discarded: bool,
     pub(crate) persistent: bool,
+    #[expect(dead_code, reason = "Retained in the Go-shaped pool test view; the currently ported cases inspect other fields.")]
     pub(crate) persistent_held: bool,
 }
 

@@ -19,7 +19,7 @@ fn get_source_file_binary_and_json_and_checker_handles() {
     let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
     let bin = match s.handle_request("getSourceFile", format!("{{{sp},\"file\":{}}}", quote(&a)).as_bytes()).unwrap() {
         Response::Binary(b) => b,
-        r => panic!("{r:?}"),
+        r @ Response::Json(_) => panic!("{r:?}"),
     };
     assert!(bin.len() > 100);
     let decoded = tsrs_api_codec::decode_source_file(&bin).expect("decodes");
@@ -70,17 +70,17 @@ fn get_config_source_file_root_and_extended_repeatedly() {
     let req = |f: &str| format!("{{\"snapshot\":{snap},\"project\":{},\"file\":{}}}", quote(&project), quote(f));
     let get_bin = |f: &str| match s.handle_request("getConfigSourceFile", req(f).as_bytes()).unwrap() {
         Response::Binary(b) => b,
-        r => panic!("{r:?}"),
+        r @ Response::Json(_) => panic!("{r:?}"),
     };
     let root = get_bin(&cfg);
-    assert!(!root.is_empty());
+    assert_ne!(root, [] as [u8; 0]);
     let first = get_bin(&base);
-    assert!(!first.is_empty());
+    assert_ne!(first, [] as [u8; 0]);
     for _ in 0..50 {
         let again = get_bin(&base);
         // Same content each time (the source file id header word differs per fresh parse, like Go).
         assert_eq!(again.len(), first.len());
         tsrs_api_codec::decode_source_file(&again).expect("decodes");
     }
-    assert!(get_bin(&dir.path("other.json")).is_empty());
+    assert_eq!(get_bin(&dir.path("other.json")), [] as [u8; 0]);
 }

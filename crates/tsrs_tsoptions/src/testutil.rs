@@ -34,7 +34,7 @@ fn flattened_message(d: P<Diagnostic>, new_line: &str, indent: usize, out: &mut 
     out.push_str(&d.localize());
     for chain in d.message_chain() {
         out.push_str(new_line);
-        out.extend((0..=indent).map(|_| "  "));
+        out.extend(std::iter::repeat_n("  ", indent + 1));
         flattened_message(*chain, new_line, indent + 1, out);
     }
 }
@@ -188,7 +188,7 @@ fn write_code_snippet(
         // so we'll skip ahead to the second-to-last line.
         if has_more_than_five_lines && first_line + 1 < i && i < last_line - 1 {
             out.push_str(indent);
-            with_style(out, &format!("{:>width$}", ELLIPSIS, width = gutter_width), GUTTER_STYLE_SEQUENCE);
+            with_style(out, &format!("{ELLIPSIS:>gutter_width$}"), GUTTER_STYLE_SEQUENCE);
             out.push_str(GUTTER_SEPARATOR);
             out.push_str(new_line);
             i = last_line - 1;

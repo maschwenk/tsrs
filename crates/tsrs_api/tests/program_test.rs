@@ -26,7 +26,7 @@ fn create_program_diagnostics_emit_release() {
     let dir = TempDir::new("prog");
     let a = dir.write("src/a.ts", "export const a: number = 'x';\nexport function f(x: string) { return x.length; }\n");
     let s = session(&dir.dir(), false);
-    let (snap, project) = create_program(&s, &[a.clone()], &format!("{{\"strict\":true,\"target\":9,\"outDir\":{},\"declaration\":true}}", quote(&dir.path("out"))));
+    let (snap, project) = create_program(&s, std::slice::from_ref(&a), &format!("{{\"strict\":true,\"target\":9,\"outDir\":{},\"declaration\":true}}", quote(&dir.path("out"))));
     let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
 
     let names = call(&s, "getSourceFileNames", &format!("{{{sp}}}"));
@@ -164,7 +164,7 @@ fn remaining_diagnostic_kinds_and_declaration_emit() {
     // declaration emit diagnostic.
     let a = dir.write("a.ts", "let x = 1;\nlet x = 2;\nclass Hidden {}\nexport function g() { return new Hidden(); }\n");
     let s = session(&dir.dir(), false);
-    let (snap, project) = create_program(&s, &[a.clone()], "{\"declaration\":true,\"isolatedDeclarations\":true}");
+    let (snap, project) = create_program(&s, std::slice::from_ref(&a), "{\"declaration\":true,\"isolatedDeclarations\":true}");
     let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
     let bind = call(&s, "getBindDiagnostics", &format!("{{{sp},\"files\":[{}]}}", quote(&a)));
     assert!(arr(&bind).iter().any(|d| get(d, "code") == &Value::Number(2451.0)), "{}", json::marshal(&bind).unwrap());
@@ -209,7 +209,7 @@ fn config_file_names_and_source_file_metadata() {
     let project = str_of(get(&r, "projects.0.id")).to_string();
     let sp = format!("\"snapshot\":{snap},\"project\":{}", quote(&project));
     let names = call(&s, "getConfigFileNames", &format!("{{{sp}}}"));
-    assert_eq!(names, Value::Array(vec![Value::String(cfg.clone()), Value::String(base)]));
+    assert_eq!(names, Value::Array(vec![Value::String(cfg), Value::String(base)]));
     let m = call(&s, "getSourceFileMetadata", &format!("{{{sp},\"file\":{}}}", quote(&a)));
     assert_eq!(get(&m, "isDefaultLibrary"), &Value::Bool(false));
     assert_eq!(get(&m, "impliedNodeFormat"), &Value::Number(99.0));

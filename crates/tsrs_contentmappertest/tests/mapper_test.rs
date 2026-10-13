@@ -46,7 +46,7 @@ fn test_mapper() -> &'static Mapper {
             name: PACKAGE_NAME.to_string(),
             version: "1.0.0".to_string(),
             exec: vec![TRANSFORMING_MAPPER.to_string()],
-            compiler_options: DECLARED_OPTIONS.iter().map(|option| option.to_string()).collect(),
+            compiler_options: DECLARED_OPTIONS.iter().map(std::string::ToString::to_string).collect(),
             ..Default::default()
         },
         package_directory: format!("/node_modules/{PACKAGE_NAME}"),

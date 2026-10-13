@@ -131,7 +131,7 @@ mod tests {
         assert!(!store.has(k));
         store.get(k).n.set(5);
         assert_eq!(store.try_get(k).unwrap().n.get(), 5);
-        assert!(store.get(k) == store.get(k));
+        assert_eq!(store.get(k), store.get(k));
 
         let paged: PagedLinkStore<Links> = PagedLinkStore::default();
         assert!(!paged.has(3));

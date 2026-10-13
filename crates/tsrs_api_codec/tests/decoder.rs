@@ -41,7 +41,7 @@ fn roundtrip(name: &str, bytes: &[u8], what: &str) -> Result<(), String> {
 fn decode_go_server_encodings() {
     let mut errors = Vec::new();
     let fixtures = fixtures();
-    errors.extend(fixtures.iter().filter_map(|(name, _)| if let Err(e) = roundtrip(name, &golden(name), "go server") { Some(e) } else { None }));
+    errors.extend(fixtures.iter().filter_map(|(name, _)| roundtrip(name, &golden(name), "go server").err()));
     eprintln!("decoded {} go-server encodings, {} failures", fixtures.len(), errors.len());
     assert!(errors.is_empty(), "{}", errors.join("\n"));
 }
@@ -50,7 +50,7 @@ fn decode_go_server_encodings() {
 fn decode_js_client_encodings() {
     let mut errors = Vec::new();
     let fixtures = fixtures();
-    errors.extend(fixtures.iter().filter_map(|(name, _)| if let Err(e) = roundtrip(name, &client_golden(name), "js client") { Some(e) } else { None }));
+    errors.extend(fixtures.iter().filter_map(|(name, _)| roundtrip(name, &client_golden(name), "js client").err()));
     eprintln!("decoded {} js-client encodings, {} failures", fixtures.len(), errors.len());
     assert!(errors.is_empty(), "{}", errors.join("\n"));
 }
@@ -102,7 +102,7 @@ fn decode_rejects_malformed_input_without_panicking() {
     let mut bad_version = good.clone();
     bad_version[3] = 8;
     assert!(matches!(decode_nodes(&bad_version), Err(DecodeError::UnsupportedVersion(8))));
-    let mut bad_offsets = good.clone();
+    let mut bad_offsets = good;
     bad_offsets[40..44].copy_from_slice(&u32::MAX.to_le_bytes());
     assert!(matches!(decode_nodes(&bad_offsets), Err(DecodeError::InvalidHeader(_))));
 
@@ -120,7 +120,7 @@ fn decode_rejects_malformed_input_without_panicking() {
     for name in ["basic.ts", "complex.ts", "jsx_component.tsx", "jsdoc_checked.js", "unicode_text.ts"] {
         let good = golden(name);
         let mut inputs: Vec<Vec<u8>> = (0..good.len()).step_by(7).map(|n| good[..n].to_vec()).collect();
-        inputs.extend((0..1500).map(|_| {
+        inputs.extend(std::iter::repeat_with(|| {
             let mut b = good.clone();
             let at = (next() as usize) % b.len();
             if next() % 2 == 0 {
@@ -133,14 +133,14 @@ fn decode_rejects_malformed_input_without_panicking() {
                 }
             }
             b
-        }));
+        }).take(1500));
         for input in inputs {
             cases += 1;
             let r = std::panic::catch_unwind(|| decode_nodes(&input).map(|d| d.root().kind()));
             match r {
                 Ok(Ok(_)) => {}
                 Ok(Err(_)) => errors += 1,
-                Err(_) => panic!("{name}: decoder panicked on a malformed input of {} bytes", input.len()),
+                Err(payload) => std::panic::resume_unwind(payload),
             }
         }
     }

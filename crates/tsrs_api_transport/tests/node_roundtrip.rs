@@ -10,9 +10,9 @@ use std::process::Command;
 #[test]
 fn pinned_node_clients_round_trip() {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let ts_ref = std::env::var_os("TSRS_TS_REF").map(PathBuf::from).unwrap_or_else(|| manifest.join("../../ts-ref"));
+    let ts_ref = std::env::var_os("TSRS_TS_REF").map_or_else(|| manifest.join("../../ts-ref"), PathBuf::from);
     let client = ts_ref.join("packages/typescript/src/api/sync/client.ts");
-    let node_ok = Command::new("node").arg("--version").output().map(|o| o.status.success()).unwrap_or(false);
+    let node_ok = Command::new("node").arg("--version").output().is_ok_and(|o| o.status.success());
     let commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6";
     assert!(
         node_ok,

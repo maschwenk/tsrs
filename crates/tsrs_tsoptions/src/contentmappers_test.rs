@@ -14,7 +14,7 @@ fn mapper(package: &str, extensions: &[&str]) -> Mapper {
     Mapper {
         definition: Definition {
             package: package.to_string(),
-            extensions: extensions.iter().map(|e| e.to_string()).collect(),
+            extensions: extensions.iter().map(std::string::ToString::to_string).collect(),
             ..Default::default()
         },
         ..Default::default()
@@ -51,7 +51,7 @@ fn test_get_content_mapper_for_file_name_uses_host_case_sensitivity() {
 
     assert!(std::ptr::eq(
         insensitive.get_content_mapper_for_file_name("/src/Component.VUE").unwrap(),
-        &insensitive.content_mappers()[0]
+        &raw const insensitive.content_mappers()[0]
     ));
     assert!(sensitive.get_content_mapper_for_file_name("/src/Component.VUE").is_none());
 }
@@ -202,7 +202,7 @@ fn test_static_content_mapper_transform_identity() {
         manifest: Manifest {
             name: name.to_string(),
             version: version.to_string(),
-            compiler_options: compiler_options.iter().map(|o| o.to_string()).collect(),
+            compiler_options: compiler_options.iter().map(std::string::ToString::to_string).collect(),
             ..Default::default()
         },
         ..Default::default()
@@ -233,7 +233,7 @@ fn test_transform_identity_hashes_declared_options_json() {
         manifest: Manifest {
             name: "vue".to_string(),
             version: "1.0.0".to_string(),
-            compiler_options: ["target", "noSuchOption", "strict", "noEmit", "jsx", "lib", "paths"].iter().map(|o| o.to_string()).collect(),
+            compiler_options: ["target", "noSuchOption", "strict", "noEmit", "jsx", "lib", "paths"].iter().map(std::string::ToString::to_string).collect(),
             ..Default::default()
         },
         ..Default::default()

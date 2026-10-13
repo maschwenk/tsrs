@@ -31,7 +31,7 @@ impl Host for TestHost {
         self.fs.read_file(path)
     }
     fn converters(&self) -> Arc<Converters> {
-        self.converters.clone()
+        std::sync::Arc::clone(&self.converters)
     }
     fn get_preferences(&self, _active_file: &str) -> UserPreferences {
         new_default_user_preferences()
@@ -64,7 +64,7 @@ impl ParseConfigHost for parseConfigHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -75,12 +75,12 @@ fn setup(files: &[(&str, &str)]) -> (LanguageService, Context) {
 
 fn setup_with(files: &[(&str, &str)], vs: bool) -> (LanguageService, Context) {
     let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true)));
-    let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
+    let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: std::sync::Arc::clone(&fs) }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
-    assert!(diagnostics.is_empty());
-    let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None, None);
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
+    let host: Arc<dyn CompilerHost> = new_compiler_host("/", std::sync::Arc::clone(&fs), &bundled::lib_path(), None, None, None);
     let program: &'static Program = new_program(ProgramOptions::new(P::new(config.unwrap()), host));
-    let fs_for_lines = fs.clone();
+    let fs_for_lines = std::sync::Arc::clone(&fs);
     let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF16, move |file_name| {
         fs_for_lines.read_file(file_name).map(|text| compute_lsp_line_starts(&text))
     });
@@ -99,11 +99,11 @@ fn position_of(text: &str, marker: &str) -> lsproto::Position {
     let offset = text.find(marker).unwrap();
     let before = &text[..offset];
     let line = before.matches('\n').count() as u32;
-    let character = (offset - before.rfind('\n').map(|i| i + 1).unwrap_or(0)) as u32;
+    let character = (offset - before.rfind('\n').map_or(0, |i| i + 1)) as u32;
     lsproto::Position { line, character }
 }
 
-const INDEX: &str = r#"/**
+const INDEX: &str = r"/**
  * Adds two numbers.
  * @param a the first
  * @returns the sum
@@ -113,7 +113,7 @@ interface Point { x: number; y: number }
 const p: Point = { x: 1, y: 2 };
 const total = add(p.x, p.y);
 let s: string = 1;
-"#;
+";
 
 fn json<T: lsproto::Json>(v: &T) -> String {
     tsrs_core::json::marshal(&v.to_json()).unwrap()
@@ -182,7 +182,7 @@ fn hover_jsdoc_aliases_overloads() {
     let files = [("/tsconfig.json", r#"{"compilerOptions":{"strict":true},"files":["index.ts"]}"#), ("/index.ts", INDEX2)];
     let (ls, ctx) = setup(&files);
     let uri = lsconv::file_name_to_document_uri("/index.ts");
-    assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX2, "Widget<number>"), ..Default::default() }).unwrap()), r#"null"#, "{}", "Widget<number>");
+    assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX2, "Widget<number>"), ..Default::default() }).unwrap()), r"null", "{}", "Widget<number>");
     assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX2, "Widget<{}>"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\nconstructor Widget<{}>(): Widget<{}>\n```\nA widget. See [Gadget](file:///index.ts#8,7-8,13) and [docs](https://example.com).\n\n*@example*\n```tsx\nconst w = new Widget<number>();\n```\n\n\n*@see* — [Gadget](file:///index.ts#8,7-8,13) for more\n\n*@deprecated* — use Gadget"},"range":{"start":{"line":14,"character":14},"end":{"line":14,"character":20}}}"#, "{}", "Widget<{}>");
     assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX2, "method(1"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\n(method) Widget<{}>.method(n: number): string\n```\n"},"range":{"start":{"line":15,"character":2},"end":{"line":15,"character":8}}}"#, "{}", "method(1");
     assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX2, "Green;"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\n(enum member) Color.Green = \"g\"\n```\n"},"range":{"start":{"line":16,"character":16},"end":{"line":16,"character":21}}}"#, "{}", "Green;");
@@ -207,5 +207,5 @@ fn hover_visual_studio_raw_content() {
     let (ls, ctx) = setup_with(&files, true);
     let uri = lsconv::file_name_to_document_uri("/index.ts");
     assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX, "add(p.x"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\nfunction add(a: number, b: number): number;\n```\nAdds two numbers.\n\n*@param* `a` — the first\n\n*@returns* — the sum"},"range":{"start":{"line":8,"character":14},"end":{"line":8,"character":17}},"_vs_rawContent":{"Style":1,"Elements":[{"Style":0,"Elements":[{"ImageId":{"Guid":"ae27a6b0-e345-4288-96df-5eaf394ee369","Id":1880,"_vs_type":"ImageId"},"_vs_type":"ImageElement"},{"Runs":[{"ClassificationTypeName":"keyword","Text":"function ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"method name","Text":"add","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":"(","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"parameter name","Text":"a","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":":","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":",","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"parameter name","Text":"b","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":":","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":")","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":":","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"whitespace","Text":" ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":";","_vs_type":"ClassifiedTextRun"}],"_vs_type":"ClassifiedTextElement"}],"_vs_type":"ContainerElement"},{"Runs":[{"ClassificationTypeName":"text","Text":"Adds two numbers.","_vs_type":"ClassifiedTextRun"}],"_vs_type":"ClassifiedTextElement"}],"_vs_type":"ContainerElement"}}"#, "{}", "add(p.x");
-    assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: position_of(INDEX, "x: 1"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\n(property) Point.x: number\n```\n"},"range":{"start":{"line":7,"character":19},"end":{"line":7,"character":20}},"_vs_rawContent":{"Style":0,"Elements":[{"ImageId":{"Guid":"ae27a6b0-e345-4288-96df-5eaf394ee369","Id":2436,"_vs_type":"ImageId"},"_vs_type":"ImageElement"},{"Runs":[{"ClassificationTypeName":"punctuation","Text":"(","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"text","Text":"property","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":") ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"property name","Text":"Point.x","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":": ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"}],"_vs_type":"ClassifiedTextElement"}],"_vs_type":"ContainerElement"}}"#, "{}", "x: 1");
+    assert_eq!(json(&ls.provide_hover(&ctx, &lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri }, position: position_of(INDEX, "x: 1"), ..Default::default() }).unwrap()), r#"{"contents":{"kind":"markdown","value":"```typescript\n(property) Point.x: number\n```\n"},"range":{"start":{"line":7,"character":19},"end":{"line":7,"character":20}},"_vs_rawContent":{"Style":0,"Elements":[{"ImageId":{"Guid":"ae27a6b0-e345-4288-96df-5eaf394ee369","Id":2436,"_vs_type":"ImageId"},"_vs_type":"ImageElement"},{"Runs":[{"ClassificationTypeName":"punctuation","Text":"(","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"text","Text":"property","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":") ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"property name","Text":"Point.x","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"punctuation","Text":": ","_vs_type":"ClassifiedTextRun"},{"ClassificationTypeName":"keyword","Text":"number","_vs_type":"ClassifiedTextRun"}],"_vs_type":"ClassifiedTextElement"}],"_vs_type":"ContainerElement"}}"#, "{}", "x: 1");
 }

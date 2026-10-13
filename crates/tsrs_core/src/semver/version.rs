@@ -373,8 +373,8 @@ mod tests {
             major,
             minor,
             patch,
-            prerelease: prerelease.iter().map(|s| s.to_string()).collect(),
-            build: build.iter().map(|s| s.to_string()).collect(),
+            prerelease: prerelease.iter().map(std::string::ToString::to_string).collect(),
+            build: build.iter().map(std::string::ToString::to_string).collect(),
         }
     }
 

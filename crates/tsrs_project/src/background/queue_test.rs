@@ -11,7 +11,7 @@ fn queue_basic_enqueue() {
     let q = new_queue();
 
     let executed = Arc::new(AtomicBool::new(false));
-    let e = executed.clone();
+    let e = std::sync::Arc::clone(&executed);
     q.enqueue(&Context::background(), move |_ctx| {
         e.store(true, Ordering::SeqCst);
     });
@@ -31,7 +31,7 @@ fn queue_multiple_tasks_execution() {
     let num_tasks = 10;
 
     for _ in 0..num_tasks {
-        let c = counter.clone();
+        let c = std::sync::Arc::clone(&counter);
         q.enqueue(&Context::background(), move |_ctx| {
             c.fetch_add(1, Ordering::SeqCst);
         });
@@ -50,11 +50,11 @@ fn queue_nested_enqueue() {
 
     let executed = Arc::new(Mutex::new(Vec::<String>::new()));
 
-    let (q2, e) = (q.clone(), executed.clone());
+    let (q2, e) = (std::sync::Arc::clone(&q), std::sync::Arc::clone(&executed));
     q.enqueue(&Context::background(), move |ctx| {
         e.lock().unwrap().push("parent".to_string());
 
-        let e2 = e.clone();
+        let e2 = std::sync::Arc::clone(&e);
         q2.enqueue(ctx, move |_child_ctx| {
             e2.lock().unwrap().push("child".to_string());
         });
@@ -73,7 +73,7 @@ fn queue_closed_queue_rejects_new_tasks() {
     q.close();
 
     let executed = Arc::new(AtomicBool::new(false));
-    let e = executed.clone();
+    let e = std::sync::Arc::clone(&executed);
     q.enqueue(&Context::background(), move |_ctx| {
         e.store(true, Ordering::SeqCst);
     });

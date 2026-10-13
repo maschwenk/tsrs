@@ -12,7 +12,7 @@ fn strip_offset(s: &str) -> String {
     let mut out = s.replace("json: unable to ", "json: cannot ");
     while let Some(i) = out.find(" after offset ") {
         let rest = &out[i + " after offset ".len()..];
-        let digits = rest.bytes().take_while(|b| b.is_ascii_digit()).count();
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
         out = format!("{}{}", &out[..i], &rest[digits..]);
     }
     out

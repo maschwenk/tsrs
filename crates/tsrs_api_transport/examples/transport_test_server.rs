@@ -4,6 +4,7 @@
 //! session and a few `test/*` methods that drive the callback filesystem and connection behavior.
 //! It is not the API server: the real session is wired by the CLI.
 
+use std::fmt::Write as _;
 use std::sync::Arc;
 
 use serde::Deserialize;
@@ -104,17 +105,15 @@ impl Handler for TestHandler {
                     if i > 0 {
                         out.push(',');
                     }
-                    let p = item.params.as_ref().map(|r| r.get().as_bytes()).unwrap_or(b"");
+                    let p = item.params.as_ref().map_or(b"".as_slice(), |r| r.get().as_bytes());
                     let method_json = serde_json::to_string(&item.method).unwrap();
                     match self.handle_request(cx, &item.method, p) {
                         Ok(Response::Json(json)) => {
-                            out.push_str(&format!("{{\"method\":{method_json},\"result\":{}}}", String::from_utf8_lossy(&json)))
+                            write!(out, "{{\"method\":{method_json},\"result\":{}}}", String::from_utf8_lossy(&json)).unwrap();
                         }
                         Ok(Response::Binary(_)) => return Err(ApiError::internal("binary result in batch")),
-                        Err(e) => out.push_str(&format!(
-                            "{{\"method\":{method_json},\"result\":null,\"error\":{}}}",
-                            serde_json::to_string(&e.message).unwrap()
-                        )),
+                        Err(e) => write!(out, "{{\"method\":{method_json},\"result\":null,\"error\":{}}}",
+                            serde_json::to_string(&e.message).unwrap()).unwrap(),
                     }
                 }
                 out.push_str("]}");
@@ -131,6 +130,7 @@ impl Handler for TestHandler {
                 }
                 let ps = serde_json::from_slice::<Ops>(params).map_err(bad)?.ops;
                 let results: Vec<serde_json::Value> = std::thread::scope(|s| {
+                    #[expect(clippy::needless_collect, reason = "Spawn all scoped calls before joining any handle so this fixture exercises parallel callbacks.")]
                     let handles: Vec<_> = ps.iter().map(|p| s.spawn(move || self.fs_op(p))).collect();
                     handles.into_iter().map(|h| h.join().unwrap_or(serde_json::Value::String("<panicked>".into()))).collect()
                 });
@@ -204,7 +204,7 @@ fn main() {
     options.collect_timing = timing;
     let result = serve(pipe.as_deref().map(std::path::Path::new), options, |caller| {
         let fs = Arc::new(CallbackFs::new(Arc::new(tsrs_vfs::osvfs::fs()), &config, case_sensitive));
-        fs.set_connection(caller.clone());
+        fs.set_connection(std::sync::Arc::clone(&caller));
         Arc::new(TestHandler { is_async, fs, caller, cwd })
     });
     if let Err(e) = result {

@@ -34,12 +34,12 @@ pub fn sort_completion_items(items: &[Any]) -> Vec<Any> {
         let mut b_sort_text = String::new();
         if let Any::CompletionItem(a) = a {
             if let Some(s) = &a.sort_text {
-                a_sort_text = s.clone();
+                a_sort_text.clone_from(s);
             }
         }
         if let Any::CompletionItem(b) = b {
             if let Some(s) = &b.sort_text {
-                b_sort_text = s.clone();
+                b_sort_text.clone_from(s);
             }
         }
         let a_sort_text = go::or_else(a_sort_text, default_sort_text.clone());

@@ -2,8 +2,10 @@
 //! typescript@7.1.0-dev.20260930.4 package: `TSRS_CODEC_ORACLE=<dir>/node_modules/typescript cargo test -p
 //! tsrs_api_codec --test node_client`. Without TSRS_CODEC_ORACLE the test reports that it was skipped.
 
+#[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]
 mod common;
 
+use std::fmt::Write as _;
 use std::process::Command;
 
 use common::*;
@@ -26,8 +28,8 @@ fn json_quote(s: &str) -> String {
             0x09 => out.push_str("\\t"),
             0x08 => out.push_str("\\b"),
             0x0c => out.push_str("\\f"),
-            r if r < 0x20 || (0xD800..=0xDFFF).contains(&r) => out.push_str(&format!("\\u{:04x}", r)),
-            r => out.push(char::from_u32(r as u32).unwrap()),
+            r if r < 0x20 || (0xD800..=0xDFFF).contains(&r) => write!(out, "\\u{r:04x}").unwrap(),
+            r => out.push(char::from_u32(r).unwrap()),
         }
         i += size.max(1);
     }

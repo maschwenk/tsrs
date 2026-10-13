@@ -15,6 +15,7 @@
 mod readablebuildinfo;
 mod sys;
 
+use std::fmt::Write as _;
 use std::path::{Path as FsPath, PathBuf};
 use std::sync::{Arc, Mutex};
 
@@ -152,7 +153,7 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
         }
         if !f.symlink.is_empty() { Some((f.path.clone(), vfstest::symlink(&f.symlink))) } else { Some((f.path.clone(), MapFile::from(f.content.as_str()))) }
     }));
-    let clock_fn = clock.clone();
+    let clock_fn = std::sync::Arc::clone(&clock);
     let fs = Arc::new(vfstest::from_map_with_clock(initial, !test.ignore_case, Arc::new(move || clock_fn.now())));
     let mut lib_files: Vec<&scenarioFile> = test.files.iter().filter(|f| libs.contains(&f.path)).collect();
     lib_files.sort_by(|a, b| a.path.cmp(&b.path));
@@ -181,11 +182,11 @@ fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
             "symlink" => {
                 let dir = tspath::get_directory_path(&op.path);
                 let _ = sys.map_fs().mkdir_all(dir.trim_start_matches('/'), tsrs_vfs::FileMode::from_bits_retain(0o777));
-                sys.map_fs().add_symlink(&op.path, &op.target)
+                sys.map_fs().add_symlink(&op.path, &op.target);
             }
             "touch" => {
                 let now = sys.clock.now();
-                fs.chtimes(&op.path, now, now).unwrap()
+                fs.chtimes(&op.path, now, now).unwrap();
             }
             other => panic!("unknown op {other}"),
         }
@@ -194,7 +195,7 @@ fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
 
 // runner.go executeCommand
 fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]) -> ExitStatus {
-    baseline.push_str(&format!("tsgo {}\n", args.join(" ")));
+    writeln!(baseline, "tsgo {}", args.join(" ")).unwrap();
     let testing: &'static dyn CommandLineTesting = sys;
     let result = crate::execute::command_line_with_testing(sys, args.to_vec(), Some(testing));
     baseline.push_str(match result.status {
@@ -257,11 +258,9 @@ fn diff_text(old_name: &str, new_name: &str, expected: &str, actual: &str) -> St
 fn run_scenario(test: &scenario) -> String {
     let mut baseline = String::new();
     let sys = new_test_sys(test);
-    baseline.push_str(&format!(
-        "currentDirectory::{}\nuseCaseSensitiveFileNames::{}\nInput::\n",
+    write!(baseline, "currentDirectory::{}\nuseCaseSensitiveFileNames::{}\nInput::\n",
         sys.cwd,
-        sys.fs.use_case_sensitive_file_names()
-    ));
+        sys.fs.use_case_sensitive_file_names()).unwrap();
     sys.baseline_fs_with_diff(&mut baseline);
     execute_command(sys, &mut baseline, &test.args);
     sys.serialize_state(&mut baseline);
@@ -270,7 +269,7 @@ fn run_scenario(test: &scenario) -> String {
     for (index, edit) in test.edits.iter().enumerate() {
         sys.clear_output();
         let args = edit.args.clone().unwrap_or_else(|| test.args.clone());
-        baseline.push_str(&format!("\n\nEdit [{}]:: {}\n", index, edit.caption));
+        write!(baseline, "\n\nEdit [{}]:: {}\n", index, edit.caption).unwrap();
         apply_ops(sys, &edit.ops);
         sys.baseline_fs_with_diff(&mut baseline);
         execute_command(sys, &mut baseline, &args);
@@ -285,20 +284,16 @@ fn run_scenario(test: &scenario) -> String {
 
         let diff = get_diff_for_incremental(sys, non_incremental_sys);
         if !diff.is_empty() {
-            baseline.push_str(&format!(
-                "\n\nDiff:: {}\n",
+            write!(baseline, "\n\nDiff:: {}\n",
                 if edit.expected_diff.is_empty() {
                     "!!! Unexpected diff, please review and either fix or write explanation as expectedDiff !!!"
                 } else {
                     &edit.expected_diff
-                }
-            ));
+                }).unwrap();
             baseline.push_str(&diff);
         } else if !edit.expected_diff.is_empty() {
-            baseline.push_str(&format!(
-                "\n\nDiff:: {} !!! Diff not found but explanation present, please review and remove the explanation !!!\n",
-                edit.expected_diff
-            ));
+            write!(baseline, "\n\nDiff:: {} !!! Diff not found but explanation present, please review and remove the explanation !!!\n",
+                edit.expected_diff).unwrap();
         }
     }
     baseline
@@ -325,7 +320,7 @@ fn tsctests() {
     // The baselines are tsgo's output: keep Go's check history (tsrs_core::compat).
     tsrs_core::compat::use_go_history_for_tsgo_baselines();
     let root = repo_root();
-    let dump = std::env::var("TSCTESTS_DUMP").map(PathBuf::from).unwrap_or_else(|_| root.join("target/tsctests-dump"));
+    let dump = std::env::var("TSCTESTS_DUMP").map_or_else(|_| root.join("target/tsctests-dump"), PathBuf::from);
     let filter = std::env::var("TSCTESTS_FILTER").unwrap_or_default();
     let mut files = Vec::new();
     collect(&dump.join("tsc"), &mut files);
@@ -353,7 +348,8 @@ fn tsctests() {
             scope.spawn(|| loop {
                 let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                 let Some(test) = scenarios.get(i) else { break };
-                let test_ref: &'static scenario = unsafe { &*(test as *const scenario) };
+                // SAFETY: scenarios stays immutable and alive until every scoped worker ends; the inner thread is joined below.
+                let test_ref: &'static scenario = unsafe { &*std::ptr::from_ref::<scenario>(test) };
                 let outcome = std::thread::Builder::new()
                     .stack_size(512 << 20)
                     .spawn(move || std::panic::catch_unwind(|| run_scenario(test_ref)))
@@ -376,7 +372,7 @@ fn tsctests() {
                         let msg = payload
                             .downcast_ref::<String>()
                             .cloned()
-                            .or_else(|| payload.downcast_ref::<&str>().map(|s| s.to_string()))
+                            .or_else(|| payload.downcast_ref::<&str>().map(std::string::ToString::to_string))
                             .unwrap_or_default();
                         let local = results_dir.join("local").join(format!("{}.crash", test.baseline));
                         std::fs::create_dir_all(local.parent().unwrap()).unwrap();
@@ -398,7 +394,7 @@ fn tsctests() {
         for suite in ["tsc/", "tsbuild/"] {
             let total = results.iter().filter(|r| r.0.starts_with(suite)).count();
             let n = names.iter().filter(|n| n.starts_with(suite)).count();
-            summary += &format!("{suite:9}{class:6} {n:4} / {total}\n");
+            writeln!(summary, "{suite:9}{class:6} {n:4} / {total}").unwrap();
         }
     }
     eprintln!("tsctests (non-watch):\n{summary}results in {}", results_dir.display());

@@ -105,7 +105,7 @@ mod tests {
         name.set_loc(TextRange::new(0, 3));
 
         let clone = f.deep_clone_reparse(Some(name)).unwrap();
-        assert!(clone != name);
+        assert_ne!(clone, name);
         assert_eq!(clone.loc(), name.loc());
         assert!(clone.flags().intersects(NodeFlags::Reparsed));
         let q = clone.as_qualified_name();

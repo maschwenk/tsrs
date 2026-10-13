@@ -7,7 +7,7 @@
 // TSRS_CHECKER_STRESS_ROUNDS (default 12) and TSRS_CHECKER_STRESS_FANOUT (default 8) scale the run.
 // TSRS_CHECKER_STRESS_REPORT=<file> writes per-outcome counts.
 
-use std::collections::HashMap;
+use rustc_hash::FxHashMap;
 use std::sync::mpsc;
 use std::sync::Arc;
 use std::thread;
@@ -43,7 +43,7 @@ const B: &str = "import { value, big } from \"./a\";\nexport const use = value;\
 /// a.ts for version k: `value` is a number (even k) or a string (odd k), plus enough declarations that
 /// a fresh checker does real work when `big` is resolved.
 fn a_ts(k: usize) -> String {
-    let mut s = if k % 2 == 0 { "export const value: number = 1;\n".to_string() } else { "export const value: string = \"s\";\n".to_string() };
+    let mut s = if k.is_multiple_of(2) { "export const value: number = 1;\n".to_string() } else { "export const value: string = \"s\";\n".to_string() };
     s.extend((0..400).map(|i| format!("export interface I{i}<T> {{ p{i}: T; q{i}: I{}<T> | undefined; }}\n", (i + 1) % 400)));
     s.push_str("export type Big = ");
     s.push_str(&(0..400).map(|i| format!("I{i}<number>")).collect::<Vec<_>>().join(" | "));
@@ -64,7 +64,7 @@ fn q(s: &str) -> String {
 struct Client {
     w: FrameWriter<std::io::PipeWriter>,
     rx: mpsc::Receiver<Value>,
-    pending: HashMap<String, Value>,
+    pending: FxHashMap<String, Value>,
     next: u64,
     run: thread::JoinHandle<Result<(), transport::TransportError>>,
 }
@@ -118,7 +118,7 @@ fn start() -> Client {
             }
         }
     });
-    Client { w: FrameWriter::new(client_w), rx, pending: HashMap::new(), next: 0, run }
+    Client { w: FrameWriter::new(client_w), rx, pending: FxHashMap::default(), next: 0, run }
 }
 
 #[derive(Default, Debug)]
@@ -186,10 +186,9 @@ fn run_stress(rounds: usize, fanout: usize) -> Counts {
         let layer = format!(r#"{{"kind":"layer","files":{{"/p/a.ts":{}}}}}"#, q(&a_ts(k + 1)));
         let update = c.send("updateSnapshot", &format!(r#"{{"snapshot":{snap},"changes":{{"ensurePrograms":true,"fileSystem":{layer}}}}}"#));
         let v = c.wait(&update);
-        let next = Some(match get(&get(&v, "result"), "snapshot") {
-            Value::Number(n) => n,
-            _ => panic!("updateSnapshot failed: {}", json::marshal(&v).unwrap()),
-        });
+        let Value::Number(next) = get(&get(&v, "result"), "snapshot") else {
+            panic!("updateSnapshot failed: {}", json::marshal(&v).unwrap());
+        };
         // Race: a fan-out of checker requests on S_k (the first ones do the heavy `big` resolution on
         // S_k's API checker) with the release of S_k sent right behind the first heavy request.
         let mut ids = Vec::new();
@@ -238,7 +237,7 @@ fn run_stress(rounds: usize, fanout: usize) -> Counts {
                 _ => counts.other.push(format!("round {k} stale {method}: {}", json::marshal(&v).unwrap())),
             }
         }
-        snap = next.expect("updateSnapshot result");
+        snap = next;
         // The old symbol reference names a.ts/b.ts files: b.ts is unchanged, so a file-owned reference
         // may still resolve in S_{k+1} (pinned Go behaves the same); it must answer the *new* type.
         let sp2 = format!(r#""snapshot":{snap},"project":{}"#, q(&project));
@@ -281,18 +280,19 @@ fn released_snapshot_checker_memory_is_poisoned() {
     let pos = B.find("all =").unwrap();
     let t = call("getTypeAtPosition", format!(r#"{{"snapshot":{snap},"project":{},"file":"/p/b.ts","position":{pos}}}"#, q(&project)));
     let Value::Number(id) = get(&t, "id") else { panic!() };
-    let addr = {
+    let (flags, before) = {
         let sd = session.snapshot_data(snap as u64).unwrap();
         let ty = sd.checker_state.registry.resolve_type(&project, id as u32, None).unwrap();
-        ty.get() as *const tsrs_checker::Type as usize
+        (ty.flags.as_ptr().cast::<u32>(), ty.flags.get().bits())
     };
-    let before: [u8; 16] = unsafe { std::ptr::read_volatile(addr as *const [u8; 16]) };
-    assert_ne!(before, [0xA5; 16], "live type memory is not poison");
+    let poison_word = u32::from_ne_bytes([0xA5; 4]);
+    assert_ne!(before, poison_word, "live type memory is not poison");
     call("release", format!(r#"{{"snapshot":{snap}}}"#));
     session.close();
     if poison {
-        // SAFETY (test-only): poison mode keeps freed regions mapped and filled; this read is the probe.
-        let after: [u8; 16] = unsafe { std::ptr::read_volatile(addr as *const [u8; 16]) };
-        assert_eq!(after, [0xA5; 16], "released checker memory was not freed/poisoned at {addr:#x}");
+        // SAFETY: flags points to the aligned u32 storage; poison mode keeps its freed region mapped and filled.
+        let after = unsafe { std::ptr::read_volatile(flags) };
+        let addr = flags.addr();
+        assert_eq!(after, poison_word, "released checker memory was not freed/poisoned at {addr:#x}");
     }
 }

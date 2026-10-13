@@ -65,7 +65,7 @@ impl fakeProgressReporter {
 fn setup(delay_ms: u64) -> (Arc<fakeProgressReporter>, Arc<projectLoadingProgress>, CancelFunc) {
     let (ctx, cancel) = Context::background().with_cancel();
     let reporter = Arc::new(fakeProgressReporter { calls: Mutex::new(Vec::new()), ctx });
-    let p = new_project_loading_progress_from_reporter(reporter.clone(), Duration::from_millis(delay_ms));
+    let p = new_project_loading_progress_from_reporter(Arc::<fakeProgressReporter>::clone(&reporter), Duration::from_millis(delay_ms));
     (reporter, p, cancel)
 }
 
@@ -98,7 +98,7 @@ fn test_progress_start_finish_before_delay() {
     std::thread::sleep(Duration::from_millis(600));
 
     let calls = reporter.get_calls();
-    assert!(calls.is_empty(), "expected no progress calls for fast operation, got {:?}", calls);
+    assert!(calls.is_empty(), "expected no progress calls for fast operation, got {calls:?}");
 
     cancel.call();
 }
@@ -116,7 +116,7 @@ fn test_progress_shows_after_delay() {
     p.wait_idle();
 
     let calls = reporter.get_calls();
-    assert_eq!(calls.len(), 2, "expected 2 calls (create + begin), got {:?}", calls);
+    assert_eq!(calls.len(), 2, "expected 2 calls (create + begin), got {calls:?}");
     assert_eq!(calls[0].method, "create", "expected create, got {:?}", calls[0]);
     assert_eq!(calls[1].method, "begin", "expected begin, got {:?}", calls[1]);
     assert_eq!(calls[1].title, tsrs_diagnostics::Loading.text(), "expected title {:?}, got {:?}", tsrs_diagnostics::Loading.text(), calls[1].title);
@@ -127,7 +127,7 @@ fn test_progress_shows_after_delay() {
 
     let calls = reporter.get_calls();
     let last = calls.last().unwrap();
-    assert_eq!(last.method, "end", "expected end, got {:?}", last);
+    assert_eq!(last.method, "end", "expected end, got {last:?}");
 
     cancel.call();
 }
@@ -148,7 +148,7 @@ fn test_progress_reports_multiple_operations() {
 
     let calls = reporter.get_calls();
     // Should have: create, begin (with first message).
-    assert!(calls.len() >= 2, "expected at least 2 calls, got {:?}", calls);
+    assert!(calls.len() >= 2, "expected at least 2 calls, got {calls:?}");
     assert_eq!(calls[0].method, "create", "expected create, got {:?}", calls[0]);
     assert_eq!(calls[1].method, "begin", "expected begin, got {:?}", calls[1]);
 
@@ -157,7 +157,7 @@ fn test_progress_reports_multiple_operations() {
     p.wait_idle();
 
     let calls = reporter.get_calls();
-    assert!(calls.iter().any(|c| c.method == "report"), "expected a report after partial finish, got {:?}", calls);
+    assert!(calls.iter().any(|c| c.method == "report"), "expected a report after partial finish, got {calls:?}");
 
     // Finish the second — should send end.
     p.finish(project_0(), project("projB"));
@@ -165,7 +165,7 @@ fn test_progress_reports_multiple_operations() {
 
     let calls = reporter.get_calls();
     let last = calls.last().unwrap();
-    assert_eq!(last.method, "end", "expected end, got {:?}", last);
+    assert_eq!(last.method, "end", "expected end, got {last:?}");
 
     cancel.call();
 }
@@ -188,7 +188,7 @@ fn test_progress_ref_counting() {
     p.wait_idle();
 
     let calls = reporter.get_calls();
-    assert!(!calls.iter().any(|c| c.method == "end"), "unexpected end with ref count > 0: {:?}", calls);
+    assert!(!calls.iter().any(|c| c.method == "end"), "unexpected end with ref count > 0: {calls:?}");
 
     // Finish again (ref count = 0) — should end.
     p.finish(project_0(), project("proj"));
@@ -196,7 +196,7 @@ fn test_progress_ref_counting() {
 
     let calls = reporter.get_calls();
     let last = calls.last().unwrap();
-    assert_eq!(last.method, "end", "expected end when ref count reaches 0, got {:?}", last);
+    assert_eq!(last.method, "end", "expected end when ref count reaches 0, got {last:?}");
 
     cancel.call();
 }
@@ -226,8 +226,8 @@ fn test_progress_new_token_after_end() {
 
     let calls = reporter.get_calls();
     let second_token = calls.iter().find(|c| c.method == "create" && c.token != first_token).map(|c| c.token.clone()).unwrap_or_default();
-    assert!(!second_token.is_empty(), "expected a new token for second cycle, got calls: {:?}", calls);
-    assert_ne!(first_token, second_token, "expected different tokens, both were {:?}", first_token);
+    assert!(!second_token.is_empty(), "expected a new token for second cycle, got calls: {calls:?}");
+    assert_ne!(first_token, second_token, "expected different tokens, both were {first_token:?}");
 
     p.finish(project_0(), project("proj2"));
     p.wait_idle();
@@ -249,7 +249,7 @@ fn test_progress_start_before_delay_then_more_after_delay() {
     p.wait_idle();
 
     let calls = reporter.get_calls();
-    assert!(calls.len() >= 2, "expected create + begin after delay, got {:?}", calls);
+    assert!(calls.len() >= 2, "expected create + begin after delay, got {calls:?}");
 
     // Start another operation after delay — should send a report immediately.
     p.start(project_0(), project("projB"));
@@ -257,7 +257,7 @@ fn test_progress_start_before_delay_then_more_after_delay() {
 
     let calls = reporter.get_calls();
     let last = calls.last().unwrap();
-    assert_eq!(last.method, "report", "expected report for new start after delay, got {:?}", last);
+    assert_eq!(last.method, "report", "expected report for new start after delay, got {last:?}");
 
     // Clean up.
     p.finish(project_0(), project("projA"));
@@ -277,7 +277,7 @@ fn test_progress_finish_with_no_active_token() {
     p.wait_idle();
 
     let calls = reporter.get_calls();
-    assert!(calls.is_empty(), "expected no calls for orphan finish, got {:?}", calls);
+    assert!(calls.is_empty(), "expected no calls for orphan finish, got {calls:?}");
 
     cancel.call();
 }
@@ -326,7 +326,7 @@ fn test_progress_zero_delay() {
     p.wait_idle();
 
     let calls = reporter.get_calls();
-    assert_eq!(calls.len(), 2, "expected 2 calls (create + begin), got {:?}", calls);
+    assert_eq!(calls.len(), 2, "expected 2 calls (create + begin), got {calls:?}");
     assert_eq!(calls[0].method, "create", "expected create, got {:?}", calls[0]);
     assert_eq!(calls[1].method, "begin", "expected begin, got {:?}", calls[1]);
     assert_eq!(calls[1].msg, "Project 'proj'", "expected message {:?}, got {:?}", "Project 'proj'", calls[1].msg);
@@ -337,7 +337,7 @@ fn test_progress_zero_delay() {
 
     let calls = reporter.get_calls();
     let last = calls.last().unwrap();
-    assert_eq!(last.method, "end", "expected end, got {:?}", last);
+    assert_eq!(last.method, "end", "expected end, got {last:?}");
 
     cancel.call();
 }
@@ -354,7 +354,7 @@ fn test_progress_finish_before_delay_no_begun() {
     p.wait_idle();
 
     let calls = reporter.get_calls();
-    assert!(!calls.iter().any(|c| c.method == "end"), "unexpected end when begun=false: {:?}", calls);
+    assert!(!calls.iter().any(|c| c.method == "end"), "unexpected end when begun=false: {calls:?}");
 
     cancel.call();
 }

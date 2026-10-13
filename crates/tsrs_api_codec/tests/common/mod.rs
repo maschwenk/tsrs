@@ -1,5 +1,4 @@
-#![allow(dead_code)]
-
+use std::fmt::Write as _;
 use std::path::PathBuf;
 
 use tsrs_api_codec::format::*;
@@ -63,7 +62,7 @@ pub fn dump(b: &[u8]) -> Vec<String> {
     let mut out = Vec::new();
     let i = nodes + NODE_SIZE;
     let j = 1;
-    out.extend(b.get(i..).unwrap_or_default().chunks_exact(NODE_SIZE).enumerate().map(|(index, record)| {
+    out.extend(b.get(i..).unwrap_or_default().as_chunks::<NODE_SIZE>().0.iter().enumerate().map(|(index, record)| {
         let j = j + index;
         let kind = rd(record, 0);
         let name = if kind == SYNTAX_KIND_NODE_LIST { "NodeList".to_string() } else { format!("{:?}", kind_from_u32(kind)) };
@@ -101,13 +100,13 @@ pub fn first_difference(expected: &[u8], actual: &[u8]) -> Option<String> {
     ] {
         let (e, a) = (rd(expected, off), rd(actual, off));
         if e != a {
-            msg += &format!("header {name}: expected {e:#x} actual {a:#x}\n");
+            writeln!(msg, "header {name}: expected {e:#x} actual {a:#x}").unwrap();
         }
     }
     let (de, da) = (dump(expected), dump(actual));
     for (k, (e, a)) in de.iter().zip(da.iter()).enumerate() {
         if e != a {
-            msg += &format!("first node difference at record {}:\n  expected {e}\n  actual   {a}\n", k + 1);
+            write!(msg, "first node difference at record {}:\n  expected {e}\n  actual   {a}\n", k + 1).unwrap();
             let lo = k.saturating_sub(3);
             msg += "  expected context:\n";
             msg.extend(de[lo..(k + 4).min(de.len())].iter().map(|l| format!("    {l}\n")));
@@ -117,11 +116,11 @@ pub fn first_difference(expected: &[u8], actual: &[u8]) -> Option<String> {
         }
     }
     if de.len() != da.len() {
-        msg += &format!("node count: expected {} actual {}\n", de.len(), da.len());
+        writeln!(msg, "node count: expected {} actual {}", de.len(), da.len()).unwrap();
     } else {
         let pos = expected.iter().zip(actual).position(|(e, a)| e != a).unwrap_or(expected.len().min(actual.len()));
-        msg += &format!("first differing byte at {pos} (sections: strOff {} strData {} ext {} struct {} nodes {})\n",
-            rd(expected, 24), rd(expected, 28), rd(expected, 32), rd(expected, 36), rd(expected, 40));
+        writeln!(msg, "first differing byte at {pos} (sections: strOff {} strData {} ext {} struct {} nodes {})",
+            rd(expected, 24), rd(expected, 28), rd(expected, 32), rd(expected, 36), rd(expected, 40)).unwrap();
     }
     Some(msg)
 }
@@ -174,7 +173,7 @@ pub fn structural(b: &[u8], keep_jsdoc: bool) -> Vec<String> {
                         format!("text={} flags={}", string_at(b, rd(b, off)), rd(b, off + 4))
                     }
                 }
-                _ => format!("data={:#010x}", data),
+                _ => format!("data={data:#010x}"),
             }
         };
         out.push(format!(

@@ -512,7 +512,7 @@ fn did_change_watched_files_change_closed_program_file() {
 // projecttestutil.go:281 WithRequestID(t.Context())
 fn request_ctx() -> Context {
     let (ctx, cancel) = Context::background().with_cancel();
-    std::mem::forget(cancel);
+    let _ = std::mem::ManuallyDrop::new(cancel);
     tsrs_core::context::with_request_id(&ctx, "0")
 }
 

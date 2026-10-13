@@ -163,7 +163,7 @@ func copyType(t types.Type) bool {
 			}
 		}
 	case *types.Pointer:
-		return isTestingTPtr(t)
+		return isTestingTPtr(t) || isOptionPtr(t) && copyType(u.Elem())
 	}
 	return false
 }

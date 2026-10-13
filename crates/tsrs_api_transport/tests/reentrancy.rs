@@ -34,13 +34,13 @@ impl Handler for SimSession {
             // Waits on the client from a thread that serves no request (like a compiler worker reading a
             // file during a program build): an unattributed call.
             "callbackFromWorker" => {
-                let caller = self.caller.clone();
+                let caller = std::sync::Arc::clone(&self.caller);
                 let r = thread::spawn(move || caller.call("cb", Some(b"\"/worker.ts\""))).join().unwrap();
                 Ok(Response::Json(r.map_err(|e| ApiError::internal(e.to_string()))?))
             }
             // Same, but the worker carries the request's identity (how core can attribute file reads).
             "callbackFromScopedWorker" => {
-                let caller = self.caller.clone();
+                let caller = std::sync::Arc::clone(&self.caller);
                 let scope = tsrs_api_transport::RequestScope::current().unwrap();
                 let r = thread::spawn(move || scope.enter(|| caller.call("cb", Some(b"\"/worker.ts\"")))).join().unwrap();
                 Ok(Response::Json(r.map_err(|e| ApiError::internal(e.to_string()))?))
@@ -48,7 +48,7 @@ impl Handler for SimSession {
             // Holds the lock while a worker thread waits on the client (genuine re-entry setup).
             "outerWorker" => {
                 let _g = lock_for_request(&self.registry, "the snapshot registry")?;
-                let caller = self.caller.clone();
+                let caller = std::sync::Arc::clone(&self.caller);
                 let r = thread::spawn(move || caller.call("cb", Some(b"\"/held.ts\""))).join().unwrap();
                 Ok(Response::Json(r.map_err(|e| ApiError::internal(e.to_string()))?))
             }
@@ -61,7 +61,7 @@ impl Handler for SimSession {
                 let wait_on = |hold_ms: u64| -> Result<Duration, String> {
                     let gate = Arc::new(Mutex::new(()));
                     let (held_tx, held_rx) = mpsc::channel();
-                    let g2 = gate.clone();
+                    let g2 = std::sync::Arc::clone(&gate);
                     let holder = thread::spawn(move || {
                         let _h = g2.lock().unwrap();
                         held_tx.send(()).unwrap();
@@ -86,7 +86,7 @@ impl Handler for SimSession {
                 let first = wait_on(first_hold);
                 let second = wait_on(1000);
                 Response::json(&serde_json::json!({
-                    "first": first.as_ref().map(|d| d.as_millis() as u64).map_err(|e| e.clone()),
+                    "first": first.as_ref().map(|d| d.as_millis() as u64).map_err(std::clone::Clone::clone),
                     "secondRejectedAfterMs": second.err().map(|e| e.parse::<u64>().unwrap()),
                 }))
             }
@@ -132,7 +132,7 @@ fn sync_nested_request_gets_a_deliberate_error_not_a_hang() {
         let (server_r, client_w) = std::io::pipe().unwrap();
         let (client_r, server_w) = std::io::pipe().unwrap();
         let late = LateCaller::new();
-        let session = Arc::new(SimSession { caller: late.clone(), registry: Mutex::new(0) });
+        let session = Arc::new(SimSession { caller: std::sync::Arc::<tsrs_api_transport::LateCaller>::clone(&late), registry: Mutex::new(0) });
         let conn = SyncConn::new(
             Box::new(MessagePackReader::new(server_r)),
             Box::new(MessagePackWriter::new(server_w)),
@@ -175,7 +175,7 @@ fn start_async_with(
     let (server_r, client_w) = std::io::pipe().unwrap();
     let (client_r, server_w) = std::io::pipe().unwrap();
     let late = LateCaller::new();
-    let session = Arc::new(SimSession { caller: late.clone(), registry: Mutex::new(0) });
+    let session = Arc::new(SimSession { caller: std::sync::Arc::<tsrs_api_transport::LateCaller>::clone(&late), registry: Mutex::new(0) });
     let conn = AsyncConn::new(
         Box::new(FrameReader::new(server_r)),
         Box::new(FrameWriter::new(server_w)),
@@ -246,11 +246,11 @@ fn closing_while_a_handler_waits_on_a_callback_is_bounded() {
         let (server_r, client_w) = std::io::pipe().unwrap();
         let (client_r, server_w) = std::io::pipe().unwrap();
         let late = LateCaller::new();
-        let session = Arc::new(SimSession { caller: late.clone(), registry: Mutex::new(0) });
+        let session = Arc::new(SimSession { caller: std::sync::Arc::<tsrs_api_transport::LateCaller>::clone(&late), registry: Mutex::new(0) });
         let conn = SyncConn::new(
             Box::new(MessagePackReader::new(server_r)),
             Box::new(MessagePackWriter::new(server_w)),
-            session.clone(),
+            std::sync::Arc::<SimSession>::clone(&session),
             ConnOptions::default(),
         );
         late.set(conn.caller());
@@ -373,7 +373,7 @@ fn genuine_reentry_through_a_worker_callback_still_fails_boundedly() {
         let (server_r, client_w) = std::io::pipe().unwrap();
         let (client_r, server_w) = std::io::pipe().unwrap();
         let late = LateCaller::new();
-        let session = Arc::new(SimSession { caller: late.clone(), registry: Mutex::new(0) });
+        let session = Arc::new(SimSession { caller: std::sync::Arc::<tsrs_api_transport::LateCaller>::clone(&late), registry: Mutex::new(0) });
         let conn = SyncConn::new(Box::new(MessagePackReader::new(server_r)), Box::new(MessagePackWriter::new(server_w)), session, grace_opts());
         late.set(conn.caller());
         let run = thread::spawn(move || conn.run());

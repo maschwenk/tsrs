@@ -66,7 +66,7 @@ fn event_list_drain_is_atomic() {
 
     let (events2, err2) = el.drain();
     assert!(err2.is_none());
-    assert!(events2.is_empty());
+    assert_eq!(events2, [] as [crate::event::Event; 0]);
 }
 
 // eventlist_test.go:110

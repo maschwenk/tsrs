@@ -12,9 +12,8 @@ fn test_flaky_diagnostic_tracking_parallel_emit() {
     for no_emit_on_error in [false, true] {
         let tsconfig = format!(
             r#"{{
-					"compilerOptions": {{ "strict": true, "declaration": true, "noEmitOnError": {}, "outDir": "out" }}
-				}}"#,
-            no_emit_on_error
+					"compilerOptions": {{ "strict": true, "declaration": true, "noEmitOnError": {no_emit_on_error}, "outDir": "out" }}
+				}}"#
         );
         let a = "export function box<T>(value: T) { return { value }; }";
         let files = [
@@ -33,7 +32,6 @@ fn test_flaky_diagnostic_tracking_parallel_emit() {
                         track_flaky_diagnostics: Some(lsproto::DiagnosticFlakeLogLevel::Panic),
                         ..Default::default()
                     }),
-                    ..Default::default()
                 }),
                 ..Default::default()
             },

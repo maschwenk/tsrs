@@ -1271,7 +1271,7 @@ mod tests {
                 info("v3", "s3", false, ModuleKind::ESNext),
             ],
             file_infos_non_nil: true,
-            file_ids_list: vec![vec![1, 2], vec![3], vec![1, 2, 3, 123456789]],
+            file_ids_list: vec![vec![1, 2], vec![3], vec![1, 2, 3, 123_456_789]],
             options: Some(options),
             referenced_map: vec![BuildInfoReferenceMapEntry { file_id: 2, file_id_list_id: 1 }, BuildInfoReferenceMapEntry { file_id: 3, file_id_list_id: 3 }],
             semantic_diagnostics_per_file: vec![

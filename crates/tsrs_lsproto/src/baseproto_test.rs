@@ -42,7 +42,7 @@ fn test_base_reader() {
         let mut r = new_base_reader(tt.input);
         let out = r.read();
         if !tt.err.is_empty() {
-            assert_eq!(out.as_ref().err().map(|e| e.to_string()).as_deref(), Some(tt.err), "{}", tt.name);
+            assert_eq!(out.as_ref().err().map(std::string::ToString::to_string).as_deref(), Some(tt.err), "{}", tt.name);
         }
         assert_eq!(out.ok().as_deref(), tt.value, "{}", tt.name);
     }

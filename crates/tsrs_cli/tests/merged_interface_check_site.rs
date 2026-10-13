@@ -6,6 +6,7 @@
 // do not report the TS2430). expected.txt is tsgo-ref's default output; `--checkerAssignment go` keeps Go's behaviour
 // (notes/fix-history-dependent-diagnostics.md).
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -26,7 +27,7 @@ fn run_in(dir: &Path, args: &[&str]) -> String {
         .env_remove("TSRS_HISTORY")
         .output()
         .unwrap();
-    assert_eq!(out.status.code(), Some(2), "{dir:?} {args:?}: {}", String::from_utf8_lossy(&out.stderr));
+    assert_eq!(out.status.code(), Some(2), "{} {args:?}: {}", dir.display(), String::from_utf8_lossy(&out.stderr));
     String::from_utf8(out.stdout).unwrap()
 }
 
@@ -51,7 +52,10 @@ fn incremental_merged_interface_sites_match_clean_builds() {
         };
         config(roots);
         let initial = run_in(&dir, mode);
-        std::fs::write(dir.join("extra.ts"), (0..100).map(|i| format!("export const e0_{i}: number = {i};\n")).collect::<String>()).unwrap();
+        std::fs::write(dir.join("extra.ts"), (0..100).fold(String::new(), |mut out, i| {
+            writeln!(out, "export const e0_{i}: number = {i};").unwrap();
+            out
+        })).unwrap();
         config(&extra_first);
         let added = run_in(&dir, mode);
         let added_clean = clean();
@@ -138,7 +142,7 @@ fn incremental_merged_interface_sites_follow_package_export_aliases() {
             let mut text = format!("{imports}{body}");
             // Equal node-plus-text weights and import counts leave only the resolved edge multiplicities different.
             let padding = (100 - nodes) * 100 - text.len() - 4;
-            text.push_str(&format!("/*{}*/", "x".repeat(padding)));
+            write!(text, "/*{}*/", "x".repeat(padding)).unwrap();
             std::fs::write(dir.join(name), text).unwrap();
         }
         std::fs::write(dir.join("tsconfig.json"), r#"{"compilerOptions":{"noLib":true,"noEmit":true,"incremental":true,"module":"nodenext"},"files":["node_modules/p/a.ts","node_modules/p/b.ts","c.ts","d.ts","e.ts","f.ts","g.ts","h.ts"]}"#).unwrap();

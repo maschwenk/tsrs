@@ -488,7 +488,7 @@ fn a_handler_panic_is_a_remote_error_for_the_caller() {
 #[test]
 fn eof_fails_every_pending_call() {
     let (host, mapper, mapper_handler, started, _) = connect();
-    let calls: Vec<_> = (0..3).map(|_| spawn_call(&host.conn, "wait", None)).collect();
+    let calls: Vec<_> = std::iter::repeat_with(|| spawn_call(&host.conn, "wait", None)).take(3).collect();
     for _ in 0..3 {
         started.recv_timeout(PATIENCE).unwrap();
     }

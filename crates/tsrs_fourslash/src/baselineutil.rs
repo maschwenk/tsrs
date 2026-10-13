@@ -5,7 +5,7 @@ use std::fmt::Write as _;
 use std::sync::{Arc, LazyLock};
 
 use regex::Regex;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_core::collections::{group_by, MultiMap, OrderedMap};
 use tsrs_core::stringutil;
 use tsrs_ls::lsconv::{self, LSPLineMap, Script};
@@ -86,15 +86,6 @@ pub(crate) fn get_baseline_extension(command: BaselineCommand) -> &'static str {
         LINKED_EDITING_CMD => "linkedEditing.txt",
         _ => "baseline.jsonc",
     }
-}
-
-// baselineutil.go:102
-pub(crate) fn drop_trailing_empty_lines(ss: &[String]) -> &[String] {
-    let end = ss
-        .iter()
-        .rposition(|s| !s.is_empty())
-        .map_or(0, |index| index + 1);
-    &ss[..end]
 }
 
 // baselineutil.go:106
@@ -275,13 +266,12 @@ pub(crate) fn unique_files_in_span_order(spans: &[DocumentSpan]) -> Vec<lsproto:
     if spans.is_empty() {
         return Vec::new();
     }
-    let mut seen: FxHashMap<lsproto::DocumentUri, ()> = FxHashMap::default();
+    let mut seen = FxHashSet::default();
     let mut result = Vec::with_capacity(spans.len());
     result.extend(spans.iter().filter_map(|span| {
-        if seen.contains_key(&span.uri) {
+        if !seen.insert(span.uri.clone()) {
             return None;
         }
-        seen.insert(span.uri.clone(), ());
         Some(span.uri.clone())
     }));
     result
@@ -624,7 +614,7 @@ impl Script for ContentScript {
 // baselineutil.go:566
 pub(crate) fn new_text_with_context(file_name: &str, content: &str) -> TextWithContext {
     let line_starts = lsconv::compute_lsp_line_starts(content);
-    let ls = line_starts.clone();
+    let ls = Arc::clone(&line_starts);
     let mut t = TextWithContext {
         n_lines_context: 4,
 
@@ -636,7 +626,7 @@ pub(crate) fn new_text_with_context(file_name: &str, content: &str) -> TextWithC
         file_name: file_name.to_string(),
         content: content.to_string(),
         line_starts,
-        converters: new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(ls.clone()))),
+        converters: new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(Arc::clone(&ls)))),
         pos_info: None,
         line_info: 0,
     };
@@ -670,10 +660,8 @@ impl TextWithContext {
 
     // baselineutil.go:589
     pub(crate) fn add(&mut self, detail: Option<&BaselineDetail>) {
-        if self.new_content.is_empty() && detail.is_none() {
-            panic!("Unsupported");
-        }
-        if detail.is_none() || detail.is_some_and(|d| d.kind != DetailKind::TextEnd && d.kind != DetailKind::ContextEnd) {
+        assert!(!(self.new_content.is_empty() && detail.is_none()), "Unsupported");
+        if detail.is_none_or(|d| d.kind != DetailKind::TextEnd && d.kind != DetailKind::ContextEnd) {
             // Calculate pos to location number of lines
             let mut pos_line_index = self.line_info;
             if self.pos_info != Some(self.pos) {
@@ -842,7 +830,7 @@ impl FourslashTest {
             let file_name = marker.file_name();
             let mut lines = match files_to_lines.get(&file_name) {
                 Some(l) => l.clone(),
-                None => LINE_SPLITTER.split(&self.get_script_info(&file_name).content).map(|s| s.to_string()).collect(),
+                None => LINE_SPLITTER.split(&self.get_script_info(&file_name).content).map(std::string::ToString::to_string).collect(),
             };
 
             let mut tooltip_lines: Vec<String> = Vec::new();

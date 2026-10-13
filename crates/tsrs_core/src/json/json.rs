@@ -458,11 +458,11 @@ mod tests {
         assert_eq!(marshal_string("a\"\n\u{1}"), "\"a\\\"\\n\\u0001\"");
         assert_eq!(marshal_f64(1e21).unwrap(), "1e+21");
         assert_eq!(marshal_f64(123.456).unwrap(), "123.456");
-        assert_eq!(marshal_f64(-0.000001).unwrap(), "-0.000001");
+        assert_eq!(marshal_f64(-0.000_001).unwrap(), "-0.000001");
         assert_eq!(marshal_f64(1.5e-7).unwrap(), "1.5e-7");
         assert_eq!(marshal_f64(1e20).unwrap(), "100000000000000000000");
         // The integer fast path agrees with the general ES6 formatting.
-        for n in [0.0, -0.0, 1.0, -1.0, 9.0, 10.0, 12345.0, -987654321.0, 9007199254740991.0, -9007199254740991.0, 9007199254740992.0, 1e20] {
+        for n in [0.0, -0.0, 1.0, -1.0, 9.0, 10.0, 12345.0, -987_654_321.0, 9_007_199_254_740_991.0, -9_007_199_254_740_991.0, 9_007_199_254_740_992.0, 1e20] {
             assert_eq!(marshal(&Value::Number(n)).unwrap(), marshal_f64(n).unwrap(), "{n}");
         }
         assert_eq!(marshal(&Value::Integer(i64::MIN)).unwrap(), i64::MIN.to_string());

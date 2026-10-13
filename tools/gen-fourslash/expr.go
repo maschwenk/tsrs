@@ -70,12 +70,21 @@ func (g *gen) expr(e ast.Expr, want types.Type, m mode) string {
 		lit := g.constLit(tv.Value, t)
 		if isString(t) {
 			if m == mOwned {
+				if constant.StringVal(tv.Value) == "" {
+					return "String::new()"
+				}
 				return lit + ".to_string()"
 			}
 		}
 		return lit
 	}
 	code, k := g.natural(e)
+	if (k == kPlace || k == kDeref) && g.canMove(e) && (m == mOwned || m == mParam && !isString(want) && !isSliceT(want)) {
+		if k == kDeref && isOptionPtr(want) {
+			return "Some(" + code + ")"
+		}
+		return code
+	}
 	return g.coerce(code, k, have, want, m)
 }
 
@@ -89,6 +98,9 @@ func (g *gen) elem(e ast.Expr, et types.Type) string {
 			fail("nil element of a pointer slice")
 		}
 		if c, k := g.natural(e); k == kDeref {
+			if g.canMove(e) {
+				return c
+			}
 			return parenIfNeeded(c) + ".clone()"
 		}
 		return parenIfNeeded(g.expr(e, et, mOwned)) + ".unwrap()"
@@ -292,6 +304,9 @@ func (g *gen) coerce(code string, k kind, have, want types.Type, m mode) string 
 		if copyType(t) {
 			return code
 		}
+		if isArcPtr(t) {
+			return "Arc::clone(&" + parenIfNeeded(code) + ")"
+		}
 		return parenIfNeeded(code) + ".clone()"
 	case kStr:
 		return parenIfNeeded(code) + ".to_string()"
@@ -302,6 +317,9 @@ func (g *gen) coerce(code string, k kind, have, want types.Type, m mode) string 
 	case kRef:
 		if copyType(t) {
 			return "*" + parenIfNeeded(code)
+		}
+		if isArcPtr(t) {
+			return "Arc::clone(" + code + ")"
 		}
 		return parenIfNeeded(code) + ".clone()"
 	case kOptArc:
@@ -391,7 +409,7 @@ func (g *gen) natural(e ast.Expr) (string, kind) {
 	case *ast.UnaryExpr:
 		switch e.Op {
 		case token.NOT:
-			return "!" + parenIfNeeded(g.expr(e.X, types.Typ[types.Bool], mOwned)), kOwned
+			return g.negatedBool(e.X), kOwned
 		case token.SUB:
 			return "-" + parenIfNeeded(g.expr(e.X, g.typeOf(e.X), mOwned)), kOwned
 		case token.AND:
@@ -433,6 +451,33 @@ func (g *gen) natural(e ast.Expr) (string, kind) {
 	}
 	fail("expression %T", e)
 	return "", 0
+}
+
+// De Morgan's law keeps left-to-right short circuiting, including the nil guard before a Go type assertion.
+func (g *gen) negatedBool(e ast.Expr) string {
+	if p, ok := e.(*ast.ParenExpr); ok {
+		return g.negatedBool(p.X)
+	}
+	if b, ok := e.(*ast.BinaryExpr); ok && (b.Op == token.LAND || b.Op == token.LOR) {
+		op := " || "
+		if b.Op == token.LOR {
+			op = " && "
+		}
+		return parenIfNeeded(g.negatedBool(b.X)) + op + parenIfNeeded(g.negatedBool(b.Y))
+	}
+	if b, ok := e.(*ast.BinaryExpr); ok && (b.Op == token.EQL || b.Op == token.NEQ) {
+		negated := *b
+		negated.Op = token.EQL
+		if b.Op == token.EQL {
+			negated.Op = token.NEQ
+		}
+		code, _ := g.binaryExpr(&negated)
+		return code
+	}
+	if u, ok := e.(*ast.UnaryExpr); ok && u.Op == token.NOT {
+		return g.expr(u.X, types.Typ[types.Bool], mOwned)
+	}
+	return "!" + parenIfNeeded(g.expr(e, types.Typ[types.Bool], mOwned))
 }
 
 func (g *gen) identExpr(e *ast.Ident) (string, kind) {
@@ -659,6 +704,9 @@ func (g *gen) binaryExpr(e *ast.BinaryExpr) (string, kind) {
 			case isAny(xt):
 				test = parenIfNeeded(c) + ".is_nil()"
 			case isOptionPtr(xt) || k == kOptArc:
+				if neg {
+					return parenIfNeeded(c) + ".is_some()", kOwned
+				}
 				test = parenIfNeeded(c) + ".is_none()"
 			default:
 				switch types.Unalias(xt).Underlying().(type) {
@@ -776,7 +824,7 @@ func (g *gen) concat(e *ast.BinaryExpr) string {
 	if len(args) == 0 {
 		return lit + ".to_string()"
 	}
-	return "format!(" + lit + ", " + strings.Join(args, ", ") + ")"
+	return formatCall(f.String(), args)
 }
 
 // constLit renders a constant of Go type t.
@@ -852,6 +900,9 @@ func (g *gen) compositeLit(e *ast.CompositeLit, t types.Type) string {
 			return "()"
 		}
 		path := g.localType(t)
+		if len(e.Elts) == 0 {
+			return path + "::default()"
+		}
 		var fields []string
 		set := 0
 		for i, el := range e.Elts {
@@ -878,7 +929,13 @@ func (g *gen) compositeLit(e *ast.CompositeLit, t types.Type) string {
 				}
 				continue
 			}
-			fields = append(fields, ident(fl.Name())+": "+g.fieldValue(val, fl.Type()))
+			name := ident(fl.Name())
+			value := g.fieldValue(val, fl.Type())
+			if name == value {
+				fields = append(fields, name)
+			} else {
+				fields = append(fields, name+": "+value)
+			}
 		}
 		if set < u.NumFields() {
 			fields = append(fields, "..Default::default()")

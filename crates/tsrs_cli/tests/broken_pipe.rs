@@ -3,6 +3,7 @@
 
 #![cfg(unix)]
 
+use std::fmt::Write as _;
 use std::os::unix::process::ExitStatusExt;
 use std::process::{Command, Stdio};
 
@@ -13,7 +14,10 @@ fn closed_stdout_ends_the_process_with_sigpipe() {
     std::fs::create_dir_all(&dir).unwrap();
     std::fs::write(dir.join("tsconfig.json"), r#"{ "compilerOptions": { "noEmit": true }, "files": ["a.ts"] }"#).unwrap();
     // Far more diagnostics text than a pipe buffer holds.
-    let source: String = (0..20_000).map(|i| format!("const v{i}: number = \"s\";\n")).collect();
+    let source = (0..20_000).fold(String::new(), |mut out, i| {
+        writeln!(out, "const v{i}: number = \"s\";").unwrap();
+        out
+    });
     std::fs::write(dir.join("a.ts"), source).unwrap();
 
     let mut child = Command::new(env!("CARGO_BIN_EXE_tsrs"))

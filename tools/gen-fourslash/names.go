@@ -56,8 +56,13 @@ func rustStr(s string) (string, bool) {
 			needsEscape = true
 		}
 	}
+	// Escaped literals preserve fixture whitespace without putting trailing spaces or conflict markers in Rust source.
+	firstLine, _, _ := strings.Cut(s, "\n")
+	if strings.HasSuffix(firstLine, " ") || strings.HasSuffix(firstLine, "\t") || strings.HasSuffix(s, " ") || strings.HasSuffix(s, "\t") || strings.HasPrefix(s, "<<<<<<<") || strings.Contains(s, "\n=======") {
+		needsEscape = true
+	}
 	if !needsEscape && (strings.ContainsAny(s, "\n\"\\")) && !strings.Contains(s, "\r") {
-		hashes := "#"
+		hashes := ""
 		for strings.Contains(s, "\""+hashes) {
 			hashes += "#"
 		}

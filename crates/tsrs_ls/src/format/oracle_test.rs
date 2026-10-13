@@ -74,6 +74,7 @@ fn run_oracle() {
             continue;
         };
         total += 1;
+        #[expect(clippy::case_sensitive_file_extension_comparisons, reason = "The Go oracle selects TSX using the exact fixture suffix.")]
         let (name, kind) = if path.ends_with(".tsx") { ("/file.tsx", ScriptKind::TSX) } else { ("/file.ts", ScriptKind::TS) };
         let got = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             let file = parse_for_test(name, &text, kind);

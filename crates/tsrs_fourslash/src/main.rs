@@ -24,7 +24,7 @@ fn main() -> ExitCode {
     let mut filter = None;
     let mut include_skipped = false;
     let mut verbose = false;
-    let mut jobs = std::thread::available_parallelism().map(|n| n.get()).unwrap_or(4);
+    let mut jobs = std::thread::available_parallelism().map_or(4, std::num::NonZero::get);
     let mut i = 1;
     while i < args.len() {
         match args[i].as_str() {

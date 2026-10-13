@@ -168,8 +168,8 @@ mod tests {
             (false, false)
         });
         assert!(!result.stopped);
-        assert!(result.path.is_empty());
-        visited_nodes.sort();
+        assert_eq!(result.path, [] as [&str; 0]);
+        visited_nodes.sort_unstable();
         assert_eq!(visited_nodes, vec!["A", "B", "C", "D"]);
 
         // early termination

@@ -2,6 +2,8 @@
 // (tsc/internal/api/protocol_msgpack.go and tsc/internal/ipc/protocol_jsonrpc.go at the commit in
 // the workspace Cargo.toml). Regenerate with tests/fixtures/go_frames_gen.go.txt (see README.md).
 
+use std::fmt::Write as _;
+
 use serde_json::Value;
 use tsrs_api_transport::jsonrpc::{FrameReader, FrameWriter};
 use tsrs_api_transport::msgpack::{MessagePackReader, MessagePackWriter};
@@ -17,7 +19,10 @@ fn hex(s: &str) -> Vec<u8> {
 }
 
 fn to_hex(b: &[u8]) -> String {
-    b.iter().map(|b| format!("{b:02x}")).collect()
+    b.iter().fold(String::new(), |mut out, b| {
+        write!(out, "{b:02x}").unwrap();
+        out
+    })
 }
 
 const ASTRAL: &str = "/proj/src/\u{1F600}-\u{e9}-\u{1D7D8}.ts";
@@ -101,7 +106,7 @@ fn message_json(m: &Message) -> Value {
         ""
     };
     serde_json::json!({
-        "id": m.id.as_ref().map(|id| id.to_json()),
+        "id": m.id.as_ref().map(tsrs_api_transport::Id::to_json),
         "method": m.method,
         "params": m.params.as_ref().map(|p| to_hex(p)),
         "result": m.result.as_ref().map(|r| to_hex(r)),
@@ -155,7 +160,7 @@ fn readers_match_go_interpretation() {
             }
             // JSON syntax errors: both reject; the error text comes from different JSON libraries.
             "jsonrpc/invalid_json" | "jsonrpc/float_id" | "jsonrpc/duplicate_key" | "jsonrpc/bad_version" => {
-                assert!(!go_err.is_empty());
+                assert_ne!(go_err, "");
                 assert!(matches!(result, Err(TransportError::Protocol(_))), "{name}: {result:?}");
             }
             _ if go_eof => assert!(result.is_ok(), "{name}: expected clean EOF, got {result:?}"),

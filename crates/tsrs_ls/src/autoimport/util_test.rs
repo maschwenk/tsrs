@@ -37,7 +37,7 @@ fn test_word_indices() {
         // Convert indices to actual word slices for comparison
         let actual_words: Vec<&str> = indices.iter().map(|&idx| &input[idx..]).collect();
 
-        assert_eq!(actual_words, expected_words, "wordIndices({:?})", input);
+        assert_eq!(actual_words, expected_words, "wordIndices({input:?})");
     }
 }
 

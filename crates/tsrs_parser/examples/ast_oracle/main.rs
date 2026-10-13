@@ -14,6 +14,7 @@ struct CountingAlloc;
 
 static HEAP_ALLOCS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
+// SAFETY: every operation delegates unchanged to MiMalloc; the atomic counter neither allocates nor alters its pointer/layout contracts.
 unsafe impl std::alloc::GlobalAlloc for CountingAlloc {
     unsafe fn alloc(&self, layout: std::alloc::Layout) -> *mut u8 {
         HEAP_ALLOCS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
@@ -54,14 +55,14 @@ fn escape(sb: &mut String, s: &str) {
         if (0x20..0x7f).contains(&b) && b != b'\\' && b != b'"' {
             sb.push(b as char);
         } else {
-            let _ = write!(sb, "\\x{:02x}", b);
+            let _ = write!(sb, "\\x{b:02x}");
         }
     }
     sb.push('"');
 }
 
 fn kind_name(k: Kind) -> String {
-    format!("{:?}", k)
+    format!("{k:?}")
 }
 
 pub(crate) trait ListArg {
@@ -149,7 +150,7 @@ impl Dumper {
 
     pub(crate) fn field_tokenflags(&mut self, name: &str, v: TokenFlags) {
         self.name(name);
-        let _ = write!(self.sb, "={:x}", v.bits() as u32);
+        let _ = write!(self.sb, "={:x}", { v.bits() });
     }
 
     pub(crate) fn field_kind(&mut self, name: &str, v: Kind) {
@@ -226,7 +227,7 @@ fn parse_options(path: &str, flags: &str) -> SourceFileParseOptions {
 }
 
 fn dump(path: &str, flags: &str) -> Result<String, String> {
-    let text = read(path).ok_or_else(|| format!("cannot read {}", path))?;
+    let text = read(path).ok_or_else(|| format!("cannot read {path}"))?;
     let file = tsrs_parser::parse_source_file(parse_options(path, flags), &text, tsrs_core::ensure_script_kind_from_file_name(path));
     let file: &'static SourceFile = file.get();
     let mut d = Dumper { sb: String::new(), file };
@@ -271,7 +272,7 @@ fn dump(path: &str, flags: &str) -> Result<String, String> {
     }
     for &rc in file.reparsed_clones.get() {
         let r = d.node_ref(Some(rc));
-        let _ = writeln!(d.sb, "RC {}", r);
+        let _ = writeln!(d.sb, "RC {r}");
     }
     for p in file.pragmas.get() {
         let _ = write!(d.sb, "PRAGMA {} {} {} {} {}", p.name, p.comment_range.kind as i16, p.comment_range.pos(), p.comment_range.end(), p.comment_range.has_trailing_new_line);
@@ -294,23 +295,23 @@ fn dump(path: &str, flags: &str) -> Result<String, String> {
         let _ = writeln!(d.sb, "CHECKJS {} {} {}", c.enabled, c.range.pos(), c.range.end());
     }
     let r = d.node_ref(file.common_js_module_indicator.get());
-    let _ = writeln!(d.sb, "CJS {}", r);
+    let _ = writeln!(d.sb, "CJS {r}");
     let r = d.node_ref(file.external_module_indicator.get());
-    let _ = writeln!(d.sb, "EMI {}", r);
+    let _ = writeln!(d.sb, "EMI {r}");
     set_external_module_indicator(file, ExternalModuleIndicatorOptions { jsx: true, force: false });
     let r = d.node_ref(file.external_module_indicator.get());
-    let _ = writeln!(d.sb, "EMI_J {}", r);
+    let _ = writeln!(d.sb, "EMI_J {r}");
     set_external_module_indicator(file, ExternalModuleIndicatorOptions { jsx: false, force: true });
     let r = d.node_ref(file.external_module_indicator.get());
-    let _ = writeln!(d.sb, "EMI_F {}", r);
+    let _ = writeln!(d.sb, "EMI_F {r}");
     Ok(d.sb)
 }
 
 fn fnv64a(data: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in data {
         h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
+        h = h.wrapping_mul(0x0100_0000_01b3);
     }
     h
 }
@@ -327,13 +328,13 @@ fn run() {
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
         "dump" => {
-            let flags = args.get(3).map(|s| s.as_str()).unwrap_or("-");
+            let flags = args.get(3).map_or("-", std::string::String::as_str);
             match dump(&args[2], flags) {
                 Ok(out) => {
                     std::io::stdout().write_all(out.as_bytes()).unwrap();
                 }
                 Err(e) => {
-                    eprintln!("{}", e);
+                    eprintln!("{e}");
                     std::process::exit(1);
                 }
             }
@@ -351,9 +352,9 @@ fn run() {
                     Ok(Ok(out)) => {
                         let _ = writeln!(w, "{:016x} {}", fnv64a(out.as_bytes()), path);
                     }
-                    Ok(Err(e)) => eprintln!("{}", e),
+                    Ok(Err(e)) => eprintln!("{e}"),
                     Err(_) => {
-                        let _ = writeln!(w, "PANIC {}", path);
+                        let _ = writeln!(w, "PANIC {path}");
                     }
                 }
                 let _ = w.flush();
@@ -396,7 +397,7 @@ fn run() {
                 );
             }
         }
-        other => panic!("unknown command {}", other),
+        other => panic!("unknown command {other}"),
     }
 }
 

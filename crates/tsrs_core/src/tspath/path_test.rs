@@ -64,58 +64,58 @@ fn test_get_root_length() {
 #[test]
 fn test_path_is_absolute() {
     // POSIX
-    assert_eq!(path_is_absolute("/path/to/file.ext"), true);
+    assert!(path_is_absolute("/path/to/file.ext"));
     // DOS
-    assert_eq!(path_is_absolute("c:/path/to/file.ext"), true);
+    assert!(path_is_absolute("c:/path/to/file.ext"));
     // URL
-    assert_eq!(path_is_absolute("file:///path/to/file.ext"), true);
+    assert!(path_is_absolute("file:///path/to/file.ext"));
     // Non-absolute
-    assert_eq!(path_is_absolute("path/to/file.ext"), false);
-    assert_eq!(path_is_absolute("./path/to/file.ext"), false);
+    assert!(!path_is_absolute("path/to/file.ext"));
+    assert!(!path_is_absolute("./path/to/file.ext"));
 }
 
 #[test]
 fn test_is_url() {
-    assert_eq!(is_url("a"), false);
-    assert_eq!(is_url("/"), false);
-    assert_eq!(is_url("c:"), false);
-    assert_eq!(is_url("c:d"), false);
-    assert_eq!(is_url("c:/"), false);
-    assert_eq!(is_url("c:\\"), false);
-    assert_eq!(is_url("//server"), false);
-    assert_eq!(is_url("//server/share"), false);
-    assert_eq!(is_url("\\\\server"), false);
-    assert_eq!(is_url("\\\\server\\share"), false);
-    assert_eq!(is_url("file:///path"), true);
-    assert_eq!(is_url("file:///c:"), true);
-    assert_eq!(is_url("file:///c:d"), true);
-    assert_eq!(is_url("file:///c:/path"), true);
-    assert_eq!(is_url("file://server"), true);
-    assert_eq!(is_url("file://server/path"), true);
-    assert_eq!(is_url("http://server"), true);
-    assert_eq!(is_url("http://server/path"), true);
+    assert!(!is_url("a"));
+    assert!(!is_url("/"));
+    assert!(!is_url("c:"));
+    assert!(!is_url("c:d"));
+    assert!(!is_url("c:/"));
+    assert!(!is_url("c:\\"));
+    assert!(!is_url("//server"));
+    assert!(!is_url("//server/share"));
+    assert!(!is_url("\\\\server"));
+    assert!(!is_url("\\\\server\\share"));
+    assert!(is_url("file:///path"));
+    assert!(is_url("file:///c:"));
+    assert!(is_url("file:///c:d"));
+    assert!(is_url("file:///c:/path"));
+    assert!(is_url("file://server"));
+    assert!(is_url("file://server/path"));
+    assert!(is_url("http://server"));
+    assert!(is_url("http://server/path"));
 }
 
 #[test]
 fn test_is_rooted_disk_path() {
-    assert_eq!(is_rooted_disk_path("a"), false);
-    assert_eq!(is_rooted_disk_path("/"), true);
-    assert_eq!(is_rooted_disk_path("c:"), true);
-    assert_eq!(is_rooted_disk_path("c:d"), false);
-    assert_eq!(is_rooted_disk_path("c:/"), true);
-    assert_eq!(is_rooted_disk_path("c:\\"), true);
-    assert_eq!(is_rooted_disk_path("//server"), true);
-    assert_eq!(is_rooted_disk_path("//server/share"), true);
-    assert_eq!(is_rooted_disk_path("\\\\server"), true);
-    assert_eq!(is_rooted_disk_path("\\\\server\\share"), true);
-    assert_eq!(is_rooted_disk_path("file:///path"), false);
-    assert_eq!(is_rooted_disk_path("file:///c:"), false);
-    assert_eq!(is_rooted_disk_path("file:///c:d"), false);
-    assert_eq!(is_rooted_disk_path("file:///c:/path"), false);
-    assert_eq!(is_rooted_disk_path("file://server"), false);
-    assert_eq!(is_rooted_disk_path("file://server/path"), false);
-    assert_eq!(is_rooted_disk_path("http://server"), false);
-    assert_eq!(is_rooted_disk_path("http://server/path"), false);
+    assert!(!is_rooted_disk_path("a"));
+    assert!(is_rooted_disk_path("/"));
+    assert!(is_rooted_disk_path("c:"));
+    assert!(!is_rooted_disk_path("c:d"));
+    assert!(is_rooted_disk_path("c:/"));
+    assert!(is_rooted_disk_path("c:\\"));
+    assert!(is_rooted_disk_path("//server"));
+    assert!(is_rooted_disk_path("//server/share"));
+    assert!(is_rooted_disk_path("\\\\server"));
+    assert!(is_rooted_disk_path("\\\\server\\share"));
+    assert!(!is_rooted_disk_path("file:///path"));
+    assert!(!is_rooted_disk_path("file:///c:"));
+    assert!(!is_rooted_disk_path("file:///c:d"));
+    assert!(!is_rooted_disk_path("file:///c:/path"));
+    assert!(!is_rooted_disk_path("file://server"));
+    assert!(!is_rooted_disk_path("file://server/path"));
+    assert!(!is_rooted_disk_path("http://server"));
+    assert!(!is_rooted_disk_path("http://server/path"));
 }
 
 #[test]
@@ -197,19 +197,19 @@ fn test_get_path_components() {
 
 #[test]
 fn test_reduce_path_components() {
-    assert_eq!(reduce_path_components(&vec![""].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec![""]);
-    assert_eq!(reduce_path_components(&vec!["", "."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec![""]);
-    assert_eq!(reduce_path_components(&vec!["", ".", "a"].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["", "a"]);
-    assert_eq!(reduce_path_components(&vec!["", "a", "."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["", "a"]);
-    assert_eq!(reduce_path_components(&vec!["", ".."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["", ".."]);
-    assert_eq!(reduce_path_components(&vec!["", "..", ".."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["", "..", ".."]);
-    assert_eq!(reduce_path_components(&vec!["", "..", ".", ".."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["", "..", ".."]);
-    assert_eq!(reduce_path_components(&vec!["", "a", ".."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec![""]);
-    assert_eq!(reduce_path_components(&vec!["", "..", "a"].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["", "..", "a"]);
-    assert_eq!(reduce_path_components(&vec!["/"].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["/"]);
-    assert_eq!(reduce_path_components(&vec!["/", "."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["/"]);
-    assert_eq!(reduce_path_components(&vec!["/", ".."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["/"]);
-    assert_eq!(reduce_path_components(&vec!["/", "a", ".."].iter().map(|s| s.to_string()).collect::<Vec<_>>()), vec!["/"]);
+    assert_eq!(reduce_path_components(&std::iter::once(&"").map(std::string::ToString::to_string).collect::<Vec<_>>()), vec![""]);
+    assert_eq!(reduce_path_components(&["", "."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec![""]);
+    assert_eq!(reduce_path_components(&["", ".", "a"].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["", "a"]);
+    assert_eq!(reduce_path_components(&["", "a", "."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["", "a"]);
+    assert_eq!(reduce_path_components(&["", ".."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["", ".."]);
+    assert_eq!(reduce_path_components(&["", "..", ".."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["", "..", ".."]);
+    assert_eq!(reduce_path_components(&["", "..", ".", ".."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["", "..", ".."]);
+    assert_eq!(reduce_path_components(&["", "a", ".."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec![""]);
+    assert_eq!(reduce_path_components(&["", "..", "a"].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["", "..", "a"]);
+    assert_eq!(reduce_path_components(&std::iter::once(&"/").map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["/"]);
+    assert_eq!(reduce_path_components(&["/", "."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["/"]);
+    assert_eq!(reduce_path_components(&["/", ".."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["/"]);
+    assert_eq!(reduce_path_components(&["/", "a", ".."].iter().map(std::string::ToString::to_string).collect::<Vec<_>>()), vec!["/"]);
 }
 
 #[test]
@@ -480,11 +480,11 @@ fn test_has_relative_path_segment_matches_segment_split() {
     for len in 0..=11 {
         for mut code in 0..3usize.pow(len) {
             bytes.clear();
-            bytes.extend((0..len).map(|_| {
+            bytes.extend(std::iter::repeat_with(|| {
                 let byte = alphabet[code % 3];
                 code /= 3;
                 byte
-            }));
+            }).take(len as usize));
             let p = std::str::from_utf8(&bytes).unwrap();
             assert_eq!(has_relative_path_segment(p), by_segments(p), "{p}");
             let prefixed = format!("/ab/c{p}");
@@ -505,7 +505,7 @@ fn test_path_is_relative() {
         ("../foo/bar".into(), true),
         ("../".to_string() + &"foo/".repeat(100), true),
         // non-relative
-        ("".into(), false),
+        (String::new(), false),
         ("foo".into(), false),
         ("foo/bar".into(), false),
         ("/foo/bar".into(), false),
@@ -521,19 +521,19 @@ fn test_path_is_relative() {
 #[test]
 fn test_get_common_parents() {
     let opts = ComparePathsOptions::default();
-    let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<String>>();
+    let s = |v: &[&str]| v.iter().map(std::string::ToString::to_string).collect::<Vec<String>>();
     let run = |paths: &[&str], min: usize| get_common_parents(&s(paths), min, get_path_components, &opts);
 
     let (got, ignored) = run(&[], 1);
     assert_eq!(ignored.len(), 0);
-    assert!(got.is_empty());
+    assert_eq!(got, [] as [std::string::String; 0]);
 
     let (got, ignored) = run(&["/a/b/c/d"], 1);
     assert_eq!(ignored.len(), 0);
     assert_eq!(got, vec!["/a/b/c/d"]);
 
     let (got, ignored) = run(&["/a/b/c/d", "/a/b/c/e", "/a/b/f/g", "/x/y"], 4);
-    assert_eq!(ignored, ["/x/y".to_string()].into_iter().collect());
+    assert_eq!(ignored, std::iter::once("/x/y".to_string()).collect());
     assert_eq!(got, vec!["/a/b/c", "/a/b/f/g"]);
 
     let (got, ignored) = run(&["/a/b/c/d", "/a/b/c/e", "/a/b/f/g"], 1);

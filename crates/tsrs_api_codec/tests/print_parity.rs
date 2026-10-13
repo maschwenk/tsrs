@@ -3,6 +3,7 @@
 //! SourceFile encodings, the pinned JS client encoder's encodings of the same trees, and client-factory
 //! synthesized trees (all positions -1, i.e. 0xFFFFFFFF on the wire) encoded by the client's encodeNode.
 
+#[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]
 mod common;
 
 use common::*;
@@ -19,7 +20,7 @@ fn print_node(bytes: &[u8]) -> Result<String, String> {
         let sf = (root.kind() == Kind::SourceFile).then(|| root.as_source_file_p());
         new_printer(PrinterOptions::default(), PrintHandlers::default(), None).emit(root, sf)
     }));
-    r.map_err(|p| format!("panic: {}", p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(|s| s.to_string())).unwrap_or_default()))
+    r.map_err(|p| format!("panic: {}", p.downcast_ref::<String>().cloned().or_else(|| p.downcast_ref::<&str>().map(std::string::ToString::to_string)).unwrap_or_default()))
 }
 
 #[test]
@@ -29,7 +30,7 @@ fn print_node_matches_pinned_go_server() {
     cases.extend(fixtures().into_iter().flat_map(|(name, _)| [(name.clone(), golden(&name)), (format!("{name}.client"), client_golden(&name))]));
     cases.extend(std::fs::read_dir(&dir).unwrap().filter_map(|e| {
         let f = e.unwrap().file_name().into_string().unwrap();
-        if let Some(base) = f.strip_suffix(".client.bin") { Some((base.to_string(), std::fs::read(dir.join(&f)).unwrap())) } else { None }
+        f.strip_suffix(".client.bin").map(|base| (base.to_string(), std::fs::read(dir.join(&f)).unwrap()))
     }));
     cases.sort();
     let (mut printed, mut errors, mut failures) = (0, 0, Vec::new());

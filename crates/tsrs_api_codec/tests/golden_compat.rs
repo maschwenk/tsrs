@@ -1,8 +1,10 @@
 //! Byte-for-byte compatibility of the Rust encoder with the pinned Go encoder (goldens produced by the real
 //! `tsc --api` server, see gen/oracle.mjs), plus index-table and decoder checks on the same inputs.
 
+#[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]
 mod common;
 
+use std::fmt::Write as _;
 use common::*;
 use tsrs_api_codec::*;
 
@@ -53,7 +55,7 @@ fn header_fields() {
     assert_eq!(&bytes[44..52], &0x0102_0304_0506_0708u64.to_le_bytes());
     assert_eq!(&bytes[52..60], &42u64.to_le_bytes());
     let h = file.hash.get();
-    assert_eq!(source_file_hash(file.get()), format!("{:032x}", h));
+    assert_eq!(source_file_hash(file.get()), format!("{h:032x}"));
 }
 
 #[test]
@@ -115,7 +117,7 @@ fn node_handles_round_trip() {
 
 /// `cargo test -p tsrs_api_codec --release --test golden_compat -- --ignored --nocapture`
 #[test]
-#[ignore]
+#[ignore = "Manual encoding benchmark; run explicitly with --ignored."]
 fn bench_encode_large_file() {
     let text = std::fs::read_to_string(crate_dir().join("tests/fixtures/more_syntax.ts")).unwrap().repeat(400);
     let (_region, file) = parse_like_server("large.ts", &text);
@@ -148,7 +150,7 @@ fn get_index_matches_pinned_go() {
             if let Some(n) = table.node(i) {
                 let idx = table.get_index(n);
                 assert_eq!(table.node(idx), Some(n), "{name}: get_index({i}) resolves to another node");
-                actual += &format!("{name} {i} {idx}\n");
+                writeln!(actual, "{name} {i} {idx}").unwrap();
                 total += 1;
                 repeated += (idx != i) as usize;
             }

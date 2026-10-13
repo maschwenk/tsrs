@@ -160,9 +160,9 @@ impl CheckerHost for TestHost {
             return Err(CheckerError::client(format!("snapshot {handle} not found")));
         }
         self.snapshot_host.retain_snapshot(&self.snapshot);
-        let snapshot = self.snapshot.clone();
-        let release_snapshot = snapshot.clone();
-        Ok(SnapshotScope { handle, snapshot, registry: self.registry.clone(), release: Some(Box::new(move || release_snapshot.deref())) })
+        let snapshot = std::sync::Arc::clone(&self.snapshot);
+        let release_snapshot = std::sync::Arc::clone(&snapshot);
+        Ok(SnapshotScope { handle, snapshot, registry: std::sync::Arc::clone(&self.registry), release: Some(Box::new(move || release_snapshot.deref())) })
     }
 
     fn acquire_cached_source_file(&self, descriptor: &Value) -> CheckerResult<CachedFileScope> {
@@ -213,7 +213,7 @@ impl CheckerHost for TestHost {
     fn clone_snapshot_with_auto_imports(&self, base: &Snapshot, file_name: &str) -> CheckerResult<Arc<Snapshot>> {
         let uri = tsrs_ls::lsconv::file_name_to_document_uri(file_name);
         let s = self.snapshot_host.clone_snapshot_with_auto_imports(&Context::background(), base, &uri, None);
-        self.clones.lock().unwrap().push(s.clone());
+        self.clones.lock().unwrap().push(std::sync::Arc::clone(&s));
         Ok(s)
     }
 
@@ -274,7 +274,7 @@ const MAIN_FILE: &str = "/p/main.ts";
 #[test]
 fn coverage_inventory_matches_pinned_proto_and_dispatch() {
     assert_eq!(PINNED_METHODS.len(), 172);
-    let mut seen = std::collections::HashSet::new();
+    let mut seen = rustc_hash::FxHashSet::default();
     for row in PINNED_METHODS {
         assert!(seen.insert(row.method), "duplicate {}", row.method);
         let dispatched = is_checker_method(row.method);
@@ -337,7 +337,7 @@ fn types_and_symbols_at_utf16_positions() {
     // Snapshot-owned vs file-owned references.
     let s = h.symbol_at(MAIN_FILE, MAIN, "box:");
     assert_eq!(num(field(&s, "reference"), "kind"), 0, "binder symbol of a source file is file-owned");
-    assert!(!arr(field(&s, "declarations")).is_empty());
+    assert_ne!(arr(field(&s, "declarations")).as_slice(), []);
 }
 
 #[test]
@@ -428,7 +428,7 @@ fn overloads_signatures_and_resolution() {
     let neg = h.call("getParameterType", &h.sp(&format!(r#""signature":{},"index":-1"#, num(&sigs[1], "id")))).unwrap_err();
     assert_eq!(neg.kind, CheckerErrorKind::Client);
     let construct = h.ok("getSignaturesOfType", &h.sp(&format!(r#""type":{},"kind":1"#, num(&t, "id"))));
-    assert!(arr(&construct).is_empty());
+    assert_eq!(arr(&construct).as_slice(), []);
     // Overload resolution at the call site `over(42)`.
     let call = {
         let sf = h.program().get_source_file(MAIN_FILE).unwrap();
@@ -838,7 +838,7 @@ fn language_service_backed_methods() {
     let value = arr(field(&list, "entries")).iter().find(|e| str_of(field(e, "name")) == "value").expect("value completion").clone();
     assert_eq!(str_of(field(field(&value, "symbol"), "name")), "value");
     assert_eq!(field(&list, "isIncomplete"), &Value::Bool(false));
-    let missing = h.ok("getCompletionsAtPosition", &h.sp(&format!(r#""file":"/p/nope.ts","position":0"#)));
+    let missing = h.ok("getCompletionsAtPosition", &h.sp(r#""file":"/p/nope.ts","position":0"#));
     assert_eq!(missing, Value::Null);
     // Import adder: import `helper` from ./other into main.ts.
     let helper = h.symbol_at("/p/other.ts", OTHER, "helper");
@@ -886,6 +886,7 @@ fn core_session_hook_maps_errors_and_encodings() {
 /// * `err.badType` (a string where a type id is expected): both are `api: invalid request: ...`, but
 ///   tsrs says `field "type": expected an unsigned integer in range` while Go prints its json/v2 decoder
 ///   error (whose wording itself varied between Go runs: "unable to unmarshal" / "cannot unmarshal").
+///
 /// Process-wide symbol ids are reported as identity booleans on both sides. Set
 /// `TSRS_CHECKER_PROBE_OUT=<file>` to dump the tsrs lines.
 #[test]
@@ -911,7 +912,7 @@ fn pinned_go_differential() {
         }
         (q, r, raw)
     };
-    let ours: std::collections::HashMap<String, (Value, Option<u64>)> = lines.iter().map(|l| parse(l)).map(|(q, r, raw)| (q, (r, raw))).collect();
+    let ours: rustc_hash::FxHashMap<String, (Value, Option<u64>)> = lines.iter().map(|l| parse(l)).map(|(q, r, raw)| (q, (r, raw))).collect();
     let mut compared = 0;
     let mut diffs = Vec::new();
     let mut raw_object_flag_diffs = Vec::new();

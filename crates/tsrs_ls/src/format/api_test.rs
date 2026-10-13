@@ -64,6 +64,6 @@ fn test_format_checker_ts() {
     let source_file = parse_for_test("/checker.ts", &text, ScriptKind::TS);
     let edits = format_document(&ctx, source_file);
     let new_text = apply_bulk_edits(&text, &edits);
-    assert!(!new_text.is_empty());
-    assert!(text != new_text);
+    assert_ne!(new_text, "");
+    assert_ne!(text, new_text);
 }

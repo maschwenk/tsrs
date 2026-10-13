@@ -1,7 +1,9 @@
 // testutil/fsbaselineutil/differ.go: baselines the test map FS and its changes between calls. Only what
 // statebaseline.go uses (`DefaultLibs` is never set by fourslash, so the lib branches never fire; kept as Go).
 
-use std::collections::{BTreeMap, HashMap, HashSet};
+use std::collections::BTreeMap;
+
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -19,21 +21,21 @@ pub struct DiffEntry {
 
 #[derive(Clone, Default)]
 pub struct Snapshot {
-    pub snap: HashMap<String, DiffEntry>,
-    pub default_libs: HashSet<String>,
+    pub snap: FxHashMap<String, DiffEntry>,
+    pub default_libs: FxHashSet<String>,
 }
 
 pub struct FSDiffer {
     pub fs: Arc<IoVFS<MapFS>>,
-    pub default_libs: Option<Box<dyn Fn() -> Option<HashSet<String>> + Send + Sync>>,
-    pub written_files: Mutex<HashSet<String>>,
+    pub default_libs: Option<Box<dyn Fn() -> Option<FxHashSet<String>> + Send + Sync>>,
+    pub written_files: Mutex<FxHashSet<String>>,
 
     serialized_diff: Option<Snapshot>,
 }
 
 impl FSDiffer {
     pub fn new(fs: Arc<IoVFS<MapFS>>) -> FSDiffer {
-        FSDiffer { fs, default_libs: None, written_files: Mutex::new(HashSet::new()), serialized_diff: None }
+        FSDiffer { fs, default_libs: None, written_files: Mutex::new(FxHashSet::default()), serialized_diff: None }
     }
 
     // differ.go:38
@@ -46,14 +48,14 @@ impl FSDiffer {
         self.serialized_diff.as_ref()
     }
 
-    fn default_libs(&self) -> Option<HashSet<String>> {
+    fn default_libs(&self) -> Option<FxHashSet<String>> {
         self.default_libs.as_ref().and_then(|f| f())
     }
 
     // differ.go:46
     pub fn baseline_fs_with_diff(&mut self, baseline: &mut String) {
         // todo: baselines the entire fs, possibly doesn't correctly diff all cases of emitted files, since emit isn't fully implemented and doesn't always emit the same way as strada
-        let mut snap: HashMap<String, DiffEntry> = HashMap::new();
+        let mut snap: FxHashMap<String, DiffEntry> = FxHashMap::default();
 
         let mut diffs: BTreeMap<String, String> = BTreeMap::new();
 
@@ -61,12 +63,11 @@ impl FSDiffer {
         for (path, file) in self.map_fs().entries() {
             if file.mode.intersects(FileMode::Symlink) {
                 let Some(target) = self.map_fs().get_target_of_symlink(&path) else {
-                    panic!("Failed to resolve symlink target: {}", path);
+                    panic!("Failed to resolve symlink target: {path}");
                 };
                 let new_entry = DiffEntry { symlink_target: target, ..Default::default() };
                 self.add_fs_entry_diff(&mut diffs, Some(&new_entry), &path);
                 snap.insert(path, new_entry);
-                continue;
             } else if file.mode.is_regular() {
                 let content = sanitize_internal_symbol_name(&tsrs_core::utf8::from_utf8_lossy(&file.data));
                 let new_entry = DiffEntry { content, m_time: file.mod_time, is_written: written.contains(&path), ..Default::default() };
@@ -83,7 +84,7 @@ impl FSDiffer {
         }
         let default_libs = self.default_libs().unwrap_or_default();
         self.serialized_diff = Some(Snapshot { snap, default_libs });
-        baseline.extend(diffs.iter().map(|(path, diff)| format!("//// [{}] {}\n", path, diff)));
+        baseline.extend(diffs.iter().map(|(path, diff)| format!("//// [{path}] {diff}\n")));
         baseline.push('\n');
         self.written_files.lock().unwrap().clear(); // Reset written files after baseline
     }
@@ -141,7 +142,7 @@ pub fn sanitize_internal_symbol_name(s: &str) -> String {
         out.push_str(&rest[..i]);
         let after = &rest[i + MARK.len()..];
         let name_len = after.find('@').filter(|&n| n > 0);
-        let digits = name_len.map(|n| after[n + 1..].bytes().take_while(|b| b.is_ascii_digit()).count()).unwrap_or(0);
+        let digits = name_len.map_or(0, |n| after[n + 1..].bytes().take_while(u8::is_ascii_digit).count());
         match name_len {
             Some(n) if digits > 0 => {
                 out.push_str(MARK);

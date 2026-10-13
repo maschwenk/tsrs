@@ -14,7 +14,7 @@ fn parse_options() -> SourceFileParseOptions {
 
 fn mapper(extensions: &[&str]) -> Mapper {
     Mapper {
-        definition: Definition { extensions: extensions.iter().map(|e| e.to_string()).collect(), ..Default::default() },
+        definition: Definition { extensions: extensions.iter().map(std::string::ToString::to_string).collect(), ..Default::default() },
         manifest: Manifest { name: "mapper".to_string(), ..Default::default() },
         ..Default::default()
     }
@@ -61,8 +61,8 @@ fn test_parse_result_supplemental_file_extensions() {
         assert_eq!(&*file.path().0, file_name);
         assert_eq!(file.script_kind(), script_kind);
         assert_eq!(file.content_mapper_transform_identity(), "transform-identity");
-        assert!(canonical_supplementals[i] == file);
-        assert!(file.canonical_source_file() == Some(canonical));
+        assert_eq!(canonical_supplementals[i], file);
+        assert_eq!(file.canonical_source_file(), Some(canonical));
     }
 }
 

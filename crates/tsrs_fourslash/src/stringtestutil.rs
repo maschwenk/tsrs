@@ -2,7 +2,7 @@ use tsrs_core::stringutil;
 
 // stringtestutil.go:9
 pub fn dedent(text: &str) -> String {
-    let mut lines: Vec<String> = text.split('\n').map(|s| s.to_string()).collect();
+    let mut lines: Vec<String> = text.split('\n').map(std::string::ToString::to_string).collect();
     // Remove blank lines in the beginning and end
     // and convert all tabs in the beginning of line to spaces
     let mut start_line: Option<usize> = None;
@@ -15,7 +15,7 @@ pub fn dedent(text: &str) -> String {
             .map(|(i, _)| i);
         if let Some(fnw) = first_non_white.filter(|&index| index > 0) {
             line = line[0..fnw].replace('\t', "    ") + &line[fnw..];
-            (*element) = line.clone();
+            element.clone_from(&line);
         }
         let line = line.trim();
         if !line.is_empty() {
@@ -26,7 +26,7 @@ pub fn dedent(text: &str) -> String {
         }
     }
     let mut lines: Vec<String> = start_line.map_or_else(Vec::new, |start_line| {
-        lines[start_line..last_line + 1].to_vec()
+        lines[start_line..=last_line].to_vec()
     });
     let mut mapped_lines: Vec<&str> = Vec::with_capacity(lines.len());
     mapped_lines.extend(lines.iter().map(|line| if line.trim().is_empty() { "" } else { line }));

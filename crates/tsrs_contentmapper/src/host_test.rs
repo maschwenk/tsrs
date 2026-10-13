@@ -34,13 +34,13 @@ fn new_mapper(package: &str, extensions: &[&str], name: &str, version: &str, exe
     Mapper {
         definition: Definition {
             package: package.to_string(),
-            extensions: extensions.iter().map(|extension| extension.to_string()).collect(),
+            extensions: extensions.iter().map(std::string::ToString::to_string).collect(),
             ..Default::default()
         },
         manifest: Manifest {
             name: name.to_string(),
             version: version.to_string(),
-            exec: exec.iter().map(|arg| arg.to_string()).collect(),
+            exec: exec.iter().map(std::string::ToString::to_string).collect(),
             ..Default::default()
         },
         ..Default::default()
@@ -1164,7 +1164,7 @@ impl Handler for recordingMapper {
 fn project_mapper(options: &str, name: &str, compiler_options: &[&str], dynamic_config: bool) -> &'static Mapper {
     let mut mapper = new_mapper("", &[], name, "1.0.0", &["mapper"]);
     mapper.definition.options = options.to_string();
-    mapper.manifest.compiler_options = compiler_options.iter().map(|option| option.to_string()).collect();
+    mapper.manifest.compiler_options = compiler_options.iter().map(std::string::ToString::to_string).collect();
     mapper.manifest.dynamic_config = dynamic_config;
     leak(mapper)
 }

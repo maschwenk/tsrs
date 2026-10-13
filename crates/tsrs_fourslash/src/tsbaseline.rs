@@ -2,6 +2,7 @@
 // VerifyBaselineNonSuggestionDiagnostics uses: GetErrorBaseline with pretty=false over fourslash diagnostics.
 // (tsrs_testrunner, a binary crate, has its own copy over its own diagnostic snapshot type.)
 
+use std::fmt::Write as _;
 use std::sync::LazyLock;
 
 use regex::Regex;
@@ -121,7 +122,7 @@ fn iterate_error_baseline(
             .collect();
 
         // Header
-        output_lines.push_str(&format!("{}==== {} ({} errors) ====", new_line(), unit, file_errors.len()));
+        write!(output_lines, "{}==== {} ({} errors) ====", new_line(), unit, file_errors.len()).unwrap();
 
         // Make sure we emit something for every error
         let mut marked_error_count = 0;
@@ -261,18 +262,14 @@ fn write_format_diagnostic(output: &mut String, diagnostic: &FourslashDiagnostic
         &diagnostic.file.file_name,
         &ComparePathsOptions::default(),
     );
-    output.push_str(&format!(
-        "{}({},{}): ",
+    write!(output, "{}({},{}): ",
         relative_file_name,
         line + 1,
-        character + 1
-    ));
+        character + 1).unwrap();
 
-    output.push_str(&format!(
-        "{} TS{}: ",
+    write!(output, "{} TS{}: ",
         diagnostic.category.name(),
-        diagnostic.code
-    ));
+        diagnostic.code).unwrap();
     output.push_str(&flatten_diagnostic_message(diagnostic));
     output.push_str(HARNESS_NEW_LINE);
 }

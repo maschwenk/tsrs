@@ -1,3 +1,4 @@
+#[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]
 mod common;
 use common::*;
 use tsrs_core::json::Value;

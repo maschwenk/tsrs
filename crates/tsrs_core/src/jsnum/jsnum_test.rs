@@ -10,39 +10,8 @@ pub(super) fn assert_equal_number(got: Number, want: Number) {
     }
 }
 
-// assertWithinOneULP checks that got and want are either equal or differ by
-// at most 1 ULP (unit in the last place).
-pub(super) fn assert_within_one_ulp(got: Number, want: Number) {
-    if got.is_nan() || want.is_nan() {
-        assert_eq!(got.is_nan(), want.is_nan(), "got: {got}, want: {want}");
-        return;
-    }
-
-    if got == want {
-        return;
-    }
-
-    let got_bits = got.0.to_bits();
-    let want_bits = want.0.to_bits();
-    if got_bits == want_bits {
-        return;
-    }
-
-    let ulp_dist = got_bits.abs_diff(want_bits);
-
-    if ulp_dist > 1 {
-        panic!(
-            "got {got} ({got_bits:016x}), want {want} ({want_bits:016x}) within 1 ULP (off by {ulp_dist} ULPs)"
-        );
-    }
-}
-
 pub(super) fn number_from_bits(b: u64) -> Number {
     Number(f64::from_bits(b))
-}
-
-pub(super) fn number_to_bits(n: Number) -> u64 {
-    n.0.to_bits()
 }
 
 // evalBinaryOp, evalUnaryOp and the "Node" subtests compare against Node.js
@@ -65,16 +34,16 @@ fn to_int32_tests() -> Vec<(&'static str, Number, i32)> {
         ("MAX_SAFE_INTEGER", MaxSafeInteger, -1),
         ("MAX_SAFE_INTEGER-1", MaxSafeInteger - Number(1.0), -2),
         ("MAX_SAFE_INTEGER+1", MaxSafeInteger + Number(1.0), 0),
-        ("-8589934590", Number(-8589934590.0), 2),
-        ("0xDEADBEEF", Number(0xDEADBEEFu64 as f64), -559038737),
-        ("4294967808", Number(4294967808.0), 512),
+        ("-8589934590", Number(-8_589_934_590.0), 2),
+        ("0xDEADBEEF", Number(0xDEAD_BEEF_u64 as f64), -559_038_737),
+        ("4294967808", Number(4_294_967_808.0), 512),
         ("-0.4", Number(-0.4), 0),
         ("SmallestNonzeroFloat64", Number(f64::from_bits(1)), 0),
         ("-SmallestNonzeroFloat64", Number(-f64::from_bits(1)), 0),
         ("MaxFloat64", Number(f64::MAX), 0),
         ("-MaxFloat64", Number(-f64::MAX), 0),
-        ("Largest subnormal number", number_from_bits(0x000FFFFFFFFFFFFF), 0),
-        ("Smallest positive normal number", number_from_bits(0x0010000000000000), 0),
+        ("Largest subnormal number", number_from_bits(0x000F_FFFF_FFFF_FFFF), 0),
+        ("Smallest positive normal number", number_from_bits(0x0010_0000_0000_0000), 0),
         ("Largest normal number", Number(f64::MAX), 0),
         ("-Largest normal number", Number(-f64::MAX), 0),
         ("1.0", Number(1.0), 1),
@@ -87,15 +56,15 @@ fn to_int32_tests() -> Vec<(&'static str, Number, i32)> {
         ("-math.E", Number(-E), -2),
         ("0.5", Number(0.5), 0),
         ("-0.5", Number(-0.5), 0),
-        ("0.49999999999999994", Number(0.49999999999999994), 0),
-        ("-0.49999999999999994", Number(-0.49999999999999994), 0),
-        ("0.5000000000000001", Number(0.5000000000000001), 0),
-        ("-0.5000000000000001", Number(-0.5000000000000001), 0),
-        ("2^31 + 0.5", Number(2147483648.5), -2147483648),
-        ("-2^31 - 0.5", Number(-2147483648.5), -2147483648),
-        ("2^40", Number(1099511627776.0), 0),
-        ("-2^40", Number(-1099511627776.0), 0),
-        ("TypeFlagsNarrowable", Number(536624127.0), 536624127),
+        ("0.49999999999999994", Number(0.499_999_999_999_999_94), 0),
+        ("-0.49999999999999994", Number(-0.499_999_999_999_999_94), 0),
+        ("0.5000000000000001", Number(0.500_000_000_000_000_1), 0),
+        ("-0.5000000000000001", Number(-0.500_000_000_000_000_1), 0),
+        ("2^31 + 0.5", Number(2_147_483_648.5), -2_147_483_648),
+        ("-2^31 - 0.5", Number(-2_147_483_648.5), -2_147_483_648),
+        ("2^40", Number(1_099_511_627_776.0), 0),
+        ("-2^40", Number(-1_099_511_627_776.0), 0),
+        ("TypeFlagsNarrowable", Number(536_624_127.0), 536_624_127),
     ]
 }
 
@@ -111,16 +80,16 @@ fn test_to_int32() {
 fn test_bitwise_not() {
     let tests: Vec<(Number, Number)> = vec![
         // Original pairs: ~(-2147483649) == ~(2147483647)
-        (Number(-2147483649.0), Number(-2147483648.0)),
-        (Number(2147483647.0), Number(-2147483648.0)),
+        (Number(-2_147_483_649.0), Number(-2_147_483_648.0)),
+        (Number(2_147_483_647.0), Number(-2_147_483_648.0)),
         // Original pairs: ~(-4294967296) == ~(0)
-        (Number(-4294967296.0), Number(-1.0)),
+        (Number(-4_294_967_296.0), Number(-1.0)),
         (Number(0.0), Number(-1.0)),
         // Original pairs: ~(2147483648) == ~(-2147483648)
-        (Number(2147483648.0), Number(2147483647.0)),
-        (Number(-2147483648.0), Number(2147483647.0)),
+        (Number(2_147_483_648.0), Number(2_147_483_647.0)),
+        (Number(-2_147_483_648.0), Number(2_147_483_647.0)),
         // Original pairs: ~(4294967296) == ~(0)
-        (Number(4294967296.0), Number(-1.0)),
+        (Number(4_294_967_296.0), Number(-1.0)),
     ];
 
     for (x, want) in tests {
@@ -206,14 +175,14 @@ fn test_unsigned_right_shift() {
         (Number(1.0), Number(2.0), Number(0.0)),
         (Number(1.0), Number(31.0), Number(0.0)),
         (Number(1.0), Number(32.0), Number(1.0)),
-        (Number(-4.0), Number(0.0), Number(4294967292.0)),
-        (Number(-4.0), Number(1.0), Number(2147483646.0)),
-        (Number(-4.0), Number(2.0), Number(1073741823.0)),
-        (Number(-4.0), Number(3.0), Number(536870911.0)),
-        (Number(-4.0), Number(4.0), Number(268435455.0)),
+        (Number(-4.0), Number(0.0), Number(4_294_967_292.0)),
+        (Number(-4.0), Number(1.0), Number(2_147_483_646.0)),
+        (Number(-4.0), Number(2.0), Number(1_073_741_823.0)),
+        (Number(-4.0), Number(3.0), Number(536_870_911.0)),
+        (Number(-4.0), Number(4.0), Number(268_435_455.0)),
         (Number(-4.0), Number(31.0), Number(1.0)),
-        (Number(-4.0), Number(32.0), Number(4294967292.0)),
-        (Number(-4.0), Number(33.0), Number(2147483646.0)),
+        (Number(-4.0), Number(32.0), Number(4_294_967_292.0)),
+        (Number(-4.0), Number(33.0), Number(2_147_483_646.0)),
     ];
 
     for (x, y, want) in tests {
@@ -228,7 +197,7 @@ fn test_left_shift() {
         (Number(1.0), Number(0.0), Number(1.0)),
         (Number(1.0), Number(1.0), Number(2.0)),
         (Number(1.0), Number(2.0), Number(4.0)),
-        (Number(1.0), Number(31.0), Number(-2147483648.0)),
+        (Number(1.0), Number(31.0), Number(-2_147_483_648.0)),
         (Number(1.0), Number(32.0), Number(1.0)),
         (Number(-4.0), Number(0.0), Number(-4.0)),
         (Number(-4.0), Number(1.0), Number(-8.0)),
@@ -314,9 +283,9 @@ fn test_exponentiate() {
         // computed via exact integer arithmetic (big.Int).
         // Cross-engine testing (V8, SpiderMonkey, QuickJS, XS via jsvu)
         // confirmed these match the majority of JS engines.
-        (Number(10.0), Number(308.0), number_from_bits(0x7fe1ccf385ebc8a0)),
-        (Number(5.0), Number(210.0), number_from_bits(0x5e68557f31326bbb)),
-        (Number(10.0), Number(200.0), number_from_bits(0x6974e718d7d7625a)),
+        (Number(10.0), Number(308.0), number_from_bits(0x7fe1_ccf3_85eb_c8a0)),
+        (Number(5.0), Number(210.0), number_from_bits(0x5e68_557f_3132_6bbb)),
+        (Number(10.0), Number(200.0), number_from_bits(0x6974_e718_d7d7_625a)),
     ];
 
     for (x, y, want) in tests {

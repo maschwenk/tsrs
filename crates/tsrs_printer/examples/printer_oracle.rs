@@ -33,7 +33,7 @@ fn options(mode: &str) -> PrinterOptions {
             target: tsrs_core::ScriptTarget::ES2021,
             ..Default::default()
         },
-        other => panic!("unknown mode {}", other),
+        other => panic!("unknown mode {other}"),
     }
 }
 
@@ -82,7 +82,7 @@ fn print_synthesized(mode: &str, file: P<SourceFile>) -> String {
                 set_flags_recursive(ec, clone, EmitFlags::MultiLine | EmitFlags::StartOnNewLine | EmitFlags::Indented);
                 new_text_writer("\n", 0)
             }
-            other => panic!("unknown mode {}", other),
+            other => panic!("unknown mode {other}"),
         };
         p.write(clone, None, &mut w, None);
         sb.push_str(&w.string());
@@ -92,10 +92,10 @@ fn print_synthesized(mode: &str, file: P<SourceFile>) -> String {
 }
 
 fn fnv64a(data: &[u8]) -> u64 {
-    let mut h: u64 = 0xcbf29ce484222325;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for &b in data {
         h ^= b as u64;
-        h = h.wrapping_mul(0x100000001b3);
+        h = h.wrapping_mul(0x0100_0000_01b3);
     }
     h
 }
@@ -112,10 +112,10 @@ fn run() {
     let args: Vec<String> = std::env::args().collect();
     match args[1].as_str() {
         "print" => {
-            let flags = args.get(4).map(|s| s.as_str()).unwrap_or("-");
+            let flags = args.get(4).map_or("-", std::string::String::as_str);
             match print_file(&args[2], &args[3], flags) {
                 Ok(text) => std::io::stdout().write_all(text.as_bytes()).unwrap(),
-                Err(status) => eprintln!("{}", status),
+                Err(status) => eprintln!("{status}"),
             }
         }
         "hash" => {
@@ -132,20 +132,20 @@ fn run() {
                     }
                     Err("UNREADABLE") => {}
                     Err(status) => {
-                        let _ = writeln!(w, "{} {}", status, path);
+                        let _ = writeln!(w, "{status} {path}");
                     }
                 }
                 let _ = w.flush();
             }
         }
-        other => panic!("unknown command {}", other),
+        other => panic!("unknown command {other}"),
     }
 }
 
 fn main() {
     std::panic::set_hook(Box::new(|info| {
         if std::env::var("TSRS_ORACLE_VERBOSE").is_ok() {
-            eprintln!("{}", info);
+            eprintln!("{info}");
         }
     }));
     let child = std::thread::Builder::new().stack_size(4096 << 20).spawn(run).unwrap();

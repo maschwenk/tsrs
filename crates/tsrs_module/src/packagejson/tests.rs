@@ -42,11 +42,11 @@ fn member<'a>(value: &'a Json, name: &str) -> &'a Json {
 #[test]
 fn test_expected() {
     let p = parse(
-        r##"{
+        r#"{
 		"name": "test",
 		"version": 2,
 		"exports": null
-	}"##,
+	}"#,
     )
     .unwrap();
 
@@ -112,7 +112,7 @@ fn test_exports() {
 #[test]
 fn test_json_value() {
     let raw = json::parse(
-        r##"{
+        r#"{
 		"private": true,
 		"false": false,
 		"name": "test",
@@ -130,7 +130,7 @@ fn test_json_value() {
 			"./null": null
 		},
 		"imports": null
-	}"##,
+	}"#,
     )
     .unwrap();
     let get = |name: &str| JSONValue::from_json(member(&raw, name));
@@ -162,22 +162,22 @@ fn test_json_value() {
 #[test]
 fn test_parse() {
     let got = parse(
-        r##"{
+        r#"{
 				"name": "test-package",
 				"name": "test-package",
 				"version": "1.0.0"
-			}"##,
+			}"#,
     )
     .unwrap();
     assert_eq!(got, Fields { name: expected_of("test-package".to_string()), version: expected_of("1.0.0".to_string()), ..Default::default() });
 
     let got = parse(
-        r##"{
+        r#"{
 				"name": "test-package",
 				"typescript": {
 					"contentMapper": { "exec": ["mapper"], "dynamicConfig": true }
 				}
-			}"##,
+			}"#,
     )
     .unwrap();
     assert_eq!(
@@ -193,7 +193,7 @@ fn test_parse() {
         }
     );
 
-    let got = parse(r##"{ "name": "test-package", "typescript": "invalid" }"##).unwrap();
+    let got = parse(r#"{ "name": "test-package", "typescript": "invalid" }"#).unwrap();
     assert_eq!(got, Fields { name: expected_of("test-package".to_string()), ..Default::default() });
 }
 
@@ -203,7 +203,7 @@ fn test_parse_errors_and_dependencies() {
     assert!(parse("{").is_err());
     assert_eq!(parse("null").unwrap(), Fields::default());
 
-    let got = parse(r##"{ "dependencies": { "a": "1", "b": "2" }, "peerDependencies": { "c": 1 }, "devDependencies": { "d": "1", "d": "2" } }"##).unwrap();
+    let got = parse(r#"{ "dependencies": { "a": "1", "b": "2" }, "peerDependencies": { "c": 1 }, "devDependencies": { "d": "1", "d": "2" } }"#).unwrap();
     assert!(got.dependencies.valid);
     assert!(got.has_dependency("a"));
     assert!(!got.peer_dependencies.valid);

@@ -85,7 +85,7 @@ fn new_content_mapper_program_with_options(
 
     let mut config: ParsedCommandLine = new_parsed_command_line(
         P::new(options),
-        root_files.iter().map(|f| f.to_string()).collect(),
+        root_files.iter().map(std::string::ToString::to_string).collect(),
         Vec::new(),
         Default::default(),
     );
@@ -126,7 +126,7 @@ fn test_content_mapper_virtual_extension_sets_implied_node_format() {
     };
 
     let file = program.get_source_file("/src/Component.vue").expect("mapped file");
-    assert_eq!(program.get_source_file_meta_data(&file.path()).implied_node_format, ResolutionMode::ESM);
+    assert_eq!(program.get_source_file_meta_data(file.path()).implied_node_format, ResolutionMode::ESM);
 }
 
 // contentmapper_test.go:95. A mapped diagnostic directive suppresses the file's diagnostics, but a missing global
@@ -189,7 +189,7 @@ fn test_content_mapper_directives_preserve_incremental_globals() {
             }
         }
         assert_eq!(globals, 1, "{policy:?}");
-        assert_eq!(unused, if policy == MappedDiagnosticDirectivePolicy::Expect { 1 } else { 0 }, "{policy:?}");
+        assert_eq!(unused, i32::from(policy == MappedDiagnosticDirectivePolicy::Expect), "{policy:?}");
     }
 }
 
@@ -211,7 +211,7 @@ fn composite_options() -> CompilerOptions {
     CompilerOptions { composite: Tristate::True, ..options(ModuleKind::ESNext, ModuleResolutionKind::Bundler) }
 }
 
-fn is_unlisted_file_diagnostic(diagnostic: &P<Diagnostic>) -> bool {
+fn is_unlisted_file_diagnostic(diagnostic: P<Diagnostic>) -> bool {
     diagnostic.code()
         == diagnostics::File_0_is_not_listed_within_the_file_list_of_project_1_Projects_must_list_all_files_or_use_an_include_pattern.code()
 }
@@ -227,7 +227,7 @@ fn test_composite_project_content_mapper_supplemental_roots_listed_canonical_roo
     };
 
     let program_diagnostics = collect_content_mapper_diagnostics(program);
-    let has_unlisted_file_diagnostic = program_diagnostics.iter().any(is_unlisted_file_diagnostic);
+    let has_unlisted_file_diagnostic = program_diagnostics.iter().copied().any(is_unlisted_file_diagnostic);
     assert!(!has_unlisted_file_diagnostic, "supplemental output should be covered by its listed canonical root: {program_diagnostics:?}");
 }
 
@@ -244,7 +244,7 @@ fn test_composite_project_content_mapper_supplemental_roots_imported_canonical_f
         return;
     };
 
-    let unlisted_file_diagnostic_count = collect_content_mapper_diagnostics(program).iter().filter(|d| is_unlisted_file_diagnostic(d)).count();
+    let unlisted_file_diagnostic_count = collect_content_mapper_diagnostics(program).iter().filter(|d| is_unlisted_file_diagnostic(**d)).count();
     assert_eq!(unlisted_file_diagnostic_count, 2);
 }
 

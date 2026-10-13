@@ -326,7 +326,7 @@ mod tests {
 
     #[test]
     fn api_build_refreshes_cli_cached_interface_absence() {
-        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("tsrs-api-canonical-cache-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let fixture =
@@ -343,7 +343,7 @@ mod tests {
         let cli = || {
             let output = std::process::Command::new(&exe).args(["-p", ".", "--pretty", "false"]).current_dir(&dir).output().unwrap();
             assert_eq!(output.status.code(), Some(2));
-            assert!(output.stderr.is_empty());
+            assert_eq!(output.stderr, [] as [u8; 0]);
             String::from_utf8(output.stdout).unwrap()
         };
         let expected_cli = cli();
@@ -385,7 +385,7 @@ mod tests {
 
     #[test]
     fn build_orchestrator_builds_references_and_cleans() {
-        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("tsrs-api-build-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("core")).unwrap();
@@ -396,7 +396,7 @@ mod tests {
         w("app/tsconfig.json", r#"{ "compilerOptions": { "composite": true, "outDir": "out" }, "references": [{ "path": "../core" }] }"#);
         w("app/main.ts", "import { one } from '../core/index';\nexport const two: number = one + 1;\n");
         let cwd = dir.canonicalize().unwrap().to_string_lossy().into_owned();
-        let flags = ApiFlags { cwd: cwd.clone(), pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
+        let flags = ApiFlags { cwd, pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
         let (s, _) = new_api_session(&flags).unwrap();
         let s = s;
         let r = call(&s, "createBuildOrchestrator", r#"{"rootNames":["app"]}"#);
@@ -515,7 +515,7 @@ mod memory_tests {
     /// API builds write the same files, byte for byte, as the Go-history CLI on the same project graph.
     #[test]
     fn api_build_outputs_match_cli_build() {
-        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let base = std::env::temp_dir().join(format!("tsrs-api-buildeq-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         let mk = |root: &std::path::Path| {
@@ -539,15 +539,9 @@ mod memory_tests {
         let cwd = api.canonicalize().unwrap().to_string_lossy().into_owned();
         let flags = ApiFlags { cwd, pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
         let (s, _) = new_api_session(&flags).unwrap();
-        let r = match s.handle_request("createBuildOrchestrator", br#"{"rootNames":["app"]}"#).unwrap() {
-            Response::Json(t) => t,
-            _ => unreachable!(),
-        };
+        let Response::Json(r) = s.handle_request("createBuildOrchestrator", br#"{"rootNames":["app"]}"#).unwrap() else { unreachable!() };
         assert!(r.contains("\"buildOrchestratorID\":1"), "{r}");
-        let b = match s.handle_request("build", br#"{"buildOrchestratorID":1}"#).unwrap() {
-            Response::Json(t) => t,
-            _ => unreachable!(),
-        };
+        let Response::Json(b) = s.handle_request("build", br#"{"buildOrchestratorID":1}"#).unwrap() else { unreachable!() };
         assert!(b.contains(&format!("\"status\":{}", status.code().unwrap())), "cli exit {:?} vs api {b}", status.code());
         let mut files = Vec::new();
         files.extend(

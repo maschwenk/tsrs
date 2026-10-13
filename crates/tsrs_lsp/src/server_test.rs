@@ -65,14 +65,14 @@ fn options(out: Box<dyn Writer>) -> ServerOptions {
 fn test_server_outgoing_queue_does_not_block_without_writer() {
     let server = new_server(options(Box::new(shutdownTestWriter)));
     let (test_ctx, cancel) = Context::background().with_cancel();
-    let _ = server.background_ctx.set(test_ctx.clone());
+    let _ = server.background_ctx.set(test_ctx);
 
     let msg = lsproto::WINDOW_LOG_MESSAGE_INFO
         .new_notification_message(lsproto::LogMessageParams { type_: lsproto::MessageType::Info, message: "queued".to_string() })
         .message();
 
     let (tx, rx) = std::sync::mpsc::channel();
-    let s = server.clone();
+    let s = server;
     std::thread::spawn(move || {
         if (0..1000).any(|_| {
             if let Err(err) = s.send(msg.clone()) {
@@ -88,7 +88,7 @@ fn test_server_outgoing_queue_does_not_block_without_writer() {
 
     match rx.recv_timeout(std::time::Duration::from_secs(30)) {
         Ok(result) => result.unwrap(),
-        Err(_) => panic!("sending outgoing messages blocked without a writer"),
+        Err(err) => panic!("sending outgoing messages blocked without a writer: {err}"),
     }
     cancel.call();
 }
@@ -105,7 +105,7 @@ fn test_write_loop_recovers_from_unserializable_response() {
 fn write_loop_recovers_from_unserializable_response() {
     let (ctx, cancel) = Context::background().with_cancel();
     let messages = Arc::new(Mutex::new(Vec::new()));
-    let writer = cancelingTestWriter { writer: to_writer(std::io::sink()), cancel: cancel.clone(), messages: messages.clone() };
+    let writer = cancelingTestWriter { writer: to_writer(std::io::sink()), cancel, messages: std::sync::Arc::clone(&messages) };
     let server = new_server(options(Box::new(writer)));
 
     let _ = server.background_ctx.set(ctx.clone());
@@ -121,17 +121,17 @@ fn write_loop_recovers_from_unserializable_response() {
     let bad_id = jsonrpc::new_id_string("bad");
     server
         .send(ResponseMessage { id: Some(bad_id.clone()), result: Some(bad_result.to_json()), ..Default::default() }.message())
-        .unwrap_or_else(|err| panic!("failed to enqueue bad response: {}", err));
+        .unwrap_or_else(|err| panic!("failed to enqueue bad response: {err}"));
     drop(bad_result);
 
     // A subsequent well-formed response must still be delivered.
     let good_id = jsonrpc::new_id_string("good");
     server
         .send(ResponseMessage { id: Some(good_id.clone()), result: Some(lsproto::SelectionRangesOrNull::default().to_json()), ..Default::default() }.message())
-        .unwrap_or_else(|err| panic!("failed to enqueue good response: {}", err));
+        .unwrap_or_else(|err| panic!("failed to enqueue good response: {err}"));
 
     let err = server.write_loop(&ctx).unwrap_err();
-    assert!(err.is(ErrorTag::ContextCanceled), "write loop exited unexpectedly: {}", err);
+    assert!(err.is(ErrorTag::ContextCanceled), "write loop exited unexpectedly: {err}");
     assert_eq!(ctx.err(), Some(ContextError::Canceled));
 
     let mut saw_error = false;
@@ -178,7 +178,7 @@ fn server_shutdown_no_deadlock() {
     )));
 
     let mut opts = options(Box::new(shutdownTestWriter));
-    opts.fs = Some(fs.clone());
+    opts.fs = Some(std::sync::Arc::clone(&fs));
     opts.default_library_path = tsrs_vfs::bundled::lib_path();
     let server = new_server(opts);
 
@@ -186,7 +186,7 @@ fn server_shutdown_no_deadlock() {
     let _ = server.background_ctx.set(ctx.clone());
 
     // Start write loop to drain queue
-    let s = server.clone();
+    let s = std::sync::Arc::clone(&server);
     let write_ctx = ctx.clone();
     let write_loop_done = std::thread::spawn(move || {
         let _ = s.write_loop(&write_ctx);
@@ -212,7 +212,7 @@ fn server_shutdown_no_deadlock() {
         parse_cache: None,
         content_mapped_parse_cache: None,
     });
-    server.set_session_for_test(session.clone());
+    server.set_session_for_test(std::sync::Arc::clone(&session));
 
     // Open a file to establish a project
     session.did_open_file(&ctx, "file:///test/index.ts".into(), 1, "const x = 1;".to_string(), lsproto::LanguageKind::TypeScript);

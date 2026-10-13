@@ -24,11 +24,11 @@ fn check_emit(emit_context: Option<P<EmitContext>>, file: P<SourceFile>, expecte
     let text = printer.emit_source_file(file);
     let actual = text.strip_suffix('\n').unwrap_or(&text);
     if actual != expected {
-        return Err(format!("expected {:?}, got {:?}", expected, actual));
+        return Err(format!("expected {expected:?}, got {actual:?}"));
     }
     let file2 = parse_type_script(&text, file.language_variant() == LanguageVariant::JSX);
     if !file2.diagnostics().is_empty() {
-        return Err(format!("error on reparse of {:?}", text));
+        return Err(format!("error on reparse of {text:?}"));
     }
     Ok(())
 }
@@ -603,11 +603,11 @@ fn test_emit() {
     for &(title, input, output, jsx) in EMIT_CASES {
         let file = parse_type_script(input, jsx);
         if !file.diagnostics().is_empty() {
-            failures.push(format!("{}: input has parse diagnostics", title));
+            failures.push(format!("{title}: input has parse diagnostics"));
             continue;
         }
         if let Err(e) = check_emit(None, file, output) {
-            failures.push(format!("{}: {}", title, e));
+            failures.push(format!("{title}: {e}"));
         }
     }
     assert!(failures.is_empty(), "{} of {} cases failed:\n{}", failures.len(), EMIT_CASES.len(), failures.join("\n"));
@@ -700,7 +700,7 @@ fn test_parenthesize_binary_expression_mixing_nullish_coalescing() {
         let statement = f.new_expression_statement(outer_expr);
         let file = synthetic_source_file(&f, vec![statement]);
         if let Err(e) = check_emit(None, file, output) {
-            panic!("{}: {}", title, e);
+            panic!("{title}: {e}");
         }
     }
 }

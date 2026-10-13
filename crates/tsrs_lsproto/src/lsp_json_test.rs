@@ -142,7 +142,7 @@ fn test_unmarshal_rejects_incomplete_objects() {
             error_text::<Location>(r#"{"range": {"start": {"line": 0, "character": 0}, "end": {"line": 0, "character": 0}}}"#),
             "missing required properties: uri",
         ),
-        ("Location empty object", error_text::<Location>(r#"{}"#), "missing required properties: uri, range"),
+        ("Location empty object", error_text::<Location>(r"{}"), "missing required properties: uri, range"),
     ];
 
     for (name, err, err_text) in tests {

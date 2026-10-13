@@ -27,7 +27,7 @@ impl Host for testHost {
         self.fs.read_file(path)
     }
     fn converters(&self) -> Arc<Converters> {
-        self.converters.clone()
+        std::sync::Arc::clone(&self.converters)
     }
     fn get_preferences(&self, _active_file: &str) -> UserPreferences {
         new_default_user_preferences()
@@ -60,7 +60,7 @@ impl ParseConfigHost for parseConfigHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -82,7 +82,7 @@ fn test_implementations_worklist_does_not_blow_up() {
         let mut b = String::new();
         b.push_str("interface I { m(): void; }\n");
         for i in 0..k {
-            writeln!(b, "const a{}: I = {{ m() {{}} }};", i).unwrap();
+            writeln!(b, "const a{i}: I = {{ m() {{}} }};").unwrap();
         }
         b.push_str("declare const i: I;\n");
         b.push_str("i.m();\n");
@@ -91,10 +91,10 @@ fn test_implementations_worklist_does_not_blow_up() {
         let files = [("/repro.ts", content.as_str()), ("/tsconfig.json", r#"{ "compilerOptions": {}, "files": ["repro.ts"] }"#)];
         let fs: Arc<dyn FS> = Arc::new(bundled::wrap_fs(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), false /*useCaseSensitiveFileNames*/)));
 
-        let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: fs.clone() }));
+        let config_host: &'static parseConfigHost = Box::leak(Box::new(parseConfigHost { fs: std::sync::Arc::clone(&fs) }));
         let (parsed, errors) = tsoptions::get_parsed_command_line_of_config_file("/tsconfig.json", None, None, config_host, None);
         assert_eq!(errors.len(), 0);
-        let host: Arc<dyn CompilerHost> = new_compiler_host("/", fs.clone(), &bundled::lib_path(), None, None, None);
+        let host: Arc<dyn CompilerHost> = new_compiler_host("/", std::sync::Arc::clone(&fs), &bundled::lib_path(), None, None, None);
         let program: &'static Program = new_program(ProgramOptions::new(P::new(parsed.unwrap()), host));
         program.bind_source_files();
         let ctx = Context::background();
@@ -103,7 +103,7 @@ fn test_implementations_worklist_does_not_blow_up() {
         let source_file = program.get_source_file("/repro.ts").unwrap();
         let line_content = content.clone();
         let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(compute_lsp_line_starts(&line_content)));
-        let l = new_language_service(ProjectID("/tsconfig.json".to_string()), program, Arc::new(testHost { fs, converters: converters.clone() }), "/repro.ts");
+        let l = new_language_service(ProjectID("/tsconfig.json".to_string()), program, Arc::new(testHost { fs, converters: std::sync::Arc::clone(&converters) }), "/repro.ts");
 
         // Position of the `m` property in the final `i.m();`.
         let offset = content.rfind("i.m").unwrap() + "i.".len();
@@ -149,5 +149,5 @@ fn test_implementations_worklist_does_not_blow_up() {
         large_groups
     );
     // Not in Go: guard against a vacuous pass (nothing found at all).
-    assert!(small_refs >= K, "expected at least K implementations, got {}", small_refs);
+    assert!(small_refs >= K, "expected at least K implementations, got {small_refs}");
 }
