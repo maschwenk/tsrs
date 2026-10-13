@@ -1,6 +1,22 @@
-# Status
+# Release notes
+
+Release entries describe changes and evidence recorded for that version. Measurements from an individual
+change are identified separately from measurements of the packaged release. For current support and known gaps,
+see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
+[engineering notes](../notes/README.md). The early development log follows the release entries.
 
 ## 2026-10-13: 0.14.1 release
+
+Highlights:
+
+- Fix false diagnostics involving merged interfaces, lazy mapped types and nested instantiation limits.
+- Ship default libraries beside the native binary and report the matching TypeScript nightly version.
+- Stop the language-server and API processes on SIGINT/SIGTERM, and preserve control characters in user strings.
+
+Known limitations: the repository-conformance smoke run still differs on opencode (member order in a message),
+n8n (an export name) and dify (a missing TS2578). The fixes below do not resolve those cases.
+
+Implementation and validation details:
 
 Fixes since 0.14.0. All seven packages use `0.14.1-ts7.1.0-dev.20260929`; the TypeScript source pin remains
 `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929). Release binaries now report the nightly built from
@@ -11,7 +27,8 @@ reports at tsgo's four-checker sites, API builds keep per-file diagnostics and G
 builds refresh interface errors when file order, imports or skip flags change (#349). Lazy mapped types no longer
 raise false TS5115/TS2456 cycles (#348), a nested check no longer leaves its instantiation count in the caller and
 adds a false TS2589 (#352), and user strings starting with DEL print as written (#351). Measurements are in
-`notes/fix-history-dependent-diagnostics.md`; warm incremental wall time on stagehand was about 7% higher locally.
+[the incremental diagnostic note](../notes/fix-history-dependent-diagnostics.md); warm incremental wall time on
+stagehand was about 7% higher locally.
 
 Parity with tsgo: the npm packages ship the default libraries beside the binary (#354); a non-array `paths`
 substitution reports TS5063 (#355); `--traceResolution` loads programs in Go's single-threaded order (#356); a closed
@@ -20,8 +37,7 @@ tsrs-only bits (#359) and the completion error comes back unwrapped (#361).
 
 CI: the release workflow waits for optional dependencies before publishing `tsrs` (#333), Clippy is enforced without
 a baseline (#342) and a 400-repository conformance workflow compares tsrs with tsgo (#345, #350). Its 20-repository
-smoke run is identical on 59 of 62 projects; opencode (object-type member order in a message), n8n (export name in
-TS2460) and dify (missing TS2578) still differ. These are not fixed in this release.
+smoke run is identical on 59 of 62 projects; the three known differences are listed above.
 
 Scanner and binder hot-path changes (#336, #337, #338, #339) and the round-4 checker change (#319) were merged
 without new release measurements.

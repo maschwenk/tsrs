@@ -6,6 +6,9 @@
 `tsrs` is a drop-in replacement for the TypeScript 7 compiler and language server, written in Rust.
 Our goal is 100% conformance, with much lower memory use and faster type checking.
 
+Maintained by [Max Schwenk](https://github.com/maschwenk). The project follows the upstream Go implementation
+closely, with regression fixes checked against TypeScript and performance changes backed by measurements.
+
 ## Get started
 
 ```sh
@@ -35,6 +38,7 @@ for supported features and known gaps.
 - [WebAssembly for Node and browsers](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md)
 - [Benchmarks and methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)
 - [Release notes](https://github.com/maschwenk/tsrs/blob/main/docs/STATUS.md)
+- [Engineering notes](https://github.com/maschwenk/tsrs/blob/main/notes/README.md)
 
 ## Contributing
 
