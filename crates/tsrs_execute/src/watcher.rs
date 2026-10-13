@@ -400,6 +400,7 @@ impl Watcher {
 
         let (mut changed_paths, overflow) = wm.drain_events();
         self.drop_own_output_events(&mut changed_paths);
+        self.drop_unchanged_file_events(&mut changed_paths);
         let has_events = !changed_paths.is_empty() || overflow;
 
         let manifest_changed = self.content_mapper_manifest_changed(&changed_paths);
@@ -512,6 +513,28 @@ impl Watcher {
             && let Some(log) = self.wm.debug_log()
         {
             log(&format!("[watch] ignoring {} event(s) for the build's own outputs\n", before - changed_paths.len()));
+        }
+    }
+
+    // tsrs-only: an event for a source file whose modification time is still the one it was parsed at changes
+    // nothing: the cycle would reuse the parsed file (`watchCompilerHost`), so it is dropped. Such events come from
+    // metadata changes (chmod, extended attributes) and from writes made just before the watch started, which
+    // FSEvents delivers after (about 12 ms late). Go runs a cycle for them.
+    fn drop_unchanged_file_events(&self, changed_paths: &mut FxHashMap<String, EventKind>) {
+        let fs = self.sys.fs();
+        let before = changed_paths.len();
+        changed_paths.retain(|event_path, kind| {
+            if *kind != EventKind::Update {
+                return true;
+            }
+            let Some(cached) = self.source_file_cache.load(&self.to_path(event_path)) else { return true };
+            // The program's spelling: a case-only rename must still be seen.
+            cached.file.file_name() != event_path.as_str() || fs.stat(event_path).is_none_or(|s| s.mod_time() != cached.mod_time)
+        });
+        if changed_paths.len() != before
+            && let Some(log) = self.wm.debug_log()
+        {
+            log(&format!("[watch] ignoring {} event(s) for files unchanged since they were read\n", before - changed_paths.len()));
         }
     }
 

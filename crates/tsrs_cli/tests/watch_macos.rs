@@ -262,3 +262,18 @@ fn an_edit_during_the_first_build_is_seen_by_watch() {
 fn an_edit_during_the_first_build_is_seen_by_build_watch() {
     an_edit_during_the_first_build_is_seen(&["-b", ".", "--watch"]);
 }
+
+#[test]
+fn a_metadata_change_starts_no_cycle() {
+    // chmod changes no content and no modification time; FSEvents still reports the file.
+    let dir = project("chmod", &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n")]);
+    let mut watch = Watch::start(&dir);
+    watch.assert_idle(Duration::from_millis(600));
+    std::fs::set_permissions(dir.join("src/a.ts"), std::os::unix::fs::PermissionsExt::from_mode(0o600)).unwrap();
+    watch.assert_idle(Duration::from_secs(1));
+    // An edit after it is still seen.
+    std::fs::write(dir.join("src/a.ts"), format!("export const a = 1;{ERR}")).unwrap();
+    assert_eq!(watch.next_cycle().len(), 1);
+    drop(watch);
+    let _ = std::fs::remove_dir_all(&dir);
+}
