@@ -357,16 +357,22 @@ pub(crate) fn get_uint_component(text: &str) -> Result<u32, String> {
     if text.is_empty() || !text.bytes().all(|b| b.is_ascii_digit()) {
         return Err(format!("strconv.ParseUint: parsing {text:?}: invalid syntax"));
     }
-    let mut r: u32 = 0;
-    r = text.bytes().try_fold(r, |r, b| {
-        r.checked_mul(10).and_then(|v| v.checked_add((b - b'0') as u32)).ok_or_else(|| format!("strconv.ParseUint: parsing {text:?}: value out of range"))
-    })?;
-    Ok(r)
+    text.parse::<u32>().map_err(|_| format!("strconv.ParseUint: parsing {text:?}: value out of range"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn decimal_components_keep_syntax_and_range_errors() {
+        assert_eq!(get_uint_component("4294967295"), Ok(u32::MAX));
+        assert_eq!(get_uint_component("00042"), Ok(42));
+        for text in ["", "+1", "-1", "1_0", "١", "999999999999x"] {
+            assert_eq!(get_uint_component(text), Err(format!("strconv.ParseUint: parsing {text:?}: invalid syntax")));
+        }
+        assert_eq!(get_uint_component("4294967296"), Err("strconv.ParseUint: parsing \"4294967296\": value out of range".to_string()));
+    }
 
     fn v(major: u32, minor: u32, patch: u32, prerelease: &[&str], build: &[&str]) -> Version {
         Version {

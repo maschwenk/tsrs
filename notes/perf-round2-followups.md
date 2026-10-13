@@ -489,6 +489,12 @@ with the switch off, which is why it is not in the default build.
   from the deeply-nested walk (+0.04% single-threaded), `Relation::set` through hashbrown's `entry` (-0.005%, noise),
   a Bloom filter of names in `some_property_reduces_to_never`'s counts (+0.03%).
 
+- Standard parsing/whitespace helper cleanup ([rust-stdlib-helpers.md](rust-stdlib-helpers.md)), applied at the
+  user's request: exact whitespace predicates and integer contracts, with Go syntax/range wording retained.
+  Five-pair Mac screening on Compiler/Compiler-Unions: -0.009% to +0.013% single instructions, -0.537% to +0.379%
+  default RSS; no qualifying gain. Keep Go boolean spellings, quoting, clamped/base-detecting parsers and JSON
+  compatibility rather than treating std substitutions as universally equivalent.
+
 ## Clippy baseline (complete)
 
 `tools/lint/baseline.tsv` went from 1,373 findings to 312 (#57-#59, #61, #63; notes/lint-paydown-compiler.md) and is

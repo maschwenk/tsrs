@@ -3306,7 +3306,7 @@ impl FourslashTest {
                 // Remove blank lines
                 let mut non_blank_lines: Vec<&str> = Vec::new();
                 non_blank_lines.extend(masked_str.split('\n').filter(|line| {
-                    let trimmed = line.trim_matches(go_is_space);
+                    let trimmed = line.trim();
                     !trimmed.is_empty() && trimmed != "↲"
                 }));
                 masked_str = non_blank_lines.join("\n");
@@ -5899,11 +5899,6 @@ struct DocumentSpanKey {
     uri: lsproto::DocumentUri,
     text_span: lsproto::Range,
     context_span: lsproto::Range,
-}
-
-// Go unicode.IsSpace (strings.TrimSpace).
-fn go_is_space(r: char) -> bool {
-    matches!(r, '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{85}' | '\u{A0}') || (!r.is_ascii() && r.is_whitespace())
 }
 
 // fourslash.go:3450

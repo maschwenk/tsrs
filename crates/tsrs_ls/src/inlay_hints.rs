@@ -990,11 +990,6 @@ fn identifier_or_access_expression_postfix_matches_parameter_name(expr: P<Node>,
     false
 }
 
-// Go unicode.IsSpace.
-fn go_is_space(r: char) -> bool {
-    matches!(r, '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{85}' | '\u{A0}') || (!r.is_ascii() && r.is_whitespace())
-}
-
 impl InlayHintState<'_> {
     // inlay_hints.go:918
     fn leading_comments_contains_parameter_name(&self, node: P<Node>, name: &str) -> bool {
@@ -1015,7 +1010,7 @@ impl InlayHintState<'_> {
                     .end()
                     .expect_source("comment ranges have source positions")
                     as usize]
-                .trim_matches(|r: char| go_is_space(r) || r == '/' || r == '*');
+                .trim_matches(|r: char| r.is_whitespace() || r == '/' || r == '*');
             comment_text == name
         }) {
             return true;

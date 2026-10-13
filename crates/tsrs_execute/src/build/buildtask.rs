@@ -1419,8 +1419,7 @@ pub(crate) fn is_content_mapper_supplemental_build_info_path<'a>(input_path: &Pa
             return false;
         }
         // Go `strconv.Atoi`: an optional sign and decimal digits.
-        let digits = index.strip_prefix(['+', '-']).unwrap_or(index);
-        let is_int = !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()) && index.parse::<i64>().is_ok();
+        let is_int = index.parse::<i64>().is_ok();
         is_int && tsrs_contentmapper::is_supported_virtual_extension(&format!(".{extension}"))
     }) {
         return true;
