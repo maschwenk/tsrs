@@ -27,9 +27,14 @@ fast watch that misses an edit or runs two cycles per save is worse than a slow 
   being written is closed (at most 1 s idle / 2 s total). FSEvents and kqueue have no close event, so on macOS a
   save that arrives in several writes can start a cycle on a half-written file and then run a second cycle. That
   is the main known macOS gap; see "What to investigate" below.
-- Watch programs free the previous program on a background thread and check in per-checker scratch regions. On
-  Linux this keeps RSS flat across cycles. Memory behavior on macOS (mimalloc returning pages to the OS, the memory
-  compressor) is unmeasured.
+- Watch programs free the previous program on a background thread, started after the cycle reports, and check in
+  per-checker scratch regions. On Linux this keeps RSS flat across cycles. Memory behavior on macOS (mimalloc
+  returning pages to the OS, the memory compressor) is unmeasured.
+- After each cycle, while nothing changes, a background thread computes the declaration signatures the builder left
+  as stand-ins (`start_signature_job` in `crates/tsrs_execute/src/watcher.rs`). Without them, the first edit of a file
+  rechecks everything that imports it. It takes 1.15 s after the initial build on vscode on Linux, and is cancelled
+  between 256-file chunks when the next change arrives. With `TS_WATCH_DEBUG=1` it logs `stored N declaration
+  signature(s) in <time> (done|canceled)`.
 - `TS_WATCH_DEBUG=1` makes the watch print what it watches and why each cycle started.
 
 ## Setup
@@ -66,7 +71,7 @@ commit, so note which version you used.
 Both runs report 371 errors on this tree, because some native modules lack types. Only agreement with a fresh build
 matters.
 
-## The two scripts in `tools/watch`
+## The scripts in `tools/watch`
 
 - `tools/watch/watchcheck.py <compiler> <projdir>` makes 13 edits under `--watch`:
   - an error added and then fixed;
@@ -85,23 +90,28 @@ matters.
 
   `REPEAT=5` repeats the edits (use it for memory). `BUILD=tsconfig.watchinc.json` runs `-b <config> --watch`
   instead. `LOG=<file>` saves the output.
+- `tools/watch/editduringjob.py <compiler> <projdir> [rounds]` edits strings.ts 0-1.2 s after each report, while the
+  signature job runs. Every third edit changes an exported signature. It prints detected and done times and compares
+  each cycle with a fresh `--noEmit` run.
 
-Both scripts restore every file they touch, even on failure. Check `git status` in vscode afterwards anyway.
+All three scripts restore every file they touch, even on failure. Check `git status` in vscode afterwards anyway.
 
 ## Reference numbers (Linux, 9.4k files, same machine for both columns)
 
 | Case | tsrs --watch | tsgo --watch | tsrs -b --watch (incremental) | tsgo -b --watch |
 |---|---|---|---|---|
 | initial build | 4.8 s | 16.6 s | 6.6 s | 16.9 s |
-| first comment edit | 5.0 s, 1 cycle | 23.5 s, 2 cycles | 7.4 s | 26.5 s |
-| repeat comment edit | 80 ms | 554 ms | 385 ms | 2.76 s |
+| first comment edit | 46 ms, 1 cycle | 23.5 s, 2 cycles | 7.4 s | 26.5 s |
+| repeat comment edit | 39 ms | 554 ms | 385 ms | 2.76 s |
 | new export in a hub file | 3.6 s | 17.7 s | 6.0 s | 20.3 s |
-| type error in a leaf file | 5.0 s | 20.8 s | 7.3 s | 25.0 s |
+| type error in a leaf file | 43 ms | 20.8 s | 7.3 s | 25.0 s |
 | detected | 0.5-3 ms | | | |
 | RSS | 1.7-2.9 GB, flat | 10-15 GB | 2-3.3 GB | |
 
-The first edit after startup is slower than a repeat because it builds the incremental state. A repeat comment edit
-reuses the program.
+The `--watch` edit rows assume the signature job finished before the edit (`watchlat.py` waits 3 s after each report).
+An edit that arrives earlier can still take seconds: files whose signatures were not computed yet recheck their
+importers. The `-b --watch` column has neither the signature job nor the one-file cycle optimizations. A real
+declaration change (the hub export) rechecks the importers of importers by design.
 
 ## Targets on macOS
 
@@ -112,8 +122,8 @@ Hard requirements:
   wait, and a cycle on a half-written file reports false errors.
 - No missed edits, including in projects under `/tmp` (a symlink to `/private/tmp`), on case-insensitive APFS, and
   for edits made through a symlinked directory.
-- Idle cost of zero: no CPU and no wakeups while nothing changes. Laptops run on battery, so a watch that wakes up 100
-  times a second is a bug even if it is fast.
+- Idle cost of zero once the signature job has finished: no CPU and no wakeups while nothing changes. Laptops run on
+  battery, so a watch that wakes up 100 times a second is a bug even if it is fast.
 - RSS flat across `REPEAT=5`, meaning no growth from one round to the next.
 - Ctrl-C exits promptly and cleanly.
 
@@ -121,7 +131,10 @@ Performance targets (Apple Silicon; scale if the Mac is much slower than the Lin
 
 - detected: under 20 ms. FSEvents latency is 1 ms, so anything much higher points at the stream setup, the GCD
   queue, or the debounce.
-- repeat comment edit, done: under 100 ms for `--watch`, under 400 ms for `-b --watch`.
+- repeat comment edit, done: under 60 ms for `--watch`, under 400 ms for `-b --watch`.
+- first comment edit after startup, once the signature job is done: under 100 ms.
+- Signature job: at most twice its Linux time, and an edit that arrives during it waits under 20 ms more ("detected"
+  includes that wait).
 - Every row in the table: at least the same ratio over tsgo that Linux shows (3-7x).
 - Rebuilding the FSEvents stream when the watch set changes (a file added or a new directory) adds under 10 ms to that
   cycle and loses no events.
@@ -162,8 +175,13 @@ Performance targets (Apple Silicon; scale if the Mac is much slower than the Lin
    both scripts. It must either work or fail with a clear error, never silently stop watching.
 6. Memory on macOS. Check RSS with `ps`, but also `footprint <pid>` and `vmmap --summary <pid>`, because RSS
    excludes compressed pages. Check that the background free actually returns memory to the OS on macOS.
-7. Idle cost. Run `top -pid <pid> -stats pid,cpu,idlew,power` for a minute with no edits. Use
-   `sudo powermetrics --samplers tasks --show-process-energy -i 5000 -n 6` to count wakeups.
+7. Idle cost. Run `top -pid <pid> -stats pid,cpu,idlew,power` for a minute with no edits, starting after the
+   signature job logs `done`. Use `sudo powermetrics --samplers tasks --show-process-energy -i 5000 -n 6` to count
+   wakeups.
+8. The signature job. Measure its time and energy after the initial build, and how long an edit made while it runs
+   waits for it: `tools/watch/editduringjob.py <compiler> <projdir> [rounds]` edits 0-1.2 s after each report and
+   compares each cycle with a fresh build. If a chunk takes much longer than on Linux, the chunk size or the
+   thread priority (a utility QoS class on macOS) may need tuning.
 
 ## Tools
 
@@ -199,4 +217,5 @@ Performance targets (Apple Silicon; scale if the Mac is much slower than the Lin
   version, and the tsgo version.
 - `watchcheck.py` results for both modes, plus the save-pattern results (pattern → cycles, correct or not).
 - Idle CPU and wakeups, and RSS/footprint across `REPEAT=5`.
+- The signature job's time after the initial build, and the `editduringjob.py` results.
 - Each problem found: the cause, the fix, its commit, and its test. Also list what you couldn't fix and why.
