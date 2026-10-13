@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
-use tsrs_ast::{new_compiler_diagnostic, Diagnostic, SourceFile};
+use tsrs_ast::{new_compiler_diagnostic, Diagnostic, DiagnosticExt, SourceFile};
 use tsrs_compiler::{filter_no_emit_semantic_diagnostics, Context, Program as CompilerProgram};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, Tristate, P};
@@ -59,7 +59,8 @@ pub fn new_program(
     } else {
         None
     };
-    P::new(Program {
+    // Recycled: see `drop_replaced`.
+    P::new_recycled(Program {
         snapshot,
         program: Some(program),
         host: Some(host),
@@ -214,6 +215,37 @@ impl Program {
         stored
     }
 
+    /// tsrs-only (watch mode, Go's GC): runs the destructors of a program nothing reads any more and of its
+    /// snapshot, giving back the heap they own (the snapshot's maps, the host and its file system caches, about 13 MB
+    /// per full build on a 9.4k-file project). Their arena blocks stay (`free_replaced` gives them back too).
+    ///
+    /// # Safety
+    /// Nothing reads `program` or its snapshot afterwards: the program made from it (if any) has been created, and it
+    /// was not created for the test harness (whose next program keeps the snapshot, `TestingData`).
+    pub unsafe fn drop_replaced(program: P<Program>) {
+        let snapshot = program.snapshot;
+        // SAFETY: both are arena values the thread arenas never drop, and nothing uses them any more (this function's
+        // contract), so each is dropped once.
+        unsafe {
+            std::ptr::drop_in_place(std::ptr::from_ref::<Program>(program.get()).cast_mut());
+            std::ptr::drop_in_place(std::ptr::from_ref::<Snapshot>(snapshot.get()).cast_mut());
+        }
+    }
+
+    /// `drop_replaced`, and gives their arena blocks to the thread's free list, for the next ones (`new_program`).
+    ///
+    /// # Safety
+    /// As `drop_replaced`; both were allocated on this thread in its own arena.
+    pub unsafe fn free_replaced(program: P<Program>) {
+        let snapshot = program.snapshot;
+        // SAFETY: this function's contract; the blocks are dead once dropped.
+        unsafe {
+            Program::drop_replaced(program);
+            tsrs_core::free!(program);
+            tsrs_core::free!(snapshot);
+        }
+    }
+
     /// tsrs-only (a watch session's file regions, tsrs_execute watchmem.rs): calls `f` with each source file that the
     /// diagnostics the snapshot keeps refer to, related information and message chains included. Diagnostics copied
     /// from an older snapshot refer to the file versions they were reported for, which need not be the program's.
@@ -243,6 +275,23 @@ impl Program {
                     true
                 });
             }
+        }
+    }
+
+    /// tsrs-only (watch mode): replaces every diagnostic the snapshot keeps with a copy in the current allocation
+    /// target (`DiagnosticExt::copy_deep`), so that the regions of the diagnostics it copied from the old snapshot
+    /// and of those the replaced program's checkers made (tsrs_compiler checkerpool.rs `SlotChecker`) can be freed.
+    /// Not for the test harness, which reads the old snapshot's diagnostics too: some are shared with this one.
+    pub fn copy_diagnostics(&self) {
+        for map in [&self.snapshot.semantic_diagnostics_per_file, &self.snapshot.emit_diagnostics_per_file] {
+            map.range(|_, cache| {
+                if let Some(diagnostics) = cache.diagnostics.lock().unwrap().as_mut() {
+                    for d in diagnostics.iter_mut() {
+                        *d = d.copy_deep();
+                    }
+                }
+                true
+            });
         }
     }
 

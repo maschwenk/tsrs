@@ -61,6 +61,13 @@ pub struct ProgramOptions {
     /// tsrs-only: each checker of the built-in pool allocates in a region of its own, which `free_program` gives
     /// back (watch mode, which replaces its program every cycle; the CLI's single build leaks its checkers).
     pub checker_regions: bool,
+    /// tsrs-only, with `checker_regions`: the diagnostics each checker makes go to a region of its own, which
+    /// `free_program` gives back too (checkerpool.rs `SlotChecker`): the caller copies those it keeps (watch mode's
+    /// snapshot, tsrs_incremental `Program::copy_diagnostics`).
+    pub checker_diagnostic_regions: bool,
+    /// tsrs-only: what the file loader allocates goes to these regions (programregions.rs), which the caller frees
+    /// once nothing uses the program's processed-file and resolution data (watch mode).
+    pub regions: Option<std::sync::Arc<crate::programregions::ProgramRegions>>,
 }
 
 impl ProgramOptions {
@@ -78,6 +85,8 @@ impl ProgramOptions {
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
             checker_regions: false,
+            checker_diagnostic_regions: false,
+            regions: None,
         }
     }
 
@@ -101,6 +110,8 @@ impl ProgramOptions {
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
             checker_regions: false,
+            checker_diagnostic_regions: false,
+            regions: None,
         }
     }
 
@@ -112,6 +123,7 @@ impl ProgramOptions {
             typings_location: self.typings_location.clone(),
             project_name: self.project_name.clone(),
             skip_module_resolution: self.skip_module_resolution,
+            regions: self.regions.clone(),
         }
     }
 }
@@ -124,6 +136,7 @@ pub struct ProgramConfig {
     pub typings_location: String,
     pub project_name: String,
     pub skip_module_resolution: bool,
+    pub regions: Option<std::sync::Arc<crate::programregions::ProgramRegions>>,
 }
 
 impl ProgramConfig {
@@ -204,9 +217,15 @@ pub struct Program {
     pub(crate) checker_recycling: bool,
     // tsrs-only: `ProgramOptions::checker_regions`.
     pub(crate) checker_regions: bool,
+    // tsrs-only: `ProgramOptions::checker_diagnostic_regions`.
+    pub(crate) checker_diagnostic_regions: bool,
     // tsrs-only: the address of the program `reuse_program` made this one from, 0 for a program built in full
     // (`is_reuse_of`). An address, not a reference: the watch frees that program once this one has replaced it.
     reused_from: usize,
+    // tsrs-only: what `reuse_program` allocated for this program when its programs are freed (`checker_regions`):
+    // the file list and the resolution data with its copy of the package.json cache table, about 40 KB per edit on a
+    // 4k-file project. Last: the fields above point into it.
+    own_region: Option<tsrs_core::arena::Region>,
 }
 
 impl std::ops::Deref for Program {
@@ -441,7 +460,9 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_referred: OnceLock::new(),
         checker_recycling: opts.checker_recycling,
         checker_regions: opts.checker_regions,
+        checker_diagnostic_regions: opts.checker_diagnostic_regions,
         reused_from: 0,
+        own_region: None,
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -633,11 +654,16 @@ impl Program {
             return result;
         }
         // TODO: reverify compiler options when config has changed?
+        let own_region = self.checker_regions.then(|| tsrs_core::arena::Region::new_scratch(64 << 10));
+        let resolution_data = {
+            let _scope = own_region.as_ref().map(tsrs_core::arena::Region::enter);
+            self.resolution_data.clone_data()
+        };
         let mut result = Program {
             opts: self.opts.clone(),
             resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
             host: new_host,
-            resolution_data: self.resolution_data.clone_data(),
+            resolution_data,
             checker_pool: OnceLock::new(),
             include_processor: includeProcessor::default(),
             module_resolution_error: None,
@@ -665,7 +691,9 @@ impl Program {
             leaf_referred: OnceLock::new(),
             checker_recycling: false,
             checker_regions: self.checker_regions,
+            checker_diagnostic_regions: self.checker_diagnostic_regions,
             reused_from: std::ptr::from_ref(self) as usize,
+            own_region,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -681,7 +709,10 @@ impl Program {
             files[supplemental_index] = new_supplemental;
             result.files_by_path.insert(new_supplemental.path().clone(), new_supplemental);
         }
-        result.files = tsrs_core::alloc_vec(files);
+        result.files = {
+            let _scope = result.own_region.as_ref().map(tsrs_core::arena::Region::enter);
+            tsrs_core::alloc_vec(files)
+        };
         let result: &'static Program = Box::leak(Box::new(result));
         tsrs_core::census_scrub_stack();
         result.init_checker_pool(create_checker_pool, self.compiler_checker_pool());

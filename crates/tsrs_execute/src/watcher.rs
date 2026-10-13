@@ -13,6 +13,7 @@ use tsrs_compiler::{new_compiler_host, new_program, CompilerHost, Program, Progr
 use tsrs_contentmapper as contentmapper;
 use tsrs_core::collections::SyncMap;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
+use tsrs_core::arena::Region;
 use tsrs_core::{CompilerOptions, ScriptKind, P};
 use tsrs_diagnostics as diagnostics;
 use tsrs_fswatch::EventKind;
@@ -124,6 +125,11 @@ pub struct Watcher {
     // session no longer uses.
     file_regions: Arc<FileRegions>,
     full_build_files: Vec<P<SourceFile>>,
+    // What the file loader allocated for the last full build (resolutions, include reasons, processed-file data),
+    // freed after the data the programs updated from it share (`install_program`).
+    full_build_regions: Option<Arc<tsrs_compiler::ProgramRegions>>,
+    // The diagnostics the current snapshot keeps from the cycles before (`install_program`).
+    snapshot_diagnostics: Option<Region>,
     freer: Freer,
 
     wm: Arc<WatchManager>,
@@ -197,6 +203,8 @@ pub(crate) fn run_watcher(
         source_file_cache: Arc::default(),
         file_regions: Arc::default(),
         full_build_files: Vec::new(),
+        full_build_regions: None,
+        snapshot_diagnostics: None,
         freer: Freer::new(testing.is_some()),
         wm,
         seen_files: FxHashSet::default(),
@@ -492,7 +500,7 @@ impl Watcher {
             return;
         }
 
-        (self.report_watch_status)(new_compiler_diagnostic(&diagnostics::File_change_detected_Starting_incremental_compilation, &[]));
+        self.report_status(|| new_compiler_diagnostic(&diagnostics::File_change_detected_Starting_incremental_compilation, &[]));
         if self.do_build(&mut state).is_err() {
             // Mid-cycle watch failure; force a full rebuild on the next event
             wm.force_overflow();
@@ -655,10 +663,15 @@ impl Watcher {
         }
 
         let mut program_options = ProgramOptions::new(self.config, Arc::clone(&host));
-        // Each cycle replaces the program; its checkers' regions are freed with it (`install_program`).
+        // Each cycle replaces the program; its checkers' regions are freed with it (`install_program`), and what the
+        // file loader allocates with the data the programs updated from it share.
         program_options.checker_regions = true;
+        // The harness reads diagnostics of programs that are freed (`install_program`).
+        program_options.checker_diagnostic_regions = self.testing.is_none();
+        let regions = Arc::new(tsrs_compiler::ProgramRegions::default());
+        program_options.regions = Some(Arc::clone(&regions));
         let program = new_program(program_options);
-        self.install_program(program, host, true);
+        self.install_program(program, host, Some(regions));
         self.program_ready = true;
         self.full_builds += 1;
 
@@ -705,10 +718,22 @@ impl Watcher {
     }
 
     fn report_error_count(&self, error_count: usize) {
-        let diagnostic = if error_count == 1 {
-            new_compiler_diagnostic(&diagnostics::Found_1_error_Watching_for_file_changes, &[])
-        } else {
-            new_compiler_diagnostic(&diagnostics::Found_0_errors_Watching_for_file_changes, &[&error_count])
+        self.report_status(|| {
+            if error_count == 1 {
+                new_compiler_diagnostic(&diagnostics::Found_1_error_Watching_for_file_changes, &[])
+            } else {
+                new_compiler_diagnostic(&diagnostics::Found_0_errors_Watching_for_file_changes, &[&error_count])
+            }
+        });
+    }
+
+    // tsrs-only: reports a status message made in a region freed right after (the reporter writes it out and keeps
+    // nothing); the two of each cycle would otherwise stay in the thread arena.
+    fn report_status(&self, make: impl FnOnce() -> P<tsrs_ast::Diagnostic>) {
+        let region = Region::new_scratch(4 << 10);
+        let diagnostic = {
+            let _route = region.route_diagnostics();
+            make()
         };
         (self.report_watch_status)(diagnostic);
     }
@@ -740,33 +765,49 @@ impl Watcher {
 
         let (new_program, _, reused) = old_program.reuse_program(changed_path, Arc::clone(&host), None, None);
         if reused {
-            self.install_program(new_program.unwrap(), host, false);
+            self.install_program(new_program.unwrap(), host, None);
         }
         reused
     }
 
     // tsrs-only (Go's GC): makes `program` the current one and frees the compiler program it replaces, with its
-    // checkers, once the new incremental program has taken what it keeps of the old snapshot (diagnostics, which the
-    // checkers allocate outside their regions, and plain data). A full build also frees the data the programs since
-    // the previous full build shared (`update_program` hands it on). Then the regions of the files nothing refers to
-    // any more (watchmem.rs).
-    fn install_program(&mut self, program: &'static Program, host: Arc<dyn CompilerHost>, full_build: bool) {
+    // checkers, once the new incremental program has taken what it keeps of the old snapshot (plain data, and
+    // diagnostics, which it copies to a region of its own: the old program's checkers made some in theirs). A full
+    // build also frees the data the programs since the previous full build shared (`update_program` hands it on).
+    // Then the regions of the files nothing refers to any more (watchmem.rs).
+    // `full_build_regions`: the file loader's regions of a full build (`None` for a program updated from the current one).
+    fn install_program(&mut self, program: &'static Program, host: Arc<dyn CompilerHost>, full_build_regions: Option<Arc<tsrs_compiler::ProgramRegions>>) {
+        let full_build = full_build_regions.is_some();
         // Bind before any checker exists: single-threaded, the first checker would bind the files in its region, and
         // later programs reuse the cached files.
         program.bind_source_files();
-        let new = tsrs_incremental::new_program(
-            program,
-            self.program,
-            tsrs_incremental::create_host(host),
-            Some(std::time::Instant::now),
-            self.testing.is_some(),
-        );
-        let old = self.program.replace(new).and_then(|old| old.compiler_program());
-        let shared = if full_build {
+        // The harness reads the old snapshot's diagnostics, which the new one shares (`copy_diagnostics`).
+        let snapshot_diagnostics = self.testing.is_none().then(|| Region::new_scratch(64 << 10));
+        let new = {
+            // The diagnostics the snapshot recomputes for the new program (`repopulate_diagnostics_of_file`).
+            let _route = snapshot_diagnostics.as_ref().map(Region::route_diagnostics);
+            tsrs_incremental::new_program(program, self.program, tsrs_incremental::create_host(host), Some(std::time::Instant::now), self.testing.is_some())
+        };
+        if let Some(region) = &snapshot_diagnostics {
+            let _scope = region.enter();
+            new.copy_diagnostics();
+        }
+        let old_snapshot_diagnostics = std::mem::replace(&mut self.snapshot_diagnostics, snapshot_diagnostics);
+        let old_incremental = self.program.replace(new);
+        let old = old_incremental.and_then(|old| old.compiler_program());
+        if self.testing.is_none()
+            && let Some(old_incremental) = old_incremental
+        {
+            // SAFETY: `new` was created from it, and nothing else holds it: the watcher's only reference was
+            // `self.program`, and the signature job, which reads the current program, is stopped during a cycle. Both
+            // incremental programs are made on this thread (`install_program`).
+            unsafe { tsrs_incremental::Program::free_replaced(old_incremental) };
+        }
+        let (shared, old_regions) = if full_build {
             self.full_build_files = program.get_source_files().to_vec();
-            self.shared_program_data.replace(tsrs_compiler::shared_program_data(program))
+            (self.shared_program_data.replace(tsrs_compiler::shared_program_data(program)), std::mem::replace(&mut self.full_build_regions, full_build_regions))
         } else {
-            None
+            (None, None)
         };
         let dead_files = self.file_regions.take_unreachable(&self.live_files(new));
         let free = move || {
@@ -776,6 +817,8 @@ impl Watcher {
                 // incremental program read the old snapshot without keeping the program.
                 unsafe { tsrs_compiler::free_program(old) };
             }
+            // The snapshot that kept them is gone, and the new one keeps copies.
+            drop(old_snapshot_diagnostics);
             if let Some(shared) = shared {
                 // SAFETY: every program since the previous full build shared this data, and each was freed when the
                 // next one replaced it (above, for the last one, after the earlier ones: the frees run in order);
@@ -785,6 +828,8 @@ impl Watcher {
             // The programs that referred to these files are freed (above, or by earlier jobs), and nothing that is
             // read again does (`live_files`).
             drop(dead_files);
+            // Last: the programs and the shared data above point into them (the programs hold the set too).
+            drop(old_regions);
         };
         // The test harness frees in place, for deterministic runs.
         if self.testing.is_some() {

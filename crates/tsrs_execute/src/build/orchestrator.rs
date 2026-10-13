@@ -676,6 +676,11 @@ impl Orchestrator {
                 // already taken).
                 // SAFETY: see above; no checker handle of it is held.
                 unsafe { tsrs_compiler::free_unshared_program(program.get_program()) };
+            } else if let (true, Some(program)) = (self.opts.command.compiler_options.watch.is_true(), program) {
+                // Watch mode: the next build of the task starts from the build info, and the compiler program goes
+                // when it does (`BuildTask::replace_watch_program`); this gives back the snapshot's heap.
+                // SAFETY: the result was the only holder of the incremental program.
+                unsafe { tsrs_incremental::Program::drop_replaced(program) };
             }
         }
         task.built.close();

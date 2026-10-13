@@ -21,7 +21,8 @@ pub(crate) fn program_to_snapshot(program: &'static CompilerProgram, old_program
             return old_program.snapshot;
         }
     }
-    let snapshot = P::new(Snapshot { hash_with_text, ..Default::default() });
+    // Recycled: a watch session frees the snapshot it replaces (`Program::drop_replaced`).
+    let snapshot = P::new_recycled(Snapshot { hash_with_text, ..Default::default() });
     snapshot.options.set(Some(program.options()));
     snapshot.check_pending.set(program.options().no_check.is_true());
     let mut to = toProgramSnapshot { program, old_program, snapshot, global_file_removed: false, has_deleted_files: false, global_scope_lost: false };

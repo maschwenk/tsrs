@@ -39,7 +39,7 @@ pub struct CheckerHandle {
 enum checkerHandleKind {
     // The built-in pool's checkers live behind a mutex per checker (Go `locks[i]`).
     // The scope makes the checker's region (`SlotChecker::region`) the allocation target while the handle is held.
-    Locked { guard: MutexGuard<'static, SlotChecker>, _scope: Option<tsrs_core::arena::ScratchScope> },
+    Locked { guard: MutexGuard<'static, SlotChecker>, _scope: Option<CheckerScope> },
     // A checker owned by an external pool, which tracks exclusivity itself (Go project pool's `heldBy`).
     External { checker: NonNull<Checker>, release: Option<Box<dyn FnOnce()>> },
 }
@@ -181,40 +181,59 @@ struct CheckerSlot(Mutex<SlotChecker>);
 // tsrs-only (notes/mem-recycle-checkers.md): a checker of the built-in pool and, when the type-check pass may retire
 // checkers (`max_memory`), the region that holds everything it allocates. The region is the allocation target
 // whenever the checker runs (`enter`), so dropping the checker and then the region gives back all of its memory.
+//
+// With `ProgramOptions::checker_diagnostic_regions` (watch mode), the diagnostics the checker makes go to a second region of the slot
+// (`arena::Region::route_diagnostics`), freed with the program like the checker's: the snapshot that keeps some of
+// them copies those (tsrs_incremental `Program::copy_diagnostics`).
 pub(crate) struct SlotChecker {
     checker: Box<Checker>,
     region: Option<tsrs_core::arena::Region>,
+    diagnostics: Option<tsrs_core::arena::Region>,
+}
+
+/// `SlotChecker::enter`.
+pub(crate) struct CheckerScope {
+    // Before the region's scope: the route applies while the region is the target.
+    _route: Option<tsrs_core::arena::DiagnosticRoute>,
+    _scope: tsrs_core::arena::ScratchScope,
 }
 
 impl SlotChecker {
     fn new(program: &'static Program, in_region: bool) -> SlotChecker {
         if !in_region {
-            return SlotChecker { checker: new_checker(program), region: None };
+            return SlotChecker { checker: new_checker(program), region: None, diagnostics: None };
         }
         let region = tsrs_core::arena::Region::new_scratch(1 << 20);
+        let diagnostics = program.checker_diagnostic_regions.then(|| tsrs_core::arena::Region::new_scratch(64 << 10));
         let checker = {
             let _scope = region.enter_scratch();
+            // Merging the globals reports duplicate declarations.
+            let _route = diagnostics.as_ref().map(tsrs_core::arena::Region::route_diagnostics);
             new_checker(program)
         };
-        SlotChecker { checker, region: Some(region) }
+        SlotChecker { checker, region: Some(region), diagnostics }
     }
 
     // A replacement for a retired checker: a fork of the frozen shared-graph seed when there is one (it starts with the
     // seed's graph instead of rebuilding it), else a fresh checker; in a region of its own either way.
-    fn new_replacement(program: &'static Program) -> SlotChecker {
+    // The retired checker's diagnostics stay with the slot: the pool's results refer to them.
+    fn new_replacement(program: &'static Program, diagnostics: Option<tsrs_core::arena::Region>) -> SlotChecker {
         let region = tsrs_core::arena::Region::new_scratch(1 << 20);
         let checker = {
             let _scope = region.enter_scratch();
+            let _route = diagnostics.as_ref().map(tsrs_core::arena::Region::route_diagnostics);
             let fork = crate::sharedgraph::fresh_fork();
             fork.unwrap_or_else(|| new_checker(program))
         };
-        SlotChecker { checker, region: Some(region) }
+        SlotChecker { checker, region: Some(region), diagnostics }
     }
 
     // Makes the checker's region the allocation target (and the thread's scratch region, so that lazily filled
-    // data of shared objects and diagnostics escape it: `arena::escape_scratch`) until the scope is dropped.
-    fn enter(&self) -> Option<tsrs_core::arena::ScratchScope> {
-        self.region.as_ref().map(tsrs_core::arena::Region::enter_scratch)
+    // data of shared objects and diagnostics escape it: `arena::escape_scratch`) until the scope is dropped. The
+    // diagnostics go to the slot's diagnostics region if it has one.
+    fn enter(&self) -> Option<CheckerScope> {
+        let scope = self.region.as_ref()?.enter_scratch();
+        Some(CheckerScope { _route: self.diagnostics.as_ref().map(tsrs_core::arena::Region::route_diagnostics), _scope: scope })
     }
 
     // Bytes of arena the checker holds (its region's chunks), 0 without a region.
@@ -1004,7 +1023,8 @@ impl checkerPool {
     // diagnostics of the files the old checker checked have been collected, and no later pass runs a checker over
     // them (the CLI's `--noEmit` check, as for leaf freeing).
     fn retire_checker(&self, state: &poolState, slot: &mut SlotChecker) {
-        let mut old = std::mem::replace(slot, SlotChecker::new_replacement(self.program));
+        let diagnostics = slot.diagnostics.take();
+        let mut old = std::mem::replace(slot, SlotChecker::new_replacement(self.program, diagnostics));
         {
             let _scope = old.enter();
             // Making the replacement left the thread's overlay (sharedgraph.rs): the old checker reads its own again.

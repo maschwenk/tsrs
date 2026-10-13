@@ -1298,6 +1298,57 @@ pub fn escape_scratch_one_level() -> Option<RegionScope> {
     Some(RegionScope::push(outer, None))
 }
 
+thread_local! {
+    /// `Region::route_diagnostics`: (the allocation target the route applies to, the arena the diagnostics go to);
+    /// null while no route is set.
+    static DIAGNOSTIC_ROUTE: Cell<(*const Arena, *const Arena)> = const { Cell::new((std::ptr::null(), std::ptr::null())) };
+}
+
+/// A route set by `Region::route_diagnostics`, until dropped.
+pub struct DiagnosticRoute {
+    saved: (*const Arena, *const Arena),
+    _region: Region,
+    _not_send: std::marker::PhantomData<*const ()>,
+}
+
+impl Region {
+    /// Until the route is dropped, diagnostics made on this thread while the allocation target is the current one
+    /// (`escape_for_diagnostic`) go to this region instead of escaping the thread's scratch regions: for a session
+    /// that frees what it no longer uses (watch mode), whose checkers would otherwise leave every diagnostic they
+    /// report in the thread arenas (a few thousand per cycle on vscode). Diagnostics made under another target (the
+    /// lazily filled data of a file, `enter_owner`; a program cache, `escape_scratch`) are not routed.
+    ///
+    /// The route allocates in the region without entering it: while the route is set, no other thread may allocate
+    /// in it.
+    pub fn route_diagnostics(&self) -> DiagnosticRoute {
+        let saved = DIAGNOSTIC_ROUTE.with(|r| r.replace((current_target(), &raw const *self.0.arena)));
+        DiagnosticRoute { saved, _region: self.clone(), _not_send: std::marker::PhantomData }
+    }
+}
+
+impl Drop for DiagnosticRoute {
+    fn drop(&mut self) {
+        DIAGNOSTIC_ROUTE.with(|r| r.set(self.saved));
+    }
+}
+
+/// For the allocations of a diagnostic: its route's region (`Region::route_diagnostics`) when the allocation target
+/// is the one the route applies to, else `escape_scratch`.
+#[inline]
+pub fn escape_for_diagnostic() -> Option<RegionScope> {
+    let (from, to) = DIAGNOSTIC_ROUTE.with(|r| r.get());
+    if !from.is_null() && current_target() == from {
+        return Some(RegionScope::push(to, None));
+    }
+    escape_scratch()
+}
+
+/// The allocation target: the current region's arena, or the thread's own.
+fn current_target() -> *const Arena {
+    let cur = CURRENT.with(|c| c.get());
+    if cur.is_null() { std::ptr::from_ref::<Arena>(crate::ptr::own_arena()) } else { cur }
+}
+
 /// `escape_scratch` unless the object at `addr` lives in the scratch region (`enter_owner` without registered regions).
 #[inline]
 fn escape_scratch_unless_inside(addr: usize) -> Option<RegionScope> {

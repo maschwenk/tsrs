@@ -124,8 +124,9 @@ pub struct BuildTask {
     content_mapper_project: OnceLock<Option<Arc<dyn tsrs_contentmapper::Project>>>,
     content_mapper_project_err: Mutex<Option<tsrs_contentmapper::Error>>,
 
-    // tsrs-only, watch mode: the program of the task's last build, freed when the task builds again (Go's GC).
-    watch_program: Mutex<Option<&'static tsrs_compiler::Program>>,
+    // tsrs-only, watch mode: the program of the task's last build and the regions of what its file loader allocated,
+    // freed when the task builds again (Go's GC).
+    watch_program: Mutex<Option<(&'static tsrs_compiler::Program, Arc<tsrs_compiler::ProgramRegions>)>>,
 }
 
 fn diag(message: &'static Message, args: &[&dyn std::fmt::Display]) -> P<Diagnostic> {
@@ -415,24 +416,26 @@ impl BuildTask {
     // that one: the cycle that built it has reported, and the next build reads the old state from the build info.
     // tsrs-only: the program of the task's last build in watch mode.
     pub(crate) fn watch_program(&self) -> Option<&'static tsrs_compiler::Program> {
-        *self.watch_program.lock().unwrap()
+        self.watch_program.lock().unwrap().as_ref().map(|&(program, _)| program)
     }
 
-    fn replace_watch_program(&self, orchestrator: &Orchestrator, program: &'static tsrs_compiler::Program) {
+    fn replace_watch_program(&self, orchestrator: &Orchestrator, program: &'static tsrs_compiler::Program, regions: Arc<tsrs_compiler::ProgramRegions>) {
         // Bind before any checker exists: single-threaded, the first checker would bind the files in its region, and
         // later cycles reuse the parsed files (host.rs `get_watch_source_file`).
         program.bind_source_files();
-        let Some(previous) = self.watch_program.lock().unwrap().replace(program) else { return };
+        let Some((previous, previous_regions)) = self.watch_program.lock().unwrap().replace((program, regions)) else { return };
         orchestrator.freer.run(move || {
             // SAFETY: see above; a build program shares nothing with another program.
             unsafe { tsrs_compiler::free_unshared_program(previous) };
+            // Last: the program and its processed-file data point into them.
+            drop(previous_regions);
         });
     }
 
     // tsrs-only (watch mode): adds the files the task's program and its diagnostics refer to
     // (`Orchestrator::free_unreachable_watch_files`).
     pub(crate) fn add_live_watch_files(&self, live: &mut rustc_hash::FxHashSet<usize>) {
-        if let Some(program) = *self.watch_program.lock().unwrap() {
+        if let Some((program, _)) = *self.watch_program.lock().unwrap() {
             live.extend(program.get_source_files().iter().map(|f| f.addr()));
         }
         let program = self.result.lock().unwrap().as_ref().and_then(|r| r.program);
@@ -487,11 +490,15 @@ impl BuildTask {
         let parse_start = sys.now();
         let watch = orchestrator.opts.command.compiler_options.watch.is_true();
         let mut program_options = ProgramOptions::new(self.resolved(), compiler_host);
-        // Watch mode frees the program when the task builds again (`replace_watch_program`).
+        // Watch mode frees the program when the task builds again (`replace_watch_program`), with the diagnostics its
+        // checkers make: the task's errors are cleared first, and its incremental program is dropped once reported.
         program_options.checker_regions = watch;
+        program_options.checker_diagnostic_regions = watch && orchestrator.opts.testing.is_none();
+        let regions = watch.then(|| Arc::new(tsrs_compiler::ProgramRegions::default()));
+        program_options.regions.clone_from(&regions);
         let program = new_program(program_options);
-        if watch {
-            self.replace_watch_program(orchestrator, program);
+        if let Some(regions) = regions {
+            self.replace_watch_program(orchestrator, program, regions);
         }
         compile_times.parse_time = sys.now() - parse_start;
         let changes_compute_start = sys.now();
@@ -502,6 +509,13 @@ impl BuildTask {
             Some(std::time::Instant::now),
             orchestrator.opts.testing.is_some(),
         );
+        if watch
+            && orchestrator.opts.testing.is_none()
+            && let Some(old_program) = old_program
+        {
+            // SAFETY: read from the build info for this build alone; `incremental_program` was made from it.
+            unsafe { tsrs_incremental::Program::drop_replaced(old_program) };
+        }
         self.result.lock().unwrap().as_mut().unwrap().program = Some(incremental_program);
         compile_times.changes_compute_time = sys.now() - changes_compute_start;
 
