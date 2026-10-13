@@ -121,6 +121,8 @@ pub struct Orchestrator {
     schedule_order: Mutex<Vec<String>>,
     // tsrs-only (`directory_change_matters`).
     wanted_watch_dirs: Mutex<FxHashSet<Path>>,
+    // tsrs-only (`cached_realpath`): the real paths of the build info's files, kept across cycles.
+    realpaths: Mutex<FxHashMap<String, String>>,
 }
 
 impl Orchestrator {
@@ -713,7 +715,8 @@ impl Orchestrator {
     // has no event; Go misses the edit until the next save (tsgo too). A program file modified since the build
     // started is queued as a change, and the first cycle checks it again. One stat per source file, once.
     fn queue_files_changed_since(&self, build_started: std::time::SystemTime) {
-        let fs = CompilerHost::fs(self.host());
+        // Not the host's cached file system: the first cycle must not see these stats.
+        let fs = self.opts.sys.fs();
         let order = self.order.lock().unwrap().clone();
         let tasks: Vec<P<BuildTask>> = order.iter().map(|config| self.get_task(&self.to_path(config))).collect();
         // The build wrote the outputs a downstream project reads (a reference's declarations): not edits.
@@ -766,6 +769,10 @@ impl Orchestrator {
             self.wm.debug(|| "[watch] DoCycle: no events, skipping\n".to_string());
             return;
         }
+        // tsrs-only: whatever the cached file system holds predates the events (`get_watch_source_file` reuses a file
+        // whose modification time it finds unchanged).
+        self.host().cached_fs.clear_cache();
+        self.invalidate_realpaths(&changed_paths, overflow);
         let mut needs_config_update = false;
         let mut needs_update = false;
         if overflow {
@@ -806,7 +813,7 @@ impl Orchestrator {
     fn free_unreachable_watch_files(&self) {
         let host = self.host();
         let Some(cache) = &host.watch_source_files else { return };
-        let mut live: rustc_hash::FxHashSet<usize> = cache.lock().unwrap().values().map(|f| f.addr()).collect();
+        let mut live: rustc_hash::FxHashSet<usize> = cache.lock().unwrap().values().map(|(f, _)| f.addr()).collect();
         let tasks: Vec<P<BuildTask>> = self.tasks.lock().unwrap().values().copied().collect();
         for task in tasks {
             task.add_live_watch_files(&mut live);
@@ -842,6 +849,12 @@ impl Orchestrator {
             task.built.reset();
             task.done.reset();
 
+            // tsrs-only: the wildcard file set changes only when a file it may match appears or goes, or a directory
+            // does; an edit of a file already in it cannot change it, so the reload (a walk of the project, 60 ms on
+            // vscode, before the cycle is even reported) is skipped. Go reloads every cycle.
+            if !self.file_names_may_change(&resolved, changed_paths) {
+                continue;
+            }
             let new_config = P::new(resolved.reload_file_names_of_parsed_command_line(CompilerHost::fs(self.host())));
             if resolved.file_names() != new_config.file_names() {
                 self.host().resolved_references.store(path.clone(), Some(new_config));
@@ -866,6 +879,33 @@ impl Orchestrator {
             }
             *needs_update = true;
         }
+    }
+
+    // tsrs-only (see `check_tasks_for_event_changes`).
+    fn file_names_may_change(&self, resolved: &tsrs_tsoptions::ParsedCommandLine, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>) -> bool {
+        if resolved.config_file.is_none() || resolved.wildcard_directories().is_none_or(|w| w.is_empty()) {
+            return false;
+        }
+        let fs = CompilerHost::fs(self.host());
+        let names = resolved.file_names_by_path();
+        #[expect(clippy::iter_over_hash_type, reason = "only asks whether any path qualifies")]
+        let cwd = self.opts.sys.get_current_directory();
+        let may_change = changed_paths.keys().any(|p| {
+            let listed = names.get(&self.to_path(p));
+            let is_name = listed.is_some();
+            if fs.file_exists(p) {
+                // An edit of a listed file keeps the set (unless it was renamed in case only: the path is the same,
+                // the spelling is not); a new file changes it if the wildcards may match it.
+                match listed {
+                    Some(name) => tspath::get_normalized_absolute_path(name, cwd) != *p,
+                    None => resolved.possibly_matches_file_name(p),
+                }
+            } else {
+                // A listed file went, or a directory came or went (a directory exists, or it is gone like a file).
+                is_name || fs.directory_exists(p) || resolved.possibly_matches_directory_name(&self.to_path(p)) || resolved.possibly_matches_file_name(p)
+            }
+        });
+        may_change
     }
 
     // The tsconfig, an extended config, or a content mapper's package manifest changed.
@@ -975,7 +1015,7 @@ impl Orchestrator {
                 let build_info_dir = tspath::get_directory_path(bi_path.as_str());
                 let roots: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
                 for file_name in &build_info.file_names {
-                    let abs_path = fs.realpath(&self.resolve_build_info_file_name(file_name, &build_info_dir));
+                    let abs_path = self.cached_realpath(&self.resolve_build_info_file_name(file_name, &build_info_dir));
                     if roots.has(&self.to_path(&abs_path)) {
                         continue;
                     }
@@ -1009,6 +1049,28 @@ impl Orchestrator {
         }
         *self.wanted_watch_dirs.lock().unwrap() = wanted;
         self.wm.resolve_desired_dirs(&dirs)
+    }
+
+    // tsrs-only: computing the watches took one realpath per file the build info lists, every cycle (10k files, 290 ms
+    // of a 400 ms vscode cycle). A real path changes only when a symlink on it does, and such a change is an event
+    // for a symlink, a directory or a removed path, which clears the cache (`invalidate_realpaths`).
+    fn cached_realpath(&self, path: &str) -> String {
+        if let Some(real) = self.realpaths.lock().unwrap().get(path) {
+            return real.clone();
+        }
+        let real = CompilerHost::fs(self.host()).realpath(path);
+        self.realpaths.lock().unwrap().insert(path.to_string(), real.clone());
+        real
+    }
+
+    fn invalidate_realpaths(&self, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>, overflow: bool) {
+        let fs = CompilerHost::fs(self.host());
+        #[expect(clippy::iter_over_hash_type, reason = "only asks whether any path qualifies")]
+        let structural = overflow
+            || changed_paths.keys().any(|p| std::fs::symlink_metadata(p).map_or(true, |m| m.file_type().is_symlink()) || fs.directory_exists(p));
+        if structural {
+            self.realpaths.lock().unwrap().clear();
+        }
     }
 
     // tsrs-only: a directory that appeared or changed under a watched one matters when a project's wildcards may
@@ -1159,6 +1221,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         freer,
         schedule_order: Mutex::new(Vec::new()),
         wanted_watch_dirs: Mutex::new(FxHashSet::default()),
+        realpaths: Mutex::new(FxHashMap::default()),
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
         api_clean_exists: Mutex::new(FxHashMap::default()),

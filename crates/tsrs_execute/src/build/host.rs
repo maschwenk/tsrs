@@ -34,8 +34,9 @@ pub(crate) struct host {
     pub(crate) resolved_references: parseCache<Path, Option<P<ParsedCommandLine>>>,
     pub(crate) m_times: Mutex<mTimeCache>,
 
-    // tsrs-only, watch mode: every parsed file, kept across build cycles (`get_watch_source_file`).
-    pub(crate) watch_source_files: Option<Mutex<FxHashMap<SourceFileParseOptions, P<SourceFile>>>>,
+    // tsrs-only, watch mode: every parsed file and the modification time it was read at, kept across build cycles
+    // (`get_watch_source_file`).
+    pub(crate) watch_source_files: Option<Mutex<FxHashMap<SourceFileParseOptions, (P<SourceFile>, Option<std::time::SystemTime>)>>>,
     // tsrs-only, watch mode: the regions of those files (watchmem.rs; `Orchestrator::free_unreachable_watch_files`).
     pub(crate) watch_file_regions: crate::watchmem::FileRegions,
 }
@@ -45,15 +46,30 @@ impl host {
     // declaration and JSON files within a cycle). A watch session here keeps every parsed file and reuses it while the
     // file's text is unchanged, as the non-build watcher does (watcher.rs `watchCompilerHost`): the same text and
     // parse options give the same tree, and binding does not depend on the program.
-    fn get_watch_source_file(&self, cache: &Mutex<FxHashMap<SourceFileParseOptions, P<SourceFile>>>, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
+    //
+    // A file whose modification time is the one it was read at is reused without reading it again (as the non-build
+    // watcher does); reading and comparing every file's text took about 100 ms of a vscode cycle. A file whose time
+    // changed is compared by text.
+    fn get_watch_source_file(&self, cache: &Mutex<FxHashMap<SourceFileParseOptions, (P<SourceFile>, Option<std::time::SystemTime>)>>, opts: SourceFileParseOptions) -> Option<P<SourceFile>> {
         let cached = cache.lock().unwrap().get(&opts).copied();
-        if let Some(file) = cached {
-            // A bundled lib is text in the binary.
-            if tsrs_vfs::bundled::embedded_file(&opts.file_name).is_some() {
+        // A bundled lib is text in the binary.
+        if let Some((file, _)) = cached
+            && tsrs_vfs::bundled::embedded_file(&opts.file_name).is_some()
+        {
+            return Some(file);
+        }
+        // Before reading: a write after this stat changes the time again, and the next cycle reads the file.
+        let info = self.host.fs().stat(&opts.file_name);
+        let mod_time = info.as_ref().and_then(|s| s.mod_time());
+        if let Some((file, cached_time)) = cached {
+            if mod_time.is_some() && mod_time == cached_time {
                 return Some(file);
             }
             match self.host.fs().read_file(&opts.file_name) {
-                Some(text) if text == file.text() => return Some(file),
+                Some(text) if text == file.text() => {
+                    cache.lock().unwrap().insert(opts, (file, mod_time));
+                    return Some(file);
+                }
                 Some(_) => {}
                 None => {
                     cache.lock().unwrap().remove(&opts);
@@ -61,9 +77,9 @@ impl host {
                 }
             }
         }
-        let size = self.host.fs().stat(&opts.file_name).map_or(0, |info| usize::try_from(info.size()).unwrap_or(0));
+        let size = info.as_ref().map_or(0, |info| usize::try_from(info.size()).unwrap_or(0));
         let file = self.watch_file_regions.parse(size, || self.host.get_source_file(opts.clone()))?;
-        cache.lock().unwrap().insert(opts, file);
+        cache.lock().unwrap().insert(opts, (file, mod_time));
         Some(file)
     }
 

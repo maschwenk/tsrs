@@ -427,3 +427,35 @@ fn installing_a_package_resolves_its_import_in_build_watch() {
     let _shared = shared();
     installing_a_package_resolves_its_import(&["-b", ".", "--watch"]);
 }
+
+fn edits_after_the_first_build_are_seen(args: &[&str]) {
+    // Incremental, with outputs (the build info is read and written), and each edit made as soon as the previous cycle
+    // reported. (-b --watch once reused a file parsed before an edit: a stat from between cycles was still cached.)
+    // The outputs go outside the watched tree (as vscode's ../out), so that no cycle for them runs between the edits.
+    let name = format!("edits-{}", args[0].trim_start_matches('-'));
+    let out = std::env::temp_dir().join(format!("tsrs-watch-{}-{name}-out", std::process::id()));
+    let config = format!(r#"{{ "compilerOptions": {{ "strict": true, "types": [], "incremental": true, "outDir": "{}", "rootDir": "src" }}, "include": ["src"] }}"#, out.display());
+    let dir = project(&name, &[("tsconfig.json", &config), ("src/a.ts", "export const a = 1;\n"), ("src/b.ts", "export const b = 1;\n")]);
+    let mut watch = Watch::start_with(&dir, args);
+    for (file, content, count) in [("src/a.ts", format!("export const a = 1;{ERR}"), 1), ("src/b.ts", format!("export const b = 1;{ERR}"), 2), ("src/a.ts", "export const a = 1;\n".to_string(), 1)] {
+        std::fs::write(dir.join(file), content).unwrap();
+        let errors = watch.next_cycle();
+        assert_eq!(errors.len(), count, "{errors:?}; watch log:\n{}", watch.log.join("\n"));
+        assert_eq!(errors, fresh(&dir));
+    }
+    drop(watch);
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+#[test]
+fn edits_after_the_first_build_are_seen_in_watch() {
+    let _shared = shared();
+    edits_after_the_first_build_are_seen(&["--watch", "-p", "."]);
+}
+
+#[test]
+fn edits_after_the_first_build_are_seen_in_build_watch() {
+    let _shared = shared();
+    edits_after_the_first_build_are_seen(&["-b", ".", "--watch"]);
+}
