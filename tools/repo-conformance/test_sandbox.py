@@ -153,7 +153,8 @@ exports.factory = () => {
 
     def test_supported_managers_still_install_inside_the_container(self):
         """Empty synthetic packages exercise the real install commands without installing a public dataset."""
-        for manager in ("npm@11.6.2", "pnpm@10.23.0", "yarn@1.22.22", "bun@1.4.3", "nub@0.8.3"):
+        for manager in ("npm@11.6.2", "pnpm@10.23.0", "pnpm@12.9.1", "pnpm@12.10.1", "yarn@1.22.22",
+                        "bun@1.4.3", "nub@0.8.3"):
             with self.subTest(manager=manager):
                 extra = {".pnpmfile.cjs": "throw new Error('pnpmfile must not execute');\n"}
                 source, repo = self.fixture(manager, extra)

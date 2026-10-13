@@ -58,10 +58,14 @@ def child_env(home: Path, cache: Path) -> dict[str, str]:
     per-repository container, not this environment filter."""
     allowed = {"PATH", "LANG", "LC_ALL", "TMPDIR", "USER", "LOGNAME"}
     env = {k: v for k, v in os.environ.items() if k in allowed}
+    # pnpm 12 ignores TMPDIR for store locks and requires a private XDG runtime directory.
+    runtime = home / ".runtime"
+    runtime.mkdir(parents=True, exist_ok=True, mode=0o700)
     for path in (home / ".npmrc", home / ".npmrc-global", home / ".gitconfig"):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.touch()
-    return dict(env, HOME=str(home), XDG_CONFIG_HOME=str(home / ".config"), XDG_STATE_HOME=str(home / ".state"),
+    return dict(env, HOME=str(home), XDG_RUNTIME_DIR=str(runtime),
+                XDG_CONFIG_HOME=str(home / ".config"), XDG_STATE_HOME=str(home / ".state"),
                 XDG_CACHE_HOME=str(cache / "xdg"), XDG_DATA_HOME=str(cache / "data"),  # pnpm store, Yarn Berry cache
                 npm_config_userconfig=str(home / ".npmrc"), npm_config_globalconfig=str(home / ".npmrc-global"),
                 npm_config_cache=str(cache / "npm"), COREPACK_HOME=str(cache / "corepack"),
