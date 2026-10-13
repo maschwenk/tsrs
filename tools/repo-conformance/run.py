@@ -44,7 +44,7 @@ MAX_SHARDS = 20
 # Recorded in manifests. A rerun's workflow comes from the dispatch commit but runs the manifest's harness (including
 # its report), so bump this when the workflow's arguments to run.py change or when a rerun's report could merge shards
 # differently; reruns of other versions are refused.
-HARNESS = 3
+HARNESS = 4
 
 
 def write_json(path: Path, data: object) -> None:
@@ -689,6 +689,9 @@ def check_dispatch(run_id: str, shards: str) -> None:
 def check_rerun(manifest: dict, shards: str, run: dict, inputs: Path) -> list[int]:
     """The shards to rerun, once the manifest is known to reproduce them: written by this harness version for that
     run, with pinned repository and compiler commits and the run's compilers."""
+    if "recovery_of_run_id" in manifest:
+        raise ValueError(f"Run {run.get('id')} is a recovery; use the original run {manifest['recovery_of_run_id']} "
+                         "and include all shards still needing recovery")
     if manifest.get("harness") != HARNESS:
         raise ValueError(f"The manifest is from harness version {manifest.get('harness')}, not {HARNESS}; older "
                          "manifests may not pin repository commits")
@@ -768,8 +771,11 @@ def main() -> int:
             parser.error(str(error))
     elif args.command == "rerun":
         try:
-            write_matrix(check_rerun(json.loads(args.manifest.read_text()), args.shards,
-                                     json.loads(args.run.read_text()), args.manifest.parent))
+            manifest = json.loads(args.manifest.read_text())
+            earlier = json.loads(args.run.read_text())
+            shards = check_rerun(manifest, args.shards, earlier, args.manifest.parent)
+            write_json(args.manifest, dict(manifest, recovery_of_run_id=earlier["id"]))
+            write_matrix(shards)
         except ValueError as error:
             parser.error(str(error))
     elif args.command == "run":

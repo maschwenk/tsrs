@@ -180,6 +180,12 @@ class RerunTests(unittest.TestCase):
                     self.assertEqual(result.returncode == 0, ok, result.stderr)
                     if ok:
                         self.assertEqual(json.loads(result.stdout), {"shard": [0, 2]})
+                        recovered = json.loads((root / "inputs" / "manifest.json").read_text())
+                        self.assertEqual(recovered["recovery_of_run_id"], 7)
+                        chained = self.run_cli("rerun", "--manifest", str(root / "inputs" / "manifest.json"),
+                                               "--shards", "0,2", "--run", str(root / "run.json"))
+                        self.assertNotEqual(chained.returncode, 0)
+                        self.assertIn("use the original run 7", chained.stderr)
             (root / "inputs" / "bin" / "tsrs").unlink()
             write_json(root / "inputs" / "manifest.json", manifest)
             write_json(root / "run.json", run)

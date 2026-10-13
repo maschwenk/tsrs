@@ -63,6 +63,10 @@ and mode flags (reports without recorded modes are read as default-only), keeps 
 repositories the manifest assigns it, and accepts a result only at the pinned commit (a failed clone records the
 commit it tried to fetch).
 
+A recovery run cannot itself be used as the source for another recovery. Always use the original run ID and include
+all lost or partial shards that need rerunning; this keeps an earlier difference from disappearing across a chain of
+recovery runs.
+
 For a local run, install `corepack@0.36.0`, set `GH_TOKEN` or `GITHUB_TOKEN` for discovery, and build both compilers
 at the manifest's commits. A saved manifest can be reused, and `--previous` adds shards from an earlier run:
 
