@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 // Assembles the npm packages for tsrs, the way TypeScript 7 ships its native compiler: one main package (Node launcher,
-// `bin/tsrs`) whose `optionalDependencies` name one package per platform, each holding only that platform's binary.
+// `bin/tsrs`) whose `optionalDependencies` name one package per platform, each holding that platform's binary and,
+// beside it, the default libraries (lib.*.d.ts), which the binary then reads from disk like the npm tsgo.
 //
 //   node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
 //   node npm/build.mjs --artifacts dir/ --pack      # dir/<target triple>/tsrs[.exe], as the release workflow lays out
 //   node npm/build.mjs --wasm npm/tsrs-wasm/tsrs.wasm --pack   # the WebAssembly package (tools/wasm/build.sh)
-//   node npm/build.mjs --print-version          # also --print-typescript-commit, --check-tag <tag>
+//   node npm/build.mjs --print-version          # also --print-typescript-commit, --print-typescript-nightly, --check-tag <tag>
 //   node npm/build.mjs --sdk-only               # just compile the JS API (npm/tsrs/src -> npm/tsrs/dist)
 //
 // The main package also carries TypeScript 7's unstable JS API (`tsrs/unstable/sync`, `/async`, `/ast`, ...),
@@ -24,6 +25,7 @@ import { fileURLToPath } from "node:url";
 
 const npmDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(npmDir, "..");
+const libsDir = path.join(repoRoot, "crates", "tsrs_vfs", "libs");
 
 // Rust target triple -> Node's process.platform / process.arch.
 const TARGETS = {
@@ -41,7 +43,7 @@ function usage(message) {
     console.error(
         "usage: node npm/build.mjs [--binary <triple>=<path>]... [--artifacts <dir>] [--out <dir>] [--pack] [--tsc <path>]\n" +
             "                          [--wasm <tsrs.wasm>] [--sdk-only]\n" +
-            "                          [--check-tag <git tag>] [--print-version | --print-typescript-commit]\n" +
+            "                          [--check-tag <git tag>] [--print-version | --print-typescript-commit | --print-typescript-nightly]\n" +
             `triples: ${Object.keys(TARGETS).join(", ")}`,
     );
     process.exit(message ? 2 : 0);
@@ -94,6 +96,9 @@ function parseArgs(argv) {
             case "--print-typescript-commit":
                 opts.print = "typescriptCommit";
                 break;
+            case "--print-typescript-nightly":
+                opts.print = "typescriptNightly";
+                break;
             case "-h":
             case "--help":
                 usage();
@@ -121,10 +126,16 @@ function readCargoVersions() {
     }
     const crateVersion = tables["workspace.package"]?.version;
     const ts = tables["workspace.metadata.typescript"];
-    if (!crateVersion || !ts?.version || !ts?.commit) {
-        throw new Error("Cargo.toml needs [workspace.package] version and [workspace.metadata.typescript] version/commit");
+    if (!crateVersion || !ts?.version || !ts?.commit || !ts?.nightly) {
+        throw new Error("Cargo.toml needs [workspace.package] version and [workspace.metadata.typescript] version/commit/nightly");
     }
-    return { crateVersion, version: `${crateVersion}-ts${ts.version}`, typescriptVersion: ts.version, typescriptCommit: ts.commit };
+    return {
+        crateVersion,
+        version: `${crateVersion}-ts${ts.version}`,
+        typescriptVersion: ts.version,
+        typescriptCommit: ts.commit,
+        typescriptNightly: ts.nightly,
+    };
 }
 
 function writeJson(file, value) {
@@ -280,6 +291,10 @@ function main() {
         const exeName = os === "win32" ? "tsrs.exe" : "tsrs";
         fs.copyFileSync(binary, path.join(dir, exeName));
         fs.chmodSync(path.join(dir, exeName), 0o755);
+        // The binary reads the default libraries from its own directory when they are there (bundled::default_lib_path),
+        // so listings, diagnostics and tsbuildinfo name the same real paths as the npm tsgo.
+        const libNames = fs.readdirSync(libsDir).filter(name => name.endsWith(".d.ts")).sort();
+        for (const libName of libNames) fs.copyFileSync(path.join(libsDir, libName), path.join(dir, libName));
         fs.writeFileSync(path.join(dir, "LICENSE"), license);
         fs.writeFileSync(path.join(dir, "NOTICE.txt"), notice);
         const readme = fs.readFileSync(path.join(npmDir, "platform", "README.md"), "utf8")
@@ -294,7 +309,7 @@ function main() {
             ...common,
             description: `The ${platform} binary for ${name}`,
             preferUnplugged: true,
-            files: [exeName, "NOTICE.txt"],
+            files: [exeName, "NOTICE.txt", ...libNames],
             exports: { "./package.json": "./package.json" },
             os: [os],
             cpu: [cpu],

@@ -475,13 +475,16 @@ then-current main:
   order with Go's `omitzero` rules (nil vs empty kept where Go distinguishes them, e.g. `fileInfos: []`) and the
   tuple encodings of the custom `MarshalJSON`s; unmarshaling follows the `UnmarshalJSON` fallbacks.
 - **Version.** The tsbuildinfo `version` is `core::version()` as in Go. Go's release builds stamp it with ldflags
-  (npm nightly: `7.1.0-dev.20260929.1`); tsrs reads `TSRS_TS_VERSION` at build time for the same purpose (default
-  `7.1.0-dev`, Go's source default), so a tsrs built with the tsgo version reads and writes tsbuildinfo files that tsgo
-  accepts, and vice versa. Different versions simply rebuild from scratch, as in Go.
+  (the npm nightly built from the pinned commit: `7.1.0-dev.20260930.4`); tsrs reads `TSRS_TS_VERSION` at build time for
+  the same purpose (default `7.1.0-dev`, Go's source default), so a tsrs built with the tsgo version reads and writes
+  tsbuildinfo files that tsgo accepts, and vice versa. Different versions simply rebuild from scratch, as in Go. Release
+  builds stamp `[workspace.metadata.typescript] nightly` (Cargo.toml); release.yml checks that the nightly was built from
+  the pinned commit (or a later one that changes nothing under tsc/) and that the binaries report it.
 - **Default library path.** Go's embedded build reads libs from `bundled:///libs`, the npm (noembed) tsgo from its
-  executable directory; the path sorts differently against project files, which reorders `referencedMap` keys.
-  `TSRS_LIB_PATH=<dir>` makes tsrs read them from a directory like the noembed build (the oracles set it to tsgo's
-  directory).
+  executable directory; the path sorts differently against project files, which reorders `referencedMap` keys. The
+  npm tsrs packages ship the libs next to the binary, and a binary with a `lib.d.ts` beside it reads them from there
+  like the npm tsgo (`bundled::default_lib_path`); a `cargo` build keeps the embedded ones. `TSRS_LIB_PATH=<dir>`
+  overrides both (the oracles set it to tsgo's directory).
 - **Concurrency.** Go runs the per-file snapshot and affected-file work on work groups; tsrs runs it on the calling
   thread in a deterministic order (sorted paths). The transforms run on the checker threads (emit/core); each
   transformed file is then printed and written on the rayon worker pool, at most 4 writes at a time

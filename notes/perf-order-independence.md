@@ -109,8 +109,9 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
 - **Base constraints cut by the depth guard** (`getResolvedBaseConstraint`): a type first reached ten levels down in
   another type's constraint is cut short, and the cut result is cached for every later caller. Seen on TanStack/router
   (open, notes/open-history-dependence.md).
-- **Relation cache and elaboration:** which elaboration path the relater reports depends on what the relation cache
-  holds. Seen on rxjs (PR #212; open, notes/open-history-dependence.md).
+- **Elaboration depth:** which elaboration path the relater reports depends on whether a type reference was first
+  created from a type annotation (`ObjectFlagsFromTypeNode` changes its recursion identity, so `isDeeplyNestedType`
+  stops at a different level). Seen on rxjs (PR #212; open, notes/open-history-dependence.md section 3).
 - **Budget errors** (TS2589 instantiation depth and count, TS2859 relation complexity, TS2590 for a union whose
   subtype reduction is estimated to take more than 1,000,000 comparisons): they count work, and how much work a
   comparison takes depends on what the checker already resolved, so what is cached can decide whether they fire. Not

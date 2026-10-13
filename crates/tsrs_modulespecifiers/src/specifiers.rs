@@ -1135,7 +1135,7 @@ fn cut<'a>(s: &'a str, sep: &str) -> (&'a str, &'a str, bool) {
 // specifiers.go:1094
 pub(crate) fn try_get_module_name_from_paths(
     relative_to_base_url: &str,
-    paths: &OrderedMap<String, Vec<String>>,
+    paths: &OrderedMap<String, impl PathSubstitutions>,
     allowed_endings: &[ModuleSpecifierEnding],
     base_directory: &str,
     host: &dyn ModuleSpecifierGenerationHost,
@@ -1143,7 +1143,7 @@ pub(crate) fn try_get_module_name_from_paths(
 ) -> String {
     let case_sensitive = host.use_case_sensitive_file_names();
     for (key, values) in paths {
-        for pattern_text in values {
+        for pattern_text in values.substitutions() {
             let normalized = tspath::normalize_path(pattern_text);
             let mut pattern = get_relative_path_if_in_same_volume(&normalized, base_directory, case_sensitive);
             if pattern.is_empty() {

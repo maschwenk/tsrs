@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@string/*": "./src/*",
+      "@null/*": null,
+      "@number/*": 5,
+      "@empty/*": [],
+      "@numbers/*": [1],
+      "@ok/*": ["./src/*"]
+    }
+  },
+  "files": ["a.ts"]
+}

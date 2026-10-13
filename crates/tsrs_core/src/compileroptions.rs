@@ -86,7 +86,9 @@ pub struct CompilerOptions {
     pub no_implicit_override: Tristate,
     pub no_unchecked_side_effect_imports: Tristate,
     pub out_dir: String,
-    pub paths: Option<OrderedMap<String, Vec<String>>>,
+    // Go's `*OrderedMap[string, []string]` keeps a nil slice for a substitution that is not an array (TS5063), apart
+    // from an empty one (TS5066); `None` is the nil slice.
+    pub paths: Option<OrderedMap<String, Option<Vec<String>>>>,
     // Plugins are parsed only so tools can report that native TypeScript does not support them.
     pub plugins: Option<Vec<PluginImport>>,
     pub preserve_const_enums: Tristate,
@@ -734,5 +736,23 @@ impl JsxEmit {
 impl fmt::Display for JsxEmit {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(self.string())
+    }
+}
+
+/// The substitutions of one `paths` (or `typesVersions`) pattern: the module resolver and the module specifier
+/// generator read both kinds of map. Go reads both as `[]string`, where nil and empty iterate alike.
+pub trait PathSubstitutions {
+    fn substitutions(&self) -> &[String];
+}
+
+impl PathSubstitutions for Vec<String> {
+    fn substitutions(&self) -> &[String] {
+        self
+    }
+}
+
+impl PathSubstitutions for Option<Vec<String>> {
+    fn substitutions(&self) -> &[String] {
+        self.as_deref().unwrap_or_default()
     }
 }
