@@ -128,6 +128,8 @@ pub struct Watcher {
 
     wm: Arc<WatchManager>,
     seen_files: FxHashSet<Path>, // all build dependencies (for event filtering)
+    // tsrs-only (`drop_own_output_events`): what the config's builds write.
+    own_outputs: FxHashSet<Path>,
     config_mtimes: FxHashMap<String, Option<SystemTime>>,
     watch_set_dirty: bool,
     // A reason that requires a full `new_program` rebuild (an overflow, a mid-cycle watch failure, a newly appeared
@@ -196,6 +198,7 @@ pub(crate) fn run_watcher(
         freer: Freer::new(testing.is_some()),
         wm,
         seen_files: FxHashSet::default(),
+        own_outputs: FxHashSet::default(),
         config_mtimes: FxHashMap::default(),
         watch_set_dirty: false,
         force_full_rebuild: false,
@@ -395,7 +398,8 @@ impl Watcher {
         let wm = Arc::clone(&self.wm);
         let mut state = wm.lock();
 
-        let (changed_paths, overflow) = wm.drain_events();
+        let (mut changed_paths, overflow) = wm.drain_events();
+        self.drop_own_output_events(&mut changed_paths);
         let has_events = !changed_paths.is_empty() || overflow;
 
         let manifest_changed = self.content_mapper_manifest_changed(&changed_paths);
@@ -487,6 +491,41 @@ impl Watcher {
             // Mid-cycle watch failure; force a full rebuild on the next event
             wm.force_overflow();
         }
+    }
+
+    // tsrs-only: the build's own writes (its outputs and build info) come back as events. When they land under a
+    // watched directory that the config's wildcards cover (an outDir inside `include: ["**/*"]`, or the build info
+    // beside the config), each would look like a new project file and start a full rebuild after every cycle; the
+    // TypeScript (JavaScript) watch ignores the program's emitted files the same way (isIgnoredFileFromWildCardWatching).
+    // Go does not (tsgo runs that second cycle). An output that is also a source of the program is kept.
+    fn drop_own_output_events(&self, changed_paths: &mut FxHashMap<String, EventKind>) {
+        if self.own_outputs.is_empty() || self.program.is_none() {
+            return;
+        }
+        let program_files = self.compiler_program().files_by_path();
+        let before = changed_paths.len();
+        changed_paths.retain(|event_path, _| {
+            let p = self.to_path(event_path);
+            !self.own_outputs.contains(&p) || program_files.contains_key(&p)
+        });
+        if changed_paths.len() != before
+            && let Some(log) = self.wm.debug_log()
+        {
+            log(&format!("[watch] ignoring {} event(s) for the build's own outputs\n", before - changed_paths.len()));
+        }
+    }
+
+    fn compute_own_outputs(&self) -> FxHashSet<Path> {
+        let options = self.config.compiler_options().unwrap();
+        if options.no_emit.is_true() {
+            return FxHashSet::default();
+        }
+        let mut outputs: FxHashSet<Path> = self.config.get_output_file_names().iter().map(|f| self.to_path(f)).collect();
+        let build_info = self.config.get_build_info_file_name();
+        if !build_info.is_empty() {
+            outputs.insert(self.to_path(&build_info));
+        }
+        outputs
     }
 
     fn is_relevant_change(&self, state: &WatchState, changed_paths: &FxHashMap<String, EventKind>) -> bool {
@@ -591,6 +630,7 @@ impl Watcher {
 
         let seen = tfs.seen_files();
         self.seen_files = seen.iter().map(|p| self.to_path(p)).collect();
+        self.own_outputs = self.compute_own_outputs();
         self.record_config_mtimes();
 
         if let Err(err) = self.reconcile_watches(state, &seen) {

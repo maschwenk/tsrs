@@ -72,6 +72,20 @@ impl Watch {
     }
 }
 
+impl Watch {
+    // Fails if a cycle starts within `quiet` (nothing changed, so nothing should).
+    fn assert_idle(&mut self, quiet: Duration) {
+        let deadline = std::time::Instant::now() + quiet;
+        while let Some(left) = deadline.checked_duration_since(std::time::Instant::now()) {
+            match self.lines.recv_timeout(left) {
+                Ok(line) if line.starts_with("[watch] ") => self.log.push(line),
+                Ok(line) => assert!(!line.contains("File change detected"), "a cycle started by itself: {line}; watch log:\n{}", self.log.join("\n")),
+                Err(_) => return,
+            }
+        }
+    }
+}
+
 impl Drop for Watch {
     fn drop(&mut self) {
         let _ = self.child.kill();
@@ -178,6 +192,28 @@ fn edits_through_a_symlinked_directory(args: &[&str]) {
     drop(watch);
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&shared);
+}
+
+#[test]
+fn outputs_inside_the_watched_tree_start_no_cycle() {
+    // Everything under the project root is included and watched recursively; the outputs and the build info land
+    // there too, and must not start a cycle of their own.
+    let config = r#"{ "compilerOptions": { "strict": true, "types": [], "outDir": "dist", "declaration": true, "incremental": true }, "include": ["**/*"] }"#;
+    let mut files = vec![("tsconfig.json".to_string(), config.to_string())];
+    files.extend((0..50).map(|i| (format!("f{i}.ts"), format!("export const f{i} = {i};\n"))));
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, c)| (p.as_str(), c.as_str())).collect();
+    let dir = project("outdir", &files);
+    let mut watch = Watch::start(&dir);
+    watch.assert_idle(Duration::from_secs(2));
+    assert!(dir.join("dist/f0.js").exists() && dir.join("dist/tsconfig.tsbuildinfo").exists());
+
+    for round in 0..3 {
+        std::fs::write(dir.join("f0.ts"), format!("export const f0 = {round};\nexport const g{round} = 1;\n")).unwrap();
+        assert_eq!(watch.next_cycle(), Vec::<String>::new());
+        watch.assert_idle(Duration::from_secs(2));
+    }
+    drop(watch);
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 // A project whose build is mostly checking: its files are read within the first few percent of the build.
