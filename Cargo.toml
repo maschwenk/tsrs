@@ -28,6 +28,8 @@ rayon = "1"
 memchr = "2"
 simdutf8 = "0.1.5"
 dragonbox_ecma = "0.1.12"
+num-bigint = "0.5.1"
+num-traits = "0.2"
 mimalloc-safe = { version = "0.1.67", features = ["v3"] }
 # Pin exactly: 1.1.2 uses Unicode 15.1.0, matching the pinned TypeScript identifier tables.
 # Newer Unicode versions accept additional identifier characters; upgrade only when TypeScript's tables change.

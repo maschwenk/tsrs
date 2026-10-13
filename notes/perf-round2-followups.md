@@ -189,6 +189,9 @@ with the switch off, which is why it is not in the default build.
   gate). Initially rejected on performance, then both changes were applied at the owner's explicit request on
   2026-10-11 to align with Oxc. These measurements do not establish a speedup; further performance work needs a
   numeric-conversion profile or new evidence of a qualifying whole-project improvement.
+  The requested math/big library cleanup ([rust-stdlib-bigint.md](rust-stdlib-bigint.md)) keeps Go's parsing and
+  256-bit intermediate rounding around num-bigint. Five-pair Mac screening on Compiler/Compiler-Unions is
+  -0.001% to +0.007% single instructions and -0.188% to -0.139% default RSS; retained for maintenance, no speedup claim.
 - Oxc-style lightweight VFS metadata (`notes/perf-vfs-lightweight-metadata.md`): existence probes avoid constructing
   full `FileInfo`, and Linux requests only `STATX_TYPE`. Public macOS screening was -0.27% single-threaded
   instructions and -0.49% default peak RSS, below the landing bars; the Linux-only path still needs a pinned

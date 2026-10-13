@@ -1,327 +1,172 @@
-// The subset of Go's math/big used by this package: arbitrary-precision
-// integers with Go's SetString/String/Exp semantics and correctly rounded
-// (round-to-nearest-even) conversion to float64.
+// The subset of Go's math/big used by this package, keeping its parsing and
+// intermediate rounding semantics around Rust's arbitrary-precision integers.
 
-use std::fmt::Write as _;
+use num_bigint::{BigInt, Sign};
+use num_traits::{Pow, ToPrimitive};
+
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub(crate) struct Int {
-    neg: bool,
-    // Little-endian 32-bit limbs with no most-significant zero limbs.
-    abs: Vec<u32>,
-}
-
-fn norm(z: &mut Vec<u32>) {
-    while z.last() == Some(&0) {
-        z.pop();
-    }
-}
-
-fn mul_add_ww(z: &mut Vec<u32>, y: u32, r: u32) {
-    let mut carry = r as u64;
-    for limb in z.iter_mut() {
-        let t = (*limb as u64) * (y as u64) + carry;
-        *limb = t as u32;
-        carry = t >> 32;
-    }
-    if carry != 0 {
-        z.push(carry as u32);
-    }
-    norm(z);
-}
-
-fn div_w(z: &mut [u32], y: u32) -> u32 {
-    let mut r: u64 = 0;
-    for limb in z.iter_mut().rev() {
-        let t = (r << 32) | (*limb as u64);
-        *limb = (t / y as u64) as u32;
-        r = t % y as u64;
-    }
-    r as u32
-}
-
-fn mul(x: &[u32], y: &[u32]) -> Vec<u32> {
-    if x.is_empty() || y.is_empty() {
-        return Vec::new();
-    }
-    let mut z = vec![0u32; x.len() + y.len()];
-    for (i, &xi) in x.iter().enumerate() {
-        let mut carry: u64 = 0;
-        for (j, &yj) in y.iter().enumerate() {
-            let t = (xi as u64) * (yj as u64) + (z[i + j] as u64) + carry;
-            z[i + j] = t as u32;
-            carry = t >> 32;
-        }
-        z[i + y.len()] = carry as u32;
-    }
-    norm(&mut z);
-    z
-}
-
-fn bit_len(x: &[u32]) -> usize {
-    match x.last() {
-        None => 0,
-        Some(&top) => (x.len() - 1) * 32 + top.bit_width() as usize,
-    }
-}
-
-fn bit(x: &[u32], i: usize) -> bool {
-    let w = i / 32;
-    w < x.len() && (x[w] >> (i % 32)) & 1 == 1
-}
-
-// Reports whether any of the bits below position i are set.
-fn sticky(x: &[u32], i: usize) -> bool {
-    let w = i / 32;
-    if x[..w.min(x.len())].iter().any(|&l| l != 0) {
-        return true;
-    }
-    let b = i % 32;
-    w < x.len() && b != 0 && x[w] & ((1u32 << b) - 1) != 0
-}
-
-fn shr(x: &[u32], s: usize) -> Vec<u32> {
-    let ws = s / 32;
-    let bs = s % 32;
-    if ws >= x.len() {
-        return Vec::new();
-    }
-    let mut z = Vec::with_capacity(x.len() - ws);
-    z.extend((ws..x.len()).map(|i| {
-        let lo = x[i] >> bs;
-        let hi = if bs != 0 && i + 1 < x.len() { x[i + 1] << (32 - bs) } else { 0 };
-        lo | hi
-    }));
-    norm(&mut z);
-    z
-}
-
-fn shl(x: &[u32], s: usize) -> Vec<u32> {
-    if x.is_empty() {
-        return Vec::new();
-    }
-    let ws = s / 32;
-    let bs = s % 32;
-    let mut z = vec![0u32; ws];
-    let mut carry = 0u32;
-    z.extend(x.iter().map(|&l| {
-        let value = (l << bs) | carry;
-        carry = if bs != 0 { l >> (32 - bs) } else { 0 };
-        value
-    }));
-    if carry != 0 {
-        z.push(carry);
-    }
-    norm(&mut z);
-    z
-}
-
-fn low64(x: &[u32]) -> u64 {
-    let lo = x.first().copied().unwrap_or(0) as u64;
-    let hi = x.get(1).copied().unwrap_or(0) as u64;
-    (hi << 32) | lo
-}
+pub(crate) struct Int(BigInt);
 
 impl Int {
     pub(crate) fn new(x: i64) -> Int {
-        let u = x.unsigned_abs();
-        let mut abs = vec![u as u32, (u >> 32) as u32];
-        norm(&mut abs);
-        Int { neg: x < 0, abs }
+        Int(BigInt::from(x))
     }
 
-    // Go's (*big.Int).SetString: an optional sign, then digits in the given base.
-    // For base 0 the base is chosen by the prefix (0b, 0o, 0x, or 0 for octal)
-    // and underscores may separate digits. The entire string must be consumed.
+    // Go's (*big.Int).SetString: base 0 detects prefixes and allows underscores
+    // between digits or immediately after a prefix; explicit bases do neither.
     pub(crate) fn set_string(s: &str, base: u32) -> Option<Int> {
-        let bytes = s.as_bytes();
-        let mut pos = 0usize;
-        let read_byte = |pos: &mut usize| -> Option<u8> {
-            if *pos < bytes.len() {
-                *pos += 1;
-                Some(bytes[*pos - 1])
-            } else {
-                None
-            }
+        let (negative, body) = match s.strip_prefix('-') {
+            Some(rest) => (true, rest),
+            None => (false, s.strip_prefix('+').unwrap_or(s)),
         };
-
-        // scanSign
-        let neg = match read_byte(&mut pos) {
-            None => return None,
-            Some(b'-') => true,
-            Some(b'+') => false,
-            Some(_) => {
-                pos -= 1;
-                false
+        let (radix, digits, prefixed) = if base == 0 && body.len() > 1 && body.starts_with('0') {
+            match body.as_bytes()[1] {
+                b'b' | b'B' => (2, &body[2..], true),
+                b'o' | b'O' => (8, &body[2..], true),
+                b'x' | b'X' => (16, &body[2..], true),
+                _ => (8, &body[1..], true),
             }
+        } else {
+            (if base == 0 { 10 } else { base }, body, false)
         };
-
-        // nat.scan
-        let mut prev = b'.';
-        let mut inval_sep = false;
-        let mut ch = read_byte(&mut pos);
-        let mut b = base;
-        let mut prefix = 0u8;
-        let mut count = 0usize;
-        if base == 0 {
-            b = 10;
-            if ch == Some(b'0') {
-                prev = b'0';
-                count = 1;
-                ch = read_byte(&mut pos);
-                if let Some(c) = ch {
-                    match c {
-                        b'b' | b'B' => {
-                            b = 2;
-                            prefix = b'b';
-                        }
-                        b'o' | b'O' => {
-                            b = 8;
-                            prefix = b'o';
-                        }
-                        b'x' | b'X' => {
-                            b = 16;
-                            prefix = b'x';
-                        }
-                        _ => {
-                            b = 8;
-                            prefix = b'0';
-                        }
-                    }
-                    if prefix != 0 {
-                        count = 0;
-                        if prefix != b'0' {
-                            ch = read_byte(&mut pos);
-                        }
-                    }
+        let mut previous_digit = prefixed;
+        for byte in digits.bytes() {
+            if byte == b'_' && base == 0 {
+                if !previous_digit {
+                    return None;
                 }
-            }
-        }
-
-        let mut z: Vec<u32> = Vec::new();
-        while let Some(c) = ch {
-            if c == b'_' && base == 0 {
-                if prev != b'0' {
-                    inval_sep = true;
-                }
-                prev = b'_';
+                previous_digit = false;
             } else {
-                let d1 = match c {
-                    b'0'..=b'9' => (c - b'0') as u32,
-                    b'a'..=b'z' => (c - b'a' + 10) as u32,
-                    b'A'..=b'Z' => (c - b'A' + 10) as u32,
-                    _ => u32::MAX,
+                let digit = match byte {
+                    b'0'..=b'9' => u32::from(byte - b'0'),
+                    b'a'..=b'z' => u32::from(byte - b'a') + 10,
+                    b'A'..=b'Z' => u32::from(byte - b'A') + 10,
+                    _ => return None,
                 };
-                if d1 >= b {
-                    pos -= 1;
-                    break;
+                if digit >= radix {
+                    return None;
                 }
-                prev = b'0';
-                count += 1;
-                mul_add_ww(&mut z, b, d1);
-            }
-            ch = read_byte(&mut pos);
-        }
-
-        let mut err = inval_sep || prev == b'_';
-        if count == 0 {
-            if prefix == b'0' {
-                z.clear();
-            } else {
-                err = true;
+                previous_digit = true;
             }
         }
-        if err {
+        if !previous_digit {
             return None;
         }
-
-        if pos != bytes.len() {
-            return None;
-        }
-        Some(Int { neg: !z.is_empty() && neg, abs: z })
+        // num-bigint rejects a leading underscore even when it follows a Go prefix.
+        let digits = digits.strip_prefix('_').unwrap_or(digits);
+        let value = BigInt::parse_bytes(digits.as_bytes(), radix)?;
+        Some(Int(if negative { -value } else { value }))
     }
 
-    // Go's (*big.Int).Exp(x, y, nil).
+    // Go's (*big.Int).Exp(x, y, nil) returns one for a non-positive exponent.
     pub(crate) fn exp(&self, y: &Int) -> Int {
-        if y.neg || y.abs.is_empty() {
+        if y.0.sign() != Sign::Plus {
             return Int::new(1);
         }
-        let mut result: Vec<u32> = vec![1];
-        let mut base = self.abs.clone();
-        let n = bit_len(&y.abs);
-        for i in 0..n {
-            if bit(&y.abs, i) {
-                result = mul(&result, &base);
-            }
-            if i + 1 < n {
-                base = mul(&base, &base);
-            }
-        }
-        let odd = bit(&y.abs, 0);
-        Int { neg: self.neg && odd && !result.is_empty(), abs: result }
+        Int(Pow::pow(&self.0, y.0.magnitude()))
     }
 
-    // Rounds to prec significant bits (round-to-nearest-even), like
-    // new(big.Float).SetPrec(prec).SetInt(x).
+    // Round the magnitude before restoring its sign, as big.Float.SetInt does.
     pub(crate) fn round_to_prec(&self, prec: usize) -> Int {
-        let n = bit_len(&self.abs);
-        if n <= prec {
+        assert!(prec > 0);
+        let magnitude = self.0.magnitude();
+        let bits = usize::try_from(magnitude.bits()).unwrap();
+        if bits <= prec {
             return self.clone();
         }
-        let s = n - prec;
-        let mut q = shr(&self.abs, s);
-        let half = bit(&self.abs, s - 1);
-        if half && (sticky(&self.abs, s - 1) || q[0] & 1 == 1) {
-            mul_add_ww(&mut q, 1, 1);
+        let shift = bits - prec;
+        let mut rounded = magnitude >> shift;
+        let half = magnitude.bit((shift - 1) as u64);
+        let sticky = magnitude
+            .trailing_zeros()
+            .is_some_and(|zeros| zeros < (shift - 1) as u64);
+        if half && (sticky || rounded.bit(0)) {
+            rounded += 1u8;
         }
-        Int { neg: self.neg, abs: shl(&q, s) }
+        Int(BigInt::from_biguint(self.0.sign(), rounded << shift))
     }
 
-    // Go's (*big.Int).Float64, dropping the accuracy result.
     pub(crate) fn float64(&self) -> f64 {
-        let n = bit_len(&self.abs);
-        if n == 0 {
-            return 0.0;
-        }
-        let f = if n <= 64 {
-            low64(&self.abs) as f64
-        } else if n > 1024 {
-            f64::INFINITY
-        } else {
-            let s = n - 64;
-            let mut top = low64(&shr(&self.abs, s));
-            if sticky(&self.abs, s) {
-                top |= 1;
-            }
-            (top as f64) * 2f64.powi(s as i32)
-        };
-        if self.neg {
-            -f
-        } else {
-            f
-        }
+        self.0.to_f64().unwrap()
     }
 
     pub(crate) fn string(&self) -> String {
-        if self.abs.is_empty() {
-            return "0".to_string();
+        self.0.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parsing_preserves_go_prefixes_and_separator_rules() {
+        for (text, base, expected) in [
+            ("-0", 0, "0"),
+            ("+0x_Ff", 0, "255"),
+            ("0_17", 0, "15"),
+            ("-0b_101", 0, "-5"),
+            ("0o_77", 0, "63"),
+            ("010", 10, "10"),
+            ("FF", 16, "255"),
+        ] {
+            assert_eq!(Int::set_string(text, base).unwrap().string(), expected);
         }
-        let mut q = self.abs.clone();
-        let mut chunks = Vec::new();
-        while !q.is_empty() {
-            chunks.push(div_w(&mut q, 1_000_000_000));
-            norm(&mut q);
+        for (text, base) in [
+            ("", 0),
+            ("+", 0),
+            ("0x", 0),
+            ("08", 0),
+            ("_1", 0),
+            ("1_", 0),
+            ("1__2", 0),
+            ("0x__1", 0),
+            ("1_2", 10),
+            ("0x1", 16),
+            ("--1", 0),
+            ("１２", 0),
+        ] {
+            assert!(
+                Int::set_string(text, base).is_none(),
+                "{text:?}, base {base}"
+            );
         }
-        let mut s = String::new();
-        if self.neg {
-            s.push('-');
+    }
+
+    #[test]
+    fn powers_preserve_non_positive_exponents_and_signs() {
+        assert_eq!(Int::new(-3).exp(&Int::new(3)).string(), "-27");
+        assert_eq!(Int::new(-3).exp(&Int::new(4)).string(), "81");
+        assert_eq!(Int::new(0).exp(&Int::new(0)).string(), "1");
+        assert_eq!(Int::new(3).exp(&Int::new(-1)).string(), "1");
+    }
+
+    #[test]
+    fn intermediate_rounding_preserves_ties_even_and_signs() {
+        for (value, expected) in [(9, 8), (11, 12), (13, 12), (15, 16), (-9, -8), (-11, -12)] {
+            assert_eq!(Int::new(value).round_to_prec(3), Int::new(expected));
         }
-        let mut iter = chunks.iter().rev();
-        if let Some(first) = iter.next() {
-            s.push_str(&first.to_string());
+        assert_eq!(Int::new(35).round_to_prec(3), Int::new(32));
+        assert_eq!(Int::new(37).round_to_prec(3), Int::new(40));
+    }
+
+    #[test]
+    fn float_conversion_preserves_rounding_and_overflow() {
+        for (text, expected) in [
+            ("9007199254740993", 9_007_199_254_740_992.0f64),
+            ("9007199254740995", 9_007_199_254_740_996.0),
+            ("-9007199254740993", -9_007_199_254_740_992.0),
+        ] {
+            assert_eq!(
+                Int::set_string(text, 10).unwrap().float64().to_bits(),
+                expected.to_bits()
+            );
         }
-        for chunk in iter {
-            let _ = write!(s, "{chunk:09}");
-        }
-        s
+        assert_eq!(Int::new(2).exp(&Int::new(1024)).float64(), f64::INFINITY);
+        assert_eq!(
+            Int::new(-2).exp(&Int::new(1025)).float64(),
+            f64::NEG_INFINITY
+        );
+        assert_eq!(Int::new(0).float64().to_bits(), 0);
     }
 }
