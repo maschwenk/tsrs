@@ -275,6 +275,7 @@ fn watch_mask() -> u32 {
 
 // A created entry that a writer may still be writing: a regular file (not a directory, symlink or device, which get
 // no close event).
+#[expect(clippy::filetype_is_file, reason = "only a regular file is written and closed; the other types are what it excludes")]
 fn is_regular_file(path: &str) -> bool {
     std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_file())
 }
