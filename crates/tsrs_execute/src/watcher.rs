@@ -452,10 +452,14 @@ impl Watcher {
         let content_mapper_watched_files: FxHashSet<Path> = self.content_mapper_watched_files().iter().map(|f| self.to_path(f)).collect();
         sorted_keys(changed_paths).into_iter().any(|event_path| {
             let p = self.to_path(event_path);
+            // tsrs-only: Go also asks `PossiblyMatchesDirectoryName` of a changed file, which is true of any file under a
+            // recursive wildcard directory (an editor's swap file, a log, a .md), so each write to one rebuilt the
+            // program. Only a directory (or a deleted path, which may have been one) can bring in files that match.
+            let maybe_directory = || changed_paths[event_path] == EventKind::Delete || fs.directory_exists(event_path);
             content_mapper_watched_files.contains(&p)
                 || self.seen_files.contains(&p)
                 || (self.config.config_file.is_some() && self.config.possibly_matches_file_name(event_path))
-                || (self.config.config_file.is_some() && self.config.possibly_matches_directory_name(&p))
+                || (self.config.config_file.is_some() && self.config.possibly_matches_directory_name(&p) && maybe_directory())
                 || (fs.directory_exists(event_path) && WatchManager::is_path_under_watch(state, event_path, &opts))
         })
     }
