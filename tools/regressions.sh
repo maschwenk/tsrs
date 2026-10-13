@@ -8,7 +8,10 @@ tsrs="$(cd "$(dirname "${1:-$repo/target/release/tsrs}")" && pwd)/$(basename "${
 fail=0
 for dir in "$repo"/testdata/regressions/*/; do
   name="$(basename "$dir")"
-  actual="$(cd "$dir" && "$tsrs" -p . --pretty false --singleThreaded 2>&1)"
+  # Resolution traces print absolute paths; expected.txt has <dir> for the case's directory.
+  here="$(cd "$dir" && pwd -P)"
+  actual="$(cd "$here" && "$tsrs" -p . --pretty false --singleThreaded 2>&1)"
+  actual="${actual//"$here"/<dir>}"
   if [ "$actual" == "$(cat "$dir/expected.txt")" ]; then
     echo "pass $name"
   else

@@ -28,6 +28,7 @@ bitflags! {
         const NoLexicalArguments = 1 << 22; // Do not capture `arguments` for this arrow function. Set on arrows lowered from class static blocks, where `arguments` is an error; preserves Strada's emit behavior.
         const TransformPrivateStaticElements = 1 << 23; // Indicates static private elements in a file or class should be transformed regardless of --target (used by esDecorators transform).
         const NoLexicalThis = 1 << 24; // Do not capture `this` for this node's subtree. Set on relocated static initializers, where `this` is handled by the class fields transform.
+        const InternalSymbolName = 1 << 25; // Port-only: this string literal's text is a symbol name whose leading U+007F is the port's stand-in for Go's internal-name prefix byte 0xFE.
 
         const None = 0;
         const NoSourceMap = Self::NoLeadingSourceMap.bits() | Self::NoTrailingSourceMap.bits(); // Do not emit a source map location for this node.

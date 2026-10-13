@@ -1545,7 +1545,19 @@ impl Checker {
             self.check_const_enum_access(node, t);
         }
         self.current_node = save_current_node;
+        self.end_instantiation_count();
         t
+    }
+
+    /// tsrs-only. Discard a nested check's count so a declaration resolved on demand cannot exhaust its caller's
+    /// budget. Do not restore the caller's earlier count: Go discards it on entry to the nested check, and restoring
+    /// it can add a TS2589 across call arguments (notes/open-history-dependence.md section 5).
+    /// Go-compatible history leaves the nested check's count in place, as Go does.
+    #[inline]
+    pub(crate) fn end_instantiation_count(&mut self) {
+        if !tsrs_core::compat::go_compatible_history() {
+            self.instantiation_count = 0;
+        }
     }
 
     // checker.go:7745

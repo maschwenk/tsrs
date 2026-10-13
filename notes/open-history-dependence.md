@@ -1,4 +1,4 @@
-# open-history-dependence: three cases whose output still depends on the checker assignment (not fixed), and one fixed
+# open-history-dependence: four cases whose output still depends on the checker assignment (not fixed), and two fixed
 
 notes/perf-order-independence.md made diagnostics a function of the program on the corpora it tested, and the README
 says output does not depend on the checker count. Three bench candidates show that this does not hold in general:
@@ -8,7 +8,10 @@ tsrs prints the same output under `--checkerAssignment go` when the files are vi
 fixed. For the router case a fix that makes the output canonical exists, but it costs up to 4% of single-threaded
 instructions and adds an error that tsgo does not print to another program (below); the cheaper variant leaves part of
 the dependence. A fourth case, a TS2590 reported on a private monorepo (issue #218), was reproduced by the reporter and
-is fixed: section 4 keeps the mechanism and the measurements. This note is the evidence and the measurements.
+is fixed: section 4 keeps the mechanism and the measurements. Two more came from the top-400 repository comparison
+(run 38278199589): backstage, a TS2589 charged to the expression that first checks a declaration (section 5, fixed),
+and dify, an instantiation depth limit reached on a checker that has cached less (section 6, not fixed). This note is
+the evidence and the measurements.
 
 ## Summary
 
@@ -17,6 +20,8 @@ is fixed: section 4 keeps the mechanism and the measurements. This note is the e
 | TanStack/router `663282b0ebbc` (`packages/react-router/tsconfig.bench.json`, overlay) | 5 / 7 / 7 / 7 errors | 7 each | 5 | 5 / 5 / 5 / 5 |
 | sequelize `d191d5be03ad` (`tsconfig.bench.json`, overlay) | 42 / 43 / 43 / 43 | 43 each | 41 | 42 / 41 / 41 / 42 |
 | rxjs `54796b38a57e` (`packages/rxjs/tsconfig.bench.json`, overlay) | 6,158 each, 5 with different elaboration text | `random:1..3` at 2 and 4 differ | | text differs between 1 and 4 |
+| backstage `b60c255ec204` (`tsconfig.json`), before section 5's fix | 23 / 34 / 36 / 36 | 45 / 46 / 28 / 34 / 49 | 31 | 23 / 31 / 32 / 28 |
+| dify `7b69dea2c802` (`packages/contracts/tsconfig.json`) | 1 / 1 / 1 / 1 (2 at 2 checkers) | 2 / 2 / 1 / 2 / 2 | 2 | 1 / 2 / 1 / 2 |
 
 tsrs is main at 990d32d5 on the Mac; tsgo-ref is `typescript@7.1.0-dev.20260930.4`. The overlays are the scouts'
 `tsconfig.bench.json` files (bench PR #206 for rxjs). Single-threaded tsrs equals tsgo-ref at one checker on all three.
@@ -212,8 +217,9 @@ tools/ci/determinism.sh requires every case to print the same at 2 and 4 checker
 
 ## Regression cases
 
-`union-too-complex-cross-product` (section 4, the fixed case, from the reporter's PR #228) and
-`union-too-complex-canonical-order` (section 4, what the case is not). `tools/ci/determinism.sh` compares every
+`union-too-complex-cross-product` (section 4, the fixed case, from the reporter's PR #228),
+`union-too-complex-canonical-order` (section 4, what the case is not) and `instantiation-count-nested-declaration`
+(section 5). `tools/ci/determinism.sh` compares every
 `testdata/regressions` case at 2 and 4 checkers and under random assignments with its single-threaded output, so a case
 that still depends on the assignment would fail it. The router reduction is in
 upstream/determinism-base-constraint-depth.md, ready to become a case with whichever fix lands.
@@ -317,3 +323,75 @@ same template literal type node evaluated twice reports once where tsgo reports 
 check only, for a union of 1,101 classes each re-evaluation pays the 100,000-comparison estimate, about 4 ms per site
 (100 sites in one file: 0.46 s against 0.05 s). `TSRS_TRACE_UNION_REDUCTION=1` (docs/DEBUGGING.md) remains, for the
 `remove_subtypes` site, for Go mode, and to find which union a TS2590 is about.
+
+## 5. backstage: a TS2589 charged to the expression that first checks a declaration (fixed)
+
+From the top-400 comparison (run 38278199589, `tsconfig.json` at backstage `b60c255ec204`, yarn 4.18.0 `--immutable
+--mode=skip-build`): tsgo at its default 4 checkers prints eight errors that tsrs did not, two TS2589 at
+`createSpecializedApp.test.tsx(91,21)` and `appModulePublicSignIn.tsx(120,5)` and the TS2322 / TS7006 that follow from
+the error type (`OverridableFrontendPlugin<{}, {}, any>` is not assignable to `FrontendFeature`). They are tsgo's own
+history: tsgo prints 23 errors at 1 and 2 checkers, 31 at 4, 32 at 8 and 28 at 16, and tsrs prints exactly tsgo's
+output single-threaded and under `--checkerAssignment go` at 4 and 8 (lazy members on or off). The default mode
+depended on the assignment too (table above; the CI run printed 23, this Mac 34 at the same 4 checkers).
+
+Every one of these TS2589 is the per-expression budget, not the depth limit: an instrumented build (not landed) saw
+5,000,000 instantiations with a stack 0-8 deep at each of them. `plugins/app/src/plugin.ts(47,26)`'s
+`createFrontendPlugin({...})` exceeds the budget in every run and reports there. `checkExpressionEx` (checker.go:7729)
+and `checkSourceElement` (checker.go:2282) set `instantiationCount` to 0 on entry and do not restore the caller's on
+exit (Rust: `check_expression_ex`, checker_04.rs; `check_source_element`, checker_02.rs). On a checker that has not
+resolved `appPlugin` yet, `appPluginOriginal.withOverrides` in the test file checks `plugin.ts`'s initializer inside
+it; that initializer's error is filed against `plugin.ts` and dropped (this checker does not check it), and its count
+stays above 5,000,000, so the next instantiation in the test file's expression reports TS2589 there with a stack 0
+deep and returns the error type. A checker that checked `plugin.ts` first has the type cached and reports nothing.
+upstream/determinism-instantiation-count.md has a two-file reduction: tsgo prints the second file's TS2589 at 8 and 16
+checkers and not at 1-4, or single-threaded when that file comes first.
+
+The fix: by default `check_expression_ex` and `check_source_element` clear the count on exit as well as entry
+(`end_instantiation_count`), so the caller never inherits the nested check's work; `--checkerAssignment go` keeps
+Go's count on exit. The caller's earlier work is discarded too, as it already is in Go on entry to the nested check.
+Restoring the caller's earlier count would accumulate a call's parameter- and return-type work across checking an
+argument, adding a TS2589 even when Go is silent at every checker count. The confirmed one-file reduction is
+`testdata/regressions/instantiation-count-call-argument`; upstream/determinism-instantiation-count.md describes it.
+Clearing on exit can remove an error when a nested check's work plus the caller's subsequent work exceeds the
+budget, even if neither alone does. It does not change the instantiation-stack depth guard or the total counter.
+
+The memos still reject work that instantiated anything: both compare the monotonic `total_instantiation_count`.
+A reset from a nonzero count is visible in their before/after count comparison. For a reset from zero, the inference
+memo also tracks `expression_checks`; the flow memo marks frames that start at zero with `FLAG_COUNT_RESET` and
+only replays those at zero. Clearing on exit does not hide those effects.
+
+Validation of the zero-on-exit fix: backstage still prints tsgo's single-threaded 23 errors at 1, 2, 4, 8 and 16
+checkers and under `random:1..3` at 4. Go mode, with lazy members on or off, still matches tsgo's 31 errors at 4
+and 32 at 8. Fresh and reused incremental build info gives the same default output. Both memo shadows pass with
+real cache hits, and disabling both memos gives the same diagnostics. All 31 regression cases match their expected
+output, and all 558 default/random assignment comparisons match the single-threaded output. The nested-declaration
+case keeps only its original TS2589 in both file orders, at 1, 2, 4, 8 and 16 checkers, with and without incremental
+build info. The call-argument case exits 0 in default, single-threaded, Go and strict Go modes.
+
+The conformance error/type/symbol pass lists are unchanged from the save/restore version: 13,458 error passes and
+12,779 type and symbol passes in Go history, both with and without lazy members; canonical history has 12,778 type
+and symbol passes (the known `objectLiteralNormalization` difference). Canonical forced splits with shadow checks
+give the same lists as an unsplit run. No new failures, crashes or timeouts.
+
+Not fixed by it: a count within one expression still depends on what is cached (cached instantiations are not counted),
+so an expression near 5,000,000 can still report on one checker and not another; none seen.
+
+## 6. dify: an instantiation depth limit reached on a checker that has cached less (not fixed)
+
+From the same run (`packages/contracts/tsconfig.json` at dify `7b69dea2c802`, pnpm 12.10.1 `--frozen-lockfile
+--ignore-scripts`, 752 files): tsgo at 4 checkers prints `app-model-config.test.ts(154,11): error TS2578: Unused
+'@ts-expect-error' directive.` and tsrs did not. tsgo prints no TS2578 at 1, 2, 3, 5, 7, 8 and 12 checkers, `(154,11)` at 4 and
+`(93,9)` at 6 and 16; tsrs prints exactly that single-threaded and under `--checkerAssignment go` with
+`TSRS_LAZY_MEMBERS=0` at every one of those counts. With lazy members on (the default), Go mode prints `(93,9)` at 5, 7, 8
+and 12, where tsgo prints nothing: lazy member tables instantiate fewer members, so a checker has cached
+less when it reaches the chain below.
+
+The trigger is the depth limit (`len(c.instantiationStack) == 100`, checker.go:22507), at two zod schemas in
+`generated/api/console/apps/zod.gen.ts`: the one at line 2448 reports TS5115 (`Instantiations of the following types
+appear infinitely circular: 'IsOptionalIn', '$ZodTypeInternals', '$InferZodRecordInput'`) in every run, and the one at
+line 2494 is cut only on some checkers. The stack is empty when its initializer's check begins in both cases, so it is
+not a leaked stack: what the checker cached before decides how deep the chain goes. A checker that resolves it from the
+test file without having checked `zod.gen.ts` files its error against `zod.gen.ts`, drops it, and keeps the error type in the schema's type; then the `@ts-expect-error` above a line that the error type
+makes valid is unused. Section 5's fix does not change it (the default mode still prints `(154,11)` at 2 checkers).
+Making it canonical means a depth that does not depend on the cache, the same redesign section 1 describes for base
+constraints.

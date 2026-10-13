@@ -10,7 +10,9 @@ with tsgo, and checks the result with random assignments.
 **Open (2026-10-08):** three programs outside these corpora still print assignment-dependent output, all through
 typescript-go's own history dependence: TanStack/router (a base constraint cut short by the depth guard and cached),
 sequelize (a circular property type entered through variance computations) and rxjs (which elaboration the relater
-prints). None is fixed; notes/open-history-dependence.md has the evidence and the fixes measured.
+prints). None is fixed; notes/open-history-dependence.md has the evidence and the fixes measured. Two more since
+(2026-10-12, sections 5 and 6 there): backstage's TS2589, charged to the expression that first checks a declaration
+(fixed), and dify's instantiation depth limit, reached on a checker that has cached less (open).
 
 ## The diffs
 
@@ -115,7 +117,8 @@ Before the fix the 40k-error corpus gave four distinct outputs over the same con
 - **Budget errors** (TS2589 instantiation depth and count, TS2859 relation complexity, TS2590 for a union whose
   subtype reduction is estimated to take more than 1,000,000 comparisons): they count work, and how much work a
   comparison takes depends on what the checker already resolved, so what is cached can decide whether they fire. Not
-  observed under random assignments on these corpora. A second shape was reported on a private monorepo (issue #218)
+  observed under random assignments on these corpora; seen since on backstage (TS2589 count, fixed) and dify (depth,
+  open), notes/open-history-dependence.md sections 5 and 6. A second shape was reported on a private monorepo (issue #218)
   and is closed: Go caches what it builds from the error type a TS2590 returns (an intersection split in halves, a
   union of two unions, an instantiation, a relation compared through it), so a checker reports the error only the
   first time it evaluates the type; by default tsrs does not cache a result computed while a TS2590 was reported, and
