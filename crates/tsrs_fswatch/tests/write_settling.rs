@@ -6,7 +6,7 @@ use std::io::Write;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
-use tsrs_fswatch::{inotify, set_write_settling, Watcher};
+use tsrs_fswatch::{inotify, set_write_settling};
 
 // What a callback saw: when it ran, and the file's content at that moment.
 struct Seen {
