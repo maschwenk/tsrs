@@ -90,7 +90,7 @@ impl CompilerHost for watchCompilerHost {
 }
 
 // Files per declaration emit of `start_signature_job`: what a new cycle may wait for once it cancels the job.
-const SIGNATURE_JOB_CHUNK: usize = 256;
+pub(crate) const SIGNATURE_JOB_CHUNK: usize = 256;
 
 pub struct Watcher {
     sys: &'static dyn System,
@@ -857,12 +857,15 @@ impl Watcher {
     // snapshot with declaration signatures (tsrs_incremental `Program::compute_placeholder_signatures`), so that
     // the next edit of a file whose declarations do not change rechecks that file instead of everything importing
     // it. The next cycle cancels the computation and waits for the chunk in progress (`stop_signature_job`). The
-    // test harness leaves the placeholders, as Go does, for deterministic runs.
+    // test harness leaves the placeholders, as Go does, unless the scenario asks for the job (`run_signature_job`).
     fn start_signature_job(&mut self) {
-        if self.testing.is_some() {
+        let Some(program) = self.program else { return };
+        if let Some(testing) = self.testing {
+            if testing.run_signature_job() {
+                program.compute_placeholder_signatures(&tsrs_compiler::Context::default(), SIGNATURE_JOB_CHUNK);
+            }
             return;
         }
-        let Some(program) = self.program else { return };
         let (ctx, cancel) = tsrs_compiler::Context::default().with_cancel();
         let wm = Arc::clone(&self.wm);
         let job = std::thread::Builder::new()

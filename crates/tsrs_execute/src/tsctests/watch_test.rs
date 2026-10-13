@@ -3,7 +3,8 @@
 // `-b --watch` keeps each task's incremental program between cycles, and reparses only the changed file when one file
 // of a program changed (buildtask.rs `old_watch_state`, `single_changed_file`). Each of its scenarios has an edit that
 // one of the conditions of `single_changed_file` must turn into a full build. Content mappers keep transforming in
-// later cycles. `--watch` ignores the events of its own outputs.
+// later cycles. `--watch` ignores the events of its own outputs. The signature job, which the harness otherwise skips,
+// spares the first edit of a file the recheck of its importers in both modes.
 
 use rustc_hash::FxHashMap;
 
@@ -194,9 +195,50 @@ fn edits_of_files_with_synthetic_imports_build_what_a_fresh_build_does() {
     }
 }
 
+// The initial build of a project without declaration emit stores each file's version as a stand-in for its declaration
+// signature, so the first edit of a file counts as a change of its declarations and rechecks the files importing it.
+// The signature job (watcher.rs and orchestrator.rs `start_signature_job`) computes the real signatures after each
+// cycle, in both modes; after it, a comment edit rechecks the edited file only.
+#[test]
+fn a_first_edit_after_the_signature_job_rechecks_only_the_edited_file() {
+    let config = r#"{ "compilerOptions": { "incremental": true, "target": "esnext" } }"#;
+    let files = [
+        ("app/tsconfig.json", config),
+        ("app/a.ts", "export function f() { return 1; }\n"),
+        ("app/b.ts", "import { f } from \"./a\";\nexport const g = f();\n"),
+        ("app/c.ts", "import { g } from \"./b\";\nexport const h: number = g;\n"),
+        ("app/d.ts", "import { h } from \"./c\";\nexport const k = h;\n"),
+        ("app/e.ts", "import { k } from \"./d\";\nexport const m: number = k;\n"),
+    ];
+    for (mode, args) in [("watch", &["-w", "-p", "app"][..]), ("build", &["--b", "app", "-w"][..])] {
+        for signature_job in [true, false] {
+            let name = format!("signature-job-{mode}-{signature_job}");
+            let edits = vec![
+                ("comment", vec![write("app/a.ts", "export function f() { return 1; }\n// comment\n")]),
+                // The cycle stores stand-in signatures for the files two imports or more away (d.ts and e.ts).
+                ("shape change", vec![write("app/a.ts", "export function f() { return 's'; }\n")]),
+                ("comment after a cycle", vec![write("app/d.ts", "import { h } from \"./c\";\nexport const k = h;\n// comment\n")]),
+            ];
+            let baseline = run_with(&name, args, &files, edits, signature_job);
+            for (index, caption, edited, importer) in [(0, "comment", "a.ts", "b.ts"), (2, "comment after a cycle", "d.ts", "e.ts")] {
+                let start = baseline.find(&format!("\nEdit [{index}]:: {caption}\n")).unwrap();
+                let edit = &baseline[start..baseline[start + 1..].find("\nEdit [").map_or(baseline.len(), |end| start + 1 + end)];
+                let checked = |file: &str| edit.contains(&format!("*refresh*    {ROOT}/app/{file}\n"));
+                assert!(checked(edited), "{name}: the edited file is checked\n{edit}");
+                assert_eq!(checked(importer), !signature_job, "{name}: the importer is checked only without the job\n{edit}");
+            }
+        }
+    }
+}
+
 // Runs `tsgo <args>` on `files` (paths under ROOT), asserts that no edit differs from a fresh build, and returns the
 // baseline. An edit that only touches files starts no cycle: its output is empty, unlike a fresh build's.
 fn run(name: &str, args: &[&str], files: &[(&str, &str)], edits: Vec<(&str, Vec<scenarioOp>)>) -> String {
+    run_with(name, args, files, edits, false)
+}
+
+// `run`, with the watch's signature job after each cycle when `signature_job` is set.
+fn run_with(name: &str, args: &[&str], files: &[(&str, &str)], edits: Vec<(&str, Vec<scenarioOp>)>, signature_job: bool) -> String {
     let mut files: Vec<scenarioFile> = files.iter().map(|(path, content)| file(&format!("{ROOT}/{path}"), content)).collect();
     files.push(file(LIB_FILE, LIB));
     let mut all_ops: Vec<scenarioOp> = Vec::new();
@@ -220,6 +262,7 @@ fn run(name: &str, args: &[&str], files: &[(&str, &str)], edits: Vec<(&str, Vec<
         files,
         default_libs: vec![LIB_FILE.to_string()],
         edits,
+        signature_job,
     };
     let baseline = run_scenario(&test);
     let diffs = baseline.matches("\nDiff:: ").count();

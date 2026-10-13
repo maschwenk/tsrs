@@ -63,6 +63,8 @@ struct scenario {
     files: Vec<scenarioFile>,
     default_libs: Vec<String>,
     edits: Vec<scenarioEdit>,
+    // tsrs-only: run the watch's signature job after each cycle (`CommandLineTesting::run_signature_job`).
+    signature_job: bool,
 }
 
 fn s(v: Option<&Value>) -> String {
@@ -139,6 +141,7 @@ fn load_scenario(path: &FsPath) -> scenario {
         files,
         default_libs: strings(o.get("defaultLibs")).unwrap_or_default(),
         edits,
+        signature_job: false,
     }
 }
 
@@ -163,15 +166,9 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
     }
     let lib_path = if test.windows_style_root.is_empty() { TSC_LIB_PATH.to_string() } else { format!("{}{}", test.windows_style_root, &TSC_LIB_PATH[1..]) };
     let cwd = if test.cwd.is_empty() { "/home/src/workspaces/project".to_string() } else { test.cwd.clone() };
-    let sys: &'static TestSys = Box::leak(Box::new(TestSys::new(
-        fs,
-        if libs.is_empty() { None } else { Some(libs) },
-        clock,
-        cwd,
-        lib_path,
-        test.env.clone(),
-        test.output_is_tty.unwrap_or(true),
-    )));
+    let mut sys = TestSys::new(fs, if libs.is_empty() { None } else { Some(libs) }, clock, cwd, lib_path, test.env.clone(), test.output_is_tty.unwrap_or(true));
+    sys.signature_job = test.signature_job;
+    let sys: &'static TestSys = Box::leak(Box::new(sys));
     let watch_fs = Arc::clone(&sys.fs);
     let backend = mockwatch::MockWatchBackend::new(Box::new(move |d: &str| watch_fs.directory_exists(d)), !test.ignore_case);
     let _ = sys.mock_watch_backend.set(Arc::new(backend));

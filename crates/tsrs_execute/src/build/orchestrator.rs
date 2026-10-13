@@ -116,6 +116,8 @@ pub struct Orchestrator {
     wm: Arc<WatchManager>,
     // tsrs-only, watch mode: frees the programs the tasks replace and the files nothing refers to (watchmem.rs).
     pub(crate) freer: crate::watchmem::Freer,
+    // tsrs-only, watch mode: the background computation of the tasks' placeholder signatures (`start_signature_job`).
+    signature_job: Mutex<Option<(tsrs_core::context::CancelFunc, std::thread::JoinHandle<()>)>>,
 
     // order sorted by dependency depth, to reduce how often builders block on upstream projects
     schedule_order: Mutex<Vec<String>>,
@@ -713,6 +715,9 @@ impl Orchestrator {
             self.queue_files_changed_since(build_started);
             #[cfg(target_os = "macos")]
             self.freer.collect_heap();
+        }
+        self.start_signature_job();
+        if self.opts.testing.is_none() {
             self.wm.run_loop(|| {
                 self.do_cycle();
                 #[cfg(target_os = "macos")]
@@ -779,10 +784,16 @@ impl Orchestrator {
             self.wm.debug(|| "[watch] DoCycle: no events, skipping\n".to_string());
             return;
         }
+        self.stop_signature_job();
+        self.build_changes(&mut state, &changed_paths, overflow);
+        self.start_signature_job();
+    }
+
+    fn build_changes(&'static self, state: &mut watchmanager::WatchState, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>, overflow: bool) {
         // tsrs-only: whatever the cached file system holds predates the events (`get_watch_source_file` reuses a file
         // whose modification time it finds unchanged).
         self.host().cached_fs.clear_cache();
-        self.invalidate_realpaths(&changed_paths, overflow);
+        self.invalidate_realpaths(changed_paths, overflow);
         let mut needs_config_update = false;
         let mut needs_update = false;
         if overflow {
@@ -799,7 +810,7 @@ impl Orchestrator {
             needs_config_update = true;
             needs_update = true;
         } else {
-            self.check_tasks_for_event_changes(&state, &changed_paths, &mut needs_config_update, &mut needs_update);
+            self.check_tasks_for_event_changes(state, changed_paths, &mut needs_config_update, &mut needs_update);
         }
         if !needs_update {
             self.reset_caches();
@@ -814,9 +825,52 @@ impl Orchestrator {
         let order = self.order.lock().unwrap().clone();
         self.build_or_clean_order(&order);
         self.update_watch();
-        self.reconcile(&mut state);
+        self.reconcile(state);
         self.reset_caches();
         self.free_unreachable_watch_files();
+    }
+
+    // tsrs-only: `--watch`'s signature job (watcher.rs `start_signature_job`) over each task's incremental program,
+    // which the task keeps for its next build. Without it, the first edit of a file rechecks everything in its project
+    // that imports it. The next cycle cancels the job and waits for the chunk in progress before any task builds, so
+    // the programs the job reads stay unchanged and alive while it runs.
+    fn start_signature_job(&'static self) {
+        let order = self.order.lock().unwrap().clone();
+        let programs: Vec<P<tsrs_incremental::Program>> =
+            order.iter().filter_map(|config| self.get_task(&self.to_path(config)).watch_incremental_program()).collect();
+        if let Some(testing) = self.opts.testing {
+            if testing.run_signature_job() {
+                for program in programs {
+                    program.compute_placeholder_signatures(&tsrs_compiler::Context::default(), crate::watcher::SIGNATURE_JOB_CHUNK);
+                }
+            }
+            return;
+        }
+        if programs.is_empty() {
+            return;
+        }
+        let (ctx, cancel) = tsrs_compiler::Context::default().with_cancel();
+        let job = std::thread::Builder::new()
+            .name("tsrs-signatures".to_string())
+            .spawn(move || {
+                let start = std::time::Instant::now();
+                let mut stored = 0;
+                for program in programs {
+                    stored += program.compute_placeholder_signatures(&ctx, crate::watcher::SIGNATURE_JOB_CHUNK);
+                }
+                let state = if ctx.err().is_some() { "canceled" } else { "done" };
+                self.wm.debug(|| format!("[watch] stored {stored} declaration signature(s) in {:?} ({state})\n", start.elapsed()));
+            })
+            .expect("failed to spawn a thread");
+        *self.signature_job.lock().unwrap() = Some((cancel, job));
+    }
+
+    fn stop_signature_job(&self) {
+        let job = self.signature_job.lock().unwrap().take();
+        if let Some((cancel, job)) = job {
+            cancel.call();
+            job.join().expect("the signature computation panicked");
+        }
     }
 
     // tsrs-only (watchmem.rs): after a cycle's builds, frees the regions of the parsed files that neither the host's
@@ -1232,6 +1286,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         watch_status_reporter,
         wm,
         freer,
+        signature_job: Mutex::new(None),
         schedule_order: Mutex::new(Vec::new()),
         wanted_watch_dirs: Mutex::new(FxHashSet::default()),
         realpaths: Mutex::new(FxHashMap::default()),

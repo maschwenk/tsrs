@@ -2,6 +2,7 @@
 # Edits right after each report (0-1.2 s, while the background signature job runs), alternating edits that keep and
 # that change strings.ts's declarations. Prints the detection latency (it includes waiting for the cancelled job) and
 # compares the diagnostics of each cycle with a fresh --noEmit build.
+# BUILD=<config> runs `-b <config> --watch` instead (the fresh build uses `-p <config>`).
 import os, queue, random, signal, subprocess, sys, threading, time
 
 comp, proj = sys.argv[1], sys.argv[2]
@@ -12,8 +13,10 @@ SIG_OLD = "export function isFalsyOrWhitespace(str: string | undefined): boolean
 SIG_NEW = "export function isFalsyOrWhitespace(str: string | undefined): number {"
 assert SIG_OLD in orig
 random.seed(7)
+BUILD = os.environ.get("BUILD")
+MODE = ["-b", BUILD, "--watch"] if BUILD else ["--watch", "-p", "."]
 
-p = subprocess.Popen([comp, "--watch", "-p", ".", "--pretty", "false"], cwd=proj, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+p = subprocess.Popen([comp, *MODE, "--pretty", "false"], cwd=proj, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 q = queue.Queue()
 threading.Thread(target=lambda: [q.put((time.monotonic(), l)) for l in p.stdout], daemon=True).start()
 
@@ -29,7 +32,7 @@ def cycle():
         lines.append(l.rstrip("\n"))
 
 def fresh():
-    r = subprocess.run([comp, "-p", ".", "--pretty", "false", "--noEmit"], cwd=proj, capture_output=True, text=True)
+    r = subprocess.run([comp, "-p", BUILD or ".", "--pretty", "false", "--noEmit"], cwd=proj, capture_output=True, text=True)
     return sorted(l for l in r.stdout.split("\n") if l.strip())
 
 ok = True

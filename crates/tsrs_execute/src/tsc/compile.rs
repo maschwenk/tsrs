@@ -145,6 +145,11 @@ pub trait CommandLineTesting: Sync {
     }
     fn on_emitted_files(&self, _result: Option<&tsrs_compiler::EmitResult>, _m_times_cache: Option<&MTimesCache>) {}
     fn on_program(&self, _program: P<tsrs_incremental::Program>) {}
+    // tsrs-only: the watch computes placeholder signatures after each cycle (watcher.rs `start_signature_job`), on the
+    // cycle's thread, before the next edit. Off by default, as Go has no such step.
+    fn run_signature_job(&self) -> bool {
+        false
+    }
     // Go `GetTrace(w, locale)`: the trace function for a program's compiler host, writing to `w`.
     fn get_trace(&'static self, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn>;
 }

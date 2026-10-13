@@ -445,6 +445,11 @@ impl BuildTask {
         *self.watch_program.lock().unwrap()
     }
 
+    // The incremental program the task's next build starts from (`Orchestrator::start_signature_job`).
+    pub(crate) fn watch_incremental_program(&self) -> Option<P<tsrs_incremental::Program>> {
+        self.watch_incremental.lock().unwrap().as_ref().map(|&(program, _)| program)
+    }
+
     // tsrs-only (watch mode): makes `program` and `incremental` the task's program and old state, and frees the
     // program it built last, the diagnostics the old state kept (`old_snapshot_diagnostics`) and, after a full build
     // (`full_build_regions`), what the last full build allocated beside its program. Nothing else holds them: the cycle

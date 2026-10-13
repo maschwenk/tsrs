@@ -163,6 +163,7 @@ pub(crate) struct TestSys {
     pub(crate) output_is_tty: bool,
     pub(crate) clock: Arc<TestClock>,
     pub(crate) mock_watch_backend: std::sync::OnceLock<Arc<super::mockwatch::MockWatchBackend>>,
+    pub(crate) signature_job: bool,
 }
 
 impl TestSys {
@@ -188,6 +189,7 @@ impl TestSys {
             output_is_tty,
             clock,
             mock_watch_backend: std::sync::OnceLock::new(),
+            signature_job: false,
         }
     }
 
@@ -534,6 +536,9 @@ impl System for TestSys {
 }
 
 impl CommandLineTesting for TestSys {
+    fn run_signature_job(&self) -> bool {
+        self.signature_job
+    }
     fn on_watch_status_report_start(&self, w: &dyn Fn(&str)) {
         w(&format!("{WATCH_STATUS_REPORT_START}\n"));
     }
