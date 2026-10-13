@@ -412,7 +412,6 @@ impl Watcher {
 
     /// Go `DoCycle`.
     pub fn do_cycle(&mut self) {
-        self.stop_signature_job();
         let wm = Arc::clone(&self.wm);
         let mut state = wm.lock();
 
@@ -507,6 +506,10 @@ impl Watcher {
             return;
         }
 
+        // tsrs-only: only a cycle that builds stops the signature job (as orchestrator.rs `do_cycle`); one that returns
+        // above leaves it running. Most such cycles are the events of the last build's own outputs, which come while
+        // the job runs, and stopping it there left the placeholders until the next build.
+        self.stop_signature_job();
         self.report_status(|| new_compiler_diagnostic(&diagnostics::File_change_detected_Starting_incremental_compilation, &[]));
         if self.do_build(&mut state).is_err() {
             // Mid-cycle watch failure; force a full rebuild on the next event
