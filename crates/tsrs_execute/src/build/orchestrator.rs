@@ -724,6 +724,45 @@ impl Orchestrator {
         }
     }
 
+    // tsrs-only: an update event for a parsed file whose modification time is still the one it was read at changes
+    // nothing (as in watcher.rs `drop_unchanged_file_events`): chmod, and the event of a save that the first cycle
+    // already took from `queue_files_changed_since` (a save just after the first report: the queued cycle read it,
+    // and its event, which arrives ~12 ms later, ran a second cycle).
+    fn drop_unchanged_file_events(&self, changed_paths: &mut FxHashMap<String, tsrs_fswatch::EventKind>) {
+        let Some(cache) = &self.host().watch_source_files else { return };
+        if changed_paths.is_empty() {
+            return;
+        }
+        // A rename in case only keeps the modification time, and the cache can hold both spellings: keep its events.
+        let paths: FxHashSet<Path> = changed_paths.keys().map(|p| self.to_path(p)).collect();
+        if paths.len() != changed_paths.len() {
+            return;
+        }
+        let read_at: FxHashMap<String, Option<std::time::SystemTime>> = {
+            let cache = cache.lock().unwrap();
+            let mut read_at = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "builds a map; the order does not matter")]
+            for (opts, (_, mod_time)) in cache.iter() {
+                if changed_paths.contains_key(&opts.file_name) {
+                    read_at.insert(opts.file_name.clone(), *mod_time);
+                }
+            }
+            read_at
+        };
+        if read_at.is_empty() {
+            return;
+        }
+        let fs = self.opts.sys.fs();
+        let before = changed_paths.len();
+        changed_paths.retain(|path, kind| {
+            *kind != tsrs_fswatch::EventKind::Update
+                || read_at.get(path).is_none_or(|&read| read.is_none() || fs.stat(path).and_then(|s| s.mod_time()) != read)
+        });
+        if changed_paths.len() != before {
+            self.wm.debug(|| format!("[watch] ignoring {} event(s) for files unchanged since they were read\n", before - changed_paths.len()));
+        }
+    }
+
     // tsrs-only: the watches start after the first build, so a file saved while that build ran (after it was read)
     // has no event; Go misses the edit until the next save (tsgo too). A program file modified since the build
     // started is queued as a change, and the first cycle checks it again. One stat per source file, once.
@@ -777,7 +816,11 @@ impl Orchestrator {
     // orchestrator.go:816 DoCycle
     pub fn do_cycle(&'static self) {
         let mut state = self.wm.lock();
-        let (changed_paths, overflow) = self.wm.drain_events();
+        let (mut changed_paths, overflow) = self.wm.drain_events();
+        // tsrs-only: whatever the cached file system holds predates the events (`get_watch_source_file` reuses a file
+        // whose modification time it finds unchanged).
+        self.host().cached_fs.clear_cache();
+        self.drop_unchanged_file_events(&mut changed_paths);
         if changed_paths.is_empty() && !overflow {
             self.wm.debug(|| "[watch] DoCycle: no events, skipping\n".to_string());
             return;
@@ -788,9 +831,6 @@ impl Orchestrator {
     }
 
     fn build_changes(&'static self, state: &mut watchmanager::WatchState, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>, overflow: bool) {
-        // tsrs-only: whatever the cached file system holds predates the events (`get_watch_source_file` reuses a file
-        // whose modification time it finds unchanged).
-        self.host().cached_fs.clear_cache();
         self.invalidate_realpaths(changed_paths, overflow);
         let mut needs_config_update = false;
         let mut needs_update = false;
