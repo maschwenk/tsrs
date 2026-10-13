@@ -4,20 +4,29 @@ The [GitHub Actions workflow](../../.github/workflows/repo-conformance.yml) comp
 TypeScript commit pinned in `Cargo.toml`, following TypeScript's
 [`test top400`](https://github.com/microsoft/TypeScript/wiki/Triggering-TypeScript-Bot).
 It selects 400 TypeScript repos by stars after compiler changes merge into `main`, and 20 for harness PRs, excluding
-forks and archived repos. Manual dispatch accepts 1-400. Both compilers are built once; 20 shards run at most eight at a time.
+forks and archived repos. Manual dispatch accepts 1-400. Both compilers are built once; 20 shards run at most eight at a
+time. Pushes share one concurrency group: a run already in progress finishes, and only the newest pending push waits.
 
 The plan pins each repo's default-branch commit, and shards check out exactly that commit. Root dependencies are
 installed with the declared package manager (`packageManager`, or an exact `devEngines.packageManager`) unless only
 another manager's lockfile exists; then that lockfile's manager installs it. npm, pnpm and Yarn come from corepack;
 Bun and nub from their per-platform npm packages. Undeclared pnpm versions follow the lockfile format, using pnpm 10
 when package.json has a `pnpm` field or a `workspaces` field without `pnpm-workspace.yaml`, which newer pnpm reads
-differently. Installs are frozen when a lockfile exists and unpinned (and marked so) when none does. Lifecycle scripts
-are disabled and engine and platform checks are ignored, since only the files are needed. Yarn uses node_modules.
-Clones, installs and compilers get no CI credentials and, per repository, a fresh HOME with empty npm and git config, so
-package-manager config and hooks find no host config or tokens through HOME, XDG paths or the environment. This is not
-a sandbox: a hook can still read absolute host paths. Downloads go to the `--cache` directory, which holds only package
-manager caches and tools. Other package managers, out-of-date lockfiles and custom setup requirements are reported as
-setup failures.
+differently. Declared versions must be exact semver versions, optionally with a prerelease; npm/pnpm/Yarn also accept
+Corepack's SHA integrity suffix. Package aliases, URLs, ranges and tags are rejected. Installs are frozen when a lockfile
+exists and unpinned (and marked so) when none does. Lifecycle scripts and pnpmfile hooks are disabled; engine and platform
+checks are ignored, since only the files are needed. Yarn uses node_modules.
+
+Clones, installs and compilers run in a new Docker container per repository, as a non-root user with all capabilities
+dropped, no privilege escalation, and a read-only root filesystem. Only the harness script, compilers and request are
+mounted read-only; a private scratch directory holds the checkout, HOME, package caches and outputs. No other runner
+files, host credentials, host processes or Docker socket are exposed. Outbound network access remains available for public clones and
+packages, and repository hooks such as Yarn plugins can execute inside the container. Every container is forcibly
+removed before its outputs are read or the next repository starts, including on timeout; artifact export skips symlinks.
+`--cache` names the scratch parent, not a persistent cache. Nothing from those package caches is restored or saved by
+Actions, so they cannot become inputs to release builds. Other package managers, out-of-date lockfiles and custom setup
+requirements are reported as setup failures. CI requires a synthetic hook/timeout isolation smoke before comparisons;
+the image uses Ubuntu 24.04 to match the compilers' build environment and Node 24.
 
 The harness compares the full ordered output (diagnostics and other lines, such as `traceResolution` traces), exit
 codes, and loaded-file counts with `--noEmit` and fresh build info. It normalizes checkout/compiler paths and CRLF, and
@@ -67,10 +76,18 @@ A recovery run cannot itself be used as the source for another recovery. Always 
 all lost or partial shards that need rerunning; this keeps an earlier difference from disappearing across a chain of
 recovery runs.
 
-For a local run, install `corepack@0.36.0`, set `GH_TOKEN` or `GITHUB_TOKEN` for discovery, and build both compilers
-at the manifest's commits. A saved manifest can be reused, and `--previous` adds shards from an earlier run:
+Version 4 adds the container boundary; runs from before it cannot be rerun by this workflow. Changes to
+workflow arguments or the isolation contract must bump `HARNESS` because the workflow comes from the dispatch commit
+while the harness and compilers come from the earlier run.
+
+For a local run, build the Docker image, set `GH_TOKEN` or `GITHUB_TOKEN` for discovery, and build both compilers
+at the manifest's commits. Run as a non-root host user with Docker running; there is no host-execution fallback. A saved manifest can be reused,
+and `--previous` adds shards from an earlier run:
 
 ```sh
+docker build -t tsrs-repo-conformance tools/repo-conformance
+TSRS_CONFORMANCE_SANDBOX_IMAGE=tsrs-repo-conformance \
+  python3 -m unittest discover -s tools/repo-conformance -p 'test_sandbox.py' -v
 python3 tools/repo-conformance/run.py plan --count 20 --shards 1 --out /tmp/top-repos/manifest.json
 python3 tools/repo-conformance/run.py run --manifest /tmp/top-repos/manifest.json --shard 0 \
   --tsrs target/release/tsrs --tsgo /path/to/pinned/tsgo --out /tmp/top-repos/results --cache /tmp/top-repos/cache

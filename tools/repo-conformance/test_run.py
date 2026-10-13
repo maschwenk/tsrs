@@ -138,6 +138,24 @@ class InstallTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Unsupported package manager: utoo@1.0.0"):
             self.plan({"package.json": {"packageManager": "utoo@1.0.0"}})
 
+    def test_manager_versions_cannot_select_another_package_or_executable(self):
+        for name in ("npm", "pnpm", "yarn", "bun", "nub"):
+            for version in ("npm:evil@1.0.0", "https://example.org/tool.tgz", "file:/tmp/tool", "latest",
+                            "^1.2.3", "1.2.3 --prefix=/tmp", "1.2.3+sha224.evil", "01.2.3", "1.2.3-01"):
+                with self.subTest(name=name, version=version), self.assertRaisesRegex(ValueError, "Invalid"):
+                    self.plan({"package.json": {"packageManager": f"{name}@{version}"}})
+        for name in ("npm", "pnpm", "yarn"):
+            spec = f"{name}@1.2.3+sha224." + "a" * 56
+            plan = self.plan({"package.json": {"packageManager": spec}})
+            self.assertEqual(plan["command"][:2], ["corepack", spec])
+        for name in ("bun", "nub"):
+            self.assertEqual(self.plan({"package.json": {"packageManager": f"{name}@1.2.3-beta.1"}})["tool"],
+                             (name, "1.2.3-beta.1"))
+
+    def test_pnpm_hooks_are_disabled_even_when_install_scripts_are_off(self):
+        plan = self.plan({"package.json": {"packageManager": "pnpm@10.23.0"}})
+        self.assertIn("--ignore-pnpmfile", plan["command"])
+
 
 class RerunTests(unittest.TestCase):
     def run_cli(self, *args):

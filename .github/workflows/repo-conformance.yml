@@ -33,7 +33,7 @@ on:
         default: ""
 
 concurrency:
-  group: repo-conformance-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || inputs.rerun_run_id && format('rerun-{0}', inputs.rerun_run_id) || github.sha }}
+  group: repo-conformance-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || inputs.rerun_run_id && format('rerun-{0}', inputs.rerun_run_id) || github.event_name == 'push' && 'main' || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -58,6 +58,12 @@ jobs:
           RUN_ID: ${{ inputs.rerun_run_id }}
           SHARDS: ${{ inputs.rerun_shards }}
         run: python3 tools/repo-conformance/run.py dispatch --run-id "$RUN_ID" --shards "$SHARDS"
+      - name: Check repository isolation
+        env:
+          TSRS_CONFORMANCE_SANDBOX_IMAGE: tsrs-repo-conformance
+        run: |
+          docker build --tag tsrs-repo-conformance tools/repo-conformance
+          python3 -m unittest discover -s tools/repo-conformance -p 'test_sandbox.py' -v
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version-file: .node-version
@@ -148,16 +154,6 @@ jobs:
         with:
           ref: ${{ needs.build.outputs.harness }}
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-      - name: Set up package managers
-        run: npm install --global --ignore-scripts corepack@0.36.0
-      - uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
-        with:
-          path: ${{ runner.temp }}/repo-conformance-cache
-          key: repo-conformance-deps-v2-${{ runner.os }}-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
-          restore-keys: repo-conformance-deps-v2-${{ runner.os }}-${{ matrix.shard }}-
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: repo-conformance-inputs
@@ -166,10 +162,15 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
         run: |
+          docker build --tag tsrs-repo-conformance tools/repo-conformance
           chmod +x repo-conformance/bin/tsgo repo-conformance/bin/tsrs
           python3 tools/repo-conformance/run.py run --manifest repo-conformance/manifest.json \
             --shard "$SHARD" --tsgo repo-conformance/bin/tsgo --tsrs repo-conformance/bin/tsrs \
-            --out repo-conformance/results --cache "$RUNNER_TEMP/repo-conformance-cache"
+            --out repo-conformance/results --cache "$RUNNER_TEMP/repo-conformance-work" \
+            --sandbox-image tsrs-repo-conformance
+      - name: Remove repository sandboxes
+        if: always()
+        run: docker ps --all --quiet --filter label=tsrs.repo-conformance | xargs --no-run-if-empty docker rm --force
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:
@@ -180,7 +181,7 @@ jobs:
 
   report:
     needs: [build, compare]
-    if: always() && needs.build.result == 'success'
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

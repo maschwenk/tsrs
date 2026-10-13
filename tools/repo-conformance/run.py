@@ -41,9 +41,8 @@ NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 WORKFLOW = ".github/workflows/repo-conformance.yml"
 MAX_SHARDS = 20
-# Recorded in manifests. A rerun's workflow comes from the dispatch commit but runs the manifest's harness (including
-# its report), so bump this when the workflow's arguments to run.py change or when a rerun's report could merge shards
-# differently; reruns of other versions are refused.
+# Recorded in manifests. A rerun's workflow comes from the dispatch commit but runs the manifest's harness, so bump
+# this when the workflow's arguments, isolation contract or report merging rules change; other versions are refused.
 HARNESS = 4
 
 
@@ -55,8 +54,8 @@ def write_json(path: Path, data: object) -> None:
 def child_env(home: Path, cache: Path) -> dict[str, str]:
     """Environment for package managers and compilers. Package-manager config and hooks can run code, so CI
     credentials are left out and HOME is a fresh directory with empty npm and git config: no host config or token is
-    reachable through HOME, XDG paths or the environment. Downloads go to cache, which holds nothing else. This is not
-    a sandbox; a hook can still read absolute host paths."""
+    reachable through HOME, XDG paths or the environment. Filesystem and process isolation is provided by the
+    per-repository container, not this environment filter."""
     allowed = {"PATH", "LANG", "LC_ALL", "TMPDIR", "USER", "LOGNAME"}
     env = {k: v for k, v in os.environ.items() if k in allowed}
     for path in (home / ".npmrc", home / ".npmrc-global", home / ".gitconfig"):
@@ -151,6 +150,17 @@ LOCKFILES = {"bun": ("bun.lock", "bun.lockb"), "pnpm": ("pnpm-lock.yaml",), "yar
 TOOLS = {"bun": "@oven/bun-{os}-{arch}", "nub": "@nubjs/nub-{os}-{arch}"}
 TOOL_ARCH = {("bun", "arm64"): "aarch64", ("bun", "aarch64"): "aarch64", ("nub", "aarch64"): "arm64",
              ("bun", "x86_64"): "x64", ("nub", "x86_64"): "x64", ("nub", "arm64"): "arm64"}
+VERSION = re.compile(r"(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)"
+                     r"(?:-(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
+                     r"(?:\.(?:0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?\Z")
+
+
+def check_version(name: str, version: str) -> None:
+    base, separator, integrity = version.partition("+")
+    valid_hash = name in ("npm", "pnpm", "yarn") and any(
+        re.fullmatch(rf"sha{bits}\.[0-9a-fA-F]{{{bits // 4}}}", integrity) for bits in (224, 256, 384, 512))
+    if not VERSION.fullmatch(base) or (separator and not valid_hash):
+        raise ValueError(f"Invalid package manager version: {name}@{version}")
 
 
 def declared_manager(package: dict) -> tuple[str, str] | None:
@@ -159,8 +169,11 @@ def declared_manager(package: dict) -> tuple[str, str] | None:
     if not spec and isinstance(engine, dict) and re.fullmatch(r"\d+\.\d+\.\d+", str(engine.get("version", ""))):
         spec = f"{engine.get('name')}@{engine['version']}"
     if not isinstance(spec, str) or "@" not in spec:
+        if spec:
+            raise ValueError(f"Invalid packageManager: {spec!r}")
         return None
     name, version = spec.split("@", 1)
+    check_version(name, version)
     return name, version
 
 
@@ -193,7 +206,8 @@ def install_plan(root: Path) -> dict | None:
     frozen = ["--frozen-lockfile"] if lock else []
     if name == "pnpm":
         command = ["corepack", "pnpm@" + (version or default_pnpm(root, package)), "install",
-                   *(frozen or ["--no-frozen-lockfile"]), "--ignore-scripts", "--config.engine-strict=false"]
+                   *(frozen or ["--no-frozen-lockfile"]), "--ignore-scripts", "--ignore-pnpmfile",
+                   "--config.engine-strict=false"]
     elif name == "yarn":
         version = version or ("4.9.2" if lock and "__metadata:" in (root / "yarn.lock").read_text() else "1.22.22")
         if int(version.split(".", 1)[0]) >= 2:
@@ -214,10 +228,11 @@ def install_plan(root: Path) -> dict | None:
     else:
         raise ValueError(f"Unsupported package manager: {name}@{version}")
     return {"manager": name, "command": command, "dependencies": "lockfile" if lock else "unpinned",
-            **({"tool": (name, version.split("+", 1)[0])} if name in TOOLS else {})}
+            **({"tool": (name, version)} if name in TOOLS else {})}
 
 
 def tool_binary(name: str, version: str, log: Path, timeout: float, env: dict[str, str], cache: Path) -> Path:
+    check_version(name, version)
     system = {"Linux": "linux", "Darwin": "darwin"}.get(platform.system())
     arch = TOOL_ARCH.get((name, platform.machine()))
     if not system or not arch:
@@ -405,14 +420,14 @@ def check_projects(root: Path, configs: list[str], ctx: Context, out: Path, chec
 
 
 def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, cache: Path, setup_timeout: int,
-               check_timeout: int, max_configs: int) -> dict:
+               check_timeout: int, max_configs: int, source: Path | None = None) -> dict:
     result = dict(repo, status="setup_failed", configs=[])
     with tempfile.TemporaryDirectory(prefix="tsrs-repo-") as temp:
         root = Path(temp) / "repo"
         ctx = Context(tsgo, tsrs, child_env(Path(temp) / "home", cache))
         try:
             deadline = time.monotonic() + setup_timeout
-            url = "https://github.com/" + repo["repository"] + ".git"
+            url = str(source) if source else "https://github.com/" + repo["repository"] + ".git"
             if repo.get("commit"):
                 clone = ["sh", "-c", 'git init -q "$1" && git -C "$1" fetch -q --depth 1 "$2" "$3" && '
                          'git -C "$1" checkout -q FETCH_HEAD', "clone", str(root), url, repo["commit"]]
@@ -457,6 +472,8 @@ def check_repo(repo: dict, tsgo: Path, tsrs: Path, out: Path, cache: Path, setup
 
 
 def run_shard(args: argparse.Namespace, manifest: dict) -> None:
+    from sandbox import check_in_container
+
     if not 0 <= args.shard < manifest["shards"]:
         raise ValueError("Shard outside manifest range")
     for binary in (args.tsgo, args.tsrs):
@@ -470,8 +487,9 @@ def run_shard(args: argparse.Namespace, manifest: dict) -> None:
     write_json(path, report)
     for repo in manifest["repositories"][args.shard::manifest["shards"]]:
         name = repo["repository"]
-        result = check_repo(repo, args.tsgo.resolve(), args.tsrs.resolve(), args.out / name.replace("/", "--"),
-                            args.cache.resolve(), args.setup_timeout, args.check_timeout, args.max_configs)
+        result = check_in_container(repo, args.tsgo.resolve(), args.tsrs.resolve(), args.out / name.replace("/", "--"),
+                                    args.cache.resolve(), args.setup_timeout, args.check_timeout, args.max_configs,
+                                    args.sandbox_image)
         results.append(result)
         write_json(path, report)
         print(f"{name}: {result['status']}", flush=True)
@@ -742,7 +760,8 @@ def main() -> int:
     run.add_argument("--tsgo", type=Path, required=True)
     run.add_argument("--tsrs", type=Path, required=True)
     run.add_argument("--out", type=Path, required=True)
-    run.add_argument("--cache", type=Path, required=True, help="package and tool download cache; holds no config")
+    run.add_argument("--cache", type=Path, required=True, help="scratch directory; each container gets a private cache")
+    run.add_argument("--sandbox-image", default="tsrs-repo-conformance", help="locally built Docker image; required")
     run.add_argument("--setup-timeout", type=positive, default=180)
     run.add_argument("--check-timeout", type=positive, default=120)
     run.add_argument("--max-configs", type=positive, default=5)
@@ -758,6 +777,7 @@ def main() -> int:
     dispatch = commands.add_parser("dispatch", help="check the workflow_dispatch rerun inputs")
     dispatch.add_argument("--run-id", default="")
     dispatch.add_argument("--shards", default="")
+    commands.add_parser("_repo", help=argparse.SUPPRESS)
     args = parser.parse_args()
     if args.command == "plan":
         if args.count > 400 or args.shards > MAX_SHARDS:
@@ -780,6 +800,12 @@ def main() -> int:
             parser.error(str(error))
     elif args.command == "run":
         run_shard(args, json.loads(args.manifest.read_text()))
+    elif args.command == "_repo":
+        request = json.loads(Path("/request.json").read_text())
+        result = check_repo(request["repo"], Path("/inputs/tsgo"), Path("/inputs/tsrs"), Path("/work/out"),
+                            Path("/work/cache"), request["setup_timeout"], request["check_timeout"],
+                            request["max_configs"], Path("/source") if request.get("source") else None)
+        write_json(Path("/work/result.json"), result)
     else:
         return 0 if summarize(json.loads(args.manifest.read_text()), args.results, args.out, args.previous) else 1
     return 0
