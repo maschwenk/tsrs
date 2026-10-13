@@ -174,6 +174,33 @@ tsrs's errors (the table's errors paragraph names such projects).
   differences (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
 
+## Watch mode
+
+`bench/watch.py` measures `--watch` on vscode: tsrs against tsgo 7.0.2, both started as
+`--watch -p src --noEmit --preserveWatchOutput --pretty false` with no thread flags. bun check has no watch mode (Bun
+1.4.4 canary: `bun check` has no `--watch` flag, and `bun --watch check` checks once and ignores later edits), so it has
+no column. Each session:
+
+- **initial build**: from the start of the process to the first "Watching for file changes" report;
+- **first comment edit**: a comment appended to `src/vs/base/test/common/strings.test.ts`, a test file nothing imports;
+- **repeat comment edit**: five more comment edits to that file, the median of them;
+- **type error in a leaf file**: an exported assignment error appended to it (the cycle must report exactly one error
+  more than the initial build, or the session fails);
+- then the file is restored (the cycle must report the initial build's errors again; not in the table).
+
+An edit is timed from just before the write to the last "Watching for file changes" report of the cycles it started:
+after a report the harness waits two quiet seconds for another, so a watch that rebuilds twice for one save is timed
+to the second. Memory is the process's peak RSS over the whole session (`wait4`) and its RSS after the last edit. CI
+runs 5 tsrs and 3 tsgo sessions (the compiler order alternates) on its own fixed-spec machine, the `measure-watch` job;
+the tables report medians and the result keeps every session under `watch.sessions`. `bench/run.py --merge` attaches
+the result as the merged result's `watch` section, which `bench/results/<...>.md` and `bench/RESULTS.md` render as a
+"Watch mode" table; the chart does not show it.
+
+```sh
+python3 bench/watch.py --local                                   # 3 sessions each, 5 repeat edits
+python3 bench/watch.py --local --reps 1 --edits 2 --out-dir /tmp/w   # smoke test
+```
+
 ## Regression flag
 
 Wall time on a shared VM moves 2-4% between runs with no code change (2026-10-04, 64 runs: the tsrs/tsgo ratio moved
@@ -243,8 +270,8 @@ push, the previous merge): `--metrics instructions,peak,wall,wide_wall,wide_peak
 doing; the wall columns are the noisy ones and say whether the cost bought anything, and a `~` marks a wall or
 wide-peak change next to an instruction change under 0.3%: the code did not change, that is the runner.
 
-Four jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
-once the four application projects were in):
+Five jobs (since 2026-10-07; until then one job did everything in sequence, and the measurement alone took 18-20 min
+once the four application projects were in; `measure-watch` since 2026-10-13):
 
 1. `build`, on one machine of the fixed spec: the PGO + BOLT `dist` build of the commit (below). The binary and the
    `rustc -V` that built it go up as the `tsrs-pgo-dist` artifact.
@@ -259,7 +286,10 @@ once the four application projects were in):
    oversubscribe the fixed-spec machine. The job runs while the `measure` jobs do; it is the run's only 16-vCPU job. It
    restores the caches the `measure` jobs save (a project added to `projects.json` needs a restore step in it too). If
    it fails, the results file is published without the 16-vCPU sections and the tables and chart stay unchanged.
-4. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
+4. `measure-watch`, one job on a machine of the fixed spec: `bench/watch.py` on vscode ("Watch mode" below). It restores
+   the vscode cache the `measure` job saves and raises the inotify watch limit. If it fails, the results have no
+   watch table.
+5. `merge`: `bench/run.py --merge <results...>` joins them into one result, projects in `bench/projects.json` order
    and modes in `MODE_FLAGS` order, after checking that the binary, the compilers and flags agree (the rep counts may differ, as the
    `measure` jobs' 5 and `measure-wide`'s 10 do; the result records every mode's in `mode_reps`) and that no
    (project, mode) is measured twice; then the regression flag and the results commit. The `Commit results` step

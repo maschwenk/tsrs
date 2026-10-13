@@ -554,6 +554,8 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
                          f"{fmt_ratio(et['peak_rss_bytes'] / st['peak_rss_bytes'])} |")
         lines += ["", "speedup: `--singleThreaded` wall / `--checkers 8` wall. memory growth: `--checkers 8` peak / "
                       "`--singleThreaded` peak."]
+    if result.get("watch"):
+        lines += [""] + watch_markdown(result["watch"])
     odd = [(name, mode, mm) for name, mode, mm in odd if mode in modes]
     if odd:
         by_project: dict = {}
@@ -567,6 +569,37 @@ def markdown(result: dict, modes: list[str] | None = None) -> str:
     lines += ["", f"{noise}Date: {result['date']}. tsrs commit: `{commit}`. "
               "Method: [benchmark methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)."]
     return "\n".join(lines).rstrip() + "\n"
+
+
+def watch_markdown(watch: dict) -> list[str]:
+    """The watch-mode table (bench/watch.py): a section of every report that has a watch result, never of the chart."""
+    g, t = watch["tsgo"], watch["tsrs"]
+    reps = watch["reps"] if watch["reps"] == watch["tsgo_reps"] else f"{watch['reps']} (tsgo {watch['tsgo_reps']})"
+    lines = [f"### Watch mode ({watch['project']})", "",
+             f"`--watch -p {watch['project_path']} --noEmit`, no thread flags, on {watch['machine']['label']}. Edits go to "
+             f"`{watch['leaf']}`, a file nothing imports; an edit's time runs from the write to the cycle's report. "
+             f"Median of {reps} sessions; the repeat edit is the median of {watch['edits']} edits per session. "
+             "bun check has no watch mode.", "",
+             "| step | tsgo | tsrs | tsrs vs tsgo |", "| --- | ---: | ---: | ---: |"]
+    if not g["ok_runs"] or not t["ok_runs"]:
+        failed = [c for c, s in (("tsgo", g), ("tsrs", t)) if not s["ok_runs"]]
+        return lines + [f"| all | **FAILED: {', '.join(failed)}** | | |", ""]
+    for label, key, fmt, up, down in (
+            ("initial build", "initial_s", fmt_ms, "faster", "slower"),
+            ("first comment edit", "first_edit_s", fmt_ms, "faster", "slower"),
+            ("repeat comment edit", "repeat_edit_s", fmt_ms, "faster", "slower"),
+            ("type error in a leaf file", "type_error_s", fmt_ms, "faster", "slower"),
+            ("peak RSS", "peak_rss_bytes", fmt_mem, "less", "more"),
+            ("RSS after the edits", "final_rss_bytes", fmt_mem, "less", "more")):
+        ratio = g[key] / t[key] if g[key] and t[key] else None
+        lines.append(f"| {label} | {fmt(g[key])} | {fmt(t[key])} | {ratio_text(ratio, up, down, float('inf'))} |")
+    return lines + [""]
+
+
+def fmt_ms(x: float | None) -> str:
+    """Seconds as milliseconds below 1 s."""
+    return "n/a" if x is None else f"{x * 1000:.0f} ms" if x < 1 else f"{x:.2f} s"
+
 
 
 def update_readme(readme: Path, table: str) -> None:
@@ -601,9 +634,18 @@ def merge_results(cfg: dict, paths: list[Path]) -> dict:
     mode_order = {mode: i for i, mode in enumerate(MODE_FLAGS)}
     first = lambda keys, ranks: min((ranks.get(k, len(ranks)) for k in keys), default=len(ranks))
     # The fixed-spec partials (their first mode is `default`) in project order, then the wide one.
-    partials = sorted((json.loads(p.read_text()) for p in paths),
+    loaded = [json.loads(p.read_text()) for p in paths]
+    # The watch job's result (bench/watch.py) has no modes or projects: it becomes the merged result's `watch`.
+    watches = [r for r in loaded if r.get("kind") == "watch"]
+    partials = sorted((r for r in loaded if r.get("kind") != "watch"),
                       key=lambda r: (first(r["modes"], mode_order), first(r["projects"], order)))
     base = partials[0]
+    if len(watches) > 1:
+        sys.exit("--merge: more than one watch result")
+    for w in watches:
+        if w["tsrs"] != base["tsrs"] or w["tsgo"]["version"] != base["tsgo"]["version"]:
+            sys.exit(f"--merge: the watch result measured other compilers: {json.dumps([w['tsrs'], w['tsgo']])} vs "
+                     f"{json.dumps([base['tsrs'], base['tsgo']])}")
     fixed = lambda r: {"tsrs": r["tsrs"], "tsgo": r["tsgo"]["version"], "suite": r["suite"],
                        "reference": r.get("reference"), "flags": r["flags"]}
     for r in partials[1:]:
@@ -638,6 +680,12 @@ def merge_results(cfg: dict, paths: list[Path]) -> dict:
         result["partials"].append({"projects": list(r["projects"]), "modes": r["modes"], "machine": r["machine"]["label"],
                                    "date": r["date"], "duration_s": r.get("duration_s")})
         result["duration_s"] += r.get("duration_s") or 0
+    for w in watches:
+        # Its machine is in the section (`watch.machine`): the watch job runs on a machine of its own.
+        result["watch"] = w["watch"]
+        result["partials"].append({"projects": [w["watch"]["project"]], "modes": ["watch"], "machine": w["machine"]["label"],
+                                   "date": w["date"], "duration_s": w.get("duration_s")})
+        result["duration_s"] += w.get("duration_s") or 0
     result["projects"] = {name: dict(sorted(pr.items(), key=lambda kv: mode_order.get(kv[0], -1)))
                           for name, pr in sorted(result["projects"].items(), key=lambda kv: order.get(kv[0], len(order)))}
     result["raw"].sort(key=lambda row: order.get(row["project"], len(order)))

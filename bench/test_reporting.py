@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
+import chart
 import history
 import publish
 import run
@@ -70,6 +71,32 @@ class ReportingTests(unittest.TestCase):
         self.assertEqual(8, merged['machine']['cpus'])
         self.assertEqual(16, merged['projects']['vscode']['wide']['machine']['cpus'])
         self.assertIn('Default settings on 16 vCPUs', run.markdown(merged, ['wide']))
+
+    def test_merge_adds_the_watch_table_to_reports_but_not_the_chart(self):
+        stats = lambda scale: {'runs': 3, 'ok_runs': 3, 'initial_s': 9.0 * scale, 'first_edit_s': 2.0 * scale,
+                               'repeat_edit_s': 1.9 * scale, 'type_error_s': 1.9 * scale, 'errors': 359,
+                               'peak_rss_bytes': 12 * 2**30 * scale, 'final_rss_bytes': 11 * 2**30 * scale}
+        watch = {'kind': 'watch', 'date': self.historical['date'], 'machine': self.historical['machine'],
+                 'tsrs': self.historical['tsrs'], 'tsgo': self.historical['tsgo'], 'duration_s': 60,
+                 'watch': {'project': 'vscode', 'project_path': 'src', 'leaf': 'src/leaf.test.ts', 'reps': 5,
+                           'tsgo_reps': 3, 'edits': 5, 'machine': self.historical['machine'],
+                           'tsgo': stats(1), 'tsrs': stats(0.25), 'sessions': {}}}
+        with tempfile.TemporaryDirectory() as directory:
+            paths = [Path(directory) / 'all.json', Path(directory) / 'watch.json']
+            paths[0].write_text(json.dumps(self.historical))
+            paths[1].write_text(json.dumps(watch))
+            merged = run.merge_results({'projects': [{'name': name} for name in self.historical['projects']]}, paths)
+            other = dict(watch, tsrs=dict(watch['tsrs'], commit='0' * 40))
+            paths[1].write_text(json.dumps(other))
+            with self.assertRaises(SystemExit):
+                run.merge_results({'projects': [{'name': 'vscode'}]}, paths)
+        self.assertEqual(watch['watch'], merged['watch'])
+        summary = run.markdown(merged, ['wide'])
+        self.assertIn('### Watch mode (vscode)', summary)
+        self.assertIn('| repeat comment edit | 1.90 s | 475 ms | 4.00x faster |', summary)
+        self.assertIn('| peak RSS | 12.00 GiB | 3.00 GiB | 4.00x less |', summary)
+        self.assertNotIn('Watch mode', run.markdown(self.historical, ['wide']))
+        self.assertEqual(chart.svg({k: v for k, v in merged.items() if k != 'watch'}), chart.svg(merged))
 
     def test_history_starts_new_baseline_only_for_changed_hardware(self):
         new = self.resized()

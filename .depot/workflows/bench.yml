@@ -4,12 +4,13 @@
 # repository is connected to Depot CI, and Depot's runners for GitHub Actions only serve organization-owned
 # repositories.
 #
-# Four jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
+# Five jobs (bench/README.md "CI"): `build` makes the PGO dist binary once; `measure` is one job per project of
 # bench/projects.json, each on its own machine of the fixed spec, so the projects are measured at the same time
 # without ever sharing a CPU (one job measuring them one after the other took 18-20 min; the longest project, vscode,
 # takes about 5); `measure-wide` measures every project in the default mode (`wide`, the summary table) and with
-# `--checkers 16` on one 16-vCPU machine, with `bun check` as a third column; `merge` joins the partial results into
-# one result file (bench/run.py --merge), flags regressions and commits.
+# `--checkers 16` on one 16-vCPU machine, with `bun check` as a third column; `measure-watch` measures --watch on vscode
+# (bench/watch.py); `merge` joins the partial results into one result file (bench/run.py --merge), flags regressions and
+# commits.
 #
 # The push trigger is limited to the Rust source tree and build inputs: documentation, benchmark reports and other
 # repository-only changes do not need a fresh measurement. The results commit also carries [skip ci], which the build
@@ -573,13 +574,106 @@ jobs:
           path: bench/.work/logs
           if-no-files-found: ignore
 
+  # Watch mode (bench/watch.py, bench/README.md "Watch mode"): tsrs --watch against tsgo --watch on vscode, on its own
+  # machine of the fixed spec while the other jobs run. The result becomes the merged result's `watch` section, a table
+  # in the reports (never in the chart). Optional like the wide job: if it fails, the results have no watch table.
+  measure-watch:
+    needs: build
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 60
+    env:
+      BENCH_RUNNER: Depot CI `depot-ubuntu-24.04-8`
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
+          persist-credentials: false
+
+      - name: Runner hardware (must match the fixed spec)
+        run: |
+          nproc; free -g; df -h / | tail -1
+          lscpu | grep -E 'Model name|^CPU\(s\)' || true
+          mem_gb=$(awk '/MemTotal/ {printf "%d", $2 / 1048576}' /proc/meminfo)
+          if [ "$(nproc)" != 8 ] || [ "$mem_gb" -lt 28 ] || [ "$(uname -m)" != x86_64 ]; then
+            echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
+          fi
+
+      # Both watches use inotify, one watch per directory of the program (vscode: a few thousand).
+      - name: inotify limits
+        run: |
+          sudo sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=1024 || true
+          sysctl fs.inotify.max_user_watches fs.inotify.max_user_instances
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version-file: .node-version
+
+      - name: Set up pnpm
+        run: bash .github/scripts/setup-pnpm.sh
+
+      - name: Cache keys
+        id: keys
+        run: python3 bench/run.py --print-cache-keys --projects vscode | tee -a "$GITHUB_OUTPUT"
+
+      - name: Restore suite and compilers
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            bench/.work/suite
+            bench/.work/tsgo
+          key: bench-shared-${{ runner.os }}-${{ steps.keys.outputs.shared }}
+
+      # Saved by the vscode `measure` job.
+      - name: Restore vscode
+        uses: actions/cache/restore@v4
+        with:
+          path: bench/.work/solutions/vscode
+          key: bench-vscode-${{ runner.os }}-${{ steps.keys.outputs.vscode }}
+
+      - name: Set up vscode
+        run: python3 bench/run.py --setup-only --projects vscode
+
+      - name: Download tsrs (PGO, dist profile)
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: tsrs-pgo-dist
+          path: /tmp/tsrs-pgo/dist
+
+      - name: Check the binary
+        run: |
+          chmod +x /tmp/tsrs-pgo/dist/tsrs
+          sha256sum /tmp/tsrs-pgo/dist/tsrs
+          /tmp/tsrs-pgo/dist/tsrs --version
+          cat /tmp/tsrs-pgo/dist/rustc.txt
+
+      - name: Benchmark watch mode (vscode)
+        run: >-
+          python3 bench/watch.py --project vscode --tsrs /tmp/tsrs-pgo/dist/tsrs --tsrs-build pgo-dist
+          --rustc "$(cat /tmp/tsrs-pgo/dist/rustc.txt)" --out-dir /tmp/bench-partial/watch --reps 5 --tsgo-reps 3
+
+      - name: Upload the result
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-partial-watch
+          path: /tmp/bench-partial/watch
+          if-no-files-found: error
+          retention-days: 3
+
+      - name: Upload logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: bench-logs-watch
+          path: bench/.work/logs
+          if-no-files-found: ignore
+
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the summary table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
   # bench/RESULTS.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
   # every mode. The results commit also draws bench/large-projects.svg. If the wide job failed or was cancelled,
   # the results file has no 16-vCPU sections and the summary tables and chart are left as they were.
   merge:
-    needs: [build, measure, measure-wide]
+    needs: [build, measure, measure-wide, measure-watch]
     if: ${{ !cancelled() && needs.build.result == 'success' && needs.measure.result == 'success' }}
     runs-on: depot-ubuntu-24.04
     timeout-minutes: 15
