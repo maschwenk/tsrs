@@ -47,7 +47,7 @@ def svg(result: dict) -> str:
         scales[metric] = max(minimum, math.ceil(maximum / step) * step)
     root = ET.Element("svg", {"xmlns": "http://www.w3.org/2000/svg", "width": "960", "height": "940",
                               "viewBox": "0 0 960 940", "role": "img", "aria-labelledby": "title description"})
-    ET.SubElement(root, "title", id="title").text = "TypeScript 7 versus tsrs on VS Code, T3 Code and MUI docs"
+    ET.SubElement(root, "title", id="title").text = "Performance"
     description = ET.SubElement(root, "desc", id="description")
     details = []
     for name, title, source in PROJECTS:
@@ -91,7 +91,7 @@ def svg(result: dict) -> str:
 
     element(root, "rect", x=0.5, y=0.5, width=959, height=939, rx=20, fill="#fafcfb", stroke="#dce5e1")
     drawing = element(root, "g", font_family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fill="#162d27")
-    text(drawing, 40, 55, "TypeScript 7 vs tsrs", 34, 700)
+    text(drawing, 40, 55, "Performance", 34, 700)
     for index, (name, title, source) in enumerate(PROJECTS):
         y = 88 + index * 282
         cell = cells[name]

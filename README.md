@@ -13,15 +13,19 @@ pnpm add -D tsrs
 pnpm exec tsrs --noEmit
 ```
 
-[![TypeScript 7 versus tsrs: wall time and peak memory on VS Code, T3 Code and MUI docs](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
+You can try `tsrs` today and give us feedback on performance, memory usage, and conformance.
 
-## Compatibility
+## Conformance
 
-`tsrs` follows TypeScript 7.1-dev. It matches 13,458 of 13,462 error baselines and all 12,779 type and symbol
-baselines; the four remaining error-baseline differences are test-harness artifacts.
+`tsrs` currently targets the main branch of [microsoft/TypeScript](https://github.com/microsoft/typescript).
+We aim to release a stable version against TypeScript 7.1 with 100% conformance.
+
+We take conformance really seriously and are fixing the remaining 0.01% of issues we discover in existing projects.
 
 `--watch`, `--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
 for supported features and known gaps.
+
+[![Performance](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
 
 ## Learn more
 
