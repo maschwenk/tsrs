@@ -661,10 +661,14 @@ impl BuildInfo {
 
     // Go `json.Unmarshal(data, &buildInfo)`.
     pub fn unmarshal_json(data: &Value) -> Result<BuildInfo, String> {
+        Self::unmarshal_json_with_canonical_diagnostics(data, true)
+    }
+
+    fn unmarshal_json_with_canonical_diagnostics(data: &Value, canonical_diagnostics: bool) -> Result<BuildInfo, String> {
         let o = as_object(data)?;
-        // tsrs-only: canonical diagnostics cannot be reused in Go history, even if the proof is malformed.
-        if tsrs_core::compat::go_compatible_history() && o.contains_key("tsrsCanonicalCheckSignature") {
-            return Err("default-history build info cannot be reused in Go-compatible history".to_string());
+        // tsrs-only: tagged CLI diagnostics cannot be reused by API or Go history, even with a malformed proof.
+        if (!canonical_diagnostics || tsrs_core::compat::go_compatible_history()) && o.contains_key("tsrsCanonicalCheckSignature") {
+            return Err("canonical build info cannot be reused with this diagnostic policy".to_string());
         }
         Ok(BuildInfo {
             version: get_string(o, "version")?,
@@ -771,6 +775,10 @@ impl BuildInfo {
 
     pub fn unmarshal(text: &str) -> Result<BuildInfo, String> {
         BuildInfo::unmarshal_json(&tsrs_core::json::unmarshal(text)?)
+    }
+
+    pub(crate) fn unmarshal_with_canonical_diagnostics(text: &str, canonical_diagnostics: bool) -> Result<BuildInfo, String> {
+        Self::unmarshal_json_with_canonical_diagnostics(&tsrs_core::json::unmarshal(text)?, canonical_diagnostics)
     }
 
     // buildInfo.go:500

@@ -204,7 +204,7 @@ struct CliOrchestrator {
 impl CliOrchestrator {
     fn fresh(&self) -> &'static crate::build::Orchestrator {
         let o = new_orchestrator(Options { sys: self.sys, command: self.command, testing: None });
-        o.enable_api_regions();
+        o.enable_api_mode();
         o
     }
 
@@ -322,6 +322,65 @@ mod tests {
         assert_eq!(f.cwd, "/x");
         assert_eq!(f.callbacks, vec!["readFile", "fileExists"]);
         assert!(parse_api_flags(&["--nope".into()]).is_err());
+    }
+
+    #[test]
+    fn api_build_refreshes_cli_cached_interface_absence() {
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("tsrs-api-canonical-cache-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let fixture =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).parent().unwrap().parent().unwrap().join("testdata/regressions/merged-interface-check-site");
+        for file in ["bases.ts", "a.ts", "b.ts", "c.ts", "d.d.ts", "tsconfig.json"] {
+            std::fs::copy(fixture.join(file), dir.join(file)).unwrap();
+        }
+        let mut config = json::unmarshal(&std::fs::read_to_string(dir.join("tsconfig.json")).unwrap()).unwrap();
+        let Value::Object(ref mut config_object) = config else { unreachable!() };
+        let Value::Object(options) = config_object.get_mut("compilerOptions").unwrap() else { unreachable!() };
+        options.insert("incremental".into(), Value::Bool(true));
+        std::fs::write(dir.join("tsconfig.json"), json::marshal(&config).unwrap()).unwrap();
+        let exe = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("tsrs");
+        let cli = || {
+            let output = std::process::Command::new(&exe).args(["-p", ".", "--pretty", "false"]).current_dir(&dir).output().unwrap();
+            assert_eq!(output.status.code(), Some(2));
+            assert!(output.stderr.is_empty());
+            String::from_utf8(output.stdout).unwrap()
+        };
+        let expected_cli = cli();
+        assert_eq!(expected_cli.matches("error TS2320").count(), 2);
+        let info = dir.join("tsconfig.tsbuildinfo");
+        let cli_info = std::fs::read_to_string(&info).unwrap();
+        assert!(cli_info.contains("tsrsCanonicalCheckSignature"));
+        let flags = ApiFlags {
+            cwd: dir.canonicalize().unwrap().to_string_lossy().into_owned(),
+            pipe_path: String::new(),
+            callbacks: Vec::new(),
+            case_sensitive: true,
+            is_async: true,
+            timing: false,
+            run_external_code: false,
+        };
+        let (s, _) = new_api_session(&flags).unwrap();
+        let r = call(&s, "createBuildOrchestrator", r#"{"rootNames":["."]}"#);
+        let id = json::marshal(get(&r, "buildOrchestratorID")).unwrap();
+        let build = || call(&s, "build", &format!("{{\"buildOrchestratorID\":{id}}}"));
+        let migrated = build();
+        assert_eq!(get(&migrated, "status"), &Value::Number(2.0));
+        let Value::Array(diagnostics) = get(&migrated, "diagnostics") else { panic!("{migrated:?}") };
+        assert_eq!(diagnostics.iter().filter(|d| get(d, "code") == &Value::Number(2320.0)).count(), 4);
+        let api_info = std::fs::read_to_string(&info).unwrap();
+        assert!(!api_info.contains("tsrsCanonicalCheckSignature"));
+        for _ in 0..2 {
+            assert_eq!(get(&build(), "diagnostics"), get(&migrated, "diagnostics"));
+            assert_eq!(std::fs::read_to_string(&info).unwrap(), api_info);
+        }
+        std::fs::remove_file(&info).unwrap();
+        assert_eq!(get(&build(), "diagnostics"), get(&migrated, "diagnostics"), "CLI cache migration must match fresh API output");
+        assert_eq!(std::fs::read_to_string(&info).unwrap(), api_info);
+        assert_eq!(cli(), expected_cli, "API-to-CLI must refresh all ordered diagnostics");
+        assert_eq!(std::fs::read_to_string(&info).unwrap(), cli_info);
+        call(&s, "disposeBuildOrchestrator", &format!("{{\"buildOrchestratorID\":{id}}}"));
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]
@@ -453,8 +512,7 @@ mod memory_tests {
             .unwrap_or(0)
     }
 
-    /// API builds (fresh orchestrator, task regions, one builder, single-threaded programs) write the same files,
-    /// byte for byte, as `tsrs -b` on the same project graph.
+    /// API builds write the same files, byte for byte, as the Go-history CLI on the same project graph.
     #[test]
     fn api_build_outputs_match_cli_build() {
         let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
@@ -477,7 +535,7 @@ mod memory_tests {
         // The tsrs binary next to this test binary (target/<profile>/tsrs; `cargo build -p tsrs_cli` first).
         let exe = std::env::current_exe().unwrap().parent().unwrap().parent().unwrap().join("tsrs");
         assert!(exe.exists(), "build the tsrs binary first: {}", exe.display());
-        let status = std::process::Command::new(&exe).args(["-b", "app"]).current_dir(&cli).status().unwrap();
+        let status = std::process::Command::new(&exe).args(["-b", "app"]).env("TSRS_CHECKER_ASSIGNMENT", "go").current_dir(&cli).status().unwrap();
         let cwd = api.canonicalize().unwrap().to_string_lossy().into_owned();
         let flags = ApiFlags { cwd, pipe_path: String::new(), callbacks: Vec::new(), case_sensitive: true, is_async: true, timing: false, run_external_code: false };
         let (s, _) = new_api_session(&flags).unwrap();

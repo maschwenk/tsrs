@@ -58,6 +58,9 @@ pub struct ProgramOptions {
     /// with a fresh one (checkerpool.rs `retire_checker`; the CLI's `--noEmit` check, where no later pass needs the
     /// checker that checked a file).
     pub checker_recycling: bool,
+    /// tsrs-only: use virtual four-checker reporting sites and their incremental cache proof. API builds
+    /// disable this to retain per-file diagnostics and Go-shaped build info; external pools opt out too.
+    pub canonical_diagnostics: bool,
 }
 
 impl ProgramOptions {
@@ -74,6 +77,7 @@ impl ProgramOptions {
             create_module_resolver: None,
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
+            canonical_diagnostics: true,
         }
     }
 
@@ -96,6 +100,7 @@ impl ProgramOptions {
             create_module_resolver,
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
+            canonical_diagnostics: true,
         }
     }
 
@@ -199,6 +204,7 @@ pub struct Program {
     pub(crate) tsgo_check_slots: OnceLock<FxHashMap<P<SourceFile>, (u32, u32)>>,
     // tsrs-only: `ProgramOptions::checker_recycling`.
     pub(crate) checker_recycling: bool,
+    canonical_diagnostics: bool,
 }
 
 impl std::ops::Deref for Program {
@@ -209,6 +215,10 @@ impl std::ops::Deref for Program {
 }
 
 impl Program {
+    pub fn uses_canonical_diagnostics(&self) -> bool {
+        self.canonical_diagnostics && !tsrs_core::compat::go_compatible_history() && self.compiler_checker_pool().is_some()
+    }
+
     pub fn file_exists(&self, path: &str) -> bool {
         self.host.fs().file_exists(path)
     }
@@ -433,6 +443,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_referred: OnceLock::new(),
         tsgo_check_slots: OnceLock::new(),
         checker_recycling: opts.checker_recycling,
+        canonical_diagnostics: opts.canonical_diagnostics,
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -541,7 +552,9 @@ impl Program {
         if reused {
             (result.unwrap(), new_file, true)
         } else {
-            (new_program(ProgramOptions::from_config(self.opts.clone(), new_host, create_checker_pool, create_module_resolver)), new_file, false)
+            let mut opts = ProgramOptions::from_config(self.opts.clone(), new_host, create_checker_pool, create_module_resolver);
+            opts.canonical_diagnostics = self.canonical_diagnostics;
+            (new_program(opts), new_file, false)
         }
     }
 
@@ -656,6 +669,7 @@ impl Program {
             leaf_referred: OnceLock::new(),
             tsgo_check_slots: OnceLock::new(),
             checker_recycling: false,
+            canonical_diagnostics: self.canonical_diagnostics,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);

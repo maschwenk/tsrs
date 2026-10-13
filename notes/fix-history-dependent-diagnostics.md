@@ -112,7 +112,7 @@ every tsrs checker count and assignment, and it is now tsgo's default output rat
 another `--checkers` count can still differ; `--checkerAssignment go` matches it there). The association is computed
 once per compiler-pool program on first use, and only when a checked merged interface with base types is declared in
 more than one file (lib files count when they are checked: without `skipLibCheck` / `skipDefaultLibCheck` the lib
-interfaces build it). Project/API pools have no fixed file assignment and retain the per-file rule in default mode,
+interfaces build it). API builds and external project/API pools retain the per-file rule in default mode,
 including single-file diagnostics requests. Go-compatible history is unchanged in both kinds of pool.
 
 The lazy association build runs sequentially. It can be entered while a checker is held, so it must not submit work
@@ -134,9 +134,9 @@ visit position. The existing file table supplies the file order, and source/vers
 still invalidate interface caches even if the slots match. This hashes the actual association result, including
 the effect of repeated resolved import edges. The serial, lazily initialized slot table is shared between cache
 validation and diagnostic reporting. The same compiler program retains
-its snapshot fast path; external API/LS pools retain per-file reporting.
+its snapshot fast path; API builds and external API/LS pools retain per-file reporting.
 
-Both build-info writers include the optional field only in default history. An absent, malformed or unknown-version
+Both build-info writers include the optional field only for default CLI canonical reporting. An absent, malformed or unknown-version
 signature causes one conservative refresh of checked interface diagnostics, including cached absence, and a rewrite
 with the current proof. Subsequent unchanged loaded programs reuse those caches and neither serialize nor rewrite
 build info. Custom writers receive real emissions through the existing callback; no byte-equality write suppression
@@ -145,9 +145,22 @@ never writes the field. As a tsrs-only exception to Go's build-info reader, it r
 field, including an empty, malformed or unknown-version value, before converting it to a snapshot. Otherwise a
 default-to-Go switch at eight checkers can reuse two cached TS2320 sites where a fresh Go build reports four.
 The existing cold path rewrites the cache in Go's format; subsequent native Go caches retain their usual reuse.
-This checks field presence in the already parsed JSON, with no second parse or virtual-slot work. Default-history
+This checks field presence in the already parsed JSON, with no second parse or virtual-slot work. Default CLI
 validation is unchanged. A change to canonical placement semantics must bump the signature version before caches
 from that policy can be reused.
+
+API build orchestrators opt out through `ProgramOptions::canonical_diagnostics`, using their existing scoped API
+mode rather than a process-global compatibility switch. External project pools also opt out of both canonical
+reporting and its signature. The API build-info reader rejects every present CLI tag before the up-to-date check,
+so a tagged cache cannot hide an API diagnostic or leak CLI metadata back to the caller. API caches remain in Go's
+format and reuse normally. Switching either way in memory invalidates interface diagnostics, including cached
+absence; loading an untagged API cache in the default CLI uses the existing one-time signature migration. The
+OS-backed regressions check these transitions, full ordered diagnostics, actual cache identity and custom writers.
+
+The unmodified Node API build test reproduced the extra-key failure before this scoped opt-out. On local macOS,
+the same pinned client and oracle comparisons then ran all 905 tests: 899 passed, four platform skips, two existing
+TODOs, no hard failures, matching the Go oracle's totals. The build-info soft mismatch also disappeared; the known
+profiling and transport soft mismatches remain. No goldens or harness comparisons were changed.
 
 The initial unconditional loaded-build fallback had a measured cost. On local macOS arm64 `--release` builds, five unchanged warm runs
 per binary and mode, alternating before/after order after one cold run each, matched full ordered diagnostics and

@@ -36,7 +36,7 @@ pub(crate) fn snapshot_to_build_info(
     };
 
     if snapshot.options().is_incremental() {
-        if !tsrs_core::compat::go_compatible_history() {
+        if program.uses_canonical_diagnostics() {
             to.build_info.tsrs_canonical_check_signature = snapshot.canonical_check_signature.get().cloned().unwrap_or_default();
         }
         to.collect_root_files();
