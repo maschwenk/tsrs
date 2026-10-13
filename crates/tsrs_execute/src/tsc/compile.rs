@@ -136,8 +136,20 @@ pub trait CommandLineTesting: Sync {
     fn on_statistics_end(&self, _w: &dyn Fn(&str)) {}
     fn on_build_status_report_start(&self, _w: &dyn Fn(&str)) {}
     fn on_build_status_report_end(&self, _w: &dyn Fn(&str)) {}
+    // Go `OnWatchStatusReportStart` / `OnWatchStatusReportEnd` (they write to `sys.Writer()`, passed here as `w`).
+    fn on_watch_status_report_start(&self, _w: &dyn Fn(&str)) {}
+    fn on_watch_status_report_end(&self, _w: &dyn Fn(&str)) {}
+    // Go `CommandLineTestingWithWatchBackend.WatchBackend`: the harness's mock instead of fswatch.
+    fn watch_backend(&self) -> Option<std::sync::Arc<dyn crate::watchmanager::WatchBackend>> {
+        None
+    }
     fn on_emitted_files(&self, _result: Option<&tsrs_compiler::EmitResult>, _m_times_cache: Option<&MTimesCache>) {}
     fn on_program(&self, _program: P<tsrs_incremental::Program>) {}
+    // tsrs-only: the watch computes placeholder signatures after each cycle (watcher.rs `start_signature_job`), on the
+    // cycle's thread, before the next edit. Off by default, as Go has no such step.
+    fn run_signature_job(&self) -> bool {
+        false
+    }
     // Go `GetTrace(w, locale)`: the trace function for a program's compiler host, writing to `w`.
     fn get_trace(&'static self, w: SyncWriter, is_sys_writer: bool) -> Box<tsrs_compiler::TraceFn>;
 }
@@ -157,8 +169,15 @@ pub fn get_trace_with_writer_from_sys(w: SyncWriter, is_sys_writer: bool, testin
     }
 }
 
+// compile.go:61
+pub trait Watcher {
+    fn do_cycle(&mut self);
+}
+
 pub struct CommandLineResult {
     pub status: ExitStatus,
+    // Go `Watcher`: set by watch mode under the test harness, which drives the cycles itself.
+    pub watcher: Option<Box<dyn Watcher>>,
 }
 
 #[derive(Default, Clone)]

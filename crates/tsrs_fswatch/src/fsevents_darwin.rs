@@ -321,6 +321,8 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
         }
     };
 
+    let mut first_file: Option<String> = None;
+    let mut burst = false;
     for i in 0..num_events {
         let flag = payload.flag(i);
         let event_id = payload.id(i);
@@ -365,6 +367,27 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
         let raw_path = &path;
         let mut path_exists = false;
         let mut path_exists_known = false;
+        // tsrs-only (`set_write_settling`): FSEvents has no close event, but a save that truncates the file and
+        // writes it later (a slow writer, or `ftruncate` and then `write`) is seen empty by the time its event
+        // arrives (FSEvents delivers about 12 ms after the write). An empty file holds the callbacks like an
+        // unclosed one on inotify, until an event shows it non-empty or removed, or the hold times out. A save that
+        // is not empty when its event arrives is not delayed.
+        let file_len = (crate::watcher::write_settling() && flag & flagItemIsFile != 0)
+            .then(|| if is_removed && !is_created { None } else { std::fs::metadata(raw_path).ok().filter(std::fs::Metadata::is_file).map(|m| m.len()) });
+        let being_written = file_len.map(|len| len == Some(0));
+        // tsrs-only (`set_write_settling`): a batch that changed two files that still exist is a tool writing many
+        // files (a formatter, a checkout, a code generator), and the rest of its writes are still on the way.
+        // Starting at once (the debounce's leading edge) would build on the first few and run a second cycle for the
+        // rest, so the batch counts as a fire instead: the callbacks wait for 50 ms of quiet. A save, which changes
+        // one file (an atomic save's temporary file is gone by the time its event arrives), is not delayed.
+        if let Some(Some(_)) = file_len
+            && !burst
+        {
+            match &first_file {
+                None => first_file = Some(path.clone()),
+                Some(first) => burst = *first != path,
+            }
+        }
 
         for watch in watches {
             if watch.state.terminated.load(Ordering::SeqCst) {
@@ -383,6 +406,11 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
             // relies on it to tear down the stream.)
             if display_path == w.dir && !is_removed && !is_renamed {
                 continue;
+            }
+            match being_written {
+                Some(true) => w.write_started(&display_path),
+                Some(false) => w.write_finished(&display_path),
+                None => {}
             }
 
             if is_removed && !is_created {
@@ -432,6 +460,9 @@ pub(crate) fn fs_events_callback(cb: &streamCallback, payload: &fsEventsCallback
         }
     }
 
+    if burst && let Some(w) = touched.first() {
+        w.hold_leading_edge();
+    }
     for w in touched {
         w.notify();
     }

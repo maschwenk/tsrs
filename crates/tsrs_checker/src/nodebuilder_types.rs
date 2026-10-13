@@ -225,8 +225,8 @@ impl CheckerSlot {
     /// Calls `f` with the checker lent by the innermost `lend`.
     pub fn with<R>(&self, f: impl FnOnce(&mut Checker) -> R) -> R {
         // The checker's allocations (types, symbols, caches) outlive a scratch region (one file's emit) the caller
-        // may have entered (notes/mem-emit-regions.md).
-        let _outer = tsrs_core::arena::escape_scratch();
+        // may have entered (notes/mem-emit-regions.md), and stay in the checker's own region if it has one.
+        let _outer = tsrs_core::arena::escape_scratch_one_level();
         let mut ptr = self.ptr.get().expect("CheckerSlot::with outside CheckerSlot::lend");
         assert!(!self.in_use.replace(true), "CheckerSlot::with re-entered without CheckerSlot::lend");
         // SAFETY: `ptr` comes from the `&mut Checker` passed to the innermost active `lend`, which is borrowed for

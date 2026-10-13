@@ -521,6 +521,7 @@ impl<'a> speculation<'a> {
 
     fn run<'s>(&'s self, scope: &rayon::Scope<'s>, file_name: String, path: Path) {
         let ctx = self.ctx;
+        let _regions = crate::programregions::enter(ctx.opts.regions.as_deref());
         use tsrs_core::festats::{self, Cat};
         let job_start = festats::enabled().then(std::time::Instant::now);
         let metadata = festats::timed(Cat::Meta, || source_file_meta_data(ctx.opts, ctx.resolver, ctx.project_references, &file_name));
@@ -788,6 +789,7 @@ impl filesParser {
                     let spec = &spec;
                     jobs.into_par_iter()
                         .map(|(t, file_name, path, is_lib, is_root)| {
+                            let _regions = crate::programregions::enter(opts.regions.as_deref());
                             use tsrs_core::festats::{self, Cat};
                             let job_start = festats::enabled().then(std::time::Instant::now);
                             let file_name: &str = &file_name;

@@ -93,7 +93,8 @@ fn new_content_mapper_program_with_options(
         definition: Definition { package: "vue".to_string(), extensions: vec![".vue".to_string()], options: String::new() },
         manifest: Manifest { name: "vue-mapper".to_string(), version: "1.0.0".to_string(), ..Default::default() },
         ..Default::default()
-    }];
+    }]
+    .into();
     let mut opts = ProgramOptions::new(
         P::new(config),
         new_compiler_host("/src", fs, &bundled::lib_path(), None, None, Some(content_mapper_project)),

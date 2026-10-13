@@ -25,7 +25,7 @@ fn mapper(package: &str, extensions: &[&str]) -> Mapper {
 #[test]
 fn test_get_content_mapper_for_file_name_uses_longest_extension() {
     let command_line = ParsedCommandLine {
-        parsed_config: ParsedOptions { content_mappers: vec![mapper("z", &[".z"]), mapper("yz", &[".y.z"])], ..Default::default() },
+        parsed_config: ParsedOptions { content_mappers: vec![mapper("z", &[".z"]), mapper("yz", &[".y.z"])].into(), ..Default::default() },
         ..ParsedCommandLine::empty()
     };
     let z_mapper = &command_line.content_mappers()[0];
@@ -39,12 +39,12 @@ fn test_get_content_mapper_for_file_name_uses_longest_extension() {
 #[test]
 fn test_get_content_mapper_for_file_name_uses_host_case_sensitivity() {
     let insensitive = ParsedCommandLine {
-        parsed_config: ParsedOptions { content_mappers: vec![mapper("", &[".vue"])], ..Default::default() },
+        parsed_config: ParsedOptions { content_mappers: vec![mapper("", &[".vue"])].into(), ..Default::default() },
         compare_paths_options: ComparePathsOptions { use_case_sensitive_file_names: false, ..Default::default() },
         ..ParsedCommandLine::empty()
     };
     let sensitive = ParsedCommandLine {
-        parsed_config: ParsedOptions { content_mappers: vec![mapper("", &[".vue"])], ..Default::default() },
+        parsed_config: ParsedOptions { content_mappers: vec![mapper("", &[".vue"])].into(), ..Default::default() },
         compare_paths_options: ComparePathsOptions { use_case_sensitive_file_names: true, ..Default::default() },
         ..ParsedCommandLine::empty()
     };
@@ -71,7 +71,7 @@ fn test_get_output_file_names_excludes_mapper_owned_outputs() {
         Vec::new(),
         ComparePathsOptions { current_directory: "/".to_string(), use_case_sensitive_file_names: true },
     );
-    command_line.parsed_config.content_mappers = vec![mapper("", &[".vue"])];
+    command_line.parsed_config.content_mappers = vec![mapper("", &[".vue"])].into();
 
     assert_eq!(command_line.get_output_file_names(), vec!["/dist/Component.d.vue.ts".to_string()]);
 }

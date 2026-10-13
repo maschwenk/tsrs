@@ -15,7 +15,15 @@ Your existing `tsconfig.json` controls compilation. tsrs emits JavaScript and de
 options by default, just like `tsc`; pass `--noEmit` when you only want type checking.
 
 See [TypeScript compatibility](COMPATIBILITY.md) for supported features and known gaps, including unsupported
-commands such as `--watch`, `--init` and `--showConfig`.
+commands such as `--init` and `--showConfig`.
+
+`tsrs --watch -p .` and `tsrs -b --watch` rebuild when files change, like `tsc`. On Linux a rebuild starts when the
+editor closes the saved file, so it never checks a half-written file and adds no fixed delay. macOS (FSEvents) reports
+no close, so there a rebuild starts when the save's event arrives (about 13 ms after it), and waits while the file is
+still empty (a save that truncated it and has not written yet) or while a tool is writing several files (a formatter,
+a checkout). A program that writes one file in several pieces with pauses between them can still start two rebuilds;
+the second has the right result. When FSEvents is unavailable the watch uses kqueue, which needs a file descriptor
+per watched file; tsrs raises its descriptor limit as far as the system allows and says so if that is not enough.
 
 ## Performance options
 

@@ -17,6 +17,10 @@ mod snapshottobuildinfo;
 mod buildinfo_contentmapper_test;
 #[cfg(test)]
 mod emitfileshandler_test;
+#[cfg(test)]
+mod programtosnapshot_test;
+#[cfg(test)]
+mod signatures_test;
 
 pub use buildinfo::*;
 pub use host::{create_host, get_m_time, Host};

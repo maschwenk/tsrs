@@ -4,7 +4,7 @@
 `ts-ref/tsc/internal/`, a symlink to a checkout of microsoft/TypeScript at commit
 b85298b6a81f, = nightly 7.1.0-dev.20260929) to Rust. Scope: the `tsc` command line (type checking, JavaScript and
 declaration emit, source maps, incremental builds, `--build`), the language server (`--lsp`) and the API server
-(`--api`). Not ported: watch mode for the CLI, `--init`, `--showConfig`, tracing (`--generateTrace`), pprof, localized
+(`--api`), including watch mode (`--watch`, `-b --watch`). Not ported: `--init`, `--showConfig`, tracing (`--generateTrace`), pprof, localized
 messages (English only), and in the language server automatic type acquisition and telemetry; the
 [capability table](COMPATIBILITY.md#what-it-does-and-doesnt-do) has the full, current list.
 
@@ -212,8 +212,8 @@ callback, even when the closure does not need it.
 
 ## What not to port
 
-Watch mode for the CLI, `--init`/`--showConfig`, tracing, pprof, message localization, and the language server's
-automatic type acquisition and telemetry are not ported
+`--init`/`--showConfig`, tracing, pprof, message localization, the fanotify and Windows file-watching backends, and
+the language server's automatic type acquisition and telemetry are not ported
 ([capability table](COMPATIBILITY.md#what-it-does-and-doesnt-do)). If a function only serves one of those, leave it
 out; if a needed function has a branch that only serves one, keep the branch structure and mark only the truly
 unreachable part.

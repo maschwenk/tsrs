@@ -1253,6 +1253,48 @@ fn test_content_mappers() {
     }
 }
 
+// tsrs-only: the declaration output a build wrote next to a content-mapped file is not an input, whichever the
+// include glob finds first; a declaration file of the mapper's extension without a mapped file still is. A copy of the
+// config with its file names read again finds the same files and shares the mappers.
+#[test]
+fn test_content_mapper_declaration_outputs_are_not_inputs() {
+    for include in [r#"["src"]"#, r#"["src/*.vue", "src/*.ts"]"#, r#"["src/*.ts", "src/*.vue"]"#] {
+        let json_text: &'static str = format!(
+            r#"{{ "contentMappers": [{{ "package": "vue-mapper", "extensions": [".vue"] }}], "include": {include} }}"#
+        )
+        .leak();
+        let config = TestConfig {
+            json_text,
+            config_file_name: "tsconfig.json",
+            base_path: "/",
+            all_file_list: &[
+                ("/src/app.ts", "export {}"),
+                ("/src/app.d.ts", "export {}"),
+                ("/src/Component.vue", "<template></template>"),
+                ("/src/Component.d.vue.ts", "export {}"),
+                ("/src/Typed.d.vue.ts", "export {}"),
+                (
+                    "/node_modules/vue-mapper/package.json",
+                    r#"{ "name": "vue-mapper", "version": "1.2.3", "typescript": { "contentMapper": { "exec": ["node", "./mapper.js"] } } }"#,
+                ),
+            ],
+            existing_options: Some(CompilerOptions { run_external_code: Tristate::True, ..Default::default() }),
+        };
+        let mut all_file_lists: Vec<(&str, &str)> = config.all_file_list.to_vec();
+        all_file_lists.push(("/tsconfig.json", config.json_text));
+        let host = new_vfs_parse_config_host(&all_file_lists, config.base_path, true /*useCaseSensitiveFileNames*/);
+        let parsed = get_parsed_with_json_source_file_api(&config, host, config.base_path);
+        assert_eq!(parsed.errors.len(), 0, "{include}: {:?}", parsed.errors);
+        let mut file_names = parsed.file_names().to_vec();
+        file_names.sort();
+        assert_eq!(file_names, ["/src/Component.vue", "/src/Typed.d.vue.ts", "/src/app.ts"], "{include}");
+
+        let reloaded = parsed.reload_file_names_of_parsed_command_line(host.vfs);
+        assert_eq!(reloaded.file_names(), parsed.file_names(), "{include}");
+        assert!(std::ptr::eq(&reloaded.content_mappers()[0], &parsed.content_mappers()[0]), "{include}: the copy shares the mappers");
+    }
+}
+
 // tsconfigparsing_test.go:1191
 #[test]
 fn test_content_mapper_option_diagnostic_location() {

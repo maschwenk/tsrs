@@ -23,6 +23,8 @@ const STATISTICS_START: &str = "!!! Statistics start";
 const STATISTICS_END: &str = "!!! Statistics end";
 const BUILD_STATUS_REPORT_START: &str = "!!! Build Status Report Start";
 const BUILD_STATUS_REPORT_END: &str = "!!! Build Status Report End";
+const WATCH_STATUS_REPORT_START: &str = "!!! Watch Status Report Start";
+const WATCH_STATUS_REPORT_END: &str = "!!! Watch Status Report End";
 const TRACE_START: &str = "!!! Trace start";
 const TRACE_END: &str = "!!! Trace end";
 
@@ -160,6 +162,8 @@ pub(crate) struct TestSys {
     pub(crate) env: FxHashMap<String, String>,
     pub(crate) output_is_tty: bool,
     pub(crate) clock: Arc<TestClock>,
+    pub(crate) mock_watch_backend: std::sync::OnceLock<Arc<super::mockwatch::MockWatchBackend>>,
+    pub(crate) signature_job: bool,
 }
 
 impl TestSys {
@@ -184,6 +188,8 @@ impl TestSys {
             env,
             output_is_tty,
             clock,
+            mock_watch_backend: std::sync::OnceLock::new(),
+            signature_job: false,
         }
     }
 
@@ -241,6 +247,31 @@ impl TestSys {
     pub(crate) fn clear_output(&self) {
         self.current_write.lock().unwrap().clear();
         self.tracer.lock().unwrap().clear();
+    }
+
+    // fsbaselineutil FSDiffer.ChangedPaths: the files written, touched or deleted since the last baseline.
+    pub(crate) fn changed_paths(&self) -> Vec<super::mockwatch::FileChange> {
+        let serialized = self.serialized_diff.lock().unwrap();
+        let Some(old_snap) = serialized.as_ref() else { return Vec::new() };
+        let mut changes = Vec::new();
+        for (path, file) in self.map_fs().entries() {
+            if file.mode.intersects(FileMode::Symlink) || !file.mode.is_regular() {
+                continue;
+            }
+            match old_snap.snap.get(&path) {
+                None => changes.push(super::mockwatch::FileChange { path, deleted: false }),
+                Some(old) if *tsrs_core::utf8::from_utf8_lossy(&file.data) != *old.content || file.mod_time != old.m_time => {
+                    changes.push(super::mockwatch::FileChange { path, deleted: false });
+                }
+                Some(_) => {}
+            }
+        }
+        for path in old_snap.snap.keys() {
+            if self.map_fs().get_file_info(path).is_none() {
+                changes.push(super::mockwatch::FileChange { path: path.clone(), deleted: true });
+            }
+        }
+        changes
     }
 
     // fsbaselineutil BaselineFSwithDiff
@@ -433,6 +464,7 @@ impl outputSanitizer<'_> {
                 && !self.add_or_skip_lines_for_comparing(STATISTICS_START, STATISTICS_END, true, false)
                 && !self.add_or_skip_lines_for_comparing(TRACE_START, TRACE_END, false, false)
                 && !self.add_or_skip_lines_for_comparing(BUILD_STATUS_REPORT_START, BUILD_STATUS_REPORT_END, false, true)
+                && !self.add_or_skip_lines_for_comparing(WATCH_STATUS_REPORT_START, WATCH_STATUS_REPORT_END, false, true)
             {
                 self.add_output_line(line);
             }
@@ -504,6 +536,18 @@ impl System for TestSys {
 }
 
 impl CommandLineTesting for TestSys {
+    fn run_signature_job(&self) -> bool {
+        self.signature_job
+    }
+    fn on_watch_status_report_start(&self, w: &dyn Fn(&str)) {
+        w(&format!("{WATCH_STATUS_REPORT_START}\n"));
+    }
+    fn on_watch_status_report_end(&self, w: &dyn Fn(&str)) {
+        w(&format!("{WATCH_STATUS_REPORT_END}\n"));
+    }
+    fn watch_backend(&self) -> Option<Arc<dyn crate::watchmanager::WatchBackend>> {
+        self.mock_watch_backend.get().map(|b| Arc::clone(b) as Arc<dyn crate::watchmanager::WatchBackend>)
+    }
     fn on_list_files_start(&self, w: &dyn Fn(&str)) {
         w(&format!("{LIST_FILE_START}\n"));
     }

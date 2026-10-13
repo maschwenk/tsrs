@@ -132,7 +132,7 @@ mod heap_sample {
     }
 
     pub(super) struct State {
-        pub(super) live: FxHashMap<usize, (u32, usize)>,
+        pub(super) live: FxHashMap<usize, (u32, usize, u32)>,
         pub(super) stacks: Vec<Site>,
         pub(super) index: FxHashMap<(Stack, u8), u32>,
         // Live bytes per stack when the heap last grew past `peak_heap` + 8 MB: "live at the heap peak".
@@ -141,6 +141,8 @@ mod heap_sample {
     }
     pub(super) static STATE: Mutex<Option<State>> = Mutex::new(None);
     static ENABLED: AtomicU8 = AtomicU8::new(0); // 0 unknown, 1 off, 2 on (bytes), 3 on (counts)
+    // Watch memory: the watch cycle an allocation was made in (`cycle_report`).
+    pub(super) static EPOCH: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
     static SAMPLE_RATE: AtomicUsize = AtomicUsize::new(RATE as usize);
 
     thread_local! {
@@ -264,7 +266,8 @@ mod heap_sample {
             state.stacks[id as usize].live += weight as i64;
             state.stacks[id as usize].total += weight as u64;
             if mode == 2 {
-                state.live.insert(p as usize, (id, weight));
+                // Relaxed: a label for the report; an allocation racing the cycle boundary may get either epoch.
+                state.live.insert(p as usize, (id, weight, EPOCH.load(Ordering::Relaxed)));
                 let now = super::HEAP_CURRENT.load(Ordering::Relaxed);
                 if now > state.peak_heap + (8 << 20) {
                     state.peak_heap = now;
@@ -281,11 +284,89 @@ mod heap_sample {
             }
             let mut guard = STATE.lock().unwrap();
             if let Some(state) = guard.as_mut() {
-                if let Some((id, weight)) = state.live.remove(&(p as usize)) {
+                if let Some((id, weight, _)) = state.live.remove(&(p as usize)) {
                     state.stacks[id as usize].live -= weight as i64;
                 }
             }
         });
+    }
+
+    /// Watch memory: after cycle `EPOCH`, the exact live heap, sampled live bytes by allocation epoch, and the
+    /// top stacks of bytes that survive from epochs 1..=EPOCH-min_age (allocated by a cycle, not the initial build,
+    /// and still live `min_age` cycles later).
+    pub(super) fn cycle_report(min_age: u32, top: usize) {
+        // Not sampled itself: it allocates while holding STATE.
+        guarded(|| cycle_report_inner(min_age, top));
+    }
+
+    fn cycle_report_inner(min_age: u32, top: usize) {
+        // Relaxed: profiling counters, read for a report; a value off by in-flight allocations is fine.
+        let epoch = EPOCH.fetch_add(1, Ordering::Relaxed);
+        // Relaxed: as above.
+        let heap = super::HEAP_CURRENT.load(Ordering::Relaxed);
+        let (by_epoch, rows) = {
+            let guard = STATE.lock().unwrap();
+            let Some(state) = guard.as_ref() else { return };
+            let mut by_epoch: Vec<i64> = vec![0; epoch as usize + 1];
+            let mut per_stack: FxHashMap<u32, i64> = FxHashMap::default();
+            for &(id, weight, e) in state.live.values() {
+                if (e as usize) < by_epoch.len() {
+                    by_epoch[e as usize] += weight as i64;
+                }
+                if e >= 1 && e + min_age <= epoch {
+                    *per_stack.entry(id).or_default() += weight as i64;
+                }
+            }
+            let mut rows: Vec<(Stack, i64)> = per_stack.into_iter().map(|(id, b)| (state.stacks[id as usize].stack, b)).collect();
+            rows.sort_by_key(|r| -r.1);
+            rows.truncate(top);
+            (by_epoch, rows)
+        };
+        let mb = |b: i64| b as f64 / 1048576.0;
+        let hist: Vec<String> = by_epoch.iter().enumerate().map(|(e, &b)| format!("{e}:{:.1}", mb(b))).collect();
+        unsafe extern "C" {
+            fn mi_process_info(elapsed: *mut usize, user: *mut usize, system: *mut usize, rss: *mut usize, peak_rss: *mut usize, commit: *mut usize, peak_commit: *mut usize, faults: *mut usize);
+        }
+        let mut v = [0usize; 8];
+        // SAFETY: eight valid out-parameters.
+        unsafe { mi_process_info(&raw mut v[0], &raw mut v[1], &raw mut v[2], &raw mut v[3], &raw mut v[4], &raw mut v[5], &raw mut v[6], &raw mut v[7]) };
+        eprintln!(
+            "\n== heap after cycle {epoch}: live {:.1} MB (exact), mimalloc committed {:.1} MB, rss {:.1} MB; sampled live by epoch MB: {}",
+            heap as f64 / 1048576.0,
+            v[5] as f64 / 1048576.0,
+            v[3] as f64 / 1048576.0,
+            hist.join(" ")
+        );
+        unsafe extern "C" {
+            fn mi_stats_print_out(out: Option<extern "C" fn(*const std::ffi::c_char, *mut std::ffi::c_void)>, arg: *mut std::ffi::c_void);
+        }
+        extern "C" fn out(msg: *const std::ffi::c_char, _: *mut std::ffi::c_void) {
+            // SAFETY: mimalloc passes a NUL-terminated message.
+            let s = unsafe { std::ffi::CStr::from_ptr(msg) }.to_string_lossy();
+            eprint!("{s}");
+        }
+        if std::env::var_os("TSRS_CYCLE_MI_STATS").is_some() {
+            // SAFETY: prints through `out`; no other arguments.
+            unsafe { mi_stats_print_out(Some(out), std::ptr::null_mut()) };
+        }
+        if rows.is_empty() {
+            return;
+        }
+        let total: i64 = rows.iter().map(|r| r.1).sum();
+        eprintln!("-- top stacks of bytes from epochs 1..={} still live ({:.1} MB in these rows) --", epoch.saturating_sub(min_age), mb(total));
+        let ips: Vec<usize> = rows.iter().flat_map(|r| r.0.iter().copied().filter(|&ip| ip > 1)).collect();
+        let mut names: FxHashMap<usize, String> = FxHashMap::default();
+        super::os::resolve_into(&ips, &mut names, super::census::function_name);
+        for (stack, b) in &rows {
+            eprintln!("{:>8.1} MB", mb(*b));
+            if stack[0] == 1 {
+                eprintln!("             <arena chunks>");
+                continue;
+            }
+            for name in stack.iter().filter(|&&ip| ip > 1).filter_map(|ip| own_frame(names.get(ip).map(|s| s.as_str()).unwrap_or("?"))).take(10) {
+                eprintln!("             {name}");
+            }
+        }
     }
 
     fn library(name: &str) -> bool {
@@ -622,6 +703,14 @@ pub(crate) fn short_type(ty: &str) -> String {
     }
     out.push_str(seg.rsplit("::").next().unwrap_or(""));
     out
+}
+
+/// Watch memory: see `heap_sample::cycle_report`. `TSRS_CYCLE_REPORT_AGE` (default 4), `TSRS_CYCLE_REPORT_TOP`
+/// (default 12).
+pub fn cycle_report() {
+    let age = std::env::var("TSRS_CYCLE_REPORT_AGE").ok().and_then(|s| s.parse().ok()).unwrap_or(4);
+    let top = std::env::var("TSRS_CYCLE_REPORT_TOP").ok().and_then(|s| s.parse().ok()).unwrap_or(12);
+    heap_sample::cycle_report(age, top);
 }
 
 pub fn dump() {

@@ -141,6 +141,8 @@ fn main() {
     tsrs_core::memsplit::set_heap_hooks(mimalloc_heap_stats, mimalloc_collect);
     #[cfg(feature = "alloc-profile")]
     tsrs_execute::set_census_hook(census::run);
+    #[cfg(feature = "alloc-profile")]
+    tsrs_core::memsplit::set_cycle_hook(tsrs_core::alloc_profile::cycle_report);
     // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
     // native API server (docs/NODE_API.md).
     if args.first().map(String::as_str) == Some("--lsp") {
