@@ -31,6 +31,7 @@ hashbrown.workspace = true
 indexmap.workspace = true
 memchr.workspace = true
 unicode-id-start.workspace = true
+unicode-normalization.workspace = true
 simdutf8.workspace = true
 dragonbox_ecma.workspace = true
 mimalloc-safe = { workspace = true, optional = true }

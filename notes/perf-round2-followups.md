@@ -140,6 +140,12 @@ with the switch off, which is why it is not in the default build.
 
 ## Measured and rejected (do not redo)
 
+- Unicode normalization library cleanup ([rust-stdlib-normalization.md](rust-stdlib-normalization.md)), applied at
+  the user's request: unicode-normalization 0.1.25 matches the existing Unicode 17 NFD output. Five-pair Mac
+  screening on Compiler/Compiler-Unions: -0.017% to -0.011% single instructions, -0.198% to -0.056% default RSS;
+  no qualifying performance win. Keep category tables (the evaluated crate uses Unicode 16), simple casing and
+  byte decoding; direct Rust character properties change their contracts. Keep the existing stream-safe omission.
+
 - Unconditionally refreshing loaded interface diagnostic caches to cover canonical report-placement changes:
   Stagehand warm default 136 -> 402 ms, 9.14 -> 26.50 G instructions, 424 -> 879 MiB. Persisting a versioned
   signature of the actual virtual check slots restores reuse while preserving export-alias invalidation
