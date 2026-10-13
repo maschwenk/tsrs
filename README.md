@@ -42,7 +42,15 @@ for building from source and running the suites, the [Code of Conduct](https://g
 
 ## Acknowledgments
 
-Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for transferring the `tsrs` npm package name.
+We thank the following organizations and contributors:
+
+- [Depot CI](https://depot.dev) for sponsoring our continuous integration.
+- [Owner.com](https://www.owner.com) for sponsoring the initial work.
+- [Max Schwenk](https://github.com/maschwenk) for the port.
+- [@walkerdb](https://github.com/walkerdb) for improvements to the project.
+- [@JiangWeixian](https://github.com/JiangWeixian) for transferring the `tsrs` npm package name.
+
+We extend special thanks to the [TypeScript team](https://www.typescriptlang.org/) for their support.
 
 ## License
 
