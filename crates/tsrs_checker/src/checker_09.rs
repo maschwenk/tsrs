@@ -2960,6 +2960,13 @@ pub(crate) struct MemberOrigin {
     slot: i32,
 }
 
+pub(crate) struct LayoutEntry {
+    key: &'static str,
+    symbol: P<Symbol>,
+    origin: MemberOrigin,
+    rank: i32,
+}
+
 /// The member keys, order, and origins shared by a class or interface and all of its instantiations. Named members
 /// come first, in property order.
 pub(crate) struct MemberLayout {
@@ -3015,7 +3022,7 @@ pub(crate) struct SharedMemberSlots {
 }
 
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<SharedMemberSlots>() == 32);
+const _: () = assert!(std::mem::size_of::<SharedMemberSlots>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<SharedMemberSlots>() == 28);
 
@@ -3023,7 +3030,14 @@ impl Checker {
     fn get_member_layout(&mut self, source: P<Type>, bases: &[P<Type>]) -> P<MemberLayout> {
         let d = source.as_interface_type();
         if let Some(layout) = d.member_layout.get() {
-            return layout;
+            // A base type instantiation that hit an instantiation limit is the error type, which has none of the
+            // members the shared layout expects to find in it.
+            if !bases.contains(&self.error_type)
+                || self.get_base_types(source).contains(&self.error_type)
+            {
+                return layout;
+            }
+            return self.build_member_layout(source, bases);
         }
         let layout = self.build_member_layout(source, bases);
         if layout.shared {
@@ -3033,20 +3047,76 @@ impl Checker {
     }
 
     fn build_member_layout(&mut self, source: P<Type>, bases: &[P<Type>]) -> P<MemberLayout> {
-        struct Entry {
-            key: &'static str,
-            symbol: P<Symbol>,
-            origin: MemberOrigin,
-            rank: i32,
+        struct BaseMembers {
+            layout: Option<P<MemberLayout>>,
+            symbols: &'static [P<Symbol>],
+            by_name: bool,
         }
 
         let declared = source.as_interface_type().declared_members.get();
-        let mut entries: Vec<Entry> = Vec::with_capacity(declared.map_or(0, |d| d.len()));
-        let mut index: FxHashMap<&'static str, usize> = FxHashMap::default();
+        // A layout computed while base types are still being resolved may be missing inherited members.
+        let mut shared = source.as_interface_type().base_types_resolved.get();
+        let declared_bases = if shared {
+            self.get_base_types(source)
+        } else {
+            &[]
+        };
+        // Resolve base members before taking the scratch storage below, since this may build other layouts.
+        let mut base_members_list: Vec<BaseMembers> = bases
+            .iter()
+            .map(|_| BaseMembers {
+                layout: None,
+                symbols: &[],
+                by_name: false,
+            })
+            .collect();
+        let mut capacity = declared.map_or(0, |d| d.len());
+        for (k, &base) in bases.iter().enumerate() {
+            if base == self.any_type {
+                continue;
+            }
+            if base.flags().intersects(TypeFlags::Object)
+                && base
+                    .object_flags()
+                    .intersects(ObjectFlags::Reference | ObjectFlags::ClassOrInterface)
+            {
+                self.resolve_structured_type_members(base).unwrap();
+                if let Some(lazy) = base.as_structured_type().lazy() {
+                    base_members_list[k].layout = Some(lazy.layout);
+                    // A declared reference always instantiates to the same target layout. Other declared base kinds
+                    // can instantiate to unrelated class/interface layouts, whose slots are not interchangeable.
+                    let declared_base_has_layout = k < declared_bases.len()
+                        && declared_bases[k].flags().intersects(TypeFlags::Object)
+                        && declared_bases[k]
+                            .object_flags()
+                            .intersects(ObjectFlags::Reference | ObjectFlags::ClassOrInterface);
+                    shared = shared && lazy.layout.shared && declared_base_has_layout;
+                    capacity += lazy.layout.named_count;
+                    continue;
+                }
+            }
+            // A base without a layout has the same property names in every instantiation when its declared base
+            // references no type parameters, so the members can be found by name.
+            let by_name = shared
+                && k < declared_bases.len()
+                && !self.could_contain_type_variables(declared_bases[k]);
+            shared = by_name;
+            base_members_list[k].by_name = by_name;
+            base_members_list[k].symbols = self.get_properties_of_type(base);
+            capacity += base_members_list[k].symbols.len();
+        }
+        let mut entries = std::mem::take(&mut self.layout_entries);
+        let mut index = std::mem::take(&mut self.layout_index);
+        entries.clear();
+        index.clear();
+        if entries.capacity() < capacity {
+            entries = Vec::with_capacity(capacity);
+        }
+        index.reserve(capacity);
         if let Some(declared) = declared {
             for (key, symbol) in declared.entries() {
                 index.insert(key, entries.len());
-                entries.push(Entry {
+                entries.push(LayoutEntry {
                     key,
                     symbol,
                     origin: MemberOrigin {
@@ -3057,80 +3127,14 @@ impl Checker {
                 });
             }
         }
-
-        // A layout computed while base types are still being resolved may be missing inherited members.
-        let mut shared = source.as_interface_type().base_types_resolved.get();
-        let declared_bases = if shared {
-            self.get_base_types(source)
-        } else {
-            &[]
-        };
-        for (k, &base) in bases.iter().enumerate() {
-            if base == self.any_type {
-                continue;
-            }
-            let mut base_layout = None;
-            let mut base_symbols: &'static [P<Symbol>] = &[];
-            if base.flags().intersects(TypeFlags::Object)
-                && base
-                    .object_flags()
-                    .intersects(ObjectFlags::Reference | ObjectFlags::ClassOrInterface)
-            {
-                self.resolve_structured_type_members(base).unwrap();
-                base_layout = base.as_structured_type().lazy().map(|lazy| lazy.layout);
-            }
-            let by_name;
-            let count;
-            if let Some(layout) = base_layout {
-                shared = shared && layout.shared;
-                by_name = false;
-                count = layout.named_count;
-            } else {
-                // A base without a layout has the same property names in every instantiation when its declared base
-                // references no type parameters, so the members can be found by name.
-                by_name = shared
-                    && k < declared_bases.len()
-                    && !self.could_contain_type_variables(declared_bases[k]);
-                shared = by_name;
-                base_symbols = self.get_properties_of_type(base);
-                count = base_symbols.len();
-            }
-            #[expect(
-                clippy::needless_range_loop,
-                reason = "the slot indexes either a shared layout or the eager base symbol slice"
-            )]
-            for i in 0..count {
-                let (symbol, origin) = if let Some(layout) = base_layout {
-                    (
-                        layout.symbols.get()[i],
-                        MemberOrigin {
-                            base: k as i32,
-                            slot: i as i32,
-                        },
-                    )
-                } else {
-                    (
-                        base_symbols[i],
-                        if by_name {
-                            MemberOrigin {
-                                base: k as i32,
-                                slot: MEMBER_SLOT_BY_NAME,
-                            }
-                        } else {
-                            MemberOrigin {
-                                base: MEMBER_ORIGIN_FIXED,
-                                slot: 0,
-                            }
-                        },
-                    )
-                };
+        {
+            let mut add = |name: &'static str, symbol: P<Symbol>, origin: MemberOrigin| {
                 if is_static_private_identifier_property(symbol) {
-                    continue;
+                    return;
                 }
-                let name = symbol.name();
                 if let Some(&j) = index.get(name) {
                     if !entries[j].symbol.flags().intersects(SymbolFlags::Value) {
-                        entries[j] = Entry {
+                        entries[j] = LayoutEntry {
                             key: name,
                             symbol,
                             origin,
@@ -3139,12 +3143,44 @@ impl Checker {
                     }
                 } else {
                     index.insert(name, entries.len());
-                    entries.push(Entry {
+                    entries.push(LayoutEntry {
                         key: name,
                         symbol,
                         origin,
                         rank: 0,
                     });
+                }
+            };
+            for (k, base) in base_members_list.iter().enumerate() {
+                if let Some(layout) = base.layout {
+                    for (i, &symbol) in layout.symbols.get()[..layout.named_count]
+                        .iter()
+                        .enumerate()
+                    {
+                        add(
+                            symbol.name(),
+                            symbol,
+                            MemberOrigin {
+                                base: k as i32,
+                                slot: i as i32,
+                            },
+                        );
+                    }
+                    continue;
+                }
+                let origin = if base.by_name {
+                    MemberOrigin {
+                        base: k as i32,
+                        slot: MEMBER_SLOT_BY_NAME,
+                    }
+                } else {
+                    MemberOrigin {
+                        base: MEMBER_ORIGIN_FIXED,
+                        slot: 0,
+                    }
+                };
+                for &symbol in base.symbols {
+                    add(symbol.name(), symbol, origin);
                 }
             }
         }
@@ -3183,7 +3219,7 @@ impl Checker {
         let mut origins = Vec::with_capacity(entries.len());
         let needs_keys = entries.iter().any(|e| e.key != e.symbol.name());
         let mut keys = needs_keys.then(|| Vec::with_capacity(entries.len()));
-        for entry in entries {
+        for entry in &entries {
             symbols.push(entry.symbol);
             origins.push(entry.origin);
             if let Some(keys) = &mut keys {
@@ -3198,6 +3234,10 @@ impl Checker {
             named_count,
             shared,
         };
+        entries.clear();
+        index.clear();
+        self.layout_entries = entries;
+        self.layout_index = index;
         layout.build_index();
         P::new(layout)
     }

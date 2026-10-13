@@ -217,7 +217,7 @@ impl Checker {
         let mut h = HeapCensus::default();
         rows!(
             h, self,
-            file_index_map, instantiation_stack, string_literal_types, number_literal_types,
+            file_index_map, instantiation_stack, layout_entries, layout_index, string_literal_types, number_literal_types,
             bigint_literal_types, enum_literal_types, enum_nan_literal_types, indexed_access_types,
             template_literal_types, string_mapping_types, unique_es_symbol_types, this_expando_kinds,
             this_expando_locations, subtype_reduction_cache, cached_types, cached_signatures, undefined_properties,

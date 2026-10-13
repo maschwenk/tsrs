@@ -2186,7 +2186,7 @@ const _: () = assert!(std::mem::size_of::<StructuredType>() == if tsrs_core::COM
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<StructuredType>() == 4);
 #[cfg(target_pointer_width = "64")]
-const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
+const _: () = assert!(std::mem::size_of::<StructuredMembers>() == if tsrs_core::COMPRESSED_PTRS { 32 } else { 40 });
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 28);
 

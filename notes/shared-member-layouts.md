@@ -1,9 +1,9 @@
 # Shared class/interface member layouts (microsoft/TypeScript#64765)
 
 Port of [microsoft/TypeScript#64765](https://github.com/microsoft/TypeScript/pull/64765), commit
-`ad181684a4cedf5c546728c65d831815301ec6c9` ("Resolve class and interface members through shared layouts"). The
-default checker follows that Go implementation. It supersedes the #64475 class/interface lazy-member tables; the
-#64526 lazy mapped-type path remains in place.
+`ecc74a8976efe6d8177d64a9d7c3bd11a838e514` ("Reuse scratch storage when building member layouts"). The default
+checker follows that Go implementation. It supersedes the #64475 class/interface lazy-member tables; the #64526 lazy
+mapped-type path remains in place.
 
 ## Port
 
@@ -12,11 +12,17 @@ layout to be shared. `SharedMemberSlots` holds the mapper, instantiated bases an
 Lookups, full property/table materialization, weak/empty type tests, relation unmatched-property walks, node building
 and services use those slots just as the Go change does.
 
+The upstream follow-ups rebuild a per-instantiation layout when a base instantiation fails and reuse checker-owned
+entry and name-index scratch storage while building layouts. Rust checker histories can also instantiate a declared
+type-parameter or conditional base to unrelated class/interface layouts. Those sources do not cache a shared layout;
+declared class/interface references, whose target layout is stable across type arguments, remain shared.
+
 The Rust representation uses arena `ThinSlice`s and overlay-aware cells because checker graphs can be forked. It
-does not store Go's checker pointer in the slot record: member resolution already has `&mut Checker`. The pinned
-64-bit sizes are 48 bytes for `MemberLayout` and 32 bytes for `SharedMemberSlots`. `StructuredMembers` remains 32
-bytes on 64-bit; its 32-bit layout grows from 24 to 28 bytes. The allocation census knows the four layout slices and
-the slot record's base/slot slices, and the old checker-owned lazy-member maps and their heap-census entries are gone.
+does not store Go's checker pointer in the slot record: member resolution already has `&mut Checker`. On 64-bit,
+`MemberLayout` is 48 bytes; `SharedMemberSlots` and `StructuredMembers` are 32 bytes with the default compressed
+pointers and 40 bytes with plain pointers. Their 32-bit layouts are 28 bytes. The allocation census knows the four
+layout slices and the slot record's base/slot slices, and the old checker-owned lazy-member maps and their heap-census
+entries are gone. The heap census includes the retained layout-building scratch storage.
 
 For the repository's reference-equivalence gate only, `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` retains the eager
 pre-#64765 `resolveObjectTypeMembers` path. Default mode is the #64765 algorithm.
