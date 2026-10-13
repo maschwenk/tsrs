@@ -671,11 +671,9 @@ impl Printer {
         };
         let mut has_leading_comment_ranges = false;
         let mut has_new_line_comment = false;
-        for comment in scanner::get_leading_comment_ranges(
-            current_source_file.text(),
-            node.pos()
-                .expect_source("parsed nodes have source positions"),
-        ) {
+        // A synthesized node has no comment ranges: Go's scanner yields none for its position (-1).
+        let text = current_source_file.text();
+        for comment in node.pos().source_offset().into_iter().flat_map(|pos| scanner::get_leading_comment_ranges(text, pos)) {
             has_leading_comment_ranges = true;
             if self.comment_will_emit_new_line(comment) {
                 has_new_line_comment = true;
@@ -698,8 +696,7 @@ impl Printer {
         if is_partially_emitted_expression(node) {
             let pee = node.as_partially_emitted_expression();
             if node.pos() != pee.expression().pos() {
-                if scanner::get_trailing_comment_ranges(current_source_file.text(), pee.expression().pos().expect_source("parsed nodes have source positions"), )
-                    .into_iter()
+                if pee.expression().pos().source_offset().into_iter().flat_map(|pos| scanner::get_trailing_comment_ranges(text, pos))
                     .any(|comment| self.comment_will_emit_new_line(comment))
                 {
                     return true;

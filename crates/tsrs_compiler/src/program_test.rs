@@ -210,3 +210,23 @@ fn single_file_diagnostics_of_a_freed_leaf_panic() {
     assert!(file.is_check_leaf());
     let _ = program.get_semantic_diagnostics(&ctx, Some(file));
 }
+
+// A spread lowered for ES2015 under a type assertion: the return's expression is a partially emitted expression
+// around the synthesized `Object.assign` call. The printer's leading-newline check reads the comments at the
+// synthesized node's position, of which Go's scanner yields none (position -1); tsrs panicked there.
+#[test]
+fn emit_of_a_synthesized_return_expression() {
+    let files = [
+        ("/src/tsconfig.json", r#"{ "compilerOptions": { "target": "es2015", "strict": true, "types": [] } }"#),
+        ("/src/a.ts", "export function f(p: object) {\n    return { a: 1, ...p } as object;\n}\n"),
+    ];
+    let program = new_program(ProgramOptions::new(config_for(&files), host_for(&files)));
+    let written = Mutex::new(Vec::new());
+    let write_file = |name: &str, text: &str, _: &mut crate::WriteFileData| -> Result<(), String> {
+        written.lock().unwrap().push((name.to_string(), text.to_string()));
+        Ok(())
+    };
+    program.emit(&Context::default(), &crate::EmitOptions { write_file: Some(&write_file), ..Default::default() });
+    // tsgo's output.
+    assert_eq!(*written.lock().unwrap(), [("/src/a.js".to_string(), "export function f(p) {\n    return Object.assign({ a: 1 }, p);\n}\n".to_string())]);
+}
