@@ -119,10 +119,7 @@ jobs:
           toolchain: ${{ steps.rust.outputs.toolchain }}
           targets: ${{ matrix.target }}
           components: llvm-tools
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: ${{ matrix.target }}-pgo
-      # Everything of the PGO steps but the final build lives outside target/, which rust-cache saves.
+      # The instrumented build and training state live outside target/, so the final build cannot reuse them.
       # CFLAGS: cc passes -Cprofile-generate/-use on to clang (macOS) but not to gcc (Linux). Apple clang's profile
       # format does not match rustc's LLVM (the instrumented mimalloc crashed in __llvm_profile_instrument_target
       # with rustc 1.99), so the C code (mimalloc) is built without PGO, as on Linux.
@@ -147,8 +144,8 @@ jobs:
           profdata="$(rustc --print sysroot)/lib/rustlib/$(rustc -vV | sed -n 's/^host: //p')/bin/llvm-profdata"
           "$profdata" merge -o "$RUNNER_TEMP/pgo/merged.profdata" "$RUNNER_TEMP"/pgo/raw/*.profraw
           "$profdata" show "$RUNNER_TEMP/pgo/merged.profdata" | tail -5
-          # The profile's hash is part of its path, and so of RUSTFLAGS: cargo then rebuilds dependencies restored by
-          # rust-cache whenever the profile changes.
+          # The profile's hash is part of its path, and so of RUSTFLAGS: cargo rebuilds dependencies whenever the
+          # profile changes.
           sum=$(shasum -a 256 "$RUNNER_TEMP/pgo/merged.profdata" | cut -c1-16)
           mv "$RUNNER_TEMP/pgo/merged.profdata" "$RUNNER_TEMP/pgo/$sum.profdata"
           echo "path=$RUNNER_TEMP/pgo/$sum.profdata" >> "$GITHUB_OUTPUT"
@@ -221,7 +218,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
           toolchain: ${{ steps.rust.outputs.toolchain }}
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
       - run: cargo check --workspace --locked
 
   # Musl uses static dist builds without PGO/BOLT.
@@ -282,9 +278,6 @@ jobs:
         with:
           toolchain: ${{ steps.rust.outputs.toolchain }}
           targets: wasm32-wasip1
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
-        with:
-          key: wasm
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
       # Same binaryen as ci.yml (the module sizes in notes/wasm-build.md come from version 133).
       - name: Install binaryen 133
