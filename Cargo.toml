@@ -104,9 +104,6 @@ debug = false
 strip = "debuginfo"
 
 [workspace.lints.rust]
-# Specialized targets and the generated fourslash harness have target-specific unused items. Clippy denies
-# dead_code explicitly for its workspace scope (docs/RUST.md).
-dead_code = "allow"
 non_upper_case_globals = "allow"
 non_camel_case_types = "allow"
 # Rust 1.99: forming raw pointers through intermediate references can strengthen aliasing assumptions accidentally.

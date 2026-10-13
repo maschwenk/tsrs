@@ -35,9 +35,8 @@ Details:
   mostly 750k lines of generated Go test translations and has its own generator and build gates.
 - Generated Rust is linted; fix its generator when Clippy finds something. When generated code intentionally needs
   an exception, emit the smallest reasoned `#[expect]` from the generator.
-- Specialized targets and the generated fourslash harness have target-specific unused items, so `[workspace.lints.rust]`
-  keeps `dead_code` allowed and the Clippy command denies it over Clippy's scope. `unused_imports`, `unused_variables`,
-  `unused_mut` and `unsafe_op_in_unsafe_fn` are ordinary compiler warnings, which `build.warnings=deny` rejects.
+- `dead_code`, `unused_imports`, `unused_variables`, `unused_mut` and `unsafe_op_in_unsafe_fn` are ordinary compiler
+  warnings, which `build.warnings=deny` rejects. The Clippy command also denies `dead_code` explicitly over its scope.
 
 ## Upgrading Rust
 
