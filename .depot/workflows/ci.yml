@@ -213,7 +213,7 @@ jobs:
   # differential against native --singleThreaded (regressions, fixtures, the 2,000-case conformance sample on the
   # node file system and in memory, four bench projects, emit).
   wasm:
-    runs-on: depot-ubuntu-24.04-8
+    runs-on: depot-ubuntu-24.04-32
     timeout-minutes: 60
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
@@ -264,26 +264,26 @@ jobs:
       - name: Install wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
 
-      - name: cargo check (wasm32-wasip1)
-        run: cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
-
-      - name: Build native binaries
-        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner
-
-      - name: Build the module
-        run: tools/wasm/build.sh | tee target/wasm-size.txt
-
-      - name: cargo test -p tsrs_wasm
-        run: cargo test --locked -p tsrs_wasm
-
-      - name: pnpm test (npm/tsrs-wasm)
-        run: pnpm --dir npm/tsrs-wasm test
-
       - name: Bench cache keys
         id: bench-keys
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
+      # Each build has its own target directory, so that none waits on another's lock. The native binaries are the
+      # gate's reference, not what ships: the ci-native profile (no LTO) builds them in a third of the release time.
       - parallel:
+          - name: cargo check (wasm32-wasip1) and cargo test -p tsrs_wasm
+            run: |
+              cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
+              cargo test --locked -p tsrs_wasm
+
+          - name: Build the module
+            run: |
+              mkdir -p target
+              CARGO_TARGET_DIR=target/wasm tools/wasm/build.sh | tee target/wasm-size.txt
+
+          - name: Build native binaries
+            run: CARGO_TARGET_DIR=target/native cargo build --profile ci-native --locked -p tsrs_cli -p tsrs_testrunner
+
           - name: Restore the bench compilers
             uses: actions/cache/restore@v4
             with:
@@ -304,11 +304,15 @@ jobs:
               path: bench/.work/solutions/webpack
               key: bench-webpack-${{ runner.os }}-${{ steps.bench-keys.outputs['webpack'] }}
 
-      - name: Set up the bench projects
-        run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
+      - parallel:
+          - name: pnpm test (npm/tsrs-wasm)
+            run: TSRS_NATIVE=$PWD/target/native/ci-native/tsrs pnpm --dir npm/tsrs-wasm test
+
+          - name: Set up the bench projects
+            run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
 
       - name: Differential gate
-        run: tools/wasm/gate.sh
+        run: TSRS_TEST=target/native/ci-native/tsrs-test tools/wasm/gate.sh target/native/ci-native/tsrs
 
       - name: Upload the gate results
         if: always()
@@ -320,6 +324,7 @@ jobs:
             target/wasm-diff/**/summary.json
             target/wasm-diff/*.log
             target/wasm-diff/*/fail/**
+            target/wasm-diff/*/*/fail/**
           if-no-files-found: ignore
 
   # docs/RUST.md: every enabled Clippy lint is denied across the hand-written workspace.
