@@ -175,11 +175,15 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
     sys
 }
 
+/// tsrs-only: a write whose event the watch gets with the next edit's, as when a file is saved while a cycle runs,
+/// after the cycle took its events.
+pub(crate) const LATE_EVENT_WRITE: &str = "writeLateEvent";
+
 fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
     let fs = sys.fs_from_file_map();
     for op in ops {
         match op.op.as_str() {
-            "write" => fs.write_file(&op.path, &op.content).unwrap(),
+            "write" | LATE_EVENT_WRITE => fs.write_file(&op.path, &op.content).unwrap(),
             "delete" => fs.remove(&op.path).unwrap(),
             "symlink" => {
                 let dir = tspath::get_directory_path(&op.path);
@@ -270,12 +274,15 @@ fn run_scenario(test: &scenario) -> String {
     baseline_watch_state(sys, watcher.is_some(), &mut baseline);
     sys.baseline_programs(&mut baseline, "Initial build");
 
+    let mut late_changes: Vec<mockwatch::FileChange> = Vec::new();
     for (index, edit) in test.edits.iter().enumerate() {
         sys.clear_output();
         let args = edit.args.clone().unwrap_or_else(|| test.args.clone());
         baseline.push_str(&format!("\n\nEdit [{}]:: {}\n", index, edit.caption));
         apply_ops(sys, &edit.ops);
-        let changed_paths = sys.changed_paths();
+        let late: FxHashSet<&str> = edit.ops.iter().filter(|op| op.op == LATE_EVENT_WRITE).map(|op| op.path.as_str()).collect();
+        let (deferred, mut changed_paths): (Vec<_>, Vec<_>) = sys.changed_paths().into_iter().partition(|change| late.contains(change.path.as_str()));
+        changed_paths.extend(std::mem::replace(&mut late_changes, deferred));
         sys.baseline_fs_with_diff(&mut baseline);
         match &mut watcher {
             None => {

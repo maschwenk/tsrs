@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
+use tsrs_ast::{new_compiler_diagnostic, Diagnostic, SourceFile};
 use tsrs_compiler::CompilerHost;
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
@@ -741,7 +741,9 @@ impl Orchestrator {
     // tsrs-only: an update event for a parsed file whose modification time is still the one it was read at changes
     // nothing (as in watcher.rs `drop_unchanged_file_events`): chmod, and the event of a save that the first cycle
     // already took from `queue_files_changed_since` (a save just after the first report: the queued cycle read it,
-    // and its event, which arrives ~12 ms later, ran a second cycle).
+    // and its event, which arrives ~12 ms later, ran a second cycle). The cache is shared by every task, so its time
+    // only says that some task read the file then: the event is dropped only when every task that has the file has
+    // the version the cache holds (`read_by_every_task`).
     fn drop_unchanged_file_events(&self, changed_paths: &mut FxHashMap<String, tsrs_fswatch::EventKind>) {
         let Some(cache) = &self.host().watch_source_files else { return };
         if changed_paths.is_empty() {
@@ -752,29 +754,56 @@ impl Orchestrator {
         if paths.len() != changed_paths.len() {
             return;
         }
-        let read_at: FxHashMap<String, Option<std::time::SystemTime>> = {
+        // The cache keys files by their parse options, so a file can have a version for each.
+        let versions: FxHashMap<String, Vec<(P<SourceFile>, Option<std::time::SystemTime>)>> = {
             let cache = cache.lock().unwrap();
-            let mut read_at = FxHashMap::default();
-            #[expect(clippy::iter_over_hash_type, reason = "builds a map; the order does not matter")]
-            for (opts, (_, mod_time)) in cache.iter() {
+            let mut versions: FxHashMap<String, Vec<_>> = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "builds a map; the order of each file's versions does not matter")]
+            for (opts, &(file, mod_time)) in cache.iter() {
                 if changed_paths.contains_key(&opts.file_name) {
-                    read_at.insert(opts.file_name.clone(), *mod_time);
+                    versions.entry(opts.file_name.clone()).or_default().push((file, mod_time));
                 }
             }
-            read_at
+            versions
         };
-        if read_at.is_empty() {
+        if versions.is_empty() {
             return;
         }
-        let fs = self.opts.sys.fs();
+        let order = self.order.lock().unwrap().clone();
+        let tasks: Vec<P<BuildTask>> = order.iter().map(|config| self.get_task(&self.to_path(config))).collect();
         let before = changed_paths.len();
         changed_paths.retain(|path, kind| {
-            *kind != tsrs_fswatch::EventKind::Update
-                || read_at.get(path).is_none_or(|&read| read.is_none() || fs.stat(path).and_then(|s| s.mod_time()) != read)
+            *kind != tsrs_fswatch::EventKind::Update || versions.get(path).is_none_or(|versions| !self.read_by_every_task(path, versions, &tasks))
         });
         if changed_paths.len() != before {
             self.wm.debug(|| format!("[watch] ignoring {} event(s) for files unchanged since they were read\n", before - changed_paths.len()));
         }
+    }
+
+    // Whether every task that has `file_name` has one of `versions`, the cache's, all read at the file's current
+    // modification time. A task without a program in memory is up to date with what its build info lists: it must not
+    // list the file.
+    fn read_by_every_task(&self, file_name: &str, versions: &[(P<SourceFile>, Option<std::time::SystemTime>)], tasks: &[P<BuildTask>]) -> bool {
+        let mod_time = self.opts.sys.fs().stat(file_name).and_then(|s| s.mod_time());
+        if mod_time.is_none() || versions.iter().any(|&(_, read)| read != mod_time) {
+            return false;
+        }
+        let path = self.to_path(file_name);
+        tasks.iter().all(|task| match task.watch_program() {
+            Some(program) => program.get_source_file_by_path(&path).is_none_or(|file| versions.iter().any(|&(version, _)| version == file)),
+            None => !self.task_may_have_input(task, &path),
+        })
+    }
+
+    // Whether `path` is a root file of the task or a file its build info lists; true when the task has neither.
+    fn task_may_have_input(&self, task: &BuildTask, path: &Path) -> bool {
+        let Some(resolved) = task.resolved_opt() else { return true };
+        if resolved.file_names().iter().any(|file| self.to_path(file) == *path) {
+            return true;
+        }
+        let Some((build_info_path, build_info)) = task.build_info_snapshot() else { return true };
+        let build_info_dir = tspath::get_directory_path(build_info_path.as_str());
+        build_info.file_names.iter().any(|file_name| self.to_path(&self.resolve_build_info_file_name(file_name, &build_info_dir)) == *path)
     }
 
     // tsrs-only: the watches start after the first build, so a file saved while that build ran (after it was read)

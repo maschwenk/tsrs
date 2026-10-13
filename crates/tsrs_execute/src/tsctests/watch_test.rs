@@ -8,7 +8,7 @@
 
 use rustc_hash::FxHashMap;
 
-use super::{run_scenario, scenario, scenarioEdit, scenarioFile, scenarioOp};
+use super::{run_scenario, scenario, scenarioEdit, scenarioFile, scenarioOp, LATE_EVENT_WRITE};
 
 const LIB_FILE: &str = "/home/src/tslibs/TS/Lib/lib.esnext.full.d.ts";
 const LIB: &str = "/// <reference no-default-lib=\"true\"/>\ninterface Boolean {}\ninterface Function {}\ninterface CallableFunction {}\ninterface NewableFunction {}\ninterface IArguments {}\ninterface Number {}\ninterface Object {}\ninterface RegExp {}\ninterface String {}\ninterface Array<T> { length: number; [n: number]: T; }\ninterface ReadonlyArray<T> {}\n";
@@ -124,6 +124,31 @@ fn an_upstream_build_builds_the_program_again() {
         ],
     );
     assert!(baseline.contains("TS2322"), "the scenario reports type errors\n{baseline}");
+}
+
+// Every task reads a file through one cache, so the time it was read at says only that some task has that version.
+// Here a file of both projects is saved while a cycle runs: the full build of `a` reads the new version, `b` does not
+// build, and the file's event comes with the next edit. That event still changes `b`.
+#[test]
+fn a_file_another_project_read_again_still_changes_this_one() {
+    let config = r#"{ "compilerOptions": { "incremental": true, "target": "esnext", "noEmit": true } }"#;
+    let a_main = |rest: &str| format!("import {{ v }} from \"../shared/f\";\nexport const y = v;\n{rest}");
+    let baseline = run(
+        "shared-file",
+        &["--b", "a", "b", "-w"],
+        &[
+            ("shared/f.ts", "export const v: number = 1;\n"),
+            ("a/tsconfig.json", config),
+            ("a/main.ts", &a_main("")),
+            ("b/tsconfig.json", config),
+            ("b/main.ts", "import { v } from \"../shared/f\";\nexport const x: number = v;\n"),
+        ],
+        vec![
+            ("new file in a, f saved late", vec![write("a/added.ts", "export const z = 1;\n"), write_late_event("shared/f.ts", "export const v: string = 's';\n")]),
+            ("edit in a", vec![write("a/main.ts", &a_main("// comment\n"))]),
+        ],
+    );
+    assert!(baseline.contains("TS2322"), "b reports the change of f\n{baseline}");
 }
 
 // `--watch` reparses a content-mapped file in every full build. The snapshot of a full build keeps the diagnostics of
@@ -273,7 +298,13 @@ fn run_with(name: &str, args: &[&str], files: &[(&str, &str)], edits: Vec<(&str,
         .map(|(caption, ops)| {
             // A fresh build has the files the edits wrote; a touch changes no content (and its file may be an output).
             all_ops.extend(ops.iter().filter(|op| op.op != "touch").map(clone_op));
-            let expected_diff = if ops.iter().all(|op| op.op == "touch") { NO_CYCLE } else { "" };
+            let expected_diff = if ops.iter().all(|op| op.op == "touch") {
+                NO_CYCLE
+            } else if ops.iter().any(|op| op.op == LATE_EVENT_WRITE) {
+                LATE_EVENT
+            } else {
+                ""
+            };
             scenarioEdit { caption: caption.to_string(), args: None, expected_diff: expected_diff.to_string(), ops, fresh_ops: all_ops.iter().map(clone_op).collect() }
         })
         .collect();
@@ -292,15 +323,20 @@ fn run_with(name: &str, args: &[&str], files: &[(&str, &str)], edits: Vec<(&str,
     };
     let baseline = run_scenario(&test);
     let diffs = baseline.matches("\nDiff:: ").count();
-    let expected = baseline.matches(&format!("\nDiff:: {NO_CYCLE}\n")).count();
+    let expected = baseline.matches(&format!("\nDiff:: {NO_CYCLE}\n")).count() + baseline.matches(&format!("\nDiff:: {LATE_EVENT}\n")).count();
     assert_eq!(diffs, expected, "{name}: an edit differs from a fresh build\n{baseline}");
     baseline
 }
 
 const NO_CYCLE: &str = "No cycle runs";
+const LATE_EVENT: &str = "A file's event comes with the next edit";
 
 fn file(path: &str, content: &str) -> scenarioFile {
     scenarioFile { path: path.to_string(), content: content.to_string(), symlink: String::new() }
+}
+
+fn write_late_event(path: &str, content: &str) -> scenarioOp {
+    scenarioOp { op: LATE_EVENT_WRITE.to_string(), path: format!("{ROOT}/{path}"), content: content.to_string(), target: String::new() }
 }
 
 fn write(path: &str, content: &str) -> scenarioOp {
