@@ -16,7 +16,7 @@ use tsrs_core::P;
 use tsrs_ls::autoimport::ProjectID as LsProjectID;
 use tsrs_project::Snapshot;
 
-use super::host::{CheckerError, CheckerHost, CheckerResult};
+use super::host::{CheckerError, CheckerErrorKind, CheckerHost, CheckerResult};
 use super::json::obj;
 use super::params::{Params, SymbolReference};
 use super::setup::{resolve_symbol_for_program, SnapshotCtx};
@@ -155,7 +155,8 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
         }
         Err(e) => {
             release_prepared(prepared);
-            return Err(CheckerError::client(e.message));
+            // Go returns the language service's error as is (ErrNeedsAutoImports, a cancelled context).
+            return Err(CheckerError { kind: CheckerErrorKind::Internal, message: e.message });
         }
     };
     let mut entries = Vec::with_capacity(list.items.len());

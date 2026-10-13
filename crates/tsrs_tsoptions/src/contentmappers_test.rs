@@ -239,7 +239,7 @@ fn test_transform_identity_hashes_declared_options_json() {
         ..Default::default()
     };
     let mut paths = OrderedMap::default();
-    paths.insert("@/*".to_string(), vec!["src/*".to_string()]);
+    paths.insert("@/*".to_string(), Some(vec!["src/*".to_string()]));
     let options = CompilerOptions {
         target: ScriptTarget::ESNext,
         strict: Tristate::False,

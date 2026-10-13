@@ -40,6 +40,7 @@ jobs:
     outputs:
       version: ${{ steps.v.outputs.version }}
       ts_commit: ${{ steps.v.outputs.ts_commit }}
+      ts_nightly: ${{ steps.v.outputs.ts_nightly }}
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
       - id: v
@@ -47,6 +48,24 @@ jobs:
           if [ "$GITHUB_REF_TYPE" = tag ]; then node npm/build.mjs --check-tag "$GITHUB_REF_NAME"; fi
           echo "version=$(node npm/build.mjs --print-version)" >> "$GITHUB_OUTPUT"
           echo "ts_commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+          echo "ts_nightly=$(node npm/build.mjs --print-typescript-nightly)" >> "$GITHUB_OUTPUT"
+      # The binaries stamp `nightly` as TypeScript's version (Cargo.toml): it must be built from the pinned commit, or
+      # from a later one that changes nothing under tsc/, or tsbuildinfo files would claim to come from another tsgo.
+      - name: Check the TypeScript nightly against the pinned commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          nightly=$(node npm/build.mjs --print-typescript-nightly)
+          commit=$(node npm/build.mjs --print-typescript-commit)
+          head=$(npm view "typescript@$nightly" gitHead)
+          if [ "$head" != "$commit" ]; then
+            compare=$(gh api "repos/microsoft/TypeScript/compare/$commit...$head" \
+              --jq '"\(.behind_by) \([.files[].filename | select(startswith("tsc/"))] | length)"')
+            [ "$compare" = "0 0" ] || {
+              echo "::error::typescript@$nightly was built from $head, which is not $commit plus changes outside tsc/ ($compare)"
+              exit 1
+            }
+          fi
 
   # Release binaries are PGO builds with the `dist` profile (fat LTO, one codegen unit; Cargo.toml): an instrumented
   # ThinLTO build of tsrs + tsrs-test + tsrs-fourslash, the training workload (.github/scripts/pgo-train.sh: the conformance and fourslash suites
@@ -56,6 +75,9 @@ jobs:
   build:
     name: build ${{ matrix.target }}
     needs: version
+    env:
+      # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
+      TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.experimental }}
     timeout-minutes: 90
@@ -168,7 +190,8 @@ jobs:
           mkdir -p "out/${{ matrix.target }}"
           cp "target/${{ matrix.target }}/dist/$exe" "out/${{ matrix.target }}/$exe"
           if [ "${{ matrix.run }}" = true ]; then
-            "out/${{ matrix.target }}/$exe" --version
+            "out/${{ matrix.target }}/$exe" --version | tee version.txt
+            grep -q "^Version $TSRS_TS_VERSION (" version.txt || { echo "::error::the binary is not stamped with TypeScript $TSRS_TS_VERSION"; exit 1; }
             printf 'const x: number = "no";\n' > bad.ts
             set +e; "out/${{ matrix.target }}/$exe" bad.ts; status=$?; set -e
             [ "$status" = 2 ] || { echo "expected exit 2 for a type error, got $status"; exit 1; }
@@ -204,6 +227,9 @@ jobs:
   # Musl uses static dist builds without PGO/BOLT.
   build-musl:
     needs: version
+    env:
+      # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
+      TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -227,7 +253,8 @@ jobs:
           cargo zigbuild --profile dist --locked -p tsrs_cli --target ${{ matrix.target }}
           mkdir -p "out/${{ matrix.target }}"
           cp "target/${{ matrix.target }}/dist/tsrs" "out/${{ matrix.target }}/tsrs"
-          "out/${{ matrix.target }}/tsrs" --version
+          "out/${{ matrix.target }}/tsrs" --version | tee version.txt
+          grep -q "^Version $TSRS_TS_VERSION (" version.txt || { echo "::error::the binary is not stamped with TypeScript $TSRS_TS_VERSION"; exit 1; }
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: bin-${{ matrix.target }}
@@ -239,6 +266,9 @@ jobs:
   # tarball installed and run before it is handed to the publish job.
   wasm:
     needs: version
+    env:
+      # TypeScript's version in the binary (Cargo.toml [workspace.metadata.typescript] nightly).
+      TSRS_TS_VERSION: ${{ needs.version.outputs.ts_nightly }}
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -282,6 +312,7 @@ jobs:
           pnpm add --offline "$tarball"
           pnpm exec tsrs-wasm --version | tee version.txt
           grep -qF "(tsrs $VERSION," version.txt || { echo "::error::tsrs-wasm --version does not name $VERSION"; exit 1; }
+          grep -q "^Version $TSRS_TS_VERSION (" version.txt || { echo "::error::tsrs-wasm is not stamped with TypeScript $TSRS_TS_VERSION"; exit 1; }
           printf 'const x: number = "no";\n' > bad.ts
           set +e; pnpm exec tsrs-wasm bad.ts; status=$?; set -e
           [ "$status" = 2 ] || { echo "expected exit 2 for a type error, got $status"; exit 1; }

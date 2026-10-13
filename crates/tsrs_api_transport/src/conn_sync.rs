@@ -17,7 +17,7 @@ struct SyncIo {
     writer: Box<dyn ProtocolWriter>,
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct ConnOptions {
     /// SetCollectTiming: answer getServerTiming/resetServerTiming with collected data.
     pub collect_timing: bool,
@@ -25,11 +25,14 @@ pub struct ConnOptions {
     /// request on the connection is blocked on the client before it fails (see `reentrancy`). Sync
     /// connections fail such acquisitions immediately (the conflict is provably a re-entry there).
     pub reentrancy_grace: std::time::Duration,
+    /// The context passed to Run: once it is cancelled, the run loop stops before reading the next
+    /// message. The connection's own token is a child of it.
+    pub shutdown: CancellationToken,
 }
 
 impl Default for ConnOptions {
     fn default() -> Self {
-        ConnOptions { collect_timing: false, reentrancy_grace: crate::reentrancy::DEFAULT_ASYNC_GRACE }
+        ConnOptions { collect_timing: false, reentrancy_grace: crate::reentrancy::DEFAULT_ASYNC_GRACE, shutdown: CancellationToken::new() }
     }
 }
 
@@ -52,7 +55,7 @@ impl SyncConn {
             io: Mutex::new(SyncIo { reader, writer }),
             handler,
             timing: options.collect_timing.then(TimingCollector::default),
-            cancel: CancellationToken::new(),
+            cancel: options.shutdown.child(),
             callbacks: Arc::new(crate::reentrancy::CallbackState::new(true, options.reentrancy_grace)),
         })
     }

@@ -44,3 +44,16 @@ fn test_embedded_contents_match_source() {
     assert!(!fs.file_exists(&format!("{}/lib.nope.d.ts", lib)));
     assert_eq!(fs.get_accessible_entries("bundled:///").directories, vec!["libs"]);
 }
+
+#[test]
+fn test_default_lib_path() {
+    let with_libs = std::path::PathBuf::from(testing_lib_path());
+    let without_libs = with_libs.parent().unwrap().to_path_buf();
+    // A binary next to the libraries (the npm packages) reads them from its directory, like the npm tsgo.
+    assert_eq!(default_lib_path_from(None, Some(with_libs.clone())), testing_lib_path());
+    // Elsewhere (a cargo build), the embedded libraries.
+    assert_eq!(default_lib_path_from(None, Some(without_libs)), lib_path());
+    assert_eq!(default_lib_path_from(None, None), lib_path());
+    // TSRS_LIB_PATH wins over both.
+    assert_eq!(default_lib_path_from(Some("/x/libs".to_string()), Some(with_libs)), "/x/libs");
+}
