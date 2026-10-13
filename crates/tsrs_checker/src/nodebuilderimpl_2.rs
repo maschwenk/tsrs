@@ -966,7 +966,7 @@ impl NodeBuilderImpl {
             self.index_info_to_object_computed_names_or_signature_declaration(c, info, type_node)
         }));
 
-        let properties = structured_type.properties();
+        let properties = c.properties_of_structured_type(resolved_type);
         if properties.is_empty() {
             return Some(self.f.new_node_list(type_elements));
         }
@@ -1028,7 +1028,8 @@ impl NodeBuilderImpl {
         let resolved = c.resolve_structured_type_members(t).unwrap();
         let call_sigs = resolved.call_signatures();
         let ctor_sigs = resolved.construct_signatures();
-        if resolved.properties().is_empty() && resolved.index_infos().is_empty() {
+        let properties = c.properties_of_structured_type(t);
+        if properties.is_empty() && resolved.index_infos().is_empty() {
             if call_sigs.is_empty() && ctor_sigs.is_empty() {
                 add_approximate_length(self, 2);
                 let result = self.f.new_type_literal_node(self.f.new_node_list(vec![]));
@@ -1053,7 +1054,6 @@ impl NodeBuilderImpl {
         if !abstract_signatures.is_empty() {
             let mut types: Vec<P<Type>> = abstract_signatures.iter().map(|&s| c.get_or_create_type_from_signature(s)).collect();
             // count the number of type elements excluding abstract constructors
-            let properties = resolved.properties();
             let type_element_count = call_sigs.len()
                 + (ctor_sigs.len() - abstract_signatures.len())
                 + resolved.index_infos().len()

@@ -62,7 +62,7 @@ pub fn command_line_with_testing(
     }
 
     let mut args = command_line_args;
-    // tsrs-only: `--noLazyMembers` turns off the port of the lazy member resolution PRs (tsrs_core::lazymembers).
+    // tsrs-only: `--noLazyMembers` turns off the lazy mapped-member and shared-layout ports (tsrs_core::lazymembers).
     for (flag, on) in [("--lazyMembers", true), ("--noLazyMembers", false)] {
         if args.iter().any(|a| a.eq_ignore_ascii_case(flag)) {
             tsrs_core::lazymembers::set_from_cli(on);

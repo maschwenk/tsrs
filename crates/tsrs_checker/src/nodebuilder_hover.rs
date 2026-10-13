@@ -288,7 +288,9 @@ impl NodeBuilderImpl {
         // Call signatures
         members.extend(resolved.call_signatures().iter().map(|&sig| self.signature_to_signature_declaration_helper(c, sig, Kind::CallSignature, None)));
         // Properties, filtering inherited
-        let filtered_props = self.filter_inherited_properties(c, interface_type, base_types, resolved.properties());
+        let properties = c.properties_of_structured_type(interface_type);
+        let filtered_props =
+            self.filter_inherited_properties(c, interface_type, base_types, properties);
         members = self.serialize_properties_with_truncation(c, &filtered_props, &members);
 
         // Heritage clauses

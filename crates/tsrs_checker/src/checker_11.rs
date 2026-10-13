@@ -611,39 +611,18 @@ impl Checker {
     // checker.go:22220
     pub(crate) fn some_property_reduces_to_never(&mut self, t: P<Type>) -> bool {
         // Collect declaration counts for each property across all constituent types of the intersection.
-        // A name that occurs in more than one constituent occurs in one other than skipped, so skipped
-        // only needs its members looked up, which may not resolve them.
         let types = t.types();
-        let skipped = if self.lazy_members {
-            types.iter().position(|&t| {
-                t.object_flags_lazy() & (ObjectFlags::Mapped | ObjectFlags::MembersResolved) == ObjectFlags::Mapped
-                    || may_have_lazy_members(t) && t.flags().intersects(TypeFlags::Object)
-            })
-        } else {
-            None
-        };
         // tsrs: the counts are kept in a pooled `NameCounts` (Go's ordered map, without its per-name allocation and
         // hashing); every constituent's property list is fetched first, in order, as before.
         let mut counts = self.name_counts_pool.pop().unwrap_or_default();
         counts.lists.clear();
         let mut total = 0;
-        for (i, &t) in types.iter().enumerate() {
-            if Some(i) != skipped {
-                let props = self.get_properties_of_type(t);
-                total += props.len();
-                counts.lists.push(props);
-            }
+        for &t in types {
+            let (shapes, _) = self.get_property_shapes_of_type(t);
+            total += shapes.len();
+            counts.lists.push(shapes);
         }
         counts.count_lists(total);
-        if let Some(skipped) = skipped {
-            self.lazy_member_stats.some_property_skipped_constituents += 1;
-            for i in 0..counts.entries.len() {
-                let prop_name = counts.entries[i].0;
-                if self.get_property_of_type_ex(types[skipped], prop_name, true /*skipObjectFunctionPropertyAugment*/, false /*includeTypeOnlyMembers*/).is_some() {
-                    counts.entries[i].2 += 1;
-                }
-            }
-        }
         // Check if any property appears in more than one constituent type and reduces to 'never'.
         // Go in the order the properties were found so the combined properties are created in the same order every time.
         let mut result = false;

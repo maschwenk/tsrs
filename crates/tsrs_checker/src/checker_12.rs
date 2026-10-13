@@ -2123,6 +2123,7 @@ impl Checker {
         data.set_members(members);
         let properties = self.get_named_members(members, t.symbol());
         data.set_properties(alloc_vec(properties));
+        data.set_lazy(None);
         if !call_signatures.is_empty() {
             if !construct_signatures.is_empty() {
                 data.set_signatures(alloc_vec([call_signatures, construct_signatures].concat()));

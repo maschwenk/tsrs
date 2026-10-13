@@ -637,6 +637,10 @@ default mode must not lose passes either. Conformance with the flag on: no outpu
 `.types`, `.symbols`). The private monorepo, medians of 3 (flag off -> on): single-threaded peak 15.34 -> 11.77 GB, check
 26.3 -> 22.9 s; 4 checkers peak 23.32 -> 17.49 GB, check 13.2 -> 11.1 s. Details: `notes/lazy-members.md`.
 
+On 2026-10-13, microsoft/TypeScript#64765 superseded the #64475 class/interface tables with member layouts shared
+across instantiations; #64526 lazy mapped members remain. The exact port and its validation and measurements are in
+`notes/shared-member-layouts.md`. The opt-out still retains the eager pinned-reference path for oracle comparisons.
+
 ## 2026-10-05: checker threads steal work
 
 With output independent of the assignment, the type-check pass schedules dynamically. A checker that has run out of

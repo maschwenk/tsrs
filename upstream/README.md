@@ -1,5 +1,9 @@
 # Upstream patches: lazy member follow-ups to microsoft/TypeScript#64475 / #64526
 
+> Historical as of 2026-10-13: microsoft/TypeScript#64765 replaced #64475's lazy member tables with shared member
+> layouts. Patches 1-3 depend on the superseded tables and are no longer active tsrs candidates. Patches 4-5 remain
+> independent and active; the measurements below are retained as the record of the original stack.
+
 Go versions of the five checker laziness changes prototyped in tsrs (notes/mem-lazy.md), as a commit stack against
 microsoft/TypeScript, tested the way upstream CI tests and measured on a 38k-file private TypeScript monorepo (5.9M lines; "the private monorepo" below). Opened upstream as drafts on 2026-10-02: L6 as microsoft/TypeScript#64600 and L5 as #64601 (rebased onto main
 59f5b0233f; vet, gofmt, checker and testrunner tests re-run on the rebased commits). L1, L11 and L10 are not opened.

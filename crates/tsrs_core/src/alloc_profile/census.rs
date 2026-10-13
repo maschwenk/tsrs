@@ -1035,9 +1035,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             p += 4;
         }
     }
-    // Heap referrers are named only now. `Rc<LazyMemberTable>` blocks hold an empty `OnceCell<LazyMembers>` until
-    // the table is prepared, whose payload bytes are uninitialized (copied from the stack): weak. (The table's own
-    // mapper and type list are never recycled.)
+    // Heap referrers are named only now.
     let mut ips: Vec<usize> = Vec::new();
     let heap_stack = |r: &str| -> Option<usize> { r.strip_prefix("heap block (stack ")?.split(')').next()?.parse().ok() };
     ips.extend(strong.values().filter_map(|r| if let Some(k) = heap_stack(r) { Some(stacks[k].iter().copied()) } else { None }).flatten());
@@ -1067,7 +1065,6 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         let k = heap_stack(r)?;
         Some(stacks[k].iter().take_while(|&&ip| ip != 0).filter_map(|ip| names.get(ip)).filter(|n| !boring(n)).take(3).cloned().collect())
     };
-    strong.retain(|_, r| !heap_frames(r).is_some_and(|f| f.first().is_some_and(|f| f.ends_with("get_ready_lazy_member_table_worker"))));
     let (mut conservative, mut strongly, mut cbytes, mut sbytes) = (0u64, 0u64, 0u64, 0u64);
     let mut only_weak: FxHashMap<u32, (u64, u64)> = FxHashMap::default();
     for (i, b) in table.blocks.iter().enumerate() {

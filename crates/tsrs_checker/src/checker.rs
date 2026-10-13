@@ -1163,25 +1163,22 @@ pub struct Checker {
     pub source_file_links: LinkStore<SourceFile, SourceFileLinks>,
     pub reg_exp_scanner: Option<Box<Scanner>>,
     pub pattern_for_type: FxHashMap<P<Type>, P<Node>>,
-    pub(crate) lazy_member_tables: crate::basedmap::Based<FxHashMap<P<Type>, P<LazyMemberTable>>, P<Type>>,
-    /// Per generic target, what `prepare_lazy_members` learned about its declared members for good
-    /// (`lazy_unaffected_members`).
-    pub(crate) lazy_unaffected: FxHashMap<P<Type>, crate::checker_09::LazyUnaffected>,
     // Go `StructuredType.objectTypeWithoutAbstractConstructSignatures`: set only by the node builder, for few types,
     // so kept here instead of in every object, union and intersection type.
     pub(crate) object_types_without_abstract_construct_signatures: FxHashMap<P<Type>, P<Type>>,
     // Go `StructuredType.resolvedBaseConstraint` (see `resolved_base_constraint_of`).
     pub(crate) structured_type_base_constraints: FxHashMap<P<Type>, P<Type>>,
     // Go `ObjectType.instantiations` of object types that are not interfaces or tuples (see `ObjectType`).
-    pub(crate) object_type_instantiations: crate::basedmap::Based<FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>, P<Type>>,
-    pub(crate) lazy_mapped_tables: crate::basedmap::Based<FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>, P<Type>>,
-    /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
+    pub(crate) object_type_instantiations:
+        crate::basedmap::Based<FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>, P<Type>>,
+    pub(crate) lazy_mapped_tables:
+        crate::basedmap::Based<FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>, P<Type>>,
+    /// tsrs_core::lazymembers::enabled(): controls lazy mapped tables and their follow-up candidates, and retains
+    /// the eager pre-#64765 class/interface path for oracle comparisons when false.
     pub lazy_members: bool,
     /// `TSRS_DEEP_NESTED=shadow`: every deeply-nested test on a relater stack is also made without the stack's kept
     /// recursion identities, and the kept identities are recomputed; any difference panics (relater_1.rs).
     pub(crate) deep_nested_shadow: bool,
-    /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
-    pub lazy_tuples: bool,
     /// site-counts profile: creation site of each instantiated symbol until its type is resolved.
     #[cfg(feature = "site-counts")]
     pub inst_symbol_sites: FxHashMap<P<Symbol>, &'static std::panic::Location<'static>>,
@@ -1189,12 +1186,6 @@ pub struct Checker {
     pub lazy_cond_mapper: bool,
     /// notes/mem-lazy.md L6: union/intersection property caches without the eager copy.
     pub lazy_prop_cache: bool,
-    /// notes/mem-lazy.md L9: existence-only property queries in getUnmatchedProperties.
-    pub lazy_has_prop: bool,
-    /// notes/mem-lazy.md L10: getUnmatchedProperties walks lazy targets.
-    pub lazy_unmatched: bool,
-    /// notes/mem-lazy.md L11: empty-object tests on lazy tables.
-    pub lazy_empty: bool,
     pub lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats,
     /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
     /// resolved (`may_be_augment_member`).
@@ -1607,22 +1598,16 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         source_file_links: LinkStore::default(),
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
-        lazy_member_tables: Default::default(),
-        lazy_unaffected: FxHashMap::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
         object_type_instantiations: Default::default(),
         lazy_mapped_tables: Default::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         deep_nested_shadow: std::env::var("TSRS_DEEP_NESTED").is_ok_and(|v| v == "shadow"),
-        lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
         #[cfg(feature = "site-counts")]
         inst_symbol_sites: FxHashMap::default(),
         lazy_cond_mapper: tsrs_core::lazymembers::lazy_cond_mapper(),
         lazy_prop_cache: tsrs_core::lazymembers::lazy_prop_cache(),
-        lazy_has_prop: tsrs_core::lazymembers::lazy_has_prop(),
-        lazy_unmatched: tsrs_core::lazymembers::lazy_unmatched(),
-        lazy_empty: tsrs_core::lazymembers::lazy_empty(),
         lazy_member_stats: Default::default(),
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
@@ -2105,22 +2090,18 @@ impl Checker {
             source_file_links: base.source_file_links.fork(),
             reg_exp_scanner: None,
             pattern_for_type: base.pattern_for_type.clone(),
-            lazy_member_tables: crate::basedmap::Based::over(&base.lazy_member_tables),
-            lazy_unaffected: FxHashMap::default(),
-            object_types_without_abstract_construct_signatures: base.object_types_without_abstract_construct_signatures.clone(),
+            object_types_without_abstract_construct_signatures: base
+                .object_types_without_abstract_construct_signatures
+                .clone(),
             structured_type_base_constraints: base.structured_type_base_constraints.clone(),
             object_type_instantiations: crate::basedmap::Based::over(&base.object_type_instantiations),
             lazy_mapped_tables: crate::basedmap::Based::over(&base.lazy_mapped_tables),
             lazy_members: base.lazy_members.clone(),
             deep_nested_shadow: base.deep_nested_shadow,
-            lazy_tuples: base.lazy_tuples.clone(),
             #[cfg(feature = "site-counts")]
             inst_symbol_sites: base.inst_symbol_sites.clone(),
             lazy_cond_mapper: base.lazy_cond_mapper.clone(),
             lazy_prop_cache: base.lazy_prop_cache.clone(),
-            lazy_has_prop: base.lazy_has_prop.clone(),
-            lazy_unmatched: base.lazy_unmatched.clone(),
-            lazy_empty: base.lazy_empty.clone(),
             lazy_member_stats: base.lazy_member_stats.clone(),
             augment_filter: base.augment_filter.clone(),
             unmatched_found_pool: Vec::new(),

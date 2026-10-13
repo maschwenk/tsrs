@@ -49,9 +49,10 @@ understand, read both versions and the Go source; do not blindly take one side.
 
 ## Lazy member resolution (default on) and the opt-out mode
 
-tsrs ports microsoft/TypeScript#64475 + #64526 (lazy member tables, `tsrs_core::lazymembers`, notes/lazy-members.md)
-and runs them **by default**. `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` turns them off and restores the reference
-behavior exactly (same counters, same baselines). The no-regression check above is therefore run twice before a push:
+tsrs ports microsoft/TypeScript#64765 (shared layouts for class/interface members) and #64526 (lazy mapped members;
+`tsrs_core::lazymembers`, notes/shared-member-layouts.md and notes/lazy-members.md) and runs them **by default**.
+`--noLazyMembers` / `TSRS_LAZY_MEMBERS=0` turns them off and restores the pinned reference behavior exactly (same
+counters, same baselines). The no-regression check above is therefore run twice before a push:
 `TSRS_LAZY_MEMBERS=0 tsrs-test run --suite all --baselines types,symbols` must match the previous opt-out pass lists
 exactly (that is the reference-equivalence gate), and the default run must not lose passes either. Comparisons
 against `tsgo-ref` counters (symbols/types/instantiations) use the opt-out mode; with the default mode tsrs creates
@@ -65,7 +66,7 @@ files do not depend on the assignment (notes/perf-order-independence.md), but mu
 symbol/type/instantiation counters and peak memory do: compare them against `tsgo-ref` with `--checkerAssignment go`
 (or `TSRS_CHECKER_ASSIGNMENT=go`). `go` also preserves Go's checker history (`tsrs_core::compat`), so it is the mode
 for byte-identity with tsgo (with `--noLazyMembers`
-where an instantiation depth limit is reached: lazy members change which instantiations a checker has cached,
+where an instantiation depth limit is reached: shared member layouts change which instantiations a checker has cached,
 notes/open-history-dependence.md section 6). The conformance, fourslash and tsc harnesses run in it; set
 `TSRS_CHECKER_ASSIGNMENT=locality` to run them in the default mode.
 `TSRS_CHECKER_ASSIGNMENT=random:<seed>` puts each file on a random checker with a random visit order in each checker:
@@ -225,7 +226,7 @@ stop freeing that class.
 ## What each checker holds on the heap: the heap census
 
 `TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics` prints, per checker on stderr, every hash table and vector the
-checker owns directly (cache maps, relation caches, link stores, lazy member tables, ...) with entries, capacity,
+checker owns directly (cache maps, relation caches, link stores, lazy mapped tables, ...) with entries, capacity,
 bytes per slot, load factor and heap bytes (`crates/tsrs_checker/src/heapcensus.rs`, notes/mem-checker-heap.md).
 `TSRS_HEAP_CENSUS_MIN=<bytes>` sets the smallest row (default 1 MiB). It works in any build. Containers owned by
 arena objects are attributed by the heap sampler of the alloc-profile build instead:

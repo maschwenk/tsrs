@@ -1387,20 +1387,21 @@ pub(crate) fn census_layouts() {
         );
         tsrs_core::census_layout(type_name::<IndexInfosTail>(), &[thin(offset_of!(IndexInfosTail, index_infos))]);
         {
-            use crate::checker_09::{LazyMemberTable, LazyMembers};
-            // A `OnceCell` of a type with a niche is that type (checked here), so its fields are at their offsets.
-            const _: () = assert!(size_of::<std::cell::OnceCell<LazyMembers>>() == size_of::<LazyMembers>());
-            const _: () = assert!(size_of::<std::cell::OnceCell<tsrs_core::ThinSlice<P<Symbol>>>>() == 8);
-            let r = offset_of!(LazyMemberTable, ready);
+            use crate::checker_09::{MemberLayout, SharedMemberSlots};
             tsrs_core::census_layout(
-                type_name::<LazyMemberTable>(),
+                type_name::<MemberLayout>(),
                 &[
-                    thin(r + offset_of!(LazyMembers, unaffected)),
-                    thin(r + offset_of!(LazyMembers, call_signatures)),
-                    thin(r + offset_of!(LazyMembers, construct_signatures)),
-                    thin(r + offset_of!(LazyMembers, index_infos)),
-                    thin(r + offset_of!(LazyMembers, base_types)),
-                    thin(offset_of!(LazyMemberTable, ordered_properties)),
+                    thin(offset_of!(MemberLayout, keys)),
+                    thin(offset_of!(MemberLayout, symbols)),
+                    thin(offset_of!(MemberLayout, origins)),
+                    thin(offset_of!(MemberLayout, index)),
+                ],
+            );
+            tsrs_core::census_layout(
+                type_name::<SharedMemberSlots>(),
+                &[
+                    thin(offset_of!(SharedMemberSlots, bases)),
+                    thin(offset_of!(SharedMemberSlots, slots)),
                 ],
             );
         }
@@ -2157,7 +2158,7 @@ pub struct ConstrainedType {
 // `try_as_constrained_type()` is None for structured types.
 //
 // The resolved members (Go's five fields) live in a `StructuredMembers` record allocated on the first write: most
-// structured types are never resolved (on the private monorepo 4.9M of 7.6M: type references answered by lazy member tables,
+// structured types are never resolved (on the private monorepo 4.9M of 7.6M: type references answered through shared member layouts,
 // unions and intersections whose members nobody asks for), and those now carry one pointer instead of 48 bytes.
 // Reads of an absent record return the zero values (nil members, empty slices, count 0), exactly like reading the
 // unset fields; once allocated, every getter returns exactly what was last set (except that an empty index info
@@ -2170,9 +2171,11 @@ pub struct StructuredType {
 
 #[derive(Default)]
 struct StructuredMembers {
-    members: Cell<Option<P<SymbolTable>>>,
+    members: OvCell<Option<P<SymbolTable>>>,
+    // Nil while `lazy` supplies the members; Some(empty) is a resolved empty property list.
+    properties: OvOptionThinSliceCell<P<Symbol>>,
+    lazy: OvCell<Option<P<crate::checker_09::SharedMemberSlots>>>,
     // `ThinSliceCell`s are one word each (`tsrs_core::ThinSlice`).
-    properties: ThinSliceCell<P<Symbol>>,
     signatures: ThinSliceCell<P<Signature>>, // Signatures (call + construct)
     // Count of call signatures, and index infos (2% of the resolved types on the private monorepo have any).
     count_or_index_infos: CountOrIndexInfos,
@@ -2185,7 +2188,7 @@ const _: () = assert!(std::mem::size_of::<StructuredType>() == 4);
 #[cfg(target_pointer_width = "64")]
 const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 32);
 #[cfg(target_pointer_width = "32")]
-const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 24);
+const _: () = assert!(std::mem::size_of::<StructuredMembers>() == 28);
 
 /// Go's `CallSignatureCount` and `IndexInfos` in one word: `count << 1 | 1` while no non-empty index info list was
 /// set (the list reads empty, `&[]`), else a pointer to an `IndexInfosTail` holding both.
@@ -2269,11 +2272,27 @@ impl StructuredType {
     }
     #[inline]
     pub fn properties(&self) -> &'static [P<Symbol>] {
-        self.resolved.get().map_or(&[], |r| r.properties.get())
+        self.raw_properties().unwrap_or(&[])
+    }
+    #[inline]
+    pub(crate) fn raw_properties(&self) -> Option<&'static [P<Symbol>]> {
+        self.resolved.get().and_then(|r| r.properties.get())
     }
     #[inline]
     pub fn set_properties(&self, properties: &'static [P<Symbol>]) {
-        self.resolved_for_write().properties.set(properties);
+        self.resolved_for_write().properties.set(Some(properties));
+    }
+    #[inline]
+    pub(crate) fn clear_properties(&self) {
+        self.resolved_for_write().properties.set(None);
+    }
+    #[inline]
+    pub(crate) fn lazy(&self) -> Option<P<crate::checker_09::SharedMemberSlots>> {
+        self.resolved.get().and_then(|r| r.lazy.get())
+    }
+    #[inline]
+    pub(crate) fn set_lazy(&self, lazy: Option<P<crate::checker_09::SharedMemberSlots>>) {
+        self.resolved_for_write().lazy.set(lazy);
     }
     /// Call signatures followed by construct signatures.
     #[inline]
@@ -2458,6 +2477,7 @@ pub struct InterfaceType {
     pub instantiations: ReferenceInstantiations, // Map of type instantiations (Go: in ObjectType)
     pub base_types_resolved: OvCell<bool>,
     pub declared_members_resolved: OvCell<bool>,
+    pub(crate) member_layout: OvCell<Option<P<crate::checker_09::MemberLayout>>>, // Member layout shared by all instantiations, if possible
 }
 embeds!(InterfaceType, type_reference, TypeReference);
 

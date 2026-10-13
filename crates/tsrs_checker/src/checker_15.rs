@@ -781,7 +781,10 @@ impl Checker {
         t.flags() == TypeFlags::Object
             && t.object_flags_lazy() & (ObjectFlags::MembersResolved | ObjectFlags::Mapped) == ObjectFlags::MembersResolved
             && !is_tuple_type(t)
-            && t.as_structured_type().members().is_none_or(|m| m.lookup_hashed(key).is_none())
+            && t.as_structured_type().lazy().is_none()
+            && t.as_structured_type()
+                .members()
+                .is_none_or(|m| m.lookup_hashed(key).is_none())
             && self.index_infos_of_structured_type(t).is_empty()
             && !self.may_be_augment_member(key)
     }

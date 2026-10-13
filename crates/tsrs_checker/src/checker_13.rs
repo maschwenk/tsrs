@@ -1074,7 +1074,10 @@ impl Checker {
 
     #[inline(never)]
     fn is_empty_anonymous_object_type_worker(&mut self, t: P<Type>) -> bool {
-        if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) && self.is_empty_resolved_type(t.as_structured_type()) {
+        if t.object_flags_lazy()
+            .intersects(ObjectFlags::MembersResolved)
+            && self.is_empty_resolved_type(t)
+        {
             return true;
         }
         match t.symbol() {
@@ -1083,26 +1086,17 @@ impl Checker {
         }
     }
 
-    // isEmptyResolvedType(resolveStructuredTypeMembers(t)); notes/mem-lazy.md L11: a type with a lazy member table
-    // (an instantiated reference, never anyFunctionType) is asked without resolving it.
     pub(crate) fn is_empty_structured_type(&mut self, t: P<Type>) -> bool {
-        if self.lazy_empty {
-            if let Some(lm) = self.get_ready_lazy_member_table(t) {
-                self.lazy_member_stats.empty_lazy_queries += 1;
-                let ready = lm.ready.get().unwrap();
-                return ready.call_signatures.get().is_empty() && ready.construct_signatures.get().is_empty() && ready.index_infos.get().is_empty() && !self.has_properties_of_structured_type(t);
-            }
-        }
-        let resolved = self.resolve_structured_type_members(t).unwrap();
-        self.is_empty_resolved_type(resolved)
+        self.resolve_structured_type_members(t).unwrap();
+        self.is_empty_resolved_type(t)
     }
 
     // checker.go:26951
-    pub(crate) fn is_empty_resolved_type(&mut self, t: &'static StructuredType) -> bool {
-        !std::ptr::eq(t, self.any_function_type.as_structured_type())
-            && t.properties().is_empty()
-            && t.signatures().is_empty()
-            && t.index_infos().is_empty()
+    pub(crate) fn is_empty_resolved_type(&mut self, t: P<Type>) -> bool {
+        t != self.any_function_type
+            && self.property_count_of_structured_type(t) == 0
+            && t.as_structured_type().signatures().is_empty()
+            && t.as_structured_type().index_infos().is_empty()
     }
 
     // checker.go:26955
@@ -2124,8 +2118,15 @@ impl Checker {
                         let type_string = self.type_to_string_exported(object_type);
                         self.add_diagnostic(create_diagnostic_for_node(Some(access_expression), &diagnostics::Property_0_does_not_exist_on_type_1, &[&value, &type_string]));
                         return Some(self.undefined_type);
-                    } else if index_type.flags().intersects(TypeFlags::Number | TypeFlags::String) {
-                        let mut types: Vec<P<Type>> = object_type.as_structured_type().properties().iter().map(|&prop| self.get_type_of_symbol(prop)).collect();
+                    } else if index_type
+                        .flags()
+                        .intersects(TypeFlags::Number | TypeFlags::String)
+                    {
+                        let mut types: Vec<P<Type>> = self
+                            .properties_of_structured_type(object_type)
+                            .iter()
+                            .map(|&prop| self.get_type_of_symbol(prop))
+                            .collect();
                         types.push(self.undefined_type);
                         return Some(self.get_union_type(&types));
                     }
@@ -2395,10 +2396,18 @@ impl Checker {
 
     // checker.go:27835
     pub(crate) fn is_string_index_signature_only_type_worker(&mut self, t: P<Type>) -> bool {
-        t.flags().intersects(TypeFlags::Object) && !self.is_generic_mapped_type(t) && !self.has_properties_of_structured_type(t) && self.get_index_infos_of_type(t).len() == 1 && {
-            let string_type = self.string_type;
-            self.get_index_info_of_type(t, string_type).is_some()
-        } || t.flags().intersects(TypeFlags::UnionOrIntersection) && t.types().iter().all(|&t| self.is_string_index_signature_only_type(t))
+        t.flags().intersects(TypeFlags::Object)
+            && !self.is_generic_mapped_type(t)
+            && self.get_property_count_of_type(t) == 0
+            && self.get_index_infos_of_type(t).len() == 1
+            && {
+                let string_type = self.string_type;
+                self.get_index_info_of_type(t, string_type).is_some()
+            }
+            || t.flags().intersects(TypeFlags::UnionOrIntersection)
+                && t.types()
+                    .iter()
+                    .all(|&t| self.is_string_index_signature_only_type(t))
     }
 
     // checker.go:27840

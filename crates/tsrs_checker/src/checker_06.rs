@@ -54,9 +54,22 @@ fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionS
             let symbol = c.new_symbol(SymbolFlags::None, InternalSymbolNameInstantiationExpression);
             assert!(t.symbol().is_some(), "Instantiation expression source type must have a symbol");
             symbol.set_declarations_static(t.symbol().unwrap().declarations());
-            let result = c.new_object_type(ObjectFlags::Anonymous | ObjectFlags::InstantiationExpressionType, Some(symbol));
-            c.set_structured_type_members(result, resolved.members(), &call_signatures, &construct_signatures, resolved.index_infos());
-            result.as_instantiation_expression_type().node.set(Some(st.node));
+            let result = c.new_object_type(
+                ObjectFlags::Anonymous | ObjectFlags::InstantiationExpressionType,
+                Some(symbol),
+            );
+            let members = c.members_of_structured_type(t);
+            c.set_structured_type_members(
+                result,
+                members,
+                &call_signatures,
+                &construct_signatures,
+                resolved.index_infos(),
+            );
+            result
+                .as_instantiation_expression_type()
+                .node
+                .set(Some(st.node));
             return result;
         }
     } else if t.flags().intersects(TypeFlags::InstantiableNonPrimitive) {

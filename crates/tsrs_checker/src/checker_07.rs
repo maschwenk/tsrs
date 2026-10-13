@@ -790,8 +790,12 @@ impl Checker {
         // tsrs: sized for the larger side (the spread nearly always has that many members): spreading a large object
         // grew the table, and rebuilt its index, step by step. The left side counts only when already resolved, so
         // that nothing is resolved earlier than below.
-        let left_len = if left.flags().intersects(TypeFlags::Object) && left.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
-            left.as_structured_type().properties().len()
+        let left_len = if left.flags().intersects(TypeFlags::Object)
+            && left
+                .object_flags_lazy()
+                .intersects(ObjectFlags::MembersResolved)
+        {
+            self.property_count_of_structured_type(left)
         } else {
             0
         };

@@ -145,15 +145,6 @@ impl<'h> Setup<'h> {
     pub(crate) fn type_response(&mut self, t: P<Type>) -> CheckerResult<Value> {
         let id = self.register_type(t)?;
         let mut o = type_response_base(t, id);
-        // The port answers member queries on instantiated references through lazy member tables without
-        // setting MembersResolved; report the flag where pinned Go's resolveStructuredTypeMembers would have
-        // set it (only when such a query actually happened, never for unresolved types).
-        if t.flags().intersects(TypeFlags::Object)
-            && !t.object_flags().intersects(ObjectFlags::MembersResolved)
-            && self.checker.members_resolved_like_go(t)
-        {
-            o.num("objectFlags", (go_object_flags(t) | ObjectFlags::MembersResolved).bits() as f64);
-        }
         if let Some(symbol) = t.symbol() {
             o.set("symbol", compact_symbol_reference(self.sd.host, symbol)?);
         }

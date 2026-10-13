@@ -144,7 +144,11 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_single_signature(&mut self, t: P<Type>, kind: SignatureKind, allow_members: bool) -> Option<P<Signature>> {
         if t.flags().intersects(TypeFlags::Object) {
-            if allow_members || !self.has_properties_of_structured_type(t) && self.index_infos_of_structured_type(t).is_empty() {
+            self.resolve_structured_type_members(t).unwrap();
+            if allow_members
+                || self.property_count_of_structured_type(t) == 0
+                    && self.index_infos_of_structured_type(t).is_empty()
+            {
                 let call_signatures = self.signatures_of_structured_type(t, SignatureKind::Call);
                 let construct_signatures = self.signatures_of_structured_type(t, SignatureKind::Construct);
                 if kind == SignatureKind::Call && call_signatures.len() == 1 && construct_signatures.is_empty() {
@@ -1707,8 +1711,15 @@ impl Checker {
                 index_infos.push(info);
             }
             if symbol.flags().intersects(SymbolFlags::Enum)
-                && (self.get_declared_type_of_symbol(symbol).flags().intersects(TypeFlags::Enum)
-                    || d.properties().iter().any(|prop| self.get_type_of_symbol(*prop).flags().intersects(TypeFlags::NumberLike)))
+                && (self
+                    .get_declared_type_of_symbol(symbol)
+                    .flags()
+                    .intersects(TypeFlags::Enum)
+                    || self.properties_of_structured_type(t).iter().any(|prop| {
+                        self.get_type_of_symbol(*prop)
+                            .flags()
+                            .intersects(TypeFlags::NumberLike)
+                    }))
             {
                 index_infos.push(self.enum_number_index_info);
             }
@@ -2861,8 +2872,7 @@ impl Checker {
 
     pub(crate) fn get_property_of_object_type_hashed(&mut self, t: P<Type>, key: HashedName<'_>) -> Option<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
-            let symbol = resolved.members().and_then(|m| m.lookup_hashed(key));
+            let symbol = self.get_member_of_structured_type_hashed(t, key);
             if let Some(symbol) = symbol {
                 if self.symbol_is_value(symbol) {
                     return Some(symbol);

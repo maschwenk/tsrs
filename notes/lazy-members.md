@@ -1,5 +1,9 @@
 # lazy-members: microsoft/TypeScript#64475 + #64526 in tsrs
 
+> Superseded in part on 2026-10-13: microsoft/TypeScript#64765 replaced the #64475 class/interface lazy-member
+> tables with layouts shared by every instantiation. See `notes/shared-member-layouts.md`. This note remains the
+> historical record for #64475 and the current record for #64526 lazy mapped members.
+
 Port of Max's two upstream PRs that make member resolution lazier:
 
 - #64475 "build member tables of instantiated classes/interfaces lazily": an instantiated class/interface
@@ -16,7 +20,8 @@ Port of Max's two upstream PRs that make member resolution lazier:
 **On by default.** `--noLazyMembers` (CLI) or `TSRS_LAZY_MEMBERS=0` (any binary: `tsrs`, `tsrs-test`) turns it off;
 the opt-out mode is reference-identical (suite and counters, below). `--lazyMembers` / `TSRS_LAZY_MEMBERS=1` force it
 on. With `--extendedDiagnostics` and the flag on, `tsrs` prints a second table with per-path counts.
-Follow-up candidates (each behind its own switch, effective only with this flag on): notes/mem-lazy.md.
+The retained follow-up switches cover lazy mapped members, the conditional mapper, the property cache and inference
+mappers. The class/interface candidates described later in this historical note were removed with #64475's tables.
 
 ## Where it lives
 

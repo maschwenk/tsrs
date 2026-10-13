@@ -157,7 +157,8 @@ impl Checker {
         if !reduced_type.flags().intersects(TypeFlags::StructuredType) {
             return;
         }
-        let members = self.resolve_structured_type_members(reduced_type).unwrap().members();
+        self.resolve_structured_type_members(reduced_type).unwrap();
+        let members = self.members_of_structured_type(reduced_type);
         if let Some(members) = members {
             for (name, symbol) in members.entries() {
                 if self.is_named_member(symbol, name) {

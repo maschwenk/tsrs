@@ -1,7 +1,7 @@
 //! Heap census of one checker (`TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics`; notes/mem-checker-heap.md): every
 //! hash table and vector the checker owns directly, with its entry count, capacity, bytes per slot, load factor and
-//! allocated bytes, printed per checker on stderr after the statistics. The lazy member and lazy mapped tables'
-//! contents are always reported (`lazy_member_tables_heap`). In `--features assignment-stats` builds, the containers
+//! allocated bytes, printed per checker on stderr after the statistics. The lazy mapped tables' contents are always
+//! reported (`lazy_mapped_tables_heap`). In `--features assignment-stats` builds, the containers
 //! owned by the checker's created types (resolved member tables, union and intersection property caches, reference
 //! instantiation tables, conditional-root instantiation maps) are reported too (`heap_census_objects`). Other
 //! arena-owned containers (e.g. symbols' tables) are not reported; the alloc profile's heap sampler attributes them by
@@ -253,10 +253,10 @@ impl Checker {
         if let Some(m) = &self.flow_type_cache {
             h.row("flow_type_cache", m.heap_stat());
         }
-        // Lazy member and lazy mapped tables: the maps, and what the tables own (heap and arena).
-        h.row("lazy_member_tables", self.lazy_member_tables.heap_stat());
+        // Lazy mapped tables: the map and what the tables own (heap and arena).
         h.row("lazy_mapped_tables", self.lazy_mapped_tables.heap_stat());
-        h.rows.extend(crate::checker_09::lazy_member_tables_heap(self));
+        h.rows
+            .extend(crate::checker_09::lazy_mapped_tables_heap(self));
         // Relations.
         for (name, r) in [
             ("relation subtype", self.subtype_relation),

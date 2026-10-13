@@ -1238,7 +1238,7 @@ fn set_member_declared_by_spread_assignment(declaration: P<Node>, members: &mut 
     let mut properties: &[P<Symbol>] = &[];
     if let Some(t) = t {
         if t.flags().intersects(TypeFlags::StructuredType) {
-            properties = t.as_structured_type().properties();
+            properties = type_checker.get_properties_of_type(t);
         }
     }
     members.extend(properties.iter().map(|property| property.name().to_string()));

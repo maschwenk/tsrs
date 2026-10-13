@@ -32,8 +32,8 @@ Alongside the supported `tsc` flags, tsrs offers options to control performance:
 - `--maxMemory <size>` (for example `12G`; `--noEmit` checks only) keeps the process near that much memory: above it,
   tsrs replaces its largest checker with a fresh one, trading CPU for memory. The diagnostics are the same.
 - `--checkerAssignment go` splits files across threads the way tsgo does, for byte-identical output with tsgo.
-- `--noLazyMembers` turns off a set of checker optimizations that are not yet merged upstream. They never change
-  diagnostics; the patches are in [`upstream/`](../upstream/).
+- `--noLazyMembers` turns off the shared class/interface member layouts and lazy mapped members, retaining the eager
+  checker path for comparisons with the pinned TypeScript reference. It does not change diagnostics.
 
 ## Native packages
 
