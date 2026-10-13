@@ -447,7 +447,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
-    p.init_checker_pool(opts.create_checker_pool);
+    p.init_checker_pool(opts.create_checker_pool, None);
     p
 }
 
@@ -679,19 +679,20 @@ impl Program {
         result.files = tsrs_core::alloc_vec(files);
         let result: &'static Program = Box::leak(Box::new(result));
         tsrs_core::census_scrub_stack();
-        result.init_checker_pool(create_checker_pool);
+        result.init_checker_pool(create_checker_pool, self.compiler_checker_pool());
         (Some(result), new_file, true)
     }
 
     // program.go:443
-    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
+    // `previous`: the pool of the program this one reuses (`reuse_program`), whose file assignment it may take over.
+    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>, previous: Option<&checkerPool>) {
         if !self.finished_processing {
             panic!("Program must finish processing files before initializing checker pool");
         }
 
         let pool = match create {
             Some(create) => programCheckerPool::External(create(self)),
-            None => programCheckerPool::Compiler(checkerPool::new(self)),
+            None => programCheckerPool::Compiler(checkerPool::new(self, previous)),
         };
         if self.checker_pool.set(pool).is_err() {
             panic!("checker pool initialized twice");

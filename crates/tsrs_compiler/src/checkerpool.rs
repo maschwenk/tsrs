@@ -333,6 +333,8 @@ pub(crate) struct poolState {
     // The checker that runs each program file: the static assignment until stealing moves a file to the checker that
     // checks it, so later passes over the file (declaration diagnostics, emit) use the checker that has its state.
     owners: Vec<std::sync::atomic::AtomicU32>,
+    // The static assignment `owners` started from, for a program that reuses this one (`inherited_associations`).
+    pub(crate) associations: Vec<usize>,
     // Estimated work per program file (checked_file_weights), what stealing balances.
     weights: Vec<i64>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, files each checker took from other checkers.
@@ -424,6 +426,8 @@ pub(crate) struct checkerPool {
     checker_count: usize,
     single_threaded: bool,
     state: OnceLock<poolState>,
+    // tsrs-only: the file assignment of the pool of the program this one reuses (`inherited_associations`).
+    pub(crate) inherited_associations: Option<Vec<usize>>,
 }
 
 /*
@@ -613,7 +617,7 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 
 impl checkerPool {
     // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
-    pub(crate) fn new(program: &'static Program) -> checkerPool {
+    pub(crate) fn new(program: &'static Program, previous: Option<&checkerPool>) -> checkerPool {
         // Go's default is a constant 4; tsrs picks it per machine and program (default_checker_count).
         let checker_count: i64 = if program.single_threaded() {
             1
@@ -626,7 +630,8 @@ impl checkerPool {
         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
         let checker_count = checker_count.min(program.files.len() as i64).min(256).max(1) as usize;
 
-        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
+        let inherited_associations = previous.and_then(|previous| inherited_associations(program, checker_count, previous));
+        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new(), inherited_associations }
     }
 
     // checkerpool.go:331
@@ -699,7 +704,10 @@ impl checkerPool {
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
                 tsrs_core::phases::record("Checkers: create", create_start.elapsed());
-                let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
+                let associations = match &self.inherited_associations {
+                    Some(associations) => associations.clone(),
+                    None => tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count)),
+                };
                 (checkers, associations)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
@@ -718,12 +726,14 @@ impl checkerPool {
             let files = &program.files;
             let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
+            let associations_for_reuse = associations;
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
             poolState {
                 shared_graph: shared,
                 checkers,
                 file_indices,
                 owners,
+                associations: associations_for_reuse,
                 weights,
                 group_stolen: Mutex::new(Vec::new()),
                 group_runs: Mutex::new(Vec::new()),
@@ -1428,6 +1438,21 @@ fn go_associations(program: &Program, checker_count: usize) -> Vec<usize> {
         policy.balance_penalty_multiplier,
         None,
     )
+}
+
+// tsrs-only: the file assignment a program made by `reuse_program` takes over from `previous`, the pool of the
+// program it reuses, instead of computing its own: the files are the same, at the same indices, except for one
+// that was reparsed with the same imports. Computing the locality assignment of a large program takes longer than
+// the rest of a one-file watch cycle (12 ms of 80 on a 9.4k-file project), and its output is a function of the
+// program alone (see CheckerAssignment), so any assignment gives the same diagnostics and emit. The other
+// assignments are computed again: `go` keeps tsgo's assignment-dependent cache, and the debug ones should differ
+// per program.
+fn inherited_associations(program: &Program, checker_count: usize, previous: &checkerPool) -> Option<Vec<usize>> {
+    let state = previous.state.get()?;
+    let reusable = matches!(checker_assignment(), CheckerAssignment::Locality)
+        && previous.checker_count == checker_count
+        && state.associations.len() == program.files.len();
+    reusable.then(|| state.associations.clone())
 }
 
 fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {

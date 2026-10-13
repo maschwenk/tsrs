@@ -88,6 +88,8 @@ pub struct Watcher {
     sys: &'static dyn System,
     // tsrs-only: what the programs since the last full build share (`install_program`).
     shared_program_data: Option<tsrs_compiler::SharedProgramData>,
+    // Frees what the last `install_program` replaced, once the cycle has reported (`free_replaced_program`).
+    free_replaced: Option<Box<dyn FnOnce() + Send>>,
     config_file_name: String,
     config: P<ParsedCommandLine>,
     compiler_options_from_command_line: P<CompilerOptions>,
@@ -155,6 +157,7 @@ pub(crate) fn run_watcher(
     let mut w = Box::new(Watcher {
         sys,
         shared_program_data: None,
+        free_replaced: None,
         config_file_name: config.config_file.map(|f| f.source_file.file_name().to_string()).unwrap_or_default(),
         config,
         compiler_options_from_command_line,
@@ -467,6 +470,7 @@ impl Watcher {
                 self.record_config_mtimes();
                 self.config_modified = false;
                 self.report_error_count(result.diagnostics.len());
+                self.free_replaced_program();
                 if let Some(testing) = self.testing {
                     testing.on_program(self.program.unwrap());
                 }
@@ -528,6 +532,7 @@ impl Watcher {
         }
 
         self.report_error_count(result.diagnostics.len());
+        self.free_replaced_program();
         if let Some(testing) = self.testing {
             testing.on_program(self.program.unwrap());
         }
@@ -611,11 +616,20 @@ impl Watcher {
                 unsafe { shared.free() };
             }
         };
-        // Freeing a large program's checker regions takes a while (~150 ms on a 9k-file project); nothing waits for it,
-        // so it runs beside the cycle. The test harness frees in place, for deterministic runs.
+        // The test harness frees in place, for deterministic runs.
         if self.testing.is_some() {
             free();
         } else {
+            // A cycle that ended early (a watch error) left its free pending.
+            self.free_replaced_program();
+            self.free_replaced = Some(Box::new(free));
+        }
+    }
+
+    // Freeing a large program's checker regions takes a while (~150 ms on a 9k-file project) and nothing waits for it,
+    // so it runs on a thread of its own, started once the cycle has reported instead of beside the rest of the cycle.
+    fn free_replaced_program(&mut self) {
+        if let Some(free) = self.free_replaced.take() {
             std::thread::Builder::new().name("tsrs-free-program".to_string()).spawn(free).expect("failed to spawn a thread");
         }
     }
