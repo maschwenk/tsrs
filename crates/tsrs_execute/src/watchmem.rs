@@ -74,13 +74,23 @@ impl Freer {
         Freer(Some(Mutex::new(tx)))
     }
 
-    /// tsrs-only, macOS: once the frees queued so far are done, the allocator gives its freed memory back
-    /// (`mi_collect(true)`). On macOS mimalloc keeps much of what a cycle freed resident (about 0.5 GB after a few full
-    /// rebuilds of vscode); purging it at once on every free slows the cycles themselves (MIMALLOC_PURGE_DELAY=0: the
-    /// hub edit 1.3 -> 2.0 s), so it is done here, after the cycle reported, on the free thread.
-    #[cfg(target_os = "macos")]
-    pub(crate) fn collect_heap(&self) {
-        self.run(|| tsrs_core::memsplit::heap_collect(true));
+    /// tsrs-only: once the frees queued so far are done, after each cycle (and the first build):
+    /// - macOS: the allocator gives its freed memory back (`mi_collect(true)`), on every worker-pool thread and here.
+    ///   mimalloc keeps much of what a cycle freed resident there (after a few full rebuilds of vscode, its heap stood
+    ///   ~1 GB above the initial build), and purging at once on every free slows the cycles themselves
+    ///   (MIMALLOC_PURGE_DELAY=0: the hub edit 1.3 -> 2.0 s). The pool's threads matter as much as this one: what they
+    ///   allocated during the cycle is freed here, from another thread, and such a block stays allocated in its page
+    ///   (unpurgeable) until the owning thread collects (notes/watch-macos.md, "memory").
+    /// - the profiling build's per-cycle heap report (`tsrs_core::memsplit::cycle_done`; nothing otherwise).
+    pub(crate) fn after_cycle(&self) {
+        self.run(|| {
+            #[cfg(target_os = "macos")]
+            {
+                tsrs_compiler::worker_pool().broadcast(|_| tsrs_core::memsplit::heap_collect(true));
+                tsrs_core::memsplit::heap_collect(true);
+            }
+            tsrs_core::memsplit::cycle_done();
+        });
     }
 
     pub(crate) fn run(&self, job: impl FnOnce() + Send + 'static) {

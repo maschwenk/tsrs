@@ -71,12 +71,7 @@ it (debounce, cycle start, status line) adds under 1 ms.
 
 - A writer that writes one file in pieces with pauses (4 x 100 ms): 2 cycles. Its first event shows partial content,
   which nothing tells apart from a finished save without waiting.
-- Memory: after notes/watch-memory.md's fixes, comment edits are flat (footprint 1.51-1.57 GB over 100 edit/revert
-  pairs). Full rebuilds leave mimalloc's heap about 1 GB above the initial build and grow it ~30 MB per hub
-  round trip; the thread arenas stay flat. About half of the heap rise is freed memory mimalloc keeps resident on
-  macOS: the watch now collects it (`mi_collect(true)`) on the free thread after each cycle (footprint after 6
-  `--watch` hub round trips 3.99 -> 3.48 GB, after 4 `-b --watch` ones 3.05 -> 2.75 GB; cycle times unchanged in
-  interleaved runs). The rest (~60 MB per round trip, live data or fragmentation with 16 KB pages) is not split.
+- Memory: see "Memory" below.
 - An overflow (dropped events) still rebuilds every callback of a shared watch, whatever path it names. With the QoS
   fix none occurred in these runs; parallel tests that churn `$TMPDIR` can still trigger one.
 - Emitted outputs under a consolidated stream root still reach the process (now cheap); FSEventStreamSetExclusionPaths
@@ -87,3 +82,35 @@ it (debounce, cycle start, status line) adds under 1 ms.
 debounce.rs (cfg only), watcher.rs `trigger_callbacks` (the index), event.rs, watchmanager `run_loop`/`stop`,
 watcher.rs and orchestrator.rs cycle logic (case rename branch is dead on Linux; the others apply there too and fix
 the same tsgo-shared bugs). The Linux reference numbers and `write_settling.rs` should be rerun.
+
+## Memory: what the remaining growth over full rebuilds is
+
+After notes/watch-memory.md's fixes, comment edits (the one-file cycle) are flat: footprint 1.51-1.57 GB over 100
+edit/revert pairs, RSS +45 MB (0.2 MB per edit, the id space). Hub-export round trips (full rebuilds) were not:
+`footprint` put the thread arenas (untagged VM_ALLOCATE) flat at ~2.05 GB from the first round trip, and mimalloc's
+heap (VM tag 100, which footprint names "IOAccelerator") at 822 -> 1,926 MB over 6 round trips, then ~30 MB more per
+round trip.
+
+With the per-cycle heap report (docs/DEBUGGING.md), 8-10 cycles of hub round trips on vscode:
+
+- The live Rust heap is flat: 542 MB after the first build, 617 after the first cycle, then +4 MB per cycle, and
+  the sampled survivors of each cycle are 2-3 MB. Leaving out the profiler's own bookkeeping (its per-site tables and
+  sample map, which the counting allocator counts too), 3.7 MB of bytes from 7 cycles survive, 3.1 MB of them the
+  current config's `file_names_by_path` map, built once in the first cycle and still in use (the same 3.1 MB after 5
+  or 7 cycles, and with the config kept across rebuilds): no product leak shows in the live heap.
+- mimalloc's committed memory levels at ~2.46 GB after cycle 3 (the heap's peak during a full rebuild); what grows is
+  the resident part of it. mimalloc counted 860 -> 1,012 MB of blocks in use while the program held 617 -> 632 MB:
+  blocks the program had freed but mimalloc still counts. The free thread frees what the worker-pool threads
+  allocated in the cycle (parsing, emit, the program's data); a cross-thread free only puts the block on its page's
+  thread-free list, and the page (and its memory) is not reusable or purgeable until the owning thread collects. The
+  pool threads are idle after a cycle, so their pages kept those blocks. `mi_collect(true)` on the free thread alone
+  (faafb52d) only collected its own heap.
+- Broadcasting `mi_collect(true)` to the pool threads too (after each cycle, ~10 ms on the free thread): mimalloc's
+  footprint after 6 round trips 1,415 -> 1,195 MB, and over 12 round trips it levels at ~1.28 GB (rt 4 -> 12:
+  +16 MB per round trip and flat at the end, against ~25-30 MB per round trip continuing before). Repeat comment edit
+  47-51 vs 44-64 ms over interleaved runs (no difference beyond noise). What remains is mimalloc settling into the
+  working set of a full rebuild (committed stays at its ~2.5 GB peak; how much of it is resident levels off).
+- Not it: the ~300 threads each cycle starts and ends (checker threads; mimalloc abandons their pages): abandoned pages
+  stay at ~6k; `MIMALLOC_PAGE_RECLAIM_ON_FREE=1` (reclaim them on a free) made the heap larger (1,698 MB at 6 round
+  trips). Purging on every free (MIMALLOC_PURGE_DELAY=0, MIMALLOC_PURGE_DECOMMITS=1) gives the same footprint as the
+  post-cycle collect but slows the cycles (hub edit 1.3 -> 2.0 s).

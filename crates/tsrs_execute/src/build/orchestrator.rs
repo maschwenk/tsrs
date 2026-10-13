@@ -713,15 +713,13 @@ impl Orchestrator {
         }
         if self.opts.testing.is_none() {
             self.queue_files_changed_since(build_started);
-            #[cfg(target_os = "macos")]
-            self.freer.collect_heap();
+            self.freer.after_cycle();
         }
         self.start_signature_job();
         if self.opts.testing.is_none() {
             self.wm.run_loop(|| {
                 self.do_cycle();
-                #[cfg(target_os = "macos")]
-                self.freer.collect_heap();
+                self.freer.after_cycle();
             });
         }
     }
