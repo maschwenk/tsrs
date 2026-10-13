@@ -761,19 +761,9 @@ impl Watcher {
             }
         }
         let Some(changed_path) = changed_path else { return false };
-
-        if let Some(&old_file) = old_program.files_by_path().get(changed_path)
-            && let Some(new_file) = host.get_source_file(old_file.parse_options().clone())
-            && !equal_jsx_implicit_import(&old_program.options(), old_file, new_file)
-        {
-            return false;
-        }
-
-        let (new_program, _, reused) = old_program.reuse_program(changed_path, Arc::clone(&host), None, None);
-        if reused {
-            self.install_program(new_program.unwrap(), host, None);
-        }
-        reused
+        let Some(new_program) = reuse_program(old_program, changed_path, &host) else { return false };
+        self.install_program(new_program, host, None);
+        true
     }
 
     // tsrs-only (Go's GC): makes `program` the current one and frees the compiler program it replaces, with its
@@ -1041,6 +1031,21 @@ fn parsed_configs_equal(a: &ParsedCommandLine, b: &ParsedCommandLine) -> bool {
         && a.project_references == b.project_references
         && a.project_references_is_nil == b.project_references_is_nil
         && a.content_mappers == b.content_mappers
+}
+
+// `old_program` with the file at `changed_path` parsed again, if no other file needs to change: `reuse_program`, which
+// also compares the files' imports, and the same implicit JSX runtime import (a `@jsxImportSource` pragma).
+pub(crate) fn reuse_program(old_program: &'static Program, changed_path: &Path, host: &Arc<dyn CompilerHost>) -> Option<&'static Program> {
+    if let Some(&old_file) = old_program.files_by_path().get(changed_path)
+        && let Some(new_file) = host.get_source_file(old_file.parse_options().clone())
+        && !equal_jsx_implicit_import(&old_program.options(), old_file, new_file)
+    {
+        return None;
+    }
+    match old_program.reuse_program(changed_path, Arc::clone(host), None, None) {
+        (Some(program), _, true) => Some(program),
+        _ => None,
+    }
 }
 
 fn equal_jsx_implicit_import(options: &CompilerOptions, old_file: P<SourceFile>, new_file: P<SourceFile>) -> bool {

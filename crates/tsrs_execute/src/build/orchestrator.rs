@@ -676,12 +676,9 @@ impl Orchestrator {
                 // already taken).
                 // SAFETY: see above; no checker handle of it is held.
                 unsafe { tsrs_compiler::free_unshared_program(program.get_program()) };
-            } else if let (true, Some(program)) = (self.opts.command.compiler_options.watch.is_true(), program) {
-                // Watch mode: the next build of the task starts from the build info, and the compiler program goes
-                // when it does (`BuildTask::replace_watch_program`); this gives back the snapshot's heap.
-                // SAFETY: the result was the only holder of the incremental program.
-                unsafe { tsrs_incremental::Program::drop_replaced(program) };
             }
+            // In watch mode the task keeps the program as the old state of its next build, which drops it
+            // (`BuildTask::compile_and_emit`).
         }
         task.built.close();
     }
@@ -793,6 +790,7 @@ impl Orchestrator {
                 let path = self.to_path(&config);
                 let task = self.get_task(&path);
                 task.reset_config(self, &path);
+                task.set_watch_changes(None);
                 task.built.reset();
                 task.done.reset();
             }
@@ -846,6 +844,8 @@ impl Orchestrator {
         for config in &order {
             let path = self.to_path(config);
             let task = self.get_task(&path);
+            task.built_program.store(false, std::sync::atomic::Ordering::SeqCst);
+            task.set_watch_changes(None);
             if self.task_config_changed(&task, &normalized_paths) {
                 task.reset_config(self, &path);
                 *needs_config_update = true;
@@ -855,6 +855,7 @@ impl Orchestrator {
             let Some(resolved) = task.resolved_opt() else { continue };
             if self.task_inputs_changed(&task, &resolved, &normalized_paths) {
                 task.reset_status();
+                task.set_watch_changes(Some(normalized_paths.iter().map(|(p, &k)| (p.clone(), k)).collect()));
                 *needs_update = true;
             }
             task.built.reset();
@@ -870,6 +871,7 @@ impl Orchestrator {
             if resolved.file_names() != new_config.file_names() {
                 self.host().resolved_references.store(path.clone(), Some(new_config));
                 *task.resolved.lock().unwrap() = Some(new_config);
+                task.set_watch_changes(None);
                 task.reset_status();
                 *needs_update = true;
             }
