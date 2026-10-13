@@ -1090,8 +1090,11 @@ impl dirWatch {
         if !has_events && !has_error && !has_terminal {
             return;
         }
-        let start_seqs: Vec<u64> = cbs.iter().map(|cb| cb.since_seq).collect();
-        let (events_by_callback, err) = self.events.drain_for_sequences(&start_seqs);
+        // tsrs-only: the entries are taken under the locks and each callback's events made outside them (Go makes every
+        // callback's snapshot under both). A watch shared by a few hundred callbacks (the CLI watch's directories,
+        // consolidated) and a burst of a few thousand events (an emit) spent ~190 ms here with both locks held,
+        // stalling the backend's event thread and new watches.
+        let (entries, err) = self.events.drain_entries();
         for cb in &cbs {
             if cb.terminal.is_none() {
                 continue;
@@ -1103,8 +1106,12 @@ impl dirWatch {
         drop(st);
 
         let comparisons = Mutex::new(comparisonCache::default());
-        for (i, cb) in cbs.iter().enumerate() {
-            let mut cb_events = events_by_callback[i].clone();
+        let index = (cbs.len() > 1 && entries.len() > 1).then(|| eventIndex::new(&entries, self));
+        for cb in &cbs {
+            let mut cb_events: Vec<Event> = match index.as_ref().and_then(|index| index.candidates(cb)) {
+                Some(candidates) => candidates.into_iter().filter_map(|i| entries[i].1.event_since(&entries[i].0, cb.since_seq)).collect(),
+                None => entries.iter().filter_map(|(path, e)| e.event_since(path, cb.since_seq)).collect(),
+            };
             if cb.ignore.is_some() || !cb.recursive || cb.dir != self.dir || !cb.file_comparison.path.is_empty() {
                 let mut filtered = Vec::with_capacity(cb_events.len());
                 for e in cb_events {
@@ -1259,6 +1266,75 @@ impl callback {
             return rebase_path(path, &self.watch_dir, &self.watch_physical_dir);
         }
         path.to_string()
+    }
+}
+
+// tsrs-only (`trigger_callbacks`): a dirWatch's pending events by parent directory, so that a non-recursive callback
+// considers only the events in its own directory instead of all of them. Each event is keyed by its display path and
+// by its physical path (the two spaces a callback's filter compares in), folded when the comparer ignores case; a
+// non-ASCII path, which folding would compare through CoreFoundation, is a candidate for every callback. The callback's
+// filter then runs on the candidates unchanged, so the keys only need to cover every event it can accept: a direct
+// child of its directory, or its directory itself.
+struct eventIndex {
+    ignore_case: bool,
+    by_parent: FxHashMap<String, Vec<usize>>,
+    by_path: FxHashMap<String, Vec<usize>>,
+    everyone: Vec<usize>,
+}
+
+impl eventIndex {
+    fn new(entries: &[(String, crate::event::eventEntry)], w: &dirWatch) -> eventIndex {
+        let mut index = eventIndex { ignore_case: w.comparer.ignore_case, by_parent: FxHashMap::default(), by_path: FxHashMap::default(), everyone: Vec::new() };
+        for (i, (path, _)) in entries.iter().enumerate() {
+            let physical = if !w.physical_dir.is_empty() && w.physical_dir != w.dir && is_in_directory_or_self(&w.dir, path) {
+                rebase_path(path, &w.dir, &w.physical_dir)
+            } else {
+                path.clone()
+            };
+            let (Some(display), Some(physical)) = (index.key(path), index.key(&physical)) else {
+                index.everyone.push(i);
+                continue;
+            };
+            for key in [display, physical] {
+                let parent = filepath_dir(&key);
+                let list = index.by_parent.entry(parent).or_default();
+                if list.last() != Some(&i) {
+                    list.push(i);
+                }
+                let list = index.by_path.entry(key).or_default();
+                if list.last() != Some(&i) {
+                    list.push(i);
+                }
+            }
+        }
+        index
+    }
+
+    fn key(&self, path: &str) -> Option<String> {
+        if !self.ignore_case {
+            return Some(path.to_string());
+        }
+        path.is_ascii().then(|| path.to_ascii_lowercase())
+    }
+
+    // The entries `cb` may accept, in entry order; None when it may accept any (a recursive callback, or a directory
+    // the keys cannot express).
+    fn candidates(&self, cb: &callback) -> Option<Vec<usize>> {
+        if cb.recursive {
+            return None;
+        }
+        let mut out: Vec<usize> = self.everyone.clone();
+        for dir in [&cb.dir, &cb.physical_dir] {
+            if dir.is_empty() {
+                continue;
+            }
+            let key = self.key(dir)?;
+            out.extend(self.by_parent.get(&key).into_iter().flatten());
+            out.extend(self.by_path.get(&key).into_iter().flatten());
+        }
+        out.sort_unstable();
+        out.dedup();
+        Some(out)
     }
 }
 

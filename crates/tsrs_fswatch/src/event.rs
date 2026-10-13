@@ -40,7 +40,7 @@ impl Event {
 
 // eventEntry tracks coalescing state during a debounce batch.
 #[derive(Clone, Copy, Default)]
-struct eventEntry {
+pub(crate) struct eventEntry {
     created_seq: u64,
     updated_seq: u64,
     deleted_seq: u64,
@@ -160,12 +160,25 @@ impl eventList {
     }
 
     // event.go:187
+    #[cfg(test)] // only its ported test calls it: trigger_callbacks makes the snapshots outside the lock (`drain_entries`)
     pub(crate) fn drain_for_sequences(&self, start_seqs: &[u64]) -> (Vec<Vec<Event>>, Option<Error>) {
         let mut el = self.mu.lock().unwrap();
         let out = start_seqs.iter().map(|&start_seq| el.snapshot_since_locked(start_seq)).collect();
         let err = el.err.take();
         el.entries = FxHashMap::default();
         (out, err)
+    }
+
+    // tsrs-only: `drain_for_sequences` without the per-callback snapshots, which the caller makes outside the lock
+    // (`dirWatch::trigger_callbacks`): the pending entries and the stored error, and the list cleared.
+    pub(crate) fn drain_entries(&self) -> (Vec<(String, eventEntry)>, Option<Error>) {
+        let mut el = self.mu.lock().unwrap();
+        let entries = std::mem::take(&mut el.entries);
+        let err = el.err.take();
+        drop(el);
+        // order-independent: one entry per path; Go ranges the map too ("Order is not guaranteed")
+        let entries = entries.into_iter().collect();
+        (entries, err)
     }
 
     // event.go:201
@@ -273,6 +286,12 @@ impl eventEntry {
     }
 
     // event.go:256
+    // tsrs-only: the event `snapshot_since_locked` makes of this entry.
+    pub(crate) fn event_since(&self, path: &str, start_seq: u64) -> Option<Event> {
+        let kind = self.kind_since(start_seq)?;
+        Some(Event { kind, path: path.to_string(), included_watch_root: self.included_watch_root })
+    }
+
     fn kind_since(&self, start_seq: u64) -> Option<EventKind> {
         if self.deleted_seq > start_seq {
             if self.created_seq > start_seq && self.created_seq < self.deleted_seq && self.updated_seq < self.deleted_seq {
