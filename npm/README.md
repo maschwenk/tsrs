@@ -15,6 +15,8 @@ also know `win32-x64` (see TODO).
 The main package name is set in `npm/tsrs/package.json`; platform packages are `@ts-rs/<os>-<cpu>` with `-gnu` or
 `-musl` on Linux. The launcher derives that name from the current platform, architecture and libc at runtime.
 
+The repository's root `README.md` is also the main package README. `npm/build.mjs` copies it into the staged package.
+
 ## How the launcher finds the binary
 
 `bin/tsrs` -> `lib/tsrs.js` -> `lib/getExePath.js`:

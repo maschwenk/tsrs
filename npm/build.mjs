@@ -323,7 +323,8 @@ function main() {
         const mainDir = path.join(opts.out, baseName);
         // Only what the package's `files` publishes (plus package.json/README); the .ts sources and tests stay behind.
         fs.mkdirSync(mainDir, { recursive: true });
-        for (const entry of ["README.md", "UPSTREAM.json", ...template.files]) {
+        fs.copyFileSync(path.join(repoRoot, "README.md"), path.join(mainDir, "README.md"));
+        for (const entry of ["UPSTREAM.json", ...template.files]) {
             const from = path.join(npmDir, "tsrs", entry);
             if (!fs.existsSync(from)) continue;
             if (fs.statSync(from).isDirectory()) copyDir(from, path.join(mainDir, entry));
