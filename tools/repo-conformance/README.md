@@ -23,9 +23,9 @@ The harness compares the full ordered output (diagnostics and other lines, such 
 codes, and loaded-file counts with `--noEmit` and fresh build info. It normalizes checkout/compiler paths and CRLF, and
 excludes timing counters. Tracked `tsconfig.json` files are
 checked shallowest first. When neither compiler loads a file for a config, the project references tsgo reports for it
-(`--showConfig`) are checked next. Limits per repo: five projects that load files and ten configs in all; 180
-seconds for setup (60 for cloning); 120 seconds for checking, with at most 60 seconds per compiler per config. tsrs
-is not run when tsgo fails or times out. Timeouts kill child processes too.
+(`--showConfig`) are checked next, if they are inside the checkout. Limits per repo: five projects that load files
+and ten configs in all; 180 seconds for setup (60 for cloning); 120 seconds for checking, with at most 60 seconds per
+compiler per config. tsrs is not run when tsgo fails or times out. Timeouts kill child processes too.
 
 Each project is compared in two modes. Default mode runs both compilers as users do, with no extra flags, so the
 project's own options (including `checkers`) apply to both. Strict mode runs tsgo again with `--checkers 4`, its
@@ -53,12 +53,15 @@ If a shard is lost (for example, its runner shuts down), dispatch the workflow w
 before anything is built, so a malformed request fails rather than starting a full run. The rerun reuses that run's
 manifest, compiler binaries and harness commit (for both checking and the report), checks the same repository commits,
 and reports the rerun shards together with the earlier run's other shards. The manifest must come from that run of
-this workflow and record the same harness version (`HARNESS` in `run.py`); older manifests are refused, including
-those without repository commits. The report leaves out shard reports from other compiler commits, so their
-repositories count as missing, and only merges shard reports with the same limits and mode flags (reports without
-recorded modes are read as default-only), keeps each shard's results to the repositories the manifest assigns it, and
-accepts a result only at the pinned commit; a clone that failed before any checkout is reported as a setup failure
-without one.
+this workflow, built from this repository rather than a fork, and record the same harness version (`HARNESS` in
+`run.py`); other versions are refused, including manifests without repository commits. A rerun only replaces a
+shard that was lost or cut short: when the earlier run's report for that shard covers all its repositories, the
+earlier report is kept and the report fails, and any difference or tsrs failure the earlier partial report recorded
+stays a report error, so rerunning a shard until it matches cannot hide one. The report leaves out shard reports from
+other compiler commits, so their repositories count as missing, and only merges shard reports with the same limits
+and mode flags (reports without recorded modes are read as default-only), keeps each shard's results to the
+repositories the manifest assigns it, and accepts a result only at the pinned commit (a failed clone records the
+commit it tried to fetch).
 
 For a local run, install `corepack@0.36.0`, set `GH_TOKEN` or `GITHUB_TOKEN` for discovery, and build both compilers
 at the manifest's commits. A saved manifest can be reused, and `--previous` adds shards from an earlier run:

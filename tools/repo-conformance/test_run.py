@@ -7,7 +7,7 @@ import tempfile
 import time
 import unittest
 
-from run import (MODES, Context, check_config, check_projects, child_env, compare, difference, execute,
+from run import (HARNESS, MODES, Context, check_config, check_projects, child_env, compare, difference, execute,
                  install_plan, read_compilation, summarize, write_json)
 
 
@@ -154,14 +154,20 @@ class RerunTests(unittest.TestCase):
 
     def test_a_rerun_needs_a_pinned_manifest_from_the_named_run(self):
         sha = "0123456789abcdef0123456789abcdef01234567"
-        manifest = {"harness": 2, "tsrs_commit": sha, "typescript_commit": sha, "shards": 3,
+        manifest = {"harness": HARNESS, "tsrs_commit": sha, "typescript_commit": sha, "shards": 3,
                     "repositories": [{"repository": "a/one", "commit": sha}]}
-        run = {"id": 7, "path": ".github/workflows/repo-conformance.yml", "event": "workflow_dispatch", "head_sha": sha}
+        run = {"id": 7, "path": ".github/workflows/repo-conformance.yml", "event": "workflow_dispatch", "head_sha": sha,
+               "repository": {"full_name": "o/tsrs"}, "head_repository": {"full_name": "o/tsrs"}}
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             for name in ("tsgo", "tsrs"):
                 write_json(root / "inputs" / "bin" / name, {})
+            # A fork pull request's run would run the fork's compilers in this repository's cache scope.
+            fork = {"event": "pull_request", "head_repository": {"full_name": "fork/tsrs"}}
             cases = [({}, {}, "2,0", True), ({"harness": None}, {}, "1", False),
+                     ({"harness": HARNESS - 1}, {}, "1", False),
+                     ({}, {"event": "pull_request", "head_sha": "f" * 40}, "0,2", True), ({}, fork, "1", False),
+                     ({}, {"head_repository": None}, "1", False),
                      ({"repositories": [{"repository": "a/one"}]}, {}, "1", False),
                      ({}, {"head_sha": "f" * 40}, "1", False), ({}, {"path": ".github/workflows/ci.yml"}, "1", False),
                      ({}, {}, "3", False)]
@@ -230,8 +236,8 @@ class ReportTests(unittest.TestCase):
             def report(previous=True):
                 ok = summarize(manifest, root / "rerun", root / "report.md", root / "previous" if previous else None)
                 return ok, (root / "report.md").read_text()
+            # Shard 1 of the earlier run was lost: it left no report.
             write_json(root / "previous" / "shard-0.json", shard(0, ("a/one", "c1", "match"), ("a/three", "c3", "match")))
-            write_json(root / "previous" / "shard-1.json", shard(1, ("a/two", "c2", "mismatch")))
             write_json(root / "rerun" / "shard-1.json", shard(1, ("a/two", "c2", "match")))
             ok, text = report()
             self.assertTrue(ok, text)
@@ -269,6 +275,56 @@ class ReportTests(unittest.TestCase):
             ok, text = report()
             self.assertFalse(ok)
             self.assertIn('unknown comparison modes ["default", "go"]', text)
+
+    def test_a_rerun_cannot_clear_an_earlier_difference_or_replace_a_complete_shard(self):
+        """Rerunning a shard until it matches must not hide a difference or tsrs failure the earlier run recorded."""
+        manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 2,
+                    "repositories": [{"repository": f"a/{n}", "commit": "c" + n} for n in ("1", "2", "3", "4")]}
+        def result(name, default="match", strict="match"):
+            return {"repository": name, "commit": "c" + name[-1], "status": default, "strict_status": strict,
+                    "available_configs": 1, "configs": [{"config": "tsconfig.json", "status": default,
+                                                         "tsgo": {"exit": 0}, "strict": {"status": strict}}]}
+        def shard(index, *results, **fields):
+            return {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": index, "modes": MODES,
+                    **fields, "results": list(results)}
+        cases = [
+            # A partial earlier shard (a/4 was not reached) that recorded a difference in either mode.
+            ("default mismatch", [shard(1, result("a/2", "mismatch", "match"))],
+             "a/2: the earlier run's shard 1", "tsconfig.json: default mismatch; a rerun does not clear it"),
+            ("strict tsrs failure", [shard(1, result("a/2", "match", "tsrs_failed"))],
+             "a/2: the earlier run's shard 1", "tsconfig.json: strict tsrs_failed; a rerun does not clear it"),
+            # A report from before strict mode, without modes or strict results.
+            ("legacy tsrs failure", [{"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shard": 1, "results": [
+                {"repository": "a/2", "commit": "c2", "status": "tsrs_failed", "configs": [
+                    {"config": "tsconfig.json", "status": "tsrs_failed", "tsgo": {"exit": 0}}]}]}],
+             "a/2: the earlier run's shard 1", "tsconfig.json: default tsrs_failed"),
+            # A complete earlier shard is kept with its difference, and the rerun is refused.
+            ("complete shard", [shard(1, result("a/2", "mismatch"), result("a/4"))],
+             "Shard 1 was complete in the earlier run", "| [a/2](https://github.com/a/2) | `c2` | mismatch | match |"),
+            ("complete clean shard", [shard(1, result("a/2"), result("a/4"))],
+             "Shard 1 was complete in the earlier run", "a rerun replaces only lost or partial shards"),
+            # Two artifacts claim the earlier shard 1; neither is silently picked.
+            ("duplicate earlier shard", [shard(1, result("a/2")), shard(1, result("a/2", "mismatch"))],
+             "duplicate or unexpected shard 1", ""),
+            # The only acceptable recovery: a partial earlier shard without differences.
+            ("clean partial shard", [shard(1, result("a/2"))], None, None),
+        ]
+        for label, earlier, error, evidence in cases:
+            with self.subTest(label), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                write_json(root / "previous" / "repo-conformance-shard-0" / "shard-0.json",
+                           shard(0, result("a/1"), result("a/3")))
+                for n, report in enumerate(earlier):
+                    write_json(root / "previous" / f"copy-{n}" / "shard-1.json", report)
+                write_json(root / "rerun" / "repo-conformance-shard-1" / "shard-1.json",
+                           shard(1, result("a/2"), result("a/4")))
+                ok = summarize(manifest, root / "rerun", root / "report.md", root / "previous")
+                text = (root / "report.md").read_text()
+                self.assertEqual(ok, error is None, text)
+                if error:
+                    self.assertIn(error, text)
+                    self.assertIn(evidence, text)
+                self.assertIn("4 of 4 repositories have a result", text)
 
     def test_empty_projects_fail_a_run_with_no_comparisons(self):
         manifest = {"tsrs_commit": "rust-pin", "typescript_commit": "go-pin", "shards": 1,
@@ -308,9 +364,13 @@ class CompilerControls(unittest.TestCase):
     def test_solution_configs_compare_their_references_and_count_only_loaded_projects(self):
         tsrs = Path(os.environ["TSRS_CONFORMANCE_TSRS"]).resolve()
         tsgo = Path(os.environ["TSRS_CONFORMANCE_TSGO"]).resolve()
-        with tempfile.TemporaryDirectory() as temp:
+        with tempfile.TemporaryDirectory() as temp, tempfile.TemporaryDirectory() as host:
             root = Path(temp)
-            write_json(root / "tsconfig.json", {"files": [], "references": [{"path": "./tsconfig.app.json"}, {"path": "lib"}]})
+            # An absolute reference to a config outside the checkout is not followed.
+            write_json(Path(host) / "tsconfig.json", {"files": ["a.ts"]})
+            (Path(host) / "a.ts").write_text("export {};\n")
+            references = [{"path": "./tsconfig.app.json"}, {"path": "lib"}, {"path": str(Path(host).resolve())}]
+            write_json(root / "tsconfig.json", {"files": [], "references": references})
             write_json(root / "tsconfig.app.json", {"compilerOptions": {"strict": True}, "files": ["app.ts"]})
             write_json(root / "lib" / "tsconfig.json", {"compilerOptions": {"composite": True}, "files": ["lib.ts"]})
             write_json(root / "empty" / "tsconfig.json", {"files": []})

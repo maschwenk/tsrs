@@ -41,9 +41,10 @@ NAME = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
 SHA = re.compile(r"[0-9a-f]{40}\Z")
 WORKFLOW = ".github/workflows/repo-conformance.yml"
 MAX_SHARDS = 20
-# Recorded in manifests. A rerun's workflow comes from the dispatch commit but runs the manifest's harness, so bump
-# this when the workflow's arguments to run.py change; reruns of other versions are refused.
-HARNESS = 2
+# Recorded in manifests. A rerun's workflow comes from the dispatch commit but runs the manifest's harness (including
+# its report), so bump this when the workflow's arguments to run.py change or when a rerun's report could merge shards
+# differently; reruns of other versions are refused.
+HARNESS = 3
 
 
 def write_json(path: Path, data: object) -> None:
@@ -350,7 +351,7 @@ def project_references(root: Path, config: str, ctx: Context, log: Path, timeout
         path = os.path.normpath(os.path.join(os.path.dirname(config), reference.get("path", "")))
         if not path.endswith(".json"):
             path = os.path.join(path, "tsconfig.json")
-        if not path.startswith("..") and (root / path).is_file():
+        if not os.path.isabs(path) and not path.startswith("..") and (root / path).is_file():
             paths.append(Path(path).as_posix())
     return paths
 
@@ -503,7 +504,7 @@ def load_shards(directory: Path, manifest: dict, errors: list[str]) -> dict[int,
         if outside:
             errors.append(f"{path}: results for repositories outside shard {shard}: {', '.join(outside)}")
         report["results"] = [r for r in report["results"] if r["repository"] in expected]
-        reports[shard] = report
+        reports[shard] = dict(report, path=str(path))
     return reports
 
 
@@ -535,6 +536,44 @@ def command(flags: list[str]) -> str:
     return " ".join(flags) or "no extra flags"
 
 
+def at_pin(result: dict, pinned: dict[str, str | None]) -> bool:
+    # A clone that failed before checking anything out is the only result without the pinned commit.
+    unchecked = result.get("commit") is None and result["status"] == "setup_failed" and not result["configs"]
+    pin = pinned[result["repository"]]
+    return not pin or result.get("commit") == pin or unchecked
+
+
+def differences(result: dict) -> list[str]:
+    """Each project's default or strict difference or tsrs failure, as "config: mode status"."""
+    found = [f"{config['config']}: {mode} {entry['status']}"
+             for config in result.get("configs", [])
+             for mode, entry in (("default", config), ("strict", config.get("strict") or {}))
+             if entry.get("status") in ("mismatch", "tsrs_failed")]
+    return found or [f"{mode} {result[key]}" for mode, key in (("default", "status"), ("strict", "strict_status"))
+                     if result.get(key) in ("mismatch", "tsrs_failed")]
+
+
+def replace_shards(reports: dict[int, dict], earlier: dict[int, dict], manifest: dict, pinned: dict[str, str | None],
+                   errors: list[str]) -> None:
+    """Fill reports with the earlier run's shards. A rerun only replaces a shard that was lost or cut short: a complete
+    earlier shard is kept and the rerun refused, and differences and tsrs failures already recorded for a partial
+    shard stay errors, so rerunning cannot clear them."""
+    for shard, report in sorted(earlier.items()):
+        if shard not in reports:
+            reports[shard] = report
+            continue
+        assigned = {r["repository"] for r in manifest["repositories"][shard::manifest["shards"]]}
+        if assigned <= {r["repository"] for r in report["results"]}:
+            errors.append(f"Shard {shard} was complete in the earlier run ({report['path']}); a rerun replaces only "
+                          "lost or partial shards, so the earlier report is kept")
+            reports[shard] = report
+            continue
+        for result in report["results"]:
+            if at_pin(result, pinned) and differences(result):
+                errors.append(f"{result['repository']}: the earlier run's shard {shard} ({report['path']}) recorded "
+                              f"{', '.join(differences(result))}; a rerun does not clear it")
+
+
 def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None = None) -> bool:
     """Write the report. Shards missing from directory are taken from previous, a run with the same manifest."""
     pinned = {r["repository"]: r.get("commit") for r in manifest["repositories"]}
@@ -542,8 +581,7 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
     reports = load_shards(directory, manifest, errors)
     current = dict(reports)
     if previous:
-        recovered = load_shards(previous, manifest, errors)
-        reports.update((shard, report) for shard, report in recovered.items() if shard not in reports)
+        replace_shards(reports, load_shards(previous, manifest, errors), manifest, pinned, errors)
     if reports:
         base = min(current or reports)
         for shard, report in sorted(reports.items()):
@@ -557,11 +595,9 @@ def summarize(manifest: dict, directory: Path, out: Path, previous: Path | None 
     for report in reports.values():
         for result in report["results"]:
             name = result["repository"]
-            # A clone that failed before checking anything out is the only result without the pinned commit.
-            unchecked = result.get("commit") is None and result["status"] == "setup_failed" and not result["configs"]
             if name in results:
                 errors.append(f"Duplicate result for {name}")
-            elif pinned[name] and result.get("commit") != pinned[name] and not unchecked:
+            elif not at_pin(result, pinned):
                 errors.append(f"{name}: checked {result.get('commit')}, manifest pins {pinned[name]}")
             else:
                 results[name] = result
@@ -662,6 +698,10 @@ def check_rerun(manifest: dict, shards: str, run: dict, inputs: Path) -> list[in
         raise ValueError("The manifest does not pin the compiler commits")
     if str(run.get("path", "")).split("@")[0] != WORKFLOW:
         raise ValueError(f"Run {run.get('id')} is not a {WORKFLOW} run")
+    # A fork pull request's compilers would run here and their cache would be saved for later runs to restore.
+    head, base = ((run.get(key) or {}).get("full_name") for key in ("head_repository", "repository"))
+    if not head or head != base:
+        raise ValueError(f"Run {run.get('id')} was built from {head}, not {base}")
     # A pull request run's manifest names the merge commit it checked out, not the run's head.
     if run.get("event") != "pull_request" and run.get("head_sha") != manifest["tsrs_commit"]:
         raise ValueError(f"Run {run.get('id')} is at {run.get('head_sha')}, the manifest at {manifest['tsrs_commit']}")
