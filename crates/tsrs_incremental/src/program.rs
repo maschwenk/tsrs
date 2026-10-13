@@ -151,6 +151,69 @@ impl Program {
         self.program
     }
 
+    /// tsrs-only: replaces the signatures that stand in for a file's declaration shape with the signature of its
+    /// declaration output. The stand-in is the file's version: the initial build stores one for every file, and
+    /// `handle_dts_may_change_of` stores one for each file it invalidates without computing its declarations. The
+    /// next edit of such a file compares its new declaration signature with the version, which always differs, and
+    /// so invalidates every file importing it, transitively: about 5 s of rechecking on a 9.4k-file project after an
+    /// edit that changed no declaration. With the real signature only a changed declaration shape does that.
+    ///
+    /// Does nothing while a change is pending (a non-empty changed file set). Otherwise every file has been checked
+    /// against this program or is queued to be, so the files that depend on a file saw its current declaration
+    /// shape, which is what a builder that always computed the signatures would hold. Emits `chunk` files at a time
+    /// and returns between chunks once `ctx` is cancelled; the signatures stored until then stand. Must not run
+    /// concurrently with anything else that uses this program or its snapshot. Returns the number of signatures
+    /// stored.
+    pub fn compute_placeholder_signatures(&self, ctx: &Context, chunk: usize) -> usize {
+        let snapshot = self.snapshot;
+        if !snapshot.can_use_incremental_state() || snapshot.changed_files_set.size() != 0 || ctx.err().is_some() {
+            return 0;
+        }
+        let program = self.p();
+        let files: Vec<P<SourceFile>> = program
+            .get_source_files()
+            .iter()
+            .copied()
+            .filter(|&file| {
+                !file.is_declaration_file()
+                    && !tsrs_ast::is_json_source_file(file)
+                    && snapshot.file_infos.load(file.path()).is_some_and(|info| info.signature == info.version)
+            })
+            .collect();
+        let stored = std::sync::atomic::AtomicUsize::new(0);
+        let write_file = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
+            if !tspath::is_declaration_file_name(file_name) {
+                panic!("File extension for signature expected to be dts, got : {file_name}");
+            }
+            let file = data.source_file.expect("declaration output of a source file");
+            let signature = snapshot.compute_signature_with_diagnostics(file, text, data);
+            if let Some(mut info) = snapshot.file_infos.load(file.path())
+                && !signature.is_empty()
+                && info.signature == info.version
+            {
+                info.signature = signature;
+                snapshot.file_infos.store(file.path().clone(), info);
+                // Relaxed: a count, read once the emit has joined the threads that run this.
+                stored.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            Ok(())
+        };
+        for files in files.chunks(chunk.max(1)) {
+            if ctx.err().is_some() {
+                break;
+            }
+            program.emit(
+                ctx,
+                &EmitOptions { target_source_files: Some(files.to_vec()), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
+            );
+        }
+        let stored = stored.into_inner();
+        if stored > 0 {
+            snapshot.build_info_emit_pending.set(true);
+        }
+        stored
+    }
+
     pub fn get_program(&self) -> &'static CompilerProgram {
         self.panic_if_no_program("GetProgram");
         self.program.unwrap()

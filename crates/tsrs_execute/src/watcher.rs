@@ -84,12 +84,17 @@ impl CompilerHost for watchCompilerHost {
     }
 }
 
+// Files per declaration emit of `start_signature_job`: what a new cycle may wait for once it cancels the job.
+const SIGNATURE_JOB_CHUNK: usize = 256;
+
 pub struct Watcher {
     sys: &'static dyn System,
     // tsrs-only: what the programs since the last full build share (`install_program`).
     shared_program_data: Option<tsrs_compiler::SharedProgramData>,
     // Frees what the last `install_program` replaced, once the cycle has reported (`free_replaced_program`).
     free_replaced: Option<Box<dyn FnOnce() + Send>>,
+    // The background computation of the program's placeholder signatures (`start_signature_job`).
+    signature_job: Option<(tsrs_core::context::CancelFunc, std::thread::JoinHandle<()>)>,
     config_file_name: String,
     config: P<ParsedCommandLine>,
     compiler_options_from_command_line: P<CompilerOptions>,
@@ -158,6 +163,7 @@ pub(crate) fn run_watcher(
         sys,
         shared_program_data: None,
         free_replaced: None,
+        signature_job: None,
         config_file_name: config.config_file.map(|f| f.source_file.file_name().to_string()).unwrap_or_default(),
         config,
         compiler_options_from_command_line,
@@ -337,6 +343,7 @@ impl Watcher {
 
     /// Go `DoCycle`.
     pub fn do_cycle(&mut self) {
+        self.stop_signature_job();
         let wm = Arc::clone(&self.wm);
         let mut state = wm.lock();
 
@@ -471,6 +478,7 @@ impl Watcher {
                 self.config_modified = false;
                 self.report_error_count(result.diagnostics.len());
                 self.free_replaced_program();
+                self.start_signature_job();
                 if let Some(testing) = self.testing {
                     testing.on_program(self.program.unwrap());
                 }
@@ -533,6 +541,7 @@ impl Watcher {
 
         self.report_error_count(result.diagnostics.len());
         self.free_replaced_program();
+        self.start_signature_job();
         if let Some(testing) = self.testing {
             testing.on_program(self.program.unwrap());
         }
@@ -623,6 +632,39 @@ impl Watcher {
             // A cycle that ended early (a watch error) left its free pending.
             self.free_replaced_program();
             self.free_replaced = Some(Box::new(free));
+        }
+    }
+
+    // tsrs-only: while the watch waits for the next change, replaces the placeholder signatures of the program's
+    // snapshot with declaration signatures (tsrs_incremental `Program::compute_placeholder_signatures`), so that
+    // the next edit of a file whose declarations do not change rechecks that file instead of everything importing
+    // it. The next cycle cancels the computation and waits for the chunk in progress (`stop_signature_job`). The
+    // test harness leaves the placeholders, as Go does, for deterministic runs.
+    fn start_signature_job(&mut self) {
+        if self.testing.is_some() {
+            return;
+        }
+        let Some(program) = self.program else { return };
+        let (ctx, cancel) = tsrs_compiler::Context::default().with_cancel();
+        let wm = Arc::clone(&self.wm);
+        let job = std::thread::Builder::new()
+            .name("tsrs-signatures".to_string())
+            .spawn(move || {
+                let start = std::time::Instant::now();
+                let stored = program.compute_placeholder_signatures(&ctx, SIGNATURE_JOB_CHUNK);
+                if let Some(log) = wm.debug_log() {
+                    let state = if ctx.err().is_some() { "canceled" } else { "done" };
+                    log(&format!("[watch] stored {stored} declaration signature(s) in {:?} ({state})\n", start.elapsed()));
+                }
+            })
+            .expect("failed to spawn a thread");
+        self.signature_job = Some((cancel, job));
+    }
+
+    fn stop_signature_job(&mut self) {
+        if let Some((cancel, job)) = self.signature_job.take() {
+            cancel.call();
+            job.join().expect("the signature computation panicked");
         }
     }
 
