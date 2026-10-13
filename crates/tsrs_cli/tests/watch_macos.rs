@@ -179,3 +179,50 @@ fn edits_through_a_symlinked_directory(args: &[&str]) {
     let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::remove_dir_all(&shared);
 }
+
+// A project whose build is mostly checking: its files are read within the first few percent of the build.
+fn slow_to_check_project(name: &str) -> PathBuf {
+    let mut files = vec![("tsconfig.json".to_string(), TSCONFIG.to_string()), ("src/a.ts".to_string(), "export const a = 1;\n".to_string())];
+    files.extend((0..1500).map(|i| {
+        (format!("src/f{i}.ts"), format!("type T{i}<N extends number, A extends any[] = []> = A[\"length\"] extends N ? A : T{i}<N, [...A, 0]>;\nexport const x{i}: T{i}<900>[\"length\"] = 900;\n"))
+    }));
+    let files: Vec<(&str, &str)> = files.iter().map(|(p, c)| (p.as_str(), c.as_str())).collect();
+    project(name, &files)
+}
+
+fn an_edit_during_the_first_build_is_seen(args: &[&str]) {
+    let dir = slow_to_check_project(&format!("during-{}", args[0].trim_start_matches('-')));
+    let started = std::time::Instant::now();
+    assert!(fresh(&dir).is_empty());
+    let build_time = started.elapsed();
+
+    // The edit must land after the first build read a.ts and before its watches exist: when the first report already
+    // has the edit's error, it was too early, so try again later in the build.
+    for fraction in [0.4, 0.6, 0.8, 0.9] {
+        std::fs::write(dir.join("src/a.ts"), "export const a = 1;\n").unwrap();
+        std::thread::sleep(Duration::from_millis(300));
+        let mut watch = Watch::spawn(&dir, args);
+        std::thread::sleep(build_time.mul_f64(fraction));
+        std::fs::write(dir.join("src/a.ts"), format!("export const a = 1;{ERR}")).unwrap();
+        if !watch.next_cycle().is_empty() {
+            continue;
+        }
+        let errors = watch.next_cycle();
+        assert_eq!(errors, fresh(&dir));
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        drop(watch);
+        let _ = std::fs::remove_dir_all(&dir);
+        return;
+    }
+    panic!("every edit landed before the first build read the file");
+}
+
+#[test]
+fn an_edit_during_the_first_build_is_seen_by_watch() {
+    an_edit_during_the_first_build_is_seen(&["--watch", "-p", "."]);
+}
+
+#[test]
+fn an_edit_during_the_first_build_is_seen_by_build_watch() {
+    an_edit_during_the_first_build_is_seen(&["-b", ".", "--watch"]);
+}

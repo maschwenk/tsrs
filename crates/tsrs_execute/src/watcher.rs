@@ -232,6 +232,30 @@ impl Watcher {
         if self.do_build(&mut state).is_err() {
             wm.force_overflow();
         }
+        if self.testing.is_none() {
+            self.queue_files_changed_during_build();
+        }
+    }
+
+    // tsrs-only: the watches start after the first build, so a file saved while that build ran (after it was read)
+    // has no event; Go misses the edit until the next save (tsgo too). A file whose modification time is no longer
+    // the one it was parsed at is queued as a change, and the first cycle picks it up. One stat per source file
+    // (about 15 ms for 9k files), once.
+    fn queue_files_changed_during_build(&self) {
+        let fs = self.sys.fs();
+        let mut changed: Vec<String> = Vec::new();
+        for path in self.source_file_cache.keys() {
+            let Some(cached) = self.source_file_cache.load(&path) else { continue };
+            let file_name = cached.file.file_name();
+            if fs.stat(file_name).map(|s| s.mod_time()) != Some(cached.mod_time) {
+                changed.push(file_name.to_string());
+            }
+        }
+        if !changed.is_empty() {
+            changed.sort();
+            self.wm.debug(|| format!("[watch] {} file(s) changed during the build: {}\n", changed.len(), changed.join(", ")));
+            self.wm.queue_changes(changed);
+        }
     }
 
     fn new_compiler_host(&self, fs: Arc<dyn FS>) -> Arc<dyn CompilerHost> {

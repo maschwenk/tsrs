@@ -142,6 +142,18 @@ impl WatchManager {
         (changed.paths.take().unwrap_or_default(), std::mem::take(&mut changed.overflow))
     }
 
+    /// tsrs-only: records `paths` as updated, as if their events had arrived, and starts a cycle.
+    pub fn queue_changes(&self, paths: Vec<String>) {
+        {
+            let mut changed = self.changed();
+            let map = changed.paths.get_or_insert_with(FxHashMap::default);
+            for path in paths {
+                map.insert(path, EventKind::Update);
+            }
+        }
+        self.signal_do_cycle();
+    }
+
     /// Go `ForceOverflow`.
     pub fn force_overflow(&self) {
         self.changed().overflow = true;

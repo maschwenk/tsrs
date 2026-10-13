@@ -472,9 +472,11 @@ impl Orchestrator {
             }
             order.pop();
         }
+        // tsrs-only (`queue_files_changed_since`): when the first build started.
+        let build_started = std::time::SystemTime::now();
         let result = self.build_or_clean_order(&order);
         if watch {
-            self.watch();
+            self.watch(build_started);
         }
         result
     }
@@ -684,7 +686,7 @@ impl Orchestrator {
     }
 
     // orchestrator.go:473 Watch
-    fn watch(&'static self) {
+    fn watch(&'static self, build_started: std::time::SystemTime) {
         {
             let mut state = self.wm.lock();
             if self.opts.testing.is_none() {
@@ -700,7 +702,39 @@ impl Orchestrator {
             self.free_unreachable_watch_files();
         }
         if self.opts.testing.is_none() {
+            self.queue_files_changed_since(build_started);
             self.wm.run_loop(|| self.do_cycle());
+        }
+    }
+
+    // tsrs-only: the watches start after the first build, so a file saved while that build ran (after it was read)
+    // has no event; Go misses the edit until the next save (tsgo too). A program file modified since the build
+    // started is queued as a change, and the first cycle checks it again. One stat per source file, once.
+    fn queue_files_changed_since(&self, build_started: std::time::SystemTime) {
+        let fs = CompilerHost::fs(self.host());
+        let order = self.order.lock().unwrap().clone();
+        let tasks: Vec<P<BuildTask>> = order.iter().map(|config| self.get_task(&self.to_path(config))).collect();
+        // The build wrote the outputs a downstream project reads (a reference's declarations): not edits.
+        let outputs: FxHashSet<Path> =
+            tasks.iter().filter_map(|task| task.resolved_opt()).flat_map(|resolved| resolved.get_output_file_names()).map(|f| self.to_path(&f)).collect();
+        let mut changed: Vec<String> = Vec::new();
+        for task in &tasks {
+            let Some(program) = task.watch_program() else { continue };
+            changed.extend(
+                program
+                    .get_source_files()
+                    .iter()
+                    .filter(|file| !outputs.contains(file.path()))
+                    .map(|file| file.file_name())
+                    .filter(|file_name| fs.stat(file_name).and_then(|s| s.mod_time()).is_some_and(|m| m > build_started))
+                    .map(str::to_string),
+            );
+        }
+        if !changed.is_empty() {
+            changed.sort();
+            changed.dedup();
+            self.wm.debug(|| format!("[watch] {} file(s) changed during the build: {}\n", changed.len(), changed.join(", ")));
+            self.wm.queue_changes(changed);
         }
     }
 

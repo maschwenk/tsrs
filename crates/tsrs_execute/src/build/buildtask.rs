@@ -413,6 +413,11 @@ impl BuildTask {
     // buildtask.go:821
     // tsrs-only (watch mode): makes `program` the task's program and frees the one it built last. Nothing else holds
     // that one: the cycle that built it has reported, and the next build reads the old state from the build info.
+    // tsrs-only: the program of the task's last build in watch mode.
+    pub(crate) fn watch_program(&self) -> Option<&'static tsrs_compiler::Program> {
+        *self.watch_program.lock().unwrap()
+    }
+
     fn replace_watch_program(&self, orchestrator: &Orchestrator, program: &'static tsrs_compiler::Program) {
         // Bind before any checker exists: single-threaded, the first checker would bind the files in its region, and
         // later cycles reuse the parsed files (host.rs `get_watch_source_file`).
