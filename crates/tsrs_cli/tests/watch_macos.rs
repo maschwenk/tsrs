@@ -277,3 +277,26 @@ fn a_metadata_change_starts_no_cycle() {
     drop(watch);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+// The process's interrupt wakeups so far (what Activity Monitor's "Idle Wake Ups" counts).
+fn wakeups(pid: u32) -> u64 {
+    let mut info = std::mem::MaybeUninit::<libc::rusage_info_v4>::zeroed();
+    // SAFETY: `info` is a rusage_info_v4, the struct RUSAGE_INFO_V4 fills.
+    let r = unsafe { libc::proc_pid_rusage(pid as i32, libc::RUSAGE_INFO_V4, info.as_mut_ptr().cast()) };
+    assert_eq!(r, 0, "proc_pid_rusage");
+    // SAFETY: filled above.
+    unsafe { info.assume_init() }.ri_interrupt_wkups
+}
+
+#[test]
+fn an_idle_watch_does_not_wake_up() {
+    let dir = project("idle", &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n")]);
+    let mut watch = Watch::start(&dir);
+    watch.assert_idle(Duration::from_millis(500));
+    let before = wakeups(watch.child.id());
+    watch.assert_idle(Duration::from_secs(3));
+    let woke = wakeups(watch.child.id()) - before;
+    assert!(woke <= 1, "{woke} wakeups in 3 s of idling");
+    drop(watch);
+    let _ = std::fs::remove_dir_all(&dir);
+}

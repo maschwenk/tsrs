@@ -7,7 +7,6 @@
 
 use std::fmt::Write as _;
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::time::Duration;
 
 use rustc_hash::FxHashMap;
 use tsrs_core::tspath::{self, ComparePathsOptions};
@@ -370,7 +369,8 @@ impl WatchManager {
                         self.close_all_watches();
                         return;
                     }
-                    pending = self.do_cycle_cv.wait_timeout(pending, Duration::from_secs(1)).unwrap_or_else(|e| e.into_inner()).0;
+                    // No timeout: an idle watch must not wake up (Go selects on its channels too); `stop` notifies.
+                    pending = self.do_cycle_cv.wait(pending).unwrap_or_else(|e| e.into_inner());
                 }
                 *pending = false;
             }
@@ -381,6 +381,9 @@ impl WatchManager {
     /// Ends `run_loop` (Go: cancelling the context).
     pub fn stop(&self) {
         *self.stopped.lock().unwrap_or_else(|e| e.into_inner()) = true;
+        // Under `do_cycle`'s lock: `run_loop` checks `stopped` and starts waiting while it holds it, so the notification
+        // cannot fall between the two.
+        let _pending = self.do_cycle.lock().unwrap_or_else(|e| e.into_inner());
         self.do_cycle_cv.notify_all();
     }
 }
