@@ -68,7 +68,7 @@ pub(crate) fn new_api_session(flags: &ApiFlags) -> Result<(Arc<Session>, Arc<Cal
     let config = CallbackConfig::parse(&flags.callbacks)?;
     let callback_fs = Arc::new(CallbackFs::new(base, &config, Some(flags.case_sensitive)));
     let fs: Arc<dyn FS> = Arc::<CallbackFs>::clone(&callback_fs);
-    let mut options = SessionOptions::new(flags.cwd.clone(), bundled::lib_path(), fs, !flags.is_async);
+    let mut options = SessionOptions::new(flags.cwd.clone(), bundled::default_lib_path(), fs, !flags.is_async);
     options.run_external_code = flags.run_external_code;
     let session = Session::new(options);
     session.set_build_backend(Arc::new(CliBuildBackend));
@@ -117,6 +117,9 @@ pub fn run_api(args: &[String]) -> i32 {
     }
     let mut options = transport::ServeOptions::new(flags.is_async);
     options.collect_timing = flags.timing;
+    // signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM); main started catching the signals.
+    let shutdown = options.shutdown.clone();
+    crate::signals::on_interrupt(move || shutdown.cancel());
     let pipe = (!flags.pipe_path.is_empty()).then(|| std::path::PathBuf::from(&flags.pipe_path));
     let result = transport::serve(pipe.as_deref(), options, |caller| {
         let (session, callback_fs) = new_api_session(&flags).expect("callbacks validated above");

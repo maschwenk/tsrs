@@ -87,7 +87,7 @@ impl AsyncConn {
             writer: Mutex::new(writer),
             handler,
             timing: options.collect_timing.then(TimingCollector::default),
-            cancel: CancellationToken::new(),
+            cancel: options.shutdown.child(),
             seq: AtomicU64::new(0),
             pending: Mutex::new(Pending::default()),
             request_error: Mutex::new(None),

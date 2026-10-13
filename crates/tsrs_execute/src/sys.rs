@@ -39,11 +39,11 @@ impl System for osSys {
     }
 
     fn write(&self, text: &str) {
-        let _ = self.writer.lock().unwrap().write_all(text.as_bytes());
+        exit_on_broken_pipe(&self.writer.lock().unwrap().write_all(text.as_bytes()));
     }
 
     fn flush(&self) {
-        let _ = self.writer.lock().unwrap().flush();
+        exit_on_broken_pipe(&self.writer.lock().unwrap().flush());
     }
 
     fn write_output_is_tty(&self) -> bool {
@@ -60,6 +60,24 @@ impl System for osSys {
     }
 }
 
+// Go's sys.Writer() is os.Stdout, and the Go runtime ends a program whose write to file descriptor 1 or 2 fails
+// with EPIPE by SIGPIPE (os/signal: "If the program is not calling signal.Notify ... a write to a broken pipe on file
+// descriptors 1 or 2 will cause the program to exit with a SIGPIPE signal"), so `tsc | head` stops tsc with status
+// 141. Rust ignores SIGPIPE; this restores the default action and raises it. Other write errors are ignored, as Go's
+// fmt.Fprint callers do.
+fn exit_on_broken_pipe(result: &std::io::Result<()>) {
+    if !matches!(result, Err(err) if err.kind() == std::io::ErrorKind::BrokenPipe) {
+        return;
+    }
+    #[cfg(unix)]
+    // SAFETY: signal and raise take integer arguments only; the default action of SIGPIPE ends the process.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+        libc::raise(libc::SIGPIPE);
+    }
+    std::process::exit(crate::tsc::ExitStatus::DiagnosticsPresent_OutputsSkipped as i32);
+}
+
 pub fn new_system() -> osSys {
     let cwd = match std::env::current_dir() {
         Ok(cwd) => cwd,
@@ -72,21 +90,8 @@ pub fn new_system() -> osSys {
     osSys {
         cwd: tspath::normalize_path(&cwd.to_string_lossy()),
         fs: Arc::new(bundled::wrap_fs(osvfs::fs())),
-        default_library_path: default_library_path(),
+        default_library_path: bundled::default_lib_path(),
         writer: Mutex::new(std::io::BufWriter::new(std::io::stdout())),
         start: Instant::now(),
     }
-}
-
-// Go's embedded build reads the default libraries from `bundled:///libs`; its `noembed` build (the npm `tsgo`)
-// reads them from the executable's directory, which changes path-sorted tsbuildinfo fields. tsrs-only:
-// TSRS_LIB_PATH=<dir containing lib.d.ts> behaves like the noembed build (the emit oracles point it at tsgo's
-// directory when comparing tsbuildinfo with the npm tsgo).
-fn default_library_path() -> String {
-    if let Ok(dir) = std::env::var("TSRS_LIB_PATH") {
-        if !dir.is_empty() {
-            return tspath::normalize_path(&dir);
-        }
-    }
-    bundled::lib_path()
 }

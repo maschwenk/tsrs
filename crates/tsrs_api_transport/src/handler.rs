@@ -10,19 +10,28 @@ use crate::message::{ApiError, Response, TransportError};
 /// loop exits (EOF, protocol error, or a fatal write error), mirroring the cancelled handler
 /// context in ipc.AsyncConn.Run. Long-running handlers should poll it between units of work.
 #[derive(Clone, Debug, Default)]
-pub struct CancellationToken(Arc<AtomicBool>);
+pub struct CancellationToken {
+    cancelled: Arc<AtomicBool>,
+    /// Go's parent context: cancelling it cancels this token, but not the other way round.
+    parent: Option<Arc<CancellationToken>>,
+}
 
 impl CancellationToken {
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// context.WithCancel(parent).
+    pub fn child(self) -> Self {
+        CancellationToken { cancelled: Arc::default(), parent: Some(Arc::new(self)) }
+    }
+
     pub fn cancel(&self) {
-        self.0.store(true, Ordering::SeqCst);
+        self.cancelled.store(true, Ordering::SeqCst);
     }
 
     pub fn is_cancelled(&self) -> bool {
-        self.0.load(Ordering::SeqCst)
+        self.cancelled.load(Ordering::SeqCst) || self.parent.as_ref().is_some_and(|p| p.is_cancelled())
     }
 }
 

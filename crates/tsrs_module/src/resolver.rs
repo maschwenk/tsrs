@@ -1,6 +1,7 @@
 use std::fmt;
 
 use tsrs_ast::Diagnostic;
+use tsrs_core::PathSubstitutions;
 use tsrs_core::collections::{new_set_with_size_hint, OrderedMap, Set};
 use tsrs_core::tspath::{self, ComparePathsOptions};
 use tsrs_core::{
@@ -1519,7 +1520,7 @@ impl<'r> ResolutionState<'r> {
         extensions: Extensions,
         module_name: &str,
         containing_directory: &str,
-        paths: &OrderedMap<String, Vec<String>>,
+        paths: &OrderedMap<String, impl PathSubstitutions>,
         path_patterns: &ParsedPatterns,
         loader: ResolutionKindSpecificLoader<'_, 'r>,
     ) -> Option<Resolved> {
@@ -1527,8 +1528,7 @@ impl<'r> ResolutionState<'r> {
         if matched_pattern.is_valid() {
             let matched_star = matched_pattern.matched_text(module_name);
             trace!(self.tracer, diagnostics::Module_name_0_matched_pattern_1, module_name, matched_pattern.text);
-            let empty = Vec::new();
-            for subst in paths.get(matched_pattern.text.as_str()).unwrap_or(&empty) {
+            for subst in paths.get(matched_pattern.text.as_str()).map_or(&[][..], PathSubstitutions::substitutions) {
                 let path = subst.replacen('*', &matched_star, 1);
                 let candidate = tspath::normalize_path(&tspath::combine_paths(containing_directory, &[&path]));
                 trace!(self.tracer, diagnostics::Trying_substitution_0_candidate_module_location_Colon_1, subst, path);
@@ -2325,7 +2325,7 @@ impl DefaultResolver {
     }
 }
 
-pub fn try_parse_patterns(path_mappings: Option<&OrderedMap<String, Vec<String>>>) -> ParsedPatterns {
+pub fn try_parse_patterns<V>(path_mappings: Option<&OrderedMap<String, V>>) -> ParsedPatterns {
     let paths: Vec<&String> = match path_mappings {
         Some(m) => m.keys().collect(),
         None => Vec::new(),

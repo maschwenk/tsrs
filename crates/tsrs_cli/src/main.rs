@@ -67,6 +67,7 @@ unsafe impl std::alloc::GlobalAlloc for MiMalloc {
 mod census;
 mod api;
 mod lsp;
+mod signals;
 
 use tsrs_execute::{build, execute, sys, tsc};
 
@@ -143,11 +144,13 @@ fn main() {
     // main.go:21: `--lsp` runs the language server (its threads have their own stacks); `--api` runs the
     // native API server (docs/NODE_API.md).
     if args.first().map(String::as_str) == Some("--lsp") {
+        signals::notify_interrupts();
         std::process::exit(lsp::run_lsp(&args[1..]));
     }
     if args.first().map(String::as_str) == Some("--api") {
         // Checking recurses deeply; serve requests on a large stack like the command line below.
         let rest = args[1..].to_vec();
+        signals::notify_interrupts();
         let status = std::thread::Builder::new().stack_size(512 << 20).spawn(move || api::run_api(&rest)).unwrap().join().unwrap_or(1);
         std::process::exit(status);
     }
