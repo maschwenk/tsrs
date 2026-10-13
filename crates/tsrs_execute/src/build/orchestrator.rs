@@ -454,11 +454,11 @@ impl Orchestrator {
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
         let content_mapper_host = tsc::new_content_mapper_host(self.opts.sys, &self.opts.command.compiler_options);
         self.content_mapper_host.lock().unwrap().clone_from(&content_mapper_host);
-        // A watch keeps the host for its cycles, as --watch does (watcher.rs `content_mapper_host`). tsrs-only: Go also
-        // closes it here when the watch is not under test, when the initial build returns, which fails every
-        // transform of a later cycle.
+        // Go defers the host's Close unless this is a watch session under test. Outside tests a watch session runs its
+        // cycles in `watch` below, so the host closes when the session ends; the harness runs the cycles after this
+        // returns, so it keeps the host open.
         let watch = self.opts.command.compiler_options.watch.is_true();
-        let close_host = if watch { None } else { content_mapper_host };
+        let close_host = if watch && self.opts.testing.is_some() { None } else { content_mapper_host };
         let _close_content_mapper_host = tsc::contentMapperCloser { host: close_host, project: None };
         if let Some(watch_status_reporter) = &self.watch_status_reporter {
             watch_status_reporter(new_compiler_diagnostic(&diagnostics::Starting_compilation_in_watch_mode, &[]));
