@@ -4,10 +4,10 @@
 ([microsoft/typescript-benchmarking](https://github.com/microsoft/typescript-benchmarking), `cases/`) and eleven
 open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
-The Depot CI workflow `.depot/workflows/bench.yml` runs it on every push to `main`. It measures every project on the
-fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two (with bun check); `bench/results/<date>-<commit>.md`
-has every table, and [the latest results](RESULTS.md) show the 16-vCPU machine's default-mode tables: each compiler at
-its own thread count, tsgo, tsrs and bun check side by side.
+The Depot CI workflow `.depot/workflows/bench.yml` runs it after pushes to `main` that change the Rust source or build
+inputs. It measures every project on the fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two
+(with bun check); `bench/results/<date>-<commit>.md` has every table, and [the latest results](RESULTS.md) show the
+16-vCPU machine's default-mode tables: each compiler at its own thread count, tsgo, tsrs and bun check side by side.
 
 The [README chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using those
 `wide` measurements and the PGO-optimized `dist` build. The results commit step runs `bench/publish.py` to generate
@@ -204,9 +204,8 @@ the small projects move by a few hundred KiB), so peak memory is flagged when it
 
 The benchmark is a [Depot CI](https://depot.dev/docs/ci/overview) workflow, `.depot/workflows/bench.yml` (this
 repository is connected to Depot CI; Depot's runners for GitHub Actions only serve organization-owned repositories, and
-a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions stayed queued). It runs on every push to
-`main` except pushes that touch only `README.md`, `bench/RESULTS.md`, `bench/large-projects.svg` or `bench/results/**`,
-and on `workflow_dispatch`.
+a probe of `depot-ubuntu-*` / `depot-macos-latest` labels from GitHub Actions stayed queued). It runs on pushes to
+`main` that touch `crates/**`, `Cargo.toml`, `Cargo.lock` or `rust-toolchain.toml`, and on `workflow_dispatch`.
 Nobody waits on it, so it is built for unattended runs: one run per push (the concurrency group is the commit, so a push during a run
 starts its own run on its own machines and only a re-dispatch of the same commit replaces a queued twin; until
 2026-10-07 one shared group let a later push replace the queued bench, and bursts of merges left most commits without
