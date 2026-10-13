@@ -1,4 +1,4 @@
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
@@ -30,7 +30,16 @@ pub(crate) struct debounce {
     latch_cv: Condvar,
     // tsrs-only (`set_write_settling`): files a writer has written or created and not closed yet, with the times of
     // the first and the last write.
-    writes: Mutex<FxHashMap<String, (Instant, Instant)>>,
+    writes: Mutex<writeState>,
+}
+
+#[derive(Default)]
+struct writeState {
+    open: FxHashMap<String, (Instant, Instant)>,
+    // Files that stopped holding the callbacks (`settleIdleTime`, `settleMaxTime`) and are still open: a writer that
+    // keeps its file open (an editor's swap file, a log) would otherwise hold every cycle of the session for up to
+    // `settleMaxTime`. They hold nothing again until they are closed.
+    long_lived: FxHashSet<String>,
 }
 
 // tsrs-only (`set_write_settling`): a file that was written to but not closed stops holding the callbacks once it has
@@ -57,7 +66,7 @@ impl debounce {
             mu: Mutex::new(debounceState { callbacks: FxHashMap::default(), last_time: None }),
             latch_mu: Mutex::new(latchState::default()),
             latch_cv: Condvar::new(),
-            writes: Mutex::new(FxHashMap::default()),
+            writes: Mutex::new(writeState::default()),
         });
         let looper = Arc::clone(&d);
         std::thread::Builder::new().name("fswatch-debounce".to_string()).spawn(move || looper.loop_()).expect("failed to spawn fswatch debounce thread");
@@ -92,10 +101,13 @@ impl debounce {
     pub(crate) fn write_started(&self, path: &str) {
         let now = Instant::now();
         let mut writes = self.writes.lock().unwrap();
-        match writes.get_mut(path) {
+        if writes.long_lived.contains(path) {
+            return;
+        }
+        match writes.open.get_mut(path) {
             Some(times) => times.1 = now,
             None => {
-                writes.insert(path.to_string(), (now, now));
+                writes.open.insert(path.to_string(), (now, now));
             }
         }
     }
@@ -104,7 +116,8 @@ impl debounce {
     // tsrs-only: the writer of `path` closed it; the callbacks fire once no file is being written.
     pub(crate) fn write_finished(&self, path: &str) {
         let mut writes = self.writes.lock().unwrap();
-        if writes.remove(path).is_some() && writes.is_empty() {
+        writes.long_lived.remove(path);
+        if writes.open.remove(path).is_some() && writes.open.is_empty() {
             drop(writes);
             self.trigger();
         }
@@ -114,8 +127,15 @@ impl debounce {
     fn pending_write_deadline(&self) -> Option<Instant> {
         let now = Instant::now();
         let mut writes = self.writes.lock().unwrap();
-        writes.retain(|_, &mut (first, last)| now.duration_since(last) < settleIdleTime && now.duration_since(first) < settleMaxTime);
-        writes.values().map(|&(first, last)| (last + settleIdleTime).min(first + settleMaxTime)).min()
+        let writeState { open, long_lived } = &mut *writes;
+        open.retain(|path, &mut (first, last)| {
+            let settling = now.duration_since(last) < settleIdleTime && now.duration_since(first) < settleMaxTime;
+            if !settling {
+                long_lived.insert(path.clone());
+            }
+            settling
+        });
+        open.values().map(|&(first, last)| (last + settleIdleTime).min(first + settleMaxTime)).min()
     }
 
     // debounce.go:76

@@ -60,6 +60,7 @@ fn write_settling() {
     set_write_settling(true);
     callbacks_wait_for_the_close();
     an_unclosed_file_stops_holding_after_the_idle_time();
+    a_file_kept_open_holds_once();
 }
 
 fn callbacks_wait_for_the_close() {
@@ -103,6 +104,46 @@ fn an_unclosed_file_stops_holding_after_the_idle_time() {
     let waited = seen[0].0.duration_since(written);
     assert!(waited >= Duration::from_millis(900) && waited < Duration::from_millis(2500), "released after {waited:?}");
     drop(f);
+    let _ = watch.close();
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+// An editor's swap file or a log stays open and is written now and then. Once it has stopped holding the callbacks, it
+// must not hold them again (for up to `settleMaxTime` each time it is written) while it stays open.
+fn a_file_kept_open_holds_once() {
+    let dir = temp_dir("kept-open");
+    let file = dir.join("a.ts");
+    std::fs::write(&file, "export const a = 0;\n").unwrap();
+    let (recorder, watch) = watch(&dir, &file);
+    std::thread::sleep(Duration::from_millis(700));
+
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let writer = {
+        let stop = Arc::clone(&stop);
+        let log = dir.join(".a.ts.swp");
+        std::thread::spawn(move || {
+            let mut f = std::fs::File::create(log).unwrap();
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                f.write_all(b"x").unwrap();
+                f.flush().unwrap();
+                std::thread::sleep(Duration::from_millis(100));
+            }
+        })
+    };
+    // The first hold ends at `settleMaxTime` (the writer is never idle for `settleIdleTime`).
+    assert_eq!(recorder.wait_for(1, Duration::from_secs(5)).len(), 1);
+    std::thread::sleep(Duration::from_millis(700));
+    let before = recorder.wait_for(0, Duration::ZERO).len();
+
+    std::fs::write(&file, "export const a = 1;\n").unwrap();
+    let saved = Instant::now();
+    let seen = recorder.wait_for(before + 1, Duration::from_secs(5));
+    let (at, content) = seen.iter().rev().find(|(_, c)| c == "export const a = 1;\n").expect("the save was seen");
+    assert_eq!(content, "export const a = 1;\n");
+    assert!(at.duration_since(saved) < Duration::from_millis(700), "fired {:?} after the save", at.duration_since(saved));
+
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    writer.join().unwrap();
     let _ = watch.close();
     let _ = std::fs::remove_dir_all(&dir);
 }
