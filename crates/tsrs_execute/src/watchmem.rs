@@ -77,24 +77,32 @@ type FreeJob = Box<dyn FnOnce() + Send>;
 /// Runs the frees of a watch session on one thread, in the order they were queued: a file region is freed only after
 /// the programs that were replaced before it was found unreachable (they may refer to it). Freeing a large program's
 /// checker regions takes a while (~150 ms on a 9k-file project) and nothing waits for it. The test harness frees in
-/// place, for deterministic runs.
-pub(crate) struct Freer(Option<Mutex<mpsc::Sender<FreeJob>>>);
+/// place, for deterministic runs, and so does a build without threads (WebAssembly). The thread starts with the first
+/// queued free, so a build that frees nothing (every non-watch build, which creates one with its orchestrator) starts
+/// none: in the WebAssembly module, which cannot spawn threads, `-b` panicked creating it.
+pub(crate) struct Freer {
+    in_place: bool,
+    tx: std::sync::OnceLock<Mutex<mpsc::Sender<FreeJob>>>,
+}
 
 impl Freer {
     pub(crate) fn new(in_place: bool) -> Freer {
-        if in_place {
-            return Freer(None);
-        }
-        let (tx, rx) = mpsc::channel::<FreeJob>();
-        std::thread::Builder::new()
-            .name("tsrs-free-program".to_string())
-            .spawn(move || {
-                for job in rx {
-                    job();
-                }
-            })
-            .expect("failed to spawn a thread");
-        Freer(Some(Mutex::new(tx)))
+        Freer { in_place: in_place || tsrs_core::NO_THREADS, tx: std::sync::OnceLock::new() }
+    }
+
+    fn sender(&self) -> &Mutex<mpsc::Sender<FreeJob>> {
+        self.tx.get_or_init(|| {
+            let (tx, rx) = mpsc::channel::<FreeJob>();
+            std::thread::Builder::new()
+                .name("tsrs-free-program".to_string())
+                .spawn(move || {
+                    for job in rx {
+                        job();
+                    }
+                })
+                .expect("failed to spawn a thread");
+            Mutex::new(tx)
+        })
     }
 
     /// tsrs-only: once the frees queued so far are done, after each cycle (and the first build):
@@ -117,10 +125,11 @@ impl Freer {
     }
 
     pub(crate) fn run(&self, job: impl FnOnce() + Send + 'static) {
-        match &self.0 {
-            // The thread only ends when the sender is dropped, with the session.
-            Some(tx) => tx.lock().unwrap().send(Box::new(job)).expect("the free thread ended"),
-            None => job(),
+        if self.in_place {
+            job();
+            return;
         }
+        // The thread only ends when the sender is dropped, with the session.
+        self.sender().lock().unwrap().send(Box::new(job)).expect("the free thread ended");
     }
 }
