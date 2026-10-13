@@ -128,6 +128,8 @@ pub struct Watcher {
 
     wm: Arc<WatchManager>,
     seen_files: FxHashSet<Path>, // all build dependencies (for event filtering)
+    // tsrs-only (`directory_change_matters`): the directories that contain a seen file, at any depth.
+    seen_dirs: FxHashSet<Path>,
     // tsrs-only (`drop_own_output_events`): what the config's builds write.
     own_outputs: FxHashSet<Path>,
     config_mtimes: FxHashMap<String, Option<SystemTime>>,
@@ -198,6 +200,7 @@ pub(crate) fn run_watcher(
         freer: Freer::new(testing.is_some()),
         wm,
         seen_files: FxHashSet::default(),
+        seen_dirs: FxHashSet::default(),
         own_outputs: FxHashSet::default(),
         config_mtimes: FxHashMap::default(),
         watch_set_dirty: false,
@@ -428,7 +431,9 @@ impl Watcher {
                 if fs.directory_exists(event_path) {
                     // A watched directory changed: the wildcard file set may have changed, so reload file names on
                     // the next build.
-                    self.watch_set_dirty = true;
+                    if self.directory_change_matters(&self.to_path(event_path)) {
+                        self.watch_set_dirty = true;
+                    }
                     continue;
                 }
                 let p = self.to_path(event_path);
@@ -565,8 +570,16 @@ impl Watcher {
                 || self.seen_files.contains(&p)
                 || (self.config.config_file.is_some() && self.config.possibly_matches_file_name(event_path))
                 || (self.config.config_file.is_some() && self.config.possibly_matches_directory_name(&p) && maybe_directory())
-                || (fs.directory_exists(event_path) && WatchManager::is_path_under_watch(state, event_path, &opts))
+                || (fs.directory_exists(event_path) && WatchManager::is_path_under_watch(state, event_path, &opts) && self.directory_change_matters(&p))
         })
+    }
+
+    // tsrs-only: a directory that appeared or changed under a watched one matters when the config's wildcards may
+    // match it, or when a file the build read or looked for lies below it (a node_modules that did not exist). Go
+    // counts any directory under any watch, so a new directory beside the project (the watch of its parent is for a
+    // node_modules lookup) ran a full cycle.
+    fn directory_change_matters(&self, p: &Path) -> bool {
+        (self.config.config_file.is_some() && self.config.possibly_matches_directory_name(p)) || self.seen_dirs.contains(p)
     }
 
     fn do_build(&mut self, state: &mut WatchState) -> Result<(), tsrs_fswatch::Error> {
@@ -653,6 +666,7 @@ impl Watcher {
 
         let seen = tfs.seen_files();
         self.seen_files = seen.iter().map(|p| self.to_path(p)).collect();
+        self.seen_dirs = seen_directories(&self.seen_files);
         self.own_outputs = self.compute_own_outputs();
         self.record_config_mtimes();
 
@@ -934,6 +948,24 @@ impl Watcher {
         self.extended_config_cache = extended_config_cache;
         config_parse_result.map(P::new)
     }
+}
+
+// tsrs-only: every directory that contains one of `files`, at any depth.
+fn seen_directories(files: &FxHashSet<Path>) -> FxHashSet<Path> {
+    let mut dirs: FxHashSet<Path> = FxHashSet::default();
+    #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order does not matter")]
+    for file in files {
+        let mut dir = file.get_directory_path();
+        // Stop at a directory already added: its ancestors are too.
+        while dirs.insert(dir.clone()) {
+            let parent = dir.get_directory_path();
+            if parent == dir {
+                break;
+            }
+            dir = parent;
+        }
+    }
+    dirs
 }
 
 // Go ranges over the event map; the order only matters for debug logs and the first matching reason.

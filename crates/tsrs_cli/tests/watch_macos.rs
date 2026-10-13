@@ -6,7 +6,16 @@ use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::mpsc::{channel, Receiver};
+use std::sync::{RwLock, RwLockReadGuard};
 use std::time::Duration;
+
+// Tests share the temporary directory, and a watch's streams see the writes of the others: a test that needs quiet
+// takes this exclusively, the others shared.
+static EXCLUSIVE: RwLock<()> = RwLock::new(());
+
+fn shared() -> RwLockReadGuard<'static, ()> {
+    EXCLUSIVE.read().unwrap_or_else(|e| e.into_inner())
+}
 
 struct Watch {
     child: Child,
@@ -123,6 +132,7 @@ const TSCONFIG: &str = r#"{ "compilerOptions": { "strict": true, "noEmit": true,
 
 #[test]
 fn a_case_only_rename_reports_what_a_fresh_build_does() {
+    let _shared = shared();
     let dir = project("case", &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n"), ("src/b.ts", "import { a } from './a';\nexport const b: number = a;\n")]);
     let mut watch = Watch::start(&dir);
     std::thread::sleep(Duration::from_millis(600));
@@ -144,6 +154,7 @@ const ERR: &str = "\nexport const err: number = 'x';\n";
 
 #[test]
 fn a_project_under_tmp_sees_edits() {
+    let _shared = shared();
     // /tmp is a symlink to /private/tmp, and FSEvents reports /private/tmp paths. The project is named through /tmp
     // (`-p /tmp/...`, from another directory: a process's working directory is always the resolved one).
     let real = project_in(Path::new("/private/tmp"), "tmp", &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n")]);
@@ -165,11 +176,13 @@ fn a_project_under_tmp_sees_edits() {
 
 #[test]
 fn edits_through_a_symlinked_directory_by_watch() {
+    let _shared = shared();
     edits_through_a_symlinked_directory(&["--watch", "-p", "."]);
 }
 
 #[test]
 fn edits_through_a_symlinked_directory_by_build_watch() {
+    let _shared = shared();
     edits_through_a_symlinked_directory(&["-b", ".", "--watch"]);
 }
 
@@ -196,6 +209,7 @@ fn edits_through_a_symlinked_directory(args: &[&str]) {
 
 #[test]
 fn outputs_inside_the_watched_tree_start_no_cycle() {
+    let _shared = shared();
     // Everything under the project root is included and watched recursively; the outputs and the build info land
     // there too, and must not start a cycle of their own.
     let config = r#"{ "compilerOptions": { "strict": true, "types": [], "outDir": "dist", "declaration": true, "incremental": true }, "include": ["**/*"] }"#;
@@ -255,16 +269,19 @@ fn an_edit_during_the_first_build_is_seen(args: &[&str]) {
 
 #[test]
 fn an_edit_during_the_first_build_is_seen_by_watch() {
+    let _shared = shared();
     an_edit_during_the_first_build_is_seen(&["--watch", "-p", "."]);
 }
 
 #[test]
 fn an_edit_during_the_first_build_is_seen_by_build_watch() {
+    let _shared = shared();
     an_edit_during_the_first_build_is_seen(&["-b", ".", "--watch"]);
 }
 
 #[test]
 fn a_metadata_change_starts_no_cycle() {
+    let _shared = shared();
     // chmod changes no content and no modification time; FSEvents still reports the file.
     let dir = project("chmod", &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n")]);
     let mut watch = Watch::start(&dir);
@@ -290,6 +307,8 @@ fn wakeups(pid: u32) -> u64 {
 
 #[test]
 fn an_idle_watch_does_not_wake_up() {
+    // Alone: the other tests' writes under the same temporary directory reach this watch's streams too.
+    let _alone = EXCLUSIVE.write().unwrap_or_else(|e| e.into_inner());
     let dir = project("idle", &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n")]);
     let mut watch = Watch::start(&dir);
     watch.assert_idle(Duration::from_millis(500));
@@ -299,4 +318,35 @@ fn an_idle_watch_does_not_wake_up() {
     assert!(woke <= 1, "{woke} wakeups in 3 s of idling");
     drop(watch);
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+#[test]
+fn a_new_directory_beside_the_project_starts_no_cycle_in_watch() {
+    let _shared = shared();
+    a_new_directory_beside_the_project_starts_no_cycle(&["--watch", "-p", "."]);
+}
+
+#[test]
+fn a_new_directory_beside_the_project_starts_no_cycle_in_build_watch() {
+    let _shared = shared();
+    a_new_directory_beside_the_project_starts_no_cycle(&["-b", ".", "--watch"]);
+}
+
+fn a_new_directory_beside_the_project_starts_no_cycle(args: &[&str]) {
+    // The project's parent is watched for node_modules lookups; a directory made there that no lookup goes through
+    // changes nothing.
+    let dir = project(&format!("beside-{}", args[0].trim_start_matches('-')), &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n")]);
+    let mut watch = Watch::start_with(&dir, args);
+    watch.assert_idle(Duration::from_millis(500));
+    let beside = dir.with_file_name(format!("{}-sibling", dir.file_name().unwrap().to_str().unwrap()));
+    std::fs::create_dir(&beside).unwrap();
+    std::fs::write(beside.join("x.txt"), "x").unwrap();
+    watch.assert_idle(Duration::from_secs(1));
+    // A directory the project's wildcards cover still counts.
+    std::fs::create_dir(dir.join("src/sub")).unwrap();
+    std::fs::write(dir.join("src/sub/b.ts"), "export const b: number = 'x';\n").unwrap();
+    assert_eq!(watch.next_cycle().len(), 1);
+    drop(watch);
+    let _ = std::fs::remove_dir_all(&dir);
+    let _ = std::fs::remove_dir_all(&beside);
 }

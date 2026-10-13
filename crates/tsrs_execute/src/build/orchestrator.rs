@@ -119,6 +119,8 @@ pub struct Orchestrator {
 
     // order sorted by dependency depth, to reduce how often builders block on upstream projects
     schedule_order: Mutex<Vec<String>>,
+    // tsrs-only (`directory_change_matters`).
+    wanted_watch_dirs: Mutex<FxHashSet<Path>>,
 }
 
 impl Orchestrator {
@@ -855,7 +857,7 @@ impl Orchestrator {
         let fs = CompilerHost::fs(self.host());
         let mut keys: Vec<&String> = changed_paths.keys().collect();
         keys.sort();
-        if keys.into_iter().any(|p| fs.directory_exists(p) && WatchManager::is_path_under_watch(state, p, &self.compare_paths_options)) {
+        if keys.into_iter().any(|p| fs.directory_exists(p) && WatchManager::is_path_under_watch(state, p, &self.compare_paths_options) && self.directory_change_matters(p)) {
             for config in &order {
                 let task = self.get_task(&self.to_path(config));
                 task.reset_status();
@@ -990,7 +992,36 @@ impl Orchestrator {
                 add_package_json_watch_dirs(&mut desired_dirs, &package_json);
             }
         }
-        self.wm.resolve_desired_dirs(&desired_dirs.dirs())
+        let dirs = desired_dirs.dirs();
+        // tsrs-only (`directory_change_matters`): the wanted directories and their ancestors, before a missing one is
+        // replaced by its nearest existing ancestor.
+        let mut wanted: FxHashSet<Path> = FxHashSet::default();
+        #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order does not matter")]
+        for dir in dirs.keys() {
+            let mut p = self.to_path(dir);
+            while wanted.insert(p.clone()) {
+                let parent = p.get_directory_path();
+                if parent == p {
+                    break;
+                }
+                p = parent;
+            }
+        }
+        *self.wanted_watch_dirs.lock().unwrap() = wanted;
+        self.wm.resolve_desired_dirs(&dirs)
+    }
+
+    // tsrs-only: a directory that appeared or changed under a watched one matters when a project's wildcards may
+    // match it, or when it is (an ancestor of) a directory the build wants watched (a node_modules that did not
+    // exist). Go counts any directory under any watch and rebuilds every project, so a directory made beside the
+    // projects (whose parent is watched for a lookup) rebuilt them all.
+    fn directory_change_matters(&self, dir: &str) -> bool {
+        let p = self.to_path(dir);
+        if self.wanted_watch_dirs.lock().unwrap().contains(&p) {
+            return true;
+        }
+        let order = self.order.lock().unwrap().clone();
+        order.iter().any(|config| self.get_task(&self.to_path(config)).resolved_opt().is_some_and(|resolved| resolved.possibly_matches_directory_name(&p)))
     }
 
     // orchestrator.go:906
@@ -1127,6 +1158,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         wm,
         freer,
         schedule_order: Mutex::new(Vec::new()),
+        wanted_watch_dirs: Mutex::new(FxHashSet::default()),
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
         api_clean_exists: Mutex::new(FxHashMap::default()),
