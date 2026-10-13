@@ -397,6 +397,11 @@ impl DirWatchSet {
         *entry = *entry || recursive;
     }
 
+    /// tsrs-only: whether `dir` itself is in the set (not only under a recursive entry).
+    pub fn has(&self, dir: &str) -> bool {
+        self.dirs.contains_key(&self.canonical(dir))
+    }
+
     pub fn covered(&self, dir: &str) -> bool {
         let mut dir = self.canonical(dir);
         if self.dirs.contains_key(&dir) {

@@ -10,7 +10,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
 use tsrs_compiler::CompilerHost;
 use tsrs_core::collections::Set;
@@ -899,6 +899,7 @@ impl Orchestrator {
     fn compute_desired_watches(&self) -> FxHashMap<String, bool> {
         let mut desired_dirs = DirWatchSet::new(&self.compare_paths_options);
         let fs = CompilerHost::fs(self.host());
+        let mut symlink_checked: FxHashSet<String> = FxHashSet::default();
         let order = self.order.lock().unwrap().clone();
         for config in order {
             let task = self.get_task(&self.to_path(&config));
@@ -914,7 +915,7 @@ impl Orchestrator {
             }
             for file_name in resolved.file_names() {
                 let abs_path = tspath::get_normalized_absolute_path(file_name, self.opts.sys.get_current_directory());
-                add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path));
+                add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path), fs, &mut symlink_checked);
                 for mapper in resolved.content_mappers() {
                     if mapper.package_directory.is_empty() || !mapper.contribution_id.is_empty() {
                         continue;
@@ -942,7 +943,7 @@ impl Orchestrator {
                     if roots.has(&self.to_path(&abs_path)) {
                         continue;
                     }
-                    add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path));
+                    add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path), fs, &mut symlink_checked);
                 }
                 for package_json in build_info.get_package_jsons(&build_info_dir) {
                     add_package_json_watch_dirs(&mut desired_dirs, &package_json);
@@ -1002,8 +1003,11 @@ fn add_watch_dir(desired_dirs: &mut DirWatchSet, dir: &str) {
 
 // orchestrator.go:780: a program file's directory is watched at any depth; add_watch_dir's guard keeps lookup
 // locations from watching something as broad as / or /home.
-fn add_program_file_watch_dir(desired_dirs: &mut DirWatchSet, dir: &str) {
-    if !desired_dirs.covered(dir) {
+//
+// tsrs-only: a directory covered only by a recursive watch above it, but reached through a symlink, gets a watch of its
+// own (`symlink_checked` holds the directories already checked); see watcher.rs `compute_desired_watches`.
+fn add_program_file_watch_dir(desired_dirs: &mut DirWatchSet, dir: &str, fs: &dyn tsrs_vfs::FS, symlink_checked: &mut FxHashSet<String>) {
+    if !desired_dirs.covered(dir) || (!desired_dirs.has(dir) && symlink_checked.insert(dir.to_string()) && fs.realpath(dir) != dir) {
         desired_dirs.set(dir, false);
     }
 }

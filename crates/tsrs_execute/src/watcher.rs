@@ -333,9 +333,19 @@ impl Watcher {
         }
         let program_files = self.compiler_program().files_by_path();
         let root_files: FxHashSet<Path> = self.config.file_names().iter().map(|f| self.to_path(f)).collect();
+        // tsrs-only: directories under a recursive watch that are reached through a symlink, checked once each.
+        let mut symlink_checked: FxHashSet<String> = FxHashSet::default();
         for file_path in seen_file_paths {
             let dir = tspath::get_directory_path(file_path);
             if coverage.covered(&dir) {
+                // tsrs-only: a recursive watch does not follow a symlinked directory below its root (FSEvents and
+                // inotify both report the target's own path, which no watch covers), so a file read through one
+                // would never be seen to change. Its directory gets a watch of its own, under the name the program
+                // uses; the backend watches the target and reports the events under that name. Go misses these edits
+                // (tsgo too).
+                if !coverage.has(&dir) && symlink_checked.insert(dir.clone()) && fs.realpath(&dir) != dir {
+                    coverage.set(&dir, false);
+                }
                 continue;
             }
             // Seen files mix program files with lookup locations. Only lookups keep the depth check, so an imported
