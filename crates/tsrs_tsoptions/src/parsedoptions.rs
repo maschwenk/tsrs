@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use tsrs_core::{CompilerOptions, ProjectReference, TypeAcquisition, WatchOptions, P};
 
 use crate::contentmappers::Mapper;
@@ -13,5 +15,7 @@ pub struct ParsedOptions {
     // Go keeps `ProjectReferences` nil when the config has no "references" (build mode treats files: [] plus
     // references: [] as a solution).
     pub project_references_is_nil: bool,
-    pub content_mappers: Vec<Mapper>,
+    // Go `[]*Mapper`: the copies of a config (`reload_file_names_of_parsed_command_line`) share the mappers. A content
+    // mapper project knows the mappers it was made with by address (hostimpl.rs `mapper_key`).
+    pub content_mappers: Arc<[Mapper]>,
 }
