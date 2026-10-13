@@ -1,14 +1,36 @@
-# Security policy
+## TypeScript Security Properties
 
-Please report security vulnerabilities privately through GitHub: open the repository's **Security** tab and choose
-**Report a vulnerability** (a private security advisory). Do not open a public issue for a vulnerability.
+Please refer to [TypeScript Security Properties](https://github.com/microsoft/TypeScript/wiki/tsc-Security-Properties) prior to submitting a security report.
+Specifically, **crashes, stack overflows, nonlinear performance, and hangs** are generally not considered vulnerabilities unless they result in arbitrary code execution, and should be reported through the [normal issue flow](https://github.com/maschwenk/tsrs/issues/new/choose) instead.
 
-Include the affected version (`tsrs --version`), a description, and a reproduction if you have one. You should get a
-first response within a week.
+## Security
 
-tsrs is a type checker: it reads TypeScript source and configuration files and does not execute them, except that
-with `--runExternalCode` it starts the content-mapper commands named in a tsconfig's `contentMappers`, as tsc does.
-Reports that are in scope include memory-safety problems, crashes or unbounded resource use triggered by input files,
-path handling that reads outside the project, and problems in the published npm packages or the release workflow.
+We take the security of this project seriously.
 
-Only the latest release and `main` receive fixes.
+If you believe you have found a security vulnerability in this repository, please report it to us as described below.
+
+## Reporting Security Issues
+
+**Please do not report security vulnerabilities through public GitHub issues.**
+
+Instead, please report them privately through [GitHub Security Advisories](https://github.com/maschwenk/tsrs/security/advisories/new).
+
+Please include the requested information listed below (as much as you can provide) to help us better understand the nature and scope of the possible issue:
+
+  * Type of issue (e.g. buffer overflow, SQL injection, cross-site scripting, etc.)
+  * Full paths of source file(s) related to the manifestation of the issue
+  * The location of the affected source code (tag/branch/commit or direct URL)
+  * Any special configuration required to reproduce the issue
+  * Step-by-step instructions to reproduce the issue
+  * Proof-of-concept or exploit code (if possible)
+  * Impact of the issue, including how an attacker might exploit the issue
+
+This information will help us triage your report more quickly.
+
+## Preferred Languages
+
+We prefer all communications to be in English.
+
+## Policy
+
+We follow the principle of Coordinated Vulnerability Disclosure.
