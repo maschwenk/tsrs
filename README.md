@@ -20,8 +20,8 @@ The first command emits JavaScript. Use `--noEmit` when you only want to check t
 
 [![TypeScript 7 versus tsrs: wall time and peak memory on VS Code, T3 Code and MUI docs](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
 
-Across [17 projects](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md), `tsrs` is **4.3–16.2× faster** and
-uses **54–79% less peak memory** than the official TypeScript 7 compiler. Both ran with their default settings on the
+Across [17 projects](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md), `tsrs` is 4.3–15.8× faster and
+uses 54–79% less peak memory than the official TypeScript 7 compiler. Both ran with their default settings on the
 same 16-vCPU machine.
 
 You can use less memory by giving up some speed:
@@ -35,8 +35,8 @@ See [CLI usage and memory tuning](https://github.com/maschwenk/tsrs/blob/main/do
 
 ## Compatibility
 
-`tsrs` follows TypeScript 7.1-dev. It matches **13,458 of 13,462 error baselines** and all **12,779 type and symbol
-baselines**. The other four differences come from the test tools, not compiler output.
+`tsrs` follows TypeScript 7.1-dev. It matches 13,458 of 13,462 error baselines and all 12,779 type and symbol
+baselines. The other four differences come from the test tools, not compiler output.
 
 Supported today:
 
