@@ -204,6 +204,9 @@ pub struct Program {
     pub(crate) checker_recycling: bool,
     // tsrs-only: `ProgramOptions::checker_regions`.
     pub(crate) checker_regions: bool,
+    // tsrs-only: the address of the program `reuse_program` made this one from, 0 for a program built in full
+    // (`is_reuse_of`). An address, not a reference: the watch frees that program once this one has replaced it.
+    reused_from: usize,
 }
 
 impl std::ops::Deref for Program {
@@ -438,6 +441,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_referred: OnceLock::new(),
         checker_recycling: opts.checker_recycling,
         checker_regions: opts.checker_regions,
+        reused_from: 0,
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -661,6 +665,7 @@ impl Program {
             leaf_referred: OnceLock::new(),
             checker_recycling: false,
             checker_regions: self.checker_regions,
+            reused_from: std::ptr::from_ref(self) as usize,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -681,6 +686,13 @@ impl Program {
         tsrs_core::census_scrub_stack();
         result.init_checker_pool(create_checker_pool, self.compiler_checker_pool());
         (Some(result), new_file, true)
+    }
+
+    /// tsrs-only: whether `reuse_program` made this program from `other`: the files of `other` but one (and its
+    /// supplemental files), reparsed with the same imports, references, module augmentation and ambient module names,
+    /// and the module resolution of `other`. Only meaningful while `other` is alive.
+    pub fn is_reuse_of(&self, other: &Program) -> bool {
+        self.reused_from == std::ptr::from_ref(other) as usize
     }
 
     // program.go:443

@@ -120,6 +120,15 @@ impl toProgramSnapshot {
         // with it (`reused_version`).
         let old_compiler_program = self.old_program.and_then(|p| p.program);
         let shared_ambient_paths = SharedAmbientPaths::default();
+        // tsrs-only: in a program `reuse_program` made from the old state's program, the files it did not reparse keep
+        // their references. A file's references are the files declaring the module symbols of its imports and module
+        // augmentations, and the files declaring ambient modules, plus the paths of its triple-slash and type
+        // references. The module resolution is the old program's, and the reparsed file has the same imports, module
+        // augmentation and ambient module names: every module symbol has the same declaring files. Looking up the
+        // imports of every file again took 11 ms of a 50 ms one-file watch cycle on a 9.4k-file project.
+        let keeps_references = |file: P<SourceFile>| {
+            old_compiler_program.is_some_and(|old_program| self.program.is_reuse_of(old_program) && old_program.get_source_file_by_path(file.path()) == Some(file))
+        };
         let new_options = self.snapshot.options();
         // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
         // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
@@ -137,12 +146,16 @@ impl toProgramSnapshot {
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
             let affects_global_scope = file_affects_global_scope(file);
             let mut signature = String::new();
-            let checker_references = checker_references.unwrap_or_else(|| {
-                let mut checker = self.program.get_type_checker_for_file_exclusive(&Context::default(), file);
-                checker_references_of(file, &mut checker, &ambient_module_files_by_checker)
-            });
             let old_references = old.and_then(|old| old.referenced_map.get_references(file.path()));
-            let new_references = referenced_files_of(self.program, file, checker_references, old_references.as_ref(), &shared_ambient_paths);
+            let new_references = if keeps_references(file) {
+                old_references.clone()
+            } else {
+                let checker_references = checker_references.unwrap_or_else(|| {
+                    let mut checker = self.program.get_type_checker_for_file_exclusive(&Context::default(), file);
+                    checker_references_of(file, &mut checker, &ambient_module_files_by_checker)
+                });
+                referenced_files_of(self.program, file, checker_references, old_references.as_ref(), &shared_ambient_paths)
+            };
             let mut change =
                 fileChange { add_to_change_set: false, global_scope_lost: false, emit_diagnostics: None, semantic_diagnostics: None, emit_signature: None };
             if let Some(old) = old {
@@ -203,8 +216,10 @@ impl toProgramSnapshot {
             // order) instead of 18 workers taking turns on 4 checker locks per file; then the rest of the per-file
             // work on the worker pool. Without a pool of its own the program locks per file.
             let checker_references: Vec<std::sync::OnceLock<checkerReferences>> = files.iter().map(|_| std::sync::OnceLock::new()).collect();
-            let batched = self.program.for_each_checker_group(files, |checker, i, file| {
-                let _ = checker_references[i].set(checker_references_of(file, checker, &ambient_module_files_by_checker));
+            let looked_up: Vec<usize> = (0..files.len()).filter(|&i| !keeps_references(files[i])).collect();
+            let looked_up_files: Vec<P<SourceFile>> = looked_up.iter().map(|&i| files[i]).collect();
+            let batched = self.program.for_each_checker_group(&looked_up_files, |checker, j, file| {
+                let _ = checker_references[looked_up[j]].set(checker_references_of(file, checker, &ambient_module_files_by_checker));
             });
             let checker_references: Vec<Option<checkerReferences>> =
                 checker_references.into_iter().map(|r| if batched { r.into_inner() } else { None }).collect();
