@@ -1536,7 +1536,6 @@ impl Checker {
     // checker.go:7729
     pub(crate) fn check_expression_ex(&mut self, node: P<Node>, check_mode: CheckMode) -> P<Type> {
         let save_current_node = self.current_node;
-        let save_instantiation_count = self.instantiation_count;
         self.current_node = Some(node);
         self.instantiation_count = 0;
         self.expression_checks = self.expression_checks.wrapping_add(1);
@@ -1546,19 +1545,18 @@ impl Checker {
             self.check_const_enum_access(node, t);
         }
         self.current_node = save_current_node;
-        self.restore_instantiation_count(save_instantiation_count);
+        self.end_instantiation_count();
         t
     }
 
-    /// tsrs-only. Go resets the count when a statement or expression check begins and does not restore the caller's
-    /// when it ends, so an expression that checks a declaration first (a variable's initializer in another file) is
-    /// charged for it, and whether it reports TS2589 depends on what its checker checked before
-    /// (notes/open-history-dependence.md section 5). By default the caller keeps its own count;
-    /// `go_compatible_history()` keeps Go's.
+    /// tsrs-only. Discard a nested check's count so a declaration resolved on demand cannot exhaust its caller's
+    /// budget. Do not restore the caller's earlier count: Go discards it on entry to the nested check, and restoring
+    /// it can add a TS2589 across call arguments (notes/open-history-dependence.md section 5).
+    /// Go-compatible history leaves the nested check's count in place, as Go does.
     #[inline]
-    pub(crate) fn restore_instantiation_count(&mut self, count: u32) {
+    pub(crate) fn end_instantiation_count(&mut self) {
         if !tsrs_core::compat::go_compatible_history() {
-            self.instantiation_count = count;
+            self.instantiation_count = 0;
         }
     }
 

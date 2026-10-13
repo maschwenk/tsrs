@@ -215,13 +215,12 @@ impl Checker {
         if let Some(node) = node {
             let save_current_node = self.current_node;
             let save_within_unreachable_code = self.within_unreachable_code;
-            let save_instantiation_count = self.instantiation_count;
             self.current_node = Some(node);
             self.instantiation_count = 0;
             self.check_source_element_worker(node);
             self.current_node = save_current_node;
             self.within_unreachable_code = save_within_unreachable_code;
-            self.restore_instantiation_count(save_instantiation_count);
+            self.end_instantiation_count();
         }
         false
     }

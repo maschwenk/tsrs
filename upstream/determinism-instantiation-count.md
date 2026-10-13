@@ -1,7 +1,7 @@
 checker: a nested declaration check charges its instantiations to the expression that asked for it
 
 **Status:** written up only, not opened upstream. Found by tsrs on backstage/backstage (notes/open-history-dependence.md
-section 5). tsrs's default mode restores the caller's count (below); `--checkerAssignment go` keeps Go's behaviour.
+section 5). tsrs's default mode clears the count on exit (below); `--checkerAssignment go` keeps Go's behaviour.
 
 `instantiateTypeWithAlias` (checker.go:22507) yields the error type and reports TS2589 once 5,000,000 instantiations
 have been made "by the same statement or expression". `checkExpressionEx` (checker.go:7729) and `checkSourceElement`
@@ -57,8 +57,27 @@ those counts.
 The depth limit (`len(c.instantiationStack) == 100`) has a similar dependence with a different cause: what a checker has
 cached decides how deep a chain goes (notes/open-history-dependence.md section 6). No restore is missing there.
 
-Possible fix (what tsrs does by default): save `instantiationCount` in `checkExpressionEx` and `checkSourceElement` and
-restore it on exit, so a nested check is charged to itself only. `b.ts(2,11)` then goes away in both orders and at every
-checker count. Applied unconditionally in tsrs, all 13,458 passing error baselines still pass, so no baseline depends on
-the missing restore; it changes output only where a nested check used up the budget, which can happen single-threaded
-(the `b.ts` first order above).
+Possible fix (what tsrs does by default): clear `instantiationCount` on exit from `checkExpressionEx` and
+`checkSourceElement`, as well as on entry. A nested check is charged to itself only, and `b.ts(2,11)` goes away in
+both orders and at every checker count. This can remove a TS2589 even when the nested check used less than the
+whole budget: its instantiations no longer add to the caller's work after it returns. The depth guard is unchanged.
+
+Restoring the caller's saved count instead is not equivalent. Go discards the caller's earlier work on entry to
+each nested check. Restoring it lets a call accumulate work across an argument check, and can add a TS2589 absent
+from Go in every order. This one-file reduction is `testdata/regressions/instantiation-count-call-argument`:
+
+```ts
+type D = "0"|"1"|"2"|"3"|"4"|"5"|"6"|"7"|"8"|"9";
+type E = "0"|"1"|"2"|"3"|"4"|"5";
+type U = `${D}${D}${D}${E}`;
+type Chain<T, N extends unknown[] = []> = N["length"] extends 100 ? { value: T } : T extends string ? Chain<T, [...N, 0]> : never;
+type Chain2<T, N extends unknown[] = []> = N["length"] extends 100 ? { other: T } : T extends string ? Chain2<T, [...N, 0]> : never;
+declare function k<T>(x: Chain<T>): Chain2<T>;
+declare const v: any;
+const r = k<U>(v);
+```
+
+With the same compiler options as above, pinned tsgo exits 0, as does Go-compatible tsrs. The save/restore version
+reports `a.ts(8,11): error TS2589: Type instantiation is excessively deep and possibly infinite.` in default mode,
+including single-threaded: it carries parameter-type work across checking `v` and adds the return-type work.
+Clearing on exit discards both the child's work and the caller's earlier work, so the reduction exits 0 again.

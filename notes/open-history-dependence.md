@@ -305,18 +305,32 @@ deep and returns the error type. A checker that checked `plugin.ts` first has th
 upstream/determinism-instantiation-count.md has a two-file reduction: tsgo prints the second file's TS2589 at 8 and 16
 checkers and not at 1-4, or single-threaded when that file comes first.
 
-The fix: by default `check_expression_ex` and `check_source_element` give the caller its count back
-(`restore_instantiation_count`), so a nested check is charged to itself only; `--checkerAssignment go` keeps Go's.
-Backstage then prints tsgo's single-threaded 23 errors single-threaded, at 2, 4, 8 and 16 checkers, under `random:1..3`
-at 4 and in three CI-form runs (`--incremental` with fresh build info); `--checkerAssignment go --checkers 4` still prints
-tsgo's 31. It cannot print tsgo's 4-checker output in the default mode: that output is a function of tsgo's FENNEL
-assignment. The conformance suite is unchanged in Go mode, `TSRS_LAZY_MEMBERS=0` and canonical mode
-(`TS_TEST_PROGRAM_SINGLE_THREADED=false TSRS_HISTORY=canonical`): 13,458 errors, 12,779 (canonical 12,778) `.types` and
-`.symbols`, no pass lost. The same restore applied in Go mode too also left all 13,458 error baselines passing, so no
-baseline depends on the missing restore. `TSRS_FLOW_MEMO=shadow` and `TSRS_INFER_MEMO=shadow` pass on backstage (the
-memos read the count; a nested check now leaves it where it was). `testdata/regressions/instantiation-count-nested-declaration`
-is the reduction in the order tsgo prints one error at 1-4 checkers: before the fix `tools/ci/determinism.sh` failed it
-(the second error under the default mode and random assignments), after it all 540 regression runs match.
+The fix: by default `check_expression_ex` and `check_source_element` clear the count on exit as well as entry
+(`end_instantiation_count`), so the caller never inherits the nested check's work; `--checkerAssignment go` keeps
+Go's count on exit. The caller's earlier work is discarded too, as it already is in Go on entry to the nested check.
+Restoring the caller's earlier count would accumulate a call's parameter- and return-type work across checking an
+argument, adding a TS2589 even when Go is silent at every checker count. The confirmed one-file reduction is
+`testdata/regressions/instantiation-count-call-argument`; upstream/determinism-instantiation-count.md describes it.
+Clearing on exit can remove an error when a nested check's work plus the caller's subsequent work exceeds the
+budget, even if neither alone does. It does not change the instantiation-stack depth guard or the total counter.
+
+The memos still reject work that instantiated anything: both compare the monotonic `total_instantiation_count`.
+A reset from a nonzero count is visible in their before/after count comparison. For a reset from zero, the inference
+memo also tracks `expression_checks`; the flow memo marks frames that start at zero with `FLAG_COUNT_RESET` and
+only replays those at zero. Clearing on exit does not hide those effects.
+
+Validation of the zero-on-exit fix: backstage still prints tsgo's single-threaded 23 errors at 1, 2, 4, 8 and 16
+checkers and under `random:1..3` at 4. Go mode, with lazy members on or off, still matches tsgo's 31 errors at 4
+and 32 at 8. Fresh and reused incremental build info gives the same default output. Both memo shadows pass with
+real cache hits, and disabling both memos gives the same diagnostics. All 31 regression cases match their expected
+output, and all 558 default/random assignment comparisons match the single-threaded output. The nested-declaration
+case keeps only its original TS2589 in both file orders, at 1, 2, 4, 8 and 16 checkers, with and without incremental
+build info. The call-argument case exits 0 in default, single-threaded, Go and strict Go modes.
+
+The conformance error/type/symbol pass lists are unchanged from the save/restore version: 13,458 error passes and
+12,779 type and symbol passes in Go history, both with and without lazy members; canonical history has 12,778 type
+and symbol passes (the known `objectLiteralNormalization` difference). Canonical forced splits with shadow checks
+give the same lists as an unsplit run. No new failures, crashes or timeouts.
 
 Not fixed by it: a count within one expression still depends on what is cached (cached instantiations are not counted),
 so an expression near 5,000,000 can still report on one checker and not another; none seen.
