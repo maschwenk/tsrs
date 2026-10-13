@@ -146,6 +146,11 @@ impl Program {
     }
 
     // program.go:119
+    /// The compiler program, `None` for one read from a build info.
+    pub fn compiler_program(&self) -> Option<&'static CompilerProgram> {
+        self.program
+    }
+
     pub fn get_program(&self) -> &'static CompilerProgram {
         self.panic_if_no_program("GetProgram");
         self.program.unwrap()

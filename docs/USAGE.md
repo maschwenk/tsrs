@@ -15,7 +15,10 @@ Your existing `tsconfig.json` controls compilation. tsrs emits JavaScript and de
 options by default, just like `tsc`; pass `--noEmit` when you only want type checking.
 
 See [TypeScript compatibility](COMPATIBILITY.md) for supported features and known gaps, including unsupported
-commands such as `--watch`, `--init` and `--showConfig`.
+commands such as `--init` and `--showConfig`.
+
+`tsrs --watch -p .` and `tsrs -b --watch` rebuild when files change, like `tsc`. On Linux a rebuild starts when the
+editor closes the saved file, so it never checks a half-written file and adds no fixed delay.
 
 ## Performance options
 

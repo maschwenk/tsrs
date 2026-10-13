@@ -690,7 +690,7 @@ impl checkerPool {
                 // With the shared graph (sharedgraph.rs) the pool's checkers are plain until the type-check pass makes
                 // them forks of the seed.
                 run_work_group(self.single_threaded, self.checker_count, |i| {
-                    let c = SlotChecker::new(program, recycle);
+                    let c = SlotChecker::new(program, recycle || program.checker_regions);
                     if shared && i == 0 {
                         crate::sharedgraph::note_fresh_checker(&c.checker);
                     }

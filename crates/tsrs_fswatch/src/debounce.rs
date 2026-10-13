@@ -28,7 +28,16 @@ pub(crate) struct debounce {
     mu: Mutex<debounceState>,
     latch_mu: Mutex<latchState>,
     latch_cv: Condvar,
+    // tsrs-only (`set_write_settling`): files a writer has written or created and not closed yet, with the times of
+    // the first and the last write.
+    writes: Mutex<FxHashMap<String, (Instant, Instant)>>,
 }
+
+// tsrs-only (`set_write_settling`): a file that was written to but not closed stops holding the callbacks once it has
+// not been written for `settleIdleTime`, or `settleMaxTime` after its first write (a writer that keeps the file open,
+// such as a log).
+const settleIdleTime: Duration = Duration::from_millis(1000);
+const settleMaxTime: Duration = Duration::from_millis(2000);
 
 struct debounceState {
     callbacks: FxHashMap<usize, debounceCallback>,
@@ -48,6 +57,7 @@ impl debounce {
             mu: Mutex::new(debounceState { callbacks: FxHashMap::default(), last_time: None }),
             latch_mu: Mutex::new(latchState::default()),
             latch_cv: Condvar::new(),
+            writes: Mutex::new(FxHashMap::default()),
         });
         let looper = Arc::clone(&d);
         std::thread::Builder::new().name("fswatch-debounce".to_string()).spawn(move || looper.loop_()).expect("failed to spawn fswatch debounce thread");
@@ -77,6 +87,37 @@ impl debounce {
         self.latch_cv.notify_all();
     }
 
+    #[cfg(target_os = "linux")]
+    // tsrs-only: a writer wrote to `path` (or created it) and has not closed it yet.
+    pub(crate) fn write_started(&self, path: &str) {
+        let now = Instant::now();
+        let mut writes = self.writes.lock().unwrap();
+        match writes.get_mut(path) {
+            Some(times) => times.1 = now,
+            None => {
+                writes.insert(path.to_string(), (now, now));
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    // tsrs-only: the writer of `path` closed it; the callbacks fire once no file is being written.
+    pub(crate) fn write_finished(&self, path: &str) {
+        let mut writes = self.writes.lock().unwrap();
+        if writes.remove(path).is_some() && writes.is_empty() {
+            drop(writes);
+            self.trigger();
+        }
+    }
+
+    // When a file is still being written: the time at which the first of them stops holding the callbacks.
+    fn pending_write_deadline(&self) -> Option<Instant> {
+        let now = Instant::now();
+        let mut writes = self.writes.lock().unwrap();
+        writes.retain(|_, &mut (first, last)| now.duration_since(last) < settleIdleTime && now.duration_since(first) < settleMaxTime);
+        writes.values().map(|&(first, last)| (last + settleIdleTime).min(first + settleMaxTime)).min()
+    }
+
     // debounce.go:76
     fn loop_(&self) {
         loop {
@@ -87,6 +128,16 @@ impl debounce {
 
     // debounce.go:83
     fn notify_if_ready(&self) {
+        // tsrs-only: while a file is being written, its events would make the callbacks read it half-written (Go fires
+        // the first event after a quiet period at once, which for a save is the truncation). Wait for the close, or
+        // for a new event, then decide again (the latch stays notified).
+        if let Some(deadline) = self.pending_write_deadline() {
+            let l = self.latch_mu.lock().unwrap();
+            let r#gen = l.trigger_gen;
+            let wait = deadline.saturating_duration_since(Instant::now());
+            drop(self.latch_cv.wait_timeout_while(l, wait, |l| l.trigger_gen == r#gen).unwrap());
+            return;
+        }
         let mut st = self.mu.lock().unwrap();
         let now = Instant::now();
         // Go's zero lastTime makes the first gap larger than maxWaitTime.

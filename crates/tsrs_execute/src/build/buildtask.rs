@@ -102,6 +102,7 @@ pub struct BuildTask {
     pub(crate) config: String,
     pub(crate) resolved: Mutex<Option<P<ParsedCommandLine>>>,
     pub(crate) up_stream: Mutex<Vec<upstreamTask>>,
+    pub(crate) down_stream: Mutex<Vec<P<BuildTask>>>, // Only set and used in watch mode
     pub(crate) status: Mutex<Option<upToDateStatus>>,
     pub(crate) done: closeSignal,
 
@@ -115,12 +116,16 @@ pub struct BuildTask {
     errors: Mutex<Vec<P<Diagnostic>>>,
     pub(crate) pending: AtomicBool,
     is_initial_cycle: AtomicBool,
-    // Go `dirty`: the config changed since the task was created (API rebuilds; watch mode is not ported).
+    // Go `dirty`: the config changed since the task was created (API rebuilds and watch mode).
     pub(crate) dirty: AtomicBool,
+    down_stream_update_mu: Mutex<()>,
 
     // Go's contentMapperProjectOnce and the contentMapperProject it sets.
     content_mapper_project: OnceLock<Option<Arc<dyn tsrs_contentmapper::Project>>>,
     content_mapper_project_err: Mutex<Option<tsrs_contentmapper::Error>>,
+
+    // tsrs-only, watch mode: the program of the task's last build, freed when the task builds again (Go's GC).
+    watch_program: Mutex<Option<&'static tsrs_compiler::Program>>,
 }
 
 fn diag(message: &'static Message, args: &[&dyn std::fmt::Display]) -> P<Diagnostic> {
@@ -133,6 +138,7 @@ impl BuildTask {
             config,
             resolved: Mutex::new(None),
             up_stream: Mutex::new(Vec::new()),
+            down_stream: Mutex::new(Vec::new()),
             status: Mutex::new(None),
             done: closeSignal::default(),
             result: Mutex::new(None),
@@ -143,8 +149,10 @@ impl BuildTask {
             pending: AtomicBool::new(false),
             is_initial_cycle: AtomicBool::new(is_initial_cycle),
             dirty: AtomicBool::new(false),
+            down_stream_update_mu: Mutex::new(()),
             content_mapper_project: OnceLock::new(),
             content_mapper_project_err: Mutex::new(None),
+            watch_program: Mutex::new(None),
         }
     }
 
@@ -171,9 +179,28 @@ impl BuildTask {
         (project, self.content_mapper_project_err.lock().unwrap().clone())
     }
 
+    // The task's content mapper project, if it was created.
+    pub(crate) fn content_mapper_project_opt(&self) -> Option<Arc<dyn tsrs_contentmapper::Project>> {
+        self.content_mapper_project.get().cloned().flatten()
+    }
+
+    pub(crate) fn set_content_mapper_project_err(&self, err: tsrs_contentmapper::Error) {
+        *self.content_mapper_project_err.lock().unwrap() = Some(err);
+    }
+
+    // The build info file name and its parsed contents, if the task read or wrote one.
+    pub(crate) fn build_info_snapshot(&self) -> Option<(Path, Arc<BuildInfo>)> {
+        let entry = self.build_info_entry.lock().unwrap();
+        let entry = entry.as_ref()?;
+        Some((entry.path.clone(), Arc::clone(entry.build_info.as_ref()?)))
+    }
+
+    pub(crate) fn package_jsons(&self) -> Vec<String> {
+        self.package_jsons.lock().unwrap().clone()
+    }
+
     // buildtask.go:96
-    #[expect(dead_code, reason = "its only Go caller, the build orchestrator's watch update (orchestrator.go:580), is not ported")]
-    fn refresh_content_mapper_project(&self, _orchestrator: &Orchestrator) {
+    pub(crate) fn refresh_content_mapper_project(&self, _orchestrator: &Orchestrator) {
         if let Some(Some(project)) = self.content_mapper_project.get() {
             *self.content_mapper_project_err.lock().unwrap() = project.refresh().err();
         }
@@ -332,7 +359,83 @@ impl BuildTask {
         if orchestrator.opts.command.build_options.stop_build_on_errors.is_true() && self.status().is_error() {
             return;
         }
-        // downStream is only set in watch mode, which is not ported.
+        let program = self.result.lock().unwrap().as_ref().and_then(|r| r.program);
+        let down_stream = self.down_stream.lock().unwrap().clone();
+        let Some(program) = program else {
+            for down_stream in down_stream {
+                let _guard = down_stream.down_stream_update_mu.lock().unwrap();
+                down_stream.reset_status();
+                down_stream.pending.store(true, Ordering::SeqCst);
+            }
+            return;
+        };
+        for down_stream in down_stream {
+            let _guard = down_stream.down_stream_update_mu.lock().unwrap();
+            let mut reset = false;
+            {
+                let mut status = down_stream.status.lock().unwrap();
+                if let Some(current) = status.as_ref() {
+                    let mut kind = current.kind;
+                    if kind == upToDateStatusType::UpToDate && !program.has_changed_dts_file() {
+                        *status = Some(upToDateStatus::with(upToDateStatusType::UpToDateWithUpstreamTypes, current.data.clone()));
+                    } else {
+                        if kind == upToDateStatusType::UpToDate {
+                            kind = upToDateStatusType::UpToDateWithUpstreamTypes; // Go: fallthrough
+                        }
+                        match kind {
+                            upToDateStatusType::UpToDateWithUpstreamTypes | upToDateStatusType::UpToDateWithInputFileText => {
+                                if program.has_changed_dts_file() {
+                                    let output = current.oldest_output_file_name();
+                                    *status = Some(upToDateStatus::with(
+                                        upToDateStatusType::InputFileNewer,
+                                        statusData::InputOutputName(inputOutputName { input: self.config.clone(), output }),
+                                    ));
+                                }
+                            }
+                            upToDateStatusType::UpstreamErrors => {
+                                let ref_config = tsrs_core::resolve_config_file_name_of_project_reference(&current.upstream_errors().ref_);
+                                if orchestrator.to_path(&ref_config) == *_path {
+                                    reset = true;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            if reset {
+                down_stream.reset_status();
+            }
+            down_stream.pending.store(true, Ordering::SeqCst);
+        }
+    }
+
+    // buildtask.go:821
+    // tsrs-only (watch mode): makes `program` the task's program and frees the one it built last. Nothing else holds
+    // that one: the cycle that built it has reported, and the next build reads the old state from the build info.
+    fn replace_watch_program(&self, orchestrator: &Orchestrator, program: &'static tsrs_compiler::Program) {
+        // Bind before any checker exists: single-threaded, the first checker would bind the files in its region, and
+        // later cycles reuse the parsed files (host.rs `get_watch_source_file`).
+        program.bind_source_files();
+        let Some(previous) = self.watch_program.lock().unwrap().replace(program) else { return };
+        let free = move || {
+            // SAFETY: see above; a build program shares nothing with another program.
+            unsafe { tsrs_compiler::free_unshared_program(previous) };
+        };
+        // The test harness frees in place, for deterministic runs; a session frees beside the build.
+        if orchestrator.opts.testing.is_some() {
+            free();
+        } else {
+            std::thread::Builder::new().name("tsrs-free-program".to_string()).spawn(free).expect("failed to spawn a thread");
+        }
+    }
+
+    pub(crate) fn update_watch(&self, orchestrator: &Orchestrator, old_cache: &super::host::mTimeCache) {
+        if self.resolved_opt().is_some() && self.can_update_js_dts_output_timestamps() {
+            for output_file in self.resolved().get_output_file_names() {
+                orchestrator.host().store_m_time_from_old_cache(&output_file, old_cache);
+            }
+        }
     }
 
     // buildtask.go:225
@@ -369,7 +472,14 @@ impl BuildTask {
         }
         compile_times.build_info_read_time = sys.now() - build_info_read_start;
         let parse_start = sys.now();
-        let program = new_program(ProgramOptions::new(self.resolved(), compiler_host));
+        let watch = orchestrator.opts.command.compiler_options.watch.is_true();
+        let mut program_options = ProgramOptions::new(self.resolved(), compiler_host);
+        // Watch mode frees the program when the task builds again (`replace_watch_program`).
+        program_options.checker_regions = watch;
+        let program = new_program(program_options);
+        if watch {
+            self.replace_watch_program(orchestrator, program);
+        }
         compile_times.parse_time = sys.now() - parse_start;
         let changes_compute_start = sys.now();
         let incremental_program = tsrs_incremental::new_program(

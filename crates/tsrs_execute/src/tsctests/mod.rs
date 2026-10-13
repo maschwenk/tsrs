@@ -12,6 +12,7 @@
 // Results: target/tsctests-results/{pass,fail,crash}.txt and the actual baselines of failures under
 // target/tsctests-results/local/. Content-mapper scenarios run with the in-process test mappers (tsrs_contentmappertest).
 
+mod mockwatch;
 mod readablebuildinfo;
 mod sys;
 
@@ -161,7 +162,7 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
     }
     let lib_path = if test.windows_style_root.is_empty() { TSC_LIB_PATH.to_string() } else { format!("{}{}", test.windows_style_root, &TSC_LIB_PATH[1..]) };
     let cwd = if test.cwd.is_empty() { "/home/src/workspaces/project".to_string() } else { test.cwd.clone() };
-    Box::leak(Box::new(TestSys::new(
+    let sys: &'static TestSys = Box::leak(Box::new(TestSys::new(
         fs,
         if libs.is_empty() { None } else { Some(libs) },
         clock,
@@ -169,7 +170,11 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
         lib_path,
         test.env.clone(),
         test.output_is_tty.unwrap_or(true),
-    )))
+    )));
+    let watch_fs = Arc::clone(&sys.fs);
+    let backend = mockwatch::MockWatchBackend::new(Box::new(move |d: &str| watch_fs.directory_exists(d)), !test.ignore_case);
+    let _ = sys.mock_watch_backend.set(Arc::new(backend));
+    sys
 }
 
 fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
@@ -193,7 +198,7 @@ fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
 }
 
 // runner.go executeCommand
-fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]) -> ExitStatus {
+fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]) -> Option<Box<dyn crate::tsc::Watcher>> {
     baseline.push_str(&format!("tsgo {}\n", args.join(" ")));
     let testing: &'static dyn CommandLineTesting = sys;
     let result = crate::execute::command_line_with_testing(sys, args.to_vec(), Some(testing));
@@ -205,7 +210,7 @@ fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]
         ExitStatus::ProjectReferenceCycle_OutputsSkipped => "ExitStatus:: ProjectReferenceCycle_OutputsSkipped",
         ExitStatus::NotImplemented => "ExitStatus:: NotImplemented",
     });
-    result.status
+    result.watcher
 }
 
 // runner.go getDiffForIncremental
@@ -245,12 +250,11 @@ fn get_diff_for_incremental(incremental: &TestSys, non_incremental: &TestSys) ->
 // baseline.go:31 DiffText (patience diff, 3 lines of context), as in tsrs_testrunner.
 fn diff_text(old_name: &str, new_name: &str, expected: &str, actual: &str) -> String {
     let diff = similar::TextDiff::configure().algorithm(similar::Algorithm::Patience).diff_lines(expected, actual);
-    let mut text = diff.unified_diff().context_radius(3).header(old_name, new_name).to_string();
-    // Go's patience.UnifiedDiffText does not end with a newline.
-    if text.ends_with('\n') {
-        text.pop();
-    }
-    text
+    let text = diff.unified_diff().context_radius(3).header(old_name, new_name).to_string();
+    // Go's patience.UnifiedDiffText writes an empty context line without its leading space, and does not end with a
+    // newline.
+    let text = text.strip_suffix('\n').unwrap_or(&text);
+    text.split('\n').map(|line| if line == " " { "" } else { line }).collect::<Vec<_>>().join("\n")
 }
 
 // runner.go run
@@ -263,8 +267,9 @@ fn run_scenario(test: &scenario) -> String {
         sys.fs.use_case_sensitive_file_names()
     ));
     sys.baseline_fs_with_diff(&mut baseline);
-    execute_command(sys, &mut baseline, &test.args);
+    let mut watcher = execute_command(sys, &mut baseline, &test.args);
     sys.serialize_state(&mut baseline);
+    baseline_watch_state(sys, watcher.is_some(), &mut baseline);
     sys.baseline_programs(&mut baseline, "Initial build");
 
     for (index, edit) in test.edits.iter().enumerate() {
@@ -272,9 +277,19 @@ fn run_scenario(test: &scenario) -> String {
         let args = edit.args.clone().unwrap_or_else(|| test.args.clone());
         baseline.push_str(&format!("\n\nEdit [{}]:: {}\n", index, edit.caption));
         apply_ops(sys, &edit.ops);
+        let changed_paths = sys.changed_paths();
         sys.baseline_fs_with_diff(&mut baseline);
-        execute_command(sys, &mut baseline, &args);
+        match &mut watcher {
+            None => {
+                execute_command(sys, &mut baseline, &args);
+            }
+            Some(watcher) => {
+                sys.mock_watch_backend.get().unwrap().send_changed_paths(&changed_paths);
+                watcher.do_cycle();
+            }
+        }
         sys.serialize_state(&mut baseline);
+        baseline_watch_state(sys, watcher.is_some(), &mut baseline);
         sys.baseline_programs(&mut baseline, &format!("Edit [{}]:: {}\n", index, edit.caption));
 
         // Compute build with all the edits
@@ -304,6 +319,14 @@ fn run_scenario(test: &scenario) -> String {
     baseline
 }
 
+// runner.go: the watch registrations after each build of a watch scenario.
+fn baseline_watch_state(sys: &TestSys, watching: bool, baseline: &mut String) {
+    let backend = sys.mock_watch_backend.get().unwrap();
+    if watching && backend.has_watches() {
+        baseline.push_str(&backend.watch_state());
+    }
+}
+
 fn repo_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().unwrap()
 }
@@ -330,6 +353,8 @@ fn tsctests() {
     let mut files = Vec::new();
     collect(&dump.join("tsc"), &mut files);
     collect(&dump.join("tsbuild"), &mut files);
+    collect(&dump.join("tscWatch"), &mut files);
+    collect(&dump.join("tsbuildWatch"), &mut files);
     files.sort();
     if files.is_empty() {
         eprintln!("tsctests: no scenarios under {} (run tools/oracle/tsctests/dump.sh)", dump.display());
@@ -395,11 +420,11 @@ fn tsctests() {
     for class in ["pass", "fail", "crash"] {
         let names: Vec<&str> = results.iter().filter(|r| r.1 == class).map(|r| r.0.as_str()).collect();
         std::fs::write(results_dir.join(format!("{class}.txt")), names.join("\n") + "\n").unwrap();
-        for suite in ["tsc/", "tsbuild/"] {
+        for suite in ["tsc/", "tsbuild/", "tscWatch/", "tsbuildWatch/"] {
             let total = results.iter().filter(|r| r.0.starts_with(suite)).count();
             let n = names.iter().filter(|n| n.starts_with(suite)).count();
-            summary += &format!("{suite:9}{class:6} {n:4} / {total}\n");
+            summary += &format!("{suite:14}{class:6} {n:4} / {total}\n");
         }
     }
-    eprintln!("tsctests (non-watch):\n{summary}results in {}", results_dir.display());
+    eprintln!("tsctests:\n{summary}results in {}", results_dir.display());
 }

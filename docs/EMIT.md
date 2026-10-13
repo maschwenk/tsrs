@@ -172,7 +172,7 @@ Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base).
 | incremental/ (snapshot, buildInfo, affected files, emit files handler, program, …) | 3,535 | missing |
 | build/ (orchestrator, buildtask, uptodatestatus, host, parseCache, compilerHost) | 2,312 | missing |
 | tsctests/ (harness: runner.go, sys.go, fs.go, readablebuildinfo.go) | 1,355 | missing |
-| watcher.go, watchmanager/ | 1,198 | out of scope (watch) |
+| watcher.go, watchmanager/ | 1,198 | ported (watcher.rs, watchmanager/) |
 
 ### Test harness (Go `testutil`)
 
@@ -197,7 +197,7 @@ Ported so far: 4,277 of 24,418 lines (the declaration transformer and the base).
 | `transpile/` (`.js`, `.d.ts`; transpile_runner.go) | | | 41 files |
 | `tsc/` (tsc_test.go: incremental, emit, declaration emit, …) | | | 224 files |
 | `tsbuild/` (tscbuild_test.go: `--build`) | | | 192 files |
-| `tscWatch/`, `tsbuildWatch/` | | | 107 files (watch, out of scope) |
+| `tscWatch/`, `tsbuildWatch/` | | | 107 files (watch) |
 
 What the `.js` baselines exercise (from the test variants; approximate):
 
@@ -520,8 +520,9 @@ then-current main:
   ops of every edit, both in the incremental run and replayed from scratch for the non-incremental comparison. The
   harness (`crates/tsrs_execute/src/tsctests`, a `#[cfg(test)]` module of the driver crate because it drives
   `execute::command_line_with_testing`) replays them with a fake clock, the FS differ, the readable buildinfo and the
-  output sanitizer of `tsctests/sys.go`. Watch scenarios are skipped; content-mapper scenarios use the in-process
-  test mappers of `tsrs_contentmappertest`.
+  output sanitizer of `tsctests/sys.go`. Watch scenarios (`tscWatch/`, `tsbuildWatch/`) drive the watcher through
+  Go's mock watch backend (`tsctests/mockwatch.rs`); content-mapper scenarios use the in-process test mappers of
+  `tsrs_contentmappertest`.
 
 ## 11. Coordination with the LSP port
 

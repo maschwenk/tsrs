@@ -308,6 +308,24 @@ pub fn fanotify() -> &'static dyn Watcher {
     &*fanotifyFallbackWatcher
 }
 
+static WRITE_SETTLING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// tsrs-only, process-wide: on backends that report when a writer closes a file (inotify), callbacks wait until
+/// every file being written has been closed, then fire at once. Go fires the first event after a quiet period
+/// immediately, so a save is seen right after its truncation and the file is read half-written; batching for a
+/// fixed time instead adds that time to every save. Without close events (FSEvents, kqueue) this has no effect.
+/// For the CLI's `--watch`, which turns it on before it watches anything.
+pub fn set_write_settling(on: bool) {
+    WRITE_SETTLING.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+#[cfg(target_os = "linux")]
+pub(crate) fn write_settling() -> bool {
+    // Relaxed: set before the first watch is made; the backend threads that read it took the locks that publish
+    // that watch, which order the store before this load.
+    WRITE_SETTLING.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 // watcher.go:230
 // Default returns the recommended watcher for the current OS.
 pub fn default() -> &'static dyn Watcher {
@@ -992,6 +1010,23 @@ impl dirWatch {
         let db = self.mu.lock().unwrap().debounce.take();
         if let Some(db) = db {
             db.remove(self.key);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    // tsrs-only (`set_write_settling`): see `debounce::write_started` / `write_finished`.
+    pub(crate) fn write_started(&self, path: &str) {
+        let db = self.mu.lock().unwrap().debounce.clone();
+        if let Some(db) = db {
+            db.write_started(path);
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn write_finished(&self, path: &str) {
+        let db = self.mu.lock().unwrap().debounce.clone();
+        if let Some(db) = db {
+            db.write_finished(path);
         }
     }
 

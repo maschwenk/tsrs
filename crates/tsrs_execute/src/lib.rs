@@ -5,6 +5,8 @@ pub mod build;
 pub mod execute;
 pub mod sys;
 pub mod tsc;
+pub mod watcher;
+pub mod watchmanager;
 #[cfg(test)]
 mod tsctests;
 

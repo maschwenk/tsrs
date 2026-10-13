@@ -1,4 +1,4 @@
-// Port of execute/build/orchestrator.go (the non-watch parts; watch mode is out of scope).
+// Port of execute/build/orchestrator.go, including watch mode (`tsc -b --watch`: `Watch` / `DoCycle`).
 //
 // Like Go, the build tasks run on `--builders` threads (default 4, 1 with --singleThreaded; `rangeTasks`) that take
 // projects from Order() by an atomic index and block on their upstream tasks' `done` signals, while the calling thread
@@ -20,6 +20,7 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_tsoptions::ParsedBuildCommandLine;
 
 use super::buildtask::{taskResult, BuildTask};
+use crate::watchmanager::{self, DirWatchSet, WatchManager};
 use super::host::host;
 use super::parsecache::parseCache;
 use crate::tsc::{
@@ -53,7 +54,17 @@ impl OrchestratorResult {
 
     // orchestrator.go:43
     fn report_with_files_to_delete(&mut self, o: &Orchestrator, report_files_to_delete: bool) {
-        (o.error_summary_reporter)(self.errors.as_deref().unwrap_or_default());
+        match &o.watch_status_reporter {
+            Some(watch_status_reporter) => {
+                let errors = self.errors.as_ref().map_or(0, Vec::len);
+                watch_status_reporter(if errors == 1 {
+                    new_compiler_diagnostic(&diagnostics::Found_1_error_Watching_for_file_changes, &[])
+                } else {
+                    new_compiler_diagnostic(&diagnostics::Found_0_errors_Watching_for_file_changes, &[&errors])
+                });
+            }
+            None => (o.error_summary_reporter)(self.errors.as_deref().unwrap_or_default()),
+        }
         if report_files_to_delete {
             if let Some(files_to_delete) = &self.files_to_delete {
                 o.create_builder_status_reporter(None)(new_compiler_diagnostic(
@@ -100,6 +111,9 @@ pub struct Orchestrator {
     api_clean_exists: Mutex<FxHashMap<String, bool>>,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
+    // Watch mode: the status lines ("Found N errors. Watching for file changes.") and the directory watches.
+    watch_status_reporter: Option<DiagnosticReporter<'static>>,
+    wm: Arc<WatchManager>,
 
     // order sorted by dependency depth, to reduce how often builders block on upstream projects
     schedule_order: Mutex<Vec<String>>,
@@ -204,7 +218,7 @@ impl Orchestrator {
     fn setup_build_task(
         &self,
         config_name: &str,
-        _down_stream: Option<P<BuildTask>>,
+        down_stream: Option<P<BuildTask>>,
         in_circular_context: bool,
         completed: &mut Set<Path>,
         analyzing: &mut Set<Path>,
@@ -245,7 +259,11 @@ impl Orchestrator {
             task.done.reset();
             self.order.lock().unwrap().push(config_name.to_string());
         }
-        // Watch mode only: downStream links.
+        if self.opts.command.compiler_options.watch.is_true()
+            && let Some(down_stream) = down_stream
+        {
+            task.down_stream.lock().unwrap().push(down_stream);
+        }
         Some(task)
     }
 
@@ -316,7 +334,11 @@ impl Orchestrator {
     // tsc -b entrypoint
     // orchestrator.go:295
     pub fn start(&'static self) -> CommandLineResult {
-        CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
+        let status = self.start_worker("", false /*onlyReferences*/).status();
+        // Under the test harness a watch session returns after the first build; the harness drives the cycles.
+        let watcher = (self.opts.command.compiler_options.watch.is_true() && self.opts.testing.is_some())
+            .then(|| Box::new(orchestratorWatcher(self)) as Box<dyn tsc::Watcher>);
+        CommandLineResult { watcher, status }
     }
 
     /// Makes this orchestrator allocate in collectable regions (API builds; see `regions`).
@@ -424,8 +446,13 @@ impl Orchestrator {
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
         let content_mapper_host = tsc::new_content_mapper_host(self.opts.sys, &self.opts.command.compiler_options);
         self.content_mapper_host.lock().unwrap().clone_from(&content_mapper_host);
-        // Go defers the host's Close unless this is a watch session under test; watch mode is not ported.
-        let _close_content_mapper_host = tsc::contentMapperCloser { host: content_mapper_host, project: None };
+        // Go defers the host's Close unless this is a watch session under test, whose cycles keep using it.
+        let watch = self.opts.command.compiler_options.watch.is_true();
+        let close_host = if watch && self.opts.testing.is_some() { None } else { content_mapper_host };
+        let _close_content_mapper_host = tsc::contentMapperCloser { host: close_host, project: None };
+        if let Some(watch_status_reporter) = &self.watch_status_reporter {
+            watch_status_reporter(new_compiler_diagnostic(&diagnostics::Starting_compilation_in_watch_mode, &[]));
+        }
         {
             let _region = self.enter_api_region();
             if self.graph_generated.load(Ordering::SeqCst) {
@@ -443,7 +470,11 @@ impl Orchestrator {
             }
             order.pop();
         }
-        self.build_or_clean_order(&order)
+        let result = self.build_or_clean_order(&order);
+        if watch {
+            self.watch();
+        }
+        result
     }
 
     // orchestrator.go:426
@@ -642,6 +673,273 @@ impl Orchestrator {
         task.built.close();
     }
 
+    // orchestrator.go:101
+    fn resolve_build_info_file_name(&self, file_name: &str, build_info_dir: &str) -> String {
+        if tsrs_incremental::is_build_info_file_name_default_library(file_name) {
+            return tspath::combine_paths(CompilerHost::default_library_path(self.host()), &[file_name]);
+        }
+        tspath::get_normalized_absolute_path(file_name, build_info_dir)
+    }
+
+    // orchestrator.go:473 Watch
+    fn watch(&'static self) {
+        {
+            let mut state = self.wm.lock();
+            if self.opts.testing.is_none() {
+                if self.opts.sys.get_environment_variable("TS_WATCH_DEBUG").is_some_and(|v| !v.is_empty()) {
+                    let sys = self.opts.sys;
+                    self.wm.set_debug_log(Arc::new(move |t: &str| sys.write(t)));
+                }
+                self.wm.ensure_default_backend(&mut state);
+            }
+            self.update_watch();
+            self.reconcile(&mut state);
+            self.reset_caches();
+        }
+        if self.opts.testing.is_none() {
+            self.wm.run_loop(|| self.do_cycle());
+        }
+    }
+
+    fn reconcile(&self, state: &mut watchmanager::WatchState) {
+        let desired_dirs = self.compute_desired_watches();
+        if let Err(err) = self.wm.reconcile_watches(state, &desired_dirs) {
+            self.opts.sys.write(&format!("{}\n", err.message()));
+            // Mark overflow so the next event triggers a full rebuild
+            self.wm.force_overflow();
+        }
+    }
+
+    // orchestrator.go:498
+    fn update_watch(&self) {
+        let old_cache = std::mem::replace(&mut *self.host().m_times.lock().unwrap(), Arc::new(Mutex::new(FxHashMap::default())));
+        let order = self.order.lock().unwrap().clone();
+        for config in order {
+            self.get_task(&self.to_path(&config)).update_watch(self, &old_cache);
+        }
+    }
+
+    // orchestrator.go:816 DoCycle
+    pub fn do_cycle(&'static self) {
+        let mut state = self.wm.lock();
+        let (changed_paths, overflow) = self.wm.drain_events();
+        if changed_paths.is_empty() && !overflow {
+            self.wm.debug(|| "[watch] DoCycle: no events, skipping\n".to_string());
+            return;
+        }
+        let mut needs_config_update = false;
+        let mut needs_update = false;
+        if overflow {
+            // Overflow: reset all tasks to force a full rebuild.
+            let order = self.order.lock().unwrap().clone();
+        for config in order {
+                let path = self.to_path(&config);
+                let task = self.get_task(&path);
+                task.reset_config(self, &path);
+                task.built.reset();
+                task.done.reset();
+            }
+            needs_config_update = true;
+            needs_update = true;
+        } else {
+            self.check_tasks_for_event_changes(&state, &changed_paths, &mut needs_config_update, &mut needs_update);
+        }
+        if !needs_update {
+            self.reset_caches();
+            return;
+        }
+        if let Some(watch_status_reporter) = &self.watch_status_reporter {
+            watch_status_reporter(new_compiler_diagnostic(&diagnostics::File_change_detected_Starting_incremental_compilation, &[]));
+        }
+        if needs_config_update {
+            self.generate_graph_reusing_old_tasks();
+        }
+        let order = self.order.lock().unwrap().clone();
+        self.build_or_clean_order(&order);
+        self.update_watch();
+        self.reconcile(&mut state);
+        self.reset_caches();
+    }
+
+    // orchestrator.go:515
+    fn check_tasks_for_event_changes(
+        &'static self,
+        state: &watchmanager::WatchState,
+        changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>,
+        needs_config_update: &mut bool,
+        needs_update: &mut bool,
+    ) {
+        let normalized_paths: FxHashMap<Path, tsrs_fswatch::EventKind> = changed_paths.iter().map(|(p, &k)| (self.to_path(p), k)).collect();
+        let order = self.order.lock().unwrap().clone();
+        for config in &order {
+            let path = self.to_path(config);
+            let task = self.get_task(&path);
+            if self.task_config_changed(&task, &normalized_paths) {
+                task.reset_config(self, &path);
+                *needs_config_update = true;
+                *needs_update = true;
+                continue;
+            }
+            let Some(resolved) = task.resolved_opt() else { continue };
+            if self.task_inputs_changed(&task, &resolved, &normalized_paths) {
+                task.reset_status();
+                *needs_update = true;
+            }
+            task.built.reset();
+            task.done.reset();
+
+            let new_config = P::new(resolved.reload_file_names_of_parsed_command_line(CompilerHost::fs(self.host())));
+            if resolved.file_names() != new_config.file_names() {
+                self.host().resolved_references.store(path.clone(), Some(new_config));
+                *task.resolved.lock().unwrap() = Some(new_config);
+                task.reset_status();
+                *needs_update = true;
+            }
+        }
+        if *needs_update {
+            return;
+        }
+        // A new or removed directory under a watched one can change wildcard matches.
+        let fs = CompilerHost::fs(self.host());
+        let mut keys: Vec<&String> = changed_paths.keys().collect();
+        keys.sort();
+        if keys.into_iter().any(|p| fs.directory_exists(p) && WatchManager::is_path_under_watch(state, p, &self.compare_paths_options)) {
+            for config in &order {
+                let task = self.get_task(&self.to_path(config));
+                task.reset_status();
+                task.built.reset();
+                task.done.reset();
+            }
+            *needs_update = true;
+        }
+    }
+
+    // The tsconfig, an extended config, or a content mapper's package manifest changed.
+    fn task_config_changed(&self, task: &BuildTask, changed: &FxHashMap<Path, tsrs_fswatch::EventKind>) -> bool {
+        if changed.contains_key(&self.to_path(&task.config)) {
+            return true;
+        }
+        let Some(resolved) = task.resolved_opt() else { return false };
+        resolved.extended_source_files().iter().any(|file| changed.contains_key(&self.to_path(file)))
+            || resolved.content_mappers().iter().filter(|m| !m.package_directory.is_empty() && m.contribution_id.is_empty()).any(|m| {
+                changed.contains_key(&self.to_path(&tspath::combine_paths(&m.package_directory, &["package.json"])))
+            })
+    }
+
+    // A root file, content mapper input, buildinfo-recorded dependency, or package.json lookup changed.
+    fn task_inputs_changed(&'static self, task: &BuildTask, resolved: &tsrs_tsoptions::ParsedCommandLine, changed: &FxHashMap<Path, tsrs_fswatch::EventKind>) -> bool {
+        if let Some(project) = task.content_mapper_project_opt() {
+            match project.watched_files() {
+                Err(err) => {
+                    task.set_content_mapper_project_err(err);
+                    return true;
+                }
+                Ok(watched_files) => {
+                    if watched_files.iter().any(|f| changed.contains_key(&self.to_path(f))) {
+                        task.refresh_content_mapper_project(self);
+                        return true;
+                    }
+                }
+            }
+        }
+        let mut roots: Set<Path> = Set::default();
+        for file in resolved.file_names() {
+            let fp = self.to_path(file);
+            if changed.contains_key(&fp) {
+                return true;
+            }
+            roots.add(fp);
+        }
+        if let Some((bi_path, build_info)) = task.build_info_snapshot() {
+            let build_info_dir = tspath::get_directory_path(bi_path.as_str());
+            let dependency_changed = build_info.file_names.iter().any(|file_name| {
+                let fp = self.to_path(&self.resolve_build_info_file_name(file_name, &build_info_dir));
+                !roots.has(&fp) && changed.contains_key(&fp)
+            });
+            if dependency_changed
+                || build_info.get_package_jsons(&build_info_dir).iter().any(|p| self.package_json_lookup_changed(p, changed))
+                || build_info.get_missing_package_jsons(&build_info_dir).iter().any(|p| self.package_json_lookup_changed(p, changed))
+            {
+                return true;
+            }
+        }
+        task.package_jsons().iter().any(|p| self.package_json_lookup_changed(p, changed))
+    }
+
+    // orchestrator.go:673
+    fn package_json_lookup_changed(&self, package_json: &str, changed_paths: &FxHashMap<Path, tsrs_fswatch::EventKind>) -> bool {
+        let package_json_path = self.to_path(package_json);
+        if changed_paths.contains_key(&package_json_path) {
+            return true;
+        }
+        changed_paths.iter().any(|(changed, &kind)| {
+            kind == tsrs_fswatch::EventKind::Delete && tspath::contains_path(changed.as_str(), package_json_path.as_str(), &self.compare_paths_options)
+        })
+    }
+
+    // orchestrator.go:686
+    fn compute_desired_watches(&self) -> FxHashMap<String, bool> {
+        let mut desired_dirs = DirWatchSet::new(&self.compare_paths_options);
+        let fs = CompilerHost::fs(self.host());
+        let order = self.order.lock().unwrap().clone();
+        for config in order {
+            let task = self.get_task(&self.to_path(&config));
+            desired_dirs.set(&fs.realpath(&tspath::get_directory_path(&task.config)), false);
+            let Some(resolved) = task.resolved_opt() else { continue };
+            for cfg_path in resolved.extended_source_files() {
+                desired_dirs.set(&tspath::get_directory_path(&fs.realpath(cfg_path.as_str())), false);
+            }
+            if let Some(wildcards) = resolved.wildcard_directories() {
+                for (dir, &recursive) in wildcards.iter() {
+                    desired_dirs.set(&fs.realpath(dir), recursive);
+                }
+            }
+            for file_name in resolved.file_names() {
+                let abs_path = tspath::get_normalized_absolute_path(file_name, self.opts.sys.get_current_directory());
+                add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path));
+                for mapper in resolved.content_mappers() {
+                    if mapper.package_directory.is_empty() || !mapper.contribution_id.is_empty() {
+                        continue;
+                    }
+                    let manifest_path = tspath::combine_paths(&mapper.package_directory, &["package.json"]);
+                    add_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&manifest_path));
+                }
+            }
+            if let Some(project) = task.content_mapper_project_opt() {
+                match project.watched_files() {
+                    Err(err) => task.set_content_mapper_project_err(err),
+                    Ok(watched_files) => {
+                        for file_name in watched_files {
+                            add_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&fs.realpath(&file_name)));
+                        }
+                    }
+                }
+            }
+            // Non-root dependency directories from the buildinfo (e.g. node_modules .d.ts files).
+            if let Some((bi_path, build_info)) = task.build_info_snapshot() {
+                let build_info_dir = tspath::get_directory_path(bi_path.as_str());
+                let roots: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
+                for file_name in &build_info.file_names {
+                    let abs_path = fs.realpath(&self.resolve_build_info_file_name(file_name, &build_info_dir));
+                    if roots.has(&self.to_path(&abs_path)) {
+                        continue;
+                    }
+                    add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path));
+                }
+                for package_json in build_info.get_package_jsons(&build_info_dir) {
+                    add_package_json_watch_dirs(&mut desired_dirs, &package_json);
+                }
+                for package_json in build_info.get_missing_package_jsons(&build_info_dir) {
+                    add_package_json_watch_dirs(&mut desired_dirs, &package_json);
+                }
+            }
+            for package_json in task.package_jsons() {
+                add_package_json_watch_dirs(&mut desired_dirs, &package_json);
+            }
+        }
+        self.wm.resolve_desired_dirs(&desired_dirs.dirs())
+    }
+
     // orchestrator.go:906
     pub(crate) fn get_writer(&self, task: Option<P<BuildTask>>) -> Writer<'static> {
         let sys = self.opts.sys;
@@ -665,6 +963,56 @@ impl Orchestrator {
     // orchestrator.go:917
     pub(crate) fn create_diagnostic_reporter(&self, task: Option<P<BuildTask>>) -> DiagnosticReporter<'static> {
         create_diagnostic_reporter_with_writer(self.opts.sys, self.get_writer(task), Some(&self.opts.command.compiler_options))
+    }
+}
+
+// Go's `tsc.Watcher` for the test harness.
+struct orchestratorWatcher(&'static Orchestrator);
+
+impl tsc::Watcher for orchestratorWatcher {
+    fn do_cycle(&mut self) {
+        self.0.do_cycle();
+    }
+}
+
+// orchestrator.go:774
+fn add_watch_dir(desired_dirs: &mut DirWatchSet, dir: &str) {
+    if !desired_dirs.covered(dir) && watchmanager::can_watch_directory(dir) {
+        desired_dirs.set(dir, false);
+    }
+}
+
+// orchestrator.go:780: a program file's directory is watched at any depth; add_watch_dir's guard keeps lookup
+// locations from watching something as broad as / or /home.
+fn add_program_file_watch_dir(desired_dirs: &mut DirWatchSet, dir: &str) {
+    if !desired_dirs.covered(dir) {
+        desired_dirs.set(dir, false);
+    }
+}
+
+// orchestrator.go:786: a package.json's directory, plus its ancestors up to the enclosing node_modules' parent.
+fn add_package_json_watch_dirs(desired_dirs: &mut DirWatchSet, package_json: &str) {
+    let dir = tspath::get_directory_path(package_json);
+    let mut dirs = vec![dir.clone()];
+    let mut current = dir.clone();
+    loop {
+        let parent = tspath::get_directory_path(&current);
+        if parent.is_empty() || parent == current {
+            add_watch_dir(desired_dirs, &dir);
+            return;
+        }
+        dirs.push(parent.clone());
+        if tspath::get_base_file_name(&parent) == "node_modules" {
+            let grandparent = tspath::get_directory_path(&parent);
+            if !grandparent.is_empty() && grandparent != parent {
+                dirs.push(grandparent);
+            }
+            break;
+        }
+        current = parent;
+    }
+    for dir in &dirs {
+        add_watch_dir(desired_dirs, dir);
     }
 }
 
@@ -698,6 +1046,13 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
     let compare_paths_options =
         ComparePathsOptions { current_directory: sys.get_current_directory().to_string(), use_case_sensitive_file_names: sys.fs().use_case_sensitive_file_names() };
     let error_summary_reporter = create_report_error_summary(sys, &opts.command.compiler_options);
+    let watch = opts.command.compiler_options.watch.is_true();
+    let watch_status_reporter = watch.then(|| tsc::create_watch_status_reporter(sys, &opts.command.compiler_options, opts.testing));
+    let fs = sys.fs();
+    let wm = WatchManager::new(Arc::new(move |t: &str| sys.write(t)), Box::new(move |d: &str| fs.directory_exists(d)));
+    if watch && let Some(backend) = opts.testing.and_then(|t| t.watch_backend()) {
+        WatchManager::set_backend(&mut wm.lock(), backend);
+    }
     let orchestrator: &'static Orchestrator = Box::leak(Box::new(Orchestrator {
         opts,
         compare_paths_options,
@@ -708,6 +1063,8 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         graph_generated: AtomicBool::new(false),
         aborted: AtomicBool::new(false),
         error_summary_reporter,
+        watch_status_reporter,
+        wm,
         schedule_order: Mutex::new(Vec::new()),
         regions: Mutex::new(Vec::new()),
         use_regions: AtomicBool::new(false),
@@ -726,6 +1083,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         config_times: Mutex::new(FxHashMap::default()),
         resolved_references: parseCache::default(),
         m_times: Mutex::new(Arc::new(Mutex::new(FxHashMap::default()))),
+        watch_source_files: watch.then(|| Mutex::new(FxHashMap::default())),
     }));
     let _ = h.orchestrator.set(orchestrator);
     let _ = orchestrator.host.set(h);

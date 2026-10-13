@@ -20,7 +20,7 @@ pnpm exec tsrs --noEmit
 `tsrs` follows TypeScript 7.1-dev. It matches **13,458 of 13,462 error baselines** and all **12,779 type and symbol
 baselines**; the four remaining error-baseline differences are test-harness artifacts.
 
-`--watch`, `--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
+`--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
 for supported features and known gaps.
 
 ## Learn more

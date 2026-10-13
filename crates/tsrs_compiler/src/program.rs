@@ -58,6 +58,9 @@ pub struct ProgramOptions {
     /// with a fresh one (checkerpool.rs `retire_checker`; the CLI's `--noEmit` check, where no later pass needs the
     /// checker that checked a file).
     pub checker_recycling: bool,
+    /// tsrs-only: each checker of the built-in pool allocates in a region of its own, which `free_program` gives
+    /// back (watch mode, which replaces its program every cycle; the CLI's single build leaks its checkers).
+    pub checker_regions: bool,
 }
 
 impl ProgramOptions {
@@ -74,6 +77,7 @@ impl ProgramOptions {
             create_module_resolver: None,
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
+            checker_regions: false,
         }
     }
 
@@ -96,6 +100,7 @@ impl ProgramOptions {
             create_module_resolver,
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
+            checker_regions: false,
         }
     }
 
@@ -197,6 +202,8 @@ pub struct Program {
     pub(crate) leaf_referred: OnceLock<rustc_hash::FxHashSet<P<SourceFile>>>,
     // tsrs-only: `ProgramOptions::checker_recycling`.
     pub(crate) checker_recycling: bool,
+    // tsrs-only: `ProgramOptions::checker_regions`.
+    pub(crate) checker_regions: bool,
 }
 
 impl std::ops::Deref for Program {
@@ -430,6 +437,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
         leaf_referred: OnceLock::new(),
         checker_recycling: opts.checker_recycling,
+        checker_regions: opts.checker_regions,
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -652,6 +660,7 @@ impl Program {
             leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
             leaf_referred: OnceLock::new(),
             checker_recycling: false,
+            checker_regions: self.checker_regions,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
