@@ -2061,7 +2061,15 @@ impl Checker {
                         let types = [global_disposable_type, self.null_type, self.undefined_type];
                         let optional_disposable_type = self.get_union_type(&types);
                         let widened = self.widen_type_for_variable_like_declaration(Some(initializer_type), node, false);
-                        self.check_type_assignable_to(widened, optional_disposable_type, Some(initializer), Some(&diagnostics::The_initializer_of_a_using_declaration_must_be_either_an_object_with_a_Symbol_dispose_method_or_be_null_or_undefined));
+                        let mut diags = Vec::new();
+                        if !self.check_type_assignable_to_ex(widened, optional_disposable_type, Some(initializer), Some(&diagnostics::The_initializer_of_a_using_declaration_must_be_either_an_object_with_a_Symbol_dispose_method_or_be_null_or_undefined), &mut diags) {
+                            let global_async_disposable_type = self.get_global_async_disposable_type();
+                            let optional_async_disposable_type = self.get_union_type(&[global_async_disposable_type, self.null_type, self.undefined_type]);
+                            if global_async_disposable_type != self.empty_object_type && self.is_type_assignable_to(widened, optional_async_disposable_type) {
+                                diags[0].add_message_chain(new_diagnostic_chain(None, &diagnostics::This_initializer_has_a_Symbol_asyncDispose_method_Did_you_mean_to_use_await_using, &[]));
+                            }
+                            self.add_diagnostic(diags[0]);
+                        }
                     }
                 }
             }
