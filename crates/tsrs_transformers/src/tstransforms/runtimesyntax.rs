@@ -727,7 +727,7 @@ impl RuntimeSyntaxTransformer {
         let modifiers = if exported { v.visit_modifiers(extract_modifiers(emit_context, node.modifiers(), !ModifierFlags::ExportDefault)) } else { v.visit_modifiers(node.modifiers()) };
 
         let mut name = v.visit_node(node.name());
-        if name.is_none() && (exported || ast::child_is_decorated(self.compiler_options.experimental_decorators.is_true(), node, None)) {
+        if name.is_none() && (exported || ast::child_is_decorated(self.compiler_options.experimental_decorators.is_true(), node, None) || node.modifier_flags() & ModifierFlags::ExportDefault != ModifierFlags::ExportDefault && ast::node_is_decorated(self.compiler_options.experimental_decorators.is_true(), node, None, None)) {
             name = Some(f.new_generated_name_for_node(node));
         }
         let heritage_clauses = v.visit_nodes(node.as_class_declaration().heritage_clauses());
