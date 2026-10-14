@@ -105,7 +105,11 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
       # The bench projects of the training workload install with their pinned package managers via pnpm (bench/run.py --setup-only).
+      # No .npmrc: the default registry-url writes one with `_authToken=${NODE_AUTH_TOKEN}`, and yarn 1 (webpack's
+      # install in the PGO training run) refuses to run while that variable is unset. Only `publish` needs the registry.
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+        with:
+          registry-url: ""
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
         shell: bash
