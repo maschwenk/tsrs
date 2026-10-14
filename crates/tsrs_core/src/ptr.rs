@@ -166,9 +166,13 @@ pub unsafe fn arena_neighbor<T: ?Sized, U>(r: &T, offset: isize) -> &'static U {
 
 /// Pointer to an arena value. Never null; use `Option<P<T>>` for Go's nil-able pointers
 /// (it is pointer-sized).
+///
+/// A raw pointer, not a `&'static T`: a function argument that is a reference is protected for the whole call, so a
+/// callee that gives its `P` argument back to the arena (`Binder::recycle_flow_label`) would write to memory a live
+/// reference covers, which is undefined behaviour (Miri, Tree Borrows). `get` and `Deref` make the reference.
 #[cfg(not(compressed_ptrs))]
 #[repr(transparent)]
-pub struct P<T: ?Sized + 'static>(&'static T);
+pub struct P<T: ?Sized + 'static>(std::ptr::NonNull<T>, std::marker::PhantomData<&'static T>);
 
 /// Handle of an arena value: its offset from `reserve::base()` in 8-byte units (notes/mem-pointer-compression.md).
 /// Never 0; `Option<P<T>>` is 4 bytes too.
@@ -253,7 +257,7 @@ impl<T> P<T> {
             P(unsafe { std::num::NonZeroU32::new_unchecked((off >> crate::reserve::UNIT_SHIFT) as u32) }, std::marker::PhantomData)
         }
         #[cfg(not(compressed_ptrs))]
-        P(r)
+        P(std::ptr::NonNull::from_ref(r), std::marker::PhantomData)
     }
 
     /// The arena object at `bits`, which `to_bits` returned (tag bits cleared).
@@ -271,7 +275,7 @@ impl<T> P<T> {
         }
         #[cfg(not(compressed_ptrs))]
         // SAFETY: `bits` is the exposed address of a live arena object (this function's contract).
-        P(unsafe { &*std::ptr::with_exposed_provenance::<T>(bits) })
+        P(unsafe { std::ptr::NonNull::new_unchecked(std::ptr::with_exposed_provenance_mut::<T>(bits)) }, std::marker::PhantomData)
     }
 
     /// The object packed in the low bits of `w` by `pack` (higher bits may hold anything).
@@ -285,10 +289,10 @@ impl<T> P<T> {
         return P(unsafe { std::num::NonZeroU32::new_unchecked(w as u32) }, std::marker::PhantomData);
         #[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
         // SAFETY: the low bits are the address of a live arena object, shifted by `pack` (this function's contract).
-        return P(unsafe { &*std::ptr::with_exposed_provenance::<T>(((w & PACK_MASK) << 3) as usize) });
+        return P(unsafe { std::ptr::NonNull::new_unchecked(std::ptr::with_exposed_provenance_mut::<T>(((w & PACK_MASK) << 3) as usize)) }, std::marker::PhantomData);
         #[cfg(target_pointer_width = "32")]
         // SAFETY: the low bits are the address of a live arena object, unshifted on 32-bit targets (`pack`).
-        return P(unsafe { &*std::ptr::with_exposed_provenance::<T>((w & PACK_MASK) as usize) });
+        return P(unsafe { std::ptr::NonNull::new_unchecked(std::ptr::with_exposed_provenance_mut::<T>((w & PACK_MASK) as usize)) }, std::marker::PhantomData);
     }
 
     /// `unpack` for an optional pointer (low bits 0 = `None`).
@@ -316,7 +320,7 @@ impl<T> P<T> {
         return P(unsafe { std::num::NonZeroU32::new_unchecked(key) }, std::marker::PhantomData);
         #[cfg(not(compressed_ptrs))]
         // SAFETY: `key` is the exposed address of a live arena object (this function's contract).
-        return P(unsafe { &*std::ptr::with_exposed_provenance::<T>(key) });
+        return P(unsafe { std::ptr::NonNull::new_unchecked(std::ptr::with_exposed_provenance_mut::<T>(key)) }, std::marker::PhantomData);
     }
 
     /// `from_key` for an optional pointer: 0 is `None`.
@@ -355,7 +359,7 @@ impl<T> P<T> {
         }
         #[cfg(not(compressed_ptrs))]
         // SAFETY: the array has at least `n` more elements after `self` (this function's contract).
-        P(unsafe { &*std::ptr::from_ref::<T>(self.0).add(n) })
+        P(unsafe { self.0.add(n) }, std::marker::PhantomData)
     }
 
     /// The same object viewed as a `U` (a header at the start of a larger allocation, or the reverse).
@@ -367,8 +371,7 @@ impl<T> P<T> {
         #[cfg(compressed_ptrs)]
         return P(self.0, std::marker::PhantomData);
         #[cfg(not(compressed_ptrs))]
-        // SAFETY: the caller guarantees that a `U` lives at this address.
-        P(unsafe { &*(self.0 as *const T).cast::<U>() })
+        P(self.0.cast::<U>(), std::marker::PhantomData)
     }
 
     /// A pointer to an arena object (`P::get` of a live `P`, an object made with `alloc`, or a view of one that
@@ -405,20 +408,22 @@ fn from_static_failed(ty: &str, addr: usize) -> ! {
 impl<T: ?Sized> P<T> {
     #[inline]
     pub const fn from_static(r: &'static T) -> P<T> {
-        P(r)
+        P(std::ptr::NonNull::from_ref(r), std::marker::PhantomData)
     }
 
     /// The underlying `'static` reference (not tied to the borrow of `self`).
     #[inline]
     pub fn get(self) -> &'static T {
+        // SAFETY: a `P` points to a live arena value (or a static), never moved and valid for the rest of the process.
+        let r = unsafe { &*self.0.as_ptr() };
         #[cfg(feature = "alloc-profile")]
-        check_not_freed(self.0);
-        self.0
+        check_not_freed(r);
+        r
     }
 
     #[inline]
     pub fn addr(self) -> usize {
-        self.0 as *const T as *const () as usize
+        self.0.as_ptr().cast::<()>() as usize
     }
 
     /// Position-independent bits for packed words: the address here, the offset from the arena base in compressed
@@ -427,7 +432,7 @@ impl<T: ?Sized> P<T> {
     /// bits of 8-aligned types and in the high 16 bits.
     #[inline]
     pub fn to_bits(self) -> usize {
-        (self.0 as *const T as *const ()).expose_provenance()
+        self.0.as_ptr().cast::<()>().expose_provenance()
     }
 }
 
@@ -483,7 +488,7 @@ impl<T: ?Sized> P<T> {
         #[cfg(compressed_ptrs)]
         return self.0.get();
         #[cfg(not(compressed_ptrs))]
-        return (self.0 as *const T as *const ()).expose_provenance();
+        return self.0.as_ptr().cast::<()>().expose_provenance();
     }
 
     /// The pointer in the low `PACK_BITS` (45) bits of a word whose higher bits belong to the caller: the handle with
@@ -495,13 +500,13 @@ impl<T: ?Sized> P<T> {
         return self.0.get() as u64;
         #[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
         {
-            let a = (self.0 as *const T as *const ()).expose_provenance() as u64;
+            let a = self.0.as_ptr().cast::<()>().expose_provenance() as u64;
             assert!(a & 7 == 0 && a >> (PACK_BITS + 3) == 0, "address {a:#x} does not pack in 45 bits");
             a >> 3
         }
         // 32-bit targets: objects may be only 4-aligned, and every address fits in `PACK_BITS` unshifted.
         #[cfg(target_pointer_width = "32")]
-        return (self.0 as *const T as *const ()).expose_provenance() as u64;
+        return self.0.as_ptr().cast::<()>().expose_provenance() as u64;
     }
 
     #[inline]
@@ -535,9 +540,7 @@ impl<T: ?Sized> Deref for P<T> {
     type Target = T;
     #[inline]
     fn deref(&self) -> &T {
-        #[cfg(feature = "alloc-profile")]
-        check_not_freed(self.0);
-        self.0
+        self.get()
     }
 }
 

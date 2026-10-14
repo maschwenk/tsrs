@@ -69,8 +69,8 @@ programs and file versions ([LSP.md](LSP.md#memory-management)). The rules are:
 
 - `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by identity** (like Go pointers).
   Create with `P::new(value)`. `p.get()` returns `&'static T`. It is a 32-bit handle (an offset in 8-byte units into
-  one reserved address range; `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain reference with
-  `--features tsrs_core/plain-ptrs`. So: `P::from_static(r)` only for references to arena objects (an object made
+  one reserved address range; `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain pointer (a raw pointer, so a `P` argument is not a protected
+  reference) with `--features tsrs_core/plain-ptrs` and on targets without `mmap`. So: `P::from_static(r)` only for references to arena objects (an object made
   with `P::new` / `alloc`, or a view that starts 8-aligned inside one); a Go package-level `*T` variable that is a
   Rust `static` is an `SP<T>`. Packed words store `p.to_bits()` / `p.key()`, never addresses.
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
