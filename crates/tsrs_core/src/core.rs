@@ -605,10 +605,12 @@ pub fn index_after(s: &str, pattern: &str, start_index: usize) -> Option<usize> 
         .map(|matched| matched + start_index)
 }
 
-/// Go `strings.Index(haystack, needle)` on bytes, searched the way Go does: candidates by the needle's first byte and
-/// a compare, then `memmem` once too many candidates fail. Building a searcher first (`str::find`, `memmem::find`)
-/// costs time linear in the needle on every call, which adds up when a caller searches every file of a program for
-/// one name; a naive scan costs a compare per byte.
+/// Go `strings.Index(haystack, needle)` on bytes.
+///
+/// Searched the way Go does: candidates by the needle's first byte and a compare, then `memmem` once too many
+/// candidates fail. Building a searcher first (`str::find`, `memmem::find`) costs time linear in the needle on every
+/// call, which adds up when a caller searches every file of a program for one name; a naive scan costs a compare per
+/// byte.
 pub fn index_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     let Some((&first, _)) = needle.split_first() else {
         return Some(0);
