@@ -212,16 +212,14 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    # DEBUG (#516): every run step's output also goes to /tmp/wasm-ci.log, posted on the pull request on failure.
-    defaults:
-      run:
-        shell: 'bash --noprofile --norc -c "echo == step $GITHUB_ACTION >> /tmp/wasm-ci.log; bash -eo pipefail {0} 2>&1 | tee -a /tmp/wasm-ci.log; exit ${PIPESTATUS[0]}"'
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
       - name: Read TypeScript reference commit
         id: ts
-        run: echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
+        run: |
+          exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
+          echo "commit=$(node npm/build.mjs --print-typescript-commit)" >> "$GITHUB_OUTPUT"
 
       - name: Restore TypeScript testdata
         id: ts-ref
@@ -252,6 +250,7 @@ jobs:
           # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
           - name: Install binaryen 133
             run: |
+              exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
               curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
               echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
               tar xzf /tmp/binaryen.tgz -C /tmp
@@ -262,28 +261,35 @@ jobs:
       # when the Rust cache misses, as on a pull request that changes Cargo.lock (#516).
       - name: Install the toolchain and the wasm32-wasip1 target
         run: |
+          exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
           rustup toolchain install
           rustup target add wasm32-wasip1
 
       - name: Bench cache keys
         id: bench-keys
-        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
+        run: |
+          exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
+          python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
 
       # Each build has its own target directory, so that none waits on another's lock. The native binaries are the
       # gate's reference, not what ships: the ci-native profile (no LTO) builds them in a third of the release time.
       - parallel:
           - name: cargo check (wasm32-wasip1) and cargo test -p tsrs_wasm
             run: |
+              exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
               cargo check -p tsrs_wasm --target wasm32-wasip1 --locked --config 'build.warnings="deny"'
               cargo test --locked -p tsrs_wasm
 
           - name: Build the module
             run: |
+              exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
               mkdir -p target
               CARGO_TARGET_DIR=target/wasm tools/wasm/build.sh | tee target/wasm-size.txt
 
           - name: Build native binaries
-            run: CARGO_TARGET_DIR=target/native cargo build --profile ci-native --locked -p tsrs_cli -p tsrs_testrunner
+            run: |
+              exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
+              CARGO_TARGET_DIR=target/native cargo build --profile ci-native --locked -p tsrs_cli -p tsrs_testrunner
 
           - name: Restore the bench compilers
             uses: actions/cache/restore@v4
@@ -307,19 +313,26 @@ jobs:
 
       - parallel:
           - name: pnpm test (npm/tsrs-wasm)
-            run: TSRS_NATIVE=$PWD/target/native/ci-native/tsrs pnpm --dir npm/tsrs-wasm test
+            run: |
+              exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
+              TSRS_NATIVE=$PWD/target/native/ci-native/tsrs pnpm --dir npm/tsrs-wasm test
 
           - name: Set up the bench projects
-            run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
+            run: |
+              exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
+              python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
 
       - name: Differential gate
-        run: TSRS_TEST=target/native/ci-native/tsrs-test tools/wasm/gate.sh target/native/ci-native/tsrs
+        run: |
+          exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
+          TSRS_TEST=target/native/ci-native/tsrs-test tools/wasm/gate.sh target/native/ci-native/tsrs
 
       - name: Post the log (debug)
         if: failure()
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
           { echo '```'; tail -c 60000 /tmp/wasm-ci.log; echo '```'; } > /tmp/comment.md
           gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/comment.md
 
