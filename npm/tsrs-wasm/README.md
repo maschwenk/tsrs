@@ -1,4 +1,4 @@
-# @ts-rs/wasm
+# @tsrs/wasm
 
 tsrs (a Rust port of the TypeScript 7 compiler) built as a WebAssembly module for Node 22+ and browsers. It uses the
 shared Rust compiler code, compiled for `wasm32-wasip1`, and runs single-threaded.
@@ -19,11 +19,11 @@ The package version follows tsrs and identifies the TypeScript version it ports:
 ## Command line (Node 22+)
 
 ```sh
-pnpm dlx @ts-rs/wasm -p .
-pnpm dlx @ts-rs/wasm --version
+pnpm dlx @tsrs/wasm -p .
+pnpm dlx @tsrs/wasm --version
 ```
 
-Or install it with `pnpm add -D @ts-rs/wasm`, then run `pnpm exec tsrs-wasm -p .`.
+Or install it with `pnpm add -D @tsrs/wasm`, then run `pnpm exec tsrs-wasm -p .`.
 
 The command reads and writes the real file system, prints the compiler's output and exits with its status. A panic
 or trap (such as a stack overflow or running out of memory) exits with 5 and a message on stderr; ordinary compiler
@@ -32,7 +32,7 @@ statuses are 0-4. Unsupported modes can also exit with 5.
 ## API
 
 ```js
-import { tsc } from "@ts-rs/wasm";
+import { tsc } from "@tsrs/wasm";
 
 // The real file system (Node)
 const { exitCode, stdout } = await tsc(["-p", "."], { cwd: "/path/to/project" });
@@ -63,7 +63,7 @@ Options:
   `stackSizeMb` sets the worker's stack size (default 256 MB).
 - Browser: `module` supplies an already compiled `WebAssembly.Module`; `url` overrides where to fetch the module.
 
-`@ts-rs/wasm/core` exposes the lower layer: `runTsc(module, request, host, io)` and `runTscAsync(...)` over a custom
+`@tsrs/wasm/core` exposes the lower layer: `runTsc(module, request, host, io)` and `runTscAsync(...)` over a custom
 `HostFileSystem`, plus `memoryFileSystem(files)`.
 
 ## Browsers

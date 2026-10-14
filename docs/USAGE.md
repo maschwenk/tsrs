@@ -45,7 +45,7 @@ Alongside the supported `tsc` flags, tsrs offers options to control performance:
 
 ## Native packages
 
-The launcher installs the appropriate optional `@ts-rs/<os>-<arch>[-<libc>]` dependency for your platform.
+The launcher installs the appropriate optional `@tsrs/<os>-<arch>[-<libc>]` dependency for your platform.
 See the [compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do) for released platform support.
 Set `TSRS_BINARY=/path/to/tsrs` to run a locally built binary through the same launcher.
 

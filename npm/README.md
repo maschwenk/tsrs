@@ -5,14 +5,14 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 | package | contents |
 | --- | --- |
 | `tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `dist/` + `vendor/` (the `unstable/*` JS API, see below), `optionalDependencies` on every platform package |
-| `@ts-rs/<os>-<arch>[-<libc>]` | the `tsrs` binary and default TypeScript libraries for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
-| `@ts-rs/wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
+| `@tsrs/<os>-<arch>[-<libc>]` | the `tsrs` binary and default TypeScript libraries for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
+| `@tsrs/wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
 
 Platforms since 0.14.0: `darwin-arm64`, `linux-x64-gnu`, `linux-arm64-gnu`, `linux-x64-musl` and `linux-arm64-musl`
 (earlier releases use unsuffixed GNU names; `darwin-x64` was published up to 0.2.1). `npm/build.mjs` and the launcher
 also know `win32-x64` (see TODO).
 
-The main package name is set in `npm/tsrs/package.json`; platform packages are `@ts-rs/<os>-<cpu>` with `-gnu` or
+The main package name is set in `npm/tsrs/package.json`; platform packages are `@tsrs/<os>-<cpu>` with `-gnu` or
 `-musl` on Linux. The launcher derives that name from the current platform, architecture and libc at runtime.
 
 The repository's root `README.md` is also the main package README. `npm/build.mjs` copies it into the staged package.
@@ -26,7 +26,7 @@ extensionless ES module in a `"type": "module"` package. `npm/sdk/smoke-consumer
 launcher and the JS API on each given Node; 16.20.0, 18, 20, 22 and 24 pass.)
 
 1. `TSRS_BINARY` set: run that file (for local builds: `TSRS_BINARY=$PWD/target/release/tsrs pnpm exec tsrs ...`).
-2. Otherwise resolve `@ts-rs/<process.platform>-<process.arch>[-<libc>]/package.json` from the launcher's own location (with
+2. Otherwise resolve `@tsrs/<process.platform>-<process.arch>[-<libc>]/package.json` from the launcher's own location (with
    pnpm that is the sibling link in `node_modules/.pnpm/<main>/node_modules/`), and run `tsrs`/`tsrs.exe` next to it.
    Linux libc detection follows Oxc's ldd/report probes to choose `-gnu` or `-musl`.
    If that fails, exit 1 with a message naming the missing optional dependency (or listing the supported platforms).
@@ -52,7 +52,7 @@ nightly = "7.1.0-dev.20260930.4"                      # npm nightly used for the
 ```
 
 npm version: `<version>-ts<typescript version>` = `0.10.0-ts7.1.0-dev.20260929`, for every package including
-`@ts-rs/wasm` (`npm/tsrs-wasm/package.json` holds a placeholder that `npm/build.mjs` replaces). `tsrs --version`
+`@tsrs/wasm` (`npm/tsrs-wasm/package.json` holds a placeholder that `npm/build.mjs` replaces). `tsrs --version`
 and `tsrs-wasm --version` include the package version, embedded at build time by `crates/tsrs_execute/build.rs`.
 The example package version below illustrates the format; read `Cargo.toml` for the current version:
 
@@ -74,7 +74,7 @@ Use pnpm 12.10.1, pinned in the root `package.json`, for the build tooling, pack
 cargo build --release -p tsrs_cli
 pnpm install --frozen-lockfile     # build-only compiler for the JS API
 node npm/build.mjs --binary aarch64-apple-darwin=target/release/tsrs --pack
-# -> npm/dist/ts-rs-darwin-arm64-<version>.tgz, npm/dist/tsrs-<version>.tgz, npm/dist/packages.json
+# -> npm/dist/tsrs-darwin-arm64-<version>.tgz, npm/dist/tsrs-<version>.tgz, npm/dist/packages.json
 ```
 
 `--binary <triple>=<path>` can repeat; `--artifacts <dir>` picks up `<dir>/<triple>/tsrs[.exe]` (the release
@@ -85,11 +85,11 @@ To try local tarballs in a pnpm project, the simplest route is to depend on both
 
 ```sh
 pnpm add -D tsrs@file:/abs/npm/dist/tsrs-<version>.tgz \
-            @ts-rs/darwin-arm64@file:/abs/npm/dist/ts-rs-darwin-arm64-<version>.tgz
+            @tsrs/darwin-arm64@file:/abs/npm/dist/tsrs-darwin-arm64-<version>.tgz
 ```
 
 (The launcher then finds the platform package at the project root. A pnpm `overrides` entry pointing
-`@ts-rs/darwin-arm64` at the tarball reproduces the registry layout exactly, but changing `overrides` makes
+`@tsrs/darwin-arm64` at the tarball reproduces the registry layout exactly, but changing `overrides` makes
 pnpm re-resolve the whole lockfile.)
 
 ## JS API (`unstable/*` exports)
@@ -152,10 +152,10 @@ Wire contract the server has to speak (from the pinned `tsc/cmd/tsc/api.go`, `ts
    error) and the installed package (`npm/sdk/smoke-consumer.mjs`);
    musl x64/arm64 uses static `dist` builds with Zig 0.13.0 and cargo-zigbuild 0.23.4;
 3. builds the WebAssembly module (`tools/wasm/build.sh`, binaryen 133), runs `pnpm test` in `npm/tsrs-wasm`, packs
-   `@ts-rs/wasm` with `npm/build.mjs --wasm`, installs that tarball and runs it (`--version` must name the
+   `@tsrs/wasm` with `npm/build.mjs --wasm`, installs that tarball and runs it (`--version` must name the
    release version, exit code 2 on a type error), and uploads it as the `npm-wasm` artifact;
 4. assembles and packs the native packages with `npm/build.mjs`, uploads the tarballs as the `npm-packages` artifact,
-   and publishes the platform packages, then the main package, then `@ts-rs/wasm`, with
+   and publishes the platform packages, then the main package, then `@tsrs/wasm`, with
    `--access public --tag latest` using npm trusted publishing (skipping any already on the registry, so a failed
    run can be re-run). Before publishing the main package, waits up to 10 minutes for every optional dependency's
    exact version metadata and tarball to be available on npm, including platform packages skipped on a re-run.
@@ -169,8 +169,8 @@ there.
 
 What maintainers must configure before the first release:
 
-- The `@ts-rs` npm org and each package must exist. Configure a GitHub Actions trusted publisher for `tsrs`,
-  `@ts-rs/wasm` and each platform package, including the four new GNU/musl names: owner `maschwenk`, repository `tsrs`, workflow
+- The `@tsrs` npm org and each package must exist. Configure a GitHub Actions trusted publisher for `tsrs`,
+  `@tsrs/wasm` and each platform package, including the four new GNU/musl names: owner `maschwenk`, repository `tsrs`, workflow
   filename `release.yml`, no environment name, with direct publishing allowed.
 - The publish job uses pnpm 12.10.1 and `id-token: write` to authenticate through GitHub Actions OIDC. No registry publish
   token or repository secret is required. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/)

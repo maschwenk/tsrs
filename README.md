@@ -35,7 +35,7 @@ for supported features and known gaps.
 
 ## Extra features
 
-[`@ts-rs/wasm`](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md) provides WebAssembly support
+[`@tsrs/wasm`](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md) provides WebAssembly support
 targeting `wasm32-wasip1` (WASI Preview 1).
 
 ## Learn more

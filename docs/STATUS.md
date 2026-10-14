@@ -45,8 +45,8 @@ without new release measurements.
 ## 2026-10-11: 0.14.0 release
 
 Linux x64/arm64 packages gain explicit `-gnu` and `-musl` suffixes, static musl builds and libc-aware binary selection
-(#312). All seven packages (`tsrs`, `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64-gnu`, `@ts-rs/linux-arm64-gnu`,
-`@ts-rs/linux-x64-musl`, `@ts-rs/linux-arm64-musl` and `@ts-rs/wasm`) use `0.14.0-ts7.1.0-dev.20260929`.
+(#312). All seven packages (`tsrs`, `@tsrs/darwin-arm64`, `@tsrs/linux-x64-gnu`, `@tsrs/linux-arm64-gnu`,
+`@tsrs/linux-x64-musl`, `@tsrs/linux-arm64-musl` and `@tsrs/wasm`) use `0.14.0-ts7.1.0-dev.20260929`.
 Install with `pnpm add -D tsrs`; direct Linux platform-package dependencies need the appropriate libc suffix.
 The TypeScript source pin remains `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929).
 
@@ -81,15 +81,15 @@ validation preserved the conformance pass lists, passed all 29 regression cases,
 in all 102 public-project verification cells.
 
 Release tooling now uses pinned pnpm 12.10.1 for installation, packing and direct OIDC publication (#295).
-All five packages (`tsrs`, `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`, `@ts-rs/linux-arm64` and `@ts-rs/wasm`)
+All five packages (`tsrs`, `@tsrs/darwin-arm64`, `@tsrs/linux-x64`, `@tsrs/linux-arm64` and `@tsrs/wasm`)
 use `0.13.0-ts7.1.0-dev.20260929`. The TypeScript source pin remains
 `b85298b6a81f772d080b0455de0ca9d744cd6fd6` (7.1.0-dev.20260929). The shared checker seed still requires
 the `shared-graph` Cargo feature and `TSRS_SHARED_GRAPH=1`; npm binaries use the default Cargo features.
 
 ## 2026-10-10: 0.12.0 release
 
-The native compiler and JS API move to `tsrs`, the native binaries to `@ts-rs/darwin-arm64`, `@ts-rs/linux-x64`
-and `@ts-rs/linux-arm64`, and WebAssembly to `@ts-rs/wasm` (#288). All five packages use
+The native compiler and JS API move to `tsrs`, the native binaries to `@tsrs/darwin-arm64`, `@tsrs/linux-x64`
+and `@tsrs/linux-arm64`, and WebAssembly to `@tsrs/wasm` (#288). All five packages use
 `0.12.0-ts7.1.0-dev.20260929`, published directly by the release workflow using npm trusted publishing (OIDC).
 Install with `pnpm add -D tsrs`; JS API consumers change imports from `@maschwenk/tsrs/unstable/*` to
 `tsrs/unstable/*`. Earlier releases remain under `@maschwenk`. The TypeScript source pin remains
