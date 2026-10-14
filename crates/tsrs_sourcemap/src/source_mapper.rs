@@ -41,32 +41,32 @@ pub struct DocumentPositionMapper {
     use_case_sensitive_file_names: bool,
 
     source_file_absolute_paths: Vec<String>,
-    source_to_source_index_map: FxHashMap<String, u32>,
+    source_mappings_by_path: FxHashMap<String, Vec<SourceMappedPosition>>,
     generated_absolute_file_path: String,
 
     generated_mappings: Vec<MappedPosition>,
+    #[expect(dead_code, reason = "retain per-index source mappings as the Go mapper does") ]
     source_mappings: FxHashMap<u32, Vec<SourceMappedPosition>>,
 }
 
 // source_mapper.go:52
-pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawSourceMap, map_path: &str) -> DocumentPositionMapper {
+pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawSourceMap, source_root_field: Option<&str>, null_sources: &[bool], map_path: &str) -> DocumentPositionMapper {
     let map_directory = tspath::get_directory_path(map_path);
-    let source_root = if !source_map.source_root.is_empty() {
-        tspath::get_normalized_absolute_path(&source_map.source_root, &map_directory)
-    } else {
-        map_directory.clone()
-    };
+    let mut source_url_prefix = source_root_field.unwrap_or("").to_string();
+    // TypeScript and established consumers treat an explicit empty sourceRoot as absent.
+    if !source_url_prefix.is_empty() && !source_url_prefix.ends_with('/') { source_url_prefix.push('/'); }
     let generated_absolute_file_path = tspath::get_normalized_absolute_path(&source_map.file, &map_directory);
-    let source_file_absolute_paths: Vec<String> =
-        source_map.sources.iter().map(|source| tspath::get_normalized_absolute_path(source, &source_root)).collect();
+    let source_file_absolute_paths: Vec<String> = source_map.sources.iter().enumerate().map(|(i, source)| {
+        if null_sources.get(i).copied().unwrap_or(false) { return String::new(); }
+        let source_with_prefix = format!("{source_url_prefix}{source}");
+        if source_with_prefix.is_empty() { map_path.to_string() } else { tspath::get_normalized_absolute_path(&source_with_prefix, &map_directory) }
+    }).collect();
     let use_case_sensitive_file_names = host.use_case_sensitive_file_names();
-    let mut source_to_source_index_map = FxHashMap::with_capacity_and_hasher(source_file_absolute_paths.len(), Default::default());
-    source_to_source_index_map.extend(
-        source_file_absolute_paths
-            .iter()
-            .enumerate()
-            .map(|(i, source)| (tspath::get_canonical_file_name(source, use_case_sensitive_file_names), i as u32,)),
-    );
+    let mut source_to_source_index_map: FxHashMap<String, Vec<u32>> = FxHashMap::default();
+    for (i, source) in source_file_absolute_paths.iter().enumerate() {
+        if null_sources.get(i).copied().unwrap_or(false) { continue; }
+        source_to_source_index_map.entry(tspath::get_canonical_file_name(source, use_case_sensitive_file_names)).or_default().push(i as u32);
+    }
 
     let mut decoded_mappings: Vec<MappedPosition> = Vec::new();
     let mut source_mappings: FxHashMap<u32, Vec<SourceMappedPosition>> = FxHashMap::default();
@@ -92,8 +92,9 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
         if let (Some(source_index), Some(source_line), Some(source_character)) =
             (source_index, mapping.source_line, mapping.source_character)
         {
-            let line_info =
-                host.get_ecma_line_info(&source_file_absolute_paths[source_index as usize]);
+            let line_info = source_file_absolute_paths.get(source_index as usize)
+                .filter(|_| !null_sources.get(source_index as usize).copied().unwrap_or(false))
+                .and_then(|file_name| host.get_ecma_line_info(file_name));
             if let Some(line_info) = &line_info {
                 let pos = tsrs_scanner::compute_position_of_line_and_utf16_character(
                     &line_info.line_starts,
@@ -145,6 +146,14 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
         });
     }
 
+    let mut source_mappings_by_path = FxHashMap::default();
+    #[expect(clippy::iter_over_hash_type, reason = "each source path builds and sorts its own independent mapping list")]
+    for (path, indices) in source_to_source_index_map {
+        let mut mappings: Vec<SourceMappedPosition> = indices.iter().flat_map(|i| source_mappings.get(i).into_iter().flatten().copied()).collect();
+        goslices::sort_func(&mut mappings, |a, b| a.source_position.cmp(&b.source_position));
+        source_mappings_by_path.insert(path, mappings);
+    }
+
     // getGeneratedMappings()
     let mut generated_mappings = decoded_mappings;
     goslices::sort_func(&mut generated_mappings, |a, b| {
@@ -157,7 +166,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
     DocumentPositionMapper {
         use_case_sensitive_file_names,
         source_file_absolute_paths,
-        source_to_source_index_map,
+        source_mappings_by_path,
         generated_absolute_file_path,
         generated_mappings,
         source_mappings,
@@ -200,16 +209,7 @@ impl DocumentPositionMapper {
 
     // source_mapper.go:197
     pub fn get_generated_position(&self, loc: &DocumentPosition) -> Option<DocumentPosition> {
-        let &source_index =
-            self.source_to_source_index_map
-                .get(&tspath::get_canonical_file_name(
-                    &loc.file_name,
-                    self.use_case_sensitive_file_names,
-                ))?;
-        let source_mappings: &[SourceMappedPosition] = self
-            .source_mappings
-            .get(&source_index)
-            .map_or(&[], std::vec::Vec::as_slice);
+        let source_mappings = self.source_mappings_by_path.get(&tspath::get_canonical_file_name(&loc.file_name, self.use_case_sensitive_file_names))?;
         let target_index = source_mappings.partition_point(|m| m.source_position < Some(loc.pos));
 
         if target_index >= source_mappings.len() {
@@ -217,9 +217,6 @@ impl DocumentPositionMapper {
         }
 
         let mapping = &source_mappings[target_index];
-        if mapping.source_index != Some(source_index) {
-            return None;
-        }
 
         // Closest position
         Some(DocumentPosition {
@@ -270,28 +267,32 @@ pub fn get_document_position_mapper(host: &dyn Host, generated_file_name: &str) 
 
 // source_mapper.go:257
 pub(crate) fn convert_document_to_source_mapper(host: &dyn Host, contents: &str, map_file_name: &str) -> Option<DocumentPositionMapper> {
-    let source_map = try_parse_raw_source_map(contents);
-    let source_map = match source_map {
-        Some(source_map) if !source_map.sources.is_empty() && !source_map.file.is_empty() && !source_map.mappings.is_empty() => source_map,
-        // invalid map
-        _ => return None,
-    };
-
-    // Don't support source maps that contain inlined sources
-    if source_map.sources_content.as_deref().unwrap_or(&[]).iter().any(std::option::Option::is_some) {
-        return None;
-    }
-
-    Some(create_document_position_mapper(host, &source_map, map_file_name))
+    let parsed = try_parse_raw_source_map(contents)?;
+    let source_map = &parsed.source_map;
+    if source_map.sources.is_empty() || source_map.file.is_empty() || source_map.mappings.is_empty() { return None; }
+    // Don't support source maps that contain inlined sources.
+    if source_map.sources_content.as_deref().unwrap_or(&[]).iter().any(std::option::Option::is_some) { return None; }
+    Some(create_document_position_mapper(host, source_map, parsed.source_root.as_deref(), &parsed.null_sources, map_file_name))
 }
 
-// source_mapper.go:272
-pub(crate) fn try_parse_raw_source_map(contents: &str) -> Option<RawSourceMap> {
-    let source_map = json::unmarshal(contents).and_then(|v| RawSourceMap::from_json(&v)).ok()?;
-    if source_map.version != 3 {
-        return None;
-    }
-    Some(source_map)
+pub(crate) struct ParsedRawSourceMap {
+    source_map: RawSourceMap,
+    source_root: Option<String>,
+    null_sources: Vec<bool>,
+}
+
+pub(crate) fn try_parse_raw_source_map(contents: &str) -> Option<ParsedRawSourceMap> {
+    let value = json::unmarshal(contents).ok()?;
+    let mut source_map = RawSourceMap::from_json(&value).ok()?;
+    if source_map.version != 3 { return None; }
+    let json::Value::Object(object) = value else { return None };
+    let source_root = match object.get("sourceRoot") { Some(json::Value::String(root)) => Some(root.clone()), _ => None };
+    let null_sources = match object.get("sources") {
+        Some(json::Value::Array(sources)) => sources.iter().map(|source| matches!(source, json::Value::Null)).collect(),
+        _ => Vec::new(),
+    };
+    source_map.source_root.clear();
+    Some(ParsedRawSourceMap { source_map, source_root, null_sources })
 }
 
 // source_mapper.go:284

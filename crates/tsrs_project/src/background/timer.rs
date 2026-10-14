@@ -92,6 +92,8 @@ fn schedule(st: &mut timerState, id: u64, d: Duration, f: callback) {
 }
 
 impl Timer {
+    pub(crate) fn id(&self) -> u64 { self.id }
+
     // Go `t.Stop()`: reports whether the call stopped the timer (false if it already fired or was stopped).
     pub fn stop(&self) -> bool {
         let t = timer_thread();

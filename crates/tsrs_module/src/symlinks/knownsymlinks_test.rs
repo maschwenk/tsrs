@@ -15,7 +15,7 @@ fn test_new_known_symlink() {
 fn test_set_directory() {
     let cache = new_known_symlink("/test/dir", true);
     let symlink_path = tspath::to_path("/test/symlink", "/test/dir", true).ensure_trailing_directory_separator();
-    let real_directory = P::new(KnownDirectoryLink {
+    let real_directory = P::new(KnownDirectoryLink { symlink: String::new(),
         real: "/real/path/".to_string(),
         real_path: tspath::to_path("/real/path", "/test/dir", true).ensure_trailing_directory_separator(),
     });
@@ -136,7 +136,7 @@ fn test_known_symlinks_thread_safety() {
             s.spawn(move || {
                 let c = char::from_u32(id).unwrap();
                 let symlink_path = tspath::to_path(&format!("/test/symlink{c}"), "/test/dir", true).ensure_trailing_directory_separator();
-                let real_directory = P::new(KnownDirectoryLink {
+                let real_directory = P::new(KnownDirectoryLink { symlink: String::new(),
                     real: format!("/real/path{c}/"),
                     real_path: tspath::to_path(&format!("/real/path{c}"), "/test/dir", true).ensure_trailing_directory_separator(),
                 });

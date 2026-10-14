@@ -157,7 +157,7 @@ impl projectReferenceDtsFakingVfs {
         self.known_symlinks.set_directory(
             directory,
             directory_path,
-            Some(P::new(KnownDirectoryLink { real: tspath::ensure_trailing_directory_separator(&real_directory), real_path })),
+            Some(P::new(KnownDirectoryLink { symlink: String::new(), real: tspath::ensure_trailing_directory_separator(&real_directory), real_path })),
         );
     }
 
@@ -182,7 +182,7 @@ impl projectReferenceDtsFakingVfs {
             return false;
         }
         // Check if the directory or file is a symlinked package
-        let package_root = module::parse_node_module_from_path(file_or_directory, true /*isFolder*/);
+        let package_root = module::parse_node_module_from_path(file_or_directory, !is_file);
         if !package_root.is_empty() {
             self.handle_directory_could_be_symlink(&package_root);
         }
@@ -197,13 +197,15 @@ impl projectReferenceDtsFakingVfs {
         // If it contains node_modules check if its one of the symlinked path we know of
         let mut exists = false;
         known_directory_links.range(|directory_path, known_directory_link| {
-            let Some(relative) = file_or_directory_path.as_str().strip_prefix(directory_path.as_str()) else {
+            if !file_or_directory_path.as_str().starts_with(directory_path.as_str()) {
                 return true;
-            };
+            }
             let Some(known_directory_link) = known_directory_link else {
                 return true;
             };
-            exists = self.exists_using_source(&format!("{}{}", known_directory_link.real_path.as_str(), relative), is_file).is_true();
+            let real_file_or_directory = known_directory_link.resolve_file_name(file_or_directory, self.host.fs().use_case_sensitive_file_names())
+                .expect("canonical symlink path did not match its presentation path");
+            exists = self.exists_using_source(&real_file_or_directory, is_file).is_true();
             if exists {
                 if is_file {
                     // Store the real path for the file
@@ -213,7 +215,7 @@ impl projectReferenceDtsFakingVfs {
                     self.known_symlinks.set_file(
                         &absolute_path,
                         file_or_directory_path.clone(),
-                        &format!("{}{}", known_directory_link.real, &absolute_path[directory_path.as_str().len()..]),
+                        &real_file_or_directory,
                     );
                 }
                 return false;

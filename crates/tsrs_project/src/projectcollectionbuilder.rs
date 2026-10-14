@@ -261,6 +261,14 @@ impl ProjectCollectionBuilder {
 
     // projectcollectionbuilder.go:186
     pub(crate) fn handle_api_request(&self, api_request: &APISnapshotRequest, logger: &LogTree) -> Result<(), lsproto::Error> {
+        let next = self.api_state.borrow().clone_state();
+        let previous = self.api_state.replace(next);
+        let result = self.handle_api_request_worker(api_request, logger);
+        if result.is_err() { *self.api_state.borrow_mut() = previous; }
+        result
+    }
+
+    fn handle_api_request_worker(&self, api_request: &APISnapshotRequest, logger: &LogTree) -> Result<(), lsproto::Error> {
         let mut projects_to_close: Option<FxHashSet<Path>> = None;
         if let Some(close_projects) = &api_request.close_projects {
             let mut api_state = self.api_state.borrow_mut();

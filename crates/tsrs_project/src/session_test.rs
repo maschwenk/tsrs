@@ -1382,7 +1382,7 @@ fn did_change_watched_files_change_program_file_not_in_tsconfig_root_files() {
         let program_before = ls_program(&session, "/home/projects/TS/p1/src/index.ts");
         session.wait_for_background_tasks();
 
-        assert!(utils.watches_file("/home/projects/ts/x.ts"), "workspaceDir={workspace_dir}");
+        assert!(utils.watches_file("/home/projects/TS/x.ts"), "workspaceDir={workspace_dir}");
 
         utils.fs().write_file("/home/projects/TS/x.ts", "export const x = 2;").unwrap();
 

@@ -131,7 +131,7 @@ impl SnapshotHost {
             };
             change.file_system_override = change.fs.is_some();
             change.replace_file_system = api_request.replace_file_system;
-            change.new_config = api_request.user_preferences.clone();
+            change.new_config.clone_from(&api_request.user_preferences);
             if !api_request.prepare_auto_imports.0.is_empty() {
                 change.resource_request = base_snapshot.resource_request_for_document(&api_request.prepare_auto_imports);
                 change.resource_request.auto_imports = api_request.prepare_auto_imports.clone();

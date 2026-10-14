@@ -134,7 +134,8 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
         if include_symbol {
             return Err(CheckerError::client(format!("snapshot is not prepared for auto-imports for {file_name}")));
         }
-        let snapshot = host.clone_snapshot_with_auto_imports(&sd.scope.snapshot, &file_name)?;
+        let source_file = program.get_source_file(&file_name).unwrap();
+        let snapshot = host.clone_snapshot_with_auto_imports(&sd.scope.snapshot, source_file.file_name())?;
         let outcome = program_of(&snapshot, &sd.project).and_then(|program| run(&snapshot, program, &ctx));
         prepared = Some(snapshot);
         result = match outcome {
@@ -268,7 +269,7 @@ pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> Chec
     let mut prepared: Option<Arc<Snapshot>> = None;
     let prepared_for_file = working.auto_import_registry().is_some_and(|r| r.is_prepared_for_importing_file(source_file.file_name(), &project_id, working.user_preferences()));
     if !prepared_for_file {
-        let snapshot = host.clone_snapshot_with_auto_imports(&working, &file_name)?;
+        let snapshot = host.clone_snapshot_with_auto_imports(&working, source_file.file_name())?;
         prepared = Some(Arc::clone(&snapshot));
         working = snapshot;
         let resolved = program_of(&working, &sd.project).and_then(|prog| {

@@ -954,11 +954,15 @@ impl Watcher {
     }
 
     fn content_mapper_manifest_changed(&self, changed_paths: &FxHashMap<String, EventKind>) -> bool {
-        self.config
-            .content_mappers()
-            .iter()
-            .filter(|m| !m.package_directory.is_empty() && m.contribution_id.is_empty())
-            .any(|m| changed_paths.contains_key(&tspath::combine_paths(&m.package_directory, &["package.json"])))
+        let compare = self.compare_paths_options();
+        let mut changed_keys = None;
+        for mapper in self.config.content_mappers() {
+            if mapper.package_directory.is_empty() || !mapper.contribution_id.is_empty() { continue; }
+            let keys: &FxHashSet<Path> = changed_keys.get_or_insert_with(|| changed_paths.keys().map(|path| tspath::to_path(path, &compare.current_directory, compare.use_case_sensitive_file_names)).collect());
+            let manifest = tspath::combine_paths(&mapper.package_directory, &["package.json"]);
+            if keys.contains(&tspath::to_path(&manifest, &compare.current_directory, compare.use_case_sensitive_file_names)) { return true; }
+        }
+        false
     }
 
     // Returns true when the config could not be parsed (its errors were reported and the cycle ends).

@@ -436,12 +436,12 @@ fn add_referenced_files_from_import_literal(file: P<SourceFile>, referenced_file
 
 // Gets the path to reference file from file name, it could be resolvedPath if present otherwise path
 // programtosnapshot.go:281 (addReferencedFileFromFileName, returning the path it adds)
-fn referenced_file_path_from_file_name(program: &CompilerProgram, file_name: &str, source_file_directory: &str) -> Path {
+fn referenced_file_path_from_file_name(program: &CompilerProgram, file_name: &str) -> Path {
     let redirect = program.get_parse_file_redirect(file_name);
     if !redirect.is_empty() {
         tspath::to_path(&redirect, program.get_current_directory(), program.use_case_sensitive_file_names())
     } else {
-        tspath::to_path(file_name, source_file_directory, program.use_case_sensitive_file_names())
+        tspath::to_path(file_name, program.get_current_directory(), program.use_case_sensitive_file_names())
     }
 }
 
@@ -519,13 +519,13 @@ fn referenced_files_of(
     // Triple slash references, then type reference directives.
     let mut file_name_paths: Vec<Path> = Vec::new();
     file_name_paths.extend(
-        file.referenced_files().iter().map(|referenced_file| referenced_file_path_from_file_name(program, &referenced_file.file_name, &source_file_directory)),
+        file.referenced_files().iter().map(|referenced_file| referenced_file_path_from_file_name(program, &tspath::get_normalized_absolute_path(&referenced_file.file_name, &source_file_directory))),
     );
     if let Some(type_refs_in_file) = program.get_resolved_type_reference_directives().get(file.path()) {
         // the paths go into a set, and references_equal does not depend on their order
         file_name_paths.extend(type_refs_in_file.values().filter_map(|type_ref| {
             if !type_ref.resolved_file_name.is_empty() {
-                Some(referenced_file_path_from_file_name(program, type_ref.resolved_file_name, &source_file_directory))
+                Some(referenced_file_path_from_file_name(program, type_ref.resolved_file_name))
             } else {
                 None
             }

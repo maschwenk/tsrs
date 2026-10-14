@@ -254,6 +254,10 @@ pub(crate) type PathFunc = Arc<dyn Fn(&str) -> String + Send + Sync>;
 // finds the symlink boundary (the package root where the symlink lives), and caches that prefix mapping.
 // All subsequent files under the same symlinked package directory use prefix substitution with no syscalls.
 pub(crate) fn get_package_realpath_funcs(fs: &'static dyn FS, package_dir: &str) -> (PathFunc, PathFunc) {
+    let replace_prefix = |file_name: &str, prefix: &str, replacement: &str| {
+        let relative = file_name.strip_prefix(prefix).unwrap_or(file_name);
+        tspath::combine_paths(replacement, &[relative.trim_start_matches(['/', '\\'])])
+    };
     let real_package_dir = fs.realpath(package_dir);
     let is_symlinked = real_package_dir != package_dir;
     // Cache of package-directory-level symlink→realpath prefix mappings for
@@ -267,28 +271,33 @@ pub(crate) fn get_package_realpath_funcs(fs: &'static dyn FS, package_dir: &str)
         // Fast path: files within the package use prefix substitution.
         if is_symlinked {
             if let Some(after) = file_name.strip_prefix(package_dir_owned.as_str()) {
-                return format!("{real_package_dir_owned}{after}");
+                if after.is_empty() || after.starts_with(['/', '\\']) {
+                    return replace_prefix(file_name, &package_dir_owned, &real_package_dir_owned);
+                }
             }
         }
         // Files outside the package (e.g. re-exports into symlinked deps):
         // find the node_modules package directory, resolve it once, and cache.
-        let pkg_dir = module::parse_node_module_from_path(file_name, false /*isFolder*/);
+        let mut pkg_dir = module::parse_node_module_from_path(file_name, false /*isFolder*/);
         if pkg_dir.is_empty() {
             return file_name.to_string();
         }
+        // The wrapped FS also calls Realpath while traversing directories.
+        let directory_package = module::parse_node_module_from_path(file_name, true);
+        if directory_package != pkg_dir && fs.directory_exists(file_name) { pkg_dir = directory_package; }
         let cached = dir_cache.lock().unwrap().get(&pkg_dir).cloned();
         if let Some(real_dir) = cached {
             if real_dir == pkg_dir {
                 return file_name.to_string();
             }
-            return format!("{}{}", real_dir, &file_name[pkg_dir.len()..]);
+            return replace_prefix(file_name, &pkg_dir, &real_dir);
         }
         let real_dir = fs.realpath(&pkg_dir);
         dir_cache.lock().unwrap().insert(pkg_dir.clone(), real_dir.clone());
         if real_dir == pkg_dir {
             return file_name.to_string();
         }
-        format!("{}{}", real_dir, &file_name[pkg_dir.len()..])
+        replace_prefix(file_name, &pkg_dir, &real_dir)
     });
     if !is_symlinked {
         return (to_realpath, Arc::new(|s: &str| s.to_string()));
@@ -298,8 +307,8 @@ pub(crate) fn get_package_realpath_funcs(fs: &'static dyn FS, package_dir: &str)
     // paths; callers should only use it for files known to be within the package.
     let package_dir_owned = package_dir.to_string();
     let to_symlink: PathFunc = Arc::new(move |file_name: &str| -> String {
-        if let Some(after) = file_name.strip_prefix(real_package_dir.as_str()) {
-            return format!("{package_dir_owned}{after}");
+        if file_name.starts_with(real_package_dir.as_str()) {
+            return replace_prefix(file_name, &real_package_dir, &package_dir_owned);
         }
         file_name.to_string()
     });

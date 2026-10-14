@@ -75,9 +75,8 @@ pub fn new_queue() -> Queue {
 impl Queue {
     // queue.go:20
     pub fn enqueue(&self, ctx: &Context, f: impl FnOnce(&Context) + Send + 'static) {
-        if *self.closed.read().unwrap() {
-            return;
-        }
+        let closed = self.closed.read().unwrap();
+        if *closed { return; }
 
         // Don't start new tasks if context is already cancelled
         if ctx.err().is_some() {
@@ -85,6 +84,7 @@ impl Queue {
         }
 
         *self.pending.count.lock().unwrap() += 1;
+        drop(closed);
         let pending = Arc::clone(&self.pending);
         let ctx = ctx.clone();
         let task: task = Box::new(move || {
@@ -114,11 +114,17 @@ impl Queue {
     // queue.go:48
     pub fn close(&self) {
         *self.closed.write().unwrap() = true;
+        self.wait();
+    }
+
+    pub(crate) fn pending_task(&self) -> Arc<scopeDone> {
+        *self.pending.count.lock().unwrap() += 1;
+        Arc::new(scopeDone(Arc::clone(&self.pending)))
     }
 }
 
 // Go's `defer wg.Done()` (also on panic).
-struct scopeDone(Arc<pendingCount>);
+pub(crate) struct scopeDone(Arc<pendingCount>);
 
 impl Drop for scopeDone {
     fn drop(&mut self) {

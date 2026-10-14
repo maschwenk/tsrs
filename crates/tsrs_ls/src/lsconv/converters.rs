@@ -487,16 +487,7 @@ pub fn file_name_to_document_uri(file_name: &str) -> lsproto::DocumentUri {
         return lsproto::DocumentUri(file_name.to_string());
     }
     if tspath::is_dynamic_file_name(file_name) {
-        let Some((scheme, rest)) = file_name[2..].split_once('/') else {
-            panic!("invalid file name: {file_name}");
-        };
-        let Some((authority, path)) = rest.split_once('/') else {
-            panic!("invalid file name: {file_name}");
-        };
-        if authority == "ts-nul-authority" {
-            return lsproto::DocumentUri(format!("{scheme}:{path}"));
-        }
-        return lsproto::DocumentUri(format!("{scheme}://{authority}/{path}"));
+        return tsrs_lsproto::dynamic_file_name_to_document_uri(file_name);
     }
 
     let (mut volume, file_name) = match tspath::split_volume_path(file_name) {

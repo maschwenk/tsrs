@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 
 use tsrs_ast::Diagnostic;
 use tsrs_compiler::{new_program, sort_and_deduplicate_diagnostics, CheckerPool, CreateCheckerPool, CreateModuleResolver, Program, ProgramOptions};
-use tsrs_core::collections::{Set, SyncSet};
+use tsrs_core::collections::{Set, SyncMap};
 use tsrs_core::context::Context;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, JsxEmit, ModuleKind, ModuleResolutionKind, ProjectReference, ScriptTarget, Tristate, TypeAcquisition, P};
@@ -204,7 +204,7 @@ pub struct Project {
     // Only set before actually loading config file to get actual project references
     pub(crate) potential_project_references: Option<Arc<Set<Path>>>,
 
-    pub(crate) program_files_watch: Option<Arc<WatchedFiles<Option<Arc<SyncSet<Path>>>>>>,
+    pub(crate) program_files_watch: Option<Arc<WatchedFiles<Option<Arc<SyncMap<Path, String>>>>>>,
     pub(crate) typings_watch: Option<Arc<WatchedFiles<PatternsAndIgnored>>>,
     pub(crate) content_mapper_watch: Option<Arc<WatchedFiles<Vec<String>>>>,
     pub(crate) content_mapper_watched_files: Option<Arc<Set<Path>>>,
@@ -645,7 +645,7 @@ impl Project {
     }
 
     // project.go:589
-    pub(crate) fn clone_watchers(&self) -> Option<Arc<WatchedFiles<Option<Arc<SyncSet<Path>>>>>> {
+    pub(crate) fn clone_watchers(&self) -> Option<Arc<WatchedFiles<Option<Arc<SyncMap<Path, String>>>>>> {
         let seen_files = self.host.as_ref().unwrap().source_fs.seen_files();
         self.program_files_watch.as_ref().map(|w| w.clone_with(seen_files))
     }

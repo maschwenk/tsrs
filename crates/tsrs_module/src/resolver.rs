@@ -22,6 +22,36 @@ use crate::types::{
 };
 use crate::util::{is_applicable_versioned_types_key, mangle_scoped_package_name, parse_node_module_from_path, parse_package_name, compare_pattern_keys, INFERRED_TYPES_CONTAINING_FILE};
 
+fn path_for_dynamic_resolution(directory: &str, path: &str, directory_only: bool) -> Option<String> {
+    if tspath::is_encoded_dynamic_file_name(directory) && !tspath::path_is_absolute(path) {
+        return Some(if directory_only { tspath::encode_dynamic_directory_specifier(path) } else { tspath::encode_dynamic_module_specifier(path) });
+    }
+    None
+}
+
+fn resolve_path_for_module(directory: &str, path: &str, directory_only: bool) -> String {
+    let encoded = path_for_dynamic_resolution(directory, path, directory_only);
+    let resolved = tspath::normalize_path(&tspath::combine_paths(directory, &[encoded.as_deref().unwrap_or(path)]));
+    if directory_only { tspath::ensure_trailing_directory_separator(&resolved) } else { resolved }
+}
+
+fn resolve_dynamic_logical_path(directory: &str, path: &str, directory_only: bool) -> String {
+    let path = if !path.is_empty() && directory_only { tspath::remove_trailing_directory_separator(path) } else { path };
+    let encoded = if directory_only { tspath::encode_dynamic_relative_uri_directory_path(path) } else { tspath::encode_dynamic_relative_uri_path(path) };
+    let resolved = tspath::normalize_path(&tspath::combine_paths(directory, &[&encoded]));
+    if directory_only { tspath::ensure_trailing_directory_separator(&resolved) } else { resolved }
+}
+
+fn dynamic_directory_candidate(candidate: &str) -> String {
+    if !tspath::is_encoded_dynamic_file_name(candidate) { return candidate.to_string(); }
+    let directory = tspath::get_directory_path(candidate);
+    let base = tspath::get_base_file_name(candidate);
+    let logical_base = tspath::decode_dynamic_uri_path_segment(&base);
+    let encoded_base = tspath::encode_dynamic_uri_directory_path(&logical_base);
+    if encoded_base == base { return candidate.to_string(); }
+    tspath::combine_paths(&directory, &[&encoded_base])
+}
+
 #[derive(Clone, Debug, Default)]
 pub(crate) struct Resolved {
     path: String,
@@ -1029,7 +1059,6 @@ impl<'r> ResolutionState<'r> {
                     trace!(self.tracer, diagnostics::X_package_json_scope_0_has_invalid_type_for_target_of_specifier_1, scope.package_directory, module_name);
                     return continue_searching();
                 }
-                let resolved_target = tspath::combine_paths(scope.package_directory, &[target_string]);
                 // TODO: Assert that `resolvedTarget` is actually within the package directory? That's what the spec says.... but I'm not sure we need
                 // to be in the business of validating everyone's import and export map correctness.
                 let subpath_parts = tspath::get_path_components(subpath, "");
@@ -1042,11 +1071,8 @@ impl<'r> ResolutionState<'r> {
                     let message_target = if is_pattern { target_string.replace('*', subpath) } else { format!("{target_string}{subpath}") };
                     t.write(&diagnostics::Using_0_subpath_1_with_target_2, &[&if is_imports { "imports" } else { "exports" }, &key, &message_target]);
                 }
-                let final_path = if is_pattern {
-                    tspath::get_normalized_absolute_path(&resolved_target.replace('*', subpath), self.current_directory())
-                } else {
-                    tspath::get_normalized_absolute_path(&format!("{resolved_target}{subpath}"), self.current_directory())
-                };
+                let target_path = if is_pattern { target_string.replace('*', subpath) } else { format!("{target_string}{subpath}") };
+                let final_path = resolve_path_for_module(scope.package_directory, &target_path, tspath::has_trailing_directory_separator(&target_path));
                 let mut input_link =
                     self.try_load_input_file_for_path(&final_path, subpath, &tspath::combine_paths(scope.package_directory, &["package.json"]), is_imports);
                 if let Some(link) = input_link.as_mut() {
@@ -1301,13 +1327,13 @@ impl<'r> ResolutionState<'r> {
         // causing `loadNodeModuleFromDirectoryWorker`'s `ComparePaths(candidate, ...)`
         // check to fail and skip loading the package's `main`/`types` entry.
         // https://github.com/microsoft/TypeScript/tsc/issues/3526
-        let candidate =
-            tspath::remove_trailing_directory_separator(&tspath::normalize_path(&tspath::combine_paths(node_modules_directory, &[module_name]))).to_string();
+        let candidate = resolve_path_for_module(node_modules_directory, tspath::remove_trailing_directory_separator(module_name), false);
+        let candidate_directory = dynamic_directory_candidate(&candidate);
         let (package_name, rest) = parse_package_name(module_name);
         let rest = rest.to_string();
-        let mut package_directory = tspath::combine_paths(node_modules_directory, &[package_name]);
+        let mut package_directory = tspath::remove_trailing_directory_separator(&resolve_path_for_module(node_modules_directory, package_name, true)).to_string();
         if package_name.is_empty() {
-            package_directory.clone_from(&candidate);
+            package_directory.clone_from(&candidate_directory);
         }
 
         if self.resolve_package_directory_only {
@@ -1319,7 +1345,7 @@ impl<'r> ResolutionState<'r> {
 
         let mut root_package_info: Option<P<InfoCacheEntry>> = None;
         // First look for a nested package.json, as in `node_modules/foo/bar/package.json`
-        let mut package_info = self.get_package_json_info(&candidate);
+        let mut package_info = self.get_package_json_info(&candidate_directory);
         // But only if we're not respecting export maps (if we are, we might redirect around this location)
         if !rest.is_empty() && package_info.exists() {
             if self.features.intersects(NodeResolutionFeatures::Exports) {
@@ -1331,7 +1357,7 @@ impl<'r> ResolutionState<'r> {
                     return from_file;
                 }
 
-                let mut from_directory = self.load_node_module_from_directory_worker(ext, &candidate, package_info);
+                let mut from_directory = self.load_node_module_from_directory_worker(ext, &candidate_directory, package_info);
                 if let Some(d) = from_directory.as_mut() {
                     d.package_id = self.get_package_id(&d.path, package_info);
                     return from_directory;
@@ -1340,6 +1366,7 @@ impl<'r> ResolutionState<'r> {
         }
 
         let loader = |r: &mut ResolutionState<'r>, extensions: Extensions, candidate: &str, package_info: Option<P<InfoCacheEntry>>| -> Option<Resolved> {
+            let loader_candidate_directory = dynamic_directory_candidate(candidate);
             if !rest.is_empty() || !r.esm_mode {
                 let mut from_file = r.load_module_from_file(extensions, candidate);
                 if let Some(f) = from_file.as_mut() {
@@ -1347,7 +1374,7 @@ impl<'r> ResolutionState<'r> {
                     return from_file;
                 }
             }
-            let mut from_directory = r.load_node_module_from_directory_worker(extensions, candidate, package_info);
+            let mut from_directory = r.load_node_module_from_directory_worker(extensions, &loader_candidate_directory, package_info);
             if let Some(d) = from_directory.as_mut() {
                 d.package_id = r.get_package_id(&d.path, package_info);
                 return from_directory;
@@ -1359,7 +1386,7 @@ impl<'r> ResolutionState<'r> {
             {
                 // EsmMode disables index lookup in `loadNodeModuleFromDirectoryWorker` generally, however non-relative package resolutions still assume
                 // a default `index.js` entrypoint if no `main` or `exports` are present
-                let mut index_result = r.load_module_from_file(extensions, &tspath::combine_paths(candidate, &["index.js"]));
+                let mut index_result = r.load_module_from_file(extensions, &tspath::combine_paths(&loader_candidate_directory, &["index.js"]));
                 if let Some(i) = index_result.as_mut() {
                     i.package_id = r.get_package_id(&i.path, package_info);
                     return index_result;
@@ -1527,7 +1554,7 @@ impl<'r> ResolutionState<'r> {
             trace!(self.tracer, diagnostics::Module_name_0_matched_pattern_1, module_name, matched_pattern.text);
             for subst in paths.get(matched_pattern.text.as_str()).map_or(&[][..], PathSubstitutions::substitutions) {
                 let path = subst.replacen('*', matched_star, 1);
-                let candidate = tspath::normalize_path(&tspath::combine_paths(containing_directory, &[&path]));
+                let candidate = resolve_path_for_module(containing_directory, &path, tspath::has_trailing_directory_separator(&path));
                 trace!(self.tracer, diagnostics::Trying_substitution_0_candidate_module_location_Colon_1, subst, path);
                 // A path mapping may have an extension
                 let extension_from_subst = tspath::try_get_extension_from_path(subst);
@@ -1561,7 +1588,7 @@ impl<'r> ResolutionState<'r> {
 
         trace!(self.tracer, diagnostics::X_rootDirs_option_is_set_using_it_to_resolve_relative_module_name_0, self.name);
 
-        let candidate = tspath::normalize_path(&tspath::combine_paths(&self.containing_directory, &[&self.name]));
+        let candidate = resolve_path_for_module(&self.containing_directory, &self.name, tspath::has_trailing_directory_separator(&self.name));
 
         let mut matched_root_dir: Option<&String> = None;
         let mut matched_normalized_prefix = String::new();
@@ -1604,7 +1631,19 @@ impl<'r> ResolutionState<'r> {
                     // skip the initially matched entry
                     return None;
                 }
-                let candidate = tspath::combine_paths(&tspath::normalize_path(root_dir), &[suffix]);
+                let directory_only = suffix.is_empty() || tspath::has_trailing_directory_separator(suffix);
+                let root = tspath::normalize_path(root_dir);
+                let dynamic_root = tspath::is_encoded_dynamic_file_name(root_dir);
+                let dynamic_match = tspath::is_encoded_dynamic_file_name(matched_root_dir.unwrap());
+                let candidate = if dynamic_root {
+                    let logical = if dynamic_match { tspath::decode_dynamic_uri_path(suffix) } else { suffix.to_string() };
+                    resolve_dynamic_logical_path(&root, &logical, directory_only)
+                } else if dynamic_match {
+                    let decoded = tspath::decode_dynamic_uri_path_for_disk(suffix)?;
+                    resolve_path_for_module(&root, &decoded, directory_only)
+                } else {
+                    resolve_path_for_module(&root, suffix, directory_only)
+                };
                 trace!(self.tracer, diagnostics::Loading_0_from_the_root_dir_1_candidate_location_2, suffix, root_dir, candidate);
                 let resolved_file_name = loader(self, extensions, &candidate);
                 if !resolved_file_name.should_continue_searching() {
@@ -1640,15 +1679,16 @@ impl<'r> ResolutionState<'r> {
                 return resolved_from_file;
             }
         }
-        if !self.fs().directory_exists(candidate) {
-            trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, candidate);
+        let directory_candidate = dynamic_directory_candidate(candidate);
+        if !self.fs().directory_exists(&directory_candidate) {
+            trace!(self.tracer, diagnostics::Directory_0_does_not_exist_skipping_all_lookups_in_it, directory_candidate);
             return continue_searching();
         }
         // esm mode relative imports shouldn't do any directory lookups (either inside `package.json`
         // files or implicit `index.js`es). This is a notable departure from cjs norms, where `./foo/pkg`
         // could have been redirected by `./foo/pkg/package.json` to an arbitrary location!
         if !self.esm_mode {
-            return self.load_node_module_from_directory(extensions, candidate, consider_package_json);
+            return self.load_node_module_from_directory(extensions, &directory_candidate, consider_package_json);
         }
         continue_searching()
     }
@@ -1990,11 +2030,14 @@ impl<'r> ResolutionState<'r> {
 
         if let Some(version_paths) = version_paths.filter(|v| v.exists()) {
             if package_file.is_empty() || tspath::contains_path(candidate, &package_file, &ComparePathsOptions::default()) {
-                let module_name = if !package_file.is_empty() {
+                let mut module_name = if !package_file.is_empty() {
                     tspath::get_relative_path_from_directory(candidate, &package_file, &ComparePathsOptions::default())
                 } else {
                     tspath::get_relative_path_from_directory(candidate, &index_path, &ComparePathsOptions::default())
                 };
+                if tspath::is_encoded_dynamic_file_name(candidate) {
+                    module_name = tspath::decode_dynamic_uri_path(&module_name);
+                }
                 trace!(
                     self.tracer,
                     diagnostics::X_package_json_has_a_typesVersions_entry_0_that_matches_compiler_version_1_looking_for_a_pattern_to_match_module_name_2,
@@ -2169,7 +2212,7 @@ impl<'r> ResolutionState<'r> {
         names.sort();
         let mut builder = String::new();
         for name in names {
-            let peer_package_json = self.get_package_json_info(&format!("{node_modules}{name}"));
+            let peer_package_json = self.get_package_json_info(&resolve_path_for_module(&node_modules, name, true));
             if peer_package_json.exists() {
                 let version = &peer_package_json.unwrap().contents.unwrap().get().version.value;
                 builder.push('+');
@@ -2210,7 +2253,7 @@ impl<'r> ResolutionState<'r> {
             trace!(self.tracer, diagnostics::X_package_json_had_a_falsy_0_field, field_name);
             return None;
         }
-        let path = tspath::normalize_path(&tspath::combine_paths(directory, &[&field.value]));
+        let path = resolve_path_for_module(directory, &field.value, tspath::has_trailing_directory_separator(&field.value));
         trace!(self.tracer, diagnostics::X_package_json_has_0_field_1_that_references_2, field_name, field.value, path);
         Some(path)
     }
@@ -2396,7 +2439,8 @@ pub fn match_pattern_or_exact(patterns: &ParsedPatterns, candidate: &str) -> Pat
 // (https://nodejs.org/api/modules.html#all-together), but it seems that module paths ending
 // in `.` are actually normalized to `./` before proceeding with the resolution algorithm.
 fn normalize_path_for_cjs_resolution(containing_directory: &str, module_name: &str) -> String {
-    let combined = tspath::combine_paths(containing_directory, &[module_name]);
+    let encoded = path_for_dynamic_resolution(containing_directory, module_name, false);
+    let combined = tspath::combine_paths(containing_directory, &[encoded.as_deref().unwrap_or(module_name)]);
     let last_part = last_path_component(&combined);
     if last_part == "." || last_part == ".." {
         return tspath::ensure_trailing_directory_separator(&tspath::normalize_path(&combined));
@@ -2578,8 +2622,10 @@ impl DefaultResolver {
         let mut state = ResolutionState::bare(self, self.compiler_options);
         state.extensions = extensions;
         state.features = features;
+        let dynamic_package = tspath::is_encoded_dynamic_file_name(package_json.package_directory);
+        let source_package_name = if dynamic_package { tspath::dynamic_uri_path_to_module_specifier(package_name) } else { package_name.to_string() };
         if package_json.exists() && package_json.contents.unwrap().exports.is_present() {
-            let entrypoints = state.load_entrypoints_from_export_map(package_json, package_name, &package_json.contents.unwrap().exports);
+            let entrypoints = state.load_entrypoints_from_export_map(package_json, &source_package_name, &package_json.contents.unwrap().exports);
             return Some(entrypoints);
         }
 
@@ -2587,7 +2633,7 @@ impl DefaultResolver {
         let main_resolution = state.load_node_module_from_directory_worker(extensions, package_json.package_directory, Some(package_json));
 
         if main_resolution.is_resolved() {
-            result.push(self.create_resolved_entrypoint_handling_symlink(&main_resolution.as_ref().unwrap().path, package_name, None, None, Ending::Fixed));
+            result.push(self.create_resolved_entrypoint_handling_symlink(&main_resolution.as_ref().unwrap().path, &source_package_name, None, None, Ending::Fixed));
         }
 
         if enable_directory_search {
@@ -2615,9 +2661,11 @@ impl DefaultResolver {
                     return None;
                 }
 
+                let mut relative = tspath::get_relative_path_from_directory(package_json.package_directory, file, &compare_paths_options);
+                if dynamic_package { relative = tspath::dynamic_uri_path_to_module_specifier(&relative); }
                 Some(self.create_resolved_entrypoint_handling_symlink(
                     file,
-                    &tspath::resolve_path(package_name, &[&tspath::get_relative_path_from_directory(package_json.package_directory, file, &compare_paths_options)]),
+                    &tspath::resolve_path(&source_package_name, &[&relative]),
                     None,
                     None,
                     Ending::Changeable,
@@ -2706,23 +2754,31 @@ impl ResolutionState<'_> {
                 if exports_str.find('*') != exports_str.rfind('*') {
                     return;
                 }
-                let pattern_path = tspath::resolve_path(package_json.package_directory, &[exports_str]);
+                let dynamic_package = tspath::is_encoded_dynamic_file_name(package_json.package_directory);
+                let include_patterns = if dynamic_package { vec!["**/*".to_string()] } else { vec![tspath::change_full_extension(&exports_str.replacen('*', "**/*", 1), ".*")] };
+                let pattern_path = exports_str.strip_prefix("./").unwrap_or(exports_str).to_string();
                 let (leading_slice, trailing_slice) = pattern_path.split_once('*').unwrap_or((&pattern_path, ""));
-                let case_sensitive = self.resolver.host.fs().use_case_sensitive_file_names();
+                let case_sensitive = dynamic_package || self.resolver.host.fs().use_case_sensitive_file_names();
                 let files = tsrs_vfs::vfsmatch::read_directory(
                     self.resolver.host.fs(),
                     self.resolver.host.get_current_directory(),
                     package_json.package_directory,
                     &self.extensions.array(),
                     &[] as &[&str],
-                    &[tspath::change_full_extension(&exports_str.replacen('*', "**/*", 1), ".*")],
+                    &include_patterns,
                     tsrs_vfs::vfsmatch::UNLIMITED_DEPTH,
                 );
                 entrypoints.extend(files.iter().filter_map(|file| {
-                    let Some(matched_star) = self.get_matched_star_for_pattern_entrypoint(file, leading_slice, trailing_slice, case_sensitive) else {
+                    let mut logical_file = tspath::get_relative_path_from_directory(package_json.package_directory, file, &ComparePathsOptions { use_case_sensitive_file_names: case_sensitive, ..Default::default() });
+                    if dynamic_package { logical_file = tspath::decode_dynamic_uri_path(&logical_file); }
+                    let Some(mut matched_star) = self.get_matched_star_for_pattern_entrypoint(&logical_file, leading_slice, trailing_slice, case_sensitive) else {
                         return None;
                     };
-                    let module_specifier = tspath::resolve_path(package_name, &[&subpath.replacen('*', &matched_star, 1)]);
+                    if dynamic_package { matched_star = tspath::encode_dynamic_logical_module_specifier(&matched_star); }
+                    let resolved_subpath = subpath.replacen('*', &matched_star, 1);
+                    let resolved_subpath = resolved_subpath.strip_prefix("./").unwrap_or(&resolved_subpath);
+                    if resolved_subpath.is_empty() { return None; }
+                    let module_specifier = tspath::resolve_path(package_name, &[resolved_subpath]);
                     Some(self.resolver.create_resolved_entrypoint_handling_symlink(
                         file,
                         &module_specifier,

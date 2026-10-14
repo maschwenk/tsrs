@@ -139,6 +139,27 @@ fn generate_map() -> Generator {
 }
 
 #[test]
+fn duplicate_source_paths_share_generated_position_lookup() {
+    let map = r#"{"version":3,"file":"main.js","sources":["../src/main.ts","../src/main.ts"],"names":[],"mappings":"AAAA;ACCA"}"#;
+    let host = test_host("//# sourceMappingURL=main.js.map", Some(map));
+    let mapper = get_document_position_mapper(&host, "/out/main.js").unwrap();
+    let position = mapper.get_generated_position(&DocumentPosition { file_name: "/src/main.ts".to_string(), pos: 0 }).unwrap();
+    assert_eq!(position.pos, 0);
+}
+
+#[test]
+fn null_and_out_of_range_sources_remain_unmapped() {
+    for map in [
+        r#"{"version":3,"file":"main.js","sources":[null,"../src/main.ts"],"names":[],"mappings":"AAAA;ACAA"}"#,
+        r#"{"version":3,"file":"main.js","sources":["../src/main.ts"],"names":[],"mappings":"ACAA"}"#,
+    ] {
+        let host = test_host("//# sourceMappingURL=main.js.map", Some(map));
+        let mapper = get_document_position_mapper(&host, "/out/main.js").unwrap();
+        assert!(mapper.get_source_position(&DocumentPosition { file_name: "/out/main.js".to_string(), pos: 0 }).is_none());
+    }
+}
+
+#[test]
 fn document_position_mapper_from_map_file() {
     let map = generate_map().string();
     assert!(map.contains(r#""sources":["../src/main.ts"]"#), "{map}");

@@ -2,7 +2,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, Once, RwLock};
 
 use rustc_hash::{FxHashMap, FxHashSet};
-use tsrs_core::collections::{Set, SyncSet};
+use tsrs_core::collections::{Set, SyncMap};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_ls::lsconv;
 use tsrs_lsproto as lsproto;
@@ -354,20 +354,23 @@ pub(crate) fn create_resolution_lookup_glob_mapper(
     lib_directory: &str,
     current_directory: &str,
     use_case_sensitive_file_names: bool,
-) -> ComputeGlobPatterns<Option<Arc<SyncSet<Path>>>> {
-    let workspace_directory_path = tspath::to_path(workspace_directory, current_directory, use_case_sensitive_file_names);
-    let current_directory_path = tspath::to_path(current_directory, current_directory, use_case_sensitive_file_names);
-    let lib_directory_path = tspath::to_path(lib_directory, current_directory, use_case_sensitive_file_names);
+) -> ComputeGlobPatterns<Option<Arc<SyncMap<Path, String>>>> {
+    let workspace_directory = workspace_directory.to_string();
+    let lib_directory = lib_directory.to_string();
+    let current_directory = current_directory.to_string();
+    let workspace_directory_path = tspath::to_path(&workspace_directory, &current_directory, use_case_sensitive_file_names);
+    let current_directory_path = tspath::to_path(&current_directory, &current_directory, use_case_sensitive_file_names);
+    let lib_directory_path = tspath::to_path(&lib_directory, &current_directory, use_case_sensitive_file_names);
 
-    Arc::new(move |data: &Option<Arc<SyncSet<Path>>>| {
+    Arc::new(move |data: &Option<Arc<SyncMap<Path, String>>>| {
         let mut ignored = FxHashSet::default();
         let mut seen_dirs: Set<Path> = Set::default();
         let (mut include_workspace, mut include_root, mut include_lib) = (false, false, false);
-        let mut node_modules_directories: Set<Path> = Set::default();
-        let mut external_directories: Set<Path> = Set::default();
+        let mut node_modules_directories: FxHashMap<Path, String> = FxHashMap::default();
+        let mut external_directories: FxHashMap<Path, String> = FxHashMap::default();
 
         if let Some(data) = data {
-            data.range(|path| {
+            data.range(|path, file_name| {
                 if tspath::is_dynamic_file_name(path) {
                     return true;
                 }
@@ -384,10 +387,17 @@ pub(crate) fn create_resolution_lookup_glob_mapper(
                     include_root = true;
                 } else if lib_directory_path.contains_path(path) {
                     include_lib = true;
-                } else if let Some(idx) = path.find("/node_modules/") {
-                    node_modules_directories.add(Path::from(&path[..idx + "/node_modules".len()]));
                 } else {
-                    external_directories.add(path.get_directory_path());
+                    let canonical_components = tspath::get_path_components(path, "");
+                    let file_name_components = tspath::get_path_components(file_name, "");
+                    if canonical_components.len() == file_name_components.len()
+                        && let Some(index) = canonical_components.iter().position(|component| component == "node_modules")
+                    {
+                        let directory = tspath::get_path_from_path_components(&file_name_components[..=index]);
+                        node_modules_directories.insert(tspath::to_path(&directory, &current_directory, use_case_sensitive_file_names), directory);
+                        return true;
+                    }
+                    external_directories.insert(path.get_directory_path(), tspath::get_directory_path(file_name));
                 }
                 true
             });
@@ -395,28 +405,27 @@ pub(crate) fn create_resolution_lookup_glob_mapper(
 
         let mut globs = Vec::new();
         if include_workspace {
-            globs.push(get_recursive_glob_pattern(&workspace_directory_path));
+            globs.push(get_recursive_glob_pattern(&workspace_directory));
         }
         if include_root {
-            globs.push(get_recursive_glob_pattern(&current_directory_path));
+            globs.push(get_recursive_glob_pattern(&current_directory));
         }
         if include_lib {
-            globs.push(get_recursive_glob_pattern(&lib_directory_path));
+            globs.push(get_recursive_glob_pattern(&lib_directory));
         }
-        if node_modules_directories.len() > 0 {
-            let mut node_modules_globs: Vec<String> = node_modules_directories.keys().iter().map(|dir| get_recursive_glob_pattern(dir)).collect();
+        if !node_modules_directories.is_empty() {
+            let mut node_modules_globs: Vec<String> = node_modules_directories.values().map(|dir| get_recursive_glob_pattern(dir)).collect();
             node_modules_globs.sort();
             globs.extend(node_modules_globs);
         }
         let mut outside_dirs = Vec::new();
-        if external_directories.len() > 0 {
-            let external_dir_strings: Vec<String> = external_directories.keys().iter().map(std::string::ToString::to_string).collect();
+        if !external_directories.is_empty() {
+            let external_dir_strings: Vec<String> = external_directories.values().cloned().collect();
             let (mut external_directory_parents, ignored_external_dirs) = tspath::get_common_parents(
                 &external_dir_strings,
                 minWatchLocationDepth,
                 get_path_components_for_watching,
-                // Already using tspath.Path
-                &ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: String::new() },
+                &ComparePathsOptions { use_case_sensitive_file_names, current_directory: String::new() },
             );
             external_directory_parents.sort();
             ignored = ignored_external_dirs;

@@ -1,3 +1,4 @@
+use super::{canonical_dynamic_uri_path, is_encoded_dynamic_file_name, DYNAMIC_URI_FILE_NAME_PREFIX};
 use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::collections::hash_map::Entry;
@@ -230,6 +231,12 @@ pub fn get_encoded_root_length(path: &str) -> EncodedRootLength {
 
     // Untitled paths (e.g., "^/untitled/ts-nul-authority/Untitled-1")
     if ch0 == b'^' && ln > 1 && bytes[1] == b'/' {
+        if let Some(rest) = path.strip_prefix(DYNAMIC_URI_FILE_NAME_PREFIX)
+            && let Some(scheme_end) = rest.find('/')
+        {
+            let scheme_end = scheme_end + DYNAMIC_URI_FILE_NAME_PREFIX.len();
+            return EncodedRootLength::Disk(path[scheme_end + 1..].find('/').map_or(ln, |authority_end| scheme_end + authority_end + 2));
+        }
         return EncodedRootLength::Disk(2); // Untitled: "^/"
     }
 
@@ -247,8 +254,8 @@ pub fn get_encoded_root_length(path: &str) -> EncodedRootLength {
             // special case interpreted as "the machine from which the URL is being interpreted".
             let scheme = &path[..scheme_end];
             let authority = &path[authority_start..authority_end];
-            if scheme == "file"
-                && (authority.is_empty() || authority == "localhost")
+            if crate::stringutil::equate_string_case_insensitive(scheme, "file")
+                && (authority.is_empty() || crate::stringutil::equate_string_case_insensitive(authority, "localhost"))
                 && (ln > authority_end + 2)
                 && is_volume_character(bytes[authority_end + 1])
             {
@@ -736,6 +743,9 @@ pub fn to_file_name_lower_case(file_name: &str) -> String {
 pub fn to_path(file_name: &str, base_path: &str, use_case_sensitive_file_names: bool) -> Path {
     let mut non_canonicalized_path =
         if is_rooted_disk_path(file_name) { normalize_path(file_name) } else { get_normalized_absolute_path(file_name, base_path) };
+    if is_encoded_dynamic_file_name(&non_canonicalized_path) {
+        return Path::new(canonical_dynamic_uri_path(&non_canonicalized_path));
+    }
     // get_canonical_file_name, reusing the owned string
     if use_case_sensitive_file_names {
         return Path::new(non_canonicalized_path);

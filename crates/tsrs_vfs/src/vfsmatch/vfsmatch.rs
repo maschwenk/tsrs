@@ -131,8 +131,9 @@ enum SegmentKind {
 
 // compileGlobPattern compiles a glob spec (e.g., "src/**/*.ts") into a pattern.
 // Returns None if the pattern would match nothing.
-fn compile_glob_pattern(spec: &str, base_path: &str, usage: Usage, case_sensitive: bool) -> Option<GlobPattern> {
+fn compile_glob_pattern(spec: &str, base_path: &str, usage: Usage, mut case_sensitive: bool) -> Option<GlobPattern> {
     let mut parts = tspath::get_normalized_path_components(spec, base_path);
+    if tspath::is_encoded_dynamic_file_name(&parts[0]) { case_sensitive = true; }
 
     // "src/**" without a filename matches nothing (for include patterns)
     if usage != Usage::Exclude && parts.last().map_or("", std::string::String::as_str) == "**" {
@@ -141,6 +142,11 @@ fn compile_glob_pattern(spec: &str, base_path: &str, usage: Usage, case_sensitiv
 
     // Normalize root: "/home/" -> "/home"
     parts[0] = tspath::remove_trailing_directory_separator(&parts[0]).to_string();
+    if tspath::is_encoded_dynamic_file_name(&parts[0]) {
+        let mut root_parts: Vec<String> = parts[0].split('/').map(str::to_string).collect();
+        root_parts.extend(parts.into_iter().skip(1));
+        parts = root_parts;
+    }
 
     // Directories implicitly match all files: "src" -> "src/**/*"
     if is_implicit_glob(parts.last().map_or("", std::string::String::as_str)) {

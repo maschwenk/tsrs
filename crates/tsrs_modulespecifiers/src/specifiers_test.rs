@@ -145,7 +145,7 @@ fn test_get_each_file_name_of_module_with_symlinks() {
     let host = project_host();
 
     let symlink_path = tspath::to_path("/project/symlink", "/project", true).ensure_trailing_directory_separator();
-    let real_directory = KnownDirectoryLink {
+    let real_directory = KnownDirectoryLink { symlink: String::new(),
         real: "/real/path/".to_string(),
         real_path: tspath::to_path("/real/path", "/project", true).ensure_trailing_directory_separator(),
     };

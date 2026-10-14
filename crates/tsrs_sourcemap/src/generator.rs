@@ -112,7 +112,9 @@ impl RawSourceMap {
         let mut m = OrderedMap::default();
         m.insert("version".to_string(), Value::Number(self.version as f64));
         m.insert("file".to_string(), Value::String(self.file.clone()));
-        m.insert("sourceRoot".to_string(), Value::String(self.source_root.clone()));
+        if !self.source_root.is_empty() {
+            m.insert("sourceRoot".to_string(), Value::String(self.source_root.clone()));
+        }
         m.insert("sources".to_string(), Value::Array(self.sources.iter().map(|s| Value::String(s.clone())).collect()));
         m.insert("names".to_string(), Value::Array(self.names.iter().map(|s| Value::String(s.clone())).collect()));
         m.insert("mappings".to_string(), Value::String(self.mappings.clone()));

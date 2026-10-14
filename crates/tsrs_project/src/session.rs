@@ -1,5 +1,5 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, MutexGuard, RwLock, Weak};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, RwLock, Weak};
 use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
@@ -183,6 +183,8 @@ pub struct Session {
     // cache cleans. The timer resets on any file event (open, close,
     // change, save, watch) and fires after 30 seconds of inactivity.
     idle_cache_clean_timer: Mutex<Option<Timer>>,
+    idle_cache_clean_closed: AtomicBool,
+    idle_cache_clean_pending: Queue,
 
     // performanceTelemetryCancel cancels the periodic performance telemetry ticker.
     performance_telemetry_cancel: Mutex<Option<CancelFunc>>,
@@ -235,6 +237,8 @@ pub fn new_session(init: &SessionInit) -> Arc<Session> {
         diagnostics_refresh: Mutex::new(cancelState::default()),
         warm_auto_import_cancel: Mutex::new(None),
         idle_cache_clean_timer: Mutex::new(None),
+        idle_cache_clean_closed: AtomicBool::new(false),
+        idle_cache_clean_pending: new_queue(),
         performance_telemetry_cancel: Mutex::new(None),
         seen_projects: SyncSet::default(),
         global_diag_publish_pending: AtomicBool::new(false),
@@ -644,17 +648,27 @@ impl Session {
     // session.go:663
     fn schedule_idle_cache_clean(&self) {
         let mut timer = self.idle_cache_clean_timer.lock().unwrap();
+        if self.idle_cache_clean_closed.load(Ordering::SeqCst) { return; }
 
         if let Some(timer) = timer.take() {
             timer.stop();
         }
 
         let s = Weak::clone(&self.self_ref);
-        *timer = Some(after_func(idleCacheCleanDelay, move || {
+        let pending = self.idle_cache_clean_pending.pending_task();
+        let timer_id = Arc::new(OnceLock::new());
+        let callback_timer_id = Arc::clone(&timer_id);
+        let next_timer = after_func(idleCacheCleanDelay, move || {
+            let _pending = &pending;
             let Some(s) = s.upgrade() else {
                 return;
             };
-            *s.idle_cache_clean_timer.lock().unwrap() = None;
+            {
+                let mut current = s.idle_cache_clean_timer.lock().unwrap();
+                if current.as_ref().is_some_and(|timer| Some(&timer.id()) == callback_timer_id.get()) {
+                    *current = None;
+                }
+            }
 
             let _update = s.snapshot_update_mu.lock().unwrap();
             s.cancel_scheduled_snapshot_update();
@@ -667,7 +681,9 @@ impl Session {
                 SnapshotChange { reason: UpdateReason::IdleCleanDiskCache, file_changes, ata_changes, new_config, clean_file_cache: true, ..Default::default() },
             );
             // (Go also starts a GC here.)
-        }));
+        });
+        timer_id.set(next_timer.id()).unwrap();
+        *timer = Some(next_timer);
     }
 
     // session.go:694
@@ -676,6 +692,12 @@ impl Session {
         if let Some(timer) = self.idle_cache_clean_timer.lock().unwrap().take() {
             timer.stop();
         }
+    }
+
+    fn close_idle_cache_clean(&self) {
+        self.idle_cache_clean_closed.store(true, Ordering::SeqCst);
+        self.cancel_idle_cache_clean();
+        self.idle_cache_clean_pending.close();
     }
 
     // session.go:707
@@ -1357,7 +1379,7 @@ impl Session {
         // Cancel any pending auto-import cache warming
         self.cancel_warm_auto_import_cache();
         // Cancel any pending idle cache clean
-        self.cancel_idle_cache_clean();
+        self.close_idle_cache_clean();
         // Cancel periodic performance telemetry
         self.stop_performance_telemetry();
         self.background_queue.close();

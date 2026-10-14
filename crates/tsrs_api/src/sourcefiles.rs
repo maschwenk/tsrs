@@ -259,13 +259,19 @@ impl Session {
         self.binary_or_base64(data)
     }
 
+    fn resolve_create_source_file_name(&self, file_name: &str) -> ApiResult<String> {
+        if file_name.is_empty() { return Err(ApiError::client("fileName must not be empty")); }
+        Ok(tspath::get_normalized_absolute_path(file_name, self.current_directory()))
+    }
+
     pub(crate) fn handle_create_source_file(&self, p: Params) -> ApiResult<Response> {
-        let lease = self.create_source_file_lease(p.str("fileName")?, p.str("sourceText")?, p.get("options"))?;
+        let file_name = self.resolve_create_source_file_name(p.str("fileName")?)?;
+        let lease = self.create_source_file_lease(&file_name, p.str("sourceText")?, p.get("options"))?;
         self.encode_leased(lease)
     }
 
     pub(crate) fn handle_create_source_file_from_file(&self, p: Params) -> ApiResult<Response> {
-        let file_name = tspath::get_normalized_absolute_path(p.str("fileName")?, self.current_directory());
+        let file_name = self.resolve_create_source_file_name(p.str("fileName")?)?;
         let text = self.base_fs().read_file(&file_name).ok_or_else(|| ApiError::client(format!("could not read file {file_name:?}")))?;
         let lease = self.create_source_file_lease(&file_name, &text, p.get("options"))?;
         self.encode_leased(lease)

@@ -38,17 +38,32 @@ impl DocumentUri {
             panic!("invalid URI: {uri}");
         };
 
+        let (mut path, suffix) = path.find(['?', '#']).map_or((path, ""), |i| (&path[..i], &path[i..]));
         let mut authority = "ts-nul-authority";
-        let mut path = path;
+        let mut has_authority = false;
+        let mut has_path = true;
         if let Some(rest) = path.strip_prefix("//") {
-            let Some((a, p)) = rest.split_once('/') else {
-                panic!("invalid URI: {uri}");
-            };
-            authority = a;
-            path = p;
+            has_authority = true;
+            match rest.split_once('/') {
+                Some((a, p)) => { authority = a; path = p; }
+                None => { authority = rest; path = ""; has_path = false; }
+            }
         }
-
-        format!("^/{scheme}/{authority}/{path}")
+        let encoded_authority = if has_authority {
+            if authority == "ts-nul-authority" {
+                tspath::force_encode_dynamic_uri_path_segment(authority, false)
+            } else {
+                tspath::encode_dynamic_uri_path(authority)
+            }
+        } else {
+            authority.to_string()
+        };
+        let encoded_path = if has_path {
+            tspath::encode_dynamic_uri_path_with_suffix(path, suffix)
+        } else {
+            tspath::encode_dynamic_uri_no_path(suffix)
+        };
+        format!("{}{scheme}/{encoded_authority}/{encoded_path}", tspath::DYNAMIC_URI_FILE_NAME_PREFIX)
     }
 
     // lsp.go:52
@@ -60,6 +75,37 @@ impl DocumentUri {
     pub fn as_str(&self) -> &str {
         &self.0
     }
+}
+
+pub fn dynamic_file_name_to_document_uri(file_name: &str) -> DocumentUri {
+    dynamic_file_name_to_document_uri_worker(file_name, false).unwrap_or_else(|| panic!("invalid file name: {file_name}"))
+}
+
+pub fn try_dynamic_file_name_to_document_uri(file_name: &str) -> Option<DocumentUri> {
+    dynamic_file_name_to_document_uri_worker(file_name, true)
+}
+
+fn dynamic_file_name_to_document_uri_worker(file_name: &str, strict: bool) -> Option<DocumentUri> {
+    let encoded = tspath::is_encoded_dynamic_file_name(file_name);
+    let start = if encoded { tspath::DYNAMIC_URI_FILE_NAME_PREFIX.len() } else { 2 };
+    let (scheme, rest) = file_name[start..].split_once('/')?;
+    if strict && scheme.is_empty() { return None; }
+    let (authority, uri_path) = rest.split_once('/')?;
+    let has_authority = authority != "ts-nul-authority";
+    let authority = if encoded {
+        if strict { tspath::try_decode_dynamic_uri_path_segment(authority)? } else { tspath::decode_dynamic_uri_path_segment(authority) }
+    } else {
+        authority.to_string()
+    };
+    if encoded && has_authority && let Some(suffix) = tspath::decode_dynamic_uri_no_path(uri_path) {
+        return Some(DocumentUri(format!("{scheme}://{authority}{suffix}")));
+    }
+    let uri_path = if encoded {
+        if strict { tspath::try_decode_dynamic_uri_path(uri_path)? } else { tspath::decode_dynamic_uri_path(uri_path) }
+    } else {
+        uri_path.to_string()
+    };
+    Some(DocumentUri(if has_authority { format!("{scheme}://{authority}/{uri_path}") } else { format!("{scheme}:{uri_path}") }))
 }
 
 impl Deref for DocumentUri {

@@ -780,12 +780,12 @@ pub(crate) fn try_get_module_name_as_node_module(
     if !package_name_only {
         let mut package_root_index = parts.package_root_index;
         let mut module_file_name = String::new();
-        // Go passes the unchanged `parts` to every try (Strada updated `parts.packageRootIndex` per level); kept, like
-        // the output of exports directory mappings (e.g. `dirs/d/dist/d/deep/file.js`).
         loop {
             // If the module could be imported by a directory name, use that directory's name
+            let mut current_parts = parts;
+            current_parts.package_root_index = package_root_index;
             let pkg_json_results =
-                try_directory_with_package_json(parts, path_obj, importing_source_file, host, override_mode, options, &allowed_endings);
+                try_directory_with_package_json(current_parts, parts.package_root_index, path_obj, importing_source_file, host, override_mode, options, &allowed_endings);
             let module_file_to_try = pkg_json_results.module_file_to_try;
             let package_root_path = pkg_json_results.package_root_path;
             let blocked_by_exports = pkg_json_results.blocked_by_exports;
@@ -847,6 +847,7 @@ pub(crate) fn try_get_module_name_as_node_module(
 // specifiers.go:837
 pub(crate) fn try_directory_with_package_json(
     parts: NodeModulePathParts,
+    package_base_root_index: Option<usize>,
     path_obj: &ModulePath,
     importing_source_file: P<SourceFile>,
     host: &dyn ModuleSpecifierGenerationHost,
@@ -862,7 +863,7 @@ pub(crate) fn try_directory_with_package_json(
     let Some(package_json) = host.get_package_json_info(&package_json_path) else {
         // No package.json exists; an index.js will still resolve as the package name
         let file_name =
-            &module_file_to_try[parts.package_root_index.map_or(0, |index| index + 1)..];
+            &module_file_to_try[package_base_root_index.map_or(0, |index| index + 1)..];
         if file_name == "index.d.ts"
             || file_name == "index.js"
             || file_name == "index.ts"
