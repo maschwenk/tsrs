@@ -410,7 +410,7 @@ impl CommandLineParser {
 }
 
 pub fn parse_list_type_option(opt: &'static CommandLineOption, value: &str) -> (Vec<CompilerOptionsValue>, Vec<P<Diagnostic>>) {
-    let value = go_trim_space(value);
+    let value = value.trim();
     let mut errors: Vec<P<Diagnostic>> = Vec::new();
     if value.starts_with('-') {
         return (Vec::new(), errors);
@@ -463,11 +463,6 @@ pub fn parse_list_type_option(opt: &'static CommandLineOption, value: &str) -> (
             (result, errors)
         }
     }
-}
-
-// strings.TrimSpace: trims Unicode white space (unicode.IsSpace).
-pub(crate) fn go_trim_space(s: &str) -> &str {
-    s.trim_matches(|c: char| matches!(c, '\t' | '\n' | '\u{000B}' | '\u{000C}' | '\r' | ' ' | '\u{0085}' | '\u{00A0}') || (c > '\u{00FF}' && c.is_whitespace()))
 }
 
 pub(crate) fn convert_json_option_of_enum_type(

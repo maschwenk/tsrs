@@ -242,11 +242,6 @@ pub fn format_diagnostic_with_color_and_context(output: &mut dyn Write, diagnost
     }
 }
 
-fn is_go_space(c: char) -> bool {
-    // unicode.IsSpace
-    matches!(c, '\t' | '\n' | '\u{000B}' | '\u{000C}' | '\r' | ' ' | '\u{0085}' | '\u{00A0}') || (c as u32 > 0xFF && c.is_whitespace())
-}
-
 fn utf16_len(s: &str) -> usize {
     s.chars().map(char::len_utf16).sum()
 }
@@ -305,7 +300,7 @@ fn write_code_snippet(
             text.len()
         };
 
-        let line_content = text[line_start..line_end].trim_end_matches(is_go_space); // trim from end
+        let line_content = text[line_start..line_end].trim_end(); // trim from end
         let line_content = line_content.replace('\t', " "); // convert tabs to single spaces
 
         // Output the gutter and the actual contents of the line.

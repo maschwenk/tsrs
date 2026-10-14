@@ -330,6 +330,11 @@ with the switch off, which is why it is not in the default build.
   lines. Untried: a wider header filter, a bulk freeze without per-table headers.
 - Flat flow-label edges and one shared Start per file for bodyless signatures (reverted in #191;
   notes/mem-flow-compaction.md): -5.4 MB arena on vscode (0.2% of peak), for 377 lines of binder representation.
+- Requested rust string helper cleanup ([rust-string-helpers.md](rust-string-helpers.md)): production code -53 lines. Five-pair
+  Mac screening on Compiler/Compiler-Unions: -0.002% to +0.008% single instructions,
+  +0.056% to +0.458% default RSS. Retained for maintenance at the user's request, with no
+  qualifying performance gain or speedup claim.
+
 - A global identifier interner (notes/mem-round2.md, step 9): -0.075 GiB single-threaded on the private monorepo, but
   parse time +9% (2.6 -> 2.8 s) and +1% instructions from hashing and locking 7.8M identifiers; `PackedStr` took -0.10
   GiB with no table.

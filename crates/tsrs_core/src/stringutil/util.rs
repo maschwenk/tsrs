@@ -74,38 +74,9 @@ pub fn is_ascii_letter(ch: Rune) -> bool {
 }
 
 pub fn split_lines(text: &str) -> Vec<&str> {
-    let bytes = text.as_bytes();
-    let mut lines = Vec::with_capacity(memchr::memchr_iter(b'\n', bytes).count() + 1);
-    let mut start = 0;
-    let mut pos = 0;
-    while pos < bytes.len() {
-        match bytes[pos] {
-            b'\r' => {
-                if pos + 1 < bytes.len() && bytes[pos + 1] == b'\n' {
-                    lines.push(&text[start..pos]);
-                    pos += 2;
-                    start = pos;
-                    continue;
-                }
-                lines.push(&text[start..pos]);
-                pos += 1;
-                start = pos;
-                continue;
-            }
-            b'\n' => {
-                lines.push(&text[start..pos]);
-                pos += 1;
-                start = pos;
-                continue;
-            }
-            _ => {}
-        }
-        pos += 1;
-    }
-    if start < bytes.len() {
-        lines.push(&text[start..]);
-    }
-    lines
+    text.split_terminator('\n')
+        .flat_map(|line| line.strip_suffix('\r').unwrap_or(line).split('\r'))
+        .collect()
 }
 
 pub fn guess_indentation(lines: &[&str]) -> usize {
@@ -402,7 +373,15 @@ mod tests {
 
     #[test]
     fn test_misc() {
-        assert_eq!(split_lines("a\r\nb\rc\nd"), vec!["a", "b", "c", "d"]);
+        for (text, expected) in [
+            ("", vec![]),
+            ("a\r\nb\rc\nd", vec!["a", "b", "c", "d"]),
+            ("a\r\n", vec!["a"]),
+            ("\r\n\r\r\n", vec!["", "", ""]),
+            ("é\ra\n\n", vec!["é", "a", ""]),
+        ] {
+            assert_eq!(split_lines(text), expected);
+        }
         assert_eq!(unquote_string("\"a\\\"b\""), "a\"b");
         assert_eq!(strip_quotes("'x'"), "x");
         assert!(is_unicode_identifier_start('é' as Rune));

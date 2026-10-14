@@ -12,6 +12,7 @@ starting another experiment.
 
 - [Measured and rejected approaches](perf-round2-followups.md#measured-and-rejected-do-not-redo): check this list
   before retrying an idea. The follow-up sections are dated; they are not a live roadmap.
+- [Rust string helpers](rust-string-helpers.md): equivalent splitting/whitespace contracts and measurements.
 - [Serial work and added complexity](perf-serial-steps.md): why small gains may not justify a cache, thread or
   overlap between phases.
 - [Checker instruction-count round 4](perf-icount-round4.md): the later checker measurements and validation.

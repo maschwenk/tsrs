@@ -311,11 +311,6 @@ pub fn format_diagnostic_with_color_and_context(output: &mut String, diagnostic:
     }
 }
 
-fn is_go_space(c: char) -> bool {
-    // unicode.IsSpace
-    matches!(c, '\t' | '\n' | '\u{000B}' | '\u{000C}' | '\r' | ' ' | '\u{0085}' | '\u{00A0}') || (c > '\u{00FF}' && c.is_whitespace())
-}
-
 fn write_code_snippet(
     writer: &mut String,
     source_file: &FileLike,
@@ -361,7 +356,7 @@ fn write_code_snippet(
         let line_start = source_file.line_map[i] as usize;
         let line_end = if i < last_line_of_file { source_file.line_map[i + 1] as usize } else { source_file.text.len() };
 
-        let line_content = byte_slice(&source_file.text, line_start, line_end).trim_end_matches(is_go_space); // trim from end
+        let line_content = byte_slice(&source_file.text, line_start, line_end).trim_end(); // trim from end
         let line_content = line_content.replace('\t', " "); // convert tabs to single spaces
 
         // Output the gutter and the actual contents of the line.

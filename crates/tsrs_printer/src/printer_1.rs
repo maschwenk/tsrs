@@ -774,7 +774,7 @@ impl Printer {
                     }
                     scan += size as u32;
                 }
-                let current_line_text = go_trim_space(&text[pos as usize..end as usize]);
+                let current_line_text = text[pos as usize..end as usize].trim();
                 if !current_line_text.is_empty() {
                     self.write_comment(current_line_text);
                     if end != loc_end {
@@ -802,14 +802,6 @@ impl Printer {
             );
         }
     }
-}
-
-/// Go `strings.TrimSpace`: trims Unicode white space (`unicode.IsSpace`) from both ends.
-fn go_trim_space(s: &str) -> &str {
-    fn is_space(c: char) -> bool {
-        matches!(c, '\t' | '\n' | '\u{0B}' | '\u{0C}' | '\r' | ' ' | '\u{85}' | '\u{A0}') || (c as u32 > 0xFF && c.is_whitespace())
-    }
-    s.trim_matches(is_space)
 }
 
 //
