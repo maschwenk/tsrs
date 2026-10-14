@@ -453,12 +453,13 @@ impl DeclarationTransformer {
     // transform.go:1798
     pub(crate) fn transform_type_alias_declaration(&self, input: P<Node>) -> P<Node> {
         self.needs_declare.set(false);
+        let type_node = self.visit_fn(input.type_node()).unwrap_or_else(|| self.factory().new_keyword_type_node(Kind::AnyKeyword));
         self.factory().update_type_alias_declaration(
             input,
             self.ensure_modifiers(input),
             input.name().unwrap(),
             self.visitor().visit_nodes(input.type_parameter_list()),
-            self.visit_fn(input.type_node()),
+            Some(type_node),
         )
     }
 
