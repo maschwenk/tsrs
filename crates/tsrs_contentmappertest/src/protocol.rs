@@ -1,6 +1,5 @@
 // Package contentmappertest provides realistic content mapper implementations used by tests.
 
-use std::fmt::Write as _;
 use std::sync::Arc;
 
 use tsrs_contentmapper::{
@@ -113,30 +112,5 @@ pub(crate) fn unexpected_method(method: &str) -> ipc::Error {
 
 // Go `strconv.Quote`, which fmt's %q verb uses for a string.
 pub(crate) fn quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    out = s.chars().fold(out, |mut out, c| {
-        match c {
-            '\x07' => out.push_str("\\a"),
-            '\x08' => out.push_str("\\b"),
-            '\x0c' => out.push_str("\\f"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\x0b' => out.push_str("\\v"),
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 || c == '\x7f' => {
-                let _ = write!(out, "\\x{:02x}", c as u32);
-            }
-            c if c.is_control() || (c.is_whitespace() && c != ' ') => {
-                let _ = write!(out, "\\u{:04x}", c as u32);
-            }
-            c => out.push(c),
-        }
-
-        out
-    });
-    out.push('"');
-    out
+    tsrs_core::gocompat::quote(s.as_bytes(), tsrs_core::gocompat::QuoteStyle::MapperTest)
 }

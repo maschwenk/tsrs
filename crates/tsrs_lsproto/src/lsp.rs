@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::fmt;
 use std::marker::PhantomData;
 use std::ops::Deref;
@@ -290,29 +289,7 @@ fn unescape(s: &str, mode: Encoding) -> Result<String, String> {
 
 // Go `strconv.Quote` (as `%q` formats a string or byte slice).
 pub(crate) fn go_quote(b: &[u8]) -> String {
-    let mut out = String::from("\"");
-    let s = tsrs_core::utf8::from_utf8_lossy(b);
-    out = s.chars().fold(out, |mut out, c| {
-        match c {
-            '\x07' => out.push_str("\\a"),
-            '\x08' => out.push_str("\\b"),
-            '\x0c' => out.push_str("\\f"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\x0b' => out.push_str("\\v"),
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => {
-                let _ = write!(out, "\\x{:02x}", c as u32);
-            }
-            c => out.push(c),
-        }
-
-        out
-    });
-    out.push('"');
-    out
+    tsrs_core::gocompat::quote(b, tsrs_core::gocompat::QuoteStyle::Lsp)
 }
 
 // lsp.go:57

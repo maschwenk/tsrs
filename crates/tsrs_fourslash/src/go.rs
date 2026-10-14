@@ -1,7 +1,6 @@
 // Go built-ins and standard-library pieces the generated tests call (tools/gen-fourslash maps them here), and
 // `Any`, the Rust form of Go's `any` / `interface{}` values in the harness API.
 
-use std::fmt::Write as _;
 use std::fmt;
 use std::hash::Hash;
 use std::panic::{self, AssertUnwindSafe};
@@ -188,34 +187,7 @@ pub fn slice_str(s: &str, lo: Option<usize>, hi: Option<usize>) -> String {
 
 // strconv.Quote
 pub fn quote(s: &str) -> String {
-    let mut b = String::with_capacity(s.len() + 2);
-    b.push('"');
-    b = s.chars().fold(b, |mut b, c| {
-        match c {
-            '"' => b.push_str("\\\""),
-            '\\' => b.push_str("\\\\"),
-            '\x07' => b.push_str("\\a"),
-            '\x08' => b.push_str("\\b"),
-            '\x0c' => b.push_str("\\f"),
-            '\n' => b.push_str("\\n"),
-            '\r' => b.push_str("\\r"),
-            '\t' => b.push_str("\\t"),
-            '\x0b' => b.push_str("\\v"),
-            c if (c as u32) < 0x20 || c as u32 == 0x7f => write!(b, "\\x{:02x}", c as u32).unwrap(),
-            c if c.is_control() => {
-                if (c as u32) < 0x10000 {
-                    write!(b, "\\u{:04x}", c as u32).unwrap();
-                } else {
-                    write!(b, "\\U{:08x}", c as u32).unwrap();
-                }
-            }
-            c => b.push(c),
-        }
-
-        b
-    });
-    b.push('"');
-    b
+    tsrs_core::gocompat::quote(s.as_bytes(), tsrs_core::gocompat::QuoteStyle::Fourslash)
 }
 
 // map[string]any configuration literal -> the JSON object lsutil.ParseUserPreferences receives.

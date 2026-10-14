@@ -1,4 +1,3 @@
-use std::fmt::Write as _;
 use std::io::{BufRead, BufReader, Read, Write};
 
 use crate::error::eof;
@@ -142,62 +141,12 @@ fn trim_space(b: &[u8]) -> &[u8] {
 
 // strconv.ParseInt(string(s), 10, 64), with its error text.
 fn parse_int(s: &[u8]) -> Result<i64, String> {
-    let digits = s.strip_prefix(b"+").or_else(|| s.strip_prefix(b"-")).unwrap_or(s);
-    if digits.is_empty() || !digits.iter().all(u8::is_ascii_digit) {
-        return Err(format!("strconv.ParseInt: parsing {}: invalid syntax", go_quote(s)));
-    }
-    // Only ASCII was accepted above.
-    std::str::from_utf8(s)
-        .ok()
-        .and_then(|s| s.parse::<i64>().ok())
-        .ok_or_else(|| format!("strconv.ParseInt: parsing {}: value out of range", go_quote(s)))
+    tsrs_core::gocompat::parse_int64(s, tsrs_core::gocompat::QuoteStyle::Header)
 }
 
 // Go's `%q` of a byte slice (strconv.Quote): printable runes as they are, the usual backslash escapes, `\x` for
 // invalid UTF-8 and ASCII controls, `\u` / `\U` for other non-printable runes. Go's unicode.IsPrint is
 // approximated: controls, white space other than ' ', and the format characters a header is likely to contain.
 pub(crate) fn go_quote(b: &[u8]) -> String {
-    let mut out = String::with_capacity(b.len() + 2);
-    out.push('"');
-    for chunk in b.utf8_chunks() {
-        out = chunk.valid().chars().fold(out, |mut out, c| {
-            match c {
-                '\x07' => out.push_str("\\a"),
-                '\x08' => out.push_str("\\b"),
-                '\x0c' => out.push_str("\\f"),
-                '\n' => out.push_str("\\n"),
-                '\r' => out.push_str("\\r"),
-                '\t' => out.push_str("\\t"),
-                '\x0b' => out.push_str("\\v"),
-                '"' => out.push_str("\\\""),
-                '\\' => out.push_str("\\\\"),
-                c if (c as u32) < 0x20 || c == '\x7f' => {
-                    let _ = write!(out, "\\x{:02x}", c as u32);
-                }
-                c if is_print(c) => out.push(c),
-                c if (c as u32) < 0x10000 => {
-                    let _ = write!(out, "\\u{:04x}", c as u32);
-                }
-                c => {
-                    let _ = write!(out, "\\U{:08x}", c as u32);
-                }
-            }
-
-            out
-        });
-        for byte in chunk.invalid() {
-            let _ = write!(out, "\\x{byte:02x}");
-        }
-    }
-    out.push('"');
-    out
-}
-
-fn is_print(c: char) -> bool {
-    if c == ' ' {
-        return true;
-    }
-    !(c.is_control()
-        || c.is_whitespace()
-        || matches!(c, '\u{ad}' | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{feff}'))
+    tsrs_core::gocompat::quote(b, tsrs_core::gocompat::QuoteStyle::Header)
 }

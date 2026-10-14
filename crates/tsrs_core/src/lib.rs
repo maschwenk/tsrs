@@ -21,6 +21,7 @@ pub mod collections;
 pub mod compat;
 pub mod debug;
 pub mod glob;
+pub mod gocompat;
 pub mod goslices;
 pub mod jsnum;
 pub mod json;

@@ -32,12 +32,7 @@ fn io_error(err: &std::io::Error) -> Error {
 
 // Go strconv.ParseInt(s, 10, 64).
 fn parse_int(s: &str) -> Result<i64, String> {
-    let syntax = || format!("strconv.ParseInt: parsing {}: invalid syntax", go_quote(s.as_bytes()));
-    let digits = s.strip_prefix(['+', '-']).unwrap_or(s);
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(syntax());
-    }
-    s.parse::<i64>().map_err(|_| format!("strconv.ParseInt: parsing {}: value out of range", go_quote(s.as_bytes())))
+    tsrs_core::gocompat::parse_int64(s.as_bytes(), tsrs_core::gocompat::QuoteStyle::Lsp)
 }
 
 impl<R: Read> Reader<R> {

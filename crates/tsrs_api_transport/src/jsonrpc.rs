@@ -1,7 +1,6 @@
 // Port of tsc/internal/jsonrpc/baseproto.go (Content-Length framing) and
 // tsc/internal/ipc/protocol_jsonrpc.go (JSON-RPC 2.0 messages) for the `--api --async` server.
 
-use std::fmt::Write as _;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 
 use serde::Deserialize;
@@ -88,39 +87,12 @@ impl<R: Read> FrameReader<R> {
 
 /// strconv.ParseInt(s, 10, 64) error text.
 fn parse_go_int64(s: &str) -> Result<i64, String> {
-    let quoted = go_quote(s.as_bytes());
-    let digits = s.strip_prefix(['+', '-']).unwrap_or(s);
-    if digits.is_empty() || !digits.bytes().all(|b| b.is_ascii_digit()) {
-        return Err(format!("strconv.ParseInt: parsing {quoted}: invalid syntax"));
-    }
-    s.parse::<i64>().map_err(|_| format!("strconv.ParseInt: parsing {quoted}: value out of range"))
+    tsrs_core::gocompat::parse_int64(s.as_bytes(), tsrs_core::gocompat::QuoteStyle::Api)
 }
 
 /// A close approximation of Go's %q for error messages.
 fn go_quote(bytes: &[u8]) -> String {
-    let mut out = String::from("\"");
-    for chunk in bytes.utf8_chunks() {
-        out = chunk.valid().chars().fold(out, |mut out, c| {
-            match c {
-                '"' => out.push_str("\\\""),
-                '\\' => out.push_str("\\\\"),
-                '\n' => out.push_str("\\n"),
-                '\r' => out.push_str("\\r"),
-                '\t' => out.push_str("\\t"),
-                c if (c as u32) < 0x20 || c == '\u{7f}' => {
-                    let _ = write!(out, "\\x{:02x}", c as u32);
-                }
-                c => out.push(c),
-            }
-
-            out
-        });
-        for b in chunk.invalid() {
-            let _ = write!(out, "\\x{b:02x}");
-        }
-    }
-    out.push('"');
-    out
+    tsrs_core::gocompat::quote(bytes, tsrs_core::gocompat::QuoteStyle::Api)
 }
 
 #[derive(Deserialize)]

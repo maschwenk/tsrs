@@ -249,6 +249,11 @@ with the switch off, which is why it is not in the default build.
 - A full unit-property index for relations to union targets: would skip at most 0.2% (big) / 0.1% (vscode) of failed
   constituent checks; the rest is inherent (notes/perf-checker-algorithms.md, "Row 1").
 
+- Requested shared go-style quoting and integer parsing ([shared-go-compat.md](shared-go-compat.md)): production code -102 lines. Five-pair
+  Mac screening on Compiler/Compiler-Unions: -0.002% to +0.001% single instructions,
+  -0.056% to +0.339% default RSS. Retained for maintenance at the user's request, with no
+  qualifying performance gain or speedup claim.
+
 - Zero-based handles on Linux (reserve 4-32 GiB so a dereference needs no base; #62, notes/mem-pointer-compression.md
   section 6 on that branch): removes 2.7 of the 7 points of extra x86 instructions, but wall and cycles move by 0.7-2%,
   inside the host's drift, and it adds low-address-space failure modes. The rest of the cost is the 32-bit handle

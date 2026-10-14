@@ -1,5 +1,4 @@
 use std::fmt;
-use std::fmt::Write as _;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -583,43 +582,5 @@ impl From<ipc::Error> for Error {
 
 // Go `strconv.Quote`, which fmt's %q verb uses for a string.
 pub(crate) fn quote(s: &str) -> String {
-    let mut out = String::with_capacity(s.len() + 2);
-    out.push('"');
-    out = s.chars().fold(out, |mut out, c| {
-        match c {
-            '\x07' => out.push_str("\\a"),
-            '\x08' => out.push_str("\\b"),
-            '\x0c' => out.push_str("\\f"),
-            '\n' => out.push_str("\\n"),
-            '\r' => out.push_str("\\r"),
-            '\t' => out.push_str("\\t"),
-            '\x0b' => out.push_str("\\v"),
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            c if (c as u32) < 0x20 || c == '\x7f' => {
-                let _ = write!(out, "\\x{:02x}", c as u32);
-            }
-            c if is_print(c) => out.push(c),
-            c if (c as u32) < 0x10000 => {
-                let _ = write!(out, "\\u{:04x}", c as u32);
-            }
-            c => {
-                let _ = write!(out, "\\U{:08x}", c as u32);
-            }
-        }
-
-        out
-    });
-    out.push('"');
-    out
-}
-
-// Go `strconv.IsPrint`, approximated: letters, marks, numbers, punctuation, symbols and the ASCII space.
-fn is_print(c: char) -> bool {
-    if c == ' ' {
-        return true;
-    }
-    !(c.is_control()
-        || c.is_whitespace()
-        || matches!(c, '\u{ad}' | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{2064}' | '\u{feff}'))
+    tsrs_core::gocompat::quote(s.as_bytes(), tsrs_core::gocompat::QuoteStyle::Header)
 }
