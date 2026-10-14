@@ -7,7 +7,7 @@ set -uo pipefail
 : "${TSRS_BIN:?}" "${BENCH_WORK:?}" "${PROBE_OUT:?}"
 mkdir -p "$PROBE_OUT"
 REPS="${PROBE_REPS:-7}"
-COUNTS="${PROBE_COUNTS:-8 16 32}"
+COUNTS="${PROBE_ARGS:-${PROBE_COUNTS:-8 16}}"   # checker counts; perf-probe.yml passes probe_args as PROBE_ARGS
 declare -A DIRS=( [t3code-server]=apps/server [mui-docs]=docs [vscode]=src [cal-diy]=apps/web )
 PERF=""; for p in /usr/lib/linux-tools/*/perf /usr/bin/perf; do [ -x "$p" ] && { PERF="$p"; break; }; done
 echo "tsrs: $("$TSRS_BIN" --version)  runner: $(nproc) vCPU  perf: ${PERF:-none}  reps: $REPS" | tee "$PROBE_OUT/summary.txt"
