@@ -117,6 +117,13 @@ inherits = "release"
 lto = false
 codegen-units = 16
 
+# Undoes `profile.release.package.tsrs_fourslash`, which only pays under fat LTO: there the crate stops at bitcode, and
+# opt-level 1 saves its optimization. Without LTO the crate goes through code generation, where opt-level 1 took
+# 60-65 s against 35 s at opt-level 3.
+[profile.ci-native.package.tsrs_fourslash]
+opt-level = 3
+codegen-units = 16
+
 # The edit-build-test loop (CONTRIBUTING.md, docs/DEBUGGING.md): release optimization without any LTO, incrementally.
 # A checker edit rebuilds tsrs and tsrs-test in about 5 s instead of about 3 minutes, and the conformance suite gives
 # the same results in the same time (notes/dev-loop-build.md). Not for performance measurements: use `release`.
@@ -125,6 +132,12 @@ inherits = "release"
 lto = "off"
 codegen-units = 256
 incremental = true
+
+# As for ci-native: no LTO, so the release override for tsrs_fourslash only slows its build (an edit rebuilt it in
+# 5 s against 3 s).
+[profile.fast.package.tsrs_fourslash]
+opt-level = 3
+codegen-units = 256
 
 # The WebAssembly module (crates/tsrs_wasm, tools/wasm/build.sh; notes/wasm-build.md has the opt-level measurements).
 # panic = "abort": wasm cannot unwind (a panic prints and exits with status 5, as a panicked native driver thread).
