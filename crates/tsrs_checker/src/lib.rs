@@ -106,6 +106,7 @@ mod nodebuilderimpl_1;
 pub(crate) use nodebuilderimpl_1::*;
 mod nodebuilderimpl_2;
 pub(crate) use nodebuilderimpl_2::*;
+mod emitsupport;
 mod nodebuilderscopes;
 mod nodecopy;
 mod pseudotypenodebuilder;

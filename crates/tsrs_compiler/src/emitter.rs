@@ -115,7 +115,10 @@ pub(crate) fn get_declaration_diagnostics(host: &'static crate::emithost::EmitHo
     // The caller runs this in a scratch region (`Program::get_declaration_diagnostics_for_file`): a scratch emit
     // context, so the nodes the node builder makes for the transform die with it. Go passes nil and the transformer
     // makes a fresh context, which is what this is.
-    let transform = tsrs_declarations::new_declaration_transformer(host, Some(tsrs_printer::new_scratch_emit_context()), options, "", "");
+    let transform = tsrs_declarations::new_declaration_transformer(host, tsrs_declarations::DeclarationEmitHost::new_emit_resolver(
+            host,
+            tsrs_printer::new_scratch_emit_context(),
+        ), options, "", "");
     transform.base.transform_source_file(file);
     transform.get_diagnostics()
 }
@@ -202,12 +205,17 @@ mod emit {
         }
 
         fn transform_worker(&mut self) {
+            let context = printer::new_scratch_emit_context();
+            let resolver = self.host.new_emit_resolver(context);
             let js_file_path = self.paths.js_file_path().to_string();
             let source_map_file_path = self.paths.source_map_file_path().to_string();
-            self.emit_js_file(Some(self.source_file), &js_file_path, &source_map_file_path);
+            self.emit_js_file(resolver,
+                Some(self.source_file), &js_file_path, &source_map_file_path,
+            );
             let declaration_file_path = self.paths.declaration_file_path().to_string();
             let declaration_map_path = self.paths.declaration_map_path().to_string();
-            self.emit_declaration_file(Some(self.source_file), &declaration_file_path, &declaration_map_path);
+            self.emit_declaration_file(resolver,
+                Some(self.source_file), &declaration_file_path, &declaration_map_path);
         }
 
         // The rest of `emit`, in Go's order: print and write the JS file, add the declaration transform's
@@ -248,16 +256,15 @@ mod emit {
             let options = self.host.options();
             let map_options = pending.map_options.as_ref().unwrap_or(&options);
             self.print_source_file(&pending.file_path, &pending.source_map_file_path, pending.source_file, printer, map_options, pending.should_emit_source_maps, writer);
-            pending.emit_context.reset(); // put_emit_context
-        }
+            }
 
         // emitter.go:62. Go returns a slice of the `declarationTransformer` interface; the two transformers run in
         // `run_declaration_transformers` in the same order.
-        fn run_declaration_transformers(&mut self, emit_context: P<EmitContext>, source_file: P<SourceFile>, declaration_file_path: &str, declaration_map_path: &str) -> (P<SourceFile>, Vec<P<Diagnostic>>) {
+        fn run_declaration_transformers(&mut self, resolver: tsrs_transformers::Resolver, source_file: P<SourceFile>, declaration_file_path: &str, declaration_map_path: &str) -> (P<SourceFile>, Vec<P<Diagnostic>>) {
             let force_dts_emit = self.emit_only == EmitOnly::EmitOnlyBuilderSignature || self.force_emit && self.emit_only == EmitOnly::EmitOnlyDts;
             let mut diags = Vec::new();
             // getDeclarationTransformers (emitter.go:62)
-            let declaration = tsrs_declarations::new_declaration_transformer(self.host, Some(emit_context), self.host.options(), declaration_file_path, declaration_map_path);
+            let declaration = tsrs_declarations::new_declaration_transformer(self.host, resolver, self.host.options(), declaration_file_path, declaration_map_path);
             let supplemental = tsrs_declarations::new_supplemental_references_transformer(self.host, source_file, declaration_file_path, force_dts_emit);
             // emitter.go:81
             let source_file = self.times.time(EmitPhase::DeclarationTransform, || {
@@ -271,10 +278,11 @@ mod emit {
         }
 
         // emitter.go:71
-        fn run_script_transformers(&mut self, emit_context: P<EmitContext>, mut source_file: P<SourceFile>) -> P<SourceFile> {
+        fn run_script_transformers(&mut self, emit_context: P<EmitContext>, mut source_file: P<SourceFile>, resolver: tsrs_transformers::Resolver,
+        ) -> P<SourceFile> {
             let host = self.host;
             self.times.time(EmitPhase::ScriptTransform, || {
-                source_file = get_script_transformers(emit_context, host, source_file).into_iter().fold(source_file, |mut source_file, transformer| {
+                source_file = get_script_transformers(emit_context, host, source_file, resolver).into_iter().fold(source_file, |mut source_file, transformer| {
                     source_file = transformer.transform_source_file(source_file);
 
                     source_file
@@ -284,7 +292,8 @@ mod emit {
         }
 
         // emitter.go:192
-        fn emit_js_file(&mut self, source_file: Option<P<SourceFile>>, js_file_path: &str, source_map_file_path: &str) {
+        fn emit_js_file(&mut self, resolver: tsrs_transformers::Resolver,
+            source_file: Option<P<SourceFile>>, js_file_path: &str, source_map_file_path: &str) {
             let options = self.host.options();
 
             let Some(source_file) = source_file else {
@@ -299,9 +308,9 @@ mod emit {
                 return;
             }
 
-            let (emit_context, _) = printer::get_scratch_emit_context();
+            let emit_context= resolver.emit_context();
 
-            let source_file = self.run_script_transformers(emit_context, source_file);
+            let source_file = self.run_script_transformers(emit_context, source_file, resolver);
 
             let printer_options = PrinterOptions {
                 remove_comments: options.remove_comments.is_true(),
@@ -329,7 +338,8 @@ mod emit {
         }
 
         // emitter.go:239
-        fn emit_declaration_file(&mut self, source_file: Option<P<SourceFile>>, declaration_file_path: &str, declaration_map_path: &str) {
+        fn emit_declaration_file(&mut self, resolver: tsrs_transformers::Resolver,
+            source_file: Option<P<SourceFile>>, declaration_file_path: &str, declaration_map_path: &str) {
             let options = self.host.options();
 
             let Some(source_file) = source_file else {
@@ -341,8 +351,8 @@ mod emit {
             let emit_declaration_map = self.emit_only != EmitOnly::EmitOnlyBuilderSignature && options.declaration_map.is_true();
             let content_mapped_source = source_file;
 
-            let (emit_context, _) = printer::get_scratch_emit_context();
-            let (source_file, diags) = self.run_declaration_transformers(emit_context, source_file, declaration_file_path, declaration_map_path);
+            let emit_context= resolver.emit_context();
+            let (source_file, diags) = self.run_declaration_transformers(resolver, source_file, declaration_file_path, declaration_map_path);
 
             // added to the emit diagnostics in `print`, after the JS file is written
             let decl_blocked = !diags.is_empty() && !self.force_emit && self.emit_only != EmitOnly::EmitOnlyBuilderSignature;
@@ -350,13 +360,11 @@ mod emit {
 
             if !self.force_emit && self.emit_only != EmitOnly::EmitOnlyBuilderSignature && (options.no_emit == Tristate::True || self.host.is_emit_blocked(declaration_file_path)) {
                 self.emit_result.emit_skipped = true;
-                emit_context.reset(); // put_emit_context
                 return;
             }
 
             if decl_blocked {
                 self.emit_result.emit_skipped = true;
-                emit_context.reset(); // put_emit_context
                 return;
             }
 
@@ -594,15 +602,14 @@ mod emit {
     }
 
     // emitter.go:116
-    pub(crate) fn get_script_transformers(emit_context: P<EmitContext>, host: &'static EmitHost, source_file: P<SourceFile>) -> Vec<P<Transformer>> {
+    pub(crate) fn get_script_transformers(emit_context: P<EmitContext>, host: &'static EmitHost, source_file: P<SourceFile>, emit_resolver: tsrs_transformers::Resolver,
+    ) -> Vec<P<Transformer>> {
         let mut tx: Vec<P<Transformer>> = Vec::new();
         let options = host.options();
 
         // JS files don't use reference calculations as they don't do import elision, no need to calculate it
         let import_elision_enabled = !options.verbatim_module_syntax.is_true() && !ast::is_in_js_file(Some(source_file.as_node()));
         let jsx_transform_enabled = options.get_jsx_transform_enabled() && source_file.language_variant.get() == LanguageVariant::JSX;
-
-        let emit_resolver = host.get_emit_resolver();
 
         let reference_resolver = if import_elision_enabled || jsx_transform_enabled || !options.get_isolated_modules() || options.emit_decorator_metadata.is_true() {
             ReferenceResolverRef::Emit(emit_resolver)

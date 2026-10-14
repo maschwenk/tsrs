@@ -156,7 +156,8 @@ impl DeclarationTransformer {
                 self.preserve_js_doc(statement, input);
                 self.remove_all_comments(assignment);
                 return Some(f.new_syntax_list(alloc_vec(vec![statement, assignment])));
-            } else if self.host.get_emit_resolver().get_referenced_value_declaration(name) == Some(input) || self.host.get_emit_resolver().get_referenced_value_declaration(name).is_none() {
+            } else if self.resolver.get_referenced_value_declaration(name) == Some(input) || self.resolver
+                    .get_referenced_value_declaration(name).is_none() {
                 // only inline to a export var if the `name` lookup points at this assignment or nothing - if it points at something else, we must use a temp name
                 // export var name: Type
                 self.tracker.push_error_fallback_node(Some(input));
@@ -321,7 +322,7 @@ impl DeclarationTransformer {
                 if self.in_class_expression_declaration.get() {
                     js_flags &= !nodebuilder::Flags::WriteClassExpressionAsTypeLiteral;
                 }
-                let res = self.resolver.try_js_type_node_to_type_node(self.emit_context(), node.type_node().unwrap(), self.enclosing_declaration.get(), js_flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+                let res = self.resolver.try_js_type_node_to_type_node(node.type_node().unwrap(), self.enclosing_declaration.get(), js_flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
                 if res.is_some() {
                     return res;
                 }
@@ -347,9 +348,9 @@ impl DeclarationTransformer {
             flags &= !nodebuilder::Flags::WriteClassExpressionAsTypeLiteral;
         }
         if ast::has_inferred_type(node) {
-            type_node = self.resolver.create_type_of_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+            type_node = self.resolver.create_type_of_declaration(node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
         } else if ast::is_function_like(node) {
-            type_node = self.resolver.create_return_type_of_signature_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+            type_node = self.resolver.create_return_type_of_signature_declaration(node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
         } else {
             panic!("Unhandled node kind in ensureType: {:?}", node.kind());
         }
@@ -609,7 +610,7 @@ impl DeclarationTransformer {
             private_identifier = Some(f.new_property_declaration(None, f.new_private_identifier("#private"), None, None, None));
         }
 
-        let late_indexes = self.resolver.create_late_bound_index_signatures(self.emit_context(), class_node, self.enclosing_declaration.get(), declarationEmitNodeBuilderFlags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+        let late_indexes = self.resolver.create_late_bound_index_signatures(class_node, self.enclosing_declaration.get(), declarationEmitNodeBuilderFlags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
 
         let mut member_nodes = Vec::with_capacity(members.nodes().len());
         if let Some(private_identifier) = private_identifier {
@@ -670,7 +671,7 @@ impl DeclarationTransformer {
                     let var_decl = f.new_variable_declaration(
                         new_id,
                         None,
-                        self.resolver.create_type_of_expression(self.emit_context(), extends_clause.expression().unwrap(), Some(input), declarationEmitNodeBuilderFlags, declarationEmitInternalNodeBuilderFlags, self.tracker.get()),
+                        self.resolver.create_type_of_expression(extends_clause.expression().unwrap(), Some(input), declarationEmitNodeBuilderFlags, declarationEmitInternalNodeBuilderFlags, self.tracker.get()),
                         None,
                     );
                     let mut mods = None;

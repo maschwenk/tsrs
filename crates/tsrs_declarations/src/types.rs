@@ -30,7 +30,7 @@ pub trait DeclarationEmitHost: ModuleSpecifierGenerationHost {
     fn get_output_paths_for(&self, file: P<SourceFile>, force_dts_paths: bool) -> OutputPaths;
     fn source_file_may_be_emitted(&self, file: P<SourceFile>, force_dts_emit: bool) -> bool;
     fn get_effective_declaration_flags(&self, node: P<Node>, flags: ModifierFlags) -> ModifierFlags;
-    fn get_emit_resolver(&self) -> Resolver;
+    fn new_emit_resolver(&self, context: P<EmitContext>) -> Resolver;
 }
 
 // transform.go:46

@@ -64,7 +64,6 @@ impl DeclarationTransformer {
         if let Some(data) = node.function_like_data() {
             if data.full_signature.get().is_some() {
                 if let Some(nodes) = self.resolver.create_type_parameters_of_signature_declaration(
-                    self.emit_context(),
                     node,
                     self.enclosing_declaration.get(),
                     declarationEmitNodeBuilderFlags,
@@ -128,7 +127,7 @@ impl DeclarationTransformer {
             if !ast::is_primitive_literal_value(unwrapped_initializer, true) {
                 self.resolver.lock(|c| self.tracker.report_inference_fallback(c, node));
             }
-            return self.resolver.create_literal_const_value(self.emit_context(), self.emit_context().parse_node(Some(node)).unwrap(), self.tracker.get());
+            return self.resolver.create_literal_const_value(self.emit_context().parse_node(Some(node)).unwrap(), self.tracker.get());
         }
         None
     }

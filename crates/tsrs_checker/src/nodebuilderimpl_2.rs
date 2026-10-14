@@ -346,9 +346,8 @@ impl NodeBuilderImpl {
             return false;
         }
         // TODO: going through emit resolver here is weird. Relayer these APIs.
-        let r = c.get_emit_resolver();
         // The only caller checks that `b.ctx.enclosingDeclaration` is non-nil first.
-        r.is_entity_name_visible(c, e.unwrap().name().unwrap().expression().unwrap(), self.ctx().enclosing_declaration.get(), false).accessibility == SymbolAccessibility::Accessible
+        c.is_entity_name_visible(e.unwrap().name().unwrap().expression().unwrap(), self.ctx().enclosing_declaration.get(), false).accessibility == SymbolAccessibility::Accessible
     }
 
     // nodebuilderimpl.go:2159
@@ -499,12 +498,11 @@ impl NodeBuilderImpl {
         }
         let mut t = t.unwrap();
 
-        // !!! TODO: JSDoc, getEmitResolver call is unfortunate layering for the helper - hoist it into checker
         let requires_adding_undefined = declaration.is_some()
             && (ast::is_parameter_declaration(declaration.unwrap()) || ast::is_property_signature_declaration(declaration.unwrap()) || ast::is_property_declaration(declaration.unwrap()))
             && {
-                let r = c.get_emit_resolver();
-                r.requires_adding_implicit_undefined(c, declaration.unwrap(), symbol, self.ctx().enclosing_declaration.get())
+                c.requires_adding_implicit_undefined_for_declaration(
+                    declaration.unwrap(), symbol, self.ctx().enclosing_declaration.get())
             };
         let add_undefined_for_parameter = requires_adding_undefined && (ast::is_parameter_declaration(declaration.unwrap()) /*|| ast.IsJSDocParameterTag(declaration)*/);
         if add_undefined_for_parameter {

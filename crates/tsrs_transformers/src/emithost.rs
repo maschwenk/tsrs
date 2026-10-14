@@ -14,7 +14,7 @@ pub trait EmitHost {
     fn is_emit_blocked(&self, file: &str) -> bool;
     fn write_file(&self, file_name: &str, text: &str) -> Result<(), String>;
     fn get_emit_module_format_of_file(&self, file: P<SourceFile>) -> ModuleKind;
-    fn get_emit_resolver(&self) -> Resolver;
+    fn new_emit_resolver(&self, context: P<EmitContext>) -> Resolver;
     fn get_project_reference_from_source(&self, path: &tsrs_core::tspath::Path) -> Option<P<tsrs_tsoptions::SourceOutputAndProjectReference>>;
     fn is_source_file_from_external_library(&self, file: P<SourceFile>) -> bool;
 }

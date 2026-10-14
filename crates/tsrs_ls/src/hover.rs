@@ -513,6 +513,7 @@ struct QuickInfoWriter {
     alias_level: usize,
     first_declaration: Option<P<Node>>,
     symbol_was_expanded: bool,
+    display_emit_context: Option<P<printer::EmitContext>>,
 }
 
 fn node_builder_flags(flags: TypeFormatFlags) -> Flags {
@@ -520,6 +521,9 @@ fn node_builder_flags(flags: TypeFormatFlags) -> Flags {
 }
 
 impl QuickInfoWriter {
+    fn get_emit_context(&mut self) -> P<printer::EmitContext> {
+        *self.display_emit_context.get_or_insert_with(printer::new_emit_context)
+    }
     // writeTypeClassified writes a type to dpw with proper classification (punctuation, symbols, keywords).
     // Falls back to flat text when vsCapability is false or when TypeToTypeNode fails.
     // hover.go:444
@@ -530,7 +534,7 @@ impl QuickInfoWriter {
             self.dpw.write(&s);
             return;
         }
-        let emit_context = printer::new_emit_context();
+        let emit_context = self.get_emit_context();
         let id_to_symbol: P<RefCell<FxHashMap<P<Node>, P<Symbol>>>> = P::new(RefCell::new(FxHashMap::default()));
         let nb = checker::new_node_builder_ex(c, emit_context, Some(id_to_symbol));
         let combined_flags = node_builder_flags(flags);
@@ -567,7 +571,7 @@ impl QuickInfoWriter {
         } else {
             Kind::CallSignature
         };
-        let emit_context = printer::new_emit_context();
+        let emit_context = self.get_emit_context();
         let id_to_symbol: P<RefCell<FxHashMap<P<Node>, P<Symbol>>>> = P::new(RefCell::new(FxHashMap::default()));
         let nb = checker::new_node_builder_ex(c, emit_context, Some(id_to_symbol));
         let combined_flags = node_builder_flags(flags);
@@ -607,7 +611,7 @@ impl QuickInfoWriter {
             return;
         };
         let attributes = declaration.as_module_declaration().attributes.unwrap();
-        let emit_context = printer::new_emit_context();
+        let emit_context = self.get_emit_context();
         emit_context.set_emit_flags(attributes, printer::EmitFlags::SingleLine);
         let mut p = printer::new_printer(printer::PrinterOptions { new_line: NewLineKind::LF, ..Default::default() }, printer::PrintHandlers::default(), Some(emit_context));
         let mut temp_dpw = new_display_parts_writer(self.vs_capability);
@@ -1060,6 +1064,7 @@ pub(crate) fn get_quick_info_and_declaration_at_location(
         alias_level: 0,
         first_declaration: None,
         symbol_was_expanded: false,
+        display_emit_context: None,
     };
 
     if node.kind() == Kind::ThisKeyword && ast::is_in_expression_context(node) || ast::is_this_in_type_query(node) {

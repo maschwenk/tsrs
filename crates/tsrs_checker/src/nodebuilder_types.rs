@@ -381,9 +381,13 @@ pub struct DeclarationFileLinks {
 /// (tsrs_declarations `Resolver::lock`). `isValueAliasDeclaration` / `aliasMarkingVisitor` are Go method values of
 /// `isValueAliasDeclarationWorker` / `aliasMarkingVisitorWorker`; Rust calls those methods directly.
 #[derive(Default)]
-pub struct EmitResolver {
-    pub reference_resolver: std::cell::OnceCell<P<tsrs_binder::ReferenceResolver<Checker>>>,
+pub struct EmitResolverLinks {
     pub jsx_links: tsrs_core::LinkStore<Node, JSXLinks>,
     pub declaration_links: tsrs_core::LinkStore<Node, DeclarationLinks>,
     pub declaration_file_links: tsrs_core::LinkStore<Node, DeclarationFileLinks>,
 }
+
+pub struct EmitResolver {
+    pub emit_context: P<EmitContext>,
+    pub reference_resolver: std::cell::OnceCell<P<tsrs_binder::ReferenceResolver<Checker>>>,
+    }

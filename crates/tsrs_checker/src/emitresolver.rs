@@ -13,10 +13,15 @@ use tsrs_ast as ast;
 //   type EmitResolver (emitresolver.go:34)
 
 // emitresolver.go:45
-pub(crate) fn new_emit_resolver(_checker: &mut Checker) -> P<EmitResolver> {
+pub(crate) fn new_emit_resolver(_checker: &mut Checker,
+    emit_context: P<EmitContext>,
+) -> P<EmitResolver> {
     // Go also wires `isValueAliasDeclaration` / `aliasMarkingVisitor` (method values of the `...Worker` methods, which
     // Rust calls directly) and `checkerMu` (dropped: the caller serializes checker access, see nodebuilder_types.rs).
-    P::new(EmitResolver::default())
+    P::new_scratch(EmitResolver {
+        emit_context,
+        reference_resolver: std::cell::OnceCell::new(),
+    })
 }
 
 impl EmitResolver {
@@ -38,7 +43,6 @@ impl EmitResolver {
     // emitresolver.go:71
     pub fn is_late_bound(&self, c: &mut Checker, node: Option<P<Node>>) -> bool {
         // TODO: Require an emitContext to construct an EmitResolver, remove all emitContext arguments
-        // node = r.emitContext.ParseNode(node)
         let Some(node) = node else {
             return false;
         };
@@ -53,7 +57,6 @@ impl EmitResolver {
 
     // emitresolver.go:89
     pub fn get_enum_member_value(&self, c: &mut Checker, node: P<Node>) -> evaluator::Result {
-        // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(node) {
             return evaluator::new_result(None, false, false, false);
         }
@@ -68,139 +71,17 @@ impl EmitResolver {
     // emitresolver.go:104
     pub fn is_declaration_visible_exported(&self, c: &mut Checker, node: P<Node>) -> bool {
         // Only lock on external API func to prevent deadlocks
-        self.is_declaration_visible(c, Some(node))
-    }
-
-    // emitresolver.go:111
-    pub(crate) fn is_declaration_visible(&self, c: &mut Checker, node: Option<P<Node>>) -> bool {
-        // node = r.emitContext.ParseNode(node)
-        let Some(node) = node else {
-            return false;
-        };
-        if !ast::is_parse_tree_node(node) {
-            return false;
-        }
-
-        let links = self.declaration_links.get(node);
-        if links.is_visible.get() == Tristate::Unknown {
-            if self.determine_if_declaration_is_visible(c, node) {
-                links.is_visible.set(Tristate::True);
-            } else {
-                links.is_visible.set(Tristate::False);
-            }
-        }
-        links.is_visible.get() == Tristate::True
-    }
-
-    // emitresolver.go:131
-    pub(crate) fn determine_if_declaration_is_visible(&self, c: &mut Checker, node: P<Node>) -> bool {
-        match node.kind() {
-            Kind::JSDocCallbackTag
-            // | Kind::JSDocEnumTag // !!! TODO: JSDoc @enum support?
-            | Kind::JSDocTypedefTag => {
-                // Top-level jsdoc type aliases are considered exported
-                // First parent is comment node, second is hosting declaration or token; we only care about those tokens or declarations whose parent is a source file
-                match node.parent().and_then(|p| p.parent()).and_then(|p| p.parent()) {
-                    Some(p) => ast::is_source_file(p),
-                    None => false,
-                }
-            }
-            Kind::BindingElement => self.is_declaration_visible(c, node.parent().unwrap().parent()),
-            Kind::VariableDeclaration
-            | Kind::ModuleDeclaration
-            | Kind::ClassDeclaration
-            | Kind::InterfaceDeclaration
-            | Kind::TypeAliasDeclaration
-            | Kind::JSTypeAliasDeclaration
-            | Kind::FunctionDeclaration
-            | Kind::EnumDeclaration
-            | Kind::ImportEqualsDeclaration => {
-                if ast::is_variable_declaration(node) {
-                    let name = node.name().unwrap();
-                    if ast::is_binding_pattern(name) && name.elements().is_empty() {
-                        // If the binding pattern is empty, this variable declaration is not visible
-                        return false;
-                    }
-                    // falls through
-                }
-                // External module augmentation is always visible
-                // A @typedef at top-level in an external module is always visible
-                if ast::is_external_module_augmentation(node) || ast::is_implicitly_exported_jsdoc_declaration(node) {
-                    return true;
-                }
-                let parent = ast::get_declaration_container(node).unwrap();
-                // If the node is not exported or it is not ambient module element (except import declaration)
-                if !(c.get_combined_modifier_flags_cached(node).intersects(ModifierFlags::Export) || node.kind() != Kind::ImportEqualsDeclaration && parent.kind() != Kind::SourceFile && parent.flags().intersects(NodeFlags::Ambient))
-                {
-                    return ast::is_global_source_file(parent);
-                }
-                // Exported members/ambient module elements (exception import declaration) are visible if parent is visible
-                self.is_declaration_visible(c, Some(parent))
-            }
-
-            Kind::PropertyDeclaration
-            | Kind::PropertySignature
-            | Kind::GetAccessor
-            | Kind::SetAccessor
-            | Kind::MethodDeclaration
-            | Kind::MethodSignature => {
-                if c.get_effective_declaration_flags(node, ModifierFlags::Private | ModifierFlags::Protected) != ModifierFlags::None {
-                    // Private/protected properties/methods are not visible
-                    return false;
-                }
-                // Public properties/methods are visible if its parents are visible, so:
-                self.is_declaration_visible(c, node.parent())
-            }
-
-            Kind::Constructor
-            | Kind::ConstructSignature
-            | Kind::CallSignature
-            | Kind::IndexSignature
-            | Kind::Parameter
-            | Kind::ModuleBlock
-            | Kind::FunctionType
-            | Kind::ConstructorType
-            | Kind::TypeLiteral
-            | Kind::TypeReference
-            | Kind::ArrayType
-            | Kind::TupleType
-            | Kind::UnionType
-            | Kind::IntersectionType
-            | Kind::ParenthesizedType
-            | Kind::NamedTupleMember => self.is_declaration_visible(c, node.parent()),
-
-            // Default binding, import specifier and namespace import is visible
-            // only on demand so by default it is not visible
-            Kind::ImportClause | Kind::NamespaceImport | Kind::ImportSpecifier => false,
-
-            // Type parameters are always visible
-            Kind::TypeParameter => true,
-            // Source file and namespace export are always visible
-            Kind::SourceFile | Kind::NamespaceExportDeclaration => true,
-
-            // Export assignments do not create name bindings outside the module
-            Kind::ExportAssignment => false,
-
-            // An `export {X}` (without a module specifier) is itself a visible re-export of
-            // the named binding; it contributes to the symbol's external visibility.
-            Kind::ExportSpecifier => {
-                let export_decl = node.parent().unwrap().parent().unwrap();
-                if ast::is_export_declaration(export_decl) && export_decl.as_export_declaration().module_specifier.is_none() {
-                    return self.is_declaration_visible(c, export_decl.parent());
-                }
-                false
-            }
-
-            _ => false,
-        }
+        c.is_declaration_visible(Some(node))
     }
 
     // emitresolver.go:236
     pub fn precalculate_declaration_emit_visibility(&self, c: &mut Checker, file: P<SourceFile>) {
-        if self.declaration_file_links.get(file.as_node()).aliases_marked.get() {
+        if c.get_emit_resolver_links()
+            .declaration_file_links.get(file.as_node()).aliases_marked.get() {
             return;
         }
-        self.declaration_file_links.get(file.as_node()).aliases_marked.set(true);
+        c.get_emit_resolver_links()
+            .declaration_file_links.get(file.as_node()).aliases_marked.set(true);
         // TODO: Does this even *have* to be an upfront walk? If it's not possible for a
         // import a = a.b.c statement to chain into exposing a statement in a sibling scope,
         // it could at least be pushed into scope entry -  then it wouldn't need to be recursive.
@@ -281,7 +162,8 @@ impl EmitResolver {
 
             let mut next_symbol: Option<P<Symbol>> = None;
             for &declaration in symbol.declarations() {
-                self.declaration_links.get(declaration).is_visible.set(Tristate::True);
+                c.get_emit_resolver_links()
+                    .declaration_links.get(declaration).is_visible.set(Tristate::True);
 
                 if ast::is_internal_module_import_equals_declaration(declaration) {
                     // Add the referenced top container visible
@@ -335,57 +217,11 @@ pub(crate) fn get_meaning_of_entity_name_reference(entity_name: P<Node>) -> Symb
 impl EmitResolver {
     // emitresolver.go:334
     pub fn is_entity_name_visible_exported(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>) -> SymbolAccessibilityResult {
-        self.is_entity_name_visible(c, entity_name, enclosing_declaration, true)
+        c.is_entity_name_visible(entity_name, enclosing_declaration, true)
     }
 
     // emitresolver.go:340
-    pub(crate) fn is_entity_name_visible(&self, c: &mut Checker, entity_name: P<Node>, enclosing_declaration: Option<P<Node>>, should_compute_alias_to_make_visible: bool) -> SymbolAccessibilityResult {
-        // node = r.emitContext.ParseNode(entityName)
-        if !ast::is_parse_tree_node(entity_name) {
-            return SymbolAccessibilityResult { accessibility: SymbolAccessibility::NotAccessible, ..Default::default() };
-        }
-
-        let meaning = get_meaning_of_entity_name_reference(entity_name);
-        let first_identifier = ast::get_first_identifier(entity_name);
-
-        let symbol = c.resolve_name(enclosing_declaration, first_identifier.text(), meaning, None, false, false);
-
-        if let Some(symbol) = symbol {
-            if symbol.flags().intersects(SymbolFlags::TypeParameter) && meaning.intersects(SymbolFlags::Type) {
-                return SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() };
-            }
-        }
-
-        if symbol.is_none() && ast::is_this_identifier(first_identifier) {
-            let this_container = c.get_this_container(first_identifier, false, false).unwrap();
-            let sym = c.get_symbol_of_declaration(this_container);
-            if self.is_symbol_accessible(c, sym, enclosing_declaration, meaning, false).accessibility == SymbolAccessibility::Accessible {
-                return SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() };
-            }
-        }
-
-        let Some(symbol) = symbol else {
-            return SymbolAccessibilityResult {
-                accessibility: SymbolAccessibility::NotResolved,
-                error_symbol_name: first_identifier.text().to_string(),
-                error_node: Some(first_identifier),
-                ..Default::default()
-            };
-        };
-
-        let visible = self.has_visible_declarations(c, symbol, should_compute_alias_to_make_visible);
-        if let Some(visible) = visible {
-            return (*visible).clone();
-        }
-
-        SymbolAccessibilityResult {
-            accessibility: SymbolAccessibility::NotAccessible,
-            error_symbol_name: first_identifier.text().to_string(),
-            error_node: Some(first_identifier),
-            ..Default::default()
-        }
     }
-}
 
 // emitresolver.go:382
 pub(crate) fn noop_add_visible_alias(declaration: P<Node>, aliasing_statement: P<Node>) {
@@ -393,118 +229,8 @@ pub(crate) fn noop_add_visible_alias(declaration: P<Node>, aliasing_statement: P
 }
 
 impl EmitResolver {
-    // emitresolver.go:384
-    pub(crate) fn has_visible_declarations(&self, c: &mut Checker, symbol: P<Symbol>, should_compute_alias_to_make_visible: bool) -> Option<P<SymbolAccessibilityResult>> {
-        // Go collects into a map[NodeId]*Node and returns its values in (random) map order; this keeps
-        // first-insertion order, overwriting the value on a repeated key like the map assignment does.
-        let mut aliases_to_make_visible_set: Option<Vec<(NodeId, P<Node>)>> = None;
-
-        {
-            let mut add_visible_alias: Box<dyn FnMut(P<Node>, P<Node>) + '_> = if should_compute_alias_to_make_visible {
-                let aliases_to_make_visible_set = &mut aliases_to_make_visible_set;
-                Box::new(move |declaration: P<Node>, aliasing_statement: P<Node>| {
-                    self.declaration_links.get(declaration).is_visible.set(Tristate::True);
-                    let set = aliases_to_make_visible_set.get_or_insert_with(Vec::new);
-                    let id = ast::get_node_id(declaration);
-                    match set.iter_mut().find(|(k, _)| *k == id) {
-                        Some(entry) => entry.1 = aliasing_statement,
-                        None => set.push((id, aliasing_statement)),
-                    }
-                })
-            } else {
-                Box::new(noop_add_visible_alias)
-            };
-
-            let declarations = symbol.declarations().to_vec();
-            for declaration in declarations {
-                if ast::is_identifier(declaration) {
-                    continue;
-                }
-                if !self.is_declaration_visible(c, Some(declaration)) {
-                    // Mark the unexported alias as visible if its parent is visible
-                    // because these kind of aliases can be used to name types in declaration file
-                    let any_import_syntax = get_any_import_syntax(declaration);
-                    if let Some(any_import_syntax) = any_import_syntax {
-                        if !ast::has_syntactic_modifier(any_import_syntax, ModifierFlags::Export) && // import clause without export
-                            self.is_declaration_visible(c, any_import_syntax.parent())
-                        {
-                            add_visible_alias(declaration, any_import_syntax);
-                            continue;
-                        }
-                    }
-                    if ast::is_variable_declaration(declaration) {
-                        let variable_statement = declaration.parent().unwrap().parent().unwrap();
-                        if ast::is_variable_statement(variable_statement)
-                            && !ast::has_syntactic_modifier(variable_statement, ModifierFlags::Export) // unexported variable statement
-                            && self.is_declaration_visible(c, variable_statement.parent())
-                        {
-                            add_visible_alias(declaration, variable_statement);
-                            continue;
-                        }
-                    }
-                    if ast::is_late_visibility_painted_statement(declaration) // unexported top-level statement
-                        && !ast::has_syntactic_modifier(declaration, ModifierFlags::Export)
-                        && self.is_declaration_visible(c, declaration.parent())
-                    {
-                        add_visible_alias(declaration, declaration);
-                        continue;
-                    }
-                    if ast::is_binding_element(declaration) {
-                        if symbol.flags().intersects(SymbolFlags::Alias) && ast::is_in_js_file(declaration) {
-                            // exported import-like top-level JS require statement
-                            let p2 = declaration.parent().and_then(|p| p.parent());
-                            if let Some(p2) = p2 {
-                                if ast::is_variable_declaration(p2) {
-                                    let p4 = p2.parent().unwrap().parent();
-                                    if let Some(p4) = p4 {
-                                        if ast::is_variable_statement(p4) && !ast::has_syntactic_modifier(p4, ModifierFlags::Export) {
-                                            // check if the thing containing the variable statement is visible (ie, the file)
-                                            let p5 = p4.parent();
-                                            if p5.is_some() && self.is_declaration_visible(c, p5) {
-                                                add_visible_alias(declaration, p4);
-                                                continue;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        if symbol.flags().intersects(SymbolFlags::BlockScopedVariable) {
-                            let root_declaration = ast::walk_up_binding_elements_and_patterns(declaration);
-                            if ast::is_parameter_declaration(root_declaration) {
-                                return None;
-                            }
-                            let variable_statement = root_declaration.parent().unwrap().parent().unwrap();
-                            if !ast::is_variable_statement(variable_statement) {
-                                return None;
-                            }
-                            if ast::has_syntactic_modifier(variable_statement, ModifierFlags::Export) {
-                                continue; // no alias to add, already exported
-                            }
-                            if !self.is_declaration_visible(c, variable_statement.parent()) {
-                                return None; // not visible
-                            }
-                            add_visible_alias(declaration, variable_statement);
-                            continue;
-                        }
-                    }
-
-                    // Declaration is not visible
-                    return None;
-                }
-            }
-        }
-
-        Some(P::new_scratch(SymbolAccessibilityResult {
-            accessibility: SymbolAccessibility::Accessible,
-            aliases_to_make_visible: aliases_to_make_visible_set.unwrap_or_default().into_iter().map(|(_, n)| n).collect(),
-            ..Default::default()
-        }))
-    }
-
     // emitresolver.go:467
     pub fn is_implementation_of_overload(&self, c: &mut Checker, node: P<Node>) -> bool {
-        // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(node) {
             return false;
         }
@@ -544,7 +270,6 @@ impl EmitResolver {
 
     // emitresolver.go:508
     pub fn is_import_required_by_augmentation(&self, c: &mut Checker, decl: P<Node>) -> bool {
-        // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(decl) {
             return false;
         }
@@ -606,7 +331,9 @@ impl EmitResolver {
         if !ast::is_parse_tree_node(declaration) {
             return false;
         }
-        self.requires_adding_implicit_undefined(c, declaration, symbol, enclosing_declaration)
+        c.requires_adding_implicit_undefined_for_declaration(
+            declaration, symbol, enclosing_declaration,
+        )
     }
 
     // emitresolver.go:577
@@ -615,72 +342,9 @@ impl EmitResolver {
             return false;
         }
         // NO LOCKING - only should be called in contexts that already have a checker lock
-        self.requires_adding_implicit_undefined(c, declaration, symbol, enclosing_declaration)
-    }
-
-    // emitresolver.go:585
-    pub(crate) fn requires_adding_implicit_undefined(&self, c: &mut Checker, declaration: P<Node>, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>) -> bool {
-        // node = r.emitContext.ParseNode(node)
-        if !ast::is_parse_tree_node(declaration) {
-            return false;
-        }
-        match declaration.kind() {
-            Kind::PropertyDeclaration | Kind::PropertySignature | Kind::JSDocPropertyTag => {
-                let symbol = match symbol {
-                    Some(s) => s,
-                    None => c.get_symbol_of_declaration(declaration).unwrap(),
-                };
-                let t = c.get_type_of_symbol(symbol);
-                let _ = c.mapped_symbol_links.has(symbol);
-                symbol.flags().intersects(SymbolFlags::Property)
-                    && symbol.flags().intersects(SymbolFlags::Optional)
-                    && is_optional_declaration(declaration)
-                    && c.reverse_mapped_symbol_links.has(symbol)
-                    && c.reverse_mapped_symbol_links.get(symbol).mapped_type.get().is_some()
-                    && contains_non_missing_undefined_type(c, t)
-            }
-            Kind::Parameter | Kind::JSDocParameterTag => self.requires_adding_implicit_undefined_worker(c, declaration, enclosing_declaration),
-            _ => panic!("Node cannot possibly require adding undefined"),
-        }
-    }
-
-    // emitresolver.go:605
-    pub(crate) fn requires_adding_implicit_undefined_worker(&self, c: &mut Checker, parameter: P<Node>, enclosing_declaration: Option<P<Node>>) -> bool {
-        (self.is_required_initialized_parameter(c, parameter, enclosing_declaration) || self.is_optional_uninitialized_parameter_property(c, parameter))
-            && !self.declared_parameter_type_contains_undefined(c, parameter)
-    }
-
-    // emitresolver.go:609
-    pub(crate) fn declared_parameter_type_contains_undefined(&self, c: &mut Checker, parameter: P<Node>) -> bool {
-        // typeNode := getNonlocalEffectiveTypeAnnotationNode(parameter); // !!! JSDoc Support
-        let Some(type_node) = parameter.type_node() else {
-            return false;
-        };
-        let t = c.get_type_from_type_node(type_node);
-        // allow error type here to avoid confusing errors that the annotation has to contain undefined when it does in cases like this:
-        //
-        // export function fn(x?: Unresolved | undefined): void {}
-        c.is_error_type(t) || c.contains_undefined_type(t)
-    }
-
-    // emitresolver.go:622
-    pub(crate) fn is_optional_uninitialized_parameter_property(&self, c: &mut Checker, parameter: P<Node>) -> bool {
-        c.strict_null_checks
-            && self.is_optional_parameter(c, parameter)
-            && ( /*isJSDocParameterTag(parameter) ||*/parameter.initializer().is_none()) // !!! TODO: JSDoc support
-            && ast::has_syntactic_modifier(parameter, ModifierFlags::ParameterPropertyModifier)
-    }
-
-    // emitresolver.go:629
-    pub(crate) fn is_required_initialized_parameter(&self, c: &mut Checker, parameter: P<Node>, enclosing_declaration: Option<P<Node>>) -> bool {
-        if !c.strict_null_checks || self.is_optional_parameter(c, parameter) || /*isJSDocParameterTag(parameter) ||*/ parameter.initializer().is_none() {
-            // !!! TODO: JSDoc Support
-            return false;
-        }
-        if ast::has_syntactic_modifier(parameter, ModifierFlags::ParameterPropertyModifier) {
-            return enclosing_declaration.is_some() && ast::is_function_like_declaration(enclosing_declaration);
-        }
-        true
+        c.requires_adding_implicit_undefined_for_declaration(
+            declaration, symbol, enclosing_declaration,
+        )
     }
 
     // emitresolver.go:639
@@ -690,7 +354,6 @@ impl EmitResolver {
 
     // emitresolver.go:643
     pub fn is_literal_const_declaration(&self, c: &mut Checker, node: P<Node>) -> bool {
-        // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(node) {
             return false;
         }
@@ -706,7 +369,6 @@ impl EmitResolver {
 
     // emitresolver.go:660
     pub fn is_expando_function_declaration_unsafe(&self, c: &mut Checker, node: P<Node>) -> bool {
-        // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(node) {
             return false;
         }
@@ -929,14 +591,17 @@ impl EmitResolver {
     }
 
     // emitresolver.go:869
-    pub fn set_referenced_import_declaration(&self, _c: &mut Checker, node: P<Node>, ref_: P<Node>) {
-        self.jsx_links.get(node).import_ref.set(Some(ref_));
+    pub fn set_referenced_import_declaration(&self, c: &mut Checker, node: P<Node>, ref_: P<Node>) {
+        c.get_emit_resolver_links()
+            .jsx_links.get(node).import_ref.set(Some(ref_));
     }
 
     // emitresolver.go:875
     pub fn get_referenced_import_declaration(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> {
         if !ast::is_parse_tree_node(node) {
-            return self.jsx_links.get(node).import_ref.get();
+            return c
+                .get_emit_resolver_links()
+                .jsx_links.get(node).import_ref.get();
         }
 
         let symbol = c.get_referenced_value_or_alias_symbol(node);
@@ -1006,21 +671,21 @@ impl EmitResolver {
     // and likely reduces performance. There's probably some refactoring that could be done here to simplify this.
 
     // emitresolver.go:950
-    pub fn create_return_type_of_signature_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+    pub fn create_return_type_of_signature_declaration(&self, c: &mut Checker, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        let emit_context = self.emit_context;
         let Some(original) = emit_context.parse_node(Some(signature_declaration)) else {
             return Some(emit_context.factory.new_keyword_type_node(Kind::AnyKeyword));
         };
 
-        let request_node_builder = new_node_builder(c, emit_context); // TODO: cache per-context
-        request_node_builder.serialize_return_type_for_signature(c, original, enclosing_declaration, flags, internal_flags, Some(tracker))
+        let request_node_builder = new_node_builder(c, emit_context); request_node_builder.serialize_return_type_for_signature(c, original, enclosing_declaration, flags, internal_flags, Some(tracker))
     }
 
     // emitresolver.go:962
-    pub fn create_type_parameters_of_signature_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<Vec<P<Node>>> {
+    pub fn create_type_parameters_of_signature_declaration(&self, c: &mut Checker, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<Vec<P<Node>>> {
+        let emit_context = self.emit_context;
         let original = emit_context.parse_node(Some(signature_declaration))?;
 
-        let request_node_builder = new_node_builder(c, emit_context); // TODO: cache per-context
-        let result = request_node_builder.serialize_type_parameters_for_signature(c, original, enclosing_declaration, flags, internal_flags, Some(tracker));
+        let request_node_builder = new_node_builder(c, emit_context); let result = request_node_builder.serialize_type_parameters_for_signature(c, original, enclosing_declaration, flags, internal_flags, Some(tracker));
         // Go's slice is nil exactly when it is empty: typeParametersToTypeParameterDeclarations only appends to a nil
         // slice (or returns nil), and exitContextSlice returns nil on error.
         if result.is_empty() {
@@ -1030,19 +695,20 @@ impl EmitResolver {
     }
 
     // emitresolver.go:974
-    pub fn create_type_of_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+    pub fn create_type_of_declaration(&self, c: &mut Checker, declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        let emit_context= self.emit_context;
         if emit_context.parse_node(Some(declaration)).is_none() {
             return Some(emit_context.factory.new_keyword_type_node(Kind::AnyKeyword));
         }
 
-        let request_node_builder = new_node_builder(c, emit_context); // TODO: cache per-context
-        // // Get type of the symbol if this is the valid symbol otherwise get type at location
+        let request_node_builder = new_node_builder(c, emit_context); // // Get type of the symbol if this is the valid symbol otherwise get type at location
         let symbol = c.get_symbol_of_declaration(declaration);
         request_node_builder.serialize_type_for_declaration(c, declaration, symbol, enclosing_declaration, flags | Flags::MultilineObjectLiterals, internal_flags, Some(tracker))
     }
 
     // emitresolver.go:988
-    pub fn create_literal_const_value(&self, c: &mut Checker, emit_context: P<EmitContext>, node: P<Node>, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+    pub fn create_literal_const_value(&self, c: &mut Checker, node: P<Node>, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        let emit_context = self.emit_context;
         let node = emit_context.parse_node(Some(node)).unwrap();
         let symbol = c.get_symbol_of_declaration(node).unwrap();
         // Go checks `t == nil` here ("TODO: How!? Maybe this should be a panic. All symbols should have a type."); the
@@ -1052,8 +718,7 @@ impl EmitResolver {
         let f = &emit_context.factory;
         let mut enum_result: Option<P<Node>> = None;
         if t.flags().intersects(TypeFlags::EnumLike) {
-            let request_node_builder = new_node_builder(c, emit_context); // TODO: cache per-context
-            enum_result = request_node_builder.symbol_to_expression(c, t.symbol().unwrap(), SymbolFlags::Value, Some(node), Flags::None, InternalFlags::None, Some(tracker));
+            let request_node_builder = new_node_builder(c, emit_context); enum_result = request_node_builder.symbol_to_expression(c, t.symbol().unwrap(), SymbolFlags::Value, Some(node), Flags::None, InternalFlags::None, Some(tracker));
             // What about regularTrueType/regularFalseType - since those aren't fresh, we never make initializers from them
             // TODO: handle those if this function is ever used for more than initializers in declaration emit
         } else if t == c.true_type {
@@ -1095,17 +760,18 @@ impl EmitResolver {
     }
 
     // emitresolver.go:1049
-    pub fn create_type_of_expression(&self, c: &mut Checker, emit_context: P<EmitContext>, expression: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+    pub fn create_type_of_expression(&self, c: &mut Checker, expression: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        let emit_context = self.emit_context;
         let Some(expression) = emit_context.parse_node(Some(expression)) else {
             return Some(emit_context.factory.new_keyword_type_node(Kind::AnyKeyword));
         };
 
-        let request_node_builder = new_node_builder(c, emit_context); // TODO: cache per-context
-        request_node_builder.serialize_type_for_expression(c, expression, enclosing_declaration, flags | Flags::MultilineObjectLiterals, internal_flags, Some(tracker))
+        let request_node_builder = new_node_builder(c, emit_context); request_node_builder.serialize_type_for_expression(c, expression, enclosing_declaration, flags | Flags::MultilineObjectLiterals, internal_flags, Some(tracker))
     }
 
     // emitresolver.go:1061
-    pub fn create_late_bound_index_signatures(&self, c: &mut Checker, emit_context: P<EmitContext>, container: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Vec<P<Node>> {
+    pub fn create_late_bound_index_signatures(&self, c: &mut Checker, container: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Vec<P<Node>> {
+        let emit_context = self.emit_context;
         let container = emit_context.parse_node(Some(container)).unwrap();
 
         let sym = container.symbol().unwrap();
@@ -1118,8 +784,7 @@ impl EmitResolver {
             instance_infos = c.get_index_infos_of_index_symbol(instance_index_symbol, &sibling_symbols);
         }
 
-        let request_node_builder = new_node_builder(c, emit_context); // TODO: cache per-context
-        let f = &emit_context.factory;
+        let request_node_builder = new_node_builder(c, emit_context); let f = &emit_context.factory;
 
         let mut result: Vec<P<Node>> = Vec::new();
         for (i, info_list) in [static_infos, instance_infos].into_iter().enumerate() {
@@ -1142,7 +807,7 @@ impl EmitResolver {
                             comp.name().is_some_and(|name| {
                                 ast::is_computed_property_name(name)
                                     && ast::is_entity_name_expression(name.expression().unwrap())
-                                    && self.is_entity_name_visible(c, name.expression().unwrap(), enclosing_declaration, false).accessibility
+                                    && c.is_entity_name_visible(name.expression().unwrap(), enclosing_declaration, false).accessibility
                                         == SymbolAccessibility::Accessible
                             })
                         });
@@ -1207,20 +872,16 @@ impl EmitResolver {
 
     // emitresolver.go:1151
     pub fn get_effective_declaration_flags(&self, c: &mut Checker, node: P<Node>, flags: ModifierFlags) -> ModifierFlags {
-        // node = emitContext.ParseNode(node)
         c.get_effective_declaration_flags(node, flags)
     }
 
     // emitresolver.go:1158
     pub fn get_constant_value(&self, c: &mut Checker, node: P<Node>) -> Option<LiteralValue> {
-        // node = emitContext.ParseNode(node)
         c.get_constant_value(node)
     }
 
     // emitresolver.go:1165
     pub fn get_type_reference_serialization_kind(&self, c: &mut Checker, type_name: Option<P<Node>>, location: Option<P<Node>>) -> TypeReferenceSerializationKind {
-        // typeName = emitContext.ParseNode(typeName)
-        // location = emitContext.ParseNode(location)
         let (Some(type_name), Some(_)) = (type_name, location) else {
             return TypeReferenceSerializationKind::Unknown;
         };
@@ -1330,11 +991,11 @@ impl EmitResolver {
     }
 
     // emitresolver.go:1272
-    pub fn try_js_type_node_to_type_node(&self, c: &mut Checker, emit_context: P<EmitContext>, type_node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+    pub fn try_js_type_node_to_type_node(&self, c: &mut Checker, type_node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        let emit_context = self.emit_context;
         let type_node = emit_context.parse_node(Some(type_node)).unwrap();
 
-        let request_node_builder = new_node_builder(c, emit_context); // TODO: cache per-context
-        request_node_builder.try_js_type_node_to_type_node(c, type_node, enclosing_declaration, flags, internal_flags, Some(tracker))
+        let request_node_builder = new_node_builder(c, emit_context); request_node_builder.try_js_type_node_to_type_node(c, type_node, enclosing_declaration, flags, internal_flags, Some(tracker))
     }
 
     // IsThisPropertyAssignmentDeclarationRedundant reports whether a JS `this.<name> = ...` expando

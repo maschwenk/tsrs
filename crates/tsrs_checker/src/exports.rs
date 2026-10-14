@@ -494,8 +494,8 @@ impl Checker {
         if symbol.is_none() {
             return false;
         }
-        let r = self.get_emit_resolver();
-        r.requires_adding_implicit_undefined_exported(self, node, symbol, Some(enclosing_declaration))
+        self.requires_adding_implicit_undefined_for_declaration(
+            node, symbol, Some(enclosing_declaration))
     }
 
     // exports.go:386

@@ -21,6 +21,10 @@ impl Resolver {
         Resolver { r, slot }
     }
 
+    pub fn emit_context(self) -> P<EmitContext> {
+        self.r.emit_context
+    }
+
     /// Borrows the lent checker (Go: `checkerMu.Lock()` around the call).
     pub fn lock<R>(self, f: impl FnOnce(&mut Checker) -> R) -> R {
         self.slot.with(f)
@@ -100,32 +104,32 @@ impl Resolver {
         self.lock(|c| self.r.get_effective_declaration_flags(c, node, flags))
     }
 
-    pub fn create_return_type_of_signature_declaration(self, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
-        self.lock(|c| self.r.create_return_type_of_signature_declaration(c, emit_context, signature_declaration, enclosing_declaration, flags, internal_flags, tracker))
+    pub fn create_return_type_of_signature_declaration(self, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        self.lock(|c| self.r.create_return_type_of_signature_declaration(c, signature_declaration, enclosing_declaration, flags, internal_flags, tracker))
     }
 
-    pub fn create_type_parameters_of_signature_declaration(self, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<Vec<P<Node>>> {
-        self.lock(|c| self.r.create_type_parameters_of_signature_declaration(c, emit_context, signature_declaration, enclosing_declaration, flags, internal_flags, tracker))
+    pub fn create_type_parameters_of_signature_declaration(self, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<Vec<P<Node>>> {
+        self.lock(|c| self.r.create_type_parameters_of_signature_declaration(c, signature_declaration, enclosing_declaration, flags, internal_flags, tracker))
     }
 
-    pub fn create_type_of_declaration(self, emit_context: P<EmitContext>, declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
-        self.lock(|c| self.r.create_type_of_declaration(c, emit_context, declaration, enclosing_declaration, flags, internal_flags, tracker))
+    pub fn create_type_of_declaration(self, declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        self.lock(|c| self.r.create_type_of_declaration(c, declaration, enclosing_declaration, flags, internal_flags, tracker))
     }
 
-    pub fn create_literal_const_value(self, emit_context: P<EmitContext>, node: P<Node>, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
-        self.lock(|c| self.r.create_literal_const_value(c, emit_context, node, tracker))
+    pub fn create_literal_const_value(self, node: P<Node>, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        self.lock(|c| self.r.create_literal_const_value(c, node, tracker))
     }
 
-    pub fn create_type_of_expression(self, emit_context: P<EmitContext>, expression: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
-        self.lock(|c| self.r.create_type_of_expression(c, emit_context, expression, enclosing_declaration, flags, internal_flags, tracker))
+    pub fn create_type_of_expression(self, expression: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        self.lock(|c| self.r.create_type_of_expression(c, expression, enclosing_declaration, flags, internal_flags, tracker))
     }
 
-    pub fn create_late_bound_index_signatures(self, emit_context: P<EmitContext>, container: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Vec<P<Node>> {
-        self.lock(|c| self.r.create_late_bound_index_signatures(c, emit_context, container, enclosing_declaration, flags, internal_flags, tracker))
+    pub fn create_late_bound_index_signatures(self, container: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Vec<P<Node>> {
+        self.lock(|c| self.r.create_late_bound_index_signatures(c, container, enclosing_declaration, flags, internal_flags, tracker))
     }
 
-    pub fn try_js_type_node_to_type_node(self, emit_context: P<EmitContext>, type_node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
-        self.lock(|c| self.r.try_js_type_node_to_type_node(c, emit_context, type_node, enclosing_declaration, flags, internal_flags, tracker))
+    pub fn try_js_type_node_to_type_node(self, type_node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: nodebuilder::Flags, internal_flags: nodebuilder::InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
+        self.lock(|c| self.r.try_js_type_node_to_type_node(c, type_node, enclosing_declaration, flags, internal_flags, tracker))
     }
 
     // The rest of Go's `printer.EmitResolver` (used by the script transformers).

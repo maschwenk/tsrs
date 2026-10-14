@@ -25,8 +25,12 @@ pub(crate) fn get_this_property_assignment_key(name: Option<P<Node>>, node: P<No
 
 // transform.go:103
 // TODO: Convert to transformers.TransformerFactory signature to allow more automatic composition with other transforms
-pub fn new_declaration_transformer(host: &'static dyn DeclarationEmitHost, context: Option<P<EmitContext>>, compiler_options: P<CompilerOptions>, declaration_file_path: &str, declaration_map_path: &str) -> P<DeclarationTransformer> {
-    let resolver = host.get_emit_resolver();
+pub fn new_declaration_transformer(host: &'static dyn DeclarationEmitHost, resolver: Resolver,
+    compiler_options: P<CompilerOptions>,
+    declaration_file_path: &str,
+    declaration_map_path: &str,
+) -> P<DeclarationTransformer> {
+    let context = Some(resolver.emit_context());
     let state = P::new(SymbolTrackerSharedState {
         late_marked_statements: RefCell::new(Vec::new()),
         diagnostics: RefCell::new(Vec::new()),
@@ -1287,7 +1291,7 @@ impl DeclarationTransformer {
         let mut type_: Option<P<Node>> = None;
         let mut initializer: Option<P<Node>> = None;
         if ast::is_primitive_literal_value(unwrap_parenthesized_expression(expression).unwrap(), true) {
-            initializer = self.resolver.create_literal_const_value(self.emit_context(), self.emit_context().parse_node(Some(assignment)).unwrap(), self.tracker.get());
+            initializer = self.resolver.create_literal_const_value(self.emit_context().parse_node(Some(assignment)).unwrap(), self.tracker.get());
         }
         if initializer.is_none() {
             type_ = self.ensure_type(assignment, false);

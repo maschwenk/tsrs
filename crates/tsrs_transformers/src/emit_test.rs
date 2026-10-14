@@ -34,10 +34,10 @@ fn emit(files: &[(&str, &str)], file: &str, transforms: &[TransformerFactory]) -
     let source_file = program.get_source_file(file).unwrap();
     let mut checker = program.get_type_checker_for_file(&ctx, source_file);
     let slot = P::new(tsrs_checker::CheckerSlot::default());
-    let resolver = Resolver::new((*checker).get_emit_resolver(), slot);
+    let context = printer::new_emit_context();
+    let resolver = Resolver::new(checker.new_emit_resolver(context), slot);
     let options = program.options();
     slot.lend(&mut checker, || {
-        let context = printer::new_emit_context();
         let opts = TransformOptions { context, compiler_options: options, resolver: ReferenceResolverRef::Emit(resolver), emit_resolver: Some(resolver), get_emit_module_format_of_file: Rc::new(|_| tsrs_core::ModuleKind::ESNext) };
         let mut result = source_file;
         result = transforms.iter().fold(result, |mut result, t| {

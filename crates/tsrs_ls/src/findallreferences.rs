@@ -657,7 +657,7 @@ impl LanguageService {
         let program = self.get_program();
         let mut checker = program.get_type_checker(ctx);
         let checker: &mut Checker = &mut checker;
-        let emit_resolver = checker.get_emit_resolver();
+        let emit_resolver = checker.new_emit_resolver(tsrs_printer::new_emit_context());
         if let Some(result) = entry.definition.as_ref().unwrap().symbol.unwrap().declarations().iter().find_map(|&d| {
             if is_definition_visible(emit_resolver, checker, d) {
                 let (file, start_pos) = get_file_and_start_pos_from_declaration(d);

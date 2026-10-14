@@ -196,13 +196,12 @@ impl Program {
         // printed and written; the checker escapes to its own arena (`CheckerSlot::with`), and so do diagnostics
         // and the program's caches (`EmitHost`).
         let transform = |c: &mut tsrs_checker::Checker, source_file: P<SourceFile>| -> (emitter, Region) {
-            let emit_resolver = c.get_emit_resolver();
             let outer_before = if mem_log { tsrs_core::ptr::arena_used_bytes() } else { 0 };
             let region = Region::new_scratch(EMIT_REGION_FIRST_CHUNK);
             let e = {
                 let _scratch = region.enter_scratch();
                 let checker_slot = P::new(tsrs_checker::CheckerSlot::default());
-                let host = crate::emithost::new_emit_host(self, emit_resolver, checker_slot);
+                let host = crate::emithost::new_emit_host(self, checker_slot);
                 let paths = outputpaths::get_output_paths_for(
                     source_file,
                     &self.options(),

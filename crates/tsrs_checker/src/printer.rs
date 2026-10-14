@@ -429,8 +429,7 @@ impl Checker {
             if !accessible_symbol_chain.is_empty() {
                 had_accessible_chain = Some(symbol);
                 // TODO: going through emit resolver here is weird. Relayer these APIs.
-                let r = self.get_emit_resolver();
-                let has_accessible_declarations = r.has_visible_declarations(self, accessible_symbol_chain[0], should_compute_aliases_to_make_visible);
+                let has_accessible_declarations = self.has_visible_declarations(accessible_symbol_chain[0], should_compute_aliases_to_make_visible);
                 if has_accessible_declarations.is_some() {
                     return has_accessible_declarations;
                 }

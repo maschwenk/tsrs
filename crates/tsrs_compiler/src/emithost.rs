@@ -22,12 +22,12 @@ use crate::program::Program;
 
 pub(crate) struct EmitHost {
     program: &'static Program,
-    emit_resolver: Resolver,
+    checker_slot: P<CheckerSlot>,
 }
 
 // emitHost.go:38 (the checker acquisition is the caller's; see above)
-pub(crate) fn new_emit_host(program: &'static Program, emit_resolver: P<tsrs_checker::EmitResolver>, checker_slot: P<CheckerSlot>) -> &'static EmitHost {
-    P::new(EmitHost { program, emit_resolver: Resolver::new(emit_resolver, checker_slot) }).get()
+pub(crate) fn new_emit_host(program: &'static Program, checker_slot: P<CheckerSlot>) -> &'static EmitHost {
+    P::new(EmitHost { program, checker_slot }).get()
 }
 
 impl OutputPathsHost for EmitHost {
@@ -137,12 +137,13 @@ impl DeclarationEmitHost for EmitHost {
     // emitHost.go:90
     fn get_effective_declaration_flags(&self, node: P<Node>, flags: ModifierFlags) -> ModifierFlags {
         let _outer = tsrs_core::arena::escape_scratch();
-        self.get_emit_resolver().get_effective_declaration_flags(node, flags)
+        self.checker_slot.with(|c| c.get_effective_declaration_flags_exported(node, flags))
     }
 
     // emitHost.go:120 (GetEmitResolver)
-    fn get_emit_resolver(&self) -> Resolver {
-        self.emit_resolver
+    fn new_emit_resolver(&self, context: P<tsrs_printer::EmitContext>) -> Resolver {
+        self.checker_slot
+            .with(|c| Resolver::new(c.new_emit_resolver(context), self.checker_slot))
     }
 }
 
@@ -197,8 +198,9 @@ impl tsrs_transformers::EmitHost for EmitHost {
     }
 
     // emitHost.go:134
-    fn get_emit_resolver(&self) -> Resolver {
-        self.emit_resolver
+    fn new_emit_resolver(&self, context: P<tsrs_printer::EmitContext>) -> Resolver {
+        self.checker_slot
+            .with(|c| Resolver::new(c.new_emit_resolver(context), self.checker_slot))
     }
 
     // emitHost.go:83
