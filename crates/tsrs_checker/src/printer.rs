@@ -1278,6 +1278,17 @@ impl Checker {
         if symbol == self.get_merged_symbol(symbol_from_symbol_table) {
             like_symbols = true;
         }
+        if !like_symbols && let Some(mut resolved_alias_symbol) = resolved_alias_symbol {
+            let mut seen_aliases = FxHashSet::default();
+            while resolved_alias_symbol.flags().intersects(SymbolFlags::Alias) && seen_aliases.insert(resolved_alias_symbol) {
+                let resolved = self.resolve_alias(resolved_alias_symbol);
+                resolved_alias_symbol = self.get_merged_symbol(resolved);
+                if symbol == resolved_alias_symbol {
+                    like_symbols = true;
+                    break;
+                }
+            }
+        }
         if !like_symbols {
             return false;
         }
