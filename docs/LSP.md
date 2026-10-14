@@ -291,3 +291,9 @@ Checked in the code on 2026-10-10; collected from the porting waves' notes.
 - With the UTF-8 position encoding, a character offset inside a multi-byte character snaps back to the start of that
   character (`line_and_character_to_position`), as a UTF-16 offset inside a surrogate pair does. Go keeps the byte
   offset: an edit there splits the character and leaves invalid UTF-8 in the overlay, which Rust text cannot hold.
+- Signature help in JSX attributes: Go builds the attributes' argument span with the length as its end
+  (`core.NewTextRange(attributeSpanStart, attributeSpanEnd-attributeSpanStart)`, ls/signaturehelp.go:1002), so the
+  span rarely contains the position and Go walks on to an enclosing call. tsrs computes the real span
+  (signaturehelp.rs `get_immediately_containing_argument_info`). Inside a JSX element that is itself in a call's
+  argument (`wrap(() => <Comp href={…} />)`), tsrs shows the element's signature (none for an intrinsic element)
+  where Go shows the enclosing call's; outside a call both show the element's signature.
