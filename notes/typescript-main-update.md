@@ -55,3 +55,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64637](https://github.com/microsoft/TypeScript/commit/09d4966578aec90fdec11784559218392602a029) | Rust already returns None for missing config files; update the reference comment to reflect the upstream guard. |
 | [#64638](https://github.com/microsoft/TypeScript/commit/d61a7d235906e78be9b111de0ba060e28e67ecfa) | Port the custom-resolution flag and disk-layout diagnostic guard. |
 | [#64651](https://github.com/microsoft/TypeScript/commit/54f05ae22afd5f0ec5ec3ae0333b03efa1156fe6) | Port expression and object-literal element assertions for malformed assignments. |
+| [#64675](https://github.com/microsoft/TypeScript/commit/91521cf2299d54a40d46fcf500130d273ddfc947) | Upstream prefilters Go test.run patterns; tsrs uses its own --filter/--list selector and has no Go testing-name normalization. |
