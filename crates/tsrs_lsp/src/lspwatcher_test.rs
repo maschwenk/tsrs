@@ -60,8 +60,8 @@ fn fsw(pattern: &str, kind: Option<lsproto::WatchKind>) -> lsproto::FileSystemWa
     lsproto::FileSystemWatcher { glob_pattern: lsproto::PatternOrRelativePattern { pattern: Some(pattern.to_string()), relative_pattern: None }, kind }
 }
 
-fn all_kinds() -> Option<lsproto::WatchKind> {
-    Some(lsproto::WatchKind(lsproto::WatchKind::Create.0 | lsproto::WatchKind::Change.0 | lsproto::WatchKind::Delete.0))
+fn all_kinds() -> lsproto::WatchKind {
+    lsproto::WatchKind(lsproto::WatchKind::Create.0 | lsproto::WatchKind::Change.0 | lsproto::WatchKind::Delete.0)
 }
 
 type sink = Arc<Mutex<Vec<lsproto::FileEvent>>>;
@@ -93,7 +93,7 @@ fn watcher_create_change_delete() {
     let w = new(os_fs(), on_changes, stderr_logger());
 
     let pattern = format!("{}/**/*", tspath::normalize_slashes(&dir.0));
-    w.watch_files("test", &[fsw(&pattern, all_kinds())]).unwrap();
+    w.watch_files("test", &[fsw(&pattern, Some(all_kinds()))]).unwrap();
 
     std::thread::sleep(Duration::from_millis(200));
 
@@ -260,7 +260,7 @@ fn watcher_real_backend_missing_then_create() {
     // Watch a directory that does not exist yet.
     let target = tspath::normalize_slashes(&base.join("pkg"));
     let pattern = format!("{target}/*");
-    w.watch_files("test", &[fsw(&pattern, all_kinds())]).unwrap();
+    w.watch_files("test", &[fsw(&pattern, Some(all_kinds()))]).unwrap();
 
     // Give the ancestor watch time to install.
     std::thread::sleep(Duration::from_millis(200));
@@ -307,7 +307,7 @@ fn watcher_missing_directory_promotes_on_create() {
     let base_norm = tspath::normalize_slashes(&base.0);
     let target = tspath::normalize_slashes(&base.join("pkg"));
     let pattern = format!("{target}/*");
-    w.watch_files("id", &[fsw(&pattern, all_kinds())]).unwrap();
+    w.watch_files("id", &[fsw(&pattern, Some(all_kinds()))]).unwrap();
 
     // Create the target directory with a file, then notify the ancestor watch.
     std::fs::create_dir_all(base.join("pkg")).unwrap();
@@ -397,7 +397,7 @@ fn watcher_synthetic_create_depth() {
         let base_norm = tspath::normalize_slashes(&base.0);
         let target = tspath::normalize_slashes(&base.join("pkg"));
         let pattern = if recursive { format!("{target}/**/*") } else { format!("{target}/*") };
-        w.watch_files("id", &[fsw(&pattern, all_kinds())]).unwrap();
+        w.watch_files("id", &[fsw(&pattern, Some(all_kinds()))]).unwrap();
 
         // Materialize the target with a nested file under a subdirectory.
         std::fs::create_dir_all(base.join("pkg/sub")).unwrap();
@@ -440,7 +440,7 @@ fn watcher_terminated_falls_back_and_recovers() {
     let target = tspath::normalize_slashes(&base.join("pkg"));
     std::fs::create_dir_all(base.join("pkg")).unwrap();
     let pattern = format!("{target}/*");
-    w.watch_files("id", &[fsw(&pattern, all_kinds())]).unwrap();
+    w.watch_files("id", &[fsw(&pattern, Some(all_kinds()))]).unwrap();
     assert!(backend.is_watching(&target), "expected target watch on {:?}, got {:?}", target, backend.watched_dirs());
 
     // Delete the directory and deliver ErrWatchTerminated together with the

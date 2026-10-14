@@ -439,7 +439,7 @@ fn break_patterns_cmp_func<E>(data: &mut [E], a: usize, b: usize) {
 }
 
 fn choose_pivot_cmp_func<E>(
-    data: &mut [E],
+    data: &[E],
     a: usize,
     b: usize,
     cmp: &mut impl FnMut(&E, &E) -> Ordering,

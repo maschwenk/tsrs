@@ -228,7 +228,7 @@ impl Binder {
         } else if is_default_export && parent.is_some() {
             ast::InternalSymbolNameDefault
         } else {
-            self.get_declaration_name(node)
+            Self::get_declaration_name(node)
         };
         let mut symbol: P<Symbol>;
         if name == ast::InternalSymbolNameMissing {
@@ -316,7 +316,7 @@ impl Binder {
                             }
                             let declaration_name = ast::get_name_of_declaration(Some(node)).unwrap_or(node);
                             let diag = if message_needs_name {
-                                let display_name = self.get_display_name(node);
+                                let display_name = Self::get_display_name(node);
                                 self.create_diagnostic_for_node(declaration_name, message, &[&display_name])
                             } else {
                                 self.create_diagnostic_for_node(declaration_name, message, &[])
@@ -334,7 +334,7 @@ impl Binder {
                             for (index, declaration) in declarations.iter().copied().enumerate() {
                                 let decl = ast::get_name_of_declaration(Some(declaration)).unwrap_or(declaration);
                                 let d = if message_needs_name {
-                                    let display_name = self.get_display_name(declaration);
+                                    let display_name = Self::get_display_name(declaration);
                                     self.create_diagnostic_for_node(decl, message, &[&display_name])
                                 } else {
                                     self.create_diagnostic_for_node(decl, message, &[])
@@ -377,7 +377,7 @@ impl Binder {
 
     // Should not be called on a declaration with a computed property name,
     // unless it is a well known Symbol.
-    pub(crate) fn get_declaration_name(&self, node: P<Node>) -> &'static str {
+    pub(crate) fn get_declaration_name(node: P<Node>) -> &'static str {
         if ast::is_export_assignment(node) {
             return if node.as_export_assignment().is_export_equals() {
                 ast::InternalSymbolNameExportEquals
@@ -446,11 +446,11 @@ impl Binder {
         ast::InternalSymbolNameMissing
     }
 
-    pub(crate) fn get_display_name(&self, node: P<Node>) -> String {
+    pub(crate) fn get_display_name(node: P<Node>) -> String {
         if let Some(name_node) = node.name() {
             return scanner::declaration_name_to_string(Some(name_node));
         }
-        let name = self.get_declaration_name(node);
+        let name = Self::get_declaration_name(node);
         if name != ast::InternalSymbolNameMissing {
             return name.to_string();
         }
@@ -490,7 +490,7 @@ impl Binder {
         //       and should never be merged directly with other augmentation, and the latter case would be possible if automatic merge is allowed.
         if !ast::is_ambient_module(node) && (has_export_modifier || container.flags().intersects(NodeFlags::ExportContext)) {
             if !ast::is_locals_container(container)
-                || (ast::has_syntactic_modifier(node, ModifierFlags::Default) && self.get_declaration_name(node) == ast::InternalSymbolNameMissing)
+                || (ast::has_syntactic_modifier(node, ModifierFlags::Default) && Self::get_declaration_name(node) == ast::InternalSymbolNameMissing)
             {
                 return self.declare_symbol(ast::get_exports(container.symbol().unwrap()), container.symbol(), node, symbol_flags, symbol_excludes);
                 // No local symbol for an unnamed default!
@@ -559,27 +559,27 @@ impl Binder {
         }
     }
 
-    pub(crate) fn new_flow_node(&mut self, flags: FlowFlags) -> P<FlowNode> {
+    pub(crate) fn new_flow_node(&self, flags: FlowFlags) -> P<FlowNode> {
         new_flow_node_value(flags, None, None, self.file.text_index.get())
     }
 
-    pub(crate) fn new_flow_node_ex(&mut self, flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
+    pub(crate) fn new_flow_node_ex(&self, flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>) -> P<FlowNode> {
         new_flow_node_value(flags, node, antecedent, self.file.text_index.get())
     }
 
-    pub(crate) fn create_loop_label(&mut self) -> P<FlowNode> {
+    pub(crate) fn create_loop_label(&self) -> P<FlowNode> {
         self.new_flow_node(FlowFlags::LoopLabel)
     }
 
-    pub(crate) fn create_branch_label(&mut self) -> P<FlowNode> {
+    pub(crate) fn create_branch_label(&self) -> P<FlowNode> {
         self.new_flow_node(FlowFlags::BranchLabel)
     }
 
-    pub(crate) fn create_reduce_label(&mut self, target: P<FlowNode>, antecedents: Option<P<FlowList>>, antecedent: P<FlowNode>) -> P<FlowNode> {
+    pub(crate) fn create_reduce_label(&self, target: P<FlowNode>, antecedents: Option<P<FlowList>>, antecedent: P<FlowNode>) -> P<FlowNode> {
         self.new_flow_node_ex(FlowFlags::ReduceLabel, Some(ast::new_flow_reduce_label_data(target, antecedents)), Some(antecedent))
     }
 
-    pub(crate) fn create_flow_condition(&mut self, flags: FlowFlags, antecedent: P<FlowNode>, expression: Option<P<Node>>) -> P<FlowNode> {
+    pub(crate) fn create_flow_condition(&self, flags: FlowFlags, antecedent: P<FlowNode>, expression: Option<P<Node>>) -> P<FlowNode> {
         if antecedent.flags.get().intersects(FlowFlags::Unreachable) {
             return antecedent;
         }
@@ -608,13 +608,13 @@ impl Binder {
         self.has_flow_effects = true;
         let result = self.new_flow_node_ex(flags, Some(node), Some(antecedent));
         if self.current_exception_target.is_some() {
-            self.add_antecedent(self.current_exception_target, result);
+            Self::add_antecedent(self.current_exception_target, result);
         }
         result
     }
 
     pub(crate) fn create_flow_switch_clause(
-        &mut self,
+        &self,
         antecedent: P<FlowNode>,
         switch_statement: P<Node>,
         clause_start: usize,
@@ -634,16 +634,16 @@ impl Binder {
         self.new_flow_node_ex(FlowFlags::Call, Some(node), Some(antecedent))
     }
 
-    pub(crate) fn new_flow_list(&mut self, head: P<FlowNode>, tail: Option<P<FlowList>>) -> P<FlowList> {
+    pub(crate) fn new_flow_list(head: P<FlowNode>, tail: Option<P<FlowList>>) -> P<FlowList> {
         P::new_recycled(FlowList { flow: head, next: OwnedCell::new(tail) })
     }
 
-    pub(crate) fn combine_flow_lists(&mut self, head: Option<P<FlowList>>, tail: Option<P<FlowList>>) -> Option<P<FlowList>> {
+    pub(crate) fn combine_flow_lists(head: Option<P<FlowList>>, tail: Option<P<FlowList>>) -> Option<P<FlowList>> {
         let Some(head) = head else {
             return tail;
         };
-        let rest = self.combine_flow_lists(head.next.get(), tail);
-        Some(self.new_flow_list(head.flow, rest))
+        let rest = Self::combine_flow_lists(head.next.get(), tail);
+        Some(Self::new_flow_list(head.flow, rest))
     }
 }
 
@@ -657,7 +657,7 @@ pub(crate) fn set_flow_node_referenced(flow: P<FlowNode>) {
 }
 
 impl Binder {
-    pub(crate) fn add_antecedent(&mut self, label: Option<P<FlowNode>>, antecedent: P<FlowNode>) {
+    pub(crate) fn add_antecedent(label: Option<P<FlowNode>>, antecedent: P<FlowNode>) {
         if antecedent.flags.get().intersects(FlowFlags::Unreachable) {
             return;
         }
@@ -672,7 +672,7 @@ impl Binder {
             last = Some(l);
             list = l.next.get();
         }
-        let new_list = self.new_flow_list(antecedent, None);
+        let new_list = Self::new_flow_list(antecedent, None);
         match last {
             None => label.set_antecedents(Some(new_list)),
             Some(last) => last.next.set(Some(new_list)),
@@ -680,7 +680,7 @@ impl Binder {
         set_flow_node_referenced(antecedent);
     }
 
-    pub(crate) fn finish_flow_label(&mut self, label: P<FlowNode>) -> P<FlowNode> {
+    pub(crate) fn finish_flow_label(&self, label: P<FlowNode>) -> P<FlowNode> {
         let Some(antecedents) = label.antecedents() else {
             return self.unreachable_flow;
         };
@@ -702,6 +702,7 @@ impl Binder {
 
     /// Gives a branch label that nothing references any more (and its antecedent list cells, not the antecedents)
     /// back to the arena. Kept when it was ever used as an antecedent or a binder field still holds it.
+    #[expect(clippy::needless_pass_by_ref_mut, reason = "Recycling frees binder-owned flow nodes and requires exclusive access to the binder.")]
     pub(crate) fn recycle_flow_label(&mut self, label: P<FlowNode>) {
         debug_assert!(label.flags.get().intersects(FlowFlags::BranchLabel));
         let held = |t: Option<P<FlowNode>>| t == Some(label);
@@ -898,7 +899,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_source_file_if_external_module(&mut self) {
-        self.set_export_context_flag(self.file.as_node());
+        Self::set_export_context_flag(self.file.as_node());
         if ast::is_external_or_common_js_module(self.file) {
             self.bind_source_file_as_external_module();
         } else if ast::is_json_source_file(self.file) {
@@ -923,7 +924,7 @@ impl Binder {
     }
 
     pub(crate) fn bind_module_declaration(&mut self, node: P<Node>) {
-        self.set_export_context_flag(node);
+        Self::set_export_context_flag(node);
         if ast::is_ambient_module(node) {
             if ast::has_syntactic_modifier(node, ModifierFlags::Export) {
                 self.error_on_first_token(
@@ -1025,7 +1026,7 @@ impl Binder {
         match container_symbol {
             None => {
                 // Export * in some sort of block construct
-                let name = self.get_declaration_name(node);
+                let name = Self::get_declaration_name(node);
                 self.bind_anonymous_declaration(node, SymbolFlags::ExportStar, name);
             }
             Some(container_symbol) => {
@@ -1051,7 +1052,7 @@ impl Binder {
         let container = self.container();
         if container.symbol().is_none() && ast::is_export_assignment(node) {
             // Incorrect export assignment in some sort of block construct
-            let name = self.get_declaration_name(node);
+            let name = Self::get_declaration_name(node);
             self.bind_anonymous_declaration(node, SymbolFlags::Value, name);
         } else {
             // If there is an `export default x;` alias declaration, can't `export default` anything else.
@@ -1073,17 +1074,17 @@ impl Binder {
         self.declare_symbol_and_add_to_symbol_table(node, symbol_flags, symbol_excludes);
     }
 
-    pub(crate) fn set_export_context_flag(&mut self, node: P<Node>) {
+    pub(crate) fn set_export_context_flag(node: P<Node>) {
         // A declaration source file or ambient module declaration that contains no export declarations (but possibly regular
         // declarations with export modifiers) is an export context in which declarations are implicitly exported.
-        if node.flags().intersects(NodeFlags::Ambient) && !self.has_export_declarations(node) {
+        if node.flags().intersects(NodeFlags::Ambient) && !Self::has_export_declarations(node) {
             node.set_flags(node.flags() | NodeFlags::ExportContext);
         } else {
             node.set_flags(node.flags() & !NodeFlags::ExportContext);
         }
     }
 
-    pub(crate) fn has_export_declarations(&self, node: P<Node>) -> bool {
+    pub(crate) fn has_export_declarations(node: P<Node>) -> bool {
         let mut statements: &[P<Node>] = &[];
         match node.kind() {
             Kind::SourceFile => {
@@ -1195,7 +1196,7 @@ impl Binder {
         // We do that by making an anonymous type literal symbol, and then setting the function
         // symbol as its sole member. To the rest of the system, this symbol will be indistinguishable
         // from an actual type literal symbol you would have gotten had you used the long form.
-        let name = self.get_declaration_name(node);
+        let name = Self::get_declaration_name(node);
         let symbol = self.new_symbol(SymbolFlags::Signature, name);
         self.add_declaration_to_symbol(symbol, node, SymbolFlags::Signature);
         let type_literal_symbol = self.new_symbol(SymbolFlags::TypeLiteral, ast::InternalSymbolNameType);
@@ -1207,13 +1208,10 @@ impl Binder {
 
     pub(crate) fn add_late_bound_assignment_declaration_to_symbol(&mut self, node: P<Node>, symbol: P<Symbol>) {
         let exports = ast::get_exports(symbol);
-        let assignment_symbol = match (*exports).get(ast::InternalSymbolNameAssignmentDeclaration) {
-            Some(s) => s,
-            None => {
-                let s = self.new_symbol(SymbolFlags::None, ast::InternalSymbolNameAssignmentDeclaration);
-                exports.set(ast::InternalSymbolNameAssignmentDeclaration, s);
-                s
-            }
+        let assignment_symbol = if let Some(s) = (*exports).get(ast::InternalSymbolNameAssignmentDeclaration) { s } else {
+            let s = self.new_symbol(SymbolFlags::None, ast::InternalSymbolNameAssignmentDeclaration);
+            exports.set(ast::InternalSymbolNameAssignmentDeclaration, s);
+            s
         };
         assignment_symbol.append_declarations(&[node]);
     }
@@ -1249,7 +1247,7 @@ impl Binder {
     // If the given module symbol has an export= symbol, promote exports with a type or namespace meaning
     // from the module symbol onto the export= symbol and, if any such exports exist, mark the export=
     // symbol as a namespace module.
-    pub(crate) fn bind_common_js_type_exports(&mut self, module_symbol: P<Symbol>) {
+    pub(crate) fn bind_common_js_type_exports(module_symbol: P<Symbol>) {
         let Some(module_exports) = module_symbol.exports() else {
             return;
         };
@@ -1276,7 +1274,7 @@ impl Binder {
             } else {
                 // We declare expandos only when there are no non-expando declarations for that name.
                 let exports = ast::get_exports(symbol);
-                let existing = (*exports).get(self.get_declaration_name(node));
+                let existing = (*exports).get(Self::get_declaration_name(node));
                 if existing.is_none() || existing.unwrap().flags.get().intersects(SymbolFlags::Assignment) {
                     self.declare_symbol(exports, Some(symbol), node, SymbolFlags::Property | SymbolFlags::Assignment, SymbolFlags::PropertyExcludes);
                 }
@@ -1487,7 +1485,7 @@ impl Binder {
         self.bind_block_scoped_declaration(node, SymbolFlags::Function, SymbolFlags::FunctionExcludes);
     }
 
-    pub(crate) fn get_infer_type_container(&self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_infer_type_container(node: P<Node>) -> Option<P<Node>> {
         let extends_type = ast::find_ancestor(Some(node), |n| {
             let parent = n.parent();
             match parent {
@@ -1523,11 +1521,11 @@ impl Binder {
 
     pub(crate) fn bind_type_parameter(&mut self, node: P<Node>) {
         if node.parent().unwrap().kind() == Kind::InferType {
-            let container = self.get_infer_type_container(node.parent().unwrap());
+            let container = Self::get_infer_type_container(node.parent().unwrap());
             if let Some(container) = container {
                 self.declare_symbol(ast::get_locals(container), None /*parent*/, node, SymbolFlags::TypeParameter, SymbolFlags::TypeParameterExcludes);
             } else {
-                let name = self.get_declaration_name(node);
+                let name = Self::get_declaration_name(node);
                 self.bind_anonymous_declaration(node, SymbolFlags::TypeParameter, name);
             }
         } else {
@@ -1537,7 +1535,7 @@ impl Binder {
 
     pub(crate) fn lookup_entity(&self, node: P<Node>, container: P<Node>) -> Option<P<Symbol>> {
         if ast::is_identifier(node) {
-            return self.lookup_name(node.text(), container);
+            return Self::lookup_name(node.text(), container);
         }
         if node.expression().unwrap().kind() == Kind::ThisKeyword {
             let (_, symbol_table) = self.get_this_class_and_symbol_table();
@@ -1558,7 +1556,7 @@ impl Binder {
         None
     }
 
-    pub(crate) fn lookup_name(&self, name: &str, container: P<Node>) -> Option<P<Symbol>> {
+    pub(crate) fn lookup_name(name: &str, container: P<Node>) -> Option<P<Symbol>> {
         if let Some(locals_container) = container.locals_container_data() {
             if let Some(locals) = locals_container.locals.get() {
                 if let Some(local) = (*locals).get(name) {
@@ -1863,9 +1861,9 @@ impl Binder {
             if node.kind() == Kind::SourceFile {
                 node.set_flags(node.flags() | self.emit_flags);
             }
-            if self.current_return_target.is_some() {
-                self.add_antecedent(self.current_return_target, self.current_flow());
-                self.current_flow = Some(self.finish_flow_label(self.current_return_target.unwrap()));
+            if let Some(return_target) = self.current_return_target {
+                Self::add_antecedent(self.current_return_target, self.current_flow());
+                self.current_flow = Some(self.finish_flow_label(return_target));
                 if node.kind() == Kind::Constructor || node.kind() == Kind::ClassStaticBlockDeclaration {
                     set_return_flow_node(node, self.current_flow);
                 }
@@ -1912,7 +1910,7 @@ impl Binder {
             }
         }
         if ast::is_source_file(node) && ast::is_external_or_common_js_module(node.as_source_file().as_p()) || ast::is_ambient_module(node) {
-            self.bind_common_js_type_exports(node.symbol().unwrap());
+            Self::bind_common_js_type_exports(node.symbol().unwrap());
         }
         self.container = save_container;
         self.this_container = save_this_container;
@@ -2215,9 +2213,9 @@ impl Binder {
         };
         if node.is_none() || !is_logical_like {
             let true_condition = self.create_flow_condition(FlowFlags::TrueCondition, self.current_flow(), node);
-            self.add_antecedent(true_target, true_condition);
+            Self::add_antecedent(true_target, true_condition);
             let false_condition = self.create_flow_condition(FlowFlags::FalseCondition, self.current_flow(), node);
-            self.add_antecedent(false_target, false_condition);
+            Self::add_antecedent(false_target, false_condition);
         }
     }
 
@@ -2280,12 +2278,12 @@ impl Binder {
         let pre_while_label = self.set_continue_target(node, loop_label);
         let pre_body_label = self.create_branch_label();
         let post_while_label = self.create_branch_label();
-        self.add_antecedent(Some(pre_while_label), self.current_flow());
+        Self::add_antecedent(Some(pre_while_label), self.current_flow());
         self.current_flow = Some(pre_while_label);
         self.bind_condition(Some(stmt.expression()), Some(pre_body_label), Some(post_while_label));
         self.current_flow = Some(self.finish_local_flow_label(pre_body_label));
         self.bind_iterative_statement(stmt.statement(), Some(post_while_label), Some(pre_while_label));
-        self.add_antecedent(Some(pre_while_label), self.current_flow());
+        Self::add_antecedent(Some(pre_while_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(post_while_label));
     }
 
@@ -2295,10 +2293,10 @@ impl Binder {
         let branch_label = self.create_branch_label();
         let pre_condition_label = self.set_continue_target(node, branch_label);
         let post_do_label = self.create_branch_label();
-        self.add_antecedent(Some(pre_do_label), self.current_flow());
+        Self::add_antecedent(Some(pre_do_label), self.current_flow());
         self.current_flow = Some(pre_do_label);
         self.bind_iterative_statement(stmt.statement(), Some(post_do_label), Some(pre_condition_label));
-        self.add_antecedent(Some(pre_condition_label), self.current_flow());
+        Self::add_antecedent(Some(pre_condition_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(pre_condition_label));
         self.bind_condition(Some(stmt.expression()), Some(pre_do_label), Some(post_do_label));
         self.current_flow = Some(self.finish_local_flow_label(post_do_label));
@@ -2323,15 +2321,15 @@ impl Binder {
         let pre_body_label = self.create_branch_label();
         let pre_incrementor_label = self.create_branch_label();
         let post_loop_label = self.create_branch_label();
-        self.add_antecedent(Some(pre_loop_label), self.current_flow());
+        Self::add_antecedent(Some(pre_loop_label), self.current_flow());
         self.current_flow = Some(pre_loop_label);
         self.bind_condition(stmt.condition(), Some(pre_body_label), Some(post_loop_label));
         self.current_flow = Some(self.finish_local_flow_label(pre_body_label));
         self.bind_iterative_statement(stmt.statement(), Some(post_loop_label), Some(pre_incrementor_label));
-        self.add_antecedent(Some(pre_incrementor_label), self.current_flow());
+        Self::add_antecedent(Some(pre_incrementor_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(pre_incrementor_label));
         self.bind(stmt.incrementor());
-        self.add_antecedent(Some(pre_loop_label), self.current_flow());
+        Self::add_antecedent(Some(pre_loop_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(post_loop_label));
     }
 
@@ -2351,18 +2349,18 @@ impl Binder {
         let loop_label = self.create_loop_label();
         let pre_loop_label = self.set_continue_target(node, loop_label);
         let post_loop_label = self.create_branch_label();
-        self.add_antecedent(Some(pre_loop_label), self.current_flow());
+        Self::add_antecedent(Some(pre_loop_label), self.current_flow());
         self.current_flow = Some(pre_loop_label);
         if node.kind() == Kind::ForOfStatement {
             self.bind(stmt.await_modifier());
         }
-        self.add_antecedent(Some(post_loop_label), self.current_flow());
+        Self::add_antecedent(Some(post_loop_label), self.current_flow());
         self.bind(stmt.initializer());
         if stmt.initializer().kind() != Kind::VariableDeclarationList {
             self.bind_assignment_target_flow(stmt.initializer());
         }
         self.bind_iterative_statement(stmt.statement(), Some(post_loop_label), Some(pre_loop_label));
-        self.add_antecedent(Some(pre_loop_label), self.current_flow());
+        Self::add_antecedent(Some(pre_loop_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(post_loop_label));
     }
 
@@ -2374,17 +2372,17 @@ impl Binder {
         self.bind_condition(Some(stmt.expression()), Some(then_label), Some(else_label));
         self.current_flow = Some(self.finish_local_flow_label(then_label));
         self.bind(stmt.then_statement());
-        self.add_antecedent(Some(post_if_label), self.current_flow());
+        Self::add_antecedent(Some(post_if_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(else_label));
         self.bind(stmt.else_statement());
-        self.add_antecedent(Some(post_if_label), self.current_flow());
+        Self::add_antecedent(Some(post_if_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(post_if_label));
     }
 
     pub(crate) fn bind_return_statement(&mut self, node: P<Node>) {
         self.bind(node.expression());
         if self.current_return_target.is_some() {
-            self.add_antecedent(self.current_return_target, self.current_flow());
+            Self::add_antecedent(self.current_return_target, self.current_flow());
         }
         self.current_flow = Some(self.unreachable_flow);
         self.has_explicit_return = true;
@@ -2430,7 +2428,7 @@ impl Binder {
 
     pub(crate) fn bind_break_or_continue_flow(&mut self, flow_label: Option<P<FlowNode>>) {
         if flow_label.is_some() {
-            self.add_antecedent(flow_label, self.current_flow());
+            Self::add_antecedent(flow_label, self.current_flow());
             self.current_flow = Some(self.unreachable_flow);
             self.has_flow_effects = true;
         }
@@ -2452,10 +2450,10 @@ impl Binder {
         if stmt.finally_block().is_some() {
             self.current_return_target = Some(return_label);
         }
-        self.add_antecedent(Some(exception_label), self.current_flow());
+        Self::add_antecedent(Some(exception_label), self.current_flow());
         self.current_exception_target = Some(exception_label);
         self.bind(stmt.try_block());
-        self.add_antecedent(Some(normal_exit_label), self.current_flow());
+        Self::add_antecedent(Some(normal_exit_label), self.current_flow());
         if stmt.catch_clause().is_some() {
             // Start of catch clause is the target of exceptions from try block.
             self.current_flow = Some(self.finish_flow_label(exception_label));
@@ -2463,10 +2461,10 @@ impl Binder {
             // Effectively, in a try-catch-finally, if an exception occurs in the try block, the catch block
             // acts like a second try block.
             exception_label = self.create_branch_label();
-            self.add_antecedent(Some(exception_label), self.current_flow());
+            Self::add_antecedent(Some(exception_label), self.current_flow());
             self.current_exception_target = Some(exception_label);
             self.bind(stmt.catch_clause());
-            self.add_antecedent(Some(normal_exit_label), self.current_flow());
+            Self::add_antecedent(Some(normal_exit_label), self.current_flow());
         }
         self.current_return_target = save_return_target;
         self.current_exception_target = save_exception_target;
@@ -2486,8 +2484,8 @@ impl Binder {
             // set of antecedents for the pre-finally label. As control flow analysis passes by a ReduceLabel
             // node, the pre-finally label is temporarily switched to the reduced antecedent set.
             let finally_label = self.create_branch_label();
-            let rest = self.combine_flow_lists(exception_label.antecedents(), return_label.antecedents());
-            let combined = self.combine_flow_lists(normal_exit_label.antecedents(), rest);
+            let rest = Self::combine_flow_lists(exception_label.antecedents(), return_label.antecedents());
+            let combined = Self::combine_flow_lists(normal_exit_label.antecedents(), rest);
             finally_label.set_antecedents(combined);
             self.current_flow = Some(finally_label);
             self.bind(stmt.finally_block());
@@ -2499,13 +2497,13 @@ impl Binder {
                 // flow that goes back through the finally block and back through only the return statements.
                 if self.current_return_target.is_some() && return_label.antecedents().is_some() {
                     let reduce = self.create_reduce_label(finally_label, return_label.antecedents(), self.current_flow());
-                    self.add_antecedent(self.current_return_target, reduce);
+                    Self::add_antecedent(self.current_return_target, reduce);
                 }
                 // If we have an outer exception target (i.e. a containing try-finally or try-catch-finally), add a
                 // control flow that goes back through the finally block and back through each possible exception source.
                 if self.current_exception_target.is_some() && exception_label.antecedents().is_some() {
                     let reduce = self.create_reduce_label(finally_label, exception_label.antecedents(), self.current_flow());
-                    self.add_antecedent(self.current_exception_target, reduce);
+                    Self::add_antecedent(self.current_exception_target, reduce);
                 }
                 // If the end of the finally block is reachable, but the end of the try and catch blocks are not,
                 // convert the current flow to unreachable. For example, 'try { return 1; } finally { ... }' should
@@ -2530,11 +2528,11 @@ impl Binder {
         self.current_break_target = Some(post_switch_label);
         self.pre_switch_case_flow = self.current_flow;
         self.bind(stmt.case_block());
-        self.add_antecedent(Some(post_switch_label), self.current_flow());
+        Self::add_antecedent(Some(post_switch_label), self.current_flow());
         let has_default = stmt.case_block().as_case_block().clauses().nodes().iter().any(|c| c.kind() == Kind::DefaultClause);
         if !has_default {
             let clause = self.create_flow_switch_clause(self.pre_switch_case_flow.unwrap(), node, 0, 0);
-            self.add_antecedent(Some(post_switch_label), clause);
+            Self::add_antecedent(Some(post_switch_label), clause);
         }
         self.current_break_target = save_break_target;
         self.pre_switch_case_flow = save_pre_switch_case_flow;
@@ -2562,8 +2560,8 @@ impl Binder {
             if is_narrowing_switch {
                 pre_case_flow = self.create_flow_switch_clause(self.pre_switch_case_flow.unwrap(), switch_statement, clause_start, i + 1);
             }
-            self.add_antecedent(Some(pre_case_label), pre_case_flow);
-            self.add_antecedent(Some(pre_case_label), fallthrough_flow);
+            Self::add_antecedent(Some(pre_case_label), pre_case_flow);
+            Self::add_antecedent(Some(pre_case_label), fallthrough_flow);
             self.current_flow = Some(self.finish_flow_label(pre_case_label));
             let clause = clauses[i];
             self.bind(clause);
@@ -2619,7 +2617,7 @@ impl Binder {
             stmt.label().set_flags(stmt.label().flags() | NodeFlags::Unreachable);
         }
         self.active_label_list.pop();
-        self.add_antecedent(Some(post_statement_label), self.current_flow());
+        Self::add_antecedent(Some(post_statement_label), self.current_flow());
         self.current_flow = Some(self.finish_flow_label(post_statement_label));
     }
 
@@ -2722,9 +2720,9 @@ impl Binder {
             self.do_with_conditional_branches(Binder::bind, Some(expr.right()), true_target, false_target);
             self.bind_assignment_target_flow(expr.left());
             let true_condition = self.create_flow_condition(FlowFlags::TrueCondition, self.current_flow(), Some(node));
-            self.add_antecedent(true_target, true_condition);
+            Self::add_antecedent(true_target, true_condition);
             let false_condition = self.create_flow_condition(FlowFlags::FalseCondition, self.current_flow(), Some(node));
-            self.add_antecedent(false_target, false_condition);
+            Self::add_antecedent(false_target, false_condition);
         } else {
             self.bind_condition(Some(expr.right()), true_target, false_target);
         }
@@ -2750,11 +2748,11 @@ impl Binder {
         self.current_flow = Some(self.finish_local_flow_label(true_label));
         self.bind(expr.question_token());
         self.bind(expr.when_true());
-        self.add_antecedent(Some(post_expression_label), self.current_flow());
+        Self::add_antecedent(Some(post_expression_label), self.current_flow());
         self.current_flow = Some(self.finish_local_flow_label(false_label));
         self.bind(expr.colon_token());
         self.bind(expr.when_false());
-        self.add_antecedent(Some(post_expression_label), self.current_flow());
+        Self::add_antecedent(Some(post_expression_label), self.current_flow());
         if self.has_flow_effects {
             self.current_flow = Some(self.finish_local_flow_label(post_expression_label));
         } else {
@@ -2838,9 +2836,9 @@ impl Binder {
         self.do_with_conditional_branches(|b, n| b.bind_optional_chain_rest(n.unwrap()), Some(node), true_target, false_target);
         if ast::is_outermost_optional_chain(node) {
             let true_condition = self.create_flow_condition(FlowFlags::TrueCondition, self.current_flow(), Some(node));
-            self.add_antecedent(true_target, true_condition);
+            Self::add_antecedent(true_target, true_condition);
             let false_condition = self.create_flow_condition(FlowFlags::FalseCondition, self.current_flow(), Some(node));
-            self.add_antecedent(false_target, false_condition);
+            Self::add_antecedent(false_target, false_condition);
         }
     }
 
@@ -2848,9 +2846,9 @@ impl Binder {
         self.do_with_conditional_branches(Binder::bind, Some(node), true_target, false_target);
         if !ast::is_optional_chain(node) || ast::is_outermost_optional_chain(node) {
             let true_condition = self.create_flow_condition(FlowFlags::TrueCondition, self.current_flow(), Some(node));
-            self.add_antecedent(true_target, true_condition);
+            Self::add_antecedent(true_target, true_condition);
             let false_condition = self.create_flow_condition(FlowFlags::FalseCondition, self.current_flow(), Some(node));
-            self.add_antecedent(false_target, false_condition);
+            Self::add_antecedent(false_target, false_condition);
         }
     }
 
@@ -2945,8 +2943,8 @@ impl Binder {
             return;
         }
         let exit_flow = self.create_branch_label();
-        self.add_antecedent(Some(exit_flow), entry_flow.unwrap());
-        self.add_antecedent(Some(exit_flow), self.current_flow());
+        Self::add_antecedent(Some(exit_flow), entry_flow.unwrap());
+        Self::add_antecedent(Some(exit_flow), self.current_flow());
         self.current_flow = Some(self.finish_flow_label(exit_flow));
     }
 }

@@ -1,6 +1,7 @@
 use crate::*;
 
 // usestrict.go:9
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_use_strict_transformer(opts: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(useStrictTransformer {
         base: Transformer::default(),

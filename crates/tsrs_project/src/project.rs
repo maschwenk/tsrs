@@ -652,6 +652,7 @@ impl Project {
 
     // project.go:593
     #[expect(dead_code, reason = "Go passes p.log to newCheckerPool (project.go:505); with this no-op body the Rust passes None")]
+    #[expect(clippy::unused_self, reason = "The Go project logging callback retains its receiver when logging is disabled.")]
     fn log(&self, _msg: &str) {
         // !!!
     }

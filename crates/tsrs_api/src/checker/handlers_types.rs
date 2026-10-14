@@ -403,7 +403,7 @@ pub(crate) fn get_contextual_type_for_argument(host: &dyn CheckerHost, p: &Param
     let t = s
         .c()
         .get_contextual_type_for_argument_at_index_exported(node, index);
-    s.opt_type_response(t)
+    s.opt_type_response(Some(t))
 }
 
 pub(crate) fn is_context_sensitive(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {

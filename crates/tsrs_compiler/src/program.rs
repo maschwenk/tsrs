@@ -1089,15 +1089,12 @@ impl Program {
         concurrent: bool,
         collect: impl Fn(&Context, P<SourceFile>) -> Vec<P<Diagnostic>> + Sync,
     ) -> Vec<P<Diagnostic>> {
-        let result = match source_file {
-            Some(file) => {
-                crate::fileregions::assert_not_freed(file);
-                collect(ctx, file)
-            }
-            None => {
-                let diagnostics = self.collect_diagnostics_from_files(ctx, self.files, concurrent, &collect);
-                diagnostics.concat()
-            }
+        let result = if let Some(file) = source_file {
+            crate::fileregions::assert_not_freed(file);
+            collect(ctx, file)
+        } else {
+            let diagnostics = self.collect_diagnostics_from_files(ctx, self.files, concurrent, &collect);
+            diagnostics.concat()
         };
         filter_and_sort_diagnostics(&result)
     }
@@ -1290,7 +1287,7 @@ impl Program {
             return Vec::new();
         }
         let diags = self.include_processor.get_diagnostics(self).lock().unwrap().get_diagnostics_for_file(source_file);
-        let (filtered, _) = self.get_diagnostics_with_preceding_directives(source_file, diags);
+        let (filtered, _) = Self::get_diagnostics_with_preceding_directives(source_file, diags);
         filtered
     }
 
@@ -2148,12 +2145,9 @@ impl Program {
         }
 
         let mut guard;
-        let c = match c {
-            Some(c) => c,
-            None => {
-                guard = self.get_type_checker_for_file(ctx, source_file);
-                &mut *guard
-            }
+        let c = if let Some(c) = c { c } else {
+            guard = self.get_type_checker_for_file(ctx, source_file);
+            &mut *guard
         };
         // The declaration transform runs in a scratch region of its own, freed once its diagnostics are collected
         // (notes/mem-emit-regions.md; the diagnostics themselves escape it).
@@ -2236,7 +2230,7 @@ impl Program {
             diags.extend_from_slice(source_file.jsdoc_diagnostics());
         }
 
-        let (mut filtered, directives_by_line) = self.get_diagnostics_with_preceding_directives(source_file, diags);
+        let (mut filtered, directives_by_line) = Self::get_diagnostics_with_preceding_directives(source_file, diags);
         if let Some(directives_by_line) = directives_by_line {
             // Go iterates this map in random order; the result is sorted by the caller.
             // every caller sorts and deduplicates (filter_and_sort_diagnostics); each directive has its own location
@@ -2262,7 +2256,6 @@ impl Program {
     }
 
     fn get_diagnostics_with_preceding_directives(
-        &self,
         source_file: P<SourceFile>,
         diags: Vec<P<Diagnostic>>,
     ) -> (Vec<P<Diagnostic>>, Option<FxHashMap<usize, ast::CommentDirective>>) {

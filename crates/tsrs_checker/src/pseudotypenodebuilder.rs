@@ -28,7 +28,7 @@ impl NodeBuilderImpl {
             return result;
         } else if t.kind == PseudoTypeKind::Direct {
             let existing = t.as_pseudo_type_direct().type_node;
-            if !self.can_reuse_existing_js_type_node(c, existing, checker_type) {
+            if !Self::can_reuse_existing_js_type_node(c, existing, checker_type) {
                 let ctx = self.ctx();
                 if !ctx.suppress_report_inference_fallback.get() {
                     ctx.tracker.get().unwrap().report_inference_fallback(c, existing);
@@ -341,7 +341,7 @@ impl NodeBuilderImpl {
         }
         let name_parent = p.name.parent().unwrap();
         // matches strada behavior of always reserializing param names from scratch
-        let name = self.parameter_to_parameter_declaration_name(c, name_parent.symbol().unwrap(), Some(name_parent)).unwrap();
+        let name = self.parameter_to_parameter_declaration_name(c, name_parent.symbol().unwrap(), Some(name_parent));
         let type_node = self.pseudo_type_to_node(c, Some(p.type_));
         let parameter = self.f.new_parameter_declaration(None, dot_dot_dot, name, question_mark, type_node, None);
         let original = name_parent;
@@ -499,7 +499,7 @@ impl NodeBuilderImpl {
                             }
                             let target_predicate = c.get_type_predicate_of_signature(target_sig);
                             if let Some(target_predicate) = target_predicate {
-                                if !self.pseudo_return_type_matches_predicate(c, Some(d.return_type), target_predicate) {
+                                if !Self::pseudo_return_type_matches_predicate(c, Some(d.return_type), target_predicate) {
                                     if report_errors {
                                         self.ctx().tracker.get().unwrap().report_inference_fallback(c, e.name.parent().unwrap());
                                     }
@@ -580,7 +580,7 @@ impl NodeBuilderImpl {
                 }
                 let target_predicate = c.get_type_predicate_of_signature(target_sig);
                 if let Some(target_predicate) = target_predicate {
-                    if !self.pseudo_return_type_matches_predicate(c, Some(pt.return_type), target_predicate) {
+                    if !Self::pseudo_return_type_matches_predicate(c, Some(pt.return_type), target_predicate) {
                         if report_errors {
                             self.ctx().tracker.get().unwrap().report_inference_fallback(c, pt.signature);
                         }
@@ -673,7 +673,7 @@ impl NodeBuilderImpl {
     // pseudotypenodebuilder.go:645
     // pseudoReturnTypeMatchesPredicate checks if a pseudo return type (which should be a Direct type
     // wrapping a TypePredicate) matches the given type predicate from the checker.
-    pub(crate) fn pseudo_return_type_matches_predicate(&self, c: &mut Checker, rt: Option<P<PseudoType>>, predicate: P<TypePredicate>) -> bool {
+    pub(crate) fn pseudo_return_type_matches_predicate(c: &mut Checker, rt: Option<P<PseudoType>>, predicate: P<TypePredicate>) -> bool {
         let rt = rt.unwrap();
         if rt.kind != PseudoTypeKind::Direct {
             return false;

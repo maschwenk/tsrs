@@ -102,6 +102,7 @@ pub fn semantic_tokens_legend(client_capabilities: &lsproto::ResolvedSemanticTok
 
 impl LanguageService {
     // semantictokens.go:128
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_semantic_tokens(&self, ctx: &Context, document_uri: &lsproto::DocumentUri) -> Result<lsproto::SemanticTokensResponse, lsproto::Error> {
         let (program, file) = self.get_program_and_file(document_uri);
 
@@ -112,7 +113,7 @@ impl LanguageService {
         let mut tokens: Vec<SemanticToken> = Vec::with_capacity(files.len());
         for projection in files {
             let mut c = program.get_type_checker_for_file(ctx, projection);
-            tokens.extend(self.collect_semantic_tokens(ctx, &mut c, projection, program).into_iter().map(|mut token| {
+            tokens.extend(Self::collect_semantic_tokens(ctx, &mut c, projection, program).into_iter().map(|mut token| {
                 token.file = Some(projection);
                 token
             }));
@@ -130,6 +131,7 @@ impl LanguageService {
     }
 
     // semantictokens.go:160
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_semantic_tokens_range(
         &self,
         ctx: &Context,
@@ -145,7 +147,7 @@ impl LanguageService {
             let projection = mapped.script;
             let mut c = program.get_type_checker_for_file(ctx, projection);
             tokens.extend(
-                self.collect_semantic_tokens_in_range(ctx, &mut c, projection, program, mapped.span.pos().expect_source("mapped semantic-token ranges have source positions") , mapped.span.end().expect_source("mapped semantic-token ranges have source positions"), ).into_iter().filter_map(
+                Self::collect_semantic_tokens_in_range(ctx, &mut c, projection, program, mapped.span.pos().expect_source("mapped semantic-token ranges have source positions") , mapped.span.end().expect_source("mapped semantic-token ranges have source positions"), ).into_iter().filter_map(
                     |mut token| {
                         token.file = Some(projection);
                         if seen.insert(token) { Some(token) } else { None }
@@ -223,13 +225,12 @@ struct SemanticToken {
 impl LanguageService {
     // semantictokens.go:222
     fn collect_semantic_tokens(
-        &self,
         ctx: &Context,
         c: &mut Checker,
         file: P<SourceFile>,
         program: &Program,
     ) -> Vec<SemanticToken> {
-        self.collect_semantic_tokens_in_range(
+        Self::collect_semantic_tokens_in_range(
             ctx,
             c,
             file,
@@ -245,7 +246,6 @@ impl LanguageService {
 
     // semantictokens.go:226
     fn collect_semantic_tokens_in_range(
-        &self,
         ctx: &Context,
         c: &mut Checker,
         file: P<SourceFile>,

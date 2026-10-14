@@ -63,16 +63,13 @@ macro_rules! profile {
 /// The current thread's own arena (never freed): on first use, an arena that a thread done allocating gave back
 /// (`release_own_arena`), else a new one.
 pub(crate) fn own_arena() -> &'static Arena {
-    ARENA.with(|c| match c.get() {
-        Some(a) => a,
-        None => {
-            let a = arena::take_spare_arena().unwrap_or_else(new_thread_arena);
-            c.set(Some(a));
-            // Fails only while the thread exits (a destructor that allocates after the arena was handed on): that
-            // arena stays with the thread.
-            let _ = RELEASE_AT_EXIT.try_with(|_| ());
-            a
-        }
+    ARENA.with(|c| if let Some(a) = c.get() { a } else {
+        let a = arena::take_spare_arena().unwrap_or_else(new_thread_arena);
+        c.set(Some(a));
+        // Fails only while the thread exits (a destructor that allocates after the arena was handed on): that
+        // arena stays with the thread.
+        let _ = RELEASE_AT_EXIT.try_with(|_| ());
+        a
     })
 }
 
@@ -1525,6 +1522,7 @@ pub fn census_layout(type_name: &'static str, fields: &[CensusField]) {
 ///
 /// Compiled to nothing otherwise.
 #[inline]
+#[cfg_attr(not(feature = "alloc-profile"), expect(clippy::needless_pass_by_ref_mut, reason = "The allocation census mutates this storage when alloc-profile is enabled."))]
 pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
     #[cfg(feature = "alloc-profile")]
     if crate::alloc_profile::census::recording() {
@@ -1542,6 +1540,7 @@ pub fn census_scrub_slack<T>(v: &mut Vec<T>) {
 /// entry type with uninitialized bytes (an enum whose variants differ in size) keeps stale words there that
 /// the census reads as references. Compiled to nothing otherwise.
 #[inline]
+#[cfg_attr(not(feature = "alloc-profile"), expect(clippy::needless_pass_by_ref_mut, reason = "The allocation census mutates this storage when alloc-profile is enabled."))]
 pub fn census_reset<T: Default>(t: &mut T) {
     #[cfg(feature = "alloc-profile")]
     if crate::alloc_profile::census::recording() {
@@ -1557,6 +1556,7 @@ pub fn census_reset<T: Default>(t: &mut T) {
 /// Zeroes them, for options kept for the rest of a session (process-wide caches, long-lived tables). Compiled
 /// to nothing otherwise.
 #[inline]
+#[cfg_attr(not(feature = "alloc-profile"), expect(clippy::needless_pass_by_ref_mut, reason = "The allocation census mutates this storage when alloc-profile is enabled."))]
 pub fn census_scrub_none<T>(opt: &mut Option<T>) {
     #[cfg(feature = "alloc-profile")]
     if crate::alloc_profile::census::recording() && opt.is_none() {
@@ -1792,6 +1792,7 @@ pub fn arena_used_bytes() -> usize {
 
 /// Compressed pointers: (bytes of the reserved range handed out as chunks now, how far into it chunks were ever
 /// carved). `None` with plain pointers.
+#[cfg_attr(compressed_ptrs, expect(clippy::unnecessary_wraps, reason = "Plain-pointer builds have no compressed reservation and return None through the same API."))]
 pub fn reserve_stats() -> Option<(usize, usize)> {
     #[cfg(compressed_ptrs)]
     return Some((crate::reserve::reserved_in_use(), crate::reserve::reserved_high_water()));

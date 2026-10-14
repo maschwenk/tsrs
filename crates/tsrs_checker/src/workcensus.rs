@@ -396,13 +396,10 @@ fn file_and_line(node: P<Node>) -> String {
     };
     let line = tsrs_scanner::get_ecma_line_of_position(&*sf, pos);
     let name = sf.file_name();
-    let short: String = match name.find("/node_modules/") {
-        Some(i) => name[i + 1..].to_string(),
-        None => {
-            // The last three path components.
-            let start = name.rmatch_indices('/').nth(2).map_or(0, |(i, _)| i + 1);
-            name[start..].to_string()
-        }
+    let short: String = if let Some(i) = name.find("/node_modules/") { name[i + 1..].to_string() } else {
+        // The last three path components.
+        let start = name.rmatch_indices('/').nth(2).map_or(0, |(i, _)| i + 1);
+        name[start..].to_string()
     };
     format!("{short}:{}", line + 1)
 }

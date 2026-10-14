@@ -372,7 +372,7 @@ impl fileLoader {
     }
 
     pub(crate) fn resolve_automatic_type_directives(
-        &mut self,
+        &self,
         containing_file_name: &str,
     ) -> (Vec<resolvedRef>, ModeAwareCache<P<ResolvedTypeReferenceDirective>>, Vec<DiagAndArgs>, Vec<processingDiagnostic>) {
         let mut to_parse = Vec::new();
@@ -1259,7 +1259,7 @@ impl fileLoader {
                 let specifier = self.create_synthetic_import(&jsx_import, file);
                 module_names.push(specifier);
                 self.tasks[t].data().jsx_runtime_import_specifier =
-                    Some(P::new(jsxRuntimeImportSpecifier { module_reference: jsx_import.clone(), specifier }));
+                    Some(P::new(jsxRuntimeImportSpecifier { module_reference: jsx_import, specifier }));
             }
         }
 
@@ -1320,12 +1320,9 @@ impl fileLoader {
                     continue;
                 }
 
-                let (resolution, mode, prepared) = match prefetched_resolution {
-                    Some(prefetched) => (prefetched.resolution, prefetched.mode, Some(prefetched.prepared)),
-                    None => {
-                        let mode = get_mode_for_usage_location(file.file_name(), meta.as_ref().expect("metadata"), entry, Some(&options_for_file));
-                        (self.resolver.resolve_module_name(module_name, &file_name, mode, redirect), mode, None)
-                    }
+                let (resolution, mode, prepared) = if let Some(prefetched) = prefetched_resolution { (prefetched.resolution, prefetched.mode, Some(prefetched.prepared)) } else {
+                    let mode = get_mode_for_usage_location(file.file_name(), meta.as_ref().expect("metadata"), entry, Some(&options_for_file));
+                    (self.resolver.resolve_module_name(module_name, &file_name, mode, redirect), mode, None)
                 };
                 let (resolved_module, trace) = match resolution {
                     Ok((resolved_module, trace)) => (resolved_module, trace),
@@ -1386,7 +1383,7 @@ impl fileLoader {
         }
     }
 
-    fn create_synthetic_import(&mut self, text: &str, file: P<SourceFile>) -> P<Node> {
+    fn create_synthetic_import(&self, text: &str, file: P<SourceFile>) -> P<Node> {
         let external_helpers_module_reference = self.factory.new_string_literal(tsrs_core::alloc_str(text), TokenFlags::None);
         let import_decl = self.factory.new_import_declaration(None, None, external_helpers_module_reference, None);
         external_helpers_module_reference.set_parent(Some(import_decl));

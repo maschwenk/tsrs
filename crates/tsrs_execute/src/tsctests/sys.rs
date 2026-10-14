@@ -421,17 +421,14 @@ pub(crate) fn sanitize_internal_symbol_name(s: &str) -> String {
             let digits = after[n + 1..].bytes().take_while(u8::is_ascii_digit).count();
             (digits > 0).then_some((n, digits))
         });
-        match matched {
-            Some((n, digits)) => {
-                out.push_str("\u{FFFD}@");
-                out.push_str(&after[..n]);
-                out.push_str("@<symbolId>");
-                rest = &after[n + 1 + digits..];
-            }
-            None => {
-                out.push_str("\u{FFFD}@");
-                rest = after;
-            }
+        if let Some((n, digits)) = matched {
+            out.push_str("\u{FFFD}@");
+            out.push_str(&after[..n]);
+            out.push_str("@<symbolId>");
+            rest = &after[n + 1 + digits..];
+        } else {
+            out.push_str("\u{FFFD}@");
+            rest = after;
         }
     }
     out.push_str(rest);

@@ -434,12 +434,9 @@ mod heap_sample {
                 if site.stack[0] == 1 {
                     continue;
                 }
-                let at = match groups.iter().position(|g| g.0 == site.group) {
-                    Some(at) => at,
-                    None => {
-                        groups.push((site.group, 0, 0));
-                        groups.len() - 1
-                    }
+                let at = if let Some(at) = groups.iter().position(|g| g.0 == site.group) { at } else {
+                    groups.push((site.group, 0, 0));
+                    groups.len() - 1
                 };
                 groups[at].1 += site.live;
                 groups[at].2 += state.peak.get(i).copied().unwrap_or(0);

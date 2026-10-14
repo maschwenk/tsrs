@@ -747,11 +747,10 @@ pub fn get_next_jsdoc_comment_location(node: P<Node>) -> Option<P<Node>> {
             | Kind::ReturnStatement
             | Kind::VariableStatement
             | Kind::ExpressionStatement => return Some(parent),
-            Kind::VariableDeclarationList => {
-                if parent.as_variable_declaration_list().declarations.nodes()[0] == node {
+            Kind::VariableDeclarationList
+                if parent.as_variable_declaration_list().declarations.nodes()[0] == node => {
                     return Some(parent);
                 }
-            }
             _ => {}
         }
     }

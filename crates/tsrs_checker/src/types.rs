@@ -109,12 +109,9 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
     /// Go `m[k] = v`. Creates the map if it is nil (Go would panic; faithful code always `make`s first).
     #[inline]
     pub fn set(&self, key: K, value: V) {
-        let m = match self.for_write() {
-            Some(m) => m,
-            None => {
-                self.make();
-                self.0.get().unwrap()
-            }
+        let m = if let Some(m) = self.for_write() { m } else {
+            self.make();
+            self.0.get().unwrap()
         };
         m.borrow_mut().insert(key, value);
     }
@@ -2266,13 +2263,10 @@ impl CountOrIndexInfos {
 impl StructuredType {
     #[inline]
     fn resolved_for_write(&self) -> P<StructuredMembers> {
-        match self.resolved.get() {
-            Some(resolved) => resolved,
-            None => {
-                let resolved = P::new(StructuredMembers::default());
-                self.resolved.set(Some(resolved));
-                resolved
-            }
+        if let Some(resolved) = self.resolved.get() { resolved } else {
+            let resolved = P::new(StructuredMembers::default());
+            self.resolved.set(Some(resolved));
+            resolved
         }
     }
 
@@ -2626,7 +2620,7 @@ impl MappedType {
         self.template_type.get()
     }
     #[inline]
-    pub fn resolve_components(&self, c: &mut Checker, typ: P<Type>) {
+    pub fn resolve_components(c: &mut Checker, typ: P<Type>) {
         c.get_type_parameter_from_mapped_type(typ);
         c.get_constraint_type_from_mapped_type(typ);
         c.get_name_type_from_mapped_type(typ);
@@ -3190,13 +3184,10 @@ impl Signature {
     }
     #[inline]
     fn rare_for_write(&self) -> P<SignatureRare> {
-        match self.rare.tail() {
-            Some(rare) => rare,
-            None => {
-                let rare = P::new(SignatureRare::default());
-                self.rare.set_tail(rare);
-                rare
-            }
+        if let Some(rare) = self.rare.tail() { rare } else {
+            let rare = P::new(SignatureRare::default());
+            self.rare.set_tail(rare);
+            rare
         }
     }
     /// Go `sig.resolvedTypePredicate`; `no_type_predicate` is the checker's `noTypePredicate`.

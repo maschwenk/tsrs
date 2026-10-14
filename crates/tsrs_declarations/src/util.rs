@@ -117,12 +117,12 @@ pub(crate) fn mask_modifier_flags(node: P<Node>, modifier_mask: ModifierFlags, m
 }
 
 // util.go:142
-pub(crate) fn unwrap_parenthesized_expression(o: P<Node>) -> Option<P<Node>> {
+pub(crate) fn unwrap_parenthesized_expression(o: P<Node>) -> P<Node> {
     let mut o = o;
     while o.kind() == Kind::ParenthesizedExpression {
         o = o.expression().unwrap();
     }
-    Some(o)
+    o
 }
 
 // util.go:149

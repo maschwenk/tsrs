@@ -147,7 +147,7 @@ impl LanguageService {
                 .iter()
                 .map(|&t| {
                     let name = printer::escape_string(string_literal_value(t), quote_char);
-                    let lsp_item = self.create_lsp_completion_item(
+                    let lsp_item = Self::create_lsp_completion_item(
                         ctx,
                         &name,
                         "", /*insertText*/
@@ -198,7 +198,7 @@ impl LanguageService {
                 if !path_completion.name.ends_with(&path_completion.extension) {
                     detail += &path_completion.extension;
                 }
-                let lsp_item = self.create_lsp_completion_item(
+                let lsp_item = Self::create_lsp_completion_item(
                     ctx,
                     &path_completion.name,
                     "", /*insertText*/

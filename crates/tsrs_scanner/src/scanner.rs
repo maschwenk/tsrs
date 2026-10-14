@@ -891,6 +891,7 @@ impl Scanner {
     }
 
     #[cold]
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_whitespace(&mut self) -> Option<Kind> {
         debug_assert!(!self.skip_trivia);
         self.state.pos += 1;
@@ -905,6 +906,7 @@ impl Scanner {
     }
 
     #[cold]
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_line_break(&mut self) -> Option<Kind> {
         debug_assert!(!self.skip_trivia);
         let ch = self.char();
@@ -917,6 +919,7 @@ impl Scanner {
         Some(Kind::NewLineTrivia)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_exclamation(&mut self) -> Option<Kind> {
         let token = if self.char_at(1) == Some(b'=') {
             if self.char_at(2) == Some(b'=') {
@@ -933,15 +936,18 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_string(&mut self) -> Option<Kind> {
         self.state.token_value = self.scan_string(false /*jsxAttributeString*/);
         Some(Kind::StringLiteral)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_template(&mut self) -> Option<Kind> {
         Some(self.scan_template_and_set_token_value(false /*shouldEmitInvalidEscapeError*/))
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_percent(&mut self) -> Option<Kind> {
         let token = if self.char_at(1) == Some(b'=') {
             self.state.pos += 2;
@@ -953,6 +959,7 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_ampersand(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
         let token = if next == Some(b'&') {
@@ -973,11 +980,13 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_open_paren(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::OpenParenToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_close_paren(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::CloseParenToken)
@@ -1016,6 +1025,7 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_plus(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
         let token = if next == Some(b'=') {
@@ -1031,11 +1041,13 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_comma(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::CommaToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_minus(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
         let token = if next == Some(b'=') {
@@ -1051,6 +1063,7 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_dot(&mut self) -> Option<Kind> {
         let next = self.char_at(1);
         let token = if next.is_some_and(|ch| stringutil::is_digit(u32::from(ch))) {
@@ -1179,6 +1192,7 @@ impl Scanner {
         (comment_closed, last_line_start as u32)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_number(&mut self) -> Option<Kind> {
         let ch = self.char();
         let token = 'digit: {
@@ -1237,11 +1251,13 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_colon(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::ColonToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_semicolon(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::SemicolonToken)
@@ -1252,9 +1268,8 @@ impl Scanner {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
                 return None;
-            } else {
-                return Some(Kind::ConflictMarkerTrivia);
             }
+            return Some(Kind::ConflictMarkerTrivia);
         }
         let token = if self.char_at(1) == Some(b'<') {
             if self.char_at(2) == Some(b'=') {
@@ -1285,9 +1300,8 @@ impl Scanner {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
                 return None;
-            } else {
-                return Some(Kind::ConflictMarkerTrivia);
             }
+            return Some(Kind::ConflictMarkerTrivia);
         }
         let token = if self.char_at(1) == Some(b'=') {
             if self.char_at(2) == Some(b'=') {
@@ -1312,14 +1326,14 @@ impl Scanner {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
                 return None;
-            } else {
-                return Some(Kind::ConflictMarkerTrivia);
             }
+            return Some(Kind::ConflictMarkerTrivia);
         }
         self.state.pos += 1;
         Some(Kind::GreaterThanToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_question(&mut self) -> Option<Kind> {
         let token = if self.char_at(1) == Some(b'.') && !self.char_at(2).is_some_and(|ch| stringutil::is_digit(u32::from(ch))) {
             self.state.pos += 2;
@@ -1339,16 +1353,19 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_open_bracket(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::OpenBracketToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_close_bracket(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::CloseBracketToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_caret(&mut self) -> Option<Kind> {
         let token = if self.char_at(1) == Some(b'=') {
             self.state.pos += 2;
@@ -1360,6 +1377,7 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_open_brace(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::OpenBraceToken)
@@ -1370,9 +1388,8 @@ impl Scanner {
             self.state.pos = self.scan_conflict_marker_trivia_reporting(self.state.pos);
             if self.skip_trivia {
                 return None;
-            } else {
-                return Some(Kind::ConflictMarkerTrivia);
             }
+            return Some(Kind::ConflictMarkerTrivia);
         }
         let token = if self.char_at(1) == Some(b'|') {
             if self.char_at(2) == Some(b'=') {
@@ -1392,16 +1409,19 @@ impl Scanner {
         Some(token)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_close_brace(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::CloseBraceToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_tilde(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::TildeToken)
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_at(&mut self) -> Option<Kind> {
         self.state.pos += 1;
         Some(Kind::AtToken)
@@ -1424,6 +1444,7 @@ impl Scanner {
     }
 
     #[cold]
+    #[expect(clippy::unnecessary_wraps, reason = "BYTE_HANDLERS requires Option<Kind>; other byte handlers return None to continue scanning trivia.")]
     fn scan_byte_identifier_slow(&mut self) -> Option<Kind> {
         let token = if self.scan_identifier(0, IdentifierVariant::Standard) {
             get_identifier_token(self.state.token_value)
@@ -2686,14 +2707,14 @@ impl Scanner {
         }
         if self.state.token_flags.intersects(TokenFlags::ContainsLeadingZero) {
             self.error_at(&diagnostics::Decimals_with_leading_zeros_are_not_allowed, start, self.state.pos - start, &[]);
-            self.state.token_value = self.canonical_number(self.state.token_value);
+            self.state.token_value = Self::canonical_number(self.state.token_value);
             return Kind::NumericLiteral;
         }
 
         let result = if fixed_part_end == self.state.pos {
             self.scan_big_int_suffix()
         } else {
-            self.state.token_value = self.canonical_number(self.state.token_value);
+            self.state.token_value = Self::canonical_number(self.state.token_value);
             Kind::NumericLiteral
         };
         let (ch, _) = self.char_and_size();
@@ -2722,7 +2743,7 @@ impl Scanner {
     }
 
     /// Go `jsnum.FromString(v).String()`, reusing `v` when it is already canonical.
-    fn canonical_number(&self, v: &'static str) -> &'static str {
+    fn canonical_number(v: &'static str) -> &'static str {
         // Every decimal integer with at most 15 digits is a safe integer. Its scanner spelling is canonical when it
         // has no leading zero, so neither conversion nor a temporary formatting String is needed. Longer integers,
         // fractions and exponents still go through Number::string for ECMAScript rounding and formatting.
@@ -2909,7 +2930,7 @@ impl Scanner {
             self.state.token_value = cached;
         } else {
             let original = self.state.token_value;
-            let token_value = self.canonical_number(original);
+            let token_value = Self::canonical_number(original);
             if token_value != original {
                 self.pin_unless_source(original, token_value);
                 self.number_cache.insert(original, token_value);

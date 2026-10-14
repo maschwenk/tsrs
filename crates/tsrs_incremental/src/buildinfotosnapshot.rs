@@ -133,12 +133,12 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:120
-    fn set_compiler_options(&mut self) {
+    fn set_compiler_options(&self) {
         self.snapshot.options.set(Some(P::new(self.build_info.get_compiler_options(&self.build_info_directory))));
     }
 
     // buildinfotosnapshot.go:124
-    fn set_file_info_and_emit_signatures(&mut self) {
+    fn set_file_info_and_emit_signatures(&self) {
         let is_composite = self.snapshot.options().composite.is_true();
         for (index, build_info_file_info) in self.build_info.file_infos.iter().enumerate() {
             let path = self.to_file_path(index as BuildInfoFileId + 1);
@@ -162,14 +162,14 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:145
-    fn set_referenced_map(&mut self) {
+    fn set_referenced_map(&self) {
         for entry in &self.build_info.referenced_map {
             self.snapshot.referenced_map.store_shared_references(self.to_file_path(entry.file_id), self.to_file_path_set(entry.file_id_list_id));
         }
     }
 
     // buildinfotosnapshot.go:151
-    fn set_change_file_set(&mut self) {
+    fn set_change_file_set(&self) {
         for &file_id in &self.build_info.change_file_set {
             let file_path = self.to_file_path(file_id);
             self.snapshot.changed_files_set.add(file_path);
@@ -177,7 +177,7 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:158
-    fn set_semantic_diagnostics(&mut self) {
+    fn set_semantic_diagnostics(&self) {
         self.snapshot.file_infos.range(|path, _info| {
             // Initialize to have no diagnostics if its not changed file
             if !self.snapshot.changed_files_set.has(path) {
@@ -200,7 +200,7 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:176
-    fn set_emit_diagnostics(&mut self) {
+    fn set_emit_diagnostics(&self) {
         for diagnostic in &self.build_info.emit_diagnostics_per_file {
             let file_path = self.to_file_path(diagnostic.file_id);
             self.snapshot.emit_diagnostics_per_file.store(file_path, self.to_diagnostics_or_build_info_diagnostics_with_file_name(diagnostic));
@@ -208,7 +208,7 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:183
-    fn set_affected_files_pending_emit(&mut self) {
+    fn set_affected_files_pending_emit(&self) {
         if self.build_info.affected_files_pending_emit.is_empty() {
             return;
         }
@@ -222,7 +222,7 @@ impl toSnapshot<'_> {
     }
 
     // buildinfotosnapshot.go:193
-    fn set_package_jsons(&mut self) {
+    fn set_package_jsons(&self) {
         *self.snapshot.package_jsons.borrow_mut() = Some(match &self.build_info.package_jsons {
             Some(package_jsons) => package_jsons.iter().map(|p| self.to_absolute_path(p)).collect(),
             None => Vec::new(),

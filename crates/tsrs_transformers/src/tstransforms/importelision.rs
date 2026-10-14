@@ -8,6 +8,7 @@ pub struct ImportElisionTransformer {
 }
 
 // importelision.go:17
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_import_elision_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opt.compiler_options;
     let emit_context = opt.context;

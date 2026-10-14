@@ -3,7 +3,7 @@
 // `ASTDiagnostic`'s methods (`diagnostic_file`, `diagnostic_pos`, `diagnostic_message_chain`, ...), which map a
 // diagnostic on a content-mapped file back to its original text.
 
-use std::io::{self, Write};
+use std::io::Write;
 
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic, SourceFile, SourceFileLike};
 use tsrs_core::tspath::{self, ComparePathsOptions};
@@ -488,15 +488,12 @@ fn get_error_summary(diags: &[P<Diagnostic>]) -> ErrorSummary {
             None => global_errors.push(diagnostic),
             Some(file) => {
                 // A wrapper (`FileLike::key` is None) is a new map key each time, as in Go.
-                let idx = match file.key() {
-                    Some(key) => *index_by_file.entry(key).or_insert_with(|| {
-                        errors_by_file.push((file, Vec::new()));
-                        errors_by_file.len() - 1
-                    }),
-                    None => {
-                        errors_by_file.push((file, Vec::new()));
-                        errors_by_file.len() - 1
-                    }
+                let idx = if let Some(key) = file.key() { *index_by_file.entry(key).or_insert_with(|| {
+                    errors_by_file.push((file, Vec::new()));
+                    errors_by_file.len() - 1
+                }) } else {
+                    errors_by_file.push((file, Vec::new()));
+                    errors_by_file.len() - 1
                 };
                 errors_by_file[idx].1.push(diagnostic);
             }
@@ -569,10 +566,10 @@ pub fn write_format_diagnostic(output: &mut dyn Write, diagnostic: P<Diagnostic>
     w!(output, "{}", format_opts.new_line);
 }
 
-pub fn format_diagnostic_to_string(diagnostic: P<Diagnostic>, format_opts: &FormattingOptions) -> io::Result<String> {
+pub fn format_diagnostic_to_string(diagnostic: P<Diagnostic>, format_opts: &FormattingOptions) -> String {
     let mut out = Vec::new();
     write_format_diagnostic(&mut out, diagnostic, format_opts);
-    Ok(tsrs_core::utf8::from_utf8_lossy(&out).into_owned())
+    tsrs_core::utf8::from_utf8_lossy(&out).into_owned()
 }
 
 // diagnosticwriter.go:584

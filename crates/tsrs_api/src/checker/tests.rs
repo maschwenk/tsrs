@@ -137,7 +137,7 @@ impl TestHost {
         str_of(&self.ok("typeToString", &self.sp(&format!(r#""type":{}"#, num(t, "id")))))
     }
 
-    fn symbol_ref(&self, symbol: &Value) -> String {
+    fn symbol_ref(symbol: &Value) -> String {
         json::marshal(field(symbol, "reference")).unwrap()
     }
 
@@ -345,17 +345,17 @@ fn symbol_types_aliases_and_imports() {
     let h = fixture();
     // Imported alias from a .d.ts.
     let make_alias = h.symbol_at(MAIN_FILE, MAIN, "make }");
-    let aliased = h.ok("getAliasedSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&make_alias))));
+    let aliased = h.ok("getAliasedSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&make_alias))));
     assert_eq!(str_of(field(&aliased, "name")), "make");
     let decl = str_of(&arr(field(&aliased, "declarations"))[0]);
     assert!(decl.ends_with("/p/types.d.ts"), "{decl}");
-    let immediate = h.ok("getImmediateAliasedSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&make_alias))));
+    let immediate = h.ok("getImmediateAliasedSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&make_alias))));
     assert_eq!(str_of(field(&immediate, "name")), "make");
-    let fq = h.ok("getFullyQualifiedName", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&aliased))));
+    let fq = h.ok("getFullyQualifiedName", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&aliased))));
     assert_eq!(str_of(&fq), "\"/p/types\".make");
     // Type alias: declared type is the union; types and alias symbol come back.
     let u = h.symbol_at(MAIN_FILE, MAIN, "U = ");
-    let declared = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&u))));
+    let declared = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&u))));
     assert_eq!(h.type_string(&declared), "U");
     let members = h.ok("getTypesOfType", &h.sp(&format!(r#""objectId":{}"#, num(&declared, "id"))));
     let mut member_strings: Vec<String> = arr(&members).iter().map(|t| h.type_string(t)).collect();
@@ -370,7 +370,7 @@ fn symbol_types_aliases_and_imports() {
     assert_eq!((a, b), (Value::Bool(true), Value::Bool(false)));
     // getTypesOfSymbols batch.
     let box_sym = h.symbol_at(MAIN_FILE, MAIN, "box:");
-    let types = h.ok("getTypesOfSymbols", &h.sp(&format!(r#""symbols":[{},{}]"#, h.symbol_ref(&box_sym), h.symbol_ref(&u))));
+    let types = h.ok("getTypesOfSymbols", &h.sp(&format!(r#""symbols":[{},{}]"#, TestHost::symbol_ref(&box_sym), TestHost::symbol_ref(&u))));
     assert_eq!(h.type_string(&arr(&types)[0]), "Box<number>");
 }
 
@@ -388,7 +388,7 @@ fn generics_properties_index_infos_and_type_arguments() {
     let props = h.ok("getPropertiesOfType", &h.sp(&format!(r#""type":{id}"#)));
     assert_eq!(names(&props), ["value"]);
     let prop = h.ok("getPropertyOfType", &h.sp(&format!(r#""type":{id},"name":"value""#)));
-    let prop_type = h.ok("getTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&prop))));
+    let prop_type = h.ok("getTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&prop))));
     assert_eq!(h.type_string(&prop_type), "number");
     let missing = h.ok("getPropertyOfType", &h.sp(&format!(r#""type":{id},"name":"nope""#)));
     assert_eq!(missing, Value::Null);
@@ -412,7 +412,7 @@ fn generics_properties_index_infos_and_type_arguments() {
 fn overloads_signatures_and_resolution() {
     let h = fixture();
     let over = h.symbol_at(MAIN_FILE, MAIN, "over(x: string)");
-    let t = h.ok("getTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&over))));
+    let t = h.ok("getTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&over))));
     let sigs = h.ok("getSignaturesOfType", &h.sp(&format!(r#""type":{},"kind":0"#, num(&t, "id"))));
     let sigs = arr(&sigs);
     assert_eq!(sigs.len(), 2);
@@ -453,15 +453,15 @@ fn overloads_signatures_and_resolution() {
 fn classes_predicates_enums_and_jsdoc() {
     let h = fixture();
     let dog = h.symbol_at(MAIN_FILE, MAIN, "Dog extends");
-    let dog_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&dog))));
+    let dog_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&dog))));
     let bases = h.ok("getBaseTypes", &h.sp(&format!(r#""type":{}"#, num(&dog_t, "id"))));
     assert_eq!(arr(&bases).iter().map(|b| h.type_string(b)).collect::<Vec<_>>(), ["Animal"]);
     let props = h.ok("getPropertiesOfType", &h.sp(&format!(r#""type":{}"#, num(&dog_t, "id"))));
     assert_eq!(names(&props), ["legs", "name"]);
     let legs = &arr(&props)[0];
-    assert_eq!(h.ok("isReadonlySymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(legs)))), Value::Bool(true));
+    assert_eq!(h.ok("isReadonlySymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(legs)))), Value::Bool(true));
     // Members of a file-owned class symbol resolve without a checker, ordered by declaration.
-    let members = h.ok("getMembersOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&dog)));
+    let members = h.ok("getMembersOfSymbol", &format!(r#"{{"symbol":{}}}"#, TestHost::symbol_ref(&dog)));
     assert_eq!(names(&members), ["legs"]);
     // Type predicates.
     let is_str = h.type_at(MAIN_FILE, MAIN, "isStr(");
@@ -478,9 +478,9 @@ fn classes_predicates_enums_and_jsdoc() {
     assert_eq!(field(&value, "value"), &Value::Number(1.0));
     // JSDoc.
     let animal = h.symbol_at(MAIN_FILE, MAIN, "Animal {");
-    let doc = h.ok("getDocumentationComment", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&animal))));
+    let doc = h.ok("getDocumentationComment", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&animal))));
     assert_eq!(str_of(&doc), "Docs for Animal.");
-    let tags = h.ok("getJsDocTags", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&animal))));
+    let tags = h.ok("getJsDocTags", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&animal))));
     assert_eq!(str_of(field(&arr(&tags)[0], "name")), "deprecated");
     assert_eq!(str_of(field(&arr(&tags)[0], "text")), "use Dog");
 }
@@ -490,14 +490,14 @@ fn structured_type_shapes_tuple_mapped_conditional_literal() {
     let h = fixture();
     // Labeled tuple target.
     let pair = h.symbol_at(MAIN_FILE, MAIN, "Pair<A, B> =");
-    let pair_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&pair))));
+    let pair_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&pair))));
     assert_eq!(field(&pair_t, "isTupleType"), &Value::Bool(true));
     let tuple_target = h.ok("getTargetOfType", &h.sp(&format!(r#""objectId":{}"#, num(&pair_t, "id"))));
     assert_eq!(arr(field(&tuple_target, "labeledElementDeclarations")).len(), 2);
     assert_eq!(num(&tuple_target, "fixedLength"), 2);
     // Mapped type components are registered and resolvable.
     let m = h.symbol_at(MAIN_FILE, MAIN, "M = ");
-    let m_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&m))));
+    let m_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&m))));
     let tp = h.ok("getTypeParameterOfMappedType", &h.sp(&format!(r#""objectId":{}"#, num(&m_t, "id"))));
     assert_eq!(num(&tp, "id"), num(&m_t, "typeParameter"));
     let ct = h.ok("getConstraintTypeOfMappedType", &h.sp(&format!(r#""objectId":{}"#, num(&m_t, "id"))));
@@ -505,7 +505,7 @@ fn structured_type_shapes_tuple_mapped_conditional_literal() {
     assert_eq!(h.ok("getNameTypeOfMappedType", &h.sp(&format!(r#""objectId":{}"#, num(&m_t, "id")))), Value::Null);
     // Conditional type.
     let c = h.symbol_at(MAIN_FILE, MAIN, "C<T> =");
-    let c_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&c))));
+    let c_t = h.ok("getDeclaredTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&c))));
     let check = h.ok("getCheckTypeOfType", &h.sp(&format!(r#""objectId":{}"#, num(&c_t, "id"))));
     assert_eq!(h.type_string(&check), "T");
     let tru = h.ok("getTrueTypeOfConditionalType", &h.sp(&format!(r#""objectId":{}"#, num(&c_t, "id"))));
@@ -553,12 +553,12 @@ fn scope_names_exports_intrinsics_and_well_known() {
     assert_eq!(err.kind, CheckerErrorKind::Client);
     // Module symbol and its exports (checker ordering).
     let module = h.ok("getSymbolOfSourceFile", &h.sp(&format!(r#""file":"{MAIN_FILE}""#)));
-    let exports = h.ok("getExportsOfModule", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&module))));
+    let exports = h.ok("getExportsOfModule", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&module))));
     let export_names = names(&exports);
     for n in ["Animal", "Color", "Dog", "box", "over", "p", "r"] {
         assert!(export_names.iter().any(|e| e == n), "{n} missing from {export_names:?}");
     }
-    let member = h.ok("getMemberInModuleExports", &h.sp(&format!(r#""symbol":{},"name":"Dog""#, h.symbol_ref(&module))));
+    let member = h.ok("getMemberInModuleExports", &h.sp(&format!(r#""symbol":{},"name":"Dog""#, TestHost::symbol_ref(&module))));
     assert_eq!(str_of(field(&member, "name")), "Dog");
     // Intrinsics.
     for (method, expected) in [("getAnyType", "any"), ("getNumberType", "number"), ("getNeverType", "never"), ("getUnknownType", "unknown"), ("getESSymbolType", "symbol"), ("getNonPrimitiveType", "object")] {
@@ -589,7 +589,7 @@ fn handle_validation_stale_cross_project_and_release() {
     assert_eq!(h.call("getSymbolAtLocation", &h.sp(r#""location":"garbage""#)).unwrap_err().kind, CheckerErrorKind::Client);
     // Snapshot symbol reference that names a different snapshot.
     let global = h.ok("resolveName", &h.sp(&format!(r#""name":"Array","meaning":{}"#, tsrs_ast::SymbolFlags::Type.bits())));
-    let mut forged = h.symbol_ref(&global);
+    let mut forged = TestHost::symbol_ref(&global);
     forged = forged.replace(&format!(r#""snapshot":{}"#, h.handle), &format!(r#""snapshot":{}"#, h.handle + 1));
     assert_eq!(h.call("getTypeOfSymbol", &h.sp(&format!(r#""symbol":{forged}"#))).unwrap_err().kind, CheckerErrorKind::Client);
     // After release every handle is rejected.
@@ -635,7 +635,7 @@ impl TestHost {
 
     fn declared(&self, needle: &str) -> Value {
         let s = self.symbol_at(MAIN_FILE, MAIN, needle);
-        self.ok("getDeclaredTypeOfSymbol", &self.sp(&format!(r#""symbol":{}"#, self.symbol_ref(&s))))
+        self.ok("getDeclaredTypeOfSymbol", &self.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&s))))
     }
 
     fn sig0(&self, t: &Value) -> Value {
@@ -665,18 +665,18 @@ fn locations_batches_and_symbol_relations() {
     // File-owned relations resolve without a snapshot.
     let dog_t = h.declared("Dog extends");
     let legs = arr(&h.ok("getPropertiesOfType", &h.sp(&format!(r#""type":{}"#, num(&dog_t, "id")))))[0].clone();
-    let parent = h.ok("getParentOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&legs)));
+    let parent = h.ok("getParentOfSymbol", &format!(r#"{{"symbol":{}}}"#, TestHost::symbol_ref(&legs)));
     assert_eq!(str_of(field(&parent, "name")), "Dog");
     let module = h.ok("getSymbolOfSourceFile", &h.sp(&format!(r#""file":"{MAIN_FILE}""#)));
-    let exports = h.ok("getExportsOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&module)));
+    let exports = h.ok("getExportsOfSymbol", &format!(r#"{{"symbol":{}}}"#, TestHost::symbol_ref(&module)));
     let export_names = names(&exports);
     assert_eq!(&export_names[..3], ["Pair", "U", "over"], "file-owned tables are ordered by declaration position");
     assert!(export_names.iter().any(|n| n == "uni"));
     // Local symbol -> export symbol.
     let scope = h.ok("getSymbolsInScope", &h.sp(&format!(r#""file":"{MAIN_FILE}","position":{},"meaning":{}"#, utf16_pos(MAIN, "box.value"), tsrs_ast::SymbolFlags::Value.bits())));
     let local_box = arr(&scope).iter().find(|s| str_of(field(s, "name")) == "box").unwrap().clone();
-    let es = h.ok("getExportSymbolOfSymbol", &format!(r#"{{"symbol":{}}}"#, h.symbol_ref(&local_box)));
-    let es2 = h.ok("getExportSymbolOfSymbolForChecker", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&local_box))));
+    let es = h.ok("getExportSymbolOfSymbol", &format!(r#"{{"symbol":{}}}"#, TestHost::symbol_ref(&local_box)));
+    let es2 = h.ok("getExportSymbolOfSymbolForChecker", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&local_box))));
     // Pinned Go: the local symbol (ExportValue, file-owned) maps to the exported variable `box` (flags 2).
     assert_eq!(num(&local_box, "flags"), tsrs_ast::SymbolFlags::ExportValue.bits() as u64);
     for exported in [&es, &es2] {
@@ -691,17 +691,17 @@ fn locations_batches_and_symbol_relations() {
     let local = h.ok("getExportSpecifierLocalTargetSymbol", &h.sp(&format!(r#""location":"{spec}""#)));
     assert_eq!(str_of(field(&local, "name")), "ünïcödé");
     let box_sym = h.symbol_at(MAIN_FILE, MAIN, "box:");
-    let refs = h.ok("getReferencesToSymbolInFile", &h.sp(&format!(r#""file":"{MAIN_FILE}","symbol":{}"#, h.symbol_ref(&box_sym))));
+    let refs = h.ok("getReferencesToSymbolInFile", &h.sp(&format!(r#""file":"{MAIN_FILE}","symbol":{}"#, TestHost::symbol_ref(&box_sym))));
     assert!(arr(&refs).len() >= 3, "{}", json::marshal(&refs).unwrap());
-    let at = h.ok("getTypeOfSymbolAtLocation", &h.sp(&format!(r#""symbol":{},"location":"{b}""#, h.symbol_ref(&box_sym))));
+    let at = h.ok("getTypeOfSymbolAtLocation", &h.sp(&format!(r#""symbol":{},"location":"{b}""#, TestHost::symbol_ref(&box_sym))));
     assert_eq!(h.type_string(&at), "Box<number>");
     let maybe = h.symbol_at(MAIN_FILE, MAIN, "maybe:");
-    let nm = h.ok("getNonMissingTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&maybe))));
+    let nm = h.ok("getNonMissingTypeOfSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&maybe))));
     assert_eq!(h.type_string(&nm), "string | undefined");
     // Instantiated property -> target symbol; type of property.
     let box_t = h.type_at(MAIN_FILE, MAIN, "box:");
     let value = h.ok("getPropertyOfType", &h.sp(&format!(r#""type":{},"name":"value""#, num(&box_t, "id"))));
-    let target = h.ok("getTargetSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&value))));
+    let target = h.ok("getTargetSymbol", &h.sp(&format!(r#""symbol":{}"#, TestHost::symbol_ref(&value))));
     assert_eq!(str_of(field(&target, "name")), "value");
     let vt = h.ok("getTypeOfPropertyOfType", &h.sp(&format!(r#""type":{},"name":"value""#, num(&box_t, "id"))));
     assert_eq!(h.type_string(&vt), "number");
@@ -842,7 +842,7 @@ fn language_service_backed_methods() {
     assert_eq!(missing, Value::Null);
     // Import adder: import `helper` from ./other into main.ts.
     let helper = h.symbol_at("/p/other.ts", OTHER, "helper");
-    let edits = h.ok("getImportAdderEdits", &h.sp(&format!(r#""file":"{MAIN_FILE}","actions":[{{"kind":"importSymbol","symbol":{}}}]"#, h.symbol_ref(&helper))));
+    let edits = h.ok("getImportAdderEdits", &h.sp(&format!(r#""file":"{MAIN_FILE}","actions":[{{"kind":"importSymbol","symbol":{}}}]"#, TestHost::symbol_ref(&helper))));
     let edits = arr(&edits);
     assert_eq!(edits.len(), 1, "{}", json::marshal(&Value::Array(edits.clone())).unwrap());
     assert!(str_of(field(&edits[0], "newText")).contains("helper"), "{}", json::marshal(&edits[0]).unwrap());
@@ -1114,7 +1114,7 @@ fn well_known_singletons_identify_checker_results() {
 fn import_adder_client_errors_follow_go_ordering_and_release_the_clone() {
     let h = fixture();
     let helper = h.symbol_at("/p/other.ts", OTHER, "helper");
-    let r = h.symbol_ref(&helper);
+    let r = TestHost::symbol_ref(&helper);
     let cases: [(&str, String, Option<&str>); 6] = [
         ("bogus kind", r#"[{"kind":"bogus"}]"#.to_string(), Some(r#"api: client error: unknown import adder action kind "bogus""#)),
         ("null action", "[null]".to_string(), Some(r#"api: client error: unknown import adder action kind """#)),

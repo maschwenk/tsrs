@@ -128,7 +128,7 @@ impl CheckerHost for SessionHost<'_> {
     }
 
     fn encode_node(&self, node: P<Node>) -> CheckerResult<Vec<u8>> {
-        self.session.encode_node(node).map_err(from_api_error)
+        Session::encode_node(node).map_err(from_api_error)
     }
 
     fn clone_snapshot_with_auto_imports(&self, base: &Snapshot, file_name: &str) -> CheckerResult<Arc<Snapshot>> {

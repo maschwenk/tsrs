@@ -34,7 +34,7 @@ fn test_dynamic_queue_get_cancellation() {
 fn test_dynamic_queue_put_cancellation_while_state_unavailable() {
     let background = Context::background();
     let q = new_dynamic_queue::<i32>();
-    let state = q.get_any(&background).unwrap();
+    let state = q.get_any(&background);
 
     let (ctx, cancel) = background.with_cancel();
     cancel.call();

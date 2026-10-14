@@ -220,9 +220,8 @@ pub(crate) fn pow(x: f64, y: f64) -> f64 {
             return 1.0;
         } else if (x.abs() < 1.0) == (y == f64::INFINITY) {
             return 0.0;
-        } else {
-            return f64::INFINITY;
         }
+        return f64::INFINITY;
     } else if x.is_infinite() {
         if x == f64::NEG_INFINITY {
             return pow(1.0 / x, -y); // Pow(-0, -y)
@@ -249,9 +248,8 @@ pub(crate) fn pow(x: f64, y: f64) -> f64 {
             return 1.0;
         } else if (x.abs() < 1.0) == (y > 0.0) {
             return 0.0;
-        } else {
-            return f64::INFINITY;
         }
+        return f64::INFINITY;
     }
 
     // ans = a1 * 2**ae (= 1 for now).

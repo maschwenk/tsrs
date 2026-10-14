@@ -66,7 +66,7 @@ struct toProgramSnapshot {
 
 impl toProgramSnapshot {
     // programtosnapshot.go:50
-    fn reuse_from_old_program(&mut self) {
+    fn reuse_from_old_program(&self) {
         if let Some(old_program) = self.old_program {
             let old = old_program.snapshot;
             if self.snapshot.options().composite.is_true() {
@@ -339,7 +339,7 @@ impl toProgramSnapshot {
     }
 
     // programtosnapshot.go:180
-    fn handle_global_scope_change(&mut self) {
+    fn handle_global_scope_change(&self) {
         if self.old_program.is_none() || self.global_file_removed {
             return;
         }
@@ -353,7 +353,7 @@ impl toProgramSnapshot {
     }
 
     // programtosnapshot.go:203
-    fn handle_pending_emit(&mut self) {
+    fn handle_pending_emit(&self) {
         if let Some(old_program) = self.old_program {
             if self.global_file_removed {
                 return;
@@ -379,7 +379,7 @@ impl toProgramSnapshot {
     }
 
     // programtosnapshot.go:226
-    fn handle_pending_check(&mut self) {
+    fn handle_pending_check(&self) {
         if let Some(old_program) = self.old_program {
             if self.snapshot.semantic_diagnostics_per_file.size() != self.program.get_source_files().len()
                 && old_program.snapshot.check_pending.get() != self.snapshot.check_pending.get()

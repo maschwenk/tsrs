@@ -41,7 +41,7 @@ impl<K: Hash + Eq + Clone, V: Clone> CopyOnWriteMap<K, V> {
     // While the scope is active, the map shares its current backing storage with
     // the parent scope: reads see the inherited entries, and the first mutation
     // transparently clones the storage so the parent's view is not modified.
-    pub fn enter_scope(&mut self) -> CopyOnWriteScope<K, V> {
+    pub fn enter_scope(&self) -> CopyOnWriteScope<K, V> {
         CopyOnWriteScope { saved: Rc::clone(&self.m) }
     }
 
@@ -70,7 +70,7 @@ impl<K: Hash + Eq + Clone> CopyOnWriteSet<K> {
         self.m.set(k, ());
     }
 
-    pub fn enter_scope(&mut self) -> CopyOnWriteScope<K, ()> {
+    pub fn enter_scope(&self) -> CopyOnWriteScope<K, ()> {
         self.m.enter_scope()
     }
 

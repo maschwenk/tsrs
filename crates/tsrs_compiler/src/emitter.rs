@@ -254,7 +254,7 @@ mod emit {
 
         // emitter.go:62. Go returns a slice of the `declarationTransformer` interface; the two transformers run in
         // `run_declaration_transformers` in the same order.
-        fn run_declaration_transformers(&mut self, emit_context: P<EmitContext>, source_file: P<SourceFile>, declaration_file_path: &str, declaration_map_path: &str) -> (P<SourceFile>, Vec<P<Diagnostic>>) {
+        fn run_declaration_transformers(&self, emit_context: P<EmitContext>, source_file: P<SourceFile>, declaration_file_path: &str, declaration_map_path: &str) -> (P<SourceFile>, Vec<P<Diagnostic>>) {
             let force_dts_emit = self.emit_only == EmitOnly::EmitOnlyBuilderSignature || self.force_emit && self.emit_only == EmitOnly::EmitOnlyDts;
             let mut diags = Vec::new();
             // getDeclarationTransformers (emitter.go:62)
@@ -272,7 +272,7 @@ mod emit {
         }
 
         // emitter.go:71
-        fn run_script_transformers(&mut self, emit_context: P<EmitContext>, mut source_file: P<SourceFile>) -> P<SourceFile> {
+        fn run_script_transformers(&self, emit_context: P<EmitContext>, mut source_file: P<SourceFile>) -> P<SourceFile> {
             let host = self.host;
             self.times.time(EmitPhase::ScriptTransform, || {
                 source_file = get_script_transformers(emit_context, host, source_file).into_iter().fold(source_file, |mut source_file, transformer| {
@@ -581,9 +581,8 @@ mod emit {
                             current_directory: self.host.get_current_directory().to_string(),
                         },
                     ));
-                } else {
-                    return stringutil::encode_uri(&tspath::combine_paths(&source_map_dir, &[&source_map_file]));
                 }
+                return stringutil::encode_uri(&tspath::combine_paths(&source_map_dir, &[&source_map_file]));
             }
             stringutil::encode_uri(&source_map_file)
         }

@@ -406,17 +406,14 @@ impl Session {
         let (mut req, echo) = self.to_api_snapshot_request(p)?;
         let open_state = self.reconcile_snapshot_opens(&mut req, &OpenState::default());
         let mut file_changes = self.to_file_change_summary(p.get("fileNotifications"))?;
-        let snapshot_fs = match self.request_file_system(p, None, &mut file_changes)? {
-            Some((fs, replace)) => {
-                req.layered_file_system = Some(Arc::clone(&fs) as Arc<dyn tsrs_project::LayeredFileSystem>);
-                req.replace_file_system = replace;
-                Some(fs)
-            }
-            None => {
-                // Attribution only: same host filesystem, never a replacement.
-                req.file_system = Some(ScopedFs::wrap(self.snapshot_host_fs()));
-                None
-            }
+        let snapshot_fs = if let Some((fs, replace)) = self.request_file_system(p, None, &mut file_changes)? {
+            req.layered_file_system = Some(Arc::clone(&fs) as Arc<dyn tsrs_project::LayeredFileSystem>);
+            req.replace_file_system = replace;
+            Some(fs)
+        } else {
+            // Attribution only: same host filesystem, never a replacement.
+            req.file_system = Some(ScopedFs::wrap(self.snapshot_host_fs()));
+            None
         };
         let ctx = tsrs_core::context::Context::background();
         let root = self.snapshot_host.new_root_snapshot();

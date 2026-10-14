@@ -164,7 +164,7 @@ impl TypeWriterWalker {
         self.visit_node(source_file.as_node(), true /*isSymbolWalk*/)
     }
 
-    fn visit_node(&mut self, node: P<Node>, is_symbol_walk: bool) -> Vec<TypeWriterResult> {
+    fn visit_node(&self, node: P<Node>, is_symbol_walk: bool) -> Vec<TypeWriterResult> {
         let nodes = for_each_ast_node(node);
         let mut results = Vec::new();
         results.extend(nodes.into_iter().filter_map(|n| {
@@ -181,7 +181,7 @@ impl TypeWriterWalker {
         results
     }
 
-    fn write_type_or_symbol(&mut self, node: P<Node>, is_symbol_walk: bool) -> Option<TypeWriterResult> {
+    fn write_type_or_symbol(&self, node: P<Node>, is_symbol_walk: bool) -> Option<TypeWriterResult> {
         let sf = self.current_source_file.unwrap();
         let actual_pos = scanner::skip_trivia(
             sf.text(),

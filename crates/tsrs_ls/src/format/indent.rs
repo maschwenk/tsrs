@@ -1090,26 +1090,25 @@ pub(crate) fn child_is_unindented_branch_of_conditional_expression(
         );
         if child == parent.as_conditional_expression().when_true {
             return child_start_line == condition_end_line;
-        } else {
-            // On the whenFalse side, we have to look at the whenTrue side, because if that one was
-            // indented, whenFalse must also be indented:
-            //
-            // const y = true
-            //   ? 1 : (          L1: whenTrue indented because it's on a new line
-            //     0              L2: indented two stops, one because whenTrue was indented
-            //   );                   and one because of the parentheses spanning multiple lines
-            let true_start_line =
-                get_start_line_for_node(parent.as_conditional_expression().when_true, source_file);
-            let true_end_line = scanner::get_ecma_line_of_position(
-                source_file.get(),
-                parent
-                    .as_conditional_expression()
-                    .when_true
-                    .end()
-                    .expect_source("parsed expressions have source positions"),
-            );
-            return condition_end_line == true_start_line && true_end_line == child_start_line;
         }
+        // On the whenFalse side, we have to look at the whenTrue side, because if that one was
+        // indented, whenFalse must also be indented:
+        //
+        // const y = true
+        //   ? 1 : (          L1: whenTrue indented because it's on a new line
+        //     0              L2: indented two stops, one because whenTrue was indented
+        //   );                   and one because of the parentheses spanning multiple lines
+        let true_start_line =
+            get_start_line_for_node(parent.as_conditional_expression().when_true, source_file);
+        let true_end_line = scanner::get_ecma_line_of_position(
+            source_file.get(),
+            parent
+                .as_conditional_expression()
+                .when_true
+                .end()
+                .expect_source("parsed expressions have source positions"),
+        );
+        return condition_end_line == true_start_line && true_end_line == child_start_line;
     }
     false
 }

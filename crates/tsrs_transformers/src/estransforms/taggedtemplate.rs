@@ -14,6 +14,7 @@ pub struct taggedTemplateTransformer {
 }
 
 // taggedtemplate.go:22
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_tagged_template_lift_restriction_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(taggedTemplateTransformer { base: Transformer::default(), current_source_file: Cell::new(None), tagged_template_string_declarations: RefCell::new(Vec::new()) });
     Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opt.context)))

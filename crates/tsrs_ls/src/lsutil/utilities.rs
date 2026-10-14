@@ -86,9 +86,8 @@ pub fn should_use_uri_style_node_core_modules(file: P<SourceFile>, program: &Pro
         if tsrs_core::node_core_modules().contains(node.text()) && !tsrs_core::is_exclusively_prefixed_node_core_module(node.text()) {
             if node.text().starts_with("node:") {
                 return Some(Tristate::True);
-            } else {
-                return Some(Tristate::False);
             }
+            return Some(Tristate::False);
         }
 
         None

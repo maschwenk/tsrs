@@ -24,6 +24,7 @@ pub struct RuntimeSyntaxTransformer {
 }
 
 // runtimesyntax.go:31
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_runtime_syntax_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opt.compiler_options;
     let emit_context = opt.context;
@@ -427,11 +428,11 @@ impl RuntimeSyntaxTransformer {
         let result = self.emit_resolver.unwrap().get_enum_member_value(parse_node.unwrap());
         match result.value {
             Some(LiteralValue::Number(value)) => {
-                expression = constant_expression(ConstantValue::Number(value), f).or(expression);
+                expression = Some(constant_expression(ConstantValue::Number(value), f));
                 use_explicit_reverse_mapping = true;
             }
             Some(LiteralValue::String(value)) => {
-                expression = constant_expression(ConstantValue::String(value), f).or(expression);
+                expression = Some(constant_expression(ConstantValue::String(value), f));
                 use_explicit_reverse_mapping = false;
             }
             _ => {
@@ -702,7 +703,7 @@ impl RuntimeSyntaxTransformer {
     }
 
     // runtimesyntax.go:690
-    fn get_parameter_properties(&self, constructor: Option<P<Node>>) -> Vec<P<Node>> {
+    fn get_parameter_properties(constructor: Option<P<Node>>) -> Vec<P<Node>> {
         let mut parameter_properties: Vec<P<Node>> = Vec::new();
         if let Some(constructor) = constructor {
             parameter_properties.extend(
@@ -731,7 +732,7 @@ impl RuntimeSyntaxTransformer {
         let heritage_clauses = v.visit_nodes(node.as_class_declaration().heritage_clauses());
         let member_list = node.member_list().unwrap();
         let mut members = v.visit_nodes(Some(member_list)).unwrap();
-        let parameter_properties = self.get_parameter_properties(member_list.nodes().iter().copied().find(|&m| ast::is_constructor_declaration(m)));
+        let parameter_properties = Self::get_parameter_properties(member_list.nodes().iter().copied().find(|&m| ast::is_constructor_declaration(m)));
 
         if !parameter_properties.is_empty() {
             let mut new_members: Vec<P<Node>> = Vec::new();
@@ -775,7 +776,7 @@ impl RuntimeSyntaxTransformer {
         let heritage_clauses = v.visit_nodes(node.as_class_expression().heritage_clauses());
         let member_list = node.member_list().unwrap();
         let mut members = v.visit_nodes(Some(member_list)).unwrap();
-        let parameter_properties = self.get_parameter_properties(member_list.nodes().iter().copied().find(|&m| ast::is_constructor_declaration(m)));
+        let parameter_properties = Self::get_parameter_properties(member_list.nodes().iter().copied().find(|&m| ast::is_constructor_declaration(m)));
 
         if !parameter_properties.is_empty() {
             let mut new_members: Vec<P<Node>> = Vec::new();
@@ -816,7 +817,7 @@ impl RuntimeSyntaxTransformer {
     // runtimesyntax.go:794
     fn visit_constructor_body(&self, body: P<Node>, constructor: P<Node>) -> Option<P<Node>> {
         let emit_context = self.emit_context();
-        let parameter_properties = self.get_parameter_properties(Some(constructor));
+        let parameter_properties = Self::get_parameter_properties(Some(constructor));
         if parameter_properties.is_empty() {
             return emit_context.visit_function_body(Some(body), &mut self.visitor());
         }

@@ -1080,7 +1080,7 @@ pub(crate) fn record_extended_data(node: P<Node>, cx: &mut EncodeContext) -> Res
 
 impl Decoder<'_> {
     /// Go `createStringNode`.
-    pub(crate) fn create_string_node(&mut self, kind: Kind, data: u32, common_data: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn create_string_node(&self, kind: Kind, data: u32, common_data: u32) -> Result<P<Node>, DecodeError> {
         let text = self.get_string(data & NODE_DATA_STRING_INDEX_MASK)?;
         let f = &self.factory;
         let _ = common_data;
@@ -1112,7 +1112,7 @@ impl Decoder<'_> {
     }
 
     /// Go `createExtendedNode`: dispatches to the hand-written `decode_extended_data_*` functions.
-    pub(crate) fn create_extended_node(&mut self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn create_extended_node(&self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {
         match kind {
             Kind::StringLiteral => self.decode_extended_data_string_literal(data, child_indices, common_data),
             Kind::NumericLiteral => self.decode_extended_data_numeric_literal(data, child_indices, common_data),
@@ -1128,7 +1128,7 @@ impl Decoder<'_> {
     }
 
     /// Go `createChildrenNode`.
-    pub(crate) fn create_children_node(&mut self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn create_children_node(&self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {
         let mask = (data & NODE_DATA_CHILD_MASK) as u8;
         let _ = (mask, common_data);
         let f = self.factory.clone();
@@ -1139,16 +1139,16 @@ impl Decoder<'_> {
             }
             Kind::QualifiedName => {
                 let mut it = ChildIter::new(child_indices);
-                let left = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let right = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let left = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let right = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_qualified_name(left, right)
             }
             Kind::ComputedPropertyName => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_computed_property_name(expression)
             }
             Kind::Decorator => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_decorator(expression)
             }
             Kind::EmptyStatement => {
@@ -1156,88 +1156,88 @@ impl Decoder<'_> {
             }
             Kind::IfStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let then_statement = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let else_statement = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let then_statement = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let else_statement = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_if_statement(expression, then_statement, else_statement)
             }
             Kind::DoStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let statement = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let statement = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_do_statement(statement, expression)
             }
             Kind::WhileStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let statement = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let statement = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_while_statement(expression, statement)
             }
             Kind::ForStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let condition = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let incrementor = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let statement = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let condition = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let incrementor = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let statement = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_for_statement(initializer, condition, incrementor, statement)
             }
             Kind::ForInStatement | Kind::ForOfStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let await_modifier = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let statement = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let await_modifier = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let statement = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_for_in_or_of_statement(kind, await_modifier, initializer, expression, statement)
             }
             Kind::BreakStatement => {
-                let label = from_node(self.single_child(child_indices)?)?;
+                let label = from_node(self.single_child(child_indices))?;
                 f.new_break_statement(label)
             }
             Kind::ContinueStatement => {
-                let label = from_node(self.single_child(child_indices)?)?;
+                let label = from_node(self.single_child(child_indices))?;
                 f.new_continue_statement(label)
             }
             Kind::ReturnStatement => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_return_statement(expression)
             }
             Kind::WithStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let statement = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let statement = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_with_statement(expression, statement)
             }
             Kind::SwitchStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let case_block = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let case_block = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_switch_statement(expression, case_block)
             }
             Kind::CaseBlock => {
-                let clauses = from_list(self.single_node_list_child(child_indices)?)?;
+                let clauses = from_list(self.single_node_list_child(child_indices))?;
                 f.new_case_block(clauses)
             }
             Kind::CaseClause | Kind::DefaultClause => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let statements = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let statements = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_case_or_default_clause(kind, expression, statements)
             }
             Kind::ThrowStatement => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_throw_statement(expression)
             }
             Kind::TryStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let try_block = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let catch_clause = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let finally_block = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let try_block = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let catch_clause = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let finally_block = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_try_statement(try_block, catch_clause, finally_block)
             }
             Kind::CatchClause => {
                 let mut it = ChildIter::new(child_indices);
-                let variable_declaration = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let block = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let variable_declaration = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let block = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_catch_clause(variable_declaration, block)
             }
             Kind::DebuggerStatement => {
@@ -1245,129 +1245,129 @@ impl Decoder<'_> {
             }
             Kind::LabeledStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let label = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let statement = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let label = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let statement = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_labeled_statement(label, statement)
             }
             Kind::ExpressionStatement => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_expression_statement(expression)
             }
             Kind::Block => {
                 let multi_line = common_data & 1 != 0;
-                let statements = from_list(self.list_at(child_indices.first().copied().unwrap_or(0))?)?;
+                let statements = from_list(self.list_at(child_indices.first().copied().unwrap_or(0)))?;
                 f.new_block(statements, multi_line)
             }
             Kind::VariableStatement => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let declaration_list = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let declaration_list = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_variable_statement(modifiers, declaration_list)
             }
             Kind::VariableDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let exclamation_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let exclamation_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_variable_declaration(name, exclamation_token, type_node, initializer)
             }
             Kind::VariableDeclarationList => {
-                let declarations = from_list(self.single_node_list_child(child_indices)?)?;
+                let declarations = from_list(self.single_node_list_child(child_indices))?;
                 f.new_variable_declaration_list(declarations, absent()?)
             }
             Kind::ObjectBindingPattern | Kind::ArrayBindingPattern => {
-                let elements = from_list(self.single_node_list_child(child_indices)?)?;
+                let elements = from_list(self.single_node_list_child(child_indices))?;
                 f.new_binding_pattern(kind, elements)
             }
             Kind::Parameter => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let question_token = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let question_token = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
                 f.new_parameter_declaration(modifiers, dot_dot_dot_token, name, question_token, type_node, initializer)
             }
             Kind::BindingElement => {
                 let mut it = ChildIter::new(child_indices);
-                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let property_name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let property_name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_binding_element(dot_dot_dot_token, property_name, name, initializer)
             }
             Kind::MissingDeclaration => {
-                let modifiers = self.modifier_list_at(child_indices.first().copied().unwrap_or(0))?;
+                let modifiers = self.modifier_list_at(child_indices.first().copied().unwrap_or(0));
                 f.new_missing_declaration(modifiers)
             }
             Kind::FunctionDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 4))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 6))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 4)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 6)))?;
                 f.new_function_declaration(modifiers, asterisk_token, name, type_parameters, parameters, type_node, absent()?, body)
             }
             Kind::ClassDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let heritage_clauses = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let members = from_list(self.list_at(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let heritage_clauses = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let members = from_list(self.list_at(it.next_if(mask, 4)))?;
                 f.new_class_declaration(modifiers, name, type_parameters, heritage_clauses, members)
             }
             Kind::ClassExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let heritage_clauses = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let members = from_list(self.list_at(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let heritage_clauses = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let members = from_list(self.list_at(it.next_if(mask, 4)))?;
                 f.new_class_expression(modifiers, name, type_parameters, heritage_clauses, members)
             }
             Kind::HeritageClause => {
                 let token = if common_data & 1 != 0 { Kind::ImplementsKeyword } else { Kind::ExtendsKeyword };
-                let types = from_list(self.single_node_list_child(child_indices)?)?;
+                let types = from_list(self.single_node_list_child(child_indices))?;
                 f.new_heritage_clause(token, types)
             }
             Kind::InterfaceDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let heritage_clauses = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let members = from_list(self.list_at(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let heritage_clauses = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let members = from_list(self.list_at(it.next_if(mask, 4)))?;
                 f.new_interface_declaration(modifiers, name, type_parameters, heritage_clauses, members)
             }
             Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 match kind { Kind::TypeAliasDeclaration => f.new_type_alias_declaration(modifiers, name, type_parameters, type_node), Kind::JSTypeAliasDeclaration => f.new_js_type_alias_declaration(modifiers, name, type_parameters, type_node), k => return Err(DecodeError::UnexpectedKind(k)) }
             }
             Kind::EnumMember => {
                 let mut it = ChildIter::new(child_indices);
-                let name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_enum_member(name, initializer)
             }
             Kind::EnumDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let members = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let members = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_enum_declaration(modifiers, name, members)
             }
             Kind::ModuleBlock => {
-                let statements = from_list(self.single_node_list_child(child_indices)?)?;
+                let statements = from_list(self.single_node_list_child(child_indices))?;
                 f.new_module_block(statements)
             }
             Kind::NotEmittedStatement => {
@@ -1378,141 +1378,141 @@ impl Decoder<'_> {
             }
             Kind::ImportDeclaration | Kind::JSImportDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let import_clause = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let module_specifier = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let attributes = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let import_clause = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let module_specifier = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let attributes = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 match kind { Kind::ImportDeclaration => f.new_import_declaration(modifiers, import_clause, module_specifier, attributes), Kind::JSImportDeclaration => f.new_js_import_declaration(modifiers, import_clause, module_specifier, attributes), k => return Err(DecodeError::UnexpectedKind(k)) }
             }
             Kind::ExternalModuleReference => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_external_module_reference(expression)
             }
             Kind::NamespaceImport => {
-                let name = from_node(self.single_child(child_indices)?)?;
+                let name = from_node(self.single_child(child_indices))?;
                 f.new_namespace_import(name)
             }
             Kind::NamedImports => {
-                let elements = from_list(self.single_node_list_child(child_indices)?)?;
+                let elements = from_list(self.single_node_list_child(child_indices))?;
                 f.new_named_imports(elements)
             }
             Kind::ExportAssignment => {
                 let is_export_equals = common_data & 1 != 0;
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_export_assignment(modifiers, is_export_equals, type_node, expression)
             }
             Kind::NamespaceExportDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_namespace_export_declaration(modifiers, name)
             }
             Kind::NamespaceExport => {
-                let name = from_node(self.single_child(child_indices)?)?;
+                let name = from_node(self.single_child(child_indices))?;
                 f.new_namespace_export(name)
             }
             Kind::NamedExports => {
-                let elements = from_list(self.single_node_list_child(child_indices)?)?;
+                let elements = from_list(self.single_node_list_child(child_indices))?;
                 f.new_named_exports(elements)
             }
             Kind::ExportSpecifier => {
                 let is_type_only = common_data & 1 != 0;
                 let mut it = ChildIter::new(child_indices);
-                let property_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let property_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_export_specifier(is_type_only, property_name, name)
             }
             Kind::CallSignature => {
                 let mut it = ChildIter::new(child_indices);
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 0))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 0)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_call_signature_declaration(type_parameters, parameters, type_node)
             }
             Kind::ConstructSignature => {
                 let mut it = ChildIter::new(child_indices);
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 0))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 0)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_construct_signature_declaration(type_parameters, parameters, type_node)
             }
             Kind::Constructor => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
                 f.new_constructor_declaration(modifiers, type_parameters, parameters, type_node, absent()?, body)
             }
             Kind::GetAccessor => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
                 f.new_get_accessor_declaration(modifiers, name, type_parameters, parameters, type_node, absent()?, body)
             }
             Kind::SetAccessor => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
                 f.new_set_accessor_declaration(modifiers, name, type_parameters, parameters, type_node, absent()?, body)
             }
             Kind::IndexSignature => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_index_signature_declaration(modifiers, parameters, type_node)
             }
             Kind::MethodSignature => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 4))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 4)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
                 f.new_method_signature_declaration(modifiers, name, postfix_token, type_parameters, parameters, type_node)
             }
             Kind::MethodDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 4))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 5))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 6))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 7))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 4)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 5)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 6)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 7)))?;
                 f.new_method_declaration(modifiers, asterisk_token, name, postfix_token, type_parameters, parameters, type_node, absent()?, body)
             }
             Kind::PropertySignature => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
                 f.new_property_signature_declaration(modifiers, name, postfix_token, type_node, initializer)
             }
             Kind::PropertyDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
                 f.new_property_declaration(modifiers, name, postfix_token, type_node, initializer)
             }
             Kind::SemicolonClassElement => {
@@ -1520,8 +1520,8 @@ impl Decoder<'_> {
             }
             Kind::ClassStaticBlockDeclaration => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let body = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_class_static_block_declaration(modifiers, body)
             }
             Kind::OmittedExpression => {
@@ -1532,244 +1532,244 @@ impl Decoder<'_> {
             }
             Kind::BinaryExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let left = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let operator_token = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let right = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let left = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let operator_token = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let right = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
                 f.new_binary_expression(modifiers, left, type_node, operator_token, right)
             }
             Kind::PrefixUnaryExpression => {
                 let operator = match common_data & 7 { 0 => Kind::PlusToken, 1 => Kind::MinusToken, 2 => Kind::TildeToken, 3 => Kind::ExclamationToken, 4 => Kind::PlusPlusToken, 5 => Kind::MinusMinusToken, i => return Err(DecodeError::InvalidCommonData { kind, value: i }) };
-                let operand = from_node(self.single_child(child_indices)?)?;
+                let operand = from_node(self.single_child(child_indices))?;
                 f.new_prefix_unary_expression(operator, operand)
             }
             Kind::PostfixUnaryExpression => {
                 let operator = if common_data & 1 != 0 { Kind::MinusMinusToken } else { Kind::PlusPlusToken };
-                let operand = from_node(self.single_child(child_indices)?)?;
+                let operand = from_node(self.single_child(child_indices))?;
                 f.new_postfix_unary_expression(operand, operator)
             }
             Kind::YieldExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_yield_expression(asterisk_token, expression)
             }
             Kind::ArrowFunction => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let equals_greater_than_token = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let equals_greater_than_token = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
                 f.new_arrow_function(modifiers, type_parameters, parameters, type_node, absent()?, equals_greater_than_token, body)
             }
             Kind::FunctionExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 3))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 4))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 6))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let asterisk_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 3)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 4)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 6)))?;
                 f.new_function_expression(modifiers, asterisk_token, name, type_parameters, parameters, type_node, absent()?, body)
             }
             Kind::AsExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_as_expression(expression, type_node)
             }
             Kind::SatisfiesExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_satisfies_expression(expression, type_node)
             }
             Kind::ConditionalExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let condition = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let question_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let when_true = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let colon_token = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let when_false = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
+                let condition = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let question_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let when_true = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let colon_token = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let when_false = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
                 f.new_conditional_expression(condition, question_token, when_true, colon_token, when_false)
             }
             Kind::PropertyAccessExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_property_access_expression(expression, question_dot_token, name, absent()?)
             }
             Kind::ElementAccessExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let argument_expression = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let argument_expression = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_element_access_expression(expression, question_dot_token, argument_expression, absent()?)
             }
             Kind::CallExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let arguments = from_list(self.list_at(it.next_if(mask, 3))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let arguments = from_list(self.list_at(it.next_if(mask, 3)))?;
                 f.new_call_expression(expression, question_dot_token, type_arguments, arguments, absent()?)
             }
             Kind::NewExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let arguments = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let arguments = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_new_expression(expression, type_arguments, arguments)
             }
             Kind::MetaProperty => {
                 let keyword_token = if common_data & 1 != 0 { Kind::NewKeyword } else { Kind::ImportKeyword };
-                let name = from_node(self.single_child(child_indices)?)?;
+                let name = from_node(self.single_child(child_indices))?;
                 f.new_meta_property(keyword_token, name)
             }
             Kind::NonNullExpression => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_non_null_expression(expression, absent()?)
             }
             Kind::SpreadElement => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_spread_element(expression)
             }
             Kind::TemplateExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let head = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let template_spans = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let head = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let template_spans = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_template_expression(head, template_spans)
             }
             Kind::TemplateSpan => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let literal = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let literal = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_template_span(expression, literal)
             }
             Kind::TaggedTemplateExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let tag = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let template = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let tag = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let question_dot_token = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let template = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_tagged_template_expression(tag, question_dot_token, type_arguments, template, absent()?)
             }
             Kind::ParenthesizedExpression => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_parenthesized_expression(expression)
             }
             Kind::ArrayLiteralExpression => {
                 let multi_line = common_data & 1 != 0;
-                let elements = from_list(self.list_at(child_indices.first().copied().unwrap_or(0))?)?;
+                let elements = from_list(self.list_at(child_indices.first().copied().unwrap_or(0)))?;
                 f.new_array_literal_expression(elements, multi_line)
             }
             Kind::ObjectLiteralExpression => {
                 let multi_line = common_data & 1 != 0;
-                let properties = from_list(self.list_at(child_indices.first().copied().unwrap_or(0))?)?;
+                let properties = from_list(self.list_at(child_indices.first().copied().unwrap_or(0)))?;
                 f.new_object_literal_expression(properties, multi_line)
             }
             Kind::SpreadAssignment => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_spread_assignment(expression)
             }
             Kind::PropertyAssignment => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
                 f.new_property_assignment(modifiers, name, postfix_token, type_node, initializer)
             }
             Kind::ShorthandPropertyAssignment => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let equals_token = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
-                let object_assignment_initializer = from_node(self.node_at_opt(it.next_if(mask, 5))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let postfix_token = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let equals_token = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
+                let object_assignment_initializer = from_node(self.node_at_opt(it.next_if(mask, 5)))?;
                 f.new_shorthand_property_assignment(modifiers, name, postfix_token, type_node, equals_token, object_assignment_initializer)
             }
             Kind::DeleteExpression => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_delete_expression(expression)
             }
             Kind::TypeOfExpression => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_type_of_expression(expression)
             }
             Kind::VoidExpression => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_void_expression(expression)
             }
             Kind::AwaitExpression => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_await_expression(expression)
             }
             Kind::TypeAssertionExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_type_assertion(type_node, expression)
             }
             Kind::VoidKeyword | Kind::AnyKeyword | Kind::BooleanKeyword | Kind::IntrinsicKeyword | Kind::NeverKeyword | Kind::NumberKeyword | Kind::ObjectKeyword | Kind::StringKeyword | Kind::SymbolKeyword | Kind::UndefinedKeyword | Kind::UnknownKeyword | Kind::BigIntKeyword => {
                 f.new_keyword_type_node(kind)
             }
             Kind::UnionType => {
-                let types = from_list(self.single_node_list_child(child_indices)?)?;
+                let types = from_list(self.single_node_list_child(child_indices))?;
                 f.new_union_type_node(types)
             }
             Kind::IntersectionType => {
-                let types = from_list(self.single_node_list_child(child_indices)?)?;
+                let types = from_list(self.single_node_list_child(child_indices))?;
                 f.new_intersection_type_node(types)
             }
             Kind::ConditionalType => {
                 let mut it = ChildIter::new(child_indices);
-                let check_type = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let extends_type = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let true_type = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let false_type = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let check_type = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let extends_type = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let true_type = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let false_type = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_conditional_type_node(check_type, extends_type, true_type, false_type)
             }
             Kind::TypeOperator => {
                 let operator = match common_data & 3 { 0 => Kind::KeyOfKeyword, 1 => Kind::ReadonlyKeyword, 2 => Kind::UniqueKeyword, i => return Err(DecodeError::InvalidCommonData { kind, value: i }) };
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_type_operator_node(operator, type_node)
             }
             Kind::InferType => {
-                let type_parameter = from_node(self.single_child(child_indices)?)?;
+                let type_parameter = from_node(self.single_child(child_indices))?;
                 f.new_infer_type_node(type_parameter)
             }
             Kind::ArrayType => {
-                let element_type = from_node(self.single_child(child_indices)?)?;
+                let element_type = from_node(self.single_child(child_indices))?;
                 f.new_array_type_node(element_type)
             }
             Kind::IndexedAccessType => {
                 let mut it = ChildIter::new(child_indices);
-                let object_type = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let index_type = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let object_type = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let index_type = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_indexed_access_type_node(object_type, index_type)
             }
             Kind::TypeReference => {
                 let mut it = ChildIter::new(child_indices);
-                let type_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let type_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_type_reference_node(type_name, type_arguments)
             }
             Kind::ExpressionWithTypeArguments => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_expression_with_type_arguments(expression, type_arguments)
             }
             Kind::LiteralType => {
-                let literal = from_node(self.single_child(child_indices)?)?;
+                let literal = from_node(self.single_child(child_indices))?;
                 f.new_literal_type_node(literal)
             }
             Kind::ThisType => {
@@ -1777,139 +1777,139 @@ impl Decoder<'_> {
             }
             Kind::TypePredicate => {
                 let mut it = ChildIter::new(child_indices);
-                let asserts_modifier = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let parameter_name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let asserts_modifier = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let parameter_name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_type_predicate_node(asserts_modifier, parameter_name, type_node)
             }
             Kind::ImportAttribute => {
                 let mut it = ChildIter::new(child_indices);
-                let name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let value = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let value = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_import_attribute(name, value)
             }
             Kind::ImportAttributes => {
                 let multi_line = common_data & 1 != 0;
                 let token = if (common_data >> 1) & 1 != 0 { Kind::AssertKeyword } else { Kind::WithKeyword };
-                let attributes = from_list(self.list_at(child_indices.first().copied().unwrap_or(0))?)?;
+                let attributes = from_list(self.list_at(child_indices.first().copied().unwrap_or(0)))?;
                 f.new_import_attributes(token, attributes, multi_line)
             }
             Kind::TypeQuery => {
                 let mut it = ChildIter::new(child_indices);
-                let expr_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let expr_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_type_query_node(expr_name, type_arguments)
             }
             Kind::MappedType => {
                 let mut it = ChildIter::new(child_indices);
-                let readonly_token = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_parameter = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name_type = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let question_token = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
-                let members = from_list(self.list_at(it.next_if(mask, 5))?)?;
+                let readonly_token = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_parameter = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name_type = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let question_token = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
+                let members = from_list(self.list_at(it.next_if(mask, 5)))?;
                 f.new_mapped_type_node(readonly_token, type_parameter, name_type, question_token, type_node, members)
             }
             Kind::TypeLiteral => {
-                let members = from_list(self.single_node_list_child(child_indices)?)?;
+                let members = from_list(self.single_node_list_child(child_indices))?;
                 f.new_type_literal_node(members)
             }
             Kind::TupleType => {
-                let elements = from_list(self.single_node_list_child(child_indices)?)?;
+                let elements = from_list(self.single_node_list_child(child_indices))?;
                 f.new_tuple_type_node(elements)
             }
             Kind::NamedTupleMember => {
                 let mut it = ChildIter::new(child_indices);
-                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let question_token = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let question_token = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_named_tuple_member(dot_dot_dot_token, name, question_token, type_node)
             }
             Kind::OptionalType => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_optional_type_node(type_node)
             }
             Kind::RestType => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_rest_type_node(type_node)
             }
             Kind::ParenthesizedType => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_parenthesized_type_node(type_node)
             }
             Kind::FunctionType => {
                 let mut it = ChildIter::new(child_indices);
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 0))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 0)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_function_type_node(type_parameters, parameters, type_node)
             }
             Kind::ConstructorType => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_constructor_type_node(modifiers, type_parameters, parameters, type_node)
             }
             Kind::TemplateLiteralType => {
                 let mut it = ChildIter::new(child_indices);
-                let head = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let template_spans = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let head = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let template_spans = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_template_literal_type_node(head, template_spans)
             }
             Kind::TemplateLiteralTypeSpan => {
                 let mut it = ChildIter::new(child_indices);
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let literal = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let literal = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_template_literal_type_span(type_node, literal)
             }
             Kind::SyntheticExpression => {
                 let (type_node, is_spread,) = decode_node_common_data_synthetic_expression(common_data)?;
-                let tuple_name_source = from_node(self.single_child(child_indices)?)?;
+                let tuple_name_source = from_node(self.single_child(child_indices))?;
                 f.new_synthetic_expression(type_node, is_spread, tuple_name_source)
             }
             Kind::PartiallyEmittedExpression => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_partially_emitted_expression(expression)
             }
             Kind::JsxElement => {
                 let mut it = ChildIter::new(child_indices);
-                let opening_element = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let children = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let closing_element = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let opening_element = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let children = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let closing_element = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_jsx_element(opening_element, children, closing_element)
             }
             Kind::JsxAttributes => {
-                let properties = from_list(self.single_node_list_child(child_indices)?)?;
+                let properties = from_list(self.single_node_list_child(child_indices))?;
                 f.new_jsx_attributes(properties)
             }
             Kind::JsxNamespacedName => {
                 let mut it = ChildIter::new(child_indices);
-                let namespace = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let namespace = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_jsx_namespaced_name(namespace, name)
             }
             Kind::JsxOpeningElement => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let attributes = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let attributes = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_jsx_opening_element(tag_name, type_arguments, attributes)
             }
             Kind::JsxSelfClosingElement => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let attributes = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let attributes = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_jsx_self_closing_element(tag_name, type_arguments, attributes)
             }
             Kind::JsxFragment => {
                 let mut it = ChildIter::new(child_indices);
-                let opening_fragment = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let children = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let closing_fragment = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let opening_fragment = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let children = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let closing_fragment = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_jsx_fragment(opening_fragment, children, closing_fragment)
             }
             Kind::JsxOpeningFragment => {
@@ -1920,22 +1920,22 @@ impl Decoder<'_> {
             }
             Kind::JsxAttribute => {
                 let mut it = ChildIter::new(child_indices);
-                let name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let initializer = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let initializer = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_jsx_attribute(name, initializer)
             }
             Kind::JsxSpreadAttribute => {
-                let expression = from_node(self.single_child(child_indices)?)?;
+                let expression = from_node(self.single_child(child_indices))?;
                 f.new_jsx_spread_attribute(expression)
             }
             Kind::JsxClosingElement => {
-                let tag_name = from_node(self.single_child(child_indices)?)?;
+                let tag_name = from_node(self.single_child(child_indices))?;
                 f.new_jsx_closing_element(tag_name)
             }
             Kind::JsxExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let dot_dot_dot_token = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_jsx_expression(dot_dot_dot_token, expression)
             }
             Kind::SyntaxList => {
@@ -1945,244 +1945,244 @@ impl Decoder<'_> {
             }
             Kind::JSDoc => {
                 let mut it = ChildIter::new(child_indices);
-                let comment = from_list(self.list_at(it.next_if(mask, 0))?)?;
-                let tags = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let comment = from_list(self.list_at(it.next_if(mask, 0)))?;
+                let tags = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc(comment, tags)
             }
             Kind::JSDocTypeExpression => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_jsdoc_type_expression(type_node)
             }
             Kind::JSDocNonNullableType => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_jsdoc_non_nullable_type(type_node)
             }
             Kind::JSDocNullableType => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_jsdoc_nullable_type(type_node)
             }
             Kind::JSDocAllType => {
                 f.new_jsdoc_all_type()
             }
             Kind::JSDocVariadicType => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_jsdoc_variadic_type(type_node)
             }
             Kind::JSDocOptionalType => {
-                let type_node = from_node(self.single_child(child_indices)?)?;
+                let type_node = from_node(self.single_child(child_indices))?;
                 f.new_jsdoc_optional_type(type_node)
             }
             Kind::JSDocTypeTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_type_tag(tag_name, type_expression, comment)
             }
             Kind::JSDocUnknownTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc_unknown_tag(tag_name, comment)
             }
             Kind::JSDocTemplateTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let constraint = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 2))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 3))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let constraint = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 2)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 3)))?;
                 f.new_jsdoc_template_tag(tag_name, constraint, type_parameters, comment)
             }
             Kind::JSDocReturnTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_return_tag(tag_name, type_expression, comment)
             }
             Kind::JSDocPublicTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc_public_tag(tag_name, comment)
             }
             Kind::JSDocPrivateTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc_private_tag(tag_name, comment)
             }
             Kind::JSDocProtectedTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc_protected_tag(tag_name, comment)
             }
             Kind::JSDocReadonlyTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc_readonly_tag(tag_name, comment)
             }
             Kind::JSDocOverrideTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc_override_tag(tag_name, comment)
             }
             Kind::JSDocDeprecatedTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 1))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 1)))?;
                 f.new_jsdoc_deprecated_tag(tag_name, comment)
             }
             Kind::JSDocSeeTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let name_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let name_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_see_tag(tag_name, name_expression, comment)
             }
             Kind::JSDocImplementsTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let class_name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let class_name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_implements_tag(tag_name, class_name, comment)
             }
             Kind::JSDocAugmentsTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let class_name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let class_name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_augments_tag(tag_name, class_name, comment)
             }
             Kind::JSDocSatisfiesTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_satisfies_tag(tag_name, type_expression, comment)
             }
             Kind::JSDocThrowsTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_throws_tag(tag_name, type_expression, comment)
             }
             Kind::JSDocThisTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_this_tag(tag_name, type_expression, comment)
             }
             Kind::JSDocImportTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let import_clause = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let module_specifier = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let attributes = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 4))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let import_clause = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let module_specifier = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let attributes = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 4)))?;
                 f.new_jsdoc_import_tag(tag_name, import_clause, module_specifier, attributes, comment)
             }
             Kind::JSDocCallbackTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 3))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 3)))?;
                 f.new_jsdoc_callback_tag(tag_name, type_expression, name, comment)
             }
             Kind::JSDocOverloadTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 2))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 2)))?;
                 f.new_jsdoc_overload_tag(tag_name, type_expression, comment)
             }
             Kind::JSDocTypedefTag => {
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 3))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 3)))?;
                 f.new_jsdoc_typedef_tag(tag_name, type_expression, name, comment)
             }
             Kind::JSDocSignature => {
                 let mut it = ChildIter::new(child_indices);
-                let type_parameters = from_list(self.list_at(it.next_if(mask, 0))?)?;
-                let parameters = from_list(self.list_at(it.next_if(mask, 1))?)?;
-                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let type_parameters = from_list(self.list_at(it.next_if(mask, 0)))?;
+                let parameters = from_list(self.list_at(it.next_if(mask, 1)))?;
+                let type_node = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_jsdoc_signature(type_parameters, parameters, type_node)
             }
             Kind::JSDocNameReference => {
-                let name = from_node(self.single_child(child_indices)?)?;
+                let name = from_node(self.single_child(child_indices))?;
                 f.new_jsdoc_name_reference(name)
             }
             Kind::ModuleDeclaration => {
                 let keyword = if common_data & 1 != 0 { Kind::NamespaceKeyword } else { Kind::ModuleKeyword };
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let attributes = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let body = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let attributes = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let body = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_module_declaration(modifiers, keyword, name, attributes, body)
             }
             Kind::ImportEqualsDeclaration => {
                 let is_type_only = common_data & 1 != 0;
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let module_reference = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let module_reference = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
                 f.new_import_equals_declaration(modifiers, is_type_only, name, module_reference)
             }
             Kind::ExportDeclaration => {
                 let is_type_only = common_data & 1 != 0;
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let export_clause = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let module_specifier = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let attributes = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let export_clause = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let module_specifier = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let attributes = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
                 f.new_export_declaration(modifiers, is_type_only, export_clause, module_specifier, attributes)
             }
             Kind::ImportType => {
                 let is_type_of = common_data & 1 != 0;
                 let mut it = ChildIter::new(child_indices);
-                let argument = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let attributes = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let qualifier = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let type_arguments = from_list(self.list_at(it.next_if(mask, 3))?)?;
+                let argument = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let attributes = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let qualifier = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let type_arguments = from_list(self.list_at(it.next_if(mask, 3)))?;
                 f.new_import_type_node(is_type_of, argument, attributes, qualifier, type_arguments)
             }
             Kind::ImportClause => {
                 let phase_modifier = match common_data & 3 { 1 => Kind::TypeKeyword, 2 => Kind::DeferKeyword, _ => Kind::Unknown };
                 let mut it = ChildIter::new(child_indices);
-                let name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let named_bindings = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let named_bindings = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_import_clause(phase_modifier, name, named_bindings)
             }
             Kind::ImportSpecifier => {
                 let is_type_only = common_data & 1 != 0;
                 let mut it = ChildIter::new(child_indices);
-                let property_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let property_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_import_specifier(is_type_only, property_name, name)
             }
             Kind::TypeParameter => {
                 let mut it = ChildIter::new(child_indices);
-                let modifiers = self.modifier_list_at(it.next_if(mask, 0))?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let constraint = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 3))?)?;
-                let default_type = from_node(self.node_at_opt(it.next_if(mask, 4))?)?;
+                let modifiers = self.modifier_list_at(it.next_if(mask, 0));
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let constraint = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 3)))?;
+                let default_type = from_node(self.node_at_opt(it.next_if(mask, 4)))?;
                 f.new_type_parameter_declaration(modifiers, name, constraint, expression, default_type)
             }
             Kind::SyntheticReferenceExpression => {
                 let mut it = ChildIter::new(child_indices);
-                let expression = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let this_arg = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
+                let expression = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let this_arg = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
                 f.new_synthetic_reference_expression(expression, this_arg)
             }
             Kind::JSDocTypeLiteral => {
@@ -2195,10 +2195,10 @@ impl Decoder<'_> {
                 let is_bracketed = common_data & 1 != 0;
                 let is_name_first = common_data & 2 != 0;
                 let mut it = ChildIter::new(child_indices);
-                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0))?)?;
-                let name = from_node(self.node_at_opt(it.next_if(mask, 1))?)?;
-                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 2))?)?;
-                let comment = from_list(self.list_at(it.next_if(mask, 3))?)?;
+                let tag_name = from_node(self.node_at_opt(it.next_if(mask, 0)))?;
+                let name = from_node(self.node_at_opt(it.next_if(mask, 1)))?;
+                let type_expression = from_node(self.node_at_opt(it.next_if(mask, 2)))?;
+                let comment = from_list(self.list_at(it.next_if(mask, 3)))?;
                 f.new_jsdoc_parameter_or_property_tag(kind, tag_name, name, is_bracketed, type_expression, is_name_first, comment)
             }
             k => return Err(DecodeError::UnexpectedKind(k)),

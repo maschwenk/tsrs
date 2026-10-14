@@ -523,9 +523,8 @@ fn get_syntax(symbol: P<Symbol>) -> ExportSyntax {
             _ => {
                 if ast::get_combined_modifier_flags(decl).intersects(ModifierFlags::Default) {
                     return Some(ExportSyntax::DefaultModifier);
-                } else {
-                    return Some(ExportSyntax::Modifier);
                 }
+                return Some(ExportSyntax::Modifier);
             }
         }
 

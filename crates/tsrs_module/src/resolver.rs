@@ -53,6 +53,7 @@ fn continue_searching() -> Option<Resolved> {
     None
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Some(unresolved) stops module resolution; None from continue_searching means try the next loader.")]
 fn unresolved() -> Option<Resolved> {
     Some(Resolved::default())
 }
@@ -329,6 +330,7 @@ impl DefaultResolver {
         (result, get_traces(trace_builder))
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "The module resolver interface returns errors for custom resolver implementations as well as resolved modules.")]
     pub fn resolve_module_name(
         &self,
         module_name: &str,
@@ -341,6 +343,7 @@ impl DefaultResolver {
         Ok((result, trace))
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "The module resolver interface returns errors for custom resolver implementations as well as resolved modules.")]
     pub fn resolve_module_name_from_directory(
         &self,
         module_name: &str,
@@ -1070,9 +1073,8 @@ impl<'r> ResolutionState<'r> {
                             }
                             trace!(self.tracer, diagnostics::Exiting_conditional_exports);
                             return result;
-                        } else {
-                            trace!(self.tracer, diagnostics::Failed_to_resolve_under_condition_0, condition);
                         }
+                        trace!(self.tracer, diagnostics::Failed_to_resolve_under_condition_0, condition);
                     } else {
                         trace!(self.tracer, diagnostics::Saw_non_matching_condition_0, condition);
                     }
@@ -1918,9 +1920,8 @@ impl<'r> ResolutionState<'r> {
         if self.fs().file_exists(file_name) {
             trace!(self.tracer, diagnostics::File_0_exists_use_it_as_a_name_resolution_result, file_name);
             return true;
-        } else {
-            trace!(self.tracer, diagnostics::File_0_does_not_exist, file_name);
         }
+        trace!(self.tracer, diagnostics::File_0_does_not_exist, file_name);
         false
     }
 
@@ -2093,12 +2094,11 @@ impl<'r> ResolutionState<'r> {
             if existing.contents.is_some() {
                 trace!(self.tracer, diagnostics::File_0_exists_according_to_earlier_cached_lookups, package_json_path);
                 return Some(with_package_directory(existing, package_directory));
-            } else {
-                if existing.directory_exists {
-                    trace!(self.tracer, diagnostics::File_0_does_not_exist_according_to_earlier_cached_lookups, package_json_path);
-                }
-                return None;
             }
+            if existing.directory_exists {
+                trace!(self.tracer, diagnostics::File_0_does_not_exist_according_to_earlier_cached_lookups, package_json_path);
+            }
+            return None;
         }
 
         let directory_exists = self.fs().directory_exists(package_directory);
@@ -2117,15 +2117,14 @@ impl<'r> ResolutionState<'r> {
             drop(owner);
             let result = self.resolver.package_json_info_cache.set(&package_json_path, result);
             return Some(with_package_directory(result, package_directory));
-        } else {
-            if directory_exists {
-                trace!(self.tracer, diagnostics::File_0_does_not_exist, package_json_path);
-            }
-            let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
-            let entry = P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None });
-            drop(owner);
-            self.resolver.package_json_info_cache.set(&package_json_path, entry);
         }
+        if directory_exists {
+            trace!(self.tracer, diagnostics::File_0_does_not_exist, package_json_path);
+        }
+        let owner = tsrs_core::arena::enter_table_owner(self.resolver.package_json_info_cache.owner_addr());
+        let entry = P::new(InfoCacheEntry { package_directory: tsrs_core::alloc_str(package_directory), directory_exists, contents: None });
+        drop(owner);
+        self.resolver.package_json_info_cache.set(&package_json_path, entry);
         None
     }
 

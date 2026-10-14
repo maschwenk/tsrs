@@ -79,12 +79,12 @@ pub(crate) struct changeFileResult {
 }
 
 // Go `core.CopyMapInto` over set-like maps.
-fn copy_set_into<T: std::hash::Hash + Eq + Clone>(dst: Option<FxHashSet<T>>, src: Option<&FxHashSet<T>>) -> Option<FxHashSet<T>> {
+fn copy_set_into<T: std::hash::Hash + Eq + Clone>(dst: Option<FxHashSet<T>>, src: Option<&FxHashSet<T>>) -> FxHashSet<T> {
     let mut dst = dst.unwrap_or_default();
     if let Some(src) = src {
         dst.extend(src.iter().cloned());
     }
-    Some(dst)
+    dst
 }
 
 impl configFileRegistryBuilder {
@@ -418,7 +418,7 @@ impl configFileRegistryBuilder {
 
         self.configs.range(|entry| {
             entry.change(|entry| {
-                affected_projects = copy_set_into(affected_projects.take(), entry.retaining_projects.as_ref());
+                affected_projects = Some(copy_set_into(affected_projects.take(), entry.retaining_projects.as_ref()));
                 if entry.pending_reload != PendingReload::Full {
                     let text = self.fs.read_file(&entry.file_name);
                     match (&text, entry.command_line) {
@@ -523,12 +523,12 @@ impl configFileRegistryBuilder {
                         return self.invalidate_cache(logger);
                     }
 
-                    affected_projects = copy_set_into(affected_projects, self.handle_config_change(&entry, logger).as_ref());
+                    affected_projects = Some(copy_set_into(affected_projects, Self::handle_config_change(&entry, logger).as_ref()));
                     let retaining_configs: Vec<Path> =
                         entry.value().and_then(|v| v.retaining_configs.clone()).map(|r| r.into_iter().collect()).unwrap_or_default();
                     affected_projects = retaining_configs.into_iter().fold(affected_projects, |mut affected_projects, extending_config_path| {
                         if let Some(extending_config_entry) = self.configs.load(&extending_config_path) {
-                            affected_projects = copy_set_into(affected_projects, self.handle_config_change(&extending_config_entry, logger).as_ref());
+                            affected_projects = Some(copy_set_into(affected_projects, Self::handle_config_change(&extending_config_entry, logger).as_ref()));
                         }
 
                         affected_projects
@@ -541,7 +541,7 @@ impl configFileRegistryBuilder {
                         let mut manifest_changed = false;
                         self.configs.range(|entry| {
                             if content_mapper_manifest_path(entry.value().and_then(|v| v.command_line), |f| self.to_path(f), path) {
-                                affected_projects = copy_set_into(affected_projects.take(), self.handle_config_change(entry, logger).as_ref());
+                                affected_projects = Some(copy_set_into(affected_projects.take(), Self::handle_config_change(entry, logger).as_ref()));
                                 manifest_changed = true;
                             }
                             true
@@ -594,7 +594,7 @@ impl configFileRegistryBuilder {
                     },
                     |config| {
                         config.pending_reload = PendingReload::FileNames;
-                        affected_projects = copy_set_into(affected_projects.take(), config.retaining_projects.as_ref());
+                        affected_projects = Some(copy_set_into(affected_projects.take(), config.retaining_projects.as_ref()));
                         logger.logf(format_args!("Root files for config {} changed", key.0));
                         should_invalidate_cache = has_excessive_changes;
                     },
@@ -638,7 +638,7 @@ impl configFileRegistryBuilder {
                     },
                     |config| {
                         config.pending_reload = PendingReload::FileNames;
-                        affected_projects = copy_set_into(affected_projects.take(), config.retaining_projects.as_ref());
+                        affected_projects = Some(copy_set_into(affected_projects.take(), config.retaining_projects.as_ref()));
                         logger.logf(format_args!("Root files for config {} changed", key.0));
                         should_invalidate_cache = has_excessive_changes;
                     },
@@ -654,7 +654,7 @@ impl configFileRegistryBuilder {
     }
 
     // configfileregistrybuilder.go:642
-    fn handle_config_change(&self, entry: &Arc<SyncMapEntry<Path, configFileEntry>>, logger: &LogTree) -> Option<FxHashSet<ID>> {
+    fn handle_config_change(entry: &Arc<SyncMapEntry<Path, configFileEntry>>, logger: &LogTree) -> Option<FxHashSet<ID>> {
         let mut affected_projects = None;
         let changed = entry.change_if(|config| config.pending_reload != PendingReload::Full, |config| config.pending_reload = PendingReload::Full);
         if changed {

@@ -197,20 +197,14 @@ impl Context {
         };
         let state = cancelState::new(deadline);
         if let Some(parent) = parent {
-            match parent.err() {
-                Some(err) => state.cancel(err, None),
-                None => {
-                    let mut inner = parent.inner.lock().unwrap();
-                    match inner.err {
-                        Some(err) => {
-                            drop(inner);
-                            state.cancel(err, None);
-                        }
-                        None => {
-                            inner.children.retain(|c| c.strong_count() > 0);
-                            inner.children.push(Arc::downgrade(&state));
-                        }
-                    }
+            if let Some(err) = parent.err() { state.cancel(err, None) } else {
+                let mut inner = parent.inner.lock().unwrap();
+                if let Some(err) = inner.err {
+                    drop(inner);
+                    state.cancel(err, None);
+                } else {
+                    inner.children.retain(|c| c.strong_count() > 0);
+                    inner.children.push(Arc::downgrade(&state));
                 }
             }
         }

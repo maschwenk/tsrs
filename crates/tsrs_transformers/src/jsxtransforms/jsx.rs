@@ -19,6 +19,7 @@ pub struct JSXTransformer {
 }
 
 // jsx.go:32
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_jsx_transformer(opts: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opts.compiler_options;
     let emit_context = opts.context;

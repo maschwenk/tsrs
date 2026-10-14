@@ -51,6 +51,8 @@ contributing `impl` blocks to the same type.
   Names are the snake_case of the Go name, always. Acronym runs are one word:
   `getJSXElementType` -> `get_jsx_element_type`, `isESSymbol` -> `is_es_symbol`,
   `getTypeOfJSDoc` -> `get_type_of_jsdoc`, `URL` -> `url`, `ID`/`Id` -> `id`.
+- Use `&self` for helpers that only read the receiver, and associated functions for helpers that do not use it.
+  Callback and interface methods keep their required signatures with a local, reasoned `#[expect]` when necessary.
 - Exported (capitalized) Go identifiers -> `pub`. Unexported -> `pub(crate)`.
 - Go package-level functions -> free functions in the corresponding module.
 - If snake_casing produces a Rust keyword, append `_`: `type_`, `in_`, `as_`, `ref_`, `mod_`, `match_`, `loop_`.

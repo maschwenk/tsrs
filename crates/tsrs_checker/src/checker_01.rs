@@ -278,7 +278,8 @@ impl Checker {
     }
 
     // checker.go:1256
-    pub(crate) fn initialize_closures(&mut self) {
+    #[expect(clippy::unused_self, reason = "The Go initialization or tracing hook is retained in the same method call sequence.")]
+    pub(crate) fn initialize_closures(&self) {
         // Go assigns the function-valued fields isPrimitiveOrObjectOrEmptyType, containsMissingType,
         // couldContainTypeVariables, isStringIndexSignatureOnlyType, markNodeAssignments and
         // compareTypesAssignable here. In Rust they are the methods of the same names in checker.rs.
@@ -559,7 +560,7 @@ impl Checker {
     }
 
     // checker.go:1507
-    pub(crate) fn create_name_resolver(&mut self) -> P<NameResolver<Checker>> {
+    pub(crate) fn create_name_resolver(&self) -> P<NameResolver<Checker>> {
         P::new(NameResolver::<Checker> {
             compiler_options: self.compiler_options,
             get_symbol_of_declaration: Some(super::checker::Checker::get_symbol_of_declaration),
@@ -586,7 +587,7 @@ impl Checker {
     }
 
     // checker.go:1525
-    pub(crate) fn create_name_resolver_for_suggestion(&mut self) -> P<NameResolver<Checker>> {
+    pub(crate) fn create_name_resolver_for_suggestion(&self) -> P<NameResolver<Checker>> {
         P::new(NameResolver::<Checker> {
             compiler_options: self.compiler_options,
             get_symbol_of_declaration: Some(super::checker::Checker::get_symbol_of_declaration),
@@ -661,7 +662,7 @@ impl Checker {
         {
             return false;
         }
-        let container = self.get_this_container(error_location, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/).unwrap();
+        let container = Self::get_this_container(error_location, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/).unwrap();
         let mut location = container;
         while let Some(location_parent) = location.parent() {
             if ast::is_class_like(location_parent) {
@@ -718,7 +719,7 @@ impl Checker {
             }
         }
         // Report missing lib first
-        let suggested_lib = self.get_suggested_lib_for_non_existent_name(name);
+        let suggested_lib = Self::get_suggested_lib_for_non_existent_name(name);
         if !suggested_lib.is_empty() {
             self.error(error_location, name_not_found_message, &[&declaration_name, &suggested_lib]);
             return;
@@ -928,7 +929,7 @@ impl Checker {
     }
 
     // checker.go:1774
-    pub(crate) fn get_suggested_lib_for_non_existent_name(&mut self, name: &str) -> String {
+    pub(crate) fn get_suggested_lib_for_non_existent_name(name: &str) -> String {
         let feature_map = get_feature_map();
         if let Some(type_features) = feature_map.get(name) {
             return type_features[0].lib.to_string();
@@ -1090,7 +1091,7 @@ impl Checker {
                         &diagnostics::X_0_cannot_be_used_as_a_value_because_it_was_imported_using_import_type
                     };
                     let diagnostic = self.error(error_location, message, &[&name]);
-                    self.add_type_only_declaration_related_info(diagnostic, Some(type_only_declaration), name);
+                    Self::add_type_only_declaration_related_info(diagnostic, Some(type_only_declaration), name);
                 }
             }
         }
@@ -1174,7 +1175,7 @@ impl Checker {
             return true;
         }
         // deferred usage in a type context is always OK regardless of the usage position:
-        if usage.flags().intersects(NodeFlags::JSDoc) || is_in_type_query(usage) || self.is_in_ambient_or_type_node(usage) {
+        if usage.flags().intersects(NodeFlags::JSDoc) || is_in_type_query(usage) || Self::is_in_ambient_or_type_node(usage) {
             return true;
         }
         if declaration.pos() <= usage.pos()
@@ -1363,13 +1364,12 @@ impl Checker {
 pub(crate) fn is_immediately_used_in_initializer_of_block_scoped_variable(declaration: P<Node>, usage: P<Node>, decl_container: P<Node>) -> bool {
     let grandparent = declaration.parent().unwrap().parent().unwrap();
     match grandparent.kind() {
-        Kind::VariableStatement | Kind::ForStatement | Kind::ForOfStatement => {
+        Kind::VariableStatement | Kind::ForStatement | Kind::ForOfStatement
             // variable statement/for/for-of statement case,
             // use site should not be inside variable declaration (initializer of declaration or binding element)
-            if is_same_scope_descendent_of(usage, Some(declaration), decl_container) {
+            if is_same_scope_descendent_of(usage, Some(declaration), decl_container) => {
                 return true;
             }
-        }
         _ => {}
     }
     // ForIn/ForOf case - use site should not be used in expression part

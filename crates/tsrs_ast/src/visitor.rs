@@ -165,12 +165,9 @@ impl NodeVisitor {
                     if i >= nodes.len() {
                         break;
                     }
-                    match self.visit.clone() {
-                        Some(visit) => visited = visit(self, nodes[i]),
-                        None => {
-                            updated.extend_from_slice(&nodes[i..]);
-                            break;
-                        }
+                    if let Some(visit) = self.visit.clone() { visited = visit(self, nodes[i]) } else {
+                        updated.extend_from_slice(&nodes[i..]);
+                        break;
                     }
                 }
                 return (alloc_vec(updated), true);
@@ -258,7 +255,7 @@ impl NodeVisitor {
         self.visit_nodes_hooked(nodes)
     }
 
-    fn lift_to_block(&mut self, node: Option<P<Node>>) -> P<Node> {
+    fn lift_to_block(&self, node: Option<P<Node>>) -> P<Node> {
         let nodes: Vec<P<Node>> = match node {
             Some(n) if n.kind() == Kind::SyntaxList => n.as_syntax_list().children.to_vec(),
             Some(n) => vec![n],

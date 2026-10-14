@@ -8,6 +8,7 @@ pub struct TypeEraserTransformer {
 }
 
 // typeeraser.go:18
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_type_eraser_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opt.compiler_options;
     let emit_context = opt.context;

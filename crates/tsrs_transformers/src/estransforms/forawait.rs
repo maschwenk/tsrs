@@ -52,6 +52,7 @@ pub struct forawaitTransformer {
 }
 
 // forawait.go:56
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn newforawait_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(forawaitTransformer {
         base: Transformer::default(),
@@ -502,6 +503,7 @@ impl forawaitTransformer {
     }
 
     // forawait.go:537
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_constructor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_enclosing_function_flags = self.enclosing_function_flags.replace(ast::get_function_flags(Some(node)));
         let parameters = self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor());
@@ -520,6 +522,7 @@ impl forawaitTransformer {
     }
 
     // forawait.go:554
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_get_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_enclosing_function_flags = self.enclosing_function_flags.replace(ast::get_function_flags(Some(node)));
         let name = self.visitor().visit_node(node.name()).unwrap();
@@ -540,6 +543,7 @@ impl forawaitTransformer {
     }
 
     // forawait.go:572
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_set_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_enclosing_function_flags = self.enclosing_function_flags.replace(ast::get_function_flags(Some(node)));
         let name = self.visitor().visit_node(node.name()).unwrap();
@@ -560,6 +564,7 @@ impl forawaitTransformer {
     }
 
     // forawait.go:590
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_method_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_enclosing_function_flags = self.enclosing_function_flags.replace(ast::get_function_flags(Some(node)));
         let flags = self.enclosing_function_flags.get();
@@ -594,6 +599,7 @@ impl forawaitTransformer {
     }
 
     // forawait.go:635
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_function_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_enclosing_function_flags = self.enclosing_function_flags.replace(ast::get_function_flags(Some(node)));
         let flags = self.enclosing_function_flags.get();
@@ -626,6 +632,7 @@ impl forawaitTransformer {
     }
 
     // forawait.go:680
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_arrow_function(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_enclosing_function_flags = self.enclosing_function_flags.replace(ast::get_function_flags(Some(node)));
         let parameters = self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor());
@@ -645,6 +652,7 @@ impl forawaitTransformer {
     }
 
     // forawait.go:698
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_function_expression(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_enclosing_function_flags = self.enclosing_function_flags.replace(ast::get_function_flags(Some(node)));
         let flags = self.enclosing_function_flags.get();

@@ -279,13 +279,10 @@ impl BuildOrchestrator for CliOrchestrator {
         result
     }
     fn clean(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        let o = match self.orchestrator {
-            Some(o) => o,
-            None => {
-                let o = self.fresh();
-                self.replace(o);
-                o
-            }
+        let o = if let Some(o) = self.orchestrator { o } else {
+            let o = self.fresh();
+            self.replace(o);
+            o
         };
         outcome(o.clean_for_api(project, only_references))
     }

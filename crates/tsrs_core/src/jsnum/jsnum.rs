@@ -190,9 +190,7 @@ impl Number {
     #[must_use]
     pub fn remainder(self, d: Number) -> Number {
         let n = self;
-        if n.is_nan() || d.is_nan() {
-            return nan();
-        } else if n.is_inf() {
+        if (n.is_nan() || d.is_nan()) || (n.is_inf()) {
             return nan();
         } else if d.is_inf() {
             return n;
@@ -209,9 +207,7 @@ impl Number {
     #[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
     pub fn exponentiate(self, exponent: Number) -> Number {
         let base = self;
-        if (base == Number(1.0) || base == Number(-1.0)) && exponent.is_inf() {
-            return nan();
-        } else if base == Number(1.0) && exponent.is_nan() {
+        if ((base == Number(1.0) || base == Number(-1.0)) && exponent.is_inf()) || (base == Number(1.0) && exponent.is_nan()) {
             return nan();
         }
 

@@ -43,7 +43,7 @@ impl PseudoChecker {
             Kind::PropertySignature | Kind::PropertyDeclaration | Kind::JSDocPropertyTag => Some(self.type_from_property(node)),
             Kind::BindingElement => Some(new_pseudo_type_no_result(node)),
             Kind::ExportAssignment => self.type_from_expression(node.as_export_assignment().expression()),
-            Kind::PropertyAccessExpression | Kind::ElementAccessExpression | Kind::BinaryExpression => Some(self.type_from_expando_property(node)),
+            Kind::PropertyAccessExpression | Kind::ElementAccessExpression | Kind::BinaryExpression => Some(Self::type_from_expando_property(node)),
             Kind::PropertyAssignment | Kind::ShorthandPropertyAssignment => Some(self.type_from_property_assignment(node)),
             Kind::CallExpression => {
                 match ast::get_assignment_declaration_kind(node) {
@@ -85,7 +85,7 @@ impl PseudoChecker {
 
     // lookup.go:88
     // This is _not_ redundant with the reparser; see how expandoFunctionSymbolProperty.ts and similar behaves
-    pub(crate) fn type_from_expando_property(&self, node: P<Node>) -> P<PseudoType> {
+    pub(crate) fn type_from_expando_property(node: P<Node>) -> P<PseudoType> {
         let declared_type = node.type_node();
         if let Some(declared_type) = declared_type {
             return new_pseudo_type_direct(declared_type);
@@ -158,12 +158,13 @@ impl PseudoChecker {
     }
 
     // lookup.go:146
+    #[expect(clippy::unnecessary_wraps, reason = "The pseudo-checker accessor hook returns None to let the caller fall back to full checker inference.")]
     pub(crate) fn type_from_accessor(&self, accessor: P<Node>) -> Option<P<PseudoType>> {
         let accessor_declarations = {
             let decls = accessor.declaration_data().unwrap().symbol().unwrap().declarations();
             get_all_accessor_declarations_for_declaration(accessor, decls)
         };
-        let accessor_type = self.get_type_annotation_from_all_accessor_declarations(accessor, accessor_declarations);
+        let accessor_type = Self::get_type_annotation_from_all_accessor_declarations(accessor, accessor_declarations);
         if let Some(accessor_type) = accessor_type {
             if !is_type_predicate_node(accessor_type) {
                 return Some(new_pseudo_type_direct(accessor_type));
@@ -184,15 +185,15 @@ impl PseudoChecker {
     }
 
     // lookup.go:166
-    pub(crate) fn get_type_annotation_from_all_accessor_declarations(&self, node: P<Node>, accessors: AllAccessorDeclarations) -> Option<P<Node>> {
-        let mut accessor_type = self.get_type_annotation_from_accessor(node);
+    pub(crate) fn get_type_annotation_from_all_accessor_declarations(node: P<Node>, accessors: AllAccessorDeclarations) -> Option<P<Node>> {
+        let mut accessor_type = Self::get_type_annotation_from_accessor(node);
         if accessor_type.is_none() && node != accessors.first_accessor {
-            accessor_type = self.get_type_annotation_from_accessor(accessors.first_accessor);
+            accessor_type = Self::get_type_annotation_from_accessor(accessors.first_accessor);
         }
         if accessor_type.is_none() {
             if let Some(second_accessor) = accessors.second_accessor {
                 if node != second_accessor {
-                    accessor_type = self.get_type_annotation_from_accessor(second_accessor);
+                    accessor_type = Self::get_type_annotation_from_accessor(second_accessor);
                 }
             }
         }
@@ -200,7 +201,7 @@ impl PseudoChecker {
     }
 
     // lookup.go:177
-    pub(crate) fn get_type_annotation_from_accessor(&self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_type_annotation_from_accessor(node: P<Node>) -> Option<P<Node>> {
         // !!! TODO: support ripping return type off of .FullSignature
         if node.kind() == Kind::GetAccessor {
             return node.as_get_accessor_declaration().type_();
@@ -321,7 +322,7 @@ impl PseudoChecker {
             }
             Kind::PrefixUnaryExpression => {
                 if is_primitive_literal_value(node, true) {
-                    return self.type_from_primitive_literal_prefix(node);
+                    return Self::type_from_primitive_literal_prefix(node);
                 }
             }
             Kind::ArrayLiteralExpression => return Some(self.type_from_array_literal(node)),
@@ -347,7 +348,7 @@ impl PseudoChecker {
 
     // lookup.go:315
     pub(crate) fn type_from_object_literal(&self, node: P<Node>) -> P<PseudoType> {
-        let error_nodes = self.can_get_type_from_object_literal(node);
+        let error_nodes = Self::can_get_type_from_object_literal(node);
         if !error_nodes.is_empty() {
             return new_pseudo_type_inferred_with_errors(node, false, &error_nodes);
         }
@@ -367,7 +368,7 @@ impl PseudoChecker {
                         e,
                         e.name().unwrap(),
                         optional,
-                        &self.clone_type_parameters(e.as_method_declaration().type_parameters()),
+                        &Self::clone_type_parameters(e.as_method_declaration().type_parameters()),
                         &self.clone_parameters(e.parameter_list()),
                         self.create_return_from_signature(e).unwrap(),
                     ))
@@ -402,9 +403,8 @@ impl PseudoChecker {
 
                     if is_get_accessor_declaration(accessor) {
                         return Some(new_pseudo_get_accessor(accessor, name, false, self.type_from_accessor(accessor).unwrap()));
-                    } else {
-                        return Some(new_pseudo_set_accessor(accessor, name, false, self.clone_parameters(accessor.as_set_accessor_declaration().parameters())[0]));
                     }
+                    return Some(new_pseudo_set_accessor(accessor, name, false, self.clone_parameters(accessor.as_set_accessor_declaration().parameters())[0]));
                 }
             }
         }
@@ -423,7 +423,7 @@ impl PseudoChecker {
     // canGetTypeFromObjectLiteral checks whether an object literal can be typed by the pseudochecker.
     // Returns nil if the object can be typed, or a slice of error nodes (shorthand/spread properties,
     // non-literal computed names) that prevent typing.
-    pub(crate) fn can_get_type_from_object_literal(&self, node: P<Node>) -> Vec<P<Node>> {
+    pub(crate) fn can_get_type_from_object_literal(node: P<Node>) -> Vec<P<Node>> {
         let properties = node.properties();
         if properties.is_empty() {
             return Vec::new(); // empty object, ok
@@ -455,7 +455,7 @@ impl PseudoChecker {
 
     // lookup.go:438
     pub(crate) fn type_from_array_literal(&self, node: P<Node>) -> P<PseudoType> {
-        let error_nodes = self.can_get_type_from_array_literal(node);
+        let error_nodes = Self::can_get_type_from_array_literal(node);
         if !error_nodes.is_empty() {
             return new_pseudo_type_inferred_with_errors(node, false, &error_nodes);
         }
@@ -474,7 +474,7 @@ impl PseudoChecker {
     // Returns nil if the array can be typed, or a slice of error nodes that prevent typing.
     // For non-const arrays, the error node is the array expression itself.
     // For const arrays with spreads, the error node is the spread element.
-    pub(crate) fn can_get_type_from_array_literal(&self, node: P<Node>) -> Vec<P<Node>> {
+    pub(crate) fn can_get_type_from_array_literal(node: P<Node>) -> Vec<P<Node>> {
         if !is_in_const_context(node) {
             return vec![node];
         }
@@ -515,7 +515,7 @@ pub fn is_in_const_context(node: P<Node>) -> bool {
 
 impl PseudoChecker {
     // lookup.go:494
-    pub(crate) fn type_from_primitive_literal_prefix(&self, node: P<Node>) -> Option<P<PseudoType>> {
+    pub(crate) fn type_from_primitive_literal_prefix(node: P<Node>) -> Option<P<PseudoType>> {
         let p = node.as_prefix_unary_expression();
         let mut expr = node;
         if p.operator == Kind::PlusToken {
@@ -546,13 +546,13 @@ impl PseudoChecker {
             return new_pseudo_type_direct(full_signature);
         }
         let return_type = self.create_return_from_signature(node).unwrap();
-        let type_parameters = self.clone_type_parameters(d.type_parameters());
+        let type_parameters = Self::clone_type_parameters(d.type_parameters());
         let parameters = self.clone_parameters(d.parameters());
         new_pseudo_type_single_call_signature(node, &parameters, &type_parameters, return_type)
     }
 
     // lookup.go:532
-    pub(crate) fn clone_type_parameters(&self, nodes: Option<P<NodeList>>) -> Vec<P<Node>> {
+    pub(crate) fn clone_type_parameters(nodes: Option<P<NodeList>>) -> Vec<P<Node>> {
         let Some(nodes) = nodes else {
             return Vec::new();
         };

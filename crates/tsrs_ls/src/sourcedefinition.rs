@@ -34,6 +34,7 @@ impl LanguageService {
     }
 
     // sourcedefinition.go:45
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     fn provide_source_definition_at_position(
         &self,
         ctx: &Context,

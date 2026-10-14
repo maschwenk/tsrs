@@ -459,15 +459,12 @@ fn compare_import_or_export_specifiers(
 // organizeimports.go:400
 // GetNamedImportSpecifierComparer returns a comparer function for sorting import specifiers.
 pub fn get_named_import_specifier_comparer(preferences: &UserPreferences, comparer: Option<StringComparer>) -> NodeComparer {
-    let comparer = match comparer {
-        Some(comparer) => comparer,
-        None => {
-            let mut ignore_case = false;
-            if !preferences.organize_imports_ignore_case.is_unknown() {
-                ignore_case = preferences.organize_imports_ignore_case.is_true();
-            }
-            get_organize_imports_string_comparer(preferences, ignore_case)
+    let comparer = if let Some(comparer) = comparer { comparer } else {
+        let mut ignore_case = false;
+        if !preferences.organize_imports_ignore_case.is_unknown() {
+            ignore_case = preferences.organize_imports_ignore_case.is_true();
         }
+        get_organize_imports_string_comparer(preferences, ignore_case)
     };
     let preferences = preferences.clone();
     Rc::new(move |s1: P<Node>, s2: P<Node>| compare_import_or_export_specifiers(s1, s2, &*comparer, &preferences))

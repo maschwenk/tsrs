@@ -487,7 +487,7 @@ impl RequestFileSystem {
                 return Err(format!("duplicate request filesystem symlink path {existing:?} and {abs:?}"));
             }
             seen_links.insert(path.clone(), abs.clone());
-            let abs_target = r.to_absolute_path_from(target, &tspath::get_directory_path(&abs));
+            let abs_target = RequestFileSystem::to_absolute_path_from(target, &tspath::get_directory_path(&abs));
             let node = root.ensure(&path);
             if node.entry.is_none() {
                 node.entry = Some(Arc::new(Entry::Symlink(Symlink { link_name: abs, target: abs_target, host: *host })));
@@ -509,10 +509,10 @@ impl RequestFileSystem {
     }
 
     fn to_absolute_path(&self, path: &str) -> String {
-        self.to_absolute_path_from(path, &self.current_directory)
+        Self::to_absolute_path_from(path, &self.current_directory)
     }
 
-    fn to_absolute_path_from(&self, path: &str, cwd: &str) -> String {
+    fn to_absolute_path_from(path: &str, cwd: &str) -> String {
         let abs = tspath::get_normalized_absolute_path(path, cwd);
         if tspath::is_disk_path_root(&abs) {
             abs

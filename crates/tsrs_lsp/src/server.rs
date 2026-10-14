@@ -1637,6 +1637,7 @@ impl Server {
     }
 
     // server.go:1788
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_shutdown(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::ShutdownResponse, Error> {
         if let Some(builtin_watcher) = self.builtin_watcher.get() {
             builtin_watcher.close();
@@ -1646,11 +1647,13 @@ impl Server {
     }
 
     // server.go:1796
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_exit(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams) -> Result<(), Error> {
         Err(Error::tagged(ErrorTag::EOF, "EOF"))
     }
 
     // server.go:1800
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_change_workspace_configuration(self: &Arc<Self>, _ctx: &Context, params: &lsproto::DidChangeConfigurationParams) -> Result<(), Error> {
         if params.settings == lsproto::Value::Null {
             return Ok(());
@@ -1661,6 +1664,7 @@ impl Server {
     }
 
     // server.go:1809
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_open(self: &Arc<Self>, ctx: &Context, params: lsproto::DidOpenTextDocumentParams) -> Result<(), Error> {
         let doc = params.text_document;
         self.session().did_open_file(ctx, doc.uri, doc.version, doc.text, doc.language_id);
@@ -1668,30 +1672,36 @@ impl Server {
     }
 
     // server.go:1814
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_change(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeTextDocumentParams) -> Result<(), Error> {
         self.session().did_change_file(ctx, params.text_document.uri, params.text_document.version, params.content_changes);
         Ok(())
     }
 
     // server.go:1819
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_save(self: &Arc<Self>, ctx: &Context, params: lsproto::DidSaveTextDocumentParams) -> Result<(), Error> {
         self.session().did_save_file(ctx, params.text_document.uri);
         Ok(())
     }
 
     // server.go:1824
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_close(self: &Arc<Self>, ctx: &Context, params: lsproto::DidCloseTextDocumentParams) -> Result<(), Error> {
         self.session().did_close_file(ctx, params.text_document.uri);
         Ok(())
     }
 
     // server.go:1829
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_change_watched_files(self: &Arc<Self>, ctx: &Context, params: &lsproto::DidChangeWatchedFilesParams) -> Result<(), Error> {
         self.session().did_change_watched_files(ctx, &params.changes);
         Ok(())
     }
 
     // server.go:1834
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_set_trace(self: &Arc<Self>, _ctx: &Context, _params: lsproto::SetTraceParams) -> Result<(), Error> {
         // $/setTrace is sent by vscode-languageclient when trace settings change.
         // Server log verbosity is controlled separately by custom/setLogVerbosity,
@@ -1760,11 +1770,13 @@ impl Server {
     }
 
     // server.go:1907
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_hover(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::HoverParams) -> Result<lsproto::HoverResponse, Error> {
         ls.provide_hover(ctx, params)
     }
 
     // server.go:1911
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_prepare_rename(
         self: &Arc<Self>,
         ctx: &Context,
@@ -1823,6 +1835,7 @@ impl Server {
     // If `sendRenameFile` is true, the original `willRenameFiles` request is being handled as part of a rename operation
     // where the client doesn't support `willRenameFiles`,
     // so we should include the file rename in the edits we return
+    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_will_rename_files_worker(
         self: &Arc<Self>,
         ctx: &Context,
@@ -1923,21 +1936,25 @@ impl Server {
     }
 
     // server.go:2070
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_signature_help(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::SignatureHelpParams) -> Result<lsproto::SignatureHelpResponse, Error> {
         ls.provide_signature_help(ctx, &params.text_document.uri, params.position, params.context.as_ref())
     }
 
     // server.go:2079
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_folding_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::FoldingRangeParams) -> Result<lsproto::FoldingRangeResponse, Error> {
         ls.provide_folding_range(ctx, &params.text_document.uri)
     }
 
     // server.go:2083
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_vs_on_auto_insert(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, Error> {
         ls.provide_on_auto_insert(ctx, params)
     }
 
     // server.go:2087
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_linked_editing_range(
         self: &Arc<Self>,
         ctx: &Context,
@@ -1948,11 +1965,13 @@ impl Server {
     }
 
     // server.go:2091
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::DefinitionParams) -> Result<lsproto::DefinitionResponse, Error> {
         ls.provide_definition(ctx, &params.text_document.uri, params.position)
     }
 
     // server.go:2095
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_source_definition(
         self: &Arc<Self>,
         ctx: &Context,
@@ -1964,11 +1983,13 @@ impl Server {
     }
 
     // server.go:2103
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_type_definition(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::TypeDefinitionParams) -> Result<lsproto::TypeDefinitionResponse, Error> {
         ls.provide_type_definition(ctx, &params.text_document.uri, params.position)
     }
 
     // server.go:2107
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_completion(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: &lsproto::CompletionParams) -> Result<lsproto::CompletionResponse, Error> {
         language_service.provide_completion(ctx, &params.text_document.uri, params.position, params.context.as_ref())
     }
@@ -1991,11 +2012,13 @@ impl Server {
     }
 
     // server.go:2129
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_document_format(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::DocumentFormattingParams) -> Result<lsproto::DocumentFormattingResponse, Error> {
         ls.provide_format_document(ctx, &params.text_document.uri, params.options)
     }
 
     // server.go:2137
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_document_range_format(
         self: &Arc<Self>,
         ctx: &Context,
@@ -2006,6 +2029,7 @@ impl Server {
     }
 
     // server.go:2146
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_document_on_type_format(
         self: &Arc<Self>,
         ctx: &Context,
@@ -2049,11 +2073,13 @@ impl Server {
     }
 
     // server.go:2184
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_document_symbol(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::DocumentSymbolParams) -> Result<lsproto::DocumentSymbolResponse, Error> {
         ls.provide_document_symbols(ctx, &params.text_document.uri)
     }
 
     // server.go:2188
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_document_highlight(
         self: &Arc<Self>,
         ctx: &Context,
@@ -2064,6 +2090,7 @@ impl Server {
     }
 
     // server.go:2192
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_multi_document_highlight(
         self: &Arc<Self>,
         ctx: &Context,
@@ -2074,21 +2101,25 @@ impl Server {
     }
 
     // server.go:2196
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_selection_range(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::SelectionRangeParams) -> Result<lsproto::SelectionRangeResponse, Error> {
         ls.provide_selection_ranges(ctx, params)
     }
 
     // server.go:2200
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_code_action(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::CodeActionParams) -> Result<lsproto::CodeActionResponse, Error> {
         ls.provide_code_actions(ctx, params)
     }
 
     // server.go:2204
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_inlay_hint(self: &Arc<Self>, ctx: &Context, language_service: &Arc<LanguageService>, params: &lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, Error> {
         language_service.provide_inlay_hint(ctx, params)
     }
 
     // server.go:2212
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_code_lens(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::CodeLensParams) -> Result<lsproto::CodeLensResponse, Error> {
         ls.provide_code_lenses(ctx, &params.text_document.uri)
     }
@@ -2126,6 +2157,7 @@ impl Server {
     }
 
     // server.go:2240
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_prepare_call_hierarchy(
         self: &Arc<Self>,
         ctx: &Context,
@@ -2158,11 +2190,13 @@ impl Server {
     }
 
     // server.go:2272
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_semantic_tokens_full(self: &Arc<Self>, ctx: &Context, ls: &Arc<LanguageService>, params: &lsproto::SemanticTokensParams) -> Result<lsproto::SemanticTokensResponse, Error> {
         ls.provide_semantic_tokens(ctx, &params.text_document.uri)
     }
 
     // server.go:2276
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_semantic_tokens_range(
         self: &Arc<Self>,
         ctx: &Context,
@@ -2173,6 +2207,7 @@ impl Server {
     }
 
     // server.go:2280 (the `api` package is out of scope)
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_initialize_api_session(
         self: &Arc<Self>,
         _ctx: &Context,
@@ -2192,26 +2227,31 @@ impl Server {
     }
 
     // server.go:2394 (pprof is out of scope)
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_run_gc(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::RunGCResponse, Error> {
         Err(not_yet_ported(Method::CustomRunGC))
     }
 
     // server.go:2400
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_save_heap_profile(self: &Arc<Self>, _ctx: &Context, _params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveHeapProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomSaveHeapProfile))
     }
 
     // server.go:2409
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_save_alloc_profile(self: &Arc<Self>, _ctx: &Context, _params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::SaveAllocProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomSaveAllocProfile))
     }
 
     // server.go:2418
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_start_cpu_profile(self: &Arc<Self>, _ctx: &Context, _params: &lsproto::ProfileParams, _req: &RequestMessage) -> Result<lsproto::StartCPUProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomStartCPUProfile))
     }
 
     // server.go:2427
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_stop_cpu_profile(self: &Arc<Self>, _ctx: &Context, _params: lsproto::NoParams, _req: &RequestMessage) -> Result<lsproto::StopCPUProfileResponse, Error> {
         Err(not_yet_ported(Method::CustomStopCPUProfile))
     }
@@ -2228,6 +2268,7 @@ impl Server {
     }
 
     // server.go:2451 (content mappers are out of scope)
+    #[expect(clippy::unused_self, reason = "Registered LSP handlers share a Server receiver so the dispatcher can call them uniformly.")]
     fn handle_set_content_mapper_contributions(
         self: &Arc<Self>,
         _ctx: &Context,
@@ -2584,7 +2625,7 @@ impl tsrs_ls::CrossProjectOrchestrator for crossProjectOrchestrator {
 
     // server.go:1452
     fn get_projects_for_file(&self, ctx: &Context, uri: &lsproto::DocumentUri) -> Result<Vec<Arc<dyn tsrs_ls::Project>>, Error> {
-        self.server.session().get_projects_for_file(ctx, uri)
+        Ok(self.server.session().get_projects_for_file(ctx, uri))
     }
 
     // server.go:1456. Go returns an iterator that loads the snapshot while it is consumed; the projects are

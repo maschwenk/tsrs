@@ -292,7 +292,7 @@ impl<'a> Decoder<'a> {
         self.nodes[1].ok_or_else(|| DecodeError::InvalidTree("root is a NodeList".into()))
     }
 
-    fn create_node(&mut self, kind: Kind, data: u32, child_indices: &[usize]) -> Result<P<Node>, DecodeError> {
+    fn create_node(&self, kind: Kind, data: u32, child_indices: &[usize]) -> Result<P<Node>, DecodeError> {
         let common_data = (data >> 24) & 0x3f;
         match data & NODE_DATA_TYPE_MASK {
             NODE_DATA_TYPE_STRING => self.create_string_node(kind, data, common_data),
@@ -304,34 +304,32 @@ impl<'a> Decoder<'a> {
 
     // ── child accessors used by the generated factories ──
 
-    pub(crate) fn node_at_opt(&self, ci: usize) -> Result<Option<P<Node>>, DecodeError> {
-        Ok(if ci == 0 { None } else { self.nodes[ci] })
+    pub(crate) fn node_at_opt(&self, ci: usize) -> Option<P<Node>> {
+        if ci == 0 { None } else { self.nodes[ci] }
     }
 
-    pub(crate) fn list_at(&self, ci: usize) -> Result<Option<P<NodeList>>, DecodeError> {
-        Ok(if ci == 0 { None } else { self.lists[ci] })
+    pub(crate) fn list_at(&self, ci: usize) -> Option<P<NodeList>> {
+        if ci == 0 { None } else { self.lists[ci] }
     }
 
-    pub(crate) fn modifier_list_at(&self, ci: usize) -> Result<Option<P<ModifierList>>, DecodeError> {
-        let Some(list) = self.list_at(ci)? else {
-            return Ok(None);
-        };
+    pub(crate) fn modifier_list_at(&self, ci: usize) -> Option<P<ModifierList>> {
+        let list = self.list_at(ci)?;
         let mods = self.factory.new_modifier_list_from_slice(list.nodes());
         mods.list.loc.set(list.loc());
-        Ok(Some(mods))
+        Some(mods)
     }
 
-    pub(crate) fn single_child(&self, child_indices: &[usize]) -> Result<Option<P<Node>>, DecodeError> {
-        Ok(child_indices.first().and_then(|&ci| self.nodes[ci]))
+    pub(crate) fn single_child(&self, child_indices: &[usize]) -> Option<P<Node>> {
+        child_indices.first().and_then(|&ci| self.nodes[ci])
     }
 
-    pub(crate) fn single_node_list_child(&self, child_indices: &[usize]) -> Result<Option<P<NodeList>>, DecodeError> {
-        Ok(child_indices.first().and_then(|&ci| self.lists[ci]))
+    pub(crate) fn single_node_list_child(&self, child_indices: &[usize]) -> Option<P<NodeList>> {
+        child_indices.first().and_then(|&ci| self.lists[ci])
     }
 
     // ── hand-written extended data (Go decodeExtendedData_*) ──
 
-    pub(crate) fn decode_extended_data_source_file(&mut self, data: u32, child_indices: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_source_file(&self, data: u32, child_indices: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let off = data & NODE_DATA_STRING_INDEX_MASK;
         let text = self.get_string(self.read_ext(off, 0)?)?;
         let file_name = self.get_string(self.read_ext(off, 4)?)?;
@@ -398,7 +396,7 @@ impl<'a> Decoder<'a> {
     }
 
     pub(crate) fn decode_extended_data_template_head(
-        &mut self,
+        &self,
         data: u32,
         _: &[usize],
         _: u32,
@@ -407,37 +405,37 @@ impl<'a> Decoder<'a> {
         Ok(self.factory.new_template_head(t, r, f))
     }
 
-    pub(crate) fn decode_extended_data_template_middle(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_template_middle(&self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let (t, r, f) = self.ext_text_raw_flags(data)?;
         Ok(self.factory.new_template_middle(t, r, f))
     }
 
-    pub(crate) fn decode_extended_data_template_tail(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_template_tail(&self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let (t, r, f) = self.ext_text_raw_flags(data)?;
         Ok(self.factory.new_template_tail(t, r, f))
     }
 
-    pub(crate) fn decode_extended_data_string_literal(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_string_literal(&self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let (t, f) = self.ext_text_flags(data)?;
         Ok(self.factory.new_string_literal(t, f))
     }
 
-    pub(crate) fn decode_extended_data_numeric_literal(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_numeric_literal(&self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let (t, f) = self.ext_text_flags(data)?;
         Ok(self.factory.new_numeric_literal(t, f))
     }
 
-    pub(crate) fn decode_extended_data_big_int_literal(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_big_int_literal(&self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let (t, f) = self.ext_text_flags(data)?;
         Ok(self.factory.new_big_int_literal(t, f))
     }
 
-    pub(crate) fn decode_extended_data_regular_expression_literal(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_regular_expression_literal(&self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let (t, f) = self.ext_text_flags(data)?;
         Ok(self.factory.new_regular_expression_literal(t, f))
     }
 
-    pub(crate) fn decode_extended_data_no_substitution_template_literal(&mut self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
+    pub(crate) fn decode_extended_data_no_substitution_template_literal(&self, data: u32, _: &[usize], _: u32) -> Result<P<Node>, DecodeError> {
         let (t, f) = self.ext_text_flags(data)?;
         Ok(self.factory.new_no_substitution_template_literal(t, f))
     }

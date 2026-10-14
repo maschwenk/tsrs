@@ -602,21 +602,18 @@ impl filesParser {
                 Some(data) => Some(data),
                 None => w.task_data_by_path.get(&loader.tasks[task].path).copied(),
             };
-            let (data, loaded) = match known {
-                Some(data) => (data, true),
-                None => {
-                    let mut tasks = TasksByCasing::default();
-                    tasks.insert(Arc::clone(&loader.tasks[task].normalized_file_path), task);
-                    w.datas.push(parseTaskData {
-                        tasks,
-                        lowest_depth: None,
-                        started_sub_tasks: false,
-                        package_id: PackageId::default(),
-                    });
-                    let id = w.datas.len() - 1;
-                    w.task_data_by_path.insert(loader.tasks[task].path.clone(), id);
-                    (id, false)
-                }
+            let (data, loaded) = if let Some(data) = known { (data, true) } else {
+                let mut tasks = TasksByCasing::default();
+                tasks.insert(Arc::clone(&loader.tasks[task].normalized_file_path), task);
+                w.datas.push(parseTaskData {
+                    tasks,
+                    lowest_depth: None,
+                    started_sub_tasks: false,
+                    package_id: PackageId::default(),
+                });
+                let id = w.datas.len() - 1;
+                w.task_data_by_path.insert(loader.tasks[task].path.clone(), id);
+                (id, false)
             };
             loader.tasks[task].data_id = data as u32;
             w.queue.push(queuedTask { task, loaded, data, depth });
@@ -1070,9 +1067,8 @@ impl filesParser {
                             }
                         }
                         continue;
-                    } else {
-                        c.seen[data] = Some((task, Arc::as_ptr(&loader.tasks[task].normalized_file_path)));
                     }
+                    c.seen[data] = Some((task, Arc::as_ptr(&loader.tasks[task].normalized_file_path)));
 
                     if let Some(seen_ignore_case) = &mut tasks_seen_by_name_ignore_case {
                         let path_lower_case = tspath::to_file_name_lower_case(loader.tasks[task].path.as_str());

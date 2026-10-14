@@ -109,6 +109,7 @@ impl SnapshotHost {
 
     // snapshothost.go:110
     // RetainSnapshot adds a reference to a snapshot owned by this host.
+    #[expect(clippy::unused_self, reason = "SnapshotHost lifecycle callbacks keep their instance receiver alongside the stateful host operations.")]
     pub fn retain_snapshot(&self, snapshot: &Snapshot) {
         snapshot.ref_();
     }
@@ -143,6 +144,7 @@ impl SnapshotHost {
     // snapshothost.go:137
     // update derives a snapshot from baseSnapshot without adopting it as any
     // canonical session state or performing session side effects.
+    #[expect(clippy::unused_self, reason = "SnapshotHost lifecycle callbacks keep their instance receiver alongside the stateful host operations.")]
     fn update(&self, ctx: &Context, base_snapshot: &Snapshot, change: SnapshotChange) -> Arc<Snapshot> {
         base_snapshot.clone_snapshot(ctx, change, base_snapshot.overlays(), None, None)
     }
@@ -150,6 +152,7 @@ impl SnapshotHost {
     // snapshothost.go:143
     // CloneSnapshotWithAutoImports derives a snapshot with auto-import preparation without
     // adopting the clone in the background.
+    #[expect(clippy::unused_self, reason = "SnapshotHost lifecycle callbacks keep their instance receiver alongside the stateful host operations.")]
     pub fn clone_snapshot_with_auto_imports(&self, ctx: &Context, base_snapshot: &Snapshot, uri: &lsproto::DocumentUri, logger: Option<&dyn Logger>) -> Arc<Snapshot> {
         let mut change = SnapshotChange {
             reason: UpdateReason::RequestedLanguageServiceWithAutoImports,
@@ -201,6 +204,7 @@ impl SnapshotHost {
     }
 
     // snapshothost.go:196
+    #[expect(clippy::unused_self, reason = "SnapshotHost lifecycle callbacks keep their instance receiver alongside the stateful host operations.")]
     pub fn close(&self) {
         // (Content mappers are not ported: there is no content mapper host to close.)
     }

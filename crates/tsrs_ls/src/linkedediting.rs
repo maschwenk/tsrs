@@ -14,6 +14,7 @@ const JSX_TAG_WORD_PATTERN: &str = "[a-zA-Z0-9:\\-\\._$]*";
 
 impl LanguageService {
     // linkedediting.go:18
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_linked_editing_range(&self, _ctx: &Context, params: &lsproto::LinkedEditingRangeParams) -> Result<lsproto::LinkedEditingRangeResponse, lsproto::Error> {
         let (_, mut source_file) = self.get_program_and_file(&params.text_document.uri);
         let positions = self.converters.from_lsp_position_for_source_file(source_file, params.position, Feature::LinkedEditing);

@@ -321,12 +321,12 @@ impl Checker {
     // relater.go:2829
     pub(crate) fn get_type_of_property_in_types(&mut self, types: &[P<Type>], name: &str) -> P<Type> {
         let mut prop_types: Vec<P<Type>> = Vec::new();
-        prop_types.extend(types.iter().map(|&t| self.get_type_of_property_in_type(t, name).unwrap()));
+        prop_types.extend(types.iter().map(|&t| self.get_type_of_property_in_type(t, name)));
         self.get_union_type(&prop_types)
     }
 
     // relater.go:2837
-    pub(crate) fn get_type_of_property_in_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
+    pub(crate) fn get_type_of_property_in_type(&mut self, t: P<Type>, name: &str) -> P<Type> {
         let t = self.get_apparent_type(t);
         let prop = if t.flags().intersects(TypeFlags::UnionOrIntersection) {
             self.get_property_of_union_or_intersection_type(t, name, false)
@@ -334,13 +334,13 @@ impl Checker {
             self.get_property_of_object_type(t, name)
         };
         if let Some(prop) = prop {
-            return Some(self.get_type_of_symbol(prop));
+            return self.get_type_of_symbol(prop);
         }
         let index_info = self.get_applicable_index_info_for_name(t, name);
         if let Some(index_info) = index_info {
-            return Some(index_info.value_type());
+            return index_info.value_type();
         }
-        Some(self.undefined_type)
+        self.undefined_type
     }
 }
 
@@ -500,7 +500,7 @@ impl Relater {
         let source_types = source.types();
         // We strip `undefined` from the target if the `source` trivially doesn't contain it for our correspondence-checking fastpath
         // since `undefined` is frequently added by optionality and would otherwise spoil a potentially useful correspondence
-        let stripped_target = self.get_undefined_stripped_target_if_needed(c, source, target);
+        let stripped_target = Self::get_undefined_stripped_target_if_needed(c, source, target);
         let mut stripped_types: &[P<Type>] = &[];
         if stripped_target.flags().intersects(TypeFlags::Union) {
             stripped_types = stripped_target.types();
@@ -543,7 +543,7 @@ impl Relater {
     }
 
     // relater.go:2997
-    pub(crate) fn get_undefined_stripped_target_if_needed(&self, c: &mut Checker, source: P<Type>, target: P<Type>) -> P<Type> {
+    pub(crate) fn get_undefined_stripped_target_if_needed(c: &mut Checker, source: P<Type>, target: P<Type>) -> P<Type> {
         if source.flags().intersects(TypeFlags::Union)
             && target.flags().intersects(TypeFlags::Union)
             && !source.types()[0].flags().intersects(TypeFlags::Undefined)
@@ -1048,7 +1048,7 @@ impl Relater {
             //     x = y;  // Mismatched property in source intersection
             //   }
             //
-            } else if result != Ternary::False && c.is_non_generic_object_type(target) && !c.is_array_or_tuple_type(target) && self.is_source_intersection_needing_extra_check(c, source, target) {
+            } else if result != Ternary::False && c.is_non_generic_object_type(target) && !c.is_array_or_tuple_type(target) && Self::is_source_intersection_needing_extra_check(c, source, target) {
                 result &= self.properties_related_to(c, source, target, report_errors, &NO_EXCLUDED_PROPERTIES, true /*optionalsOnly*/, intersection_state);
             }
         }
@@ -1059,7 +1059,7 @@ impl Relater {
     }
 
     // relater.go:3286
-    pub(crate) fn is_source_intersection_needing_extra_check(&self, c: &mut Checker, source: P<Type>, target: P<Type>) -> bool {
+    pub(crate) fn is_source_intersection_needing_extra_check(c: &mut Checker, source: P<Type>, target: P<Type>) -> bool {
         source.flags().intersects(TypeFlags::Intersection)
             && c.get_apparent_type(source).flags().intersects(TypeFlags::StructuredType)
             && !source.types().iter().any(|&t| t == target || t.object_flags().intersects(ObjectFlags::NonInferrableType))
@@ -1093,7 +1093,7 @@ impl Relater {
             self.restore_error_state(c, save_error_state.clone());
             return (Ternary::False, false);
         }
-        let allow_structural_fallback = c.has_covariant_void_argument(target_type_arguments, variances);
+        let allow_structural_fallback = checker::Checker::has_covariant_void_argument(target_type_arguments, variances);
         *variance_check_failed = !allow_structural_fallback;
         // The type arguments did not relate appropriately, but it may be because we have no variance
         // information (in which case typeArgumentsRelatedTo defaulted to covariance for all type
@@ -1233,7 +1233,7 @@ impl Relater {
                 return Ternary::Unknown;
             }
             let params = c.type_alias_links.get(alias_symbol).type_parameters.get();
-            let min_params = c.get_min_type_argument_count(params);
+            let min_params = checker::Checker::get_min_type_argument_count(params);
             let node_is_in_js_file = is_in_js_file(alias_symbol.value_declaration());
             let source_types = c.fill_missing_type_arguments(source.alias().unwrap().type_arguments(), params, min_params, node_is_in_js_file);
             let target_types = c.fill_missing_type_arguments(target.alias().unwrap().type_arguments(), params, min_params, node_is_in_js_file);
@@ -1372,7 +1372,7 @@ impl Relater {
                     let constraint_type = c.get_constraint_type_from_mapped_type(target_type);
                     let target_keys;
                     #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                    if name_type.is_some() && c.is_mapped_type_with_keyof_constraint_declaration(target_type) {
+                    if name_type.is_some() && checker::Checker::is_mapped_type_with_keyof_constraint_declaration(target_type) {
                         // we need to get the apparent mappings and union them with the generic mappings, since some properties may be
                         // missing from the `constraintType` which will otherwise be mapped in the object
                         let mapped_keys = c.get_apparent_mapped_type_keys(name_type.unwrap(), target_type);
@@ -1437,7 +1437,7 @@ impl Relater {
         } else if target.flags().intersects(TypeFlags::TemplateLiteral) {
             if source.flags().intersects(TypeFlags::TemplateLiteral) {
                 if self.rel() == c.comparable_relation {
-                    if c.template_literal_types_definitely_unrelated(source.as_template_literal_type(), target.as_template_literal_type()) {
+                    if checker::Checker::template_literal_types_definitely_unrelated(source.as_template_literal_type(), target.as_template_literal_type()) {
                         return Ternary::False;
                     }
                     return Ternary::True;
@@ -1585,7 +1585,7 @@ impl Relater {
                 // eg, `keyof {[X in keyof A]: Obj[X]}` should be assignable to `keyof {[Y in keyof A]: Tup[Y]}` because both map over the same set of keys (`keyof A`).
                 // Without this source-side breakdown, a `keyof {[X in keyof A]: Obj[X]}` style type won't be assignable to anything except itself, which is much too strict.
                 #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                let source_mapped_keys = if name_type.is_some() && c.is_mapped_type_with_keyof_constraint_declaration(mapped_type) {
+                let source_mapped_keys = if name_type.is_some() && checker::Checker::is_mapped_type_with_keyof_constraint_declaration(mapped_type) {
                     c.get_apparent_mapped_type_keys(name_type.unwrap(), mapped_type)
                 } else if let Some(name_type) = name_type {
                     name_type
@@ -1615,7 +1615,7 @@ impl Relater {
                 if !source_params.is_empty() {
                     // If the source has infer type parameters, we instantiate them in the context of the target
                     let r = self.as_p();
-                    let ctx = c.new_inference_context(source_params, None /*signature*/, InferenceFlags::None, Some(r.worker_comparer()));
+                    let ctx = checker::Checker::new_inference_context(source_params, None /*signature*/, InferenceFlags::None, Some(r.worker_comparer()));
                     c.infer_types(ctx.inferences.get(), target_conditional.extends_type.get().unwrap(), source_extends, InferencePriority::NoConstraints | InferencePriority::AlwaysStrict, false);
                     source_extends = c.instantiate_type(source_extends, ctx.mapper());
                     mapper = ctx.mapper();
@@ -1744,7 +1744,7 @@ impl Relater {
                 // By flags alone, we know that the `target` is a readonly array while the source is a normal array or tuple
                 // or `target` is an array and source is a tuple - in both cases the types cannot be identical, by construction
                 return Ternary::False;
-            } else if c.is_generic_tuple_type(source) && is_tuple_type(target) && !c.is_generic_tuple_type(target) {
+            } else if checker::Checker::is_generic_tuple_type(source) && is_tuple_type(target) && !checker::Checker::is_generic_tuple_type(target) {
                 let constraint = c.get_base_constraint_or_type(source);
                 if constraint != source {
                     return self.is_related_to(c, constraint, target, RecursionFlags::Source, report_errors);
@@ -2065,8 +2065,8 @@ impl Relater {
                 if !target.target_tuple_type().readonly.get() && (c.is_readonly_array_type(source) || is_tuple_type(source) && source.target_tuple_type().readonly.get()) {
                     return Ternary::False;
                 }
-                let source_arity = c.get_type_reference_arity(source);
-                let target_arity = c.get_type_reference_arity(target);
+                let source_arity = checker::Checker::get_type_reference_arity(source);
+                let target_arity = checker::Checker::get_type_reference_arity(target);
                 let source_rest = if is_tuple_type(source) { source.target_tuple_type().combined_flags.get().intersects(ElementFlags::Rest) } else { true };
                 let target_has_rest_element = target.target_tuple_type().combined_flags.get().intersects(ElementFlags::Rest);
                 let target_has_variable_element = target.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable);
@@ -2573,14 +2573,11 @@ impl Relater {
             target = c.get_erased_signature(target);
         }
         let cached = self.signature_comparers.borrow().iter().find(|e| e.0 == intersection_state).map(|e| e.1);
-        let is_related_to_worker = match cached {
-            Some(f) => f,
-            None => {
-                let r = self.as_p();
-                let f = type_comparer(move |c, source, target, report_errors| r.is_related_to_ex(c, source, target, RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state));
-                self.signature_comparers.borrow_mut().push((intersection_state, f));
-                f
-            }
+        let is_related_to_worker = if let Some(f) = cached { f } else {
+            let r = self.as_p();
+            let f = type_comparer(move |c, source, target, report_errors| r.is_related_to_ex(c, source, target, RecursionFlags::Both, report_errors, None /*headMessage*/, intersection_state));
+            self.signature_comparers.borrow_mut().push((intersection_state, f));
+            f
         };
         let mut reporter = |c: &mut Checker, message: &'static Message, args: &[&dyn Display]| self.report_error(c, message, args);
         c.compare_signatures_related(source, target, check_mode, report_errors, Some(&mut reporter), is_related_to_worker, Some(c.report_unreliable_mapper))
@@ -3112,7 +3109,7 @@ impl Checker {
         } else if target == self.global_function_type {
             source.flags().intersects(TypeFlags::Object) && self.is_function_object_type(source)
         } else {
-            let target_type = self.get_target_type(target).unwrap();
+            let target_type = Self::get_target_type(target).unwrap();
             self.has_base_type(source, Some(target_type)) || (self.is_array_type(target) && !self.is_readonly_array_type(target) && self.is_type_derived_from(source, self.global_readonly_array_type))
         }
     }
@@ -3127,6 +3124,7 @@ impl Checker {
 
 impl Relater {
     // relater.go:5030
+    #[expect(clippy::unused_self, reason = "The Go initialization or tracing hook is retained in the same method call sequence.")]
     pub(crate) fn trace_unions_or_intersections_too_large(&self, _c: &mut Checker, _source: P<Type>, _target: P<Type>) {
         // Only reports to the tracer, which is not ported.
     }

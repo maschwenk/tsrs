@@ -825,12 +825,12 @@ impl Session {
     }
 
     // session.go:1136
-    pub fn get_projects_for_file(&self, ctx: &Context, uri: &lsproto::DocumentUri) -> Result<Vec<Arc<dyn tsrs_ls::Project>>, lsproto::Error> {
+    pub fn get_projects_for_file(&self, ctx: &Context, uri: &lsproto::DocumentUri) -> Vec<Arc<dyn tsrs_ls::Project>> {
         let snapshot = self.get_snapshot(ctx, ResourceRequest { configured_project_documents: vec![uri.clone()], ..Default::default() }, false /*callerRef*/);
 
         // !!! TODO: sheetal:  Get other projects that contain the file with symlink
-        let all_projects = snapshot.get_language_service_projects_containing_file(uri);
-        Ok(all_projects)
+
+        snapshot.get_language_service_projects_containing_file(uri)
     }
 
     // session.go:1153
@@ -1143,17 +1143,14 @@ impl Session {
                     let (call_ctx, call_cancel) = ctx.with_timeout(watchRequestTimeout);
                     let result = client.watch_files(&call_ctx, id.clone(), vec![watcher.clone()]);
                     call_cancel.call();
-                    match result {
-                        Err(err) => watch_errors.push(err),
-                        Ok(()) => {
-                            if old_watcher.is_none() {
-                                self.logger.log(&format!("Added new watch: {id}"));
-                            } else {
-                                self.logger.log(&format!("Updated watch: {id}"));
-                            }
-                            self.logger.log(&format!("\t{}", file_system_watcher_glob_string(watcher)));
-                            self.logger.log("");
+                    if let Err(err) = result { watch_errors.push(err) } else {
+                        if old_watcher.is_none() {
+                            self.logger.log(&format!("Added new watch: {id}"));
+                        } else {
+                            self.logger.log(&format!("Updated watch: {id}"));
                         }
+                        self.logger.log(&format!("\t{}", file_system_watcher_glob_string(watcher)));
+                        self.logger.log("");
                     }
                 }
                 if !watch_errors.is_empty() {

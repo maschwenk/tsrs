@@ -302,15 +302,12 @@ impl RegExpParser {
                 }
                 0x5C /* \ */ => {
                     self.inc_pos(1);
-                    match self.char() {
-                        Some(0x62 | 0x42) /* b B */ => {
-                            self.inc_pos(1);
-                            is_previous_term_quantifiable = false;
-                        }
-                        _ => {
-                            self.scan_atom_escape();
-                            is_previous_term_quantifiable = true;
-                        }
+                    if let Some(0x62 | 0x42) /* b B */ = self.char() {
+                        self.inc_pos(1);
+                        is_previous_term_quantifiable = false;
+                    } else {
+                        self.scan_atom_escape();
+                        is_previous_term_quantifiable = true;
                     }
                 }
                 0x28 /* ( */ => {
@@ -326,25 +323,22 @@ impl RegExpParser {
                             Some(0x3C) /* < */ => {
                                 let group_name_start = self.pos();
                                 self.inc_pos(1);
-                                match self.char() {
-                                    Some(0x3D | 0x21) /* = ! */ => {
-                                        self.inc_pos(1);
-                                        is_previous_term_quantifiable = false;
+                                if let Some(0x3D | 0x21) /* = ! */ = self.char() {
+                                    self.inc_pos(1);
+                                    is_previous_term_quantifiable = false;
+                                } else {
+                                    self.scan_group_name(false /*isReference*/);
+                                    self.scan_expected_char(b'>');
+                                    if self.scanner.language_version() < ScriptTarget::ES2018 {
+                                        self.error(
+                                            &diagnostics::Named_capturing_groups_are_only_available_when_targeting_ES2018_or_later,
+                                            group_name_start,
+                                            self.pos() - group_name_start,
+                                            &[],
+                                        );
                                     }
-                                    _ => {
-                                        self.scan_group_name(false /*isReference*/);
-                                        self.scan_expected_char(b'>');
-                                        if self.scanner.language_version() < ScriptTarget::ES2018 {
-                                            self.error(
-                                                &diagnostics::Named_capturing_groups_are_only_available_when_targeting_ES2018_or_later,
-                                                group_name_start,
-                                                self.pos() - group_name_start,
-                                                &[],
-                                            );
-                                        }
-                                        self.number_of_capturing_groups += 1;
-                                        is_previous_term_quantifiable = true;
-                                    }
+                                    self.number_of_capturing_groups += 1;
+                                    is_previous_term_quantifiable = true;
                                 }
                             }
                             _ => {
@@ -819,39 +813,38 @@ impl RegExpParser {
                     start = self.pos() - 2;
                     operand = Cow::Borrowed(&self.text()[start as usize..self.pos() as usize]);
                     continue;
-                } else {
-                    if operand.is_empty() {
-                        self.error(
-                            &diagnostics::A_character_class_range_must_not_be_bounded_by_another_character_class,
-                            start,
-                            self.pos() - 1 - start,
-                            &[],
-                        );
-                    }
-                    let second_start = self.pos();
-                    let second_operand = self.scan_class_set_operand();
-                    if is_character_complement && self.may_contain_strings {
-                        self.error(
-                            &diagnostics::Anything_that_would_possibly_match_more_than_a_single_character_is_invalid_inside_a_negated_character_class,
-                            second_start,
-                            self.pos() - second_start,
-                            &[],
-                        );
-                    }
-                    expression_may_contain_strings = expression_may_contain_strings || self.may_contain_strings;
-                    if second_operand.is_empty() {
-                        self.error(
-                            &diagnostics::A_character_class_range_must_not_be_bounded_by_another_character_class,
-                            second_start,
-                            self.pos() - second_start,
-                            &[],
-                        );
-                    } else if !operand.is_empty() {
-                        let (min_character_value, min_size) = stringutil::decode_js_string_rune(&operand);
-                        let (max_character_value, max_size) = stringutil::decode_js_string_rune(&second_operand);
-                        if operand.len() == min_size && second_operand.len() == max_size && min_character_value > max_character_value {
-                            self.error(&diagnostics::Range_out_of_order_in_character_class, start, self.pos() - start, &[]);
-                        }
+                }
+                if operand.is_empty() {
+                    self.error(
+                        &diagnostics::A_character_class_range_must_not_be_bounded_by_another_character_class,
+                        start,
+                        self.pos() - 1 - start,
+                        &[],
+                    );
+                }
+                let second_start = self.pos();
+                let second_operand = self.scan_class_set_operand();
+                if is_character_complement && self.may_contain_strings {
+                    self.error(
+                        &diagnostics::Anything_that_would_possibly_match_more_than_a_single_character_is_invalid_inside_a_negated_character_class,
+                        second_start,
+                        self.pos() - second_start,
+                        &[],
+                    );
+                }
+                expression_may_contain_strings = expression_may_contain_strings || self.may_contain_strings;
+                if second_operand.is_empty() {
+                    self.error(
+                        &diagnostics::A_character_class_range_must_not_be_bounded_by_another_character_class,
+                        second_start,
+                        self.pos() - second_start,
+                        &[],
+                    );
+                } else if !operand.is_empty() {
+                    let (min_character_value, min_size) = stringutil::decode_js_string_rune(&operand);
+                    let (max_character_value, max_size) = stringutil::decode_js_string_rune(&second_operand);
+                    if operand.len() == min_size && second_operand.len() == max_size && min_character_value > max_character_value {
+                        self.error(&diagnostics::Range_out_of_order_in_character_class, start, self.pos() - start, &[]);
                     }
                 }
             } else if ch == Some(b'&') {
@@ -1013,10 +1006,9 @@ impl RegExpParser {
                         self.scan_class_string_disjunction_contents();
                         self.scan_expected_char(b'}');
                         return Cow::Borrowed("");
-                    } else {
-                        self.error(&diagnostics::X_q_must_be_followed_by_string_alternatives_enclosed_in_braces, self.pos() - 2, 2, &[]);
-                        return Cow::Borrowed("q");
                     }
+                    self.error(&diagnostics::X_q_must_be_followed_by_string_alternatives_enclosed_in_braces, self.pos() - 2, 2, &[]);
+                    return Cow::Borrowed("q");
                 }
                 self.dec_pos(1);
                 self.scan_class_set_character()
@@ -1074,31 +1066,25 @@ impl RegExpParser {
                 _ => return self.scan_character_escape(false /*atomEscape*/),
             }
         } else if self.pos() + 1 < self.end && ch == self.char_at(self.pos() + 1) {
-            match ch {
-                Some(
+            if let Some(
                     0x26 | 0x21 | 0x23 | 0x25 | 0x2A | 0x2B | 0x2C | 0x2E | 0x3A | 0x3B | 0x3C
                     | 0x3D | 0x3E | 0x3F | 0x40 | 0x60 | 0x7E,
-                ) => {
-                    self.error(
-                        &diagnostics::A_character_class_must_not_contain_a_reserved_double_punctuator_Did_you_mean_to_escape_it_with_backslash,
-                        self.pos(),
-                        2,
-                        &[],
-                    );
-                    self.inc_pos(2);
-                    return Cow::Borrowed(&self.text()[(self.pos() - 2) as usize..self.pos() as usize]);
-                }
-                _ => {}
+                ) = ch {
+                self.error(
+                    &diagnostics::A_character_class_must_not_contain_a_reserved_double_punctuator_Did_you_mean_to_escape_it_with_backslash,
+                    self.pos(),
+                    2,
+                    &[],
+                );
+                self.inc_pos(2);
+                return Cow::Borrowed(&self.text()[(self.pos() - 2) as usize..self.pos() as usize]);
             }
         }
-        match ch {
-            Some(ch @ (0x2F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x2D | 0x7C)) => {
-                let s = rune_string(u32::from(ch));
-                self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
-                self.inc_pos(1);
-                return Cow::Owned(s);
-            }
-            _ => {}
+        if let Some(ch @ (0x2F | 0x28 | 0x29 | 0x5B | 0x5D | 0x7B | 0x7D | 0x2D | 0x7C)) = ch {
+            let s = rune_string(u32::from(ch));
+            self.error(&diagnostics::Unexpected_0_Did_you_mean_to_escape_it_with_backslash, self.pos(), 1, &[&s]);
+            self.inc_pos(1);
+            return Cow::Owned(s);
         }
         self.scan_source_character()
     }
@@ -1173,7 +1159,7 @@ impl RegExpParser {
                                 self.pos() - property_name_or_value_start,
                                 &[],
                             );
-                            let suggestion = self.get_spelling_suggestion_for_unicode_property_name(property_name_or_value);
+                            let suggestion = Self::get_spelling_suggestion_for_unicode_property_name(property_name_or_value);
                             if !suggestion.is_empty() {
                                 self.error(
                                     &diagnostics::Did_you_mean_0,
@@ -1197,7 +1183,7 @@ impl RegExpParser {
                                         self.pos() - property_value_start,
                                         &[],
                                     );
-                                    let suggestion = self.get_spelling_suggestion_for_unicode_property_value(property_name, property_value);
+                                    let suggestion = Self::get_spelling_suggestion_for_unicode_property_value(property_name, property_value);
                                     if !suggestion.is_empty() {
                                         self.error(
                                             &diagnostics::Did_you_mean_0,
@@ -1236,7 +1222,7 @@ impl RegExpParser {
                             self.pos() - property_name_or_value_start,
                             &[],
                         );
-                        let suggestion = self.get_spelling_suggestion_for_unicode_property_name_or_value(property_name_or_value);
+                        let suggestion = Self::get_spelling_suggestion_for_unicode_property_name_or_value(property_name_or_value);
                         if !suggestion.is_empty() {
                             self.error(
                                 &diagnostics::Did_you_mean_0,
@@ -1273,18 +1259,18 @@ impl RegExpParser {
         }
     }
 
-    fn get_spelling_suggestion_for_unicode_property_name(&self, name: &str) -> String {
+    fn get_spelling_suggestion_for_unicode_property_name(name: &str) -> String {
         tsrs_core::get_spelling_suggestion_for_strings(name, NON_BINARY_UNICODE_PROPERTIES.iter().map(|&(k, _)| k)).map(std::string::ToString::to_string).unwrap_or_default()
     }
 
-    fn get_spelling_suggestion_for_unicode_property_value(&self, property_name: &str, value: &str) -> String {
+    fn get_spelling_suggestion_for_unicode_property_value(property_name: &str, value: &str) -> String {
         let Some(values) = crate::unicodeproperties::values_list_of_non_binary_unicode_properties(property_name) else {
             return String::new();
         };
         tsrs_core::get_spelling_suggestion_for_strings(value, values.iter().copied()).map(std::string::ToString::to_string).unwrap_or_default()
     }
 
-    fn get_spelling_suggestion_for_unicode_property_name_or_value(&self, name: &str) -> String {
+    fn get_spelling_suggestion_for_unicode_property_name_or_value(name: &str) -> String {
         tsrs_core::get_spelling_suggestion_for_strings(
             name,
             GENERAL_CATEGORY_VALUES.iter().copied().chain(BINARY_UNICODE_PROPERTIES.iter().copied()).chain(BINARY_UNICODE_PROPERTIES_OF_STRINGS.iter().copied()),

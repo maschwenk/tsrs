@@ -81,7 +81,7 @@ impl Parser {
                 if is_namespace {
                     modifiers = Some(self.create_export_modifier(tag));
                 }
-                let innermost = self.get_innermost_name_of_jsdoc_namespace(full_name);
+                let innermost = Self::get_innermost_name_of_jsdoc_namespace(full_name);
                 let checked = self.check_non_identifier_name(innermost);
                 let name = self.add_deep_clone_reparse(checked).unwrap();
                 let type_alias = self.factory.new_js_type_alias_declaration(modifiers, name, None, None);
@@ -114,7 +114,7 @@ impl Parser {
                     modifiers = Some(self.create_export_modifier(tag));
                 }
                 let function_type = self.reparse_jsdoc_signature(type_expression, tag, js_doc, tag, None);
-                let innermost = self.get_innermost_name_of_jsdoc_namespace(full_name);
+                let innermost = Self::get_innermost_name_of_jsdoc_namespace(full_name);
                 let name = self.add_deep_clone_reparse(innermost).unwrap();
                 let type_alias = self.factory.new_js_type_alias_declaration(modifiers, name, None, Some(function_type));
                 let type_parameters = self.gather_type_parameters(js_doc, true /*typedefOrCallback*/);
@@ -141,14 +141,14 @@ impl Parser {
                 tsrs_core::arena_pin();
                 self.reparse_list.push(import_declaration);
             }
-            Kind::JSDocOverloadTag => {
+            Kind::JSDocOverloadTag
                 // Create overload signatures only for function, method, and constructor declarations outside object literals
                 if (ast::is_function_declaration(parent)
                     || ast::is_method_declaration(parent)
                     || ast::is_constructor_declaration(parent))
                     && self.parsing_contexts & (1 << ParsingContext::ObjectLiteralMembers as u32)
                         == 0
-                {
+                => {
                     let signature = self.reparse_jsdoc_signature(
                         tag.as_jsdoc_overload_tag().type_expression,
                         parent,
@@ -159,7 +159,6 @@ impl Parser {
                     tsrs_core::arena_pin();
                     self.reparse_list.push(signature);
                 }
-            }
             _ => {}
         }
     }
@@ -444,15 +443,14 @@ impl Parser {
                             }
                         }
                     }
-                    Kind::ReturnStatement | Kind::ParenthesizedExpression => {
-                        if parent.expression().is_some() && tag.type_expression().is_some() {
+                    Kind::ReturnStatement | Kind::ParenthesizedExpression
+                        if parent.expression().is_some() && tag.type_expression().is_some() => {
                             let t = self.add_deep_clone_reparse(tag.type_expression().unwrap().type_node()).unwrap();
                             let cast = self.make_new_cast(t, parent.expression().unwrap(), true /*isAssertion*/);
                             parent.as_mutable().set_expression(cast);
                             self.finish_mutated_node(parent);
                             return;
                         }
-                    }
                     _ => {}
                 }
                 if let Some(fun) = get_function_like_host(parent) {
@@ -720,7 +718,7 @@ impl Parser {
         }
     }
 
-    pub(crate) fn make_question_if_optional(&mut self, parameter: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn make_question_if_optional(&self, parameter: P<Node>) -> Option<P<Node>> {
         let data = parameter.as_jsdoc_parameter_or_property_tag();
         let mut question_token = None;
         if data.is_bracketed
@@ -748,7 +746,7 @@ impl Parser {
         assert
     }
 
-    pub(crate) fn create_export_modifier(&mut self, location_node: P<Node>) -> P<ModifierList> {
+    pub(crate) fn create_export_modifier(&self, location_node: P<Node>) -> P<ModifierList> {
         let export_modifier = self.factory.new_modifier(Kind::ExportKeyword);
         export_modifier.set_loc(location_node.loc());
         export_modifier.set_flags(self.context_flags | NodeFlags::Reparsed);
@@ -758,7 +756,7 @@ impl Parser {
     // getInnermostNameOfJSDocNamespace returns the innermost identifier from a
     // JSDoc namespace chain (ModuleDeclaration). For a simple identifier, it returns
     // the identifier itself. For "A.B.C", it returns the identifier "C".
-    pub(crate) fn get_innermost_name_of_jsdoc_namespace(&mut self, full_name: Option<P<Node>>) -> Option<P<Node>> {
+    pub(crate) fn get_innermost_name_of_jsdoc_namespace(full_name: Option<P<Node>>) -> Option<P<Node>> {
         let mut full_name = full_name?;
         while full_name.kind() == Kind::ModuleDeclaration {
             let Some(body) = full_name.body() else {

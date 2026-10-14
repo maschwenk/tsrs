@@ -12,6 +12,7 @@ pub struct usingDeclarationTransformer {
 }
 
 // using.go:21
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_using_declaration_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(usingDeclarationTransformer {
         base: Transformer::default(),
@@ -270,7 +271,7 @@ impl usingDeclarationTransformer {
 
         match node.kind() {
             Kind::ImportDeclaration | Kind::ImportEqualsDeclaration | Kind::ExportDeclaration | Kind::FunctionDeclaration => {
-                self.hoist_import_or_export_or_hoisted_declaration(node, top_level_statements);
+                Self::hoist_import_or_export_or_hoisted_declaration(node, top_level_statements);
                 None
             }
             Kind::ExportAssignment => Some(self.hoist_export_assignment(node)),
@@ -344,7 +345,7 @@ impl usingDeclarationTransformer {
     }
 
     // using.go:397
-    fn hoist_import_or_export_or_hoisted_declaration(&self, node: P<Node>, top_level_statements: &mut Vec<P<Node>>) {
+    fn hoist_import_or_export_or_hoisted_declaration(node: P<Node>, top_level_statements: &mut Vec<P<Node>>) {
         // NOTE: `node` has already been visited
         top_level_statements.push(node);
     }

@@ -61,6 +61,7 @@ impl CheckerHandle {
     }
 
     // Go `done()`.
+    #[expect(clippy::unused_self, reason = "Releasing a checker handle remains an instance lifecycle operation even when the pool owns its storage.")]
     pub fn release(self) {}
 }
 

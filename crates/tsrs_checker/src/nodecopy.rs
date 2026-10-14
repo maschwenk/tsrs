@@ -45,7 +45,7 @@ impl NodeBuilderImpl {
             propertyNameNodeKind::NumericLiteral => return Some(res),
         };
         self.e.set_original(renamed, res);
-        self.set_text_range(c, renamed, Some(res))
+        Some(self.set_text_range(c, renamed, Some(res)))
     }
 
     // nodecopy.go:56
@@ -202,7 +202,7 @@ pub(crate) fn new_wrapping_tracker(inner: &'static dyn SymbolTracker, bound: P<r
 
 impl NodeBuilderImpl {
     // nodecopy.go:195
-    pub(crate) fn create_recovery_boundary(&self, c: &mut Checker) -> P<recoveryBoundary> {
+    pub(crate) fn create_recovery_boundary(&self, c: &Checker) -> P<recoveryBoundary> {
         c.check_not_canceled();
         let ctx = self.ctx();
         let bound = P::new_scratch(recoveryBoundary {
@@ -270,7 +270,7 @@ impl NodeBuilderImpl {
             }
             let mut name: &'static str = lit.text();
             let original_name = name;
-            let node_symbol = self.try_get_resolved_symbol_from_type_node(c, parent);
+            let node_symbol = Self::try_get_resolved_symbol_from_type_node(c, parent);
             let meaning = if parent.as_import_type_node().is_type_of { SymbolFlags::Value } else { SymbolFlags::Type };
             let mut parent_symbol: Option<P<Symbol>> = None;
             if let Some(node_symbol) = node_symbol {
@@ -309,7 +309,7 @@ impl NodeBuilderImpl {
     }
 
     // nodecopy.go:280
-    pub(crate) fn get_enclosing_declaration_ignoring_fake_scope(&self, c: &mut Checker) -> Option<P<Node>> {
+    pub(crate) fn get_enclosing_declaration_ignoring_fake_scope(&self, c: &Checker) -> Option<P<Node>> {
         let _ = c;
         let mut enc = self.ctx().enclosing_declaration.get();
         while let Some(e) = enc {
@@ -323,7 +323,7 @@ impl NodeBuilderImpl {
 }
 
 // nodecopy.go:288
-pub(crate) fn get_existing_node_tree_visitor(c: &mut Checker, b: P<NodeBuilderImpl>, bound: P<recoveryBoundary>) -> NodeVisitor {
+pub(crate) fn get_existing_node_tree_visitor(c: &Checker, b: P<NodeBuilderImpl>, bound: P<recoveryBoundary>) -> NodeVisitor {
     // TODO: wrap all these closures into methods on an object so we can guarantee we reuse the same memory on each invocation by reusing/resetting the object
     // instead of re-closing-over all of these each time we need a visitor. In theory the compiler could handle this, but in practice closure inlining hasn't been reliable
     //
@@ -397,7 +397,7 @@ impl ExistingNodeTree {
 
     /// `b.setTextRange(range, location)` with non-nil arguments (never returns nil).
     fn set_text_range(self, c: &mut Checker, range_: P<Node>, location: P<Node>) -> P<Node> {
-        self.b.set_text_range(c, range_, Some(location)).unwrap()
+        self.b.set_text_range(c, range_, Some(location))
     }
 
     fn tracker(self) -> &'static dyn SymbolTracker {
@@ -457,7 +457,7 @@ impl ExistingNodeTree {
         let mut sym: Option<P<Symbol>>;
         if ast::is_this_identifier(leftmost) {
             // `this` isn't a bindable identifier - skip resolution, find a relevant `this` symbol directly and avoid exhaustive scope traversal
-            let this_container = c.get_this_container(leftmost, false, false).unwrap();
+            let this_container = checker::Checker::get_this_container(leftmost, false, false).unwrap();
             sym = c.get_symbol_of_declaration(this_container);
             if c.is_symbol_accessible(sym, Some(leftmost), meaning, false).accessibility != SymbolAccessibility::Accessible {
                 introduces_error = true;
@@ -495,9 +495,8 @@ impl ExistingNodeTree {
                 }
                 introduces_error = true;
                 return (introduces_error, self.set_text_range(c, b.f.deep_clone_node(Some(node)).unwrap(), node), sym);
-            } else {
-                sym = sym_at_location;
             }
+            sym = sym_at_location;
         }
 
         if let Some(sym) = sym {
@@ -559,7 +558,7 @@ impl ExistingNodeTree {
         if ast::is_const_type_reference(node) {
             return None;
         }
-        let s = b.try_get_resolved_symbol_from_type_node(c, node)?; // ???
+        let s = nodebuilder_types::NodeBuilderImpl::try_get_resolved_symbol_from_type_node(c, node)?; // ???
         if s.flags().intersects(SymbolFlags::TypeParameter) {
             let declared_type = c.get_declared_type_of_symbol(s);
             if let Some(mapper) = b.ctx().mapper.get() {
@@ -569,7 +568,7 @@ impl ExistingNodeTree {
             }
         }
         let t = b.get_type_from_type_node(c, node, false).unwrap();
-        if !b.can_reuse_existing_js_type_node(c, node, t) {
+        if !nodebuilder_types::NodeBuilderImpl::can_reuse_existing_js_type_node(c, node, t) {
             // fallback to serialization for jsdoc types that have insufficient or incomplete type args, or are remapped by the checker in only jsdoc contexts
             // TODO: remappings like `promise` -> `Promise<any>` are static, we *could* statically remap the nodes, too. But that only matters for `isolatedDeclarations`
             // in JS, should we enable that.
@@ -597,11 +596,10 @@ impl ExistingNodeTree {
             Kind::TypeReference => return self.try_visit_type_reference(c, v, inner_node),
             Kind::TypeQuery => return self.try_visit_type_query(c, v, inner_node),
             Kind::IndexedAccessType => return self.try_visit_indexed_access(c, v, inner_node),
-            Kind::TypeOperator => {
-                if inner_node.as_type_operator_node().operator == Kind::KeyOfKeyword {
+            Kind::TypeOperator
+                if inner_node.as_type_operator_node().operator == Kind::KeyOfKeyword => {
                     return self.try_visit_key_of(c, v, inner_node);
                 }
-            }
             _ => {}
         }
         self.visit_node(c, v, Some(node))
@@ -859,12 +857,11 @@ impl ExistingNodeTree {
             let (introduces_error, result, _) = self.track_existing_entity_name(c, node.as_computed_property_name().expression, None);
             if !introduces_error {
                 return Some(factory.update_computed_property_name(node, result));
-            } else {
-                // !!! TODO: rewriting computed names based on evaluator/typecheck results?
-                // strada's behavior seems hard to justify vs marking an error and moving on
-                bound.mark_error(None);
-                return self.visit_each_child(c, v, node);
             }
+            // !!! TODO: rewriting computed names based on evaluator/typecheck results?
+            // strada's behavior seems hard to justify vs marking an error and moving on
+            bound.mark_error(None);
+            return self.visit_each_child(c, v, node);
         }
         if ast::is_type_predicate_node(node) {
             let tp = node.as_type_predicate_node();
@@ -971,10 +968,7 @@ impl ExistingNodeTree {
         //  is set to build for (even though we are reusing the node structure, the position information
         //  would make the printer print invalid spans for literals and identifiers, and the formatter would
         //  choke on the mismatched positonal spans between a parent and an injected child from another file).
-        result = match result {
-            Some(r) => b.set_text_range(c, r, Some(node)),
-            None => None,
-        };
+        result = result.map(|r| b.set_text_range(c, r, Some(node)));
 
         if bound.had_error.get() {
             if ast::is_type_node(node) && !ast::is_type_predicate_node(node) {
@@ -984,7 +978,7 @@ impl ExistingNodeTree {
                 let t = b.get_type_from_type_node(c, node, false);
                 return b.type_to_type_node(c, t);
             }
-            return b.set_text_range(c, node.clone_node(&b.f), Some(node));
+            return Some(b.set_text_range(c, node.clone_node(&b.f), Some(node)));
         }
 
         result

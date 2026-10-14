@@ -779,6 +779,7 @@ impl LanguageService {
 
     // Go groups the call sites in a map keyed by node id (random iteration order); the port keeps first-seen order.
     // callhierarchy.go:678
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     fn symbol_and_entries_to_incoming_calls(
         &self,
         _ctx: &Context,
@@ -1111,6 +1112,7 @@ impl LanguageService {
     }
 
     // callhierarchy.go:1004
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_prepare_call_hierarchy(
         &self,
         _ctx: &Context,
@@ -1181,6 +1183,7 @@ impl LanguageService {
     }
 
     // callhierarchy.go:1070
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_call_hierarchy_outgoing_calls(&self, _ctx: &Context, item: &lsproto::CallHierarchyItem) -> Result<lsproto::CallHierarchyOutgoingCallsResponse, lsproto::Error> {
         let program = self.get_program();
         let file_name = item.uri.file_name();

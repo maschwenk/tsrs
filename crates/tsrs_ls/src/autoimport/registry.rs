@@ -490,7 +490,7 @@ impl Registry {
     // the arena (module and alias resolvers, the extraction checkers' types and symbols, resolution caches) goes
     // to a scratch region freed before this returns; the finished registry holds no reference into it. The
     // package.json entries the new version keeps in `directories` go to a region of their own (`regions`).
-    pub fn clone_registry(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    pub fn clone_registry(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Arc<Registry> {
         let scratch = Region::new(SCRATCH_REGION_FIRST_CHUNK);
         let scratch_scope = scratch.enter();
         let registry = self.clone_registry_in_scratch(ctx, change, host, logger);
@@ -499,7 +499,7 @@ impl Registry {
         registry
     }
 
-    fn clone_registry_in_scratch(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    fn clone_registry_in_scratch(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Arc<Registry> {
         let start = Instant::now();
         let mut logger = logger;
         if !logger.is_nil() {
@@ -524,7 +524,7 @@ impl Registry {
             logger.logf(format_args!("Built autoimport registry in {:?}", start.elapsed()));
         }
         let registry = builder.build();
-        Ok(Arc::new(registry))
+        Arc::new(registry)
     }
 
     // registry.go:452
@@ -807,25 +807,22 @@ impl registryBuilder<'_> {
         let update_directory = |b: &mut registryBuilder, dir_path: &Path, dir_name: &str, package_json_changed: bool| {
             let package_json_file_name = tspath::combine_paths(dir_name, &["package.json"]);
             let has_node_modules = host.fs().directory_exists(&tspath::combine_paths(dir_name, &["node_modules"]));
-            match b.directories.get(dir_path) {
-                Some(entry) => {
-                    // (Go reads the package.json inside the apply function; it is read first here so that the entry is
-                    // allocated in this update's package.json region.)
-                    if entry.value().is_some_and(|dir| package_json_changed || dir.has_node_modules != has_node_modules) {
-                        let package_json = b.get_directory_package_json(&package_json_file_name);
-                        entry.change_if(
-                            |dir| package_json_changed || dir.has_node_modules != has_node_modules,
-                            |dir| {
-                                dir.package_json = package_json;
-                                dir.has_node_modules = has_node_modules;
-                            },
-                        );
-                    }
-                }
-                _ => {
+            if let Some(entry) = b.directories.get(dir_path) {
+                // (Go reads the package.json inside the apply function; it is read first here so that the entry is
+                // allocated in this update's package.json region.)
+                if entry.value().is_some_and(|dir| package_json_changed || dir.has_node_modules != has_node_modules) {
                     let package_json = b.get_directory_package_json(&package_json_file_name);
-                    b.directories.add(dir_path.clone(), Shared::new(directory { name: dir_name.to_string(), package_json, has_node_modules }));
+                    entry.change_if(
+                        |dir| package_json_changed || dir.has_node_modules != has_node_modules,
+                        |dir| {
+                            dir.package_json = package_json;
+                            dir.has_node_modules = has_node_modules;
+                        },
+                    );
                 }
+            } else {
+                let package_json = b.get_directory_package_json(&package_json_file_name);
+                b.directories.add(dir_path.clone(), Shared::new(directory { name: dir_name.to_string(), package_json, has_node_modules }));
             }
 
             if has_node_modules {
@@ -1481,7 +1478,7 @@ impl bucketBuildResult {
 impl registryBuilder<'_> {
     // registry.go:1229
     fn build_project_bucket(
-        &mut self,
+        &self,
         ctx: &Context,
         result: &mut bucketBuildResult,
         project_id: &ProjectID,

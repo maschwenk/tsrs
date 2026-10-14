@@ -550,9 +550,8 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
         Kind::HeritageClause => {
             if is_class_like(parent) {
                 return parent.class_like_data().unwrap().heritage_clauses();
-            } else {
-                return parent.as_interface_declaration().heritage_clauses;
             }
+            return parent.as_interface_declaration().heritage_clauses;
         }
         _ => {}
     }
@@ -613,11 +612,10 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
                 return parent.member_list();
             }
         }
-        Kind::SourceFile => {
-            if is_statement(node) {
+        Kind::SourceFile
+            if is_statement(node) => {
                 return parent.statement_list();
             }
-        }
         _ => {}
     }
 

@@ -572,11 +572,11 @@ impl checkerPool {
             if was_canceled {
                 // Canceled checkers must be disposed.
                 (p.log)(&format!("checkerpool: Checker {} for request {} was canceled, disposing", index, hold_tag(&request_id)));
-                disposed = p.dispose_checker_locked(&mut st, index, c);
+                disposed = checkerPool::dispose_checker_locked(&mut st, index, c);
             } else {
                 // Query checkers can produce incidental errors while serializing types.
                 if index == 0 {
-                    p.merge_global_diagnostics_from_checker_locked(&mut st, index);
+                    checkerPool::merge_global_diagnostics_from_checker_locked(&mut st, index);
                 }
                 st.held_by[index] = String::new();
                 st.last_released[index] = Some(Instant::now());
@@ -695,7 +695,7 @@ impl checkerPool {
             if idle >= self.opts.idle_timeout {
                 (self.log)(&format!("checkerpool: Disposing idle checker {i} (idle {idle:?})"));
                 let c = st.checkers[i].as_mut().unwrap().as_non_null();
-                disposed.extend(self.dispose_checker_locked(&mut st, i, c));
+                disposed.extend(Self::dispose_checker_locked(&mut st, i, c));
             }
         }
         // Reschedule for any remaining idle-but-not-yet-expired checkers.
@@ -713,7 +713,7 @@ impl checkerPool {
     // (file and request) that reference it. Must be called with p.mu held.
     // Region hook: returns the checker, for `dispose_checker` once p.mu is released.
     #[must_use]
-    fn dispose_checker_locked(&self, st: &mut checkerPoolState, index: usize, c: std::ptr::NonNull<Checker>) -> Option<PooledChecker> {
+    fn dispose_checker_locked(st: &mut checkerPoolState, index: usize, c: std::ptr::NonNull<Checker>) -> Option<PooledChecker> {
         assert!(st.checkers[index].as_mut().is_some_and(|pc| pc.as_non_null() == c));
         let old = st.checkers[index].take();
         st.held_by[index] = String::new();
@@ -728,7 +728,7 @@ impl checkerPool {
     // mergeGlobalDiagnosticsFromCheckerLocked checks if the given checker has produced new global
     // diagnostics since the last time we looked, and if so merges them into the accumulated set.
     // Must be called with p.mu held.
-    fn merge_global_diagnostics_from_checker_locked(&self, st: &mut checkerPoolState, index: usize) {
+    fn merge_global_diagnostics_from_checker_locked(st: &mut checkerPoolState, index: usize) {
         let globals = st.checkers[index].as_mut().unwrap().get_global_diagnostics();
         if globals.len() == st.global_diag_checker_count[index] {
             return;

@@ -38,7 +38,7 @@ impl Checker {
     }
 
     // checker.go:28324
-    pub(crate) fn contains_undefined_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn contains_undefined_type(t: P<Type>) -> bool {
         let mut t = t;
         if t.flags().intersects(TypeFlags::Union) {
             t = t.types()[0];
@@ -48,7 +48,7 @@ impl Checker {
 
     // checker.go:28331
     pub fn type_has_call_or_construct_signatures(&mut self, t: P<Type>) -> bool {
-        t.flags().intersects(TypeFlags::StructuredType) && !self.resolve_structured_type_members(t).unwrap().signatures().is_empty()
+        t.flags().intersects(TypeFlags::StructuredType) && !self.resolve_structured_type_members(t).signatures().is_empty()
     }
 
     // checker.go:28335
@@ -72,7 +72,7 @@ impl Checker {
             let n: P<Type>;
             if is_fresh_literal_type(t) {
                 n = t.as_literal_type().regular_type.get().unwrap();
-            } else if self.is_generic_tuple_type(t) {
+            } else if Self::is_generic_tuple_type(t) {
                 n = self.get_normalized_tuple_type(t, writing);
             } else if t.object_flags().intersects(ObjectFlags::Reference) {
                 if t.as_type_reference().node.get().is_some() {
@@ -158,7 +158,7 @@ impl Checker {
         // A generic tuple type indexed by a number exists only when the index type doesn't select a
         // fixed element. We simplify to either the combined type of all elements (when the index type
         // the actual number type) or to the combined type of all non-fixed elements.
-        if self.is_generic_tuple_type(object_type) && index_type.flags().intersects(TypeFlags::NumberLike) {
+        if Self::is_generic_tuple_type(object_type) && index_type.flags().intersects(TypeFlags::NumberLike) {
             let index = if_else(index_type.flags().intersects(TypeFlags::Number), 0, object_type.target_tuple_type().fixed_length.get());
             if let Some(element_type) = self.get_element_type_of_slice_of_tuple_type(object_type, index, 0 /*endSkipCount*/, writing, false) {
                 return element_type;
@@ -380,11 +380,11 @@ impl Checker {
     pub(crate) fn get_modifiers_type_from_mapped_type(&mut self, t: P<Type>) -> P<Type> {
         let m = t.as_mapped_type();
         if m.modifiers_type.get().is_none() {
-            if self.is_mapped_type_with_keyof_constraint_declaration(t) {
+            if Self::is_mapped_type_with_keyof_constraint_declaration(t) {
                 // If the constraint declaration is a 'keyof T' node, the modifiers type is T. We check
                 // AST nodes here because, when T is a non-generic type, the logic below eagerly resolves
                 // 'keyof T' to a literal union type and we can't recover T from that type.
-                let type_node = self.get_constraint_declaration_for_mapped_type(t).unwrap().type_node().unwrap();
+                let type_node = Self::get_constraint_declaration_for_mapped_type(t).unwrap().type_node().unwrap();
                 let from_node = self.get_type_from_type_node(type_node);
                 m.modifiers_type.set(Some(self.instantiate_type(from_node, m.mapper.get())));
             } else {
@@ -421,7 +421,7 @@ impl Checker {
         if let Some(&cached) = self.cached_types.get(&key) {
             return cached;
         }
-        let resolved = self.resolve_structured_type_members(t).unwrap();
+        let resolved = self.resolve_structured_type_members(t);
         let members = self.transform_type_of_members(t, super::checker::Checker::get_regular_type_of_object_literal);
         let regular = self.new_anonymous_type(t.symbol(), Some(members), resolved.call_signatures(), resolved.construct_signatures(), resolved.index_infos());
         // resolved is t's own structured data, so resolved.flags/objectFlags are t's header flags
@@ -725,10 +725,10 @@ impl Checker {
             let right = if is_property_access_expression(location) { location.as_property_access_expression().name } else { location.as_qualified_name().right };
             let mut lexically_scoped_symbol: Option<P<Symbol>> = None;
             if is_private_identifier(right) {
-                lexically_scoped_symbol = self.lookup_symbol_for_private_identifier_declaration(right.text(), right);
+                lexically_scoped_symbol = Self::lookup_symbol_for_private_identifier_declaration(right.text(), right);
             }
             let assignment_kind = get_assignment_target_kind(location);
-            let apparent_type = if assignment_kind != AssignmentKind::None || self.is_method_access_for_call(location) {
+            let apparent_type = if assignment_kind != AssignmentKind::None || Self::is_method_access_for_call(location) {
                 let widened = self.get_widened_type(left_type);
                 self.get_apparent_type(widened)
             } else {
@@ -921,7 +921,7 @@ impl Checker {
     }
 
     // checker.go:29093
-    pub(crate) fn get_helper_names(&mut self, helper: ExternalEmitHelpers) -> Vec<String> {
+    pub(crate) fn get_helper_names(&self, helper: ExternalEmitHelpers) -> Vec<String> {
         let names: &[&str] = if helper == ExternalEmitHelpers::Rest {
             &["__rest"]
         } else if helper == ExternalEmitHelpers::Decorate {
@@ -1002,7 +1002,7 @@ impl Checker {
             Kind::ClassDeclaration => {
                 if let Some(ctor) = get_first_constructor_with_body(node) {
                     for &p in ctor.parameters() {
-                        let type_node = self.get_parameter_type_node_for_decorator_check(p);
+                        let type_node = Self::get_parameter_type_node_for_decorator_check(p);
                         self.mark_decorator_medata_data_type_node_as_referenced(type_node);
                     }
                 }
@@ -1011,15 +1011,15 @@ impl Checker {
                 let other_kind = if node.kind() == Kind::SetAccessor { Kind::GetAccessor } else { Kind::SetAccessor };
                 let symbol = self.get_symbol_of_declaration(node).unwrap();
                 let other_accessor = get_declaration_of_kind(symbol, other_kind);
-                let mut annotation = self.get_annotated_accessor_type_node(Some(node));
+                let mut annotation = Self::get_annotated_accessor_type_node(Some(node));
                 if annotation.is_none() && other_accessor.is_some() {
-                    annotation = self.get_annotated_accessor_type_node(other_accessor);
+                    annotation = Self::get_annotated_accessor_type_node(other_accessor);
                 }
                 self.mark_decorator_medata_data_type_node_as_referenced(annotation);
             }
             Kind::MethodDeclaration => {
                 for &p in node.parameters() {
-                    let type_node = self.get_parameter_type_node_for_decorator_check(p);
+                    let type_node = Self::get_parameter_type_node_for_decorator_check(p);
                     self.mark_decorator_medata_data_type_node_as_referenced(type_node);
                 }
                 self.mark_decorator_medata_data_type_node_as_referenced(node.type_node());
@@ -1028,11 +1028,11 @@ impl Checker {
                 self.mark_decorator_medata_data_type_node_as_referenced(node.type_node());
             }
             Kind::Parameter => {
-                let type_node = self.get_parameter_type_node_for_decorator_check(node);
+                let type_node = Self::get_parameter_type_node_for_decorator_check(node);
                 self.mark_decorator_medata_data_type_node_as_referenced(type_node);
                 let containing_signature = node.parent().unwrap();
                 for &p in containing_signature.parameters() {
-                    let type_node = self.get_parameter_type_node_for_decorator_check(p);
+                    let type_node = Self::get_parameter_type_node_for_decorator_check(p);
                     self.mark_decorator_medata_data_type_node_as_referenced(type_node);
                 }
                 self.mark_decorator_medata_data_type_node_as_referenced(containing_signature.type_node());
@@ -1042,7 +1042,7 @@ impl Checker {
     }
 
     // checker.go:29204
-    pub(crate) fn get_parameter_type_node_for_decorator_check(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_parameter_type_node_for_decorator_check(node: P<Node>) -> Option<P<Node>> {
         let type_node = node.type_node();
         if node.as_parameter_declaration().dot_dot_dot_token().is_some() {
             return get_rest_parameter_element_type(type_node);
@@ -1141,7 +1141,7 @@ impl Checker {
         let links = self.alias_symbol_links.get(symbol);
         if !links.referenced.get() {
             links.referenced.set(true);
-            let Some(node) = self.get_declaration_of_alias_symbol(symbol) else {
+            let Some(node) = Self::get_declaration_of_alias_symbol(symbol) else {
                 panic!("Unexpected nil in markAliasSymbolAsReferenced");
             };
             // We defer checking of the reference of an `import =` until the import itself is referenced,
@@ -1231,7 +1231,7 @@ impl Checker {
             return Some(cached);
         }
         let global_promise_type = self.get_global_promise_type();
-        if self.is_reference_to_type(Some(t), global_promise_type) {
+        if Self::is_reference_to_type(Some(t), global_promise_type) {
             let result = self.get_type_arguments(t)[0];
             self.cached_types.insert(key, result);
             return Some(result);
@@ -1440,7 +1440,7 @@ impl Checker {
     }
 
     // checker.go:29584
-    pub(crate) fn get_definitely_falsy_part_of_type(&mut self, t: P<Type>) -> P<Type> {
+    pub(crate) fn get_definitely_falsy_part_of_type(&self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::String) {
             self.empty_string_type
         } else if t.flags().intersects(TypeFlags::Number) {
@@ -1461,7 +1461,7 @@ impl Checker {
     }
 
     // checker.go:29602
-    pub(crate) fn get_constraint_declaration(&mut self, t: P<Type>) -> Option<P<Node>> {
+    pub(crate) fn get_constraint_declaration(t: P<Type>) -> Option<P<Node>> {
         if let Some(symbol) = t.symbol() {
             if let Some(result) = symbol.declarations().iter().find_map(|&d| {
                 if is_type_parameter_declaration(d) {
@@ -1543,19 +1543,16 @@ impl Checker {
         let new_text_refs: Vec<&str> = new_texts.iter().map(std::string::String::as_str).collect();
         let key = get_template_type_key(&new_text_refs, &new_types);
 
-        match self.template_literal_types.get(&key) {
-            Some(t) => t,
-            None => {
-                let t = self.new_template_literal_type(&new_text_refs, &new_types);
-                self.template_literal_types.insert(key, t);
-                t
-            }
+        if let Some(t) = self.template_literal_types.get(&key) { t } else {
+            let t = self.new_template_literal_type(&new_text_refs, &new_types);
+            self.template_literal_types.insert(key, t);
+            t
         }
     }
 
     // checker.go:29702
     /// Go `getTemplateStringForType`, appended to `sb` (without a temporary `String` for string literals).
-    pub(crate) fn push_template_string_for_type(&mut self, sb: &mut String, t: P<Type>) {
+    pub(crate) fn push_template_string_for_type(sb: &mut String, t: P<Type>) {
         if t.flags().intersects(TypeFlags::StringLiteral | TypeFlags::NumberLiteral | TypeFlags::BooleanLiteral | TypeFlags::BigIntLiteral) {
             match t.as_literal_type().value.get().unwrap() {
                 LiteralValue::String(s) => sb.push_str(s),
@@ -1602,7 +1599,7 @@ struct TemplateSpansState {
 fn add_template_spans(c: &mut Checker, state: &mut TemplateSpansState, texts: &[&str], types: &[P<Type>]) -> bool {
     for (i, &t) in types.iter().enumerate() {
         if t.flags().intersects(TypeFlags::Literal | TypeFlags::Null | TypeFlags::Undefined) {
-            c.push_template_string_for_type(&mut state.sb, t);
+            checker::Checker::push_template_string_for_type(&mut state.sb, t);
             state.sb.push_str(texts[i + 1]);
         } else if t.flags().intersects(TypeFlags::TemplateLiteral) {
             state.sb.push_str(t.as_template_literal_type().texts.get()[0]);
@@ -1672,13 +1669,10 @@ impl Checker {
     // checker.go:29765
     pub(crate) fn get_string_mapping_type_for_generic_type(&mut self, symbol: P<Symbol>, t: P<Type>) -> P<Type> {
         let key = StringMappingKey { s: symbol, t };
-        match self.string_mapping_types.get(&key) {
-            Some(&result) => result,
-            None => {
-                let result = self.new_string_mapping_type(symbol, t);
-                self.string_mapping_types.insert(key, result);
-                result
-            }
+        if let Some(&result) = self.string_mapping_types.get(&key) { result } else {
+            let result = self.new_string_mapping_type(symbol, t);
+            self.string_mapping_types.insert(key, result);
+            result
         }
     }
 
@@ -1691,7 +1685,7 @@ impl Checker {
     pub(crate) fn substitute_indexed_mapped_type(&mut self, object_type: P<Type>, index: P<Type>) -> P<Type> {
         let type_parameter = self.get_type_parameter_from_mapped_type(object_type);
         let mapper = new_simple_type_mapper(type_parameter, index);
-        let template_mapper = self.combine_type_mappers(object_type.as_mapped_type().mapper.get(), mapper);
+        let template_mapper = Self::combine_type_mappers(object_type.as_mapped_type().mapper.get(), mapper);
         let template_type = self.get_template_type_from_mapped_type(object_type.as_mapped_type().target.get().unwrap_or(object_type));
         let instantiated_template_type = self.instantiate_type(template_type, Some(template_mapper));
         // SAFETY: both made here for this one instantiation (the composite's children escape with it).
@@ -1855,11 +1849,10 @@ impl Checker {
         match declaration.kind() {
             Kind::Parameter => return self.get_contextually_typed_parameter_type(declaration),
             Kind::BindingElement => return self.get_contextual_type_for_binding_element(declaration, context_flags),
-            Kind::PropertyDeclaration => {
-                if is_static(declaration) {
+            Kind::PropertyDeclaration
+                if is_static(declaration) => {
                     return self.get_contextual_type_for_static_property_declaration(declaration, context_flags);
                 }
-            }
             _ => {}
         }
         // By default, do nothing and return nil - only the above cases have context implied by a parent
@@ -2232,7 +2225,7 @@ impl Checker {
         let arg_index = args.iter().position(|&a| a == arg);
         // -1 for e.g. the expression of a CallExpression, or the tag of a TaggedTemplateExpression
         let arg_index = arg_index?;
-        self.get_contextual_type_for_argument_at_index(call_target, arg_index)
+        Some(self.get_contextual_type_for_argument_at_index(call_target, arg_index))
     }
 
     // checker.go:30261
@@ -2240,14 +2233,14 @@ impl Checker {
         &mut self,
         call_target: P<Node>,
         arg_index: usize,
-    ) -> Option<P<Type>> {
+    ) -> P<Type> {
         if is_import_call(call_target) {
             return if arg_index == 0 {
-                Some(self.string_type)
+                self.string_type
             } else if arg_index == 1 {
-                Some(self.get_global_import_call_options_type())
+                self.get_global_import_call_options_type()
             } else {
-                Some(self.any_type)
+                self.any_type
             };
         }
         // If we're already in the process of resolving the given signature, don't resolve again as
@@ -2267,15 +2260,15 @@ impl Checker {
             let rest_type = self.get_type_of_symbol(signature.parameters.get()[rest_index]);
             let index_type =
                 self.get_number_literal_type(jsnum::Number((arg_index - rest_index) as f64));
-            return Some(self.get_indexed_access_type_ex(
+            return self.get_indexed_access_type_ex(
                 rest_type,
                 index_type,
                 AccessFlags::Contextual,
                 None,
                 AliasArg::None,
-            ));
+            );
         }
-        Some(self.get_type_at_position(signature, arg_index))
+        self.get_type_at_position(signature, arg_index)
     }
 
     // checker.go:30290
@@ -2317,11 +2310,10 @@ impl Checker {
                 }
                 return t;
             }
-            Kind::AmpersandAmpersandToken | Kind::CommaToken => {
-                if node == binary.right.get() {
+            Kind::AmpersandAmpersandToken | Kind::CommaToken
+                if node == binary.right.get() => {
                     return self.get_contextual_type(binary_node, context_flags);
                 }
-            }
             _ => {}
         }
         None
@@ -2396,18 +2388,15 @@ impl Checker {
                     if let Some(binary_symbol) = binary.symbol() {
                         if binary_symbol.value_declaration().is_some_and(|d| d.type_node().is_none()) {
                             // We have an assignment declaration 'this.xxx = expr' with no (synthetic) type annotation
-                            let this_container = self.get_this_container(expr, false, false);
+                            let this_container = Self::get_this_container(expr, false, false);
                             if !is_object_literal_method(this_container) {
                                 return None;
                             }
                             // and now for one single case of object literal methods
                             let name = get_element_or_property_access_name(left);
-                            if name.is_none() {
-                                return None;
-                            } else {
-                                // !!! contextual typing for `this` in object literals
-                                return None;
-                            }
+                            name?;
+                            // !!! contextual typing for `this` in object literals
+                            return None;
                         }
                     }
                 }
@@ -2528,7 +2517,7 @@ impl Checker {
                     // If the offset is within the ending fixed part of the contextual tuple type, return the type of the contextual
                     // tuple element.
                     if offset.is_some_and(|offset| offset <= fixed_end_length) {
-                        let arity = c.get_type_reference_arity(t);
+                        let arity = checker::Checker::get_type_reference_arity(t);
                         return Some(c.get_type_arguments(t)[arity - offset.unwrap()]);
                     }
                     // Return a union of the possible contextual element types with no subtype reduction.

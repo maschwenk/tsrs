@@ -198,7 +198,7 @@ impl Checker {
             // No property was found
             return None;
         };
-        if (!self.has_common_declaration(&prop_set.values) || prop_set.values.is_empty()) && (check_flags.intersects(CheckFlags::Partial) || !prop_set.values.is_empty()) && check_flags.intersects(CheckFlags::ContainsPrivate | CheckFlags::ContainsProtected | CheckFlags::ContainsWritePrivate | CheckFlags::ContainsWriteProtected) && is_union
+        if (!Self::has_common_declaration(&prop_set.values) || prop_set.values.is_empty()) && (check_flags.intersects(CheckFlags::Partial) || !prop_set.values.is_empty()) && check_flags.intersects(CheckFlags::ContainsPrivate | CheckFlags::ContainsProtected | CheckFlags::ContainsWritePrivate | CheckFlags::ContainsWriteProtected) && is_union
         {
             // A property in a union has a private or protected declaration in one constituent, but is missing
             // or has a different declaration in another constituent. If the private or protected declaration is
@@ -384,7 +384,7 @@ pub(crate) fn is_prototype_property(symbol: P<Symbol>) -> bool {
 
 impl Checker {
     // checker.go:22041
-    pub(crate) fn has_common_declaration(&mut self, symbols: &[P<Symbol>]) -> bool {
+    pub(crate) fn has_common_declaration(symbols: &[P<Symbol>]) -> bool {
         let mut common_declarations: OrderedSet<P<Node>> = OrderedSet::default();
         for symbol in symbols {
             let symbol_declarations = symbol.declarations();
@@ -539,13 +539,10 @@ impl Checker {
         }
         let key = CachedTypeKey { kind: CachedTypeKind::ApparentType, type_id: this_argument.id };
 
-        match self.cached_types.get(&key).copied() {
-            Some(result) => result,
-            None => {
-                let result = self.get_type_with_this_argument(t, Some(this_argument), true /*needApparentType*/);
-                self.cached_types.insert(key, result);
-                result
-            }
+        if let Some(result) = self.cached_types.get(&key).copied() { result } else {
+            let result = self.get_type_with_this_argument(t, Some(this_argument), true /*needApparentType*/);
+            self.cached_types.insert(key, result);
+            result
         }
     }
 
@@ -811,16 +808,16 @@ impl Checker {
     // checker.go:22329
     pub(crate) fn get_effective_type_arguments(&mut self, node: P<Node>, type_parameters: &[P<Type>]) -> Vec<P<Type>> {
         let type_arguments: Vec<P<Type>> = node.type_arguments().iter().map(|&n| self.get_type_from_type_node(n)).collect();
-        let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
+        let min_type_argument_count = Self::get_min_type_argument_count(type_parameters);
         self.fill_missing_type_arguments(&type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(node))
     }
 
     // Gets the minimum number of type arguments needed to satisfy all non-optional type parameters.
     // checker.go:22334
-    pub fn get_min_type_argument_count(&mut self, type_parameters: &[P<Type>]) -> usize {
+    pub fn get_min_type_argument_count(type_parameters: &[P<Type>]) -> usize {
         let mut min_type_argument_count = 0;
         min_type_argument_count = type_parameters.iter().enumerate().fold(min_type_argument_count, |mut min_type_argument_count, (i, &type_parameter)| {
-            if !self.has_type_parameter_default(type_parameter) {
+            if !Self::has_type_parameter_default(type_parameter) {
                 min_type_argument_count = i + 1;
             }
 
@@ -830,7 +827,7 @@ impl Checker {
     }
 
     // checker.go:22344
-    pub(crate) fn has_type_parameter_default(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn has_type_parameter_default(t: P<Type>) -> bool {
         match t.symbol() {
             Some(symbol) => symbol.declarations().iter().any(|&d| is_type_parameter_declaration(d) && d.as_type_parameter_declaration().default_type.is_some()),
             None => false,
@@ -885,7 +882,7 @@ impl Checker {
     }
 
     // checker.go:22382
-    pub(crate) fn get_default_type_argument_type(&mut self, is_in_java_script_file: bool) -> P<Type> {
+    pub(crate) fn get_default_type_argument_type(&self, is_in_java_script_file: bool) -> P<Type> {
         if is_in_java_script_file {
             return self.any_type;
         }
@@ -964,13 +961,13 @@ impl Checker {
             let container = container.unwrap();
             result.extend((0..n).filter_map(|i| {
                 let (id, symbol) = members.entry(i);
-                if self.is_named_member(symbol, id) && self.is_declaration_contained_by(symbol, container) { Some(symbol) } else { None }
+                if self.is_named_member(symbol, id) && Self::is_declaration_contained_by(symbol, container) { Some(symbol) } else { None }
             }));
             contained_count = result.len();
         }
         result.extend((0..n).filter_map(|i| {
             let (id, symbol) = members.entry(i);
-            if self.is_named_member(symbol, id) && (!is_class_or_interface_container || !self.is_declaration_contained_by(symbol, container.unwrap())) {
+            if self.is_named_member(symbol, id) && (!is_class_or_interface_container || !Self::is_declaration_contained_by(symbol, container.unwrap())) {
                 Some(symbol)
             } else {
                 None
@@ -983,7 +980,7 @@ impl Checker {
     }
 
     // checker.go:22472
-    pub(crate) fn is_declaration_contained_by(&mut self, symbol: P<Symbol>, container: P<Symbol>) -> bool {
+    pub(crate) fn is_declaration_contained_by(symbol: P<Symbol>, container: P<Symbol>) -> bool {
         if let Some(declaration) = symbol.value_declaration() {
             if container.declarations().iter().any(|d| declaration.loc().contained_by(d.loc())) {
                 return true;
@@ -1123,14 +1120,11 @@ const ACTIVE_MAPPER_TYPE_KEY: u64 = 0x7f4a_7c15_9e37_79b9;
 /// matches one of these with the same 2^-128 odds as two xxh3 keys match each other.
 #[inline]
 fn active_mapper_cache_key(t: P<Type>, alias: Option<P<TypeAlias>>) -> CacheHashKey {
-    match alias {
-        None => CacheHashKey { hi: ACTIVE_MAPPER_TYPE_KEY, lo: u64::from(t.id.0).wrapping_mul(0x9e37_79b9_7f4a_7c15) },
-        Some(_) => {
-            let mut b = keyBuilder::default();
-            b.write_type(t);
-            b.write_alias(alias);
-            b.hash()
-        }
+    if alias.is_none() { CacheHashKey { hi: ACTIVE_MAPPER_TYPE_KEY, lo: u64::from(t.id.0).wrapping_mul(0x9e37_79b9_7f4a_7c15) } } else {
+        let mut b = keyBuilder::default();
+        b.write_type(t);
+        b.write_alias(alias);
+        b.hash()
     }
 }
 
@@ -1185,7 +1179,7 @@ impl Checker {
     }
 
     // checker.go:22596
-    pub(crate) fn find_active_mapper(&mut self, mapper: P<TypeMapper>) -> Option<usize> {
+    pub(crate) fn find_active_mapper(&self, mapper: P<TypeMapper>) -> Option<usize> {
         find_last_index(&self.active_mappers, |&m| m == mapper)
     }
 
@@ -1210,7 +1204,7 @@ impl Checker {
         }
         let result = t.flags().intersects(TypeFlags::Instantiable)
             || t.flags().intersects(TypeFlags::Object)
-                && !self.is_non_generic_top_level_type(t)
+                && !Self::is_non_generic_top_level_type(t)
                 && (object_flags.intersects(ObjectFlags::Reference)
                     && (t.as_type_reference().node.get().is_some() || {
                         let type_arguments = self.get_type_arguments(t);
@@ -1224,14 +1218,14 @@ impl Checker {
                     || object_flags.intersects(ObjectFlags::Mapped | ObjectFlags::ReverseMapped | ObjectFlags::ObjectRestType | ObjectFlags::InstantiationExpressionType))
             || t.flags().intersects(TypeFlags::UnionOrIntersection)
                 && !t.flags().intersects(TypeFlags::EnumLiteral)
-                && !self.is_non_generic_top_level_type(t)
+                && !Self::is_non_generic_top_level_type(t)
                 && t.types().iter().any(|&u| self.could_contain_type_variables(u));
         t.object_flags.set(t.object_flags_lazy() | ObjectFlags::CouldContainTypeVariablesComputed | tsrs_core::if_else(result, ObjectFlags::CouldContainTypeVariables, ObjectFlags::None));
         result
     }
 
     // checker.go:22626
-    pub(crate) fn is_non_generic_top_level_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_non_generic_top_level_type(t: P<Type>) -> bool {
         if let Some(alias) = t.alias() {
             if alias.type_arguments().is_empty() {
                 let alias_symbol = alias.symbol().unwrap();
@@ -1327,11 +1321,11 @@ impl Checker {
                 }
                 return self.get_conditional_type_instantiation_ex(t, t.as_conditional_type().mapper.get(), m, false /*forConstraint*/, alias);
             }
-            let mapper = self.combine_type_mappers(t.as_conditional_type().mapper.get(), m);
+            let mapper = Self::combine_type_mappers(t.as_conditional_type().mapper.get(), m);
             return self.get_conditional_type_instantiation(t, mapper, false /*forConstraint*/, alias);
         } else if flags.intersects(TypeFlags::Substitution) {
             let new_base_type = self.instantiate_type(t.as_substitution_type().base_type().unwrap(), Some(m));
-            if self.is_no_infer_type(t) {
+            if Self::is_no_infer_type(t) {
                 return self.get_no_infer_type(new_base_type);
             }
             let new_constraint = self.instantiate_type(t.as_substitution_type().subst_constraint().unwrap(), Some(m));
@@ -1381,36 +1375,33 @@ impl Checker {
             t
         };
         let type_parameters: &'static [P<Type>] =
-            match links.outer_type_parameters.get() {
-                Some(type_parameters) => type_parameters,
-                None => {
-                    // The first time an anonymous type is instantiated we compute and store a list of the type
-                    // parameters that are in scope (and therefore potentially referenced). For type literals that
-                    // aren't the right hand side of a generic type alias declaration we optimize by reducing the
-                    // set of type parameters to those that are possibly referenced in the literal.
-                    let mut type_parameters = self.get_outer_type_parameters(declaration, true /*includeThisTypes*/);
-                    if target.alias().type_arguments().is_empty() {
-                        if t.object_flags().intersects(ObjectFlags::Reference | ObjectFlags::InstantiationExpressionType) {
-                            let mut filtered = Vec::new();
-                            filtered.extend(
-                                type_parameters
-                                    .into_iter()
-                                    .filter(|&tp| self.is_type_parameter_possibly_referenced(tp, declaration)),
-                            );
-                            type_parameters = filtered;
-                        } else if target.symbol().unwrap().flags().intersects(SymbolFlags::Method | SymbolFlags::TypeLiteral) {
-                            let mut filtered = Vec::new();
-                            let declarations = t.symbol().unwrap().declarations();
-                            filtered.extend(type_parameters.into_iter().filter(|&tp| {
-                                declarations.iter().any(|&d| self.is_type_parameter_possibly_referenced(tp, d))
-                            }));
-                            type_parameters = filtered;
-                        }
+            if let Some(type_parameters) = links.outer_type_parameters.get() { type_parameters } else {
+                // The first time an anonymous type is instantiated we compute and store a list of the type
+                // parameters that are in scope (and therefore potentially referenced). For type literals that
+                // aren't the right hand side of a generic type alias declaration we optimize by reducing the
+                // set of type parameters to those that are possibly referenced in the literal.
+                let mut type_parameters = self.get_outer_type_parameters(declaration, true /*includeThisTypes*/);
+                if target.alias().type_arguments().is_empty() {
+                    if t.object_flags().intersects(ObjectFlags::Reference | ObjectFlags::InstantiationExpressionType) {
+                        let mut filtered = Vec::new();
+                        filtered.extend(
+                            type_parameters
+                                .into_iter()
+                                .filter(|&tp| self.is_type_parameter_possibly_referenced(tp, declaration)),
+                        );
+                        type_parameters = filtered;
+                    } else if target.symbol().unwrap().flags().intersects(SymbolFlags::Method | SymbolFlags::TypeLiteral) {
+                        let mut filtered = Vec::new();
+                        let declarations = t.symbol().unwrap().declarations();
+                        filtered.extend(type_parameters.into_iter().filter(|&tp| {
+                            declarations.iter().any(|&d| self.is_type_parameter_possibly_referenced(tp, d))
+                        }));
+                        type_parameters = filtered;
                     }
-                    let type_parameters = alloc_vec(type_parameters);
-                    links.outer_type_parameters.set(Some(type_parameters));
-                    type_parameters
                 }
+                let type_parameters = alloc_vec(type_parameters);
+                links.outer_type_parameters.set(Some(type_parameters));
+                type_parameters
             };
         if type_parameters.is_empty() {
             return t;
@@ -1443,7 +1434,7 @@ impl Checker {
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
             #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
-                new_mapper = self.combine_type_mappers(Some(new_mapper), m.unwrap());
+                new_mapper = Self::combine_type_mappers(Some(new_mapper), m.unwrap());
             }
             let r = if target.object_flags().intersects(ObjectFlags::Reference) {
                 self.create_deferred_type_reference(t.target().unwrap(), t.as_type_reference().node.get().unwrap(), Some(new_mapper), new_alias)
@@ -1557,7 +1548,7 @@ impl Checker {
             let orig_type_parameter = self.get_type_parameter_from_mapped_type(t);
             let fresh_type_parameter = self.clone_type_parameter(orig_type_parameter);
             result.as_mapped_type().type_parameter.set(Some(fresh_type_parameter));
-            m = self.combine_type_mappers(Some(new_simple_type_mapper(orig_type_parameter, fresh_type_parameter)), m);
+            m = Self::combine_type_mappers(Some(new_simple_type_mapper(orig_type_parameter, fresh_type_parameter)), m);
             fresh_type_parameter.as_type_parameter().mapper.set(Some(m));
         } else if t.object_flags().intersects(ObjectFlags::InstantiationExpressionType) {
             result.as_instantiation_expression_type().node.set(t.as_instantiation_expression_type().node.get());
@@ -1568,7 +1559,7 @@ impl Checker {
         result.set_alias(alias);
         if let Some(alias) = alias {
             if !alias.type_arguments().is_empty() {
-                let propagating = self.get_propagating_flags_of_types(result.alias().unwrap().type_arguments(), TypeFlags::None);
+                let propagating = Self::get_propagating_flags_of_types(result.alias().unwrap().type_arguments(), TypeFlags::None);
                 result.object_flags.set(result.object_flags_lazy() | propagating);
             }
         }
@@ -1919,13 +1910,13 @@ impl Checker {
     }
 
     // checker.go:23134
-    pub(crate) fn is_mapped_type_with_keyof_constraint_declaration(&mut self, t: P<Type>) -> bool {
-        let constraint_declaration = self.get_constraint_declaration_for_mapped_type(t).unwrap();
+    pub(crate) fn is_mapped_type_with_keyof_constraint_declaration(t: P<Type>) -> bool {
+        let constraint_declaration = Self::get_constraint_declaration_for_mapped_type(t).unwrap();
         is_type_operator_node(constraint_declaration) && constraint_declaration.as_type_operator_node().operator == Kind::KeyOfKeyword
     }
 
     // checker.go:23139
-    pub(crate) fn get_constraint_declaration_for_mapped_type(&mut self, t: P<Type>) -> Option<P<Node>> {
+    pub(crate) fn get_constraint_declaration_for_mapped_type(t: P<Type>) -> Option<P<Node>> {
         t.as_mapped_type().declaration.get().unwrap().as_mapped_type_node().type_parameter.as_type_parameter_declaration().constraint
     }
 
@@ -2249,19 +2240,16 @@ impl Checker {
         if is_valid_es_symbol_declaration(node) {
             let symbol = self.get_symbol_of_node(node);
             if let Some(symbol) = symbol {
-                let unique_type = match self.unique_es_symbol_types.get(&symbol).copied() {
-                    Some(unique_type) => unique_type,
-                    None => {
-                        let mut b = String::new();
-                        b.push_str(InternalSymbolNamePrefix);
-                        b.push('@');
-                        b.push_str(symbol.name());
-                        b.push('@');
-                        b.push_str(&get_symbol_id(symbol).0.to_string());
-                        let unique_type = self.new_unique_es_symbol_type(symbol, &b);
-                        self.unique_es_symbol_types.insert(symbol, unique_type);
-                        unique_type
-                    }
+                let unique_type = if let Some(unique_type) = self.unique_es_symbol_types.get(&symbol).copied() { unique_type } else {
+                    let mut b = String::new();
+                    b.push_str(InternalSymbolNamePrefix);
+                    b.push('@');
+                    b.push_str(symbol.name());
+                    b.push('@');
+                    b.push_str(&get_symbol_id(symbol).0.to_string());
+                    let unique_type = self.new_unique_es_symbol_type(symbol, &b);
+                    self.unique_es_symbol_types.insert(symbol, unique_type);
+                    unique_type
                 };
                 return unique_type;
             }
@@ -2459,15 +2447,12 @@ impl Checker {
                 Some(parent_symbol) => get_symbol_path(parent_symbol) + "." + text,
                 None => text.to_string(),
             };
-            let result = match self.unresolved_symbols.get(&path).copied() {
-                Some(result) => result,
-                None => {
-                    let result = self.new_symbol_ex(SymbolFlags::TypeAlias, text, CheckFlags::Unresolved);
-                    self.unresolved_symbols.insert(path, result);
-                    result.set_parent(parent_symbol);
-                    self.type_alias_links.get(result).declared_type.set(Some(self.unresolved_type));
-                    result
-                }
+            let result = if let Some(result) = self.unresolved_symbols.get(&path).copied() { result } else {
+                let result = self.new_symbol_ex(SymbolFlags::TypeAlias, text, CheckFlags::Unresolved);
+                self.unresolved_symbols.insert(path, result);
+                result.set_parent(parent_symbol);
+                self.type_alias_links.get(result).declared_type.set(Some(self.unresolved_type));
+                result
             };
             return result;
         }
@@ -2518,7 +2503,7 @@ impl Checker {
         let type_parameters = d.local_type_parameters();
         if !type_parameters.is_empty() {
             let num_type_arguments = node.type_arguments().len();
-            let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
+            let min_type_argument_count = Self::get_min_type_argument_count(type_parameters);
             let is_js = ast::is_in_js_file(node);
             let is_js_implicit_any = !self.no_implicit_any && is_js;
             if !is_js_implicit_any
@@ -2865,7 +2850,7 @@ impl Checker {
     // checker.go:23929
     pub(crate) fn get_element_types(&mut self, t: P<Type>) -> &'static [P<Type>] {
         let type_arguments = self.get_type_arguments(t);
-        let arity = self.get_type_reference_arity(t);
+        let arity = Self::get_type_reference_arity(t);
         if type_arguments.len() == arity {
             return type_arguments;
         }
@@ -2873,17 +2858,17 @@ impl Checker {
     }
 
     // checker.go:23938
-    pub(crate) fn get_type_reference_arity(&mut self, t: P<Type>) -> usize {
+    pub(crate) fn get_type_reference_arity(t: P<Type>) -> usize {
         t.target_interface_type().type_parameters().len()
     }
 
     // checker.go:23942
-    pub fn is_array_type(&mut self, t: P<Type>) -> bool {
+    pub fn is_array_type(&self, t: P<Type>) -> bool {
         t.object_flags().intersects(ObjectFlags::Reference) && (t.target() == Some(self.global_array_type) || t.target() == Some(self.global_readonly_array_type))
     }
 
     // checker.go:23946
-    pub(crate) fn is_readonly_array_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_readonly_array_type(&self, t: P<Type>) -> bool {
         t.object_flags().intersects(ObjectFlags::Reference) && t.target() == Some(self.global_readonly_array_type)
     }
 }

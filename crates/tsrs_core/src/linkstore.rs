@@ -82,13 +82,10 @@ impl<V: Default> PagedLinkStore<V> {
                 // Grow the length of the list to pageIndex+1
                 list.resize(page_index as usize + 1, None);
             }
-            match list[page_index as usize] {
-                Some(page) => page,
-                None => {
-                    let page = Self::new_page();
-                    list[page_index as usize] = Some(page);
-                    page
-                }
+            if let Some(page) = list[page_index as usize] { page } else {
+                let page = Self::new_page();
+                list[page_index as usize] = Some(page);
+                page
             }
         } else {
             let mut map = self.page_map.borrow_mut();

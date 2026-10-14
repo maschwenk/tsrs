@@ -21,6 +21,7 @@ use crate::utilities::get_leading_comment_ranges_of_node;
 
 impl LanguageService {
     // inlay_hints.go:25
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_inlay_hint(&self, ctx: &Context, params: &lsproto::InlayHintParams) -> Result<lsproto::InlayHintResponse, lsproto::Error> {
         let user_preferences = self.user_preferences();
         let inlay_hint_preferences = &user_preferences.inlay_hints;
@@ -80,11 +81,10 @@ impl InlayHintState<'_> {
             | Kind::ClassExpression
             | Kind::FunctionExpression
             | Kind::MethodDeclaration
-            | Kind::ArrowFunction => {
-                if self.ctx.err().is_some() {
+            | Kind::ArrowFunction
+                if self.ctx.err().is_some() => {
                     return true;
                 }
-            }
             _ => {}
         }
 
@@ -96,9 +96,7 @@ impl InlayHintState<'_> {
             return false;
         }
 
-        if self.preferences.include_inlay_variable_type_hints.is_true() && ast::is_variable_declaration(node) {
-            self.visit_variable_like_declaration(node);
-        } else if self.preferences.include_inlay_property_declaration_type_hints.is_true() && ast::is_property_declaration(node) {
+        if (self.preferences.include_inlay_variable_type_hints.is_true() && ast::is_variable_declaration(node)) || (self.preferences.include_inlay_property_declaration_type_hints.is_true() && ast::is_property_declaration(node)) {
             self.visit_variable_like_declaration(node);
         } else if self.preferences.include_inlay_enum_member_value_hints.is_true() && ast::is_enum_member(node) {
             self.visit_enum_member(node);

@@ -238,11 +238,6 @@ impl Message {
     }
 }
 
-// A raw (json.Value) field: present, even when null.
-fn raw(v: &Value) -> Option<Value> {
-    Some(v.clone())
-}
-
 impl Json for Message {
     const GO_TYPE: &'static str = "jsonrpc.Message";
 
@@ -271,8 +266,9 @@ impl Json for Message {
                 }
                 "id" => s.id = opt(k, v)?,
                 "method" => s.method = field(k, v)?,
-                "params" => s.params = raw(v),
-                "result" => s.result = raw(v),
+                // Raw fields are present even when their JSON value is null.
+                "params" => s.params = Some(v.clone()),
+                "result" => s.result = Some(v.clone()),
                 "error" => s.error = opt(k, v)?,
                 _ => {}
             }

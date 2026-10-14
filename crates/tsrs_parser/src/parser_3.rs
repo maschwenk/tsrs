@@ -586,28 +586,27 @@ impl Parser {
                 // by a function call to 'as' with the argument 'Bar'
                 if self.has_preceding_line_break() {
                     break;
+                }
+                self.next_token();
+                // When we have 'a ## b as SomeType $$ c' or 'a ## b satisfies SomeType $$ c', where ## and $$
+                // are binary operators, we want to stop parsing when $$ would bind before ## after erasing the
+                // assertion. See https://github.com/microsoft/TypeScript/issues/63527.
+                let mut last_precedence = OperatorPrecedence::Highest;
+                if ast::is_binary_expression(last_operand) {
+                    last_precedence = ast::get_binary_operator_precedence(last_operand.as_binary_expression().operator_token.kind());
+                }
+                if operator == Kind::SatisfiesKeyword {
+                    let type_node = self.parse_type();
+                    left_operand = self.make_satisfies_expression(left_operand, type_node);
                 } else {
-                    self.next_token();
-                    // When we have 'a ## b as SomeType $$ c' or 'a ## b satisfies SomeType $$ c', where ## and $$
-                    // are binary operators, we want to stop parsing when $$ would bind before ## after erasing the
-                    // assertion. See https://github.com/microsoft/TypeScript/issues/63527.
-                    let mut last_precedence = OperatorPrecedence::Highest;
-                    if ast::is_binary_expression(last_operand) {
-                        last_precedence = ast::get_binary_operator_precedence(last_operand.as_binary_expression().operator_token.kind());
-                    }
-                    if operator == Kind::SatisfiesKeyword {
-                        let type_node = self.parse_type();
-                        left_operand = self.make_satisfies_expression(left_operand, type_node);
-                    } else {
-                        let type_node = self.parse_type();
-                        left_operand = self.make_as_expression(left_operand, type_node);
-                    }
-                    // Stop if the next operator would bind before the last operator when the assertion is erased.
-                    let next_operator = self.re_scan_greater_than_token();
-                    let next_precedence = ast::get_binary_operator_precedence(next_operator);
-                    if should_consume_binary_operator(next_operator, next_precedence, last_precedence) {
-                        break;
-                    }
+                    let type_node = self.parse_type();
+                    left_operand = self.make_as_expression(left_operand, type_node);
+                }
+                // Stop if the next operator would bind before the last operator when the assertion is erased.
+                let next_operator = self.re_scan_greater_than_token();
+                let next_precedence = ast::get_binary_operator_precedence(next_operator);
+                if should_consume_binary_operator(next_operator, next_precedence, last_precedence) {
+                    break;
                 }
             } else {
                 let operator_token = self.parse_token_node();
@@ -703,7 +702,7 @@ impl Parser {
         simple_unary_expression
     }
 
-    pub(crate) fn is_update_expression(&mut self) -> bool {
+    pub(crate) fn is_update_expression(&self) -> bool {
         match self.token {
             Kind::PlusToken | Kind::MinusToken | Kind::TildeToken | Kind::ExclamationToken | Kind::DeleteKeyword | Kind::TypeOfKeyword | Kind::VoidKeyword | Kind::AwaitKeyword => false,
             Kind::LessThanToken => self.language_variant == LanguageVariant::JSX,
@@ -1363,7 +1362,7 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-    pub(crate) fn is_template_start_of_tagged_template(&mut self) -> bool {
+    pub(crate) fn is_template_start_of_tagged_template(&self) -> bool {
         self.token == Kind::NoSubstitutionTemplateLiteral || self.token == Kind::TemplateHead
     }
 
@@ -1501,7 +1500,7 @@ impl Parser {
                 if question_dot_token.is_none() && ast::is_expression_with_type_arguments(expression) {
                     let original = expression.as_expression_with_type_arguments();
                     expression = self.parse_tagged_template_rest(pos, original.expression, question_dot_token, original.type_arguments.get());
-                    self.unparse_expression_with_type_arguments(Some(original.expression), original.type_arguments.get(), expression);
+                    Self::unparse_expression_with_type_arguments(Some(original.expression), original.type_arguments.get(), expression);
                 } else {
                     expression = self.parse_tagged_template_rest(pos, expression, question_dot_token, None /*typeArguments*/);
                 }
@@ -1549,7 +1548,7 @@ impl Parser {
             true, /*allowUnicodeEscapeSequenceInIdentifierName*/
         );
         let is_optional_chain =
-            question_dot_token.is_some() || self.try_reparse_optional_chain(expression);
+            question_dot_token.is_some() || Self::try_reparse_optional_chain(expression);
         let property_access = self.factory.new_property_access_expression(
             expression,
             question_dot_token,
@@ -1585,15 +1584,15 @@ impl Parser {
     }
 
     #[inline]
-    pub(crate) fn try_reparse_optional_chain(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn try_reparse_optional_chain(node: P<Node>) -> bool {
         if node.flags().intersects(NodeFlags::OptionalChain) {
             return true;
         }
         // check for an optional chain in a non-null expression
-        ast::is_non_null_expression(node) && self.try_reparse_optional_chain_in_non_null_expression(node)
+        ast::is_non_null_expression(node) && Self::try_reparse_optional_chain_in_non_null_expression(node)
     }
 
-    fn try_reparse_optional_chain_in_non_null_expression(&mut self, node: P<Node>) -> bool {
+    fn try_reparse_optional_chain_in_non_null_expression(node: P<Node>) -> bool {
         {
             let mut expr = node.expression().unwrap();
             while ast::is_non_null_expression(expr) && !expr.flags().intersects(NodeFlags::OptionalChain) {
@@ -1626,7 +1625,7 @@ impl Parser {
             argument_expression = self.parse_expression_allow_in();
         }
         self.parse_expected(Kind::CloseBracketToken);
-        let is_optional_chain = question_dot_token.is_some() || self.try_reparse_optional_chain(expression);
+        let is_optional_chain = question_dot_token.is_some() || Self::try_reparse_optional_chain(expression);
         let node = self.factory.new_element_access_expression(expression, question_dot_token, argument_expression, if is_optional_chain { NodeFlags::OptionalChain } else { NodeFlags::None });
         self.finish_node(node, pos)
     }
@@ -1652,11 +1651,11 @@ impl Parser {
                 }
                 let inner = expression;
                 let argument_list = self.parse_argument_list();
-                let is_optional_chain = question_dot_token.is_some() || self.try_reparse_optional_chain(expression);
+                let is_optional_chain = question_dot_token.is_some() || Self::try_reparse_optional_chain(expression);
                 let node = self.factory.new_call_expression(expression, question_dot_token, type_arguments, argument_list, if is_optional_chain { NodeFlags::OptionalChain } else { NodeFlags::None });
                 let node = self.finish_node(node, pos);
                 expression = self.check_js_syntax(node);
-                self.unparse_expression_with_type_arguments(Some(inner), type_arguments, expression);
+                Self::unparse_expression_with_type_arguments(Some(inner), type_arguments, expression);
                 continue;
             }
             if question_dot_token.is_some() {
@@ -1936,7 +1935,7 @@ impl Parser {
         self.finish_node(node, pos)
     }
 
-    pub(crate) fn unparse_expression_with_type_arguments(&mut self, expression: Option<P<Node>>, type_arguments: Option<P<NodeList>>, result: P<Node>) {
+    pub(crate) fn unparse_expression_with_type_arguments(expression: Option<P<Node>>, type_arguments: Option<P<NodeList>>, result: P<Node>) {
         // force overwrite the `.Parent` of the expression and type arguments to erase the fact that they may have originally been parsed as an ExpressionWithTypeArguments and be parented to such
         if let Some(expression) = expression {
             expression.set_parent(Some(result));
@@ -1976,7 +1975,7 @@ impl Parser {
         let node = self.factory.new_new_expression(expression, type_arguments, argument_list);
         let node = self.finish_node(node, pos);
         let result = self.check_js_syntax(node);
-        self.unparse_expression_with_type_arguments(Some(expression), type_arguments, result);
+        Self::unparse_expression_with_type_arguments(Some(expression), type_arguments, result);
         result
     }
 
@@ -2223,7 +2222,7 @@ impl Parser {
         false
     }
 
-    pub(crate) fn can_parse_semicolon(&mut self) -> bool {
+    pub(crate) fn can_parse_semicolon(&self) -> bool {
         // If there's a real semicolon, then we can always parse it out.
         // We can parse out an optional semicolon in ASI cases in the following cases.
         self.token == Kind::SemicolonToken || self.token == Kind::CloseBraceToken || self.token == Kind::EndOfFile || self.has_preceding_line_break()
@@ -2244,7 +2243,7 @@ impl Parser {
         self.try_parse_semicolon() || self.parse_expected(Kind::SemicolonToken)
     }
 
-    pub(crate) fn is_literal_property_name(&mut self) -> bool {
+    pub(crate) fn is_literal_property_name(&self) -> bool {
         token_is_identifier_or_keyword(self.token) || self.token == Kind::StringLiteral || self.token == Kind::NumericLiteral || self.token == Kind::BigIntLiteral
     }
 
@@ -2495,7 +2494,7 @@ impl Parser {
         self.token == Kind::DotDotDotToken || self.is_binding_identifier_or_private_identifier_or_pattern() || ast::is_modifier_kind(self.token) || self.token == Kind::AtToken || self.is_start_of_type(!is_jsdoc_parameter /*inStartOfParameter*/)
     }
 
-    pub(crate) fn is_binding_identifier_or_private_identifier_or_pattern(&mut self) -> bool {
+    pub(crate) fn is_binding_identifier_or_private_identifier_or_pattern(&self) -> bool {
         self.token == Kind::OpenBraceToken || self.token == Kind::OpenBracketToken || self.token == Kind::PrivateIdentifier || self.is_binding_identifier()
     }
 
@@ -2518,7 +2517,7 @@ impl Parser {
     }
 
     // Ignore strict mode flag because we will report an error in type checker instead.
-    pub(crate) fn is_identifier(&mut self) -> bool {
+    pub(crate) fn is_identifier(&self) -> bool {
         if self.token == Kind::Identifier {
             return true;
         }
@@ -2532,16 +2531,16 @@ impl Parser {
         self.token > Kind::LastReservedWord
     }
 
-    pub(crate) fn is_binding_identifier(&mut self) -> bool {
+    pub(crate) fn is_binding_identifier(&self) -> bool {
         // `let await`/`let yield` in [Yield] or [Await] are allowed here and disallowed in the binder.
         self.token == Kind::Identifier || self.token > Kind::LastReservedWord
     }
 
-    pub(crate) fn is_import_attribute_name(&mut self) -> bool {
+    pub(crate) fn is_import_attribute_name(&self) -> bool {
         token_is_identifier_or_keyword(self.token) || self.token == Kind::StringLiteral
     }
 
-    pub(crate) fn is_binary_operator(&mut self) -> bool {
+    pub(crate) fn is_binary_operator(&self) -> bool {
         if self.in_disallow_in_context() && self.token == Kind::InKeyword {
             return false;
         }
@@ -2567,7 +2566,7 @@ impl Parser {
         true
     }
 
-    pub(crate) fn is_heritage_clause(&mut self) -> bool {
+    pub(crate) fn is_heritage_clause(&self) -> bool {
         self.token == Kind::ExtendsKeyword || self.token == Kind::ImplementsKeyword
     }
 

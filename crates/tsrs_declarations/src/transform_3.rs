@@ -124,7 +124,7 @@ impl DeclarationTransformer {
     // transform.go:2436
     pub(crate) fn ensure_no_initializer(&self, node: P<Node>) -> Option<P<Node>> {
         if self.should_print_with_initializer(node) {
-            let unwrapped_initializer = unwrap_parenthesized_expression(node.initializer().unwrap()).unwrap();
+            let unwrapped_initializer = unwrap_parenthesized_expression(node.initializer().unwrap());
             if !ast::is_primitive_literal_value(unwrapped_initializer, true) {
                 self.resolver.lock(|c| self.tracker.report_inference_fallback(c, node));
             }
@@ -404,14 +404,13 @@ impl DeclarationTransformer {
                     }
                 }
             }
-            JSDeclarationKind::ObjectDefinePropertyExports => {
-                if self.state.current_source_file.get().unwrap().common_js_module_indicator().is_some() {
+            JSDeclarationKind::ObjectDefinePropertyExports
+                if self.state.current_source_file.get().unwrap().common_js_module_indicator().is_some() => {
                     let result = self.transform_common_js_export(expression, self.get_name_expression_preferring_identifier(expression.arguments()[1]));
                     if let Some(result) = result {
                         self.cjs_export_members.borrow_mut().push(result);
                     }
                 }
-            }
             _ => {}
         }
         let result = self.expression_visitor().visit_each_child(Some(expression)); // recur through the whole tree, looking for special assignments

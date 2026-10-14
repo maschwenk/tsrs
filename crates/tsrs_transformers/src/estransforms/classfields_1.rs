@@ -535,6 +535,7 @@ impl classFieldsTransformer {
     // identifier to indicate a problem with the code.
     // Note: private identifiers in statement position (e.g., `#;`) are intercepted earlier
     // by visitExpressionStatement, which preserves them so the runtime throws a SyntaxError.
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_private_identifier(&self, node: P<Node>) -> Option<P<Node>> {
         if !self.should_transform_private_elements_or_class_static_blocks.get() {
             return Some(node);
@@ -704,6 +705,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:640
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_computed_property_name(&self, node: P<Node>) -> Option<P<Node>> {
         // Computed property names are evaluated in the enclosing scope, not the current class.
         // Replaces Strada's onEmitNode for ComputedPropertyName which switches to
@@ -913,6 +915,7 @@ impl classFieldsTransformer {
     //	#x = 1;
     //	get x() { return this.#x; }
     //	set x(value) { this.#x = value; }
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn transform_auto_accessor(&self, node: P<Node>) -> Option<P<Node>> {
         let comment_range = self.emit_context().comment_range(node);
         let source_map_range = self.emit_context().source_map_range(node);
@@ -1322,6 +1325,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:1244
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_for_statement(&self, node: P<Node>) -> Option<P<Node>> {
         let n = node.as_for_statement();
         let initializer = self.discarded_value_visitor().visit_node(n.initializer);
@@ -1335,6 +1339,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:1255
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_expression_statement(&self, node: P<Node>) -> Option<P<Node>> {
         let expression = node.as_expression_statement().expression;
         // Preserve private identifiers that appear directly as the expression of an
@@ -1527,7 +1532,7 @@ impl classFieldsTransformer {
     // classfields.go:1432
     pub(crate) fn is_anonymous_class_needing_assigned_name_worker(&self, node: P<Node> /*anonymousFunctionDefinition*/) -> bool {
         if ast::is_class_expression(node) && node.name().is_none() {
-            let static_properties_or_class_static_blocks = self.get_static_properties_and_class_static_block(node);
+            let static_properties_or_class_static_blocks = Self::get_static_properties_and_class_static_block(node);
             if static_properties_or_class_static_blocks.iter().any(|n| is_class_named_evaluation_helper_block(self.emit_context(), *n)) {
                 return false;
             }
@@ -1691,6 +1696,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:1614
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_parenthesized_expression(&self, node: P<Node>, discarded: bool) -> Option<P<Node>> {
         // 8.4.5 RS: NamedEvaluation
         //   ParenthesizedExpression : `(` Expression `)`
@@ -1746,7 +1752,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:1686
-    pub(crate) fn get_private_instance_methods_and_accessors(&self, node: P<Node>) -> Vec<P<Node>> {
+    pub(crate) fn get_private_instance_methods_and_accessors(node: P<Node>) -> Vec<P<Node>> {
         node.members().iter().copied().filter(|m| is_non_static_method_or_accessor_with_private_name(*m)).collect()
     }
 
@@ -1828,9 +1834,7 @@ impl classFieldsTransformer {
         for member in node.members() {
             let member = *member;
             if ast::is_static(member) {
-                if member.name().is_some_and(|n| ast::is_private_identifier(n) || ast::is_auto_accessor_property_declaration(member)) && self.should_transform_private_elements_or_class_static_blocks.get() {
-                    facts |= classFacts::NeedsClassConstructorReference;
-                } else if ast::is_auto_accessor_property_declaration(member) && self.should_transform_auto_accessors.get() && node.name().is_none() && self.emit_context().class_this(node).is_none() {
+                if (member.name().is_some_and(|n| ast::is_private_identifier(n) || ast::is_auto_accessor_property_declaration(member)) && self.should_transform_private_elements_or_class_static_blocks.get()) || (ast::is_auto_accessor_property_declaration(member) && self.should_transform_auto_accessors.get() && node.name().is_none() && self.emit_context().class_this(node).is_none()) {
                     facts |= classFacts::NeedsClassConstructorReference;
                 }
                 if ast::is_property_declaration(member) || ast::is_class_static_block_declaration(member) {
@@ -1922,7 +1926,7 @@ impl classFieldsTransformer {
         }
 
         if self.should_transform_private_elements_or_class_static_blocks.get() {
-            let private_instance_methods_and_accessors = self.get_private_instance_methods_and_accessors(node);
+            let private_instance_methods_and_accessors = Self::get_private_instance_methods_and_accessors(node);
             if !private_instance_methods_and_accessors.is_empty() {
                 let weak_set_name = self.create_hoisted_variable_for_class("instances", private_instance_methods_and_accessors[0].name().unwrap(), "");
                 self.get_private_identifier_environment().data.weak_set_name.set(Some(weak_set_name));

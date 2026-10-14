@@ -71,18 +71,15 @@ impl Printer {
         let state = self.enter_node(node);
         let n = node.as_property_access_expression();
         self.emit_expression(n.expression(), if is_optional_chain(node) { OperatorPrecedence::OptionalChain } else { OperatorPrecedence::Member });
-        let token = match n.question_dot_token() {
-            Some(token) => token,
-            None => {
-                let token = self.emit_context.factory.new_token(Kind::DotToken);
-                token.set_loc(TextRange::from_text_pos(
-                    n.expression().end(),
-                    n.name().pos(),
-                ));
-                self.emit_context
-                    .add_emit_flags(token, EmitFlags::NoSourceMap);
-                token
-            }
+        let token = if let Some(token) = n.question_dot_token() { token } else {
+            let token = self.emit_context.factory.new_token(Kind::DotToken);
+            token.set_loc(TextRange::from_text_pos(
+                n.expression().end(),
+                n.name().pos(),
+            ));
+            self.emit_context
+                .add_emit_flags(token, EmitFlags::NoSourceMap);
+            token
         };
         let lines_before_dot = self.get_lines_between_nodes(node, n.expression(), token);
         self.write_line_repeat(lines_before_dot);
@@ -658,11 +655,11 @@ impl Printer {
         }
     }
 
-    pub(crate) fn comment_will_emit_new_line(&self, comment: CommentRange) -> bool {
+    pub(crate) fn comment_will_emit_new_line(comment: CommentRange) -> bool {
         comment.kind == Kind::SingleLineCommentTrivia || comment.has_trailing_new_line
     }
 
-    pub(crate) fn synthetic_comment_will_emit_new_line(&self, comment: &SynthesizedComment) -> bool {
+    pub(crate) fn synthetic_comment_will_emit_new_line(comment: &SynthesizedComment) -> bool {
         comment.kind == Kind::SingleLineCommentTrivia || comment.has_trailing_new_line
     }
 
@@ -676,7 +673,7 @@ impl Printer {
         let text = current_source_file.text();
         for comment in node.pos().source_offset().into_iter().flat_map(|pos| scanner::get_leading_comment_ranges(text, pos)) {
             has_leading_comment_ranges = true;
-            if self.comment_will_emit_new_line(comment) {
+            if Self::comment_will_emit_new_line(comment) {
                 has_new_line_comment = true;
             }
         }
@@ -691,14 +688,14 @@ impl Printer {
         if has_new_line_comment {
             return true;
         }
-        if self.emit_context.get_synthetic_leading_comments(node).iter().any(|c| self.synthetic_comment_will_emit_new_line(c)) {
+        if self.emit_context.get_synthetic_leading_comments(node).iter().any(Self::synthetic_comment_will_emit_new_line) {
             return true;
         }
         if is_partially_emitted_expression(node) {
             let pee = node.as_partially_emitted_expression();
             if node.pos() != pee.expression().pos() {
                 if pee.expression().pos().source_offset().into_iter().flat_map(|pos| scanner::get_trailing_comment_ranges(text, pos))
-                    .any(|comment| self.comment_will_emit_new_line(comment))
+                    .any(Self::comment_will_emit_new_line)
                 {
                     return true;
                 }
@@ -2155,7 +2152,7 @@ impl Printer {
 //
 
 impl Printer {
-    pub(crate) fn emit_jsdoc_node(&mut self, _node: P<Node>) {
+    pub(crate) fn emit_jsdoc_node(_node: P<Node>) {
         // !!!
         panic!("not implemented");
     }

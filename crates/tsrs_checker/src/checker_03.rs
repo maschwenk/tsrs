@@ -191,7 +191,7 @@ impl Checker {
         let links = self.declared_type_links.get(symbol);
         if !links.type_parameters_checked.get() {
             links.type_parameters_checked.set(true);
-            let declarations = self.get_class_or_interface_declarations_of_symbol(symbol);
+            let declarations = Self::get_class_or_interface_declarations_of_symbol(symbol);
             if declarations.len() <= 1 {
                 return;
             }
@@ -207,14 +207,14 @@ impl Checker {
     }
 
     // checker.go:4495
-    pub(crate) fn get_class_or_interface_declarations_of_symbol(&mut self, symbol: P<Symbol>) -> Vec<P<Node>> {
+    pub(crate) fn get_class_or_interface_declarations_of_symbol(symbol: P<Symbol>) -> Vec<P<Node>> {
         symbol.declarations().iter().copied().filter(|&d| is_class_declaration(d) || is_interface_declaration(d)).collect()
     }
 
     // checker.go:4501
     pub(crate) fn are_type_parameters_identical(&mut self, declarations: &[P<Node>], target_parameters: &[P<Type>], mut get_type_parameter_declarations: impl FnMut(&mut Checker, P<Node>) -> Vec<P<Node>>) -> bool {
         let max_type_argument_count = target_parameters.len();
-        let min_type_argument_count = self.get_min_type_argument_count(target_parameters);
+        let min_type_argument_count = Self::get_min_type_argument_count(target_parameters);
         for &declaration in declarations {
             // If this declaration has too few or too many type parameters, we report an error
             let source_parameters = get_type_parameter_declarations(self, declaration);
@@ -305,7 +305,7 @@ impl Checker {
     // checker.go:4571
     pub(crate) fn get_type_without_signatures(&mut self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
+            let resolved = self.resolve_structured_type_members(t);
             if !resolved.signatures().is_empty() {
                 let result = self.new_object_type(ObjectFlags::Anonymous, t.symbol());
                 result.object_flags.set(result.object_flags.get_lazy() | ObjectFlags::MembersResolved);
@@ -399,14 +399,14 @@ impl Checker {
                     // either base or derived property is private - not override, skip it
                     continue;
                 }
-                let error_message: &'static Message;
+
                 let base_property_flags = base.flags() & SymbolFlags::PropertyOrAccessor;
                 let derived_property_flags = derived.flags() & SymbolFlags::PropertyOrAccessor;
-                if !base_property_flags.is_empty() && !derived_property_flags.is_empty() {
+                let error_message: &'static Message = if !base_property_flags.is_empty() && !derived_property_flags.is_empty() {
                     // property/accessor is overridden with property/accessor
                     if base.check_flags().intersects(CheckFlags::Mapped)
                         || derived.value_declaration().is_some_and(is_binary_expression)
-                        || self.are_properties_abstract_or_interface(base, base_declaration_flags)
+                        || Self::are_properties_abstract_or_interface(base, base_declaration_flags)
                     {
                         // when the base property is abstract or from an interface, base/derived flags don't need to match
                         // for intersection properties, this must be true of *any* of the declarations, for others it must be true of *all*
@@ -455,14 +455,13 @@ impl Checker {
                     if is_prototype_property(derived) || derived.flags().intersects(SymbolFlags::Property) {
                         // method is overridden with method or property -- correct case
                         continue;
-                    } else {
-                        error_message = &diagnostics::Class_0_defines_instance_member_function_1_but_extended_class_2_defines_it_as_instance_member_accessor;
                     }
+                    &diagnostics::Class_0_defines_instance_member_function_1_but_extended_class_2_defines_it_as_instance_member_accessor
                 } else if base.flags().intersects(SymbolFlags::Accessor) {
-                    error_message = &diagnostics::Class_0_defines_instance_member_accessor_1_but_extended_class_2_defines_it_as_instance_member_function;
+                    &diagnostics::Class_0_defines_instance_member_accessor_1_but_extended_class_2_defines_it_as_instance_member_function
                 } else {
-                    error_message = &diagnostics::Class_0_defines_instance_member_property_1_but_extended_class_2_defines_it_as_instance_member_function;
-                }
+                    &diagnostics::Class_0_defines_instance_member_property_1_but_extended_class_2_defines_it_as_instance_member_function
+                };
                 let a0 = self.type_to_string(base_type, None);
                 let a1 = self.symbol_to_string(base);
                 let a2 = self.type_to_string(t, None);
@@ -499,16 +498,16 @@ impl Checker {
     }
 
     // checker.go:4744
-    pub(crate) fn are_properties_abstract_or_interface(&mut self, base: P<Symbol>, base_declaration_flags: ModifierFlags) -> bool {
+    pub(crate) fn are_properties_abstract_or_interface(base: P<Symbol>, base_declaration_flags: ModifierFlags) -> bool {
         let declarations = base.declarations();
         if base.check_flags().intersects(CheckFlags::Synthetic) {
-            return declarations.iter().any(|&d| self.is_property_abstract_or_interface(d, base_declaration_flags));
+            return declarations.iter().any(|&d| Self::is_property_abstract_or_interface(d, base_declaration_flags));
         }
-        declarations.iter().all(|&d| self.is_property_abstract_or_interface(d, base_declaration_flags))
+        declarations.iter().all(|&d| Self::is_property_abstract_or_interface(d, base_declaration_flags))
     }
 
     // checker.go:4751
-    pub(crate) fn is_property_abstract_or_interface(&mut self, declaration: P<Node>, base_declaration_flags: ModifierFlags) -> bool {
+    pub(crate) fn is_property_abstract_or_interface(declaration: P<Node>, base_declaration_flags: ModifierFlags) -> bool {
         is_interface_declaration(declaration.parent().unwrap())
             || base_declaration_flags.intersects(ModifierFlags::Abstract) && (!is_property_declaration(declaration) || declaration.initializer().is_none())
     }
@@ -864,12 +863,12 @@ impl Checker {
             if member.modifier_flags().intersects(ModifierFlags::Ambient) {
                 continue;
             }
-            if !ast::is_static(member) && self.is_property_without_initializer(member) {
+            if !ast::is_static(member) && Self::is_property_without_initializer(member) {
                 let prop_name = member.name().unwrap();
                 if is_identifier(prop_name) || is_private_identifier(prop_name) || is_computed_property_name(prop_name) {
                     let member_symbol = self.get_symbol_of_declaration(member).unwrap();
                     let t = self.get_type_of_symbol(member_symbol);
-                    if !(t.flags().intersects(TypeFlags::AnyOrUnknown) || self.contains_undefined_type(t)) {
+                    if !(t.flags().intersects(TypeFlags::AnyOrUnknown) || Self::contains_undefined_type(t)) {
                         if constructor.is_none() || !self.is_property_initialized_in_constructor(prop_name, t, constructor.unwrap()) {
                             self.error(member.name(), &diagnostics::Property_0_has_no_initializer_and_is_not_definitely_assigned_in_the_constructor, &[&tsrs_scanner::declaration_name_to_string(Some(prop_name))]);
                         }
@@ -880,7 +879,7 @@ impl Checker {
     }
 
     // checker.go:5047
-    pub(crate) fn is_property_without_initializer(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_property_without_initializer(node: P<Node>) -> bool {
         is_property_declaration(node) && !has_abstract_modifier(node) && !is_exclamation_token(node.postfix_token()) && node.initializer().is_none()
     }
 
@@ -903,7 +902,7 @@ impl Checker {
                 reference.set_flow_node(static_block.as_class_static_block_declaration().return_flow_node());
                 let optional_type = self.get_optional_type(prop_type, false);
                 let flow_type = self.get_flow_type_of_reference_ex(reference, prop_type, optional_type, None, None);
-                if !self.contains_undefined_type(flow_type) {
+                if !Self::contains_undefined_type(flow_type) {
                     return true;
                 }
             }
@@ -929,7 +928,7 @@ impl Checker {
         reference.set_flow_node(constructor.as_constructor_declaration().return_flow_node());
         let optional_type = self.get_optional_type(prop_type, false);
         let flow_type = self.get_flow_type_of_reference_ex(reference, prop_type, optional_type, None, None);
-        !self.contains_undefined_type(flow_type)
+        !Self::contains_undefined_type(flow_type)
     }
 
     // checker.go:5082
@@ -1027,7 +1026,7 @@ impl Checker {
             return true;
         }
         let mut seen: FxHashMap<&'static str, InheritanceInfo> = FxHashMap::default();
-        let declared_members = self.resolve_declared_members(t).unwrap().declared_members.get();
+        let declared_members = self.resolve_declared_members(t).declared_members.get();
         if let Some(declared_members) = declared_members {
             seen.extend(
                 declared_members
@@ -1302,7 +1301,7 @@ pub(crate) fn get_first_non_ambient_class_or_function_declaration(symbol: P<Symb
 
 impl Checker {
     // checker.go:5366
-    pub(crate) fn get_isolated_modules_like_flag_name(&mut self) -> String {
+    pub(crate) fn get_isolated_modules_like_flag_name(&self) -> String {
         if self.compiler_options.verbatim_module_syntax.is_true() { "verbatimModuleSyntax" } else { "isolatedModules" }.to_string()
     }
 
@@ -1810,7 +1809,7 @@ impl Checker {
                         };
                         let flag_name = self.get_isolated_modules_like_flag_name();
                         let diag = self.error(Some(id), message, &[&id.text(), &flag_name]);
-                        self.add_type_only_declaration_related_info(diag, type_only_declaration, id.text());
+                        Self::add_type_only_declaration_related_info(diag, type_only_declaration, id.text());
                     }
                 }
             }
@@ -1871,7 +1870,7 @@ impl Checker {
             // namespace members and the exported entity also exports type or namespace members.
             if let Some(export_equals_symbol) = export_equals_symbol {
                 if self.has_exported_members_of_kind(module_symbol, SymbolFlags::Value) || self.has_shadowed_namespace(export_equals_symbol) {
-                    let declaration = self.get_declaration_of_alias_symbol(export_equals_symbol).or(export_equals_symbol.value_declaration());
+                    let declaration = Self::get_declaration_of_alias_symbol(export_equals_symbol).or(export_equals_symbol.value_declaration());
                     if let Some(declaration) = declaration {
                         if !is_top_level_in_external_module_augmentation(Some(declaration)) {
                             self.error(Some(declaration), &diagnostics::An_export_assignment_cannot_be_used_in_a_module_with_other_exported_elements, &[]);
@@ -2108,7 +2107,7 @@ impl Checker {
             }
             let declarations = symbol.declarations();
             if declarations.len() > 1 {
-                if declarations.iter().any(|&d| d != node && is_variable_like(d) && !self.are_declaration_flags_identical(d, node)) {
+                if declarations.iter().any(|&d| d != node && is_variable_like(d) && !Self::are_declaration_flags_identical(d, node)) {
                     self.error(Some(name), &diagnostics::All_declarations_of_0_must_have_identical_modifiers, &[&tsrs_scanner::declaration_name_to_string(Some(name))]);
                 }
             }
@@ -2125,7 +2124,7 @@ impl Checker {
                 self.check_type_assignable_to_and_optionally_elaborate(initializer_type, declaration_type, Some(node), Some(initializer), None /*headMessage*/, None);
             }
             if let Some(value_declaration) = symbol.value_declaration() {
-                if !self.are_declaration_flags_identical(node, value_declaration) {
+                if !Self::are_declaration_flags_identical(node, value_declaration) {
                     self.error(Some(name), &diagnostics::All_declarations_of_0_must_have_identical_modifiers, &[&tsrs_scanner::declaration_name_to_string(Some(name))]);
                 }
             }

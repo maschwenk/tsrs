@@ -157,7 +157,7 @@ impl Checker {
         if !reduced_type.flags().intersects(TypeFlags::StructuredType) {
             return;
         }
-        let members = self.resolve_structured_type_members(reduced_type).unwrap().members();
+        let members = self.resolve_structured_type_members(reduced_type).members();
         if let Some(members) = members {
             for (name, symbol) in members.entries() {
                 if self.is_named_member(symbol, name) {
@@ -252,17 +252,17 @@ impl Checker {
     }
 
     // services.go:232
-    pub fn is_unknown_symbol(&mut self, symbol: P<Symbol>) -> bool {
+    pub fn is_unknown_symbol(&self, symbol: P<Symbol>) -> bool {
         symbol == self.unknown_symbol
     }
 
     // services.go:236
-    pub fn is_undefined_symbol(&mut self, symbol: P<Symbol>) -> bool {
+    pub fn is_undefined_symbol(&self, symbol: P<Symbol>) -> bool {
         symbol == self.undefined_symbol
     }
 
     // services.go:240
-    pub fn is_arguments_symbol(&mut self, symbol: P<Symbol>) -> bool {
+    pub fn is_arguments_symbol(&self, symbol: P<Symbol>) -> bool {
         symbol == self.arguments_symbol
     }
 
@@ -351,7 +351,7 @@ impl Checker {
     }
 
     // services.go:319
-    pub(crate) fn should_treat_properties_of_external_module_as_exports(&mut self, resolved_external_module_type: P<Type>) -> bool {
+    pub(crate) fn should_treat_properties_of_external_module_as_exports(&self, resolved_external_module_type: P<Type>) -> bool {
         !resolved_external_module_type.flags().intersects(TypeFlags::Primitive)
             || resolved_external_module_type.object_flags().intersects(ObjectFlags::Class)
             // `isArrayOrTupleLikeType` is too expensive to use in this auto-imports hot path.
@@ -453,7 +453,7 @@ impl Checker {
     }
 
     // services.go:415
-    pub fn get_mapped_type_symbol_of_property(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> {
+    pub fn get_mapped_type_symbol_of_property(&self, symbol: P<Symbol>) -> Option<P<Symbol>> {
         if let Some(value_links) = self.value_symbol_links.try_get(symbol) {
             return value_links.containing_type().unwrap().symbol();
         }
@@ -1269,7 +1269,7 @@ impl Checker {
 
     // services.go:1125
     // IsLibSymbolForHoverVerbosity returns true if a symbol is declared in a lib file.
-    pub fn is_lib_symbol_for_hover_verbosity(&mut self, symbol: Option<P<Symbol>>) -> bool {
+    pub fn is_lib_symbol_for_hover_verbosity(&self, symbol: Option<P<Symbol>>) -> bool {
         let Some(symbol) = symbol else {
             return false;
         };
@@ -1292,7 +1292,7 @@ impl Checker {
     // services.go:1140
     // IsLibTypeForHoverVerbosity returns true if a type is declared in a lib file.
     // Don't expand types like Array or Promise, instead treating them as opaque.
-    pub fn is_lib_type_for_hover_verbosity(&mut self, t: P<Type>) -> bool {
+    pub fn is_lib_type_for_hover_verbosity(&self, t: P<Type>) -> bool {
         let symbol = if t.object_flags().intersects(ObjectFlags::Reference) {
             t.target().unwrap().symbol()
         } else {

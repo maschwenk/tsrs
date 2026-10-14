@@ -43,7 +43,7 @@ impl<T: Send + 'static> dynamicQueue<T> {
             return Err(err);
         }
 
-        let mut state = self.get_any(ctx)?;
+        let mut state = self.get_any(ctx);
 
         state.items.push_back(item);
         drop(state);
@@ -71,10 +71,10 @@ impl<T: Send + 'static> dynamicQueue<T> {
     }
 
     // dynamic_queue.go:76
-    pub(crate) fn get_any(&self, _ctx: &Context) -> Result<MutexGuard<'_, dynamicQueueState<T>>, ContextError> {
+    pub(crate) fn get_any(&self, _ctx: &Context) -> MutexGuard<'_, dynamicQueueState<T>> {
         // The state is only ever held for a push or a pop, so taking it never waits on another caller for
         // long; Go's select on ctx.Done() is the check before taking it (Put/Get) and the ready wait below.
-        Ok(self.inner.state.lock().unwrap())
+        self.inner.state.lock().unwrap()
     }
 
     // dynamic_queue.go:87

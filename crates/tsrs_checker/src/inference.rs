@@ -56,7 +56,7 @@ impl Checker {
         self.infer_memo.steps = self.infer_memo.steps.wrapping_add(1);
         let mut source = source;
         let mut target = target;
-        if !self.could_contain_type_variables(target) || self.is_no_infer_type(target) {
+        if !self.could_contain_type_variables(target) || Self::is_no_infer_type(target) {
             return;
         }
         if source == self.wildcard_type || source == self.blocked_string_type {
@@ -76,7 +76,7 @@ impl Checker {
                     // Simply infer from source type arguments to target type arguments, with defaults applied.
                     let alias_symbol = source_alias.symbol().unwrap();
                     let params = self.type_alias_links.get(alias_symbol).type_parameters.get();
-                    let min_params = self.get_min_type_argument_count(params);
+                    let min_params = Self::get_min_type_argument_count(params);
                     let node_is_in_js_file = ast::is_in_js_file(alias_symbol.value_declaration());
                     let source_types = self.fill_missing_type_arguments(source_alias.type_arguments(), params, min_params, node_is_in_js_file);
                     let target_types = self.fill_missing_type_arguments(target_alias.type_arguments(), params, min_params, node_is_in_js_file);
@@ -103,7 +103,7 @@ impl Checker {
             // Next, infer between closely matching source and target constituents and remove
             // the matching types. Types closely match when they are instantiations of the same
             // object type or instantiations of the same type alias.
-            let (sources, targets) = self.infer_from_matching_types(n, &temp_sources, &temp_targets, super::checker::Checker::is_type_closely_matched_by, true /*sort*/);
+            let (sources, targets) = self.infer_from_matching_types(n, &temp_sources, &temp_targets, |_, s, t| Self::is_type_closely_matched_by(s, t), true /*sort*/);
             if targets.is_empty() {
                 return;
             }
@@ -135,7 +135,7 @@ impl Checker {
             }
         }
         if target.flags().intersects(TypeFlags::IndexedAccess | TypeFlags::Substitution) {
-            if self.is_no_infer_type(target) {
+            if Self::is_no_infer_type(target) {
                 return;
             }
             target = self.get_actual_type_variable(target).unwrap();
@@ -607,7 +607,7 @@ impl Checker {
 
     // inference.go:566
     pub(crate) fn infer_to_template_literal_type(&mut self, n: P<InferenceState>, source: P<Type>, target: &'static TemplateLiteralType) {
-        let comparer = self.compare_types_assignable_comparer();
+        let comparer = Self::compare_types_assignable_comparer();
         let matches = self.infer_types_from_template_literal_type(source, target, comparer);
         let types = target.types();
         // When the target template literal contains only placeholders (meaning that inference is intended to extract
@@ -666,16 +666,14 @@ impl Checker {
 
 // The `choose` closure of inferToTemplateLiteralType.
 fn infer_to_template_literal_type_choose(c: &mut Checker, left: P<Type>, right: P<Type>, all_type_flags: TypeFlags, source: P<Type>, str: &str) -> P<Type> {
-    if !right.flags().intersects(all_type_flags) {
-        left
-    } else if left.flags().intersects(TypeFlags::String) {
+    if (!right.flags().intersects(all_type_flags)) || (left.flags().intersects(TypeFlags::String)) {
         left
     } else if right.flags().intersects(TypeFlags::String) {
         source
     } else if left.flags().intersects(TypeFlags::TemplateLiteral) {
         left
     } else if right.flags().intersects(TypeFlags::TemplateLiteral) && {
-        let comparer = c.compare_types_assignable_comparer();
+        let comparer = checker::Checker::compare_types_assignable_comparer();
         c.is_type_matched_by_template_literal_type(source, right.as_template_literal_type(), comparer)
     } {
         source
@@ -778,13 +776,13 @@ impl Checker {
         }
         if self.is_array_or_tuple_type(source) {
             if is_tuple_type(target) {
-                let source_arity = self.get_type_reference_arity(source);
-                let target_arity = self.get_type_reference_arity(target);
+                let source_arity = Self::get_type_reference_arity(source);
+                let target_arity = Self::get_type_reference_arity(target);
                 let element_types = self.get_type_arguments(target);
                 let element_infos = target.target_tuple_type().element_infos();
                 // When source and target are tuple types with the same structure (fixed, variadic, and rest are matched
                 // to the same kind in each position), simply infer between the element types.
-                if is_tuple_type(source) && self.is_tuple_type_structure_matching(source, target) {
+                if is_tuple_type(source) && Self::is_tuple_type_structure_matching(source, target) {
                     for (i, element) in element_types[..target_arity].iter().enumerate() {
                         let s = self.get_type_arguments(source)[i];
                         self.infer_from_types(n, s, *element);
@@ -1034,7 +1032,7 @@ impl Checker {
         if let Some(target_type_predicate) = target_type_predicate {
             let source_type_predicate = self.get_type_predicate_of_signature(source);
             if let Some(source_type_predicate) = source_type_predicate {
-                if self.type_predicate_kinds_match(source_type_predicate, target_type_predicate) {
+                if Self::type_predicate_kinds_match(source_type_predicate, target_type_predicate) {
                     if let (Some(s), Some(t)) = (source_type_predicate.t.get(), target_type_predicate.t.get()) {
                         callback(self, s, t);
                         return;
@@ -1297,7 +1295,7 @@ impl Checker {
         let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
         if let Some(index_info) = index_info {
             let value_type = self.infer_reverse_mapped_type(index_info.value_type(), r_mapped_type, r_constraint_type).unwrap_or(self.unknown_type);
-            index_infos = vec![self.new_index_info(string_type, value_type, readonly_mask && index_info.is_readonly(), None, &[])];
+            index_infos = vec![checker::Checker::new_index_info(string_type, value_type, readonly_mask && index_info.is_readonly(), None, &[])];
         }
         let members = SymbolTable::new();
         let limited_constraint = self.get_limited_constraint(t);
@@ -1414,8 +1412,8 @@ pub(crate) fn tuple_types_definitely_unrelated(source: P<Type>, target: P<Type>)
 
 impl Checker {
     // inference.go:1202
-    pub(crate) fn is_tuple_type_structure_matching(&mut self, t1: P<Type>, t2: P<Type>) -> bool {
-        if self.get_type_reference_arity(t1) != self.get_type_reference_arity(t2) {
+    pub(crate) fn is_tuple_type_structure_matching(t1: P<Type>, t2: P<Type>) -> bool {
+        if Self::get_type_reference_arity(t1) != Self::get_type_reference_arity(t2) {
             return false;
         }
         !(t1
@@ -1437,7 +1435,7 @@ impl Checker {
     }
 
     // inference.go:1223
-    pub(crate) fn is_type_closely_matched_by(&mut self, s: P<Type>, t: P<Type>) -> bool {
+    pub(crate) fn is_type_closely_matched_by(s: P<Type>, t: P<Type>) -> bool {
         s.flags().intersects(TypeFlags::Object) && t.flags().intersects(TypeFlags::Object) && s.symbol().is_some() && s.symbol() == t.symbol()
             || s.alias().is_some() && t.alias().is_some() && !s.alias().type_arguments().is_empty() && s.alias().symbol() == t.alias().symbol()
     }
@@ -1462,41 +1460,41 @@ impl Checker {
         let mut index_infos: Vec<P<IndexInfo>> = Vec::new();
         if t.flags().intersects(TypeFlags::String) {
             let (string_type, empty_object_type) = (self.string_type, self.empty_object_type);
-            index_infos = vec![self.new_index_info(string_type, empty_object_type, false /*isReadonly*/, None, &[])];
+            index_infos = vec![checker::Checker::new_index_info(string_type, empty_object_type, false /*isReadonly*/, None, &[])];
         }
         self.new_anonymous_type(None, Some(members), &[], &[], &index_infos)
     }
 
     // inference.go:1251
-    pub(crate) fn new_inference_context(&mut self, type_parameters: &[P<Type>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: Option<TypeComparer>) -> P<InferenceContext> {
+    pub(crate) fn new_inference_context(type_parameters: &[P<Type>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: Option<TypeComparer>) -> P<InferenceContext> {
         let compare_types = match compare_types {
             Some(compare_types) => compare_types,
-            None => self.compare_types_assignable_comparer(),
+            None => Self::compare_types_assignable_comparer(),
         };
         let inferences: Vec<P<InferenceInfo>> = type_parameters.iter().map(|&tp| new_inference_info(tp)).collect();
-        self.new_inference_context_worker(&inferences, signature, flags, compare_types)
+        Self::new_inference_context_worker(&inferences, signature, flags, compare_types)
     }
 
     // inference.go:1258
     // n and the result are Option (Go checks n for nil; callers pass getInferenceContext results).
-    pub(crate) fn clone_inference_context(&mut self, n: Option<P<InferenceContext>>, extra_flags: InferenceFlags) -> Option<P<InferenceContext>> {
+    pub(crate) fn clone_inference_context(n: Option<P<InferenceContext>>, extra_flags: InferenceFlags) -> Option<P<InferenceContext>> {
         let n = n?;
         let inferences: Vec<P<InferenceInfo>> = n.inferences.get().iter().map(|&info| clone_inference_info(info)).collect();
-        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get() | extra_flags, n.compare_types.get().unwrap()))
+        Some(Self::new_inference_context_worker(&inferences, n.signature.get(), n.flags.get() | extra_flags, n.compare_types.get().unwrap()))
     }
 
     // inference.go:1265
-    pub(crate) fn clone_inferred_part_of_context(&mut self, n: P<InferenceContext>) -> Option<P<InferenceContext>> {
+    pub(crate) fn clone_inferred_part_of_context(n: P<InferenceContext>) -> Option<P<InferenceContext>> {
         let inferences: Vec<P<InferenceInfo>> = n.inferences.get().iter().copied().filter(|&info| has_inference_candidates(info)).collect();
         if inferences.is_empty() {
             return None;
         }
         let inferences: Vec<P<InferenceInfo>> = inferences.iter().map(|&info| clone_inference_info(info)).collect();
-        Some(self.new_inference_context_worker(&inferences, n.signature.get(), n.flags.get(), n.compare_types.get().unwrap()))
+        Some(Self::new_inference_context_worker(&inferences, n.signature.get(), n.flags.get(), n.compare_types.get().unwrap()))
     }
 
     // inference.go:1273
-    pub(crate) fn new_inference_context_worker(&mut self, inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
+    pub(crate) fn new_inference_context_worker(inferences: &[P<InferenceInfo>], signature: Option<P<Signature>>, flags: InferenceFlags, compare_types: TypeComparer) -> P<InferenceContext> {
         let n = P::new_recycled(InferenceContext::new(tsrs_core::alloc_slice_recycled(inferences), signature, flags, compare_types));
         if !tsrs_core::lazymembers::lazy_inference_mappers() {
             n.mapper();
@@ -1506,7 +1504,7 @@ impl Checker {
     }
 
     // inference.go:1285
-    pub(crate) fn add_intra_expression_inference_site(&mut self, n: P<InferenceContext>, node: P<Node>, t: P<Type>) {
+    pub(crate) fn add_intra_expression_inference_site(n: P<InferenceContext>, node: P<Node>, t: P<Type>) {
         n.push_intra_expression_inference_site(IntraExpressionInferenceSite { node, t });
     }
 
@@ -1680,7 +1678,7 @@ impl Checker {
 
     // inference.go:1414
     // n and the result are Option (Go returns nil for a nil context; callers pass nil-able contexts).
-    pub(crate) fn get_mapper_from_context(&mut self, n: Option<P<InferenceContext>>) -> Option<P<TypeMapper>> {
+    pub(crate) fn get_mapper_from_context(n: Option<P<InferenceContext>>) -> Option<P<TypeMapper>> {
         let n = n?;
         n.mapper()
     }
@@ -1688,9 +1686,9 @@ impl Checker {
     // Return a type mapper that combines the context's return mapper with a mapper that erases any additional type parameters
     // to their inferences at the time of creation.
     // inference.go:1423
-    pub(crate) fn create_outer_return_mapper(&mut self, context: P<InferenceContext>) -> P<TypeMapper> {
+    pub(crate) fn create_outer_return_mapper(context: P<InferenceContext>) -> P<TypeMapper> {
         if context.outer_return_mapper().is_none() {
-            let mut mapper = self.clone_inference_context(Some(context), InferenceFlags::None).unwrap().mapper().unwrap();
+            let mut mapper = Self::clone_inference_context(Some(context), InferenceFlags::None).unwrap().mapper().unwrap();
             if let Some(return_mapper) = context.return_mapper() {
                 mapper = new_merged_type_mapper(return_mapper, mapper);
             }
@@ -1921,7 +1919,7 @@ impl Checker {
     }
 
     // inference.go:1618
-    pub(crate) fn is_from_inference_blocked_source(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_from_inference_blocked_source(&self, t: P<Type>) -> bool {
         match t.symbol() {
             Some(symbol) => {
                 let declarations = symbol.declarations();
@@ -1932,7 +1930,7 @@ impl Checker {
     }
 
     // inference.go:1622
-    pub(crate) fn is_skip_direct_inference_node(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_skip_direct_inference_node(&self, node: P<Node>) -> bool {
         self.skip_direct_inference_nodes.has(&node)
     }
 }
@@ -2006,7 +2004,7 @@ pub(crate) fn has_overlapping_inferences(a: &[P<InferenceInfo>], b: &[P<Inferenc
 
 impl Checker {
     // inference.go:1679
-    pub(crate) fn merge_inferences(&mut self, target: &mut [P<InferenceInfo>], source: &[P<InferenceInfo>]) {
+    pub(crate) fn merge_inferences(target: &mut [P<InferenceInfo>], source: &[P<InferenceInfo>]) {
         for (i, element) in target.iter_mut().enumerate() {
             if !has_inference_candidates(*element) && has_inference_candidates(source[i]) {
                 (*element) = source[i];

@@ -141,30 +141,27 @@ impl Chunks {
             let start = off.next_multiple_of(align);
             (start + size <= off + len).then_some((off, len, start))
         });
-        let start = match found {
-            Some((off, len, start)) => {
-                self.free.remove(&off);
-                if start > off {
-                    self.free.insert(off, start - off);
-                }
-                if off + len > start + size {
-                    self.free.insert(start + size, off + len - (start + size));
-                }
-                start
+        let start = if let Some((off, len, start)) = found {
+            self.free.remove(&off);
+            if start > off {
+                self.free.insert(off, start - off);
             }
-            None => {
-                let start = self.next.next_multiple_of(align);
-                if start + size > RESERVE {
-                    return None;
-                }
-                // No free range ends at `next` (`put` lowers `next` instead), so the gap is a range of its own.
-                if start > self.next {
-                    self.free.insert(self.next, start - self.next);
-                }
-                self.next = start + size;
-                self.peak = self.peak.max(self.next);
-                start
+            if off + len > start + size {
+                self.free.insert(start + size, off + len - (start + size));
             }
+            start
+        } else {
+            let start = self.next.next_multiple_of(align);
+            if start + size > RESERVE {
+                return None;
+            }
+            // No free range ends at `next` (`put` lowers `next` instead), so the gap is a range of its own.
+            if start > self.next {
+                self.free.insert(self.next, start - self.next);
+            }
+            self.next = start + size;
+            self.peak = self.peak.max(self.next);
+            start
         };
         self.live += size;
         Some(start)

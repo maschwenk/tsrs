@@ -82,10 +82,7 @@ impl Tracker {
 
     // trackerimpl.go:136
     fn compute_new_text(&mut self, change: &trackerEdit, target_source_file: P<SourceFile>, source_file: P<SourceFile>) -> String {
-        match change.kind {
-            trackerEditKind::Text => return change.new_text.clone(),
-            _ => {}
-        }
+        if change.kind == trackerEditKind::Text { return change.new_text.clone() }
 
         let start = self.to_lsp_edit_range(source_file, change.text_range).start;
         let positions = self.converters.from_lsp_position_for_source_file(source_file, start, Feature::All);
@@ -276,7 +273,7 @@ impl Tracker {
     ) -> TextRange {
         TextRange::new(
             self.get_adjusted_start_position(source_file, start_node, leading_option, false),
-            self.get_adjusted_end_position(source_file, end_node, trailing_option),
+            Self::get_adjusted_end_position(source_file, end_node, trailing_option),
         )
     }
 
@@ -369,7 +366,6 @@ impl Tracker {
     // method on the changeTracker because of converters
     // Return the end position of a multiline comment if it is on another line.
     fn get_end_position_of_multiline_trailing_comment(
-        &self,
         source_file: P<SourceFile>,
         node: P<Node>,
         trailing_opt: TrailingTriviaOption,
@@ -406,7 +402,6 @@ impl Tracker {
     // trackerimpl.go:422
     // method on the changeTracker because of converters
     pub(crate) fn get_adjusted_end_position(
-        &self,
         source_file: P<SourceFile>,
         node: P<Node>,
         trailing_trivia_option: TrailingTriviaOption,
@@ -431,7 +426,7 @@ impl Tracker {
             return node_end;
         }
 
-        if let Some(multiline_end_position) = self.get_end_position_of_multiline_trailing_comment(
+        if let Some(multiline_end_position) = Self::get_end_position_of_multiline_trailing_comment(
             source_file,
             node,
             trailing_trivia_option,
@@ -459,7 +454,6 @@ impl Tracker {
 
     // trackerimpl.go:475
     pub(crate) fn get_insertion_position_at_source_file_top(
-        &self,
         source_file: P<SourceFile>,
     ) -> u32 {
         let mut last_prologue: Option<P<Node>> = None;

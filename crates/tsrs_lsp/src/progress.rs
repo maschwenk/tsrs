@@ -41,13 +41,10 @@ struct serverProgressReporter {
 impl progressReporter for serverProgressReporter {
     // progress.go:38
     fn done(&self) -> Context {
-        match self.server.upgrade() {
-            Some(server) => server.background_ctx(),
-            None => {
-                let (ctx, cancel) = Context::background().with_cancel();
-                cancel.call();
-                ctx
-            }
+        if let Some(server) = self.server.upgrade() { server.background_ctx() } else {
+            let (ctx, cancel) = Context::background().with_cancel();
+            cancel.call();
+            ctx
         }
     }
 
@@ -144,16 +141,13 @@ impl projectLoadingProgress {
             drop(ch.state.lock().unwrap());
             ch.not_full.notify_all();
         };
-        match wait_until(&done, &self.ch.not_full, guard, |s| s.events.len() < PROGRESS_CHANNEL_CAPACITY, wake) {
-            Ok(mut state) => {
-                // Sent successfully.
-                state.events.push_back(ev);
-                drop(state);
-                self.ch.not_empty.notify_all();
-            }
-            Err(_) => {
-                // Server shutting down; drop the event.
-            }
+        if let Ok(mut state) = wait_until(&done, &self.ch.not_full, guard, |s| s.events.len() < PROGRESS_CHANNEL_CAPACITY, wake) {
+            // Sent successfully.
+            state.events.push_back(ev);
+            drop(state);
+            self.ch.not_empty.notify_all();
+        } else {
+            // Server shutting down; drop the event.
         }
     }
 
@@ -344,7 +338,7 @@ impl projectLoadingProgress {
     }
 
     #[cfg(test)]
-    pub(crate) fn capacity(&self) -> usize {
+    pub(crate) fn capacity() -> usize {
         PROGRESS_CHANNEL_CAPACITY
     }
 }

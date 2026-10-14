@@ -614,7 +614,7 @@ impl Printer {
                 } else if is_punctuation_kind(node.kind()) {
                     self.emit_punctuation_node(Some(node));
                 } else if is_jsdoc_kind(node.kind()) {
-                    self.emit_jsdoc_node(node);
+                    Self::emit_jsdoc_node(node);
                 } else {
                     panic!("unhandled Node: {:?}", node.kind());
                 }
@@ -759,7 +759,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_detached_comments_before_statement_list(&mut self, node: P<Node>, detached_range: TextRange) -> Option<commentState> {
-        if !self.should_emit_detached_comments(node) {
+        if !Self::should_emit_detached_comments(node) {
             return None;
         }
 

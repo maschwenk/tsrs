@@ -13,7 +13,7 @@ impl Checker {
     // grammarchecks.go:19
     pub(crate) fn grammar_error_on_first_token(&mut self, node: P<Node>, message: &'static Message, args: &[&dyn Display]) -> bool {
         let source_file = ast::get_source_file_of_node(node).unwrap();
-        if !self.has_parse_diagnostics(source_file) {
+        if !Self::has_parse_diagnostics(source_file) {
             let span = scanner::get_range_of_token_at_position(
                 source_file,
                 node.pos()
@@ -35,7 +35,7 @@ impl Checker {
         args: &[&dyn Display],
     ) -> bool {
         let source_file = ast::get_source_file_of_node(node_for_source_file).unwrap();
-        if !self.has_parse_diagnostics(source_file) {
+        if !Self::has_parse_diagnostics(source_file) {
             self.add_diagnostic(ast::new_diagnostic(
                 Some(source_file),
                 TextRange::new(
@@ -55,7 +55,7 @@ impl Checker {
     // grammarchecks.go:38
     pub(crate) fn grammar_error_on_node(&mut self, node: P<Node>, message: &'static Message, args: &[&dyn Display]) -> bool {
         let source_file = ast::get_source_file_of_node(node).unwrap();
-        if !self.has_parse_diagnostics(source_file) {
+        if !Self::has_parse_diagnostics(source_file) {
             self.error(Some(node), message, args);
             return true;
         }
@@ -65,7 +65,7 @@ impl Checker {
     // grammarchecks.go:47
     pub(crate) fn grammar_error_on_node_skipped_on_no_emit(&mut self, node: P<Node>, message: &'static Message, args: &[&dyn Display]) -> bool {
         let source_file = ast::get_source_file_of_node(node).unwrap();
-        if !self.has_parse_diagnostics(source_file) {
+        if !Self::has_parse_diagnostics(source_file) {
             let d = new_diagnostic_for_node(Some(node), Some(message), args);
             d.set_skipped_on_no_emit();
             self.add_diagnostic(d);
@@ -112,7 +112,7 @@ impl Checker {
     // grammarchecks.go:69
     pub(crate) fn check_grammar_regular_expression_literal(&mut self, node: P<Node>) -> bool {
         let source_file = ast::get_source_file_of_node(node).unwrap();
-        if !self.has_parse_diagnostics(source_file) {
+        if !Self::has_parse_diagnostics(source_file) {
             let mut last_error: Option<P<Diagnostic>> = None;
             if self.reg_exp_scanner.is_none() {
                 self.reg_exp_scanner = Some(Box::new(Scanner::new()));
@@ -173,7 +173,7 @@ impl Checker {
     // grammarchecks.go:127
     pub(crate) fn check_grammar_decorator(&mut self, decorator: P<Node>) -> bool {
         let source_file = ast::get_source_file_of_node(decorator).unwrap();
-        if !self.has_parse_diagnostics(source_file) {
+        if !Self::has_parse_diagnostics(source_file) {
             let mut node = decorator.as_decorator().expression;
 
             // DecoratorParenthesizedExpression :
@@ -299,9 +299,8 @@ impl Checker {
                 if !ast::node_can_be_decorated(self.legacy_decorators, node, Some(parent), parent.parent()) {
                     if node.kind() == Kind::MethodDeclaration && !ast::node_is_present(node.body()) {
                         return self.grammar_error_on_first_token(node, &diagnostics::A_decorator_can_only_decorate_a_method_implementation_not_an_overload, &[]);
-                    } else {
-                        return self.grammar_error_on_first_token(node, &diagnostics::Decorators_are_not_valid_here, &[]);
                     }
+                    return self.grammar_error_on_first_token(node, &diagnostics::Decorators_are_not_valid_here, &[]);
                 } else if self.legacy_decorators && (node.kind() == Kind::GetAccessor || node.kind() == Kind::SetAccessor) {
                     let symbol = self.get_symbol_of_declaration(node).unwrap();
                     let declarations: Vec<P<Node>> = symbol.declarations().to_vec();
@@ -320,7 +319,7 @@ impl Checker {
                 if has_leading_decorators && flags.intersects(ModifierFlags::Modifier) {
                     assert!(first_decorator.is_some(), "Expected firstDecorator to be set");
                     let source_file = ast::get_source_file_of_node(modifier).unwrap();
-                    if !self.has_parse_diagnostics(source_file) {
+                    if !Self::has_parse_diagnostics(source_file) {
                         let err = self.error(Some(modifier), &diagnostics::Decorators_may_not_appear_after_export_or_export_default_if_they_also_appear_before_export, &[]);
                         err.add_related_info(create_diagnostic_for_node(first_decorator, &diagnostics::Decorator_used_before_export_here, &[]));
                         return true;
@@ -630,14 +629,14 @@ impl Checker {
 
     // grammarchecks.go:571
     pub(crate) fn report_obvious_modifier_errors(&mut self, node: P<Node>) -> bool {
-        let Some(modifier) = self.find_first_illegal_modifier(node) else {
+        let Some(modifier) = Self::find_first_illegal_modifier(node) else {
             return false;
         };
         self.grammar_error_on_first_token(modifier, &diagnostics::Modifiers_cannot_appear_here, &[])
     }
 
     // grammarchecks.go:579
-    pub(crate) fn find_first_modifier_except(&mut self, node: P<Node>, allowed_modifier: Kind) -> Option<P<Node>> {
+    pub(crate) fn find_first_modifier_except(node: P<Node>, allowed_modifier: Kind) -> Option<P<Node>> {
         let modifier = node.modifier_nodes().iter().copied().find(|&m| ast::is_modifier(m));
         if let Some(modifier) = modifier {
             if modifier.kind() != allowed_modifier {
@@ -648,7 +647,7 @@ impl Checker {
     }
 
     // grammarchecks.go:587
-    pub(crate) fn find_first_illegal_modifier(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn find_first_illegal_modifier(node: P<Node>) -> Option<P<Node>> {
         match node.kind() {
             Kind::GetAccessor
             | Kind::SetAccessor
@@ -678,16 +677,16 @@ impl Checker {
                     return None;
                 }
                 match node.kind() {
-                    Kind::FunctionDeclaration => self.find_first_modifier_except(node, Kind::AsyncKeyword),
-                    Kind::ClassDeclaration | Kind::ConstructorType => self.find_first_modifier_except(node, Kind::AbstractKeyword),
+                    Kind::FunctionDeclaration => Self::find_first_modifier_except(node, Kind::AsyncKeyword),
+                    Kind::ClassDeclaration | Kind::ConstructorType => Self::find_first_modifier_except(node, Kind::AbstractKeyword),
                     Kind::ClassExpression | Kind::InterfaceDeclaration | Kind::TypeAliasDeclaration => node.modifier_nodes().iter().copied().find(|&m| ast::is_modifier(m)),
                     Kind::VariableStatement => {
                         if node.as_variable_statement().declaration_list.flags().intersects(NodeFlags::Using) {
-                            return self.find_first_modifier_except(node, Kind::AwaitKeyword);
+                            return Self::find_first_modifier_except(node, Kind::AwaitKeyword);
                         }
                         node.modifier_nodes().iter().copied().find(|&m| ast::is_modifier(m))
                     }
-                    Kind::EnumDeclaration => self.find_first_modifier_except(node, Kind::ConstKeyword),
+                    Kind::EnumDeclaration => Self::find_first_modifier_except(node, Kind::ConstKeyword),
                     _ => panic!("Unhandled case in findFirstIllegalModifier."),
                 }
             }
@@ -696,14 +695,14 @@ impl Checker {
 
     // grammarchecks.go:642
     pub(crate) fn report_obvious_decorator_errors(&mut self, node: P<Node>) -> bool {
-        let Some(decorator) = self.find_first_illegal_decorator(node) else {
+        let Some(decorator) = Self::find_first_illegal_decorator(node) else {
             return false;
         };
         self.grammar_error_on_first_token(decorator, &diagnostics::Decorators_are_not_valid_here, &[])
     }
 
     // grammarchecks.go:650
-    pub(crate) fn find_first_illegal_decorator(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn find_first_illegal_decorator(node: P<Node>) -> Option<P<Node>> {
         if ast::can_have_illegal_decorators(node) {
             node.modifier_nodes().iter().copied().find(|&m| is_decorator(m))
         } else {
@@ -1339,7 +1338,7 @@ impl Checker {
                 if !for_in_or_of_statement.flags().intersects(NodeFlags::AwaitContext) {
                     let source_file = ast::get_source_file_of_node(as_node).unwrap();
                     if ast::is_in_top_level_context(as_node) {
-                        if !self.has_parse_diagnostics(source_file) {
+                        if !Self::has_parse_diagnostics(source_file) {
                             if !ast::is_effective_external_module(source_file, &self.compiler_options) {
                                 self.add_diagnostic(create_diagnostic_for_node(Some(await_modifier), &diagnostics::X_for_await_loops_are_only_allowed_at_the_top_level_of_a_file_when_that_file_is_a_module_but_this_file_has_no_imports_or_exports_Consider_adding_an_empty_export_to_make_this_file_a_module, &[]));
                             }
@@ -1366,7 +1365,7 @@ impl Checker {
                         }
                     } else {
                         // use of 'for-await-of' in non-async function
-                        if !self.has_parse_diagnostics(source_file) {
+                        if !Self::has_parse_diagnostics(source_file) {
                             let diagnostic = create_diagnostic_for_node(Some(await_modifier), &diagnostics::X_for_await_loops_are_only_allowed_within_async_functions_and_at_the_top_levels_of_modules, &[]);
                             let containing_func = ast::get_containing_function(for_in_or_of_statement);
                             if let Some(containing_func) = containing_func {
@@ -1475,7 +1474,7 @@ impl Checker {
         if type_parameters.is_some() {
             return self.grammar_error_on_node(accessor.name().unwrap(), &diagnostics::An_accessor_cannot_have_type_parameters, &[]);
         }
-        if !self.does_accessor_have_correct_parameter_count(accessor) {
+        if !Self::does_accessor_have_correct_parameter_count(accessor) {
             return self.grammar_error_on_node(
                 accessor.name().unwrap(),
                 if accessor.kind() == Kind::GetAccessor { &diagnostics::A_get_accessor_cannot_have_parameters } else { &diagnostics::A_set_accessor_must_have_exactly_one_parameter },
@@ -1510,10 +1509,10 @@ impl Checker {
     //	A `get` accessor has no parameters or a single `this` parameter.
     //	A `set` accessor has one parameter or a `this` parameter and one more parameter.
     // grammarchecks.go:1345
-    pub(crate) fn does_accessor_have_correct_parameter_count(&mut self, accessor: P<Node>) -> bool {
+    pub(crate) fn does_accessor_have_correct_parameter_count(accessor: P<Node>) -> bool {
         // `getAccessorThisParameter` returns `nil` if the accessor's arity is incorrect,
         // even if there is a `this` parameter declared.
-        self.get_accessor_this_parameter(accessor).is_some() || accessor.parameters().len() == usize::from(accessor.kind() != Kind::GetAccessor)
+        Self::get_accessor_this_parameter(accessor).is_some() || accessor.parameters().len() == usize::from(accessor.kind() != Kind::GetAccessor)
     }
 
     // grammarchecks.go:1351
@@ -1927,7 +1926,7 @@ impl Checker {
         } else if !node.flags().intersects(NodeFlags::AwaitContext) {
             if ast::is_in_top_level_context(node) {
                 let source_file = ast::get_source_file_of_node(node).unwrap();
-                if !self.has_parse_diagnostics(source_file) {
+                if !Self::has_parse_diagnostics(source_file) {
                     let mut span = TextRange::new(0, 0);
                     let mut span_calculated = false;
                     if !ast::is_effective_external_module(source_file, &self.compiler_options) {
@@ -1991,7 +1990,7 @@ impl Checker {
             } else {
                 // use of 'await' in non-async function
                 let source_file = ast::get_source_file_of_node(node).unwrap();
-                if !self.has_parse_diagnostics(source_file) {
+                if !Self::has_parse_diagnostics(source_file) {
                     let span = scanner::get_range_of_token_at_position(
                         source_file,
                         node.pos()
@@ -2015,7 +2014,7 @@ impl Checker {
             }
         }
 
-        if is_await_expression(node) && self.is_in_parameter_initializer_before_containing_function(node) {
+        if is_await_expression(node) && Self::is_in_parameter_initializer_before_containing_function(node) {
             // NOTE: We report this regardless as to whether there are parse diagnostics.
             self.error(Some(node), &diagnostics::X_await_expressions_cannot_be_used_in_a_parameter_initializer, &[]);
             has_error = true;
@@ -2031,7 +2030,7 @@ impl Checker {
             self.grammar_error_on_first_token(node, &diagnostics::A_yield_expression_is_only_allowed_in_a_generator_body, &[]);
             has_error = true;
         }
-        if self.is_in_parameter_initializer_before_containing_function(node) {
+        if Self::is_in_parameter_initializer_before_containing_function(node) {
             self.error(Some(node), &diagnostics::X_yield_expressions_cannot_be_used_in_a_parameter_initializer, &[]);
             has_error = true;
         }
@@ -2085,8 +2084,8 @@ impl Checker {
                     return self.grammar_error_on_node(node_name, &diagnostics::X_0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, &[&name_text, &scanner::token_to_string(meta_property.keyword_token), &"target"]);
                 }
             }
-            Kind::ImportKeyword => {
-                if name_text != "meta" {
+            Kind::ImportKeyword
+                if name_text != "meta" => {
                     let parent = node.parent().unwrap();
                     let is_callee = is_call_expression(parent) && parent.expression() == Some(node);
                     if name_text == "defer" {
@@ -2107,7 +2106,6 @@ impl Checker {
                         return self.grammar_error_on_node(node_name, &diagnostics::X_0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, &[&name_text, &scanner::token_to_string(meta_property.keyword_token), &"meta"]);
                     }
                 }
-            }
             _ => {}
         }
 

@@ -494,7 +494,7 @@ impl watcher {
     }
 
     // watcher.go:377
-    fn key_for_dir_watch(&self, dir: &str, recursive: bool) -> String {
+    fn key_for_dir_watch(dir: &str, recursive: bool) -> String {
         if recursive {
             return format!("{dir}\x00recursive");
         }
@@ -587,7 +587,7 @@ impl watcher {
             }
         }
 
-        let key = self.key_for_dir_watch(&dir, recursive);
+        let key = Self::key_for_dir_watch(&dir, recursive);
         if let Some(dw) = st.dir_watches.get(&key) {
             return Ok(Arc::clone(dw));
         }
@@ -599,7 +599,7 @@ impl watcher {
     // watcher.go:471
     fn remove_dir_watch(&self, dw: &Arc<dirWatch>) {
         let mut st = self.mu.lock().unwrap();
-        let key = self.key_for_dir_watch(&dw.dir, dw.recursive);
+        let key = Self::key_for_dir_watch(&dw.dir, dw.recursive);
         if let Some(existing) = st.dir_watches.get(&key) {
             if Arc::ptr_eq(existing, dw) {
                 st.dir_watches.remove(&key);

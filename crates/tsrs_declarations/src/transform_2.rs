@@ -35,7 +35,7 @@ impl DeclarationTransformer {
 
         // Check if the RHS is a class expression - emit as a class declaration instead of a typed variable
         if ast::is_binary_expression(input) {
-            let rhs = unwrap_parenthesized_expression(input.as_binary_expression().right()).unwrap();
+            let rhs = unwrap_parenthesized_expression(input.as_binary_expression().right());
             if ast::is_class_expression(rhs) {
                 let class_expr_name = rhs.name();
                 let has_expr_name = class_expr_name.is_some_and(|n| !n.text().is_empty());

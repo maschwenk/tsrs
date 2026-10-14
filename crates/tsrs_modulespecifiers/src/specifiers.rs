@@ -870,9 +870,8 @@ pub(crate) fn try_directory_with_package_json(
                 package_root_path,
                 ..Default::default()
             };
-        } else {
-            return pkgJsonDirAttemptResult { module_file_to_try, ..Default::default() };
         }
+        return pkgJsonDirAttemptResult { module_file_to_try, ..Default::default() };
     };
 
     let mut import_mode = override_mode;

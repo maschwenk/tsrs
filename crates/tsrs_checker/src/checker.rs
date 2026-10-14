@@ -418,13 +418,10 @@ impl InferenceContext {
     }
 
     fn rare_for_write(&self) -> P<InferenceContextRare> {
-        match self.rare() {
-            Some(rare) => rare,
-            None => {
-                let rare = P::new_recycled(InferenceContextRare::default());
-                self.rare.set(rare.to_bits() | (self.rare.get() & RARE_ESCAPED));
-                rare
-            }
+        if let Some(rare) = self.rare() { rare } else {
+            let rare = P::new_recycled(InferenceContextRare::default());
+            self.rare.set(rare.to_bits() | (self.rare.get() & RARE_ESCAPED));
+            rare
         }
     }
     pub fn return_mapper(&self) -> Option<P<TypeMapper>> {
@@ -2444,7 +2441,7 @@ impl Checker {
         t.flags().intersects(TypeFlags::Primitive | TypeFlags::NonPrimitive) || self.is_empty_anonymous_object_type(t)
     }
 
-    pub(crate) fn contains_missing_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn contains_missing_type(&self, t: P<Type>) -> bool {
         t == self.missing_type || t.flags().intersects(TypeFlags::Union) && t.types()[0] == self.missing_type
     }
 
@@ -2474,7 +2471,7 @@ impl Checker {
     }
 
     /// `c.compareTypesAssignable` used as a value (`TypeComparer`): a function item, so no arena allocation per call.
-    pub(crate) fn compare_types_assignable_comparer(&self) -> TypeComparer {
+    pub(crate) fn compare_types_assignable_comparer() -> TypeComparer {
         fn compare_types_assignable(c: &mut Checker, s: P<Type>, t: P<Type>, report_errors: bool) -> Ternary {
             c.compare_types_assignable(s, t, report_errors)
         }
@@ -3116,7 +3113,7 @@ impl Checker {
 
     /// tsrs-only (`--maxMemory`): empties the relation caches between two files (results are recomputed on
     /// demand).
-    pub fn clear_relation_caches(&mut self) {
+    pub fn clear_relation_caches(&self) {
         for r in [self.subtype_relation, self.strict_subtype_relation, self.assignable_relation, self.comparable_relation, self.identity_relation] {
             r.clear();
         }

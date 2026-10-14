@@ -309,36 +309,30 @@ impl flagSet {
                 return self.fail(&format!("flag provided but not defined: -{name}"));
             };
 
-            match self.flags[index].value {
-                flagValue::Bool(_) => {
-                    let b = match value.as_deref() {
-                        None => true,
-                        Some("1" | "t" | "T" | "TRUE" | "true" | "True") => true,
-                        Some("0" | "f" | "F" | "FALSE" | "false" | "False") => false,
-                        Some(v) => return self.fail(&format!("invalid boolean value {v:?} for -{name}: parse error")),
-                    };
-                    self.flags[index].value = flagValue::Bool(b);
-                }
-                _ => {
-                    let value = match value {
-                        Some(value) => value,
-                        None => {
-                            if i >= args.len() {
-                                return self.fail(&format!("flag needs an argument: -{name}"));
-                            }
-                            i += 1;
-                            args[i - 1].clone()
-                        }
-                    };
-                    let new_value = match self.flags[index].value {
-                        flagValue::Int(_) => match parse_go_int(&value) {
-                            Ok(n) => flagValue::Int(n),
-                            Err(reason) => return self.fail(&format!("invalid value {value:?} for flag -{name}: {reason}")),
-                        },
-                        _ => flagValue::String(value),
-                    };
-                    self.flags[index].value = new_value;
-                }
+            if let flagValue::Bool(_) = self.flags[index].value {
+                let b = match value.as_deref() {
+                    None => true,
+                    Some("1" | "t" | "T" | "TRUE" | "true" | "True") => true,
+                    Some("0" | "f" | "F" | "FALSE" | "false" | "False") => false,
+                    Some(v) => return self.fail(&format!("invalid boolean value {v:?} for -{name}: parse error")),
+                };
+                self.flags[index].value = flagValue::Bool(b);
+            } else {
+                let value = if let Some(value) = value { value } else {
+                    if i >= args.len() {
+                        return self.fail(&format!("flag needs an argument: -{name}"));
+                    }
+                    i += 1;
+                    args[i - 1].clone()
+                };
+                let new_value = match self.flags[index].value {
+                    flagValue::Int(_) => match parse_go_int(&value) {
+                        Ok(n) => flagValue::Int(n),
+                        Err(reason) => return self.fail(&format!("invalid value {value:?} for flag -{name}: {reason}")),
+                    },
+                    _ => flagValue::String(value),
+                };
+                self.flags[index].value = new_value;
             }
         }
         Ok(())

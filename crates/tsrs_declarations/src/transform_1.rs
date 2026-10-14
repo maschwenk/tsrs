@@ -177,14 +177,13 @@ impl DeclarationTransformer {
             return false;
         }
 
-        self
-            .get_leading_comment_ranges_of_node(parse_tree_node, source_file)
+        Self::get_leading_comment_ranges_of_node(parse_tree_node, source_file)
             .into_iter()
             .any(|comment_range| has_internal_annotation(comment_range, source_file))
     }
 
     // transform.go:203
-    pub(crate) fn get_leading_comment_ranges_of_node(&self, node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> {
+    pub(crate) fn get_leading_comment_ranges_of_node(node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> {
         if node.kind() == Kind::JsxText {
             return Vec::new();
         }
@@ -1050,16 +1049,13 @@ impl DeclarationTransformer {
                     value_param = Some(self.ensure_parameter(parameters[0]));
                 }
             }
-            let value_param = match value_param {
-                Some(value_param) => value_param,
-                None => {
-                    // When synthesizing a missing value parameter, emit `value: any` for non-private accessors to match TypeScript's declaration emit behavior.
-                    let mut t: Option<P<Node>> = None;
-                    if !is_private {
-                        t = Some(self.factory().new_keyword_type_node(Kind::AnyKeyword));
-                    }
-                    self.factory().new_parameter_declaration(None, None, self.factory().new_identifier("value"), None, t, None)
+            let value_param = if let Some(value_param) = value_param { value_param } else {
+                // When synthesizing a missing value parameter, emit `value: any` for non-private accessors to match TypeScript's declaration emit behavior.
+                let mut t: Option<P<Node>> = None;
+                if !is_private {
+                    t = Some(self.factory().new_keyword_type_node(Kind::AnyKeyword));
                 }
+                self.factory().new_parameter_declaration(None, None, self.factory().new_identifier("value"), None, t, None)
             };
             new_params.push(value_param);
         }
@@ -1284,7 +1280,7 @@ impl DeclarationTransformer {
         self.cjs_export_assignment_name.set(Some(new_id));
         let mut type_: Option<P<Node>> = None;
         let mut initializer: Option<P<Node>> = None;
-        if ast::is_primitive_literal_value(unwrap_parenthesized_expression(expression).unwrap(), true) {
+        if ast::is_primitive_literal_value(unwrap_parenthesized_expression(expression), true) {
             initializer = self.resolver.create_literal_const_value(self.emit_context(), self.emit_context().parse_node(Some(assignment)).unwrap(), self.tracker.get());
         }
         if initializer.is_none() {

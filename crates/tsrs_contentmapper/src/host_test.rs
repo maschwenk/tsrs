@@ -51,8 +51,8 @@ fn request<'a>(file_name: &'a str, content: &'a str) -> Request<'a> {
     Request { file_name, content }
 }
 
-fn compiler_options(options: CompilerOptions) -> Option<P<CompilerOptions>> {
-    Some(P::new(options))
+fn compiler_options(options: CompilerOptions) -> P<CompilerOptions> {
+    P::new(options)
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -174,8 +174,8 @@ struct unicodeMapper {
 fn protocol_diagnostic_directives(
     directives: Vec<MappedDiagnosticDirective>,
     unused: Vec<UnusedExpectDirectiveDiagnostic>,
-) -> Option<DiagnosticDirectives> {
-    Some(DiagnosticDirectives { unused_expect_directive_diagnostics: unused, directives })
+) -> DiagnosticDirectives {
+    DiagnosticDirectives { unused_expect_directive_diagnostics: unused, directives }
 }
 
 impl testMapper for unicodeMapper {}
@@ -222,7 +222,7 @@ impl Handler for unicodeMapper {
                         text: p.content,
                         extension: ".ts".to_string(),
                         mappings: Some(mappings),
-                        diagnostic_directives: protocol_diagnostic_directives(
+                        diagnostic_directives: Some(protocol_diagnostic_directives(
                             vec![MappedDiagnosticDirective {
                                 original_start: emoji_length,
                                 original_length: text_length - emoji_length,
@@ -232,7 +232,7 @@ impl Handler for unicodeMapper {
                                 ..Default::default()
                             }],
                             Vec::new(),
-                        ),
+                        )),
                     },
                     diagnostics: vec![Diagnostic {
                         message_text: "after non-ASCII character".to_string(),
@@ -591,7 +591,7 @@ fn test_runner_transform_diagnostic_directives() {
     let result = transform(MappedOutput {
         text: "virtual source".to_string(),
         extension: ".ts".to_string(),
-        diagnostic_directives: protocol_diagnostic_directives(
+        diagnostic_directives: Some(protocol_diagnostic_directives(
             vec![MappedDiagnosticDirective {
                 original_start: 0,
                 original_length: 9,
@@ -601,7 +601,7 @@ fn test_runner_transform_diagnostic_directives() {
                 ..Default::default()
             }],
             vec![UnusedExpectDirectiveDiagnostic { code: 2578, message_text: "Unused framework directive.".to_string() }],
-        ),
+        )),
         ..Default::default()
     })
     .unwrap();
@@ -618,7 +618,7 @@ fn test_runner_transform_diagnostic_directives() {
     let result = transform(MappedOutput {
         text: "virtual source".to_string(),
         extension: ".ts".to_string(),
-        diagnostic_directives: protocol_diagnostic_directives(
+        diagnostic_directives: Some(protocol_diagnostic_directives(
             vec![MappedDiagnosticDirective {
                 original_length: 9,
                 virtual_start: 8,
@@ -631,7 +631,7 @@ fn test_runner_transform_diagnostic_directives() {
                 UnusedExpectDirectiveDiagnostic { code: 1, message_text: "first".to_string() },
                 UnusedExpectDirectiveDiagnostic { code: 2, message_text: "second".to_string() },
             ],
-        ),
+        )),
         ..Default::default()
     })
     .unwrap();
@@ -640,10 +640,10 @@ fn test_runner_transform_diagnostic_directives() {
     transform(MappedOutput {
         text: "x".to_string(),
         extension: ".ts".to_string(),
-        diagnostic_directives: protocol_diagnostic_directives(
+        diagnostic_directives: Some(protocol_diagnostic_directives(
             vec![MappedDiagnosticDirective { original_start: -1, policy: DiagnosticDirectivePolicy::Ignore, ..Default::default() }],
             vec![UnusedExpectDirectiveDiagnostic::default()],
-        ),
+        )),
         ..Default::default()
     })
     .unwrap();
@@ -673,7 +673,7 @@ fn test_runner_transform_diagnostic_directives() {
         ("overlap", "abc", vec![directive(0, 2, 0, ignore), directive(1, 3, 0, ignore)], DiagnosticDirectiveErrorKind::Overlap),
     ];
     for (name, text, directives, kind) in invalid {
-        let mut diagnostic_directives = protocol_diagnostic_directives(directives, Vec::new()).unwrap();
+        let mut diagnostic_directives = protocol_diagnostic_directives(directives, Vec::new());
         if name == "original range out of bounds" {
             diagnostic_directives.unused_expect_directive_diagnostics = vec![UnusedExpectDirectiveDiagnostic::default()];
         } else if name == "multiple unused diagnostics require index" {
@@ -754,14 +754,14 @@ fn test_runner_transform_supplemental_outputs() {
                         mapped_output: MappedOutput {
                             text: "declare const first: string;".to_string(),
                             extension: ".ts".to_string(),
-                            diagnostic_directives: protocol_diagnostic_directives(
+                            diagnostic_directives: Some(protocol_diagnostic_directives(
                                 vec![MappedDiagnosticDirective {
                                     virtual_end: 7,
                                     policy: DiagnosticDirectivePolicy::Ignore,
                                     ..Default::default()
                                 }],
                                 Vec::new(),
-                            ),
+                            )),
                             ..Default::default()
                         },
                     },
@@ -814,10 +814,10 @@ fn test_runner_transform_invalid_supplemental_diagnostic_directive() {
                 supplemental: vec![
                     SupplementalOutput { mapped_output: output(None) },
                     SupplementalOutput {
-                        mapped_output: output(protocol_diagnostic_directives(
+                        mapped_output: output(Some(protocol_diagnostic_directives(
                             vec![MappedDiagnosticDirective { policy: DiagnosticDirectivePolicy::Expect, ..Default::default() }],
                             Vec::new(),
-                        )),
+                        ))),
                     },
                 ],
                 ..Default::default()
@@ -982,7 +982,7 @@ fn test_runner_consolidates_by_identity() {
     let project = r
         .project(ProjectSpec {
             mappers: vec![vue_a, vue_b, svelte],
-            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
+            compiler_options: Some(compiler_options(tsrs_core::CompilerOptions::default())),
             ..Default::default()
         })
         .unwrap();
@@ -1181,7 +1181,7 @@ fn test_project_lifecycle() {
         .project(ProjectSpec {
             config_file_name: "/repo/tsconfig.json".to_string(),
             mappers: vec![static_mapper],
-            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
+            compiler_options: Some(compiler_options(tsrs_core::CompilerOptions::default())),
         })
         .unwrap();
     assert_eq!(spawner.spawns.load(SeqCst), 0, "static identity should not spawn the mapper");
@@ -1195,15 +1195,15 @@ fn test_project_lifecycle() {
     let project = |config_file_name: &str, mappers: Vec<&'static Mapper>, compiler_options: Option<P<CompilerOptions>>| {
         host.project(ProjectSpec { config_file_name: config_file_name.to_string(), mappers, compiler_options }).unwrap()
     };
-    let project_a = project("/repo/a/tsconfig.json", vec![dynamic_a, dynamic_b], dynamic_a_options);
-    let project_a_reversed = project("/repo/reversed/tsconfig.json", vec![dynamic_b, dynamic_a], dynamic_a_options);
+    let project_a = project("/repo/a/tsconfig.json", vec![dynamic_a, dynamic_b], Some(dynamic_a_options));
+    let project_a_reversed = project("/repo/reversed/tsconfig.json", vec![dynamic_b, dynamic_a], Some(dynamic_a_options));
     let project_different_options = project(
         "/repo/options/tsconfig.json",
         vec![dynamic_a],
-        compiler_options(CompilerOptions { jsx: JsxEmit::React, ..Default::default() }),
+        Some(compiler_options(CompilerOptions { jsx: JsxEmit::React, ..Default::default() })),
     );
-    let project_b = project("/repo/b/tsconfig.json", vec![dynamic_a], compiler_options(tsrs_core::CompilerOptions::default()));
-    let project_a_again = project("/repo/a/tsconfig.json", vec![dynamic_a, dynamic_b], dynamic_a_options);
+    let project_b = project("/repo/b/tsconfig.json", vec![dynamic_a], Some(compiler_options(tsrs_core::CompilerOptions::default())));
+    let project_a_again = project("/repo/a/tsconfig.json", vec![dynamic_a, dynamic_b], Some(dynamic_a_options));
     assert_eq!(spawner.spawns.load(SeqCst), 0, "getting dynamic projects should not start the mapper");
     let project_a_identities = project_a.identities().unwrap();
     let project_a_reversed_identities = project_a_reversed.identities().unwrap();
@@ -1256,7 +1256,7 @@ fn test_project_methods_after_host_close() {
         .project(ProjectSpec {
             config_file_name: "/repo/tsconfig.json".to_string(),
             mappers: vec![mapper],
-            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
+            compiler_options: Some(compiler_options(tsrs_core::CompilerOptions::default())),
         })
         .unwrap();
     project.transform(mapper, request("/repo/file.ext", "x")).unwrap();
@@ -1287,7 +1287,7 @@ fn project_error_kind(mapper_process: recordingMapper, project_mapper_: &'static
         .project(ProjectSpec {
             config_file_name: "/repo/tsconfig.json".to_string(),
             mappers: vec![project_mapper_],
-            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
+            compiler_options: Some(compiler_options(tsrs_core::CompilerOptions::default())),
         })
         .unwrap();
     let err = project.transform(project_mapper_, request("/repo/file.ext", "x")).unwrap_err();
@@ -1358,7 +1358,7 @@ fn test_project_rejects_invalid_option_diagnostic_path() {
     let project = host
         .project(ProjectSpec {
             mappers: vec![project_mapper],
-            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
+            compiler_options: Some(compiler_options(tsrs_core::CompilerOptions::default())),
             ..Default::default()
         })
         .unwrap();
@@ -1379,10 +1379,10 @@ fn test_runner_forwards_project_options() {
 
     let mapper_definition = project_mapper(r#"{"strictTemplates":true}"#, "vue", &["target", "jsx"], false);
     let options = compiler_options(CompilerOptions { target: ScriptTarget::ES2020, strict: Tristate::True, ..Default::default() });
-    let project = r.project(ProjectSpec { mappers: vec![mapper_definition], compiler_options: options, ..Default::default() }).unwrap();
+    let project = r.project(ProjectSpec { mappers: vec![mapper_definition], compiler_options: Some(options), ..Default::default() }).unwrap();
     project.transform(mapper_definition, request("/a.vue", "x")).unwrap();
 
-    let want = json::marshal(&compiler_options_to_go_json(&options.unwrap())).unwrap();
+    let want = json::marshal(&compiler_options_to_go_json(&options)).unwrap();
     {
         let state = lock(&mapper.mu);
         assert_eq!(state.received, want);

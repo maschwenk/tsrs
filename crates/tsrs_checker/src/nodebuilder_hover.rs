@@ -124,7 +124,7 @@ impl NodeBuilderImpl {
 
         let declared_type = c.get_declared_type_of_class_or_interface(symbol);
         let class_type = c.get_type_with_this_argument(declared_type, None, false);
-        let target_type = c.get_target_type(class_type).unwrap();
+        let target_type = checker::Checker::get_target_type(class_type).unwrap();
         let base_types = c.get_base_types(target_type);
         let static_type = c.get_type_of_symbol(symbol);
         let is_class = static_type.symbol().is_some_and(|s| s.value_declaration().is_some_and(is_class_like));
@@ -136,7 +136,7 @@ impl NodeBuilderImpl {
         // Instance members via addPropertyToElementList (reusing existing serialization),
         // then convert TypeElements to ClassElements and add class-specific modifiers
         let all_props = c.get_properties_of_type(class_type);
-        let symbol_props = self.filter_inherited_properties(c, class_type, base_types, all_props);
+        let symbol_props = Self::filter_inherited_properties(c, class_type, base_types, all_props);
         let public_props: Vec<P<Symbol>> = symbol_props.iter().copied().filter(|&s| !is_hash_private(s)).collect();
         let has_private = symbol_props.iter().any(|&s| is_hash_private(s));
 
@@ -147,7 +147,7 @@ impl NodeBuilderImpl {
         // Static members
         let mut static_props: Vec<P<Symbol>> = Vec::new();
         static_props.extend(c.get_properties_of_type(static_type).iter().copied().filter(|&p| {
-            !p.flags().intersects(SymbolFlags::Prototype) && p.name() != "prototype" && !self.is_namespace_member(c, p)
+            !p.flags().intersects(SymbolFlags::Prototype) && p.name() != "prototype" && !Self::is_namespace_member(c, p)
         }));
         let mut static_members = self.serialize_properties_with_truncation(c, &static_props, &[]);
         let mut static_members = type_elements_to_class_elements(&self.f, &mut static_members);
@@ -273,7 +273,7 @@ impl NodeBuilderImpl {
         }
 
         // Members: reuse existing serialization functions
-        let resolved = c.resolve_structured_type_members(interface_type).unwrap();
+        let resolved = c.resolve_structured_type_members(interface_type);
         let mut members: Vec<P<Node>> = Vec::new();
 
         // Index signatures, filtering those identical to base
@@ -288,7 +288,7 @@ impl NodeBuilderImpl {
         // Call signatures
         members.extend(resolved.call_signatures().iter().map(|&sig| self.signature_to_signature_declaration_helper(c, sig, Kind::CallSignature, None)));
         // Properties, filtering inherited
-        let filtered_props = self.filter_inherited_properties(c, interface_type, base_types, resolved.properties());
+        let filtered_props = Self::filter_inherited_properties(c, interface_type, base_types, resolved.properties());
         members = self.serialize_properties_with_truncation(c, &filtered_props, &members);
 
         // Heritage clauses
@@ -463,7 +463,7 @@ impl NodeBuilderImpl {
         if let Some(exports) = exports {
             members.extend(exports.values().into_iter().filter(|&sym| {
                 // Filter to namespace-relevant members
-                if !self.is_namespace_member(c, sym) {
+                if !Self::is_namespace_member(c, sym) {
                     return false;
                 }
                 if !tsrs_scanner::is_identifier_text(sym.name(), LanguageVariant::Standard) {
@@ -503,7 +503,7 @@ impl NodeBuilderImpl {
 
             // Handle alias/re-export symbols
             if m.flags().intersects(SymbolFlags::Alias) {
-                let alias_decl = c.get_declaration_of_alias_symbol(m);
+                let alias_decl = checker::Checker::get_declaration_of_alias_symbol(m);
                 let target = c.get_target_of_alias_declaration(alias_decl).map(|t| c.get_merged_symbol(t));
                 if let Some(target) = target {
                     // If the alias target is a local symbol (not itself an export), emit its declaration first
@@ -640,7 +640,7 @@ impl NodeBuilderImpl {
 
     // nodebuilder_hover.go:571
     // filterInheritedProperties removes properties already present in base types.
-    pub(crate) fn filter_inherited_properties(&self, c: &mut Checker, t: P<Type>, base_types: &[P<Type>], properties: &[P<Symbol>]) -> Vec<P<Symbol>> {
+    pub(crate) fn filter_inherited_properties(c: &mut Checker, t: P<Type>, base_types: &[P<Type>], properties: &[P<Symbol>]) -> Vec<P<Symbol>> {
         if base_types.is_empty() {
             return properties.to_vec();
         }
@@ -650,7 +650,7 @@ impl NodeBuilderImpl {
         // Collect names of properties inherited unchanged from base types.
         let mut inherited: Set<&'static str> = Set::new();
         for &base in base_types {
-            let this_type = c.get_target_type(t).unwrap().as_interface_type().this_type.get();
+            let this_type = checker::Checker::get_target_type(t).unwrap().as_interface_type().this_type.get();
             let base_with_this = c.get_type_with_this_argument(base, this_type, false);
             inherited.m.extend(c.get_properties_of_type(base_with_this).iter().filter_map(|prop| {
                 if let Some(existing) = props_by_name.get(prop.name()) {
@@ -667,7 +667,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilder_hover.go:598
-    pub(crate) fn is_namespace_member(&self, _c: &mut Checker, p: P<Symbol>) -> bool {
+    pub(crate) fn is_namespace_member(_c: &mut Checker, p: P<Symbol>) -> bool {
         p.flags().intersects(SymbolFlags::Type | SymbolFlags::Namespace | SymbolFlags::Alias)
             || !(p.flags().intersects(SymbolFlags::Prototype)
                 || p.name() == "prototype"

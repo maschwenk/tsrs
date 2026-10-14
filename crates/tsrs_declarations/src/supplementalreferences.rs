@@ -42,6 +42,7 @@ impl SupplementalReferencesTransformer {
     }
 
     // supplementalreferences.go:52
+    #[expect(clippy::unused_self, reason = "Declaration transformers expose diagnostics through the same instance interface.")]
     pub fn get_diagnostics(&self) -> Vec<P<Diagnostic>> {
         Vec::new()
     }

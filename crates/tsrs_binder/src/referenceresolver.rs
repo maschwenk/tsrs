@@ -132,7 +132,7 @@ impl<H: 'static> ReferenceResolver<H> {
                 return hook(h, symbol, SymbolFlags::Value).is_some();
             }
 
-            let mut node = self.get_declaration_of_alias_symbol(symbol);
+            let mut node = Self::get_declaration_of_alias_symbol(symbol);
             while let Some(n) = node {
                 match n.kind() {
                     Kind::ImportEqualsDeclaration | Kind::ExportDeclaration => {
@@ -157,7 +157,7 @@ impl<H: 'static> ReferenceResolver<H> {
         false
     }
 
-    fn get_declaration_of_alias_symbol(&self, symbol: P<Symbol>) -> Option<P<Node>> {
+    fn get_declaration_of_alias_symbol(symbol: P<Symbol>) -> Option<P<Node>> {
         symbol.declarations().iter().rev().copied().find(|&d| ast::is_alias_symbol_declaration(d))
     }
 
@@ -230,7 +230,7 @@ impl<H: 'static> ReferenceResolver<H> {
             // We should only get the declaration of an alias if there isn't a local value
             // declaration for the symbol
             if ast::is_non_local_alias(Some(symbol), SymbolFlags::Value /*excludes*/) && !self.is_type_only_alias_declaration(h, Some(symbol)) {
-                return self.get_declaration_of_alias_symbol(symbol);
+                return Self::get_declaration_of_alias_symbol(symbol);
             }
         }
 

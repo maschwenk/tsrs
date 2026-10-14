@@ -885,10 +885,9 @@ impl FormatSpanWorker {
                 self.source_file,
             ) {
                 return (parent_dynamic_indentation.get_indentation(), delta);
-            } else {
-                let i = parent_dynamic_indentation.get_indentation();
-                return (i + parent_dynamic_indentation.get_delta(Some(node)), delta);
             }
+            let i = parent_dynamic_indentation.get_indentation();
+            return (i + parent_dynamic_indentation.get_delta(Some(node)), delta);
         }
 
         (
@@ -1938,11 +1937,10 @@ impl DynamicIndenter {
                     return false;
                 }
             }
-            Kind::OpenBracketToken | Kind::CloseBracketToken => {
-                if container.kind() != Kind::MappedType {
+            Kind::OpenBracketToken | Kind::CloseBracketToken
+                if container.kind() != Kind::MappedType => {
                     return false;
                 }
-            }
             _ => {}
         }
         // if token line equals to the line of containing node (this is a first token in the node) - use node indentation

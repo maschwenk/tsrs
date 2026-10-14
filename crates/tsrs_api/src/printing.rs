@@ -25,6 +25,7 @@ fn decode(encoded: &str) -> ApiResult<DecodedNode> {
 }
 
 impl Session {
+    #[expect(clippy::unused_self, reason = "API request handlers share the Session receiver used by the request dispatcher.")]
     pub(crate) fn handle_print_node(&self, p: Params) -> ApiResult<Value> {
         let decoded = decode(p.str("data")?)?;
         let options = PrinterOptions {

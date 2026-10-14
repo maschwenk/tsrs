@@ -217,7 +217,7 @@ fn delete_variable_declaration(t: &mut Tracker, deleted_nodes_in_lists: &mut Ord
 // Warning: This deletes comments too.
 fn delete_node(t: &mut Tracker, source_file: P<SourceFile>, node: P<Node>, leading_trivia: LeadingTriviaOption, trailing_trivia: TrailingTriviaOption) {
     let start_position = t.get_adjusted_start_position(source_file, node, leading_trivia, false);
-    let end_position = t.get_adjusted_end_position(source_file, node, trailing_trivia);
+    let end_position = Tracker::get_adjusted_end_position(source_file, node, trailing_trivia);
     t.replace_text_range_with_text(source_file, TextRange::new(start_position, end_position), "");
 }
 
@@ -243,7 +243,7 @@ fn delete_node_in_list(t: &mut Tracker, deleted_nodes_in_lists: &mut OrderedMap<
 
     let start_pos = t.start_position_to_delete_node_in_list(source_file, node);
     let end_pos = if index == containing_list.nodes().len() - 1 {
-        t.get_adjusted_end_position(source_file, node, TrailingTriviaOption::None)
+        Tracker::get_adjusted_end_position(source_file, node, TrailingTriviaOption::None)
     } else {
         let prev_node = if index > 0 { Some(containing_list.nodes()[index - 1]) } else { None };
         t.end_position_to_delete_node_in_list(source_file, node, prev_node, containing_list.nodes()[index + 1])
@@ -285,7 +285,7 @@ impl Tracker {
         let Some(prev_node) = prev_node else {
             return end;
         };
-        if positions_are_on_same_line(self.get_adjusted_end_position(source_file, node, TrailingTriviaOption::Include), end, source_file) {
+        if positions_are_on_same_line(Self::get_adjusted_end_position(source_file, node, TrailingTriviaOption::Include), end, source_file) {
             return end;
         }
         let token = astnav::find_preceding_token(source_file, astnav::get_start_of_node(next_node, source_file, false));

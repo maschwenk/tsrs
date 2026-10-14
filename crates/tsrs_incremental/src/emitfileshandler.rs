@@ -51,6 +51,7 @@ impl<'a> emitFilesHandler<'a> {
     // The first of writeFile if provided, writeFile of BuilderProgramHost if provided, writeFile of compiler host
     // in that order would be used to write the files
     // emitfileshandler.go:47
+    #[expect(clippy::unnecessary_wraps, reason = "The incremental emit interface shares an optional result with paths that have no pending emit.")]
     fn emit_all_affected_files(&self, options: &EmitOptions) -> Option<EmitResult> {
         let program = self.program.p();
         // Emit all affected files
@@ -344,11 +345,10 @@ impl<'a> emitFilesHandler<'a> {
             if old_signature_format.as_ref().is_some_and(|f| f.signature == old_signature) {
                 data.skipped_dts_write = true;
                 return true;
-            } else {
-                // Mark as differsOnlyInMap so that we can reverse the timestamp with --build so that
-                // the downstream projects dont detect this as change in d.ts file
-                *differs_only_in_map = self.program.snapshot.options().build.is_true();
             }
+            // Mark as differsOnlyInMap so that we can reverse the timestamp with --build so that
+            // the downstream projects dont detect this as change in d.ts file
+            *differs_only_in_map = self.program.snapshot.options().build.is_true();
         } else {
             self.latest_changed_dts_files.lock().unwrap().insert(file.path().clone(), output_file_name.to_string());
         }

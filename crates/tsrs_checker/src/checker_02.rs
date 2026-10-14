@@ -42,7 +42,7 @@ impl Checker {
         assert!(symbol.flags().intersects(SymbolFlags::Alias), "Should only get Alias here.");
         let links = self.alias_symbol_links.get(symbol);
         if links.immediate_target.get().is_none() {
-            let node = self.get_declaration_of_alias_symbol(symbol);
+            let node = Self::get_declaration_of_alias_symbol(symbol);
             let Some(node) = node else {
                 panic!("Unexpected nil in getImmediateAliasedSymbol");
             };
@@ -53,7 +53,7 @@ impl Checker {
     }
 
     // checker.go:2209
-    pub(crate) fn add_type_only_declaration_related_info(&mut self, diagnostic: P<Diagnostic>, type_only_declaration: Option<P<Node>>, name: &str) -> P<Diagnostic> {
+    pub(crate) fn add_type_only_declaration_related_info(diagnostic: P<Diagnostic>, type_only_declaration: Option<P<Node>>, name: &str) -> P<Diagnostic> {
         let Some(type_only_declaration) = type_only_declaration else {
             return diagnostic;
         };
@@ -584,7 +584,7 @@ impl Checker {
         if ast::is_interface_declaration(parent) || ast::is_class_like(parent) || ast::is_type_or_js_type_alias_declaration(parent) {
             let symbol = self.get_symbol_of_declaration(node).unwrap();
             let type_parameter = self.get_declared_type_of_type_parameter(symbol);
-            let modifiers = self.get_type_parameter_modifiers(type_parameter) & (ModifierFlags::In | ModifierFlags::Out);
+            let modifiers = Self::get_type_parameter_modifiers(type_parameter) & (ModifierFlags::In | ModifierFlags::Out);
             if !modifiers.is_empty() {
                 let symbol = self.get_symbol_of_declaration(parent).unwrap();
                 if ast::is_type_or_js_type_alias_declaration(parent)
@@ -612,7 +612,7 @@ impl Checker {
     }
 
     // checker.go:2693
-    pub(crate) fn should_check_erasable_syntax(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn should_check_erasable_syntax(&self, node: P<Node>) -> bool {
         self.compiler_options.erasable_syntax_only.is_true() && !ast::is_in_js_file(node)
     }
 
@@ -770,7 +770,7 @@ impl Checker {
             return;
         }
         let global_promise_type = self.get_global_promise_type_checked();
-        if global_promise_type != self.empty_generic_type && !self.is_reference_to_type(Some(return_type), global_promise_type) {
+        if global_promise_type != self.empty_generic_type && !Self::is_reference_to_type(Some(return_type), global_promise_type) {
             // The promise type was not a valid type reference to the global promise type, so we
             // report an error and return the unknown type.
             let awaited = self.get_awaited_type_no_alias(return_type).unwrap_or(self.void_type);
@@ -850,7 +850,7 @@ impl Checker {
             return;
         }
         let class_extends_null = self.class_declaration_extends_null(containing_class_decl);
-        let super_call = self.find_first_super_call(node.body().unwrap());
+        let super_call = Self::find_first_super_call(node.body().unwrap());
         if let Some(super_call) = super_call {
             if class_extends_null {
                 self.error(Some(super_call), &diagnostics::A_constructor_cannot_contain_a_super_call_when_its_class_extends_null, &[]);
@@ -899,7 +899,7 @@ impl Checker {
     }
 
     // checker.go:2935
-    pub(crate) fn find_first_super_call(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn find_first_super_call(node: P<Node>) -> Option<P<Node>> {
         fn visit(node: P<Node>, super_call: &mut Option<P<Node>>) -> bool {
             if is_super_call(node) {
                 *super_call = Some(node);
@@ -1146,7 +1146,7 @@ impl Checker {
         // Always check the predicate's type so nested type errors are reported even when the
         // predicate is in an invalid position, keeping diagnostics stable.
         self.check_source_element(node.type_node());
-        let parent = self.get_type_predicate_parent(node);
+        let parent = Self::get_type_predicate_parent(node);
         let Some(parent) = parent else {
             // The parent must not be valid.
             self.error(Some(node), &diagnostics::A_type_predicate_is_only_allowed_in_return_type_position_for_functions_and_methods, &[]);
@@ -1204,7 +1204,7 @@ impl Checker {
     }
 
     // checker.go:3147
-    pub(crate) fn get_type_predicate_parent(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_type_predicate_parent(node: P<Node>) -> Option<P<Node>> {
         let parent = node.parent().unwrap();
         match parent.kind() {
             Kind::ArrowFunction
@@ -1213,11 +1213,10 @@ impl Checker {
             | Kind::FunctionExpression
             | Kind::FunctionType
             | Kind::MethodDeclaration
-            | Kind::MethodSignature => {
-                if Some(node) == parent.type_node() {
+            | Kind::MethodSignature
+                if Some(node) == parent.type_node() => {
                     return Some(parent);
                 }
-            }
             _ => {}
         }
         None
@@ -2434,7 +2433,7 @@ impl Checker {
         }
         let mut effective_expr = expr; // The effective expression for diagnostics purposes.
         if let Some(expr) = expr {
-            effective_expr = self.get_effective_check_node(expr);
+            effective_expr = Some(Self::get_effective_check_node(expr));
         }
         let error_node = if_else(in_return_statement && !in_conditional_expression, Some(node), effective_expr);
         self.check_type_assignable_to_and_optionally_elaborate(unwrapped_expr_type, unwrapped_return_type, error_node, effective_expr, None, None);
@@ -2449,7 +2448,7 @@ impl Checker {
         }
         self.check_expression(node.expression().unwrap());
         let source_file = ast::get_source_file_of_node(node).unwrap();
-        if !self.has_parse_diagnostics(source_file) {
+        if !Self::has_parse_diagnostics(source_file) {
             let start = tsrs_scanner::skip_trivia(
                 source_file.text(),
                 node.pos()

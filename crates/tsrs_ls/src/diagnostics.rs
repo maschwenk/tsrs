@@ -30,6 +30,7 @@ pub(crate) fn get_all_diagnostics(ctx: &Context, program: &'static Program, file
 
 impl LanguageService {
     // diagnostics.go:32
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_diagnostics(&self, ctx: &Context, uri: &lsproto::DocumentUri) -> Result<lsproto::DocumentDiagnosticResponse, lsproto::Error> {
         let (program, file) = self.get_program_and_file(uri);
 

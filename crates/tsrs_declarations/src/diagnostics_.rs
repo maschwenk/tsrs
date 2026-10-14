@@ -215,14 +215,13 @@ pub(crate) fn get_variable_declaration_type_visibility_diagnostic_message(node: 
                 &diagnostics::Public_property_0_of_exported_class_has_or_is_using_name_1_from_private_module_2,
                 &diagnostics::Public_property_0_of_exported_class_has_or_is_using_private_name_1,
             ));
-        } else {
-            // Interfaces cannot have types that cannot be named
-            return Some(select_diagnostic_based_on_module_name_no_name_check(
-                symbol_accessibility_result,
-                &diagnostics::Property_0_of_exported_interface_has_or_is_using_name_1_from_private_module_2,
-                &diagnostics::Property_0_of_exported_interface_has_or_is_using_private_name_1,
-            ));
         }
+        // Interfaces cannot have types that cannot be named
+        return Some(select_diagnostic_based_on_module_name_no_name_check(
+            symbol_accessibility_result,
+            &diagnostics::Property_0_of_exported_interface_has_or_is_using_name_1_from_private_module_2,
+            &diagnostics::Property_0_of_exported_interface_has_or_is_using_private_name_1,
+        ));
     }
     None // TODO: Audit behavior - should this panic? potentially silent error state in strada
 }

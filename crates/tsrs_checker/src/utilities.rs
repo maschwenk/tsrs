@@ -249,12 +249,12 @@ pub(crate) fn entity_name_to_string(name: P<Node>) -> String {
 }
 
 // utilities.go:221
-pub(crate) fn get_containing_qualified_name_node(node: P<Node>) -> Option<P<Node>> {
+pub(crate) fn get_containing_qualified_name_node(node: P<Node>) -> P<Node> {
     let mut node = node;
     while ast::is_qualified_name(node.parent().unwrap()) {
         node = node.parent().unwrap();
     }
-    Some(node)
+    node
 }
 
 // utilities.go:228
@@ -1465,19 +1465,19 @@ impl Checker {
     }
 
     // utilities.go:1087
-    pub(crate) fn is_parameter_or_mutable_local_variable(&mut self, symbol: P<Symbol>) -> bool {
+    pub(crate) fn is_parameter_or_mutable_local_variable(symbol: P<Symbol>) -> bool {
         // Return true if symbol is a parameter, a catch clause variable, or a mutable local variable
         if let Some(value_declaration) = symbol.value_declaration() {
             let declaration = ast::get_root_declaration(value_declaration);
             return ast::is_parameter_declaration(declaration)
                 || ast::is_variable_declaration(declaration)
-                    && (ast::is_catch_clause(declaration.parent().unwrap()) || self.is_mutable_local_variable_declaration(declaration));
+                    && (ast::is_catch_clause(declaration.parent().unwrap()) || Self::is_mutable_local_variable_declaration(declaration));
         }
         false
     }
 
     // utilities.go:1096
-    pub(crate) fn is_mutable_local_variable_declaration(&mut self, declaration: P<Node>) -> bool {
+    pub(crate) fn is_mutable_local_variable_declaration(declaration: P<Node>) -> bool {
         // Return true if symbol is a non-exported and non-global `let` variable
         let parent = declaration.parent().unwrap();
         parent.flags().intersects(NodeFlags::Let)
@@ -1517,7 +1517,7 @@ pub(crate) fn is_call_chain(node: P<Node>) -> bool {
 
 impl Checker {
     // utilities.go:1132
-    pub(crate) fn call_like_expression_may_have_type_arguments(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn call_like_expression_may_have_type_arguments(node: P<Node>) -> bool {
         ast::is_call_or_new_expression(node) || ast::is_tagged_template_expression(node) || ast::is_jsx_opening_like_element(node)
     }
 }
@@ -1813,7 +1813,7 @@ pub(crate) fn all_declarations_in_same_source_file(symbol: P<Symbol>) -> bool {
 }
 
 // utilities.go:1647
-pub(crate) fn contains_non_missing_undefined_type(c: &mut Checker, t: P<Type>) -> bool {
+pub(crate) fn contains_non_missing_undefined_type(c: &Checker, t: P<Type>) -> bool {
     let candidate = if t.flags().intersects(TypeFlags::Union) { t.as_union_type().types.get()[0] } else { t };
     candidate.flags().intersects(TypeFlags::Undefined) && candidate != c.missing_type
 }
@@ -1882,12 +1882,12 @@ pub fn is_external_module_symbol(module_symbol: P<Symbol>) -> bool {
 
 impl Checker {
     // utilities.go:1712
-    pub(crate) fn is_canceled(&mut self) -> bool {
+    pub(crate) fn is_canceled(&self) -> bool {
         self.ctx.as_ref().is_some_and(|ctx| ctx.err().is_some())
     }
 
     // utilities.go:1716
-    pub(crate) fn check_not_canceled(&mut self) {
+    pub(crate) fn check_not_canceled(&self) {
         assert!(!self.was_canceled, "Checker was previously cancelled");
     }
 }
@@ -1925,7 +1925,7 @@ impl Checker {
     // - Is from a global file that is different from the reference file, or
     // - (optionally) Is a class, or is a this.x property access expression
     // utilities.go:1777
-    pub(crate) fn is_unchecked_js_suggestion(&mut self, node: Option<P<Node>>, suggestion: Option<P<Symbol>>, exclude_classes: bool) -> bool {
+    pub(crate) fn is_unchecked_js_suggestion(&self, node: Option<P<Node>>, suggestion: Option<P<Symbol>>, exclude_classes: bool) -> bool {
         let file = node.and_then(ast::get_source_file_of_node);
         if let Some(file) = file {
             if self.compiler_options.check_js == Tristate::Unknown

@@ -157,14 +157,11 @@ impl Symbol {
     }
     #[inline]
     fn tables_for_write(&self) -> P<SymbolTables> {
-        match self.tables() {
-            Some(tables) => tables,
-            None => {
-                let tables = P::new(SymbolTables { parent: OwnedCell::new(self.parent()), ..Default::default() });
-                self.parent_or_tables.set(tables.key());
-                self.name.set_tags(self.name.tags() | TAG_TABLES);
-                tables
-            }
+        if let Some(tables) = self.tables() { tables } else {
+            let tables = P::new(SymbolTables { parent: OwnedCell::new(self.parent()), ..Default::default() });
+            self.parent_or_tables.set(tables.key());
+            self.name.set_tags(self.name.tags() | TAG_TABLES);
+            tables
         }
     }
     #[inline]

@@ -132,7 +132,7 @@ impl Parser {
         (is_type_only, property_name, name)
     }
 
-    pub(crate) fn can_parse_module_export_name(&mut self) -> bool {
+    pub(crate) fn can_parse_module_export_name(&self) -> bool {
         token_is_identifier_or_keyword(self.token) || self.token == Kind::StringLiteral
     }
 
@@ -360,7 +360,7 @@ impl Parser {
         type_node
     }
 
-    pub(crate) fn create_union_or_intersection_type_node(&mut self, operator: Kind, types: P<NodeList>) -> P<Node> {
+    pub(crate) fn create_union_or_intersection_type_node(&self, operator: Kind, types: P<NodeList>) -> P<Node> {
         match operator {
             Kind::BarToken => self.factory.new_union_type_node(types),
             Kind::AmpersandToken => self.factory.new_intersection_type_node(types),
@@ -1207,7 +1207,7 @@ impl Parser {
         Some(result)
     }
 
-    pub(crate) fn is_parameter_name_start(&mut self) -> bool {
+    pub(crate) fn is_parameter_name_start(&self) -> bool {
         // Be permissive about await and yield by calling isBindingIdentifier instead of isIdentifier; disallowing
         // them during a speculative parse leads to many more follow-on errors than allowing the function to parse then later
         // complaining about the use of the keywords.
@@ -1516,7 +1516,7 @@ impl Parser {
         let pos = self.node_pos();
         let members = self.parse_object_type_members();
         let node = self.factory.new_type_literal_node(members);
-        self.set_lazy_owner(members, node);
+        Self::set_lazy_owner(members, node);
         self.finish_node(node, pos)
     }
 
@@ -1636,7 +1636,7 @@ impl Parser {
         self.finish_node(result, pos)
     }
 
-    pub(crate) fn get_template_literal_raw_text(&mut self, end_length: usize) -> &'static str {
+    pub(crate) fn get_template_literal_raw_text(&self, end_length: usize) -> &'static str {
         let mut end_length = end_length;
         let token_text = self.scanner.token_text();
         if self.scanner.token_flags().intersects(TokenFlags::Unterminated) {
@@ -1904,17 +1904,11 @@ impl Parser {
             // so that when 'const' is a standalone declaration, we don't issue an error.
             if !self.look_ahead(Parser::next_token_is_on_same_line_and_can_follow_modifier) {
                 return None;
-            } else {
-                self.next_token();
             }
-        } else if stop_on_start_of_class_static_block
+            self.next_token();
+        } else if (stop_on_start_of_class_static_block
             && self.token == Kind::StaticKeyword
-            && self.look_ahead(Parser::next_token_is_open_brace)
-        {
-            return None;
-        } else if has_seen_static_modifier && self.token == Kind::StaticKeyword {
-            return None;
-        } else if !self.parse_any_contextual_modifier() {
+            && self.look_ahead(Parser::next_token_is_open_brace)) || (has_seen_static_modifier && self.token == Kind::StaticKeyword) || (!self.parse_any_contextual_modifier()) {
             return None;
         }
         let node = self.factory.new_modifier(kind);
@@ -2014,7 +2008,7 @@ impl Parser {
         self.can_follow_export_modifier()
     }
 
-    pub(crate) fn can_follow_export_modifier(&mut self) -> bool {
+    pub(crate) fn can_follow_export_modifier(&self) -> bool {
         self.token == Kind::AtToken
             || self.token != Kind::AsteriskToken
                 && self.token != Kind::AsKeyword
@@ -2022,7 +2016,7 @@ impl Parser {
                 && self.can_follow_modifier()
     }
 
-    pub(crate) fn can_follow_modifier(&mut self) -> bool {
+    pub(crate) fn can_follow_modifier(&self) -> bool {
         self.token == Kind::OpenBracketToken
             || self.token == Kind::OpenBraceToken
             || self.token == Kind::AsteriskToken
@@ -2030,7 +2024,7 @@ impl Parser {
             || self.is_literal_property_name()
     }
 
-    pub(crate) fn can_follow_get_or_set_keyword(&mut self) -> bool {
+    pub(crate) fn can_follow_get_or_set_keyword(&self) -> bool {
         self.token == Kind::OpenBracketToken || self.is_literal_property_name()
     }
 

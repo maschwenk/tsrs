@@ -15,6 +15,7 @@ pub struct LegacyDecoratorsTransformer {
 }
 
 // legacydecorators.go:25
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_legacy_decorators_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(LegacyDecoratorsTransformer {
         base: Transformer::default(),

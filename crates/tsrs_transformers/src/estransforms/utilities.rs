@@ -245,11 +245,10 @@ impl superAccessState {
                     self.has_super_property_assignment.set(true);
                 }
             }
-            Kind::PostfixUnaryExpression => {
-                if is_update_expression(node) && assignment_target_contains_super_property(node.as_postfix_unary_expression().operand) {
+            Kind::PostfixUnaryExpression
+                if is_update_expression(node) && assignment_target_contains_super_property(node.as_postfix_unary_expression().operand) => {
                     self.has_super_property_assignment.set(true);
                 }
-            }
             _ => {}
         }
     }

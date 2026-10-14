@@ -489,6 +489,7 @@ pub fn build_node_index_table(file: &'static SourceFile) -> NodeIndexTable {
 
 // ── hand-written extended data (Go recordExtendedData_*) ──────────────────────
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_source_file(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let sf = node.as_source_file();
     let text_index = cx.strs.add(sf.text(), Kind::SourceFile, node.pos(), node.end());
@@ -539,18 +540,21 @@ fn record_template_like(node: P<Node>, text: &str, raw_text: &str, flags: TokenF
     append_u32s(&mut cx.extended_data, &[text_index, raw_index, flags.bits()]);
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_template_head(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_template_head();
     record_template_like(node, n.text(), n.raw_text(), n.template_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_template_middle(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_template_middle();
     record_template_like(node, n.text(), n.raw_text(), n.template_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_template_tail(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_template_tail();
     record_template_like(node, n.text(), n.raw_text(), n.template_flags(), cx);
@@ -562,30 +566,35 @@ fn record_literal(node: P<Node>, text: &str, flags: TokenFlags, cx: &mut EncodeC
     append_u32s(&mut cx.extended_data, &[text_index, flags.bits()]);
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_string_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_string_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_numeric_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_numeric_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_big_int_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_big_int_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_regular_expression_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_regular_expression_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_no_substitution_template_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_no_substitution_template_literal();
     record_literal(node, n.text(), n.template_flags(), cx);

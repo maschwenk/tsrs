@@ -137,7 +137,7 @@ struct Recompiler<'a> {
 
 impl crate::emit_harness::Recompile for Recompiler<'_> {
     fn compile(&self, input_files: &[TestFile], other_files: &[TestFile], options: CompilerOptions, tsconfig: Option<P<ParsedCommandLine>>) -> CompilationResult {
-        compile_files_ex(input_files, other_files, self.harness_options, options, self.current_directory, self.symlinks, tsconfig).unwrap()
+        compile_files_ex(input_files, other_files, self.harness_options, options, self.current_directory, self.symlinks, tsconfig)
     }
 }
 
@@ -161,7 +161,8 @@ fn compile_files(
         return Ok(Compiled::Unsupported(reason));
     }
 
-    compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig).map(|r| Compiled::Result(Box::new(r)))
+    let result = compile_files_ex(input_files, other_files, &harness_options, compiler_options, current_directory, symlinks, tsconfig);
+    Ok(Compiled::Result(Box::new(result)))
 }
 
 fn compile_files_ex(
@@ -172,7 +173,7 @@ fn compile_files_ex(
     current_directory: &str,
     symlinks: &BTreeMap<String, String>,
     tsconfig: Option<P<ParsedCommandLine>>,
-) -> Result<CompilationResult, String> {
+) -> CompilationResult {
     let mut program_file_names = Vec::new();
     program_file_names.extend(input_files.iter().filter_map(|file| {
         let file_name = tspath::get_normalized_absolute_path(&file.unit_name, current_directory);
@@ -255,9 +256,9 @@ fn compile_files_ex(
             crate::emit_harness::compile_files_with_host_emit(Arc::clone(&host), config, harness_options, &|host, config| create_program_like(host, config));
         let options = program.options().get();
         let emit = crate::emit_harness::new_emit_outputs(&recorder, program, options, &*host, emit_result);
-        return Ok(CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit) });
+        return CompilationResult { diagnostics, options, program, harness_options: harness_options.clone(), host, tsconfig, emit: Some(emit) };
     }
-    Ok(compile_files_with_host(host, config, harness_options, tsconfig))
+    compile_files_with_host(host, config, harness_options, tsconfig)
 }
 
 // harnessutil.go:953 testBuildInfoReader: reads the build info as if this compiler had written it.

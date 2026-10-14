@@ -44,7 +44,7 @@ impl Checker {
         let signatures = self.get_signatures_of_type(t, SignatureKind::Construct);
         let mut result = Vec::new();
         result.extend(signatures.iter().filter_map(|&sig| {
-            if type_arg_count >= self.get_min_type_argument_count(sig.type_parameters.get())
+            if type_arg_count >= Self::get_min_type_argument_count(sig.type_parameters.get())
                 && type_arg_count <= sig.type_parameters.get().len()
             {
                 Some(sig)
@@ -57,7 +57,7 @@ impl Checker {
 
     // checker.go:19634
     pub(crate) fn get_signature_instantiation(&mut self, sig: P<Signature>, type_arguments: &[P<Type>], is_java_script: bool, inferred_type_parameters: &[P<Type>]) -> P<Signature> {
-        let min_type_argument_count = self.get_min_type_argument_count(sig.type_parameters.get());
+        let min_type_argument_count = Self::get_min_type_argument_count(sig.type_parameters.get());
         let filled = self.fill_missing_type_arguments(type_arguments, sig.type_parameters.get(), min_type_argument_count, is_java_script);
         let instantiated_signature = self.get_signature_instantiation_without_filling_in_type_arguments(sig, &filled);
         if !inferred_type_parameters.is_empty() {
@@ -270,7 +270,7 @@ impl Checker {
     // checker.go:19807
     pub(crate) fn instantiate_signature_in_context_of(&mut self, signature: P<Signature>, contextual_signature: P<Signature>, inference_context: Option<P<InferenceContext>>, compare_types: Option<TypeComparer>) -> P<Signature> {
         let type_parameters = self.get_type_parameters_for_mapper(signature);
-        let context = self.new_inference_context(&type_parameters, Some(signature), InferenceFlags::None, compare_types);
+        let context = Self::new_inference_context(&type_parameters, Some(signature), InferenceFlags::None, compare_types);
         // We clone the inferenceContext to avoid fixing. For example, when the source signature is <T>(x: T) => T[] and
         // the contextual signature is (...args: A) => B, we want to infer the element type of A's constraint (say 'any')
         // for T but leave it possible to later infer '[any]' back to A.
@@ -420,7 +420,7 @@ impl Checker {
     }
 
     // checker.go:19939
-    pub(crate) fn add_inherited_members(&mut self, symbols: Option<P<SymbolTable>>, base_symbols: &[P<Symbol>]) -> Option<P<SymbolTable>> {
+    pub(crate) fn add_inherited_members(symbols: Option<P<SymbolTable>>, base_symbols: &[P<Symbol>]) -> Option<P<SymbolTable>> {
         let mut symbols = symbols;
         for &base in base_symbols {
             if !is_static_private_identifier_property(base) {
@@ -437,7 +437,7 @@ impl Checker {
     }
 
     // checker.go:19953
-    pub(crate) fn resolve_declared_members(&mut self, t: P<Type>) -> Option<&'static InterfaceType> {
+    pub(crate) fn resolve_declared_members(&mut self, t: P<Type>) -> &'static InterfaceType {
         let d = t.as_interface_type();
         if !d.declared_members_resolved.get() {
             let members = self.get_members_of_symbol(t.symbol().unwrap());
@@ -452,7 +452,7 @@ impl Checker {
             let index_infos = self.get_index_infos_of_symbol(t.symbol().unwrap());
             d.declared_index_infos.set(alloc_vec(index_infos));
         }
-        Some(d)
+        d
     }
 
     // checker.go:19966
@@ -492,7 +492,7 @@ impl Checker {
                         let key_types = self.get_type_from_type_node(type_node);
                         for_each_type(self, key_types, |c, key_type| {
                             if c.is_valid_index_key_type(key_type) && find_index_info(&index_infos, key_type).is_none() {
-                                let index_info = c.new_index_info(key_type, value_type, ast::has_modifier(declaration, ModifierFlags::Readonly), Some(declaration), &[]);
+                                let index_info = checker::Checker::new_index_info(key_type, value_type, ast::has_modifier(declaration, ModifierFlags::Readonly), Some(declaration), &[]);
                                 index_infos.push(index_info);
                             }
                         });
@@ -565,7 +565,7 @@ impl Checker {
             {
                 let prop_type = self.get_type_of_symbol(prop);
                 prop_types.push(prop_type);
-                if self.is_symbol_with_computed_name(prop) {
+                if Self::is_symbol_with_computed_name(prop) {
                     let first = prop.declarations()[0];
                     components.push(first);
                 }
@@ -575,7 +575,7 @@ impl Checker {
         if !prop_types.is_empty() {
             union_type = self.get_union_type_ex(&prop_types, UnionReduction::Subtype, AliasArg::None, None);
         }
-        self.new_index_info(key_type, union_type, is_readonly, None /*declaration*/, &components)
+        Self::new_index_info(key_type, union_type, is_readonly, None /*declaration*/, &components)
     }
 
     // checker.go:20082
@@ -608,7 +608,7 @@ impl Checker {
     }
 
     // checker.go:20104
-    pub(crate) fn is_symbol_with_computed_name(&mut self, symbol: P<Symbol>) -> bool {
+    pub(crate) fn is_symbol_with_computed_name(symbol: P<Symbol>) -> bool {
         let first = symbol.declarations().first().copied();
         if let Some(first) = first {
             let name = first.name();
@@ -741,7 +741,7 @@ impl Checker {
             let symbol = self.get_symbol_of_declaration(declaration).unwrap();
             let other = ast::get_declaration_of_kind(symbol, other_kind);
             if let Some(other) = other {
-                this_parameter = self.get_annotated_accessor_this_parameter(other);
+                this_parameter = Self::get_annotated_accessor_this_parameter(other);
             }
         }
         let mut class_type = None;
@@ -784,8 +784,8 @@ impl Checker {
     }
 
     // checker.go:20264
-    pub(crate) fn get_annotated_accessor_this_parameter(&mut self, accessor: P<Node>) -> Option<P<Symbol>> {
-        let parameter = self.get_accessor_this_parameter(accessor);
+    pub(crate) fn get_annotated_accessor_this_parameter(accessor: P<Node>) -> Option<P<Symbol>> {
+        let parameter = Self::get_accessor_this_parameter(accessor);
         if let Some(parameter) = parameter {
             return parameter.symbol();
         }
@@ -793,7 +793,7 @@ impl Checker {
     }
 
     // checker.go:20272
-    pub(crate) fn get_accessor_this_parameter(&mut self, accessor: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_accessor_this_parameter(accessor: P<Node>) -> Option<P<Node>> {
         if accessor.parameters().len() == if ast::is_get_accessor_declaration(accessor) { 1 } else { 2 } {
             return ast::get_this_parameter(accessor);
         }
@@ -985,9 +985,8 @@ impl Checker {
                 .is_some()
             {
                 return Some(self.get_rest_type_at_position(signature, pos, false /*readonly*/));
-            } else {
-                return Some(self.get_type_at_position(signature, pos));
             }
+            return Some(self.get_type_at_position(signature, pos));
         }
         None
     }
@@ -1002,7 +1001,7 @@ impl Checker {
 
     // checker.go:20439
     pub(crate) fn get_annotated_accessor_type(&mut self, accessor: Option<P<Node>>) -> Option<P<Type>> {
-        let node = self.get_annotated_accessor_type_node(accessor);
+        let node = Self::get_annotated_accessor_type_node(accessor);
         if let Some(node) = node {
             return Some(self.get_type_from_type_node(node));
         }
@@ -1010,7 +1009,7 @@ impl Checker {
     }
 
     // checker.go:20447
-    pub(crate) fn get_annotated_accessor_type_node(&mut self, accessor: Option<P<Node>>) -> Option<P<Node>> {
+    pub(crate) fn get_annotated_accessor_type_node(accessor: Option<P<Node>>) -> Option<P<Node>> {
         if let Some(accessor) = accessor {
             match accessor.kind() {
                 Kind::GetAccessor | Kind::PropertyDeclaration => return accessor.type_node(),
@@ -1542,7 +1541,7 @@ impl Checker {
             }
             let true_type = self.check_if_expression_refines_parameter(fn_, expr, param, init_type);
             if let Some(true_type) = true_type {
-                return Some(Some(self.new_type_predicate(
+                return Some(Some(Self::new_type_predicate(
                     TypePredicateKind::Identifier,
                     param.name().unwrap().text(),
                     Some(i),
@@ -1608,7 +1607,7 @@ impl Checker {
             // new type parameters in the mapper function. Finally store this mapper in the new type
             // parameters such that we can use it when instantiating constraints.
             fresh_type_parameters = sig.type_parameters.get().iter().map(|tp| self.clone_type_parameter(*tp)).collect();
-            m = self.combine_type_mappers(Some(new_type_mapper(sig.type_parameters.get(), alloc_slice(&fresh_type_parameters))), m);
+            m = Self::combine_type_mappers(Some(new_type_mapper(sig.type_parameters.get(), alloc_slice(&fresh_type_parameters))), m);
             for tp in &fresh_type_parameters {
                 tp.as_type_parameter().mapper.set(Some(m));
             }
@@ -1639,7 +1638,7 @@ impl Checker {
         if new_value_type == info.value_type() {
             return info;
         }
-        self.new_index_info(info.key_type(), new_value_type, info.is_readonly.get(), info.declaration.get(), info.components.get())
+        Self::new_index_info(info.key_type(), new_value_type, info.is_readonly.get(), info.declaration.get(), info.components.get())
     }
 
     // checker.go:20991
@@ -1692,7 +1691,7 @@ impl Checker {
             if base_constructor_type.flags().intersects(TypeFlags::Object | TypeFlags::Intersection | TypeFlags::TypeVariable) {
                 members = members.map(|m| m.clone_table());
                 let base_properties = self.get_properties_of_type(base_constructor_type);
-                self.add_inherited_members(members, base_properties);
+                Self::add_inherited_members(members, base_properties);
                 self.set_structured_type_members(t, members, &[], &[], &[]);
             } else if base_constructor_type == self.any_type {
                 base_constructor_index_info = Some(self.any_base_type_index_info);
@@ -1808,7 +1807,7 @@ impl Checker {
             // type mappers. This ensures that original type identities are properly preserved and that aliases
             // always reference a non-aliases.
             symbol = links.target().unwrap();
-            m = Some(self.combine_type_mappers(links.mapper(), m.unwrap()));
+            m = Some(Self::combine_type_mappers(links.mapper(), m.unwrap()));
         }
         // Keep the flags from the symbol we're instantiating.  Mark that is instantiated, and
         // also transient so that we can just store data on it directly.
@@ -1928,7 +1927,7 @@ impl Checker {
         let mut result = Vec::new();
         result.extend(base_signatures.iter().filter_map(|&base_sig| {
             let min_type_argument_count =
-                self.get_min_type_argument_count(base_sig.type_parameters.get());
+                Self::get_min_type_argument_count(base_sig.type_parameters.get());
             let type_param_count = base_sig.type_parameters.get().len();
             if is_java_script
                 || type_arg_count >= min_type_argument_count && type_arg_count <= type_param_count
@@ -1990,7 +1989,7 @@ impl Checker {
             template_modifiers,
             lazy,
         };
-        if self.is_mapped_type_with_keyof_constraint_declaration(t) {
+        if Self::is_mapped_type_with_keyof_constraint_declaration(t) {
             // We have a { [P in keyof T]: X }
             self.for_each_mapped_type_property_key_type_and_index_signature_key_type(modifiers_type, include, false /*stringsOnly*/, |c, key_type| {
                 mapped_type_add_member_for_key_type(c, &mut state, key_type);
@@ -2045,7 +2044,7 @@ impl Checker {
         let modifiers_index_info = self.get_applicable_index_info(modifiers_type, prop_name_type);
         let is_readonly = template_modifiers.intersects(MappedTypeModifiers::IncludeReadonly)
             || !template_modifiers.intersects(MappedTypeModifiers::ExcludeReadonly) && modifiers_index_info.is_some_and(|i| i.is_readonly.get());
-        let index_info = self.new_index_info(index_key_type, prop_type, is_readonly, None, &[]);
+        let index_info = Self::new_index_info(index_key_type, prop_type, is_readonly, None, &[]);
         self.append_index_info(&mut index_infos, index_info, true /*union*/)
     }
 
@@ -2144,7 +2143,7 @@ impl Checker {
             self.lazy_mapped_tables.insert(t, Rc::clone(&copy));
             return Some(copy);
         }
-        if !self.is_mapped_type_with_keyof_constraint_declaration(t) {
+        if !Self::is_mapped_type_with_keyof_constraint_declaration(t) {
             return None;
         }
         // The same steps as resolveMappedTypeMembers before it creates members.
@@ -2386,7 +2385,7 @@ impl Checker {
     pub(crate) fn get_lower_bound_of_key_type(&mut self, t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Index) {
             let t = self.get_apparent_type(t.as_index_type().target.get().unwrap());
-            if self.is_generic_tuple_type(t) {
+            if Self::is_generic_tuple_type(t) {
                 return self.get_known_keys_of_tuple_type(t);
             }
             return self.get_index_type(t);
@@ -2602,7 +2601,7 @@ impl Checker {
         result.set_composite(Some(P::new(CompositeSignature { is_union: Cell::new(is_union), signatures: Cell::new(alloc_vec(left_signatures)) })));
         if let Some(param_mapper) = param_mapper {
             if left.composite().is_some_and(|c| c.is_union.get() == is_union) && left.mapper.get().is_some() {
-                result.mapper.set(Some(self.combine_type_mappers(left.mapper.get(), param_mapper)));
+                result.mapper.set(Some(Self::combine_type_mappers(left.mapper.get(), param_mapper)));
             } else {
                 result.mapper.set(Some(param_mapper));
             }
@@ -2788,7 +2787,7 @@ impl Checker {
                 } else {
                     (self.get_intersection_type(&[info.value_type(), new_info.value_type()]), info.is_readonly.get() && new_info.is_readonly.get())
                 };
-                *info_slot = self.new_index_info(info.key_type(), value_type, is_readonly, None, &[]);
+                *info_slot = Self::new_index_info(info.key_type(), value_type, is_readonly, None, &[]);
                 return index_infos.to_vec();
             }
         }
@@ -2858,7 +2857,7 @@ impl Checker {
 
     pub(crate) fn get_property_of_object_type_hashed(&mut self, t: P<Type>, key: HashedName<'_>) -> Option<P<Symbol>> {
         if t.flags().intersects(TypeFlags::Object) {
-            let resolved = self.resolve_structured_type_members(t).unwrap();
+            let resolved = self.resolve_structured_type_members(t);
             let symbol = resolved.members().and_then(|m| m.lookup_hashed(key));
             if let Some(symbol) = symbol {
                 if self.symbol_is_value(symbol) {

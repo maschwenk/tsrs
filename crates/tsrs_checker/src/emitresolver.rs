@@ -21,11 +21,13 @@ pub(crate) fn new_emit_resolver(_checker: &mut Checker) -> P<EmitResolver> {
 
 impl EmitResolver {
     // emitresolver.go:53
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_jsx_factory_entity(&self, c: &mut Checker, location: P<Node>) -> Option<P<Node>> {
         c.get_jsx_factory_entity(Some(location))
     }
 
     // emitresolver.go:59
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_jsx_fragment_factory_entity(&self, c: &mut Checker, location: P<Node>) -> Option<P<Node>> {
         c.get_jsx_fragment_factory_entity(Some(location))
     }
@@ -36,6 +38,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:71
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_late_bound(&self, c: &mut Checker, node: Option<P<Node>>) -> bool {
         // TODO: Require an emitContext to construct an EmitResolver, remove all emitContext arguments
         // node = r.emitContext.ParseNode(node)
@@ -52,6 +55,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:89
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_enum_member_value(&self, c: &mut Checker, node: P<Node>) -> evaluator::Result {
         // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(node) {
@@ -357,7 +361,7 @@ impl EmitResolver {
         }
 
         if symbol.is_none() && ast::is_this_identifier(first_identifier) {
-            let this_container = c.get_this_container(first_identifier, false, false).unwrap();
+            let this_container = checker::Checker::get_this_container(first_identifier, false, false).unwrap();
             let sym = c.get_symbol_of_declaration(this_container);
             if self.is_symbol_accessible(c, sym, enclosing_declaration, meaning, false).accessibility == SymbolAccessibility::Accessible {
                 return SymbolAccessibilityResult { accessibility: SymbolAccessibility::Accessible, ..Default::default() };
@@ -503,6 +507,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:467
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_implementation_of_overload(&self, c: &mut Checker, node: P<Node>) -> bool {
         // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(node) {
@@ -577,6 +582,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:544
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_definitely_reference_to_global_symbol_object(&self, c: &mut Checker, node: P<Node>) -> bool {
         if !ast::is_property_access_expression(node)
             || !ast::is_identifier(node.name().unwrap())
@@ -651,6 +657,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:609
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub(crate) fn declared_parameter_type_contains_undefined(&self, c: &mut Checker, parameter: P<Node>) -> bool {
         // typeNode := getNonlocalEffectiveTypeAnnotationNode(parameter); // !!! JSDoc Support
         let Some(type_node) = parameter.type_node() else {
@@ -660,7 +667,7 @@ impl EmitResolver {
         // allow error type here to avoid confusing errors that the annotation has to contain undefined when it does in cases like this:
         //
         // export function fn(x?: Unresolved | undefined): void {}
-        c.is_error_type(t) || c.contains_undefined_type(t)
+        c.is_error_type(t) || checker::Checker::contains_undefined_type(t)
     }
 
     // emitresolver.go:622
@@ -684,11 +691,13 @@ impl EmitResolver {
     }
 
     // emitresolver.go:639
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub(crate) fn is_optional_parameter(&self, c: &mut Checker, node: P<Node>) -> bool {
         c.is_optional_parameter(node)
     }
 
     // emitresolver.go:643
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_literal_const_declaration(&self, c: &mut Checker, node: P<Node>) -> bool {
         // node = r.emitContext.ParseNode(node)
         if !ast::is_parse_tree_node(node) {
@@ -721,6 +730,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:681
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_symbol_accessible(&self, c: &mut Checker, symbol: Option<P<Symbol>>, enclosing_declaration: Option<P<Node>>, meaning: SymbolFlags, should_compute_alias_to_mark_visible: bool) -> SymbolAccessibilityResult {
         c.is_symbol_accessible(symbol, enclosing_declaration, meaning, should_compute_alias_to_mark_visible)
     }
@@ -740,6 +750,7 @@ pub(crate) fn is_const_enum_or_const_enum_only_module(s: P<Symbol>) -> bool {
 
 impl EmitResolver {
     // emitresolver.go:697
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_referenced_alias_declaration(&self, c: &mut Checker, node: P<Node>) -> bool {
         if !c.can_collect_symbol_alias_accessibility_data || !ast::is_parse_tree_node(node) {
             return true;
@@ -803,18 +814,18 @@ impl EmitResolver {
                 }
                 return true;
             }
-            Kind::BinaryExpression => {
-                if is_common_js_module_exports(node) && ast::is_identifier(node.as_binary_expression().right()) {
+            Kind::BinaryExpression
+                if is_common_js_module_exports(node) && ast::is_identifier(node.as_binary_expression().right()) => {
                     let symbol = c.get_symbol_of_declaration(node);
                     return self.is_alias_resolved_to_value(c, symbol, true /*excludeTypeOnlyValues*/);
                 }
-            }
             _ => {}
         }
         false
     }
 
     // emitresolver.go:764
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub(crate) fn is_alias_resolved_to_value(&self, c: &mut Checker, symbol: Option<P<Symbol>>, exclude_type_only_values: bool) -> bool {
         let Some(symbol) = symbol else {
             return false;
@@ -862,6 +873,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:808
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn mark_linked_references_recursively(&self, c: &mut Checker, file: Option<P<SourceFile>>) {
         if let Some(file) = file {
             if !ast::is_parse_tree_node(file.as_node()) {
@@ -890,6 +902,7 @@ fn mark_linked_references_recursively_visit(c: &mut Checker, n: P<Node>) -> bool
 
 impl EmitResolver {
     // emitresolver.go:832
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_external_module_file_from_declaration(&self, c: &mut Checker, declaration: P<Node>) -> Option<P<SourceFile>> {
         if !ast::is_parse_tree_node(declaration) {
             return None;
@@ -899,7 +912,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:842
-    pub(crate) fn get_reference_resolver(&self, c: &mut Checker) -> P<ReferenceResolver<Checker>> {
+    pub(crate) fn get_reference_resolver(&self, c: &Checker) -> P<ReferenceResolver<Checker>> {
         *self.reference_resolver.get_or_init(|| {
             tsrs_binder::new_reference_resolver(
                 c.compiler_options,
@@ -941,7 +954,7 @@ impl EmitResolver {
 
         let symbol = c.get_referenced_value_or_alias_symbol(node);
         if ast::is_non_local_alias(symbol, SymbolFlags::Value) && c.get_type_only_alias_declaration_ex(symbol.unwrap(), SymbolFlags::Value).is_none() {
-            return c.get_declaration_of_alias_symbol(symbol.unwrap());
+            return checker::Checker::get_declaration_of_alias_symbol(symbol.unwrap());
         }
         None
     }
@@ -971,6 +984,7 @@ impl EmitResolver {
 
     // IsNameResolvable returns `true` if the given `name` resolves to any symbol at `location`
     // emitresolver.go:916
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_name_resolvable(&self, c: &mut Checker, location: Option<P<Node>>, name: &str) -> bool {
         let symbol = c.resolve_name(
             location,
@@ -1006,6 +1020,7 @@ impl EmitResolver {
     // and likely reduces performance. There's probably some refactoring that could be done here to simplify this.
 
     // emitresolver.go:950
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn create_return_type_of_signature_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
         let Some(original) = emit_context.parse_node(Some(signature_declaration)) else {
             return Some(emit_context.factory.new_keyword_type_node(Kind::AnyKeyword));
@@ -1016,6 +1031,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:962
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn create_type_parameters_of_signature_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, signature_declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<Vec<P<Node>>> {
         let original = emit_context.parse_node(Some(signature_declaration))?;
 
@@ -1030,6 +1046,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:974
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn create_type_of_declaration(&self, c: &mut Checker, emit_context: P<EmitContext>, declaration: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
         if emit_context.parse_node(Some(declaration)).is_none() {
             return Some(emit_context.factory.new_keyword_type_node(Kind::AnyKeyword));
@@ -1042,6 +1059,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:988
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn create_literal_const_value(&self, c: &mut Checker, emit_context: P<EmitContext>, node: P<Node>, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
         let node = emit_context.parse_node(Some(node)).unwrap();
         let symbol = c.get_symbol_of_declaration(node).unwrap();
@@ -1095,6 +1113,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:1049
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn create_type_of_expression(&self, c: &mut Checker, emit_context: P<EmitContext>, expression: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
         let Some(expression) = emit_context.parse_node(Some(expression)) else {
             return Some(emit_context.factory.new_keyword_type_node(Kind::AnyKeyword));
@@ -1206,18 +1225,21 @@ impl EmitResolver {
     }
 
     // emitresolver.go:1151
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_effective_declaration_flags(&self, c: &mut Checker, node: P<Node>, flags: ModifierFlags) -> ModifierFlags {
         // node = emitContext.ParseNode(node)
         c.get_effective_declaration_flags(node, flags)
     }
 
     // emitresolver.go:1158
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_constant_value(&self, c: &mut Checker, node: P<Node>) -> Option<LiteralValue> {
         // node = emitContext.ParseNode(node)
         c.get_constant_value(node)
     }
 
     // emitresolver.go:1165
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_type_reference_serialization_kind(&self, c: &mut Checker, type_name: Option<P<Node>>, location: Option<P<Node>>) -> TypeReferenceSerializationKind {
         // typeName = emitContext.ParseNode(typeName)
         // location = emitContext.ParseNode(location)
@@ -1316,6 +1338,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:1257
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn get_properties_of_container_function(&self, c: &mut Checker, node: Option<P<Node>>) -> Vec<P<Symbol>> {
         // This is explicitly _not locked_ because it is only called via error reporters invoked via node builder calls
         // to the symbol tracker already within locked contexts.
@@ -1330,6 +1353,7 @@ impl EmitResolver {
     }
 
     // emitresolver.go:1272
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn try_js_type_node_to_type_node(&self, c: &mut Checker, emit_context: P<EmitContext>, type_node: P<Node>, enclosing_declaration: Option<P<Node>>, flags: Flags, internal_flags: InternalFlags, tracker: &'static dyn SymbolTracker) -> Option<P<Node>> {
         let type_node = emit_context.parse_node(Some(type_node)).unwrap();
 
@@ -1349,6 +1373,7 @@ impl EmitResolver {
     // Only `extends` base types are considered. Members coming from `implements` clauses are not
     // inherited, so the class must redeclare them, and they are always emitted.
     // emitresolver.go:1292
+    #[expect(clippy::unused_self, reason = "EmitResolver methods implement the instance resolver API used by declaration and JavaScript transforms.")]
     pub fn is_this_property_assignment_declaration_redundant(&self, c: &mut Checker, node: Option<P<Node>>) -> bool {
         let Some(node) = node else {
             return false;

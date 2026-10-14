@@ -112,12 +112,9 @@ impl CheckerPool for testPool {
     fn get_checker(&self, _ctx: &Context, _file: Option<P<tsrs_ast::SourceFile>>) -> CheckerHandle {
         let state = self.0;
         let mut slots = state.slots.lock().unwrap();
-        let index = match slots.iter().position(|(_, held)| !held) {
-            Some(index) => index,
-            None => {
-                slots.push((PooledChecker::new(tsrs_checker::new_checker(state.program)), false));
-                slots.len() - 1
-            }
+        let index = if let Some(index) = slots.iter().position(|(_, held)| !held) { index } else {
+            slots.push((PooledChecker::new(tsrs_checker::new_checker(state.program)), false));
+            slots.len() - 1
         };
         slots[index].1 = true;
         let checker: NonNull<tsrs_compiler::Checker> = slots[index].0.as_non_null();

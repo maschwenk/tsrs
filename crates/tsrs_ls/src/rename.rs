@@ -119,6 +119,7 @@ impl LanguageService {
     }
 
     // rename.go:98
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub(crate) fn symbol_and_entries_to_rename(
         &self,
         ctx: &Context,
@@ -164,7 +165,7 @@ impl LanguageService {
             };
             let text_edit = lsproto::TextEdit {
                 range: rng,
-                new_text: self.get_text_for_rename(original_node, entry, &params.new_name, ch, quote_preference, use_aliases_for_rename),
+                new_text: Self::get_text_for_rename(original_node, entry, &params.new_name, ch, quote_preference, use_aliases_for_rename),
             };
             Some(mappedRenameEdit { uri, edit: text_edit })
         }));
@@ -431,7 +432,6 @@ impl LanguageService {
 
     // rename.go:368
     fn get_text_for_rename(
-        &self,
         original_node: P<Node>,
         entry: &ReferenceEntry,
         new_text: &str,

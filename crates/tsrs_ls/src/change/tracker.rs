@@ -460,7 +460,7 @@ impl Tracker {
         trailing_trivia: TrailingTriviaOption,
     ) {
         let start_position = self.get_adjusted_start_position(source_file, start_node, leading_trivia, false);
-        let end_position = self.get_adjusted_end_position(source_file, end_node, trailing_trivia);
+        let end_position = Self::get_adjusted_end_position(source_file, end_node, trailing_trivia);
         self.replace_text_range_with_text(source_file, TextRange::new(start_position, end_position), "");
     }
 
@@ -535,7 +535,7 @@ impl Tracker {
             semicolon.set_parent(after.parent());
             self.replace_range(source_file, TextRange::new(end_pos, end_pos), semicolon, NodeOptions::default());
         }
-        self.get_adjusted_end_position(source_file, after, TrailingTriviaOption::None)
+        Self::get_adjusted_end_position(source_file, after, TrailingTriviaOption::None)
     }
 
     // tracker.go:420
@@ -733,7 +733,7 @@ impl Tracker {
             return;
         }
 
-        let mut pos = self.get_insertion_position_at_source_file_top(source_file);
+        let mut pos = Self::get_insertion_position_at_source_file_top(source_file);
         let mut original_pos = pos;
         // A content mapper may synthesize a header. Advance to the first writable segment so the insertion
         // maps exactly to the original file, and use its original position when deciding leading trivia.

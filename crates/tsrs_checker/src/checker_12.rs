@@ -34,7 +34,7 @@ impl Checker {
     }
 
     // checker.go:23970
-    pub(crate) fn is_mutable_array_or_tuple(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_mutable_array_or_tuple(&self, t: P<Type>) -> bool {
         self.is_array_type(t) && !self.is_readonly_array_type(t) || is_tuple_type(t) && !t.target_tuple_type().readonly.get()
     }
 
@@ -68,7 +68,7 @@ impl Checker {
     }
 
     // checker.go:23998
-    pub(crate) fn is_empty_literal_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_empty_literal_type(&self, t: P<Type>) -> bool {
         if self.strict_null_checks {
             return t == self.implicit_never_type;
         }
@@ -136,7 +136,7 @@ impl Checker {
         let type_parameters = self.type_alias_links.get(symbol).type_parameters.get();
         if !type_parameters.is_empty() {
             let num_type_arguments = type_arguments.len();
-            let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
+            let min_type_argument_count = Self::get_min_type_argument_count(type_parameters);
             if num_type_arguments < min_type_argument_count
                 || num_type_arguments > type_parameters.len()
             {
@@ -207,7 +207,7 @@ impl Checker {
         let mut instantiation = links.instantiations.get(&key);
         if instantiation.is_none() {
             let too_complex_before = self.too_complex_reports;
-            let min_type_argument_count = self.get_min_type_argument_count(type_parameters);
+            let min_type_argument_count = Self::get_min_type_argument_count(type_parameters);
             let filled = self.fill_missing_type_arguments(type_arguments, type_parameters, min_type_argument_count, ast::is_in_js_file(symbol.value_declaration()));
             let mapper = new_type_mapper(type_parameters, alloc_vec(filled));
             let result = self.instantiate_type_with_alias(t, Some(mapper), alias);
@@ -309,14 +309,14 @@ impl Checker {
 
     // checker.go:24198
     pub(crate) fn get_outer_type_parameters_of_class_or_interface(&mut self, symbol: P<Symbol>) -> Vec<P<Type>> {
-        let declaration = self.get_class_or_interface_like_declaration(symbol);
+        let declaration = Self::get_class_or_interface_like_declaration(symbol);
         assert!(declaration.is_some(), "Class was missing valueDeclaration -OR- non-class had no interface declarations");
         self.get_outer_type_parameters(declaration.unwrap(), false /*includeThisTypes*/)
     }
 
     // Returns the declaration used to obtain a class, interface, or function symbol's outer type parameters.
     // checker.go:24205
-    pub(crate) fn get_class_or_interface_like_declaration(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
+    pub(crate) fn get_class_or_interface_like_declaration(symbol: P<Symbol>) -> Option<P<Node>> {
         if symbol.flags().intersects(SymbolFlags::Class | SymbolFlags::Function) {
             return symbol.value_declaration();
         }
@@ -333,8 +333,8 @@ impl Checker {
     }
 
     // checker.go:24221
-    pub(crate) fn can_get_type_parameters_of_class_or_interface(&mut self, symbol: P<Symbol>) -> bool {
-        self.get_class_or_interface_like_declaration(symbol).is_some()
+    pub(crate) fn can_get_type_parameters_of_class_or_interface(symbol: P<Symbol>) -> bool {
+        Self::get_class_or_interface_like_declaration(symbol).is_some()
     }
 
     // Return the outer type parameters of a node or undefined if the node has no outer type parameters.
@@ -829,7 +829,7 @@ impl Checker {
 
     // checker.go:24618
     pub(crate) fn get_array_or_tuple_target_type(&mut self, node: P<Node>) -> P<Type> {
-        let readonly = self.is_readonly_type_operator(node.parent().unwrap());
+        let readonly = Self::is_readonly_type_operator(node.parent().unwrap());
         let element_type = self.get_array_element_type_node(node);
         if element_type.is_some() {
             if readonly {
@@ -842,7 +842,7 @@ impl Checker {
     }
 
     // checker.go:24630
-    pub(crate) fn is_readonly_type_operator(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_readonly_type_operator(node: P<Node>) -> bool {
         ast::is_type_operator_node(node) && node.as_type_operator_node().operator == Kind::ReadonlyKeyword
     }
 
@@ -1067,8 +1067,8 @@ impl Checker {
             // When the check and extends types are simple tuple types of the same arity, we defer resolution of the
             // conditional type when any tuple elements are generic. This is such that non-distributable conditional
             // types can be written `[X] extends [Y] ? ...` and be deferred similarly to `X extends Y ? ...`.
-            let check_tuples = self.is_simple_tuple_type(check_type_node)
-                && self.is_simple_tuple_type(extends_type_node)
+            let check_tuples = Self::is_simple_tuple_type(check_type_node)
+                && Self::is_simple_tuple_type(extends_type_node)
                 && check_type_node.elements().len() == extends_type_node.elements().len();
             let check_type_deferred = self.is_deferred_type(check_type, check_tuples);
             let mut combined_mapper: Option<P<TypeMapper>> = None;
@@ -1087,11 +1087,11 @@ impl Checker {
                 // This means we have two mappers that need applying:
                 //    * The original `mapper` used to create this conditional
                 //    * The mapper that maps the infer type parameter to its inference result (`context.mapper`)
-                let context = self.new_inference_context(root.infer_type_parameters.get(), None /*signature*/, InferenceFlags::None, None);
+                let context = Self::new_inference_context(root.infer_type_parameters.get(), None /*signature*/, InferenceFlags::None, None);
                 self.scratch_contexts.push(context);
                 if let Some(mapper) = mapper {
                     let own = context.non_fixing_mapper().unwrap();
-                    let non_fixing_mapper = self.combine_type_mappers(Some(own), mapper);
+                    let non_fixing_mapper = Self::combine_type_mappers(Some(own), mapper);
                     context.set_non_fixing_mapper(non_fixing_mapper);
                     // The context no longer holds its own non-fixing mapper, so it is recycled from here.
                     self.scratch_mappers.push(own);
@@ -1107,7 +1107,7 @@ impl Checker {
                 // those type parameters are used in type references (see getInferredTypeParameterConstraint). For
                 // that reason we need context.mapper to be first in the combined mapper. See #42636 for examples.
                 if let Some(mapper) = mapper {
-                    let combined = self.combine_type_mappers(context.mapper(), mapper);
+                    let combined = Self::combine_type_mappers(context.mapper(), mapper);
                     self.scratch_mappers.push(combined);
                     combined_mapper = Some(combined);
                 } else {
@@ -1226,7 +1226,7 @@ impl Checker {
                 let new_root = new_type.as_conditional_type().root.get().unwrap();
                 if !new_root.outer_type_parameters.get().is_empty() {
                     let conditional_mapper = new_type.as_conditional_type().mapper.get();
-                    let type_param_mapper = self.combine_type_mappers(conditional_mapper, new_mapper);
+                    let type_param_mapper = Self::combine_type_mappers(conditional_mapper, new_mapper);
                     let type_arguments: Vec<P<Type>> = new_root.outer_type_parameters.get().iter().map(|&t| type_param_mapper.map(self, t)).collect();
                     if conditional_mapper.is_some() {
                         // SAFETY: the composite made above, used only by those `map` calls.
@@ -1256,7 +1256,7 @@ impl Checker {
     }
 
     // checker.go:24939
-    pub(crate) fn is_simple_tuple_type(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_simple_tuple_type(node: P<Node>) -> bool {
         ast::is_tuple_type_node(node)
             && !node.elements().is_empty()
             && !node.elements().iter().any(|&e| {
@@ -1311,7 +1311,7 @@ impl Checker {
 
     // checker.go:24981
     pub(crate) fn get_restrictive_type_parameter(&mut self, t: P<Type>) -> P<Type> {
-        if t.as_type_parameter().constraint.get().is_none() && self.get_constraint_declaration(t).is_none()
+        if t.as_type_parameter().constraint.get().is_none() && Self::get_constraint_declaration(t).is_none()
             || t.as_type_parameter().constraint.get() == Some(self.no_constraint_type)
         {
             return t;
@@ -1714,8 +1714,7 @@ impl Checker {
         writing: bool,
         no_reductions: bool,
     ) -> Option<P<Type>> {
-        let length = self
-            .get_type_reference_arity(t)
+        let length = Self::get_type_reference_arity(t)
             .saturating_sub(end_skip_count);
         let element_infos = t.target_tuple_type().element_infos.get();
         if index < length {
@@ -1792,7 +1791,7 @@ impl Checker {
             }
             return t.object_flags_lazy() & ObjectFlags::IsGenericType;
         }
-        if t.flags().intersects(TypeFlags::InstantiableNonPrimitive) || self.is_generic_mapped_type(t) || self.is_generic_tuple_type(t) {
+        if t.flags().intersects(TypeFlags::InstantiableNonPrimitive) || self.is_generic_mapped_type(t) || Self::is_generic_tuple_type(t) {
             combined_flags |= ObjectFlags::IsGenericObjectType;
         }
         if t.flags().intersects(TypeFlags::InstantiableNonPrimitive | TypeFlags::Index) || self.is_generic_string_like_type(t) {
@@ -1803,7 +1802,7 @@ impl Checker {
 
     // checker.go:25374
     #[inline]
-    pub(crate) fn is_generic_tuple_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_generic_tuple_type(t: P<Type>) -> bool {
         is_tuple_type(t) && t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variadic)
     }
 
@@ -2070,7 +2069,7 @@ impl Checker {
         if let Some(t) = intf.instantiations.get(type_arguments) {
             return t;
         }
-        let propagating_flags = self.get_propagating_flags_of_types(type_arguments, TypeFlags::None);
+        let propagating_flags = Self::get_propagating_flags_of_types(type_arguments, TypeFlags::None);
         let t = self.new_object_type(ObjectFlags::Reference | object_flags | propagating_flags, target.symbol());
         let d = t.as_type_reference();
         d.target.set(Some(target));
@@ -2155,7 +2154,7 @@ impl Checker {
     // of an object literal or a non-inferrable type. This is because there are operations in the type checker
     // that care about the presence of such types at arbitrary depth in a containing type.
     // checker.go:25648
-    pub(crate) fn get_propagating_flags_of_types(&mut self, types: &[P<Type>], exclude_kinds: TypeFlags) -> ObjectFlags {
+    pub(crate) fn get_propagating_flags_of_types(types: &[P<Type>], exclude_kinds: TypeFlags) -> ObjectFlags {
         let mut result = ObjectFlags::None;
         result = types.iter().fold(result, |mut result, &t| {
             if !t.flags().intersects(exclude_kinds) {
@@ -2266,7 +2265,7 @@ impl Checker {
     }
 
     // checker.go:25733
-    pub(crate) fn new_index_info(&mut self, key_type: P<Type>, value_type: P<Type>, is_readonly: bool, declaration: Option<P<Node>>, components: &[P<Node>]) -> P<IndexInfo> {
+    pub(crate) fn new_index_info(key_type: P<Type>, value_type: P<Type>, is_readonly: bool, declaration: Option<P<Node>>, components: &[P<Node>]) -> P<IndexInfo> {
         let info = P::new(IndexInfo::default());
         info.key_type.set(Some(key_type));
         info.value_type.set(Some(value_type));
@@ -2466,7 +2465,7 @@ impl Checker {
     }
 
     // checker.go:25894
-    pub(crate) fn extract_unit_type(&mut self, t: P<Type>) -> P<Type> {
+    pub(crate) fn extract_unit_type(t: P<Type>) -> P<Type> {
         if t.flags().intersects(TypeFlags::Intersection) {
             let u = t.as_intersection_type().types.get().iter().copied().find(|&t| is_unit_type(t));
             if let Some(u) = u {

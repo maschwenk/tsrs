@@ -11,6 +11,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:1893
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_class_declaration_in_new_class_lexical_environment(&self, node: P<Node>, facts: classFacts) -> Option<P<Node>> {
         let class_decl = node.as_class_declaration();
         // If a class has private static fields, or a static field has a `this` or `super` reference,
@@ -79,7 +80,7 @@ impl classFieldsTransformer {
             // From ES6 specification:
             //   HasLexicalDeclaration (N) : Determines if the argument identifier has a binding in this environment record that was created using
             //                               a lexical declaration such as a LexicalDeclaration or a ClassDeclaration.
-            let static_properties = self.get_static_properties_and_class_static_block(node);
+            let static_properties = Self::get_static_properties_and_class_static_block(node);
             if !static_properties.is_empty() {
                 if name.is_none() {
                     name = Some(self.factory().new_generated_name_for_node(node));
@@ -155,7 +156,7 @@ impl classFieldsTransformer {
             }
         }
 
-        let static_properties_or_class_static_blocks = self.get_static_properties_and_class_static_block(node);
+        let static_properties_or_class_static_blocks = Self::get_static_properties_and_class_static_block(node);
 
         // Pre-compute whether the class expression will need a temp variable wrapper.
         // Strada registers class aliases AFTER transformClassMembers (since onSubstituteNode runs
@@ -309,6 +310,7 @@ impl classFieldsTransformer {
     //
     // The Strada noSubstitution set (ensureDynamicThisIfNeeded) is not needed because
     // transformAutoAccessor() passes the receiver directly rather than emitting `this`.
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_this_expression(&self, node: P<Node>) -> Option<P<Node>> {
         if self.inside_computed_property_name.get() && self.should_transform_this_in_static_initializers.get() && self.lexical_environment.get().is_some_and(|l| l.data.get().is_some()) {
             // Don't replace `this` in computed property names for ES-decorated classes.
@@ -356,7 +358,7 @@ impl classFieldsTransformer {
             }
 
             if self.should_transform_private_elements_or_class_static_blocks.get() {
-                if !self.get_private_instance_methods_and_accessors(node).is_empty() {
+                if !Self::get_private_instance_methods_and_accessors(node).is_empty() {
                     self.create_brand_check_weak_set_for_private_methods();
                 }
             }
@@ -621,13 +623,13 @@ impl classFieldsTransformer {
 
     // classfields.go:2503
     pub(crate) fn transform_constructor_body(&self, container: P<Node>, constructor: Option<P<Node>>, is_derived_class: bool) -> Option<P<Node>> {
-        let instance_properties = self.get_properties(container, false /*requireInitializer*/, false /*isStatic*/);
+        let instance_properties = Self::get_properties(container, false /*requireInitializer*/, false /*isStatic*/);
         let mut properties = instance_properties.clone();
         if !self.compiler_options.get_use_define_for_class_fields() {
             properties.retain(|&prop| prop.initializer().is_some() || ast::is_private_identifier(prop.name().unwrap()) || ast::has_accessor_modifier(prop));
         }
 
-        let private_methods_and_accessors = self.get_private_instance_methods_and_accessors(container);
+        let private_methods_and_accessors = Self::get_private_instance_methods_and_accessors(container);
         let needs_constructor_body = !properties.is_empty() || !private_methods_and_accessors.is_empty();
 
         // Only generate synthetic constructor when there are property initializers to move.
@@ -872,9 +874,8 @@ impl classFieldsTransformer {
                     return Some(create_private_static_field_initializer(self.factory(), info.variable_name.unwrap(), self.visitor().visit_node(property.initializer())));
                 }
                 return None;
-            } else {
-                panic!("Undeclared private name for property declaration.");
             }
+            panic!("Undeclared private name for property declaration.");
         }
 
         if (ast::is_private_identifier(property_name) || ast::has_static_modifier(property)) && property.initializer().is_none() {
@@ -957,6 +958,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:2853
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_invalid_super_property(&self, node: P<Node>) -> Option<P<Node>> {
         if ast::is_property_access_expression(node) {
             return Some(self.factory().update_property_access_expression(node, self.factory().new_void_zero_expression(), None, node.name().unwrap(), node.flags()));
@@ -1476,6 +1478,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:3334
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_assignment_pattern(&self, node: P<Node>) -> Option<P<Node>> {
         if ast::is_array_literal_expression(node) {
             // Transforms private names in destructuring assignment array bindings.
@@ -1536,7 +1539,7 @@ pub(crate) fn is_static_property_declaration_or_class_static_block(node: P<Node>
 
 impl classFieldsTransformer {
     // classfields.go:3400
-    pub(crate) fn get_properties(&self, node: P<Node>, require_initializer: bool, is_static: bool) -> Vec<P<Node>> {
+    pub(crate) fn get_properties(node: P<Node>, require_initializer: bool, is_static: bool) -> Vec<P<Node>> {
         let mut result = Vec::new();
         result.extend(node.members().iter().filter_map(|member| {
             if ast::is_property_declaration(*member)
@@ -1552,7 +1555,7 @@ impl classFieldsTransformer {
     }
 
     // classfields.go:3412
-    pub(crate) fn get_static_properties_and_class_static_block(&self, node: P<Node>) -> Vec<P<Node>> {
+    pub(crate) fn get_static_properties_and_class_static_block(node: P<Node>) -> Vec<P<Node>> {
         let mut result = Vec::new();
         result.extend(node.members().iter().filter_map(|member| {
             if ast::is_class_static_block_declaration(*member) || (ast::is_property_declaration(*member) && ast::has_static_modifier(*member)) {

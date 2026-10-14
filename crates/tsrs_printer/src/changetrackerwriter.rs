@@ -88,7 +88,7 @@ impl ChangeTrackerWriter {
     }
 
     // changetrackerwriter.go:90
-    fn set_last_non_trivia_position(&mut self, s: &str, force: bool) {
+    fn set_last_non_trivia_position(&self, s: &str, force: bool) {
         if force || scanner::skip_trivia(s, 0) as usize != s.len() {
             let mut last = self.text_writer.get_text_pos();
             // trim trailing whitespaces

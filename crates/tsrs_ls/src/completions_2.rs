@@ -123,7 +123,7 @@ impl LanguageService {
         }));
 
         if !is_checked {
-            sorted_entries = self.get_js_completion_entries(ctx, file, position, &mut unique_names, sorted_entries);
+            sorted_entries = Self::get_js_completion_entries(ctx, file, position, &mut unique_names, sorted_entries);
         }
 
         if let Some(context_token) = context_token {
@@ -260,7 +260,7 @@ impl LanguageService {
                 }
             }
 
-            let mut entry = self.create_lsp_completion_item(
+            let mut entry = Self::create_lsp_completion_item(
                 ctx,
                 &auto_import.fix.name,
                 &insert_text,
@@ -660,7 +660,7 @@ impl LanguageService {
         let preselect = is_recommended_completion_match(symbol, data.recommended_completion, type_checker);
         let kind_modifiers = lsutil::get_symbol_modifiers(Some(type_checker), Some(symbol));
 
-        Ok(Some(self.create_lsp_completion_item(
+        Ok(Some(Self::create_lsp_completion_item(
             ctx,
             &name,
             &insert_text,
@@ -1235,11 +1235,10 @@ pub(crate) fn get_filter_text(
                     // `method() { this.#| }`
                     // `method() { #| }`
                     return String::new();
-                } else {
-                    // `method() { this.| }`
-                    // `method() { | }`
-                    return after.to_string();
                 }
+                // `method() { this.| }`
+                // `method() { | }`
+                return after.to_string();
             }
         } else if word_start == '#' {
             // `method() { this.#| }`
@@ -1276,14 +1275,13 @@ pub(crate) fn get_filter_text(
         // filterText should be `.ab c` instead of `?.['ab c']`.
         if insert_text.starts_with('[') {
             return dot_accessor.to_string() + &trim_element_access(insert_text);
-        } else {
-            // ```
-            // const xyz = { abc: 1 } | undefined;
-            // xyz.ab|
-            // ```
-            // filterText should be `.abc` instead of `?.abc.
-            return dot_accessor.to_string() + insert_text;
         }
+        // ```
+        // const xyz = { abc: 1 } | undefined;
+        // xyz.ab|
+        // ```
+        // filterText should be `.abc` instead of `?.abc.
+        return dot_accessor.to_string() + insert_text;
     }
 
     // In all other cases, fall back to using the insertText.
@@ -1813,7 +1811,7 @@ pub(crate) fn get_contextual_type_for_conditional_expression(
     let arg_info =
         get_argument_info_for_completions(conditional_expr, position, file, type_checker);
     if let Some(arg_info) = arg_info {
-        return type_checker.get_contextual_type_for_argument_at_index_exported(arg_info.invocation, arg_info.argument_index);
+        return Some(type_checker.get_contextual_type_for_argument_at_index_exported(arg_info.invocation, arg_info.argument_index));
     }
     // Fall through to regular contextual type logic if not in an argument
     let contextual_type = type_checker.get_contextual_type_exported(conditional_expr, ContextFlags::IgnoreNodeInferences);

@@ -437,6 +437,7 @@ impl EmitContext {
             && every(node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes(), |&n| is_hoisted_variable(n))
     }
 
+    #[expect(clippy::unused_self, reason = "This method implements the NodeFactory creation hook, whose callback receives the emit context.")]
     pub(crate) fn on_create(&self, node: P<Node>) {
         node.flags.set(node.flags.get() | NodeFlags::Synthesized);
     }

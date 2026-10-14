@@ -822,7 +822,7 @@ impl ProjectCollectionBuilder {
                                 self.update_program(&projectEntry::Configured(Arc::clone(&entry)), logger);
                             }
                         }
-                        self.ensure_project_tree(&wg, &entry, project_tree_request, &seen_projects, logger);
+                        Self::ensure_project_tree(&wg, &entry, project_tree_request, &seen_projects, logger);
                     }
                 }
                 Some(projectTreeWork::Child(program, child_config)) => {
@@ -841,7 +841,7 @@ impl ProjectCollectionBuilder {
                     self.update_program(&projectEntry::Configured(Arc::clone(&child_project_entry)), logger);
 
                     // Ensure children for this project
-                    self.ensure_project_tree(&wg, &child_project_entry, project_tree_request, &seen_projects, logger);
+                    Self::ensure_project_tree(&wg, &child_project_entry, project_tree_request, &seen_projects, logger);
                 }
             }
         }
@@ -853,7 +853,6 @@ impl ProjectCollectionBuilder {
 
     // projectcollectionbuilder.go:761
     fn ensure_project_tree(
-        &self,
         wg: &RefCell<Vec<projectTreeWork>>,
         entry: &Arc<SyncMapEntry<ConfiguredProjectID, Project>>,
         _project_tree_request: &ProjectTreeRequest,

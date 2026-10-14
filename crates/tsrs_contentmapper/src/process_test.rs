@@ -70,16 +70,13 @@ fn test_child_process_close_does_not_wait_for_launcher_descendants() {
         let _ = done_tx.send(closer.close());
     });
 
-    let completed = match done.recv_timeout(Duration::from_secs(2)) {
-        Ok(result) => {
-            result.unwrap();
-            true
-        }
-        Err(_) => {
-            kill(descendant_pid);
-            let _ = done.recv();
-            false
-        }
+    let completed = if let Ok(result) = done.recv_timeout(Duration::from_secs(2)) {
+        result.unwrap();
+        true
+    } else {
+        kill(descendant_pid);
+        let _ = done.recv();
+        false
     };
     assert!(completed, "child process shutdown waited for a launcher descendant");
     assert!(is_process_alive(descendant_pid), "the descendant had already exited, so the close did not wait on it");

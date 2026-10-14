@@ -1385,7 +1385,7 @@ impl BuildTask {
     }
 
     // buildtask.go:897
-    fn write_file(&self, orchestrator: &Orchestrator, file_name: &str, text: &str, data: &mut WriteFileData) -> Result<(), String> {
+    fn write_file(&self, orchestrator: &Orchestrator, file_name: &str, text: &str, data: &WriteFileData) -> Result<(), String> {
         let host = orchestrator.host();
         let err = tsrs_compiler::CompilerHost::fs(host).write_file(file_name, text);
         if err.is_ok() {

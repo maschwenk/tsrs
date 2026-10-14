@@ -11,6 +11,7 @@ use crate::spanmap::Feature;
 
 impl LanguageService {
     // autoinsert.go:13
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_on_auto_insert(&self, _ctx: &Context, params: &lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, lsproto::Error> {
         if self.user_preferences().enable_auto_closing_tags.is_false() {
             return Ok(lsproto::VSOnAutoInsertResponse::default());

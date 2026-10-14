@@ -264,14 +264,11 @@ pub(crate) fn try_read_file(
     mut errors: Vec<P<Diagnostic>>,
 ) -> (String, Vec<P<Diagnostic>>) {
     // this function adds a compiler diagnostic if the file cannot be read
-    let text = match read_file(file_name) {
-        Some(text) => text,
-        None => {
-            // !!! Divergence: the returned error will not give a useful message
-            // errors = append(errors, ast.NewCompilerDiagnostic(diagnostics.Cannot_read_file_0_Colon_1, *e));
-            errors.push(new_compiler_diagnostic(&diagnostics::Cannot_read_file_0, &[&file_name]));
-            String::new()
-        }
+    let text = if let Some(text) = read_file(file_name) { text } else {
+        // !!! Divergence: the returned error will not give a useful message
+        // errors = append(errors, ast.NewCompilerDiagnostic(diagnostics.Cannot_read_file_0_Colon_1, *e));
+        errors.push(new_compiler_diagnostic(&diagnostics::Cannot_read_file_0, &[&file_name]));
+        String::new()
     };
     (text, errors)
 }
@@ -372,7 +369,7 @@ impl CommandLineParser {
                         i += 1;
                     }
                     CommandLineOptionKind::List => {
-                        let (result, err) = self.parse_list_type_option(opt, &args[i]);
+                        let (result, err) = Self::parse_list_type_option(opt, &args[i]);
                         let advance = !result.is_empty() || !err.is_empty();
                         self.options.set(opt.name.to_string(), CompilerOptionsValue::Array(result));
                         self.errors.extend(err);
@@ -401,7 +398,6 @@ impl CommandLineParser {
     }
 
     pub(crate) fn parse_list_type_option(
-        &self,
         opt: &'static CommandLineOption,
         value: &str,
     ) -> (Vec<CompilerOptionsValue>, Vec<P<Diagnostic>>) {

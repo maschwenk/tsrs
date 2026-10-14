@@ -550,7 +550,7 @@ pub struct ParserState {
 }
 
 impl Parser {
-    pub(crate) fn mark(&mut self) -> ParserState {
+    pub(crate) fn mark(&self) -> ParserState {
         ParserState {
             arena: tsrs_core::arena_checkpoint(),
             scanner_state: self.scanner.mark(),
@@ -977,7 +977,7 @@ impl Parser {
     }
 
     /// The owner node of a member list that may be lazy, right after it is created.
-    pub(crate) fn set_lazy_owner(&self, members: P<NodeList>, owner: P<Node>) {
+    pub(crate) fn set_lazy_owner(members: P<NodeList>, owner: P<Node>) {
         if let Some(record) = members.lazy_record() {
             record.set_owner(owner);
         }
@@ -1081,12 +1081,12 @@ impl Parser {
         Some(self.create_missing_list())
     }
 
-    pub(crate) fn parse_empty_node_list(&mut self) -> P<NodeList> {
+    pub(crate) fn parse_empty_node_list(&self) -> P<NodeList> {
         let pos = self.node_pos();
         self.new_node_list(new_text_range(pos, pos), &[])
     }
 
-    pub(crate) fn create_missing_list(&mut self) -> P<NodeList> {
+    pub(crate) fn create_missing_list(&self) -> P<NodeList> {
         let pos = self.node_pos();
         let result = self.factory.new_node_list_from_static(missing_list_nodes());
         result.loc.set(new_text_range(pos, pos));
@@ -1451,15 +1451,18 @@ impl Parser {
     }
 
     pub(crate) fn parse_expected_token(&mut self, kind: Kind) -> P<Node> {
-        match self.parse_optional_token(kind) {
-            Some(token) => token,
-            None => {
+        if let Some(token) = self.parse_optional_token(kind) {
+
+token
+} else {
+
+
                 self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(kind)]);
                 let token = self.factory.new_token(kind);
                 let pos = self.node_pos();
                 self.finish_node(token, pos)
-            }
-        }
+
+}
     }
 
     pub(crate) fn parse_optional_token(&mut self, kind: Kind) -> Option<P<Node>> {
@@ -1470,16 +1473,19 @@ impl Parser {
     }
 
     pub(crate) fn parse_expected_token_jsdoc(&mut self, kind: Kind) -> P<Node> {
-        match self.parse_optional_token_jsdoc(kind) {
-            Some(optional) => optional,
-            None => {
+        if let Some(optional) = self.parse_optional_token_jsdoc(kind) {
+
+optional
+} else {
+
+
                 assert!(is_keyword_or_punctuation(kind), "expected keyword or punctuation");
                 self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(kind)]);
                 let token = self.factory.new_token(kind);
                 let pos = self.node_pos();
                 self.finish_node(token, pos)
-            }
-        }
+
+}
     }
 
     pub(crate) fn parse_optional_token_jsdoc(&mut self, kind: Kind) -> Option<P<Node>> {
@@ -1490,7 +1496,8 @@ impl Parser {
     }
 
     pub(crate) fn parse_statement(&mut self) -> P<Node> {
-        match self.token {
+        let token = self.token;
+        match token {
             Kind::SemicolonToken => return self.parse_empty_statement(),
             Kind::OpenBraceToken => return self.parse_block(false /*ignoreMissingOpenBrace*/, None),
             Kind::VarKeyword => {
@@ -1559,11 +1566,10 @@ impl Parser {
             | Kind::AccessorKeyword
             | Kind::StaticKeyword
             | Kind::ReadonlyKeyword
-            | Kind::GlobalKeyword => {
-                if self.is_start_of_declaration() {
+            | Kind::GlobalKeyword
+                if self.is_start_of_declaration() => {
                     return self.parse_declaration();
                 }
-            }
             _ => {}
         }
         self.parse_expression_or_labeled_statement()
@@ -2300,7 +2306,7 @@ impl Parser {
         } else {
             self.factory.new_class_expression(modifiers, name, type_parameters, heritage_clauses, members)
         };
-        self.set_lazy_owner(members, result);
+        Self::set_lazy_owner(members, result);
         self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         if result.flags().intersects(NodeFlags::JavaScriptFile) {
@@ -2479,9 +2485,8 @@ impl Parser {
                 let result = self.parse_property_or_method_declaration(pos, jsdoc, modifiers);
                 self.context_flags = save_context_flags;
                 return result;
-            } else {
-                return self.parse_property_or_method_declaration(pos, jsdoc, modifiers);
             }
+            return self.parse_property_or_method_declaration(pos, jsdoc, modifiers);
         }
         if modifiers.is_some() {
             // treat this as a property declaration with a missing name.
@@ -2771,7 +2776,7 @@ impl Parser {
         let heritage_clauses = self.parse_heritage_clauses(true /*isInterface*/);
         let members = self.parse_object_type_members();
         let result = self.factory.new_interface_declaration(modifiers, name, type_parameters, heritage_clauses, members);
-        self.set_lazy_owner(members, result);
+        Self::set_lazy_owner(members, result);
         let result = self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         self.check_js_syntax(result);
@@ -3011,11 +3016,11 @@ impl Parser {
         self.token == Kind::FromKeyword || self.token == Kind::EqualsToken
     }
 
-    pub(crate) fn token_after_import_definitely_produces_import_declaration(&mut self) -> bool {
+    pub(crate) fn token_after_import_definitely_produces_import_declaration(&self) -> bool {
         self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken
     }
 
-    pub(crate) fn token_after_imported_identifier_definitely_produces_import_declaration(&mut self) -> bool {
+    pub(crate) fn token_after_imported_identifier_definitely_produces_import_declaration(&self) -> bool {
         // In `import id ___`, the current token decides whether to produce
         // an ImportDeclaration or ImportEqualsDeclaration.
         self.token == Kind::CommaToken || self.token == Kind::FromKeyword

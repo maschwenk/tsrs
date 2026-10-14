@@ -151,16 +151,14 @@ impl Checker {
         match ref_kind {
             JsxReferenceKind::Function => {
                 let sfc_return_constraint = self.get_jsx_stateless_element_type_at(opening_like_element);
-                if let Some(sfc_return_constraint) = sfc_return_constraint {
-                    self.check_type_related_to_ex(
-                        elem_instance_type,
-                        sfc_return_constraint,
-                        assignable_relation,
-                        Some(opening_like_element.tag_name()),
-                        Some(&diagnostics::Its_return_type_0_is_not_a_valid_JSX_element),
-                        Some(&mut diags),
-                    );
-                }
+                self.check_type_related_to_ex(
+                    elem_instance_type,
+                    sfc_return_constraint,
+                    assignable_relation,
+                    Some(opening_like_element.tag_name()),
+                    Some(&diagnostics::Its_return_type_0_is_not_a_valid_JSX_element),
+                    Some(&mut diags),
+                );
             }
             JsxReferenceKind::Component => {
                 let class_constraint = self.get_jsx_element_class_type_at(opening_like_element);
@@ -179,7 +177,7 @@ impl Checker {
             JsxReferenceKind::Mixed => {
                 let sfc_return_constraint = self.get_jsx_stateless_element_type_at(opening_like_element);
                 let class_constraint = self.get_jsx_element_class_type_at(opening_like_element);
-                let (Some(sfc_return_constraint), Some(class_constraint)) = (sfc_return_constraint, class_constraint) else {
+                let Some(class_constraint) = class_constraint else {
                     return;
                 };
                 let combined = self.get_union_type(&[sfc_return_constraint, class_constraint]);
@@ -201,7 +199,7 @@ impl Checker {
 
     // jsx.go:198
     pub(crate) fn infer_jsx_type_arguments(&mut self, node: P<Node>, signature: P<Signature>, check_mode: CheckMode, context: P<InferenceContext>) -> Vec<P<Type>> {
-        let param_type = self.get_effective_first_argument_for_jsx_signature(signature, node).unwrap();
+        let param_type = self.get_effective_first_argument_for_jsx_signature(signature, node);
         let check_attr_type = self.check_expression_with_contextual_type(node.attributes().unwrap(), param_type, Some(context), check_mode);
         self.infer_types(context.inferences.get(), check_attr_type, param_type, InferencePriority::None, false);
         self.get_inferred_types(context)
@@ -251,7 +249,7 @@ impl Checker {
                 return self.contextual_infos[index].t;
             }
         }
-        self.get_contextual_type_for_argument_at_index(node, 0)
+        Some(self.get_contextual_type_for_argument_at_index(node, 0))
     }
 
     // jsx.go:242
@@ -405,7 +403,7 @@ impl Checker {
                 if array_like_target_parts != self.never_type {
                     let child_types = self.check_jsx_children(containing_element, CheckMode::Normal);
                     let real_source = self.create_tuple_type(&child_types);
-                    let children = self.generate_jsx_children(containing_element, Rc::clone(&get_invalid_textual_child_diagnostic));
+                    let children = Self::generate_jsx_children(containing_element, Rc::clone(&get_invalid_textual_child_diagnostic));
                     reported_error = self.elaborate_iterable_or_array_like_target_elementwise(children, real_source, array_like_target_parts, relation, diagnostic_output.as_deref_mut())
                         || reported_error;
                 } else {
@@ -424,7 +422,7 @@ impl Checker {
                 }
             } else if non_array_like_target_parts != self.never_type {
                 let child = valid_children[0];
-                let e = self.get_elaboration_element_for_jsx_child(child, children_name_type, Rc::clone(&get_invalid_textual_child_diagnostic));
+                let e = Self::get_elaboration_element_for_jsx_child(child, children_name_type, Rc::clone(&get_invalid_textual_child_diagnostic));
                 if let Some(error_node) = e.error_node {
                     let mut create_diagnostic = e.create_diagnostic.clone().map(|f| move |c: &mut Checker, prop: P<Node>| f(c, prop));
                     reported_error = self.elaborate_element(
@@ -460,7 +458,7 @@ impl Checker {
     // jsx.go:376
     // Go returns a lazy iter.Seq; the port returns the equivalent pull function (`None` = exhausted) so that
     // element creation interleaves with the consumer's work exactly as in Go.
-    pub(crate) fn generate_jsx_children(&mut self, node: P<Node>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> impl FnMut(&mut Checker) -> Option<JsxElaborationElement> + 'static + use<> {
+    pub(crate) fn generate_jsx_children(node: P<Node>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> impl FnMut(&mut Checker) -> Option<JsxElaborationElement> + 'static + use<> {
         let children = node.children().nodes();
         let mut i = 0usize;
         let mut member_offset = 0usize;
@@ -469,19 +467,18 @@ impl Checker {
                 let child = children[i];
                 let name_type = c.get_number_literal_type(Number((i - member_offset) as f64));
                 i += 1;
-                let e = c.get_elaboration_element_for_jsx_child(child, name_type, Rc::clone(&get_invalid_text_diagnostic));
+                let e = checker::Checker::get_elaboration_element_for_jsx_child(child, name_type, Rc::clone(&get_invalid_text_diagnostic));
                 if e.error_node.is_some() {
                     return Some(e);
-                } else {
-                    member_offset += 1;
                 }
+                member_offset += 1;
             }
             None
         }
     }
 
     // jsx.go:393
-    pub(crate) fn get_elaboration_element_for_jsx_child(&mut self, child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> JsxElaborationElement {
+    pub(crate) fn get_elaboration_element_for_jsx_child(child: P<Node>, name_type: P<Type>, get_invalid_text_diagnostic: InvalidTextDiagnosticFn) -> JsxElaborationElement {
         match child.kind() {
             Kind::JsxExpression => {
                 // child is of the type of the expression
@@ -554,7 +551,7 @@ impl Checker {
             let Some(mut source_prop_type) = source_prop_type else {
                 continue;
             };
-            let prop_name = self.get_property_name_from_index(name_type, None /*accessNode*/);
+            let prop_name = checker::Checker::get_property_name_from_index(name_type, None /*accessNode*/);
             if !self.check_type_related_to(source_prop_type, target_prop_type, relation, None /*errorNode*/) {
                 let elaborated = next.is_some()
                     && self.elaborate_error(next, source_prop_type, target_prop_type, relation, None /*headMessage*/, diagnostic_output.as_deref_mut());
@@ -685,7 +682,7 @@ impl Checker {
                 let result = self.get_intrinsic_attributes_type_from_jsx_opening_like_element(node).unwrap();
                 let fake_signature = self.create_signature_for_jsx_intrinsic(node, result);
                 let attributes = node.attributes().unwrap();
-                let contextual_type = self.get_effective_first_argument_for_jsx_signature(fake_signature, node).unwrap();
+                let contextual_type = self.get_effective_first_argument_for_jsx_signature(fake_signature, node);
                 let attributes_type = self.check_expression_with_contextual_type(attributes, contextual_type, None /*inferenceContext*/, CheckMode::Normal);
                 self.check_type_assignable_to_and_optionally_elaborate(attributes_type, result, Some(node.tag_name()), Some(attributes), None, None);
                 let type_arguments = node.type_arguments();
@@ -753,7 +750,7 @@ impl Checker {
         // Stateless function components can have maximum of three arguments: "props", "context", and "updater".
         // However "context" and "updater" are implicit and can't be specify by users. Only the first parameter, props,
         // can be specified by users through attributes property.
-        let param_type = self.get_effective_first_argument_for_jsx_signature(signature, node).unwrap();
+        let param_type = self.get_effective_first_argument_for_jsx_signature(signature, node);
         let attributes_type = if ast::is_jsx_opening_fragment(node) {
             self.create_jsx_attributes_type_from_attributes_property(node, CheckMode::Normal)
         } else {
@@ -849,7 +846,7 @@ impl Checker {
                         assert!(inference_context.is_some());
                         // In CheckMode.Inferential we should always have an inference context
                         let inference_node = attribute_decl.initializer().unwrap().expression().unwrap();
-                        self.add_intra_expression_inference_site(inference_context.unwrap(), inference_node, expr_type);
+                        checker::Checker::add_intra_expression_inference_site(inference_context.unwrap(), inference_node, expr_type);
                     }
                 } else {
                     assert_eq!(attribute_decl.kind(), Kind::JsxSpreadAttribute);
@@ -943,7 +940,7 @@ impl Checker {
                 let child_prop_map = SymbolTable::new();
                 child_prop_map.set(children_prop_symbol.name(), children_prop_symbol);
                 let children_type = self.new_anonymous_type(attributes_symbol, Some(child_prop_map), &[], &[], &[]);
-                let propagating_flags = self.get_propagating_flags_of_types(&child_types, TypeFlags::None);
+                let propagating_flags = checker::Checker::get_propagating_flags_of_types(&child_types, TypeFlags::None);
                 spread = self.get_spread_type(spread, children_type, attributes_symbol, object_flags | propagating_flags, false /*readonly*/);
             }
         }
@@ -1024,7 +1021,7 @@ impl Checker {
     }
 
     // jsx.go:925
-    pub(crate) fn get_effective_first_argument_for_jsx_signature(&mut self, signature: P<Signature>, node: P<Node>) -> Option<P<Type>> {
+    pub(crate) fn get_effective_first_argument_for_jsx_signature(&mut self, signature: P<Signature>, node: P<Node>) -> P<Type> {
         if ast::is_jsx_opening_fragment(node) || self.get_jsx_reference_kind(node) != JsxReferenceKind::Component {
             return self.get_jsx_props_type_from_call_signature(signature, node);
         }
@@ -1032,7 +1029,7 @@ impl Checker {
     }
 
     // jsx.go:932
-    pub(crate) fn get_jsx_props_type_from_call_signature(&mut self, sig: P<Signature>, context: P<Node>) -> Option<P<Type>> {
+    pub(crate) fn get_jsx_props_type_from_call_signature(&mut self, sig: P<Signature>, context: P<Node>) -> P<Type> {
         let unknown_type = self.unknown_type;
         let mut props_type = self.get_type_of_first_parameter_of_signature_with_fallback(sig, unknown_type);
         let jsx_namespace = self.get_jsx_namespace_at(Some(context));
@@ -1041,11 +1038,11 @@ impl Checker {
         if !self.is_error_type(intrinsic_attribs) {
             props_type = self.intersect_types(Some(intrinsic_attribs), Some(props_type)).unwrap();
         }
-        Some(props_type)
+        props_type
     }
 
     // jsx.go:942
-    pub(crate) fn get_jsx_props_type_from_class_type(&mut self, sig: P<Signature>, context: P<Node>) -> Option<P<Type>> {
+    pub(crate) fn get_jsx_props_type_from_class_type(&mut self, sig: P<Signature>, context: P<Node>) -> P<Type> {
         let ns = self.get_jsx_namespace_at(Some(context));
         let forced_lookup_location = self.get_jsx_element_properties_name(ns);
         let attributes_type: Option<P<Type>>;
@@ -1062,12 +1059,12 @@ impl Checker {
             }
         }
         let Some(located_attributes_type) = attributes_type else {
-            return Some(self.unknown_type);
+            return self.unknown_type;
         };
         let attributes_type = self.get_jsx_managed_attributes_from_located_attributes(context, ns, located_attributes_type);
         if is_type_any(Some(attributes_type)) {
             // Props is of type 'any' or unknown
-            return Some(attributes_type);
+            return attributes_type;
         }
         // Normal case -- add in IntrinsicClassAttributes<T> and IntrinsicAttributes
         let mut apparent_attributes_type = attributes_type;
@@ -1078,7 +1075,7 @@ impl Checker {
 
             let library_managed_attribute_type = if !type_params.is_empty() {
                 // apply JSX.IntrinsicClassAttributes<hostClassType, ...>
-                let min_type_argument_count = self.get_min_type_argument_count(&type_params);
+                let min_type_argument_count = checker::Checker::get_min_type_argument_count(&type_params);
                 let inferred_args = self.fill_missing_type_arguments(&[host_class_type], &type_params, min_type_argument_count, ast::is_in_js_file(context));
                 let mapper = new_type_mapper(alloc_vec(type_params), alloc_vec(inferred_args));
                 self.instantiate_type(intrinsic_class_attribs, Some(mapper))
@@ -1091,7 +1088,7 @@ impl Checker {
         if !self.is_error_type(intrinsic_attribs) {
             apparent_attributes_type = self.intersect_types(Some(intrinsic_attribs), Some(apparent_attributes_type)).unwrap();
         }
-        Some(apparent_attributes_type)
+        apparent_attributes_type
     }
 
     // jsx.go:989
@@ -1398,11 +1395,11 @@ impl Checker {
     }
 
     // jsx.go:1257
-    pub(crate) fn get_jsx_stateless_element_type_at(&mut self, location: P<Node>) -> Option<P<Type>> {
+    pub(crate) fn get_jsx_stateless_element_type_at(&mut self, location: P<Node>) -> P<Type> {
         let jsx_element_type = self.get_jsx_element_type_at(location);
         // getJsxElementTypeAt never returns nil (getJsxType falls back to errorType), so Go's nil check is always false.
         let null_type = self.null_type;
-        Some(self.get_union_type(&[jsx_element_type, null_type]))
+        self.get_union_type(&[jsx_element_type, null_type])
     }
 
     // jsx.go:1265
@@ -1500,7 +1497,7 @@ impl Checker {
                     }
                     let jsx_fragment_pragma = ast::get_pragma_from_source_file(Some(file), "jsxfrag");
                     if let Some(jsx_fragment_pragma) = jsx_fragment_pragma {
-                        let factory = self.parse_isolated_entity_name(pragma_factory_argument(jsx_fragment_pragma));
+                        let factory = checker::Checker::parse_isolated_entity_name(pragma_factory_argument(jsx_fragment_pragma));
                         links.local_jsx_fragment_factory.set(factory);
                         if let Some(factory) = factory {
                             links.local_jsx_fragment_namespace.set(ast::get_first_identifier(factory).text());
@@ -1526,7 +1523,7 @@ impl Checker {
             self.jsx_namespace = "React".to_string();
             if !self.compiler_options.jsx_factory.is_empty() {
                 let jsx_factory = self.compiler_options.jsx_factory.clone();
-                self.jsx_factory_entity = self.parse_isolated_entity_name(&jsx_factory);
+                self.jsx_factory_entity = checker::Checker::parse_isolated_entity_name(&jsx_factory);
                 if let Some(jsx_factory_entity) = self.jsx_factory_entity {
                     self.jsx_namespace = ast::get_first_identifier(jsx_factory_entity).text().to_string();
                 }
@@ -1550,7 +1547,7 @@ impl Checker {
         }
         let jsx_pragma = ast::get_pragma_from_source_file(Some(file), "jsx");
         if let Some(jsx_pragma) = jsx_pragma {
-            let factory = self.parse_isolated_entity_name(pragma_factory_argument(jsx_pragma));
+            let factory = checker::Checker::parse_isolated_entity_name(pragma_factory_argument(jsx_pragma));
             links.local_jsx_factory.set(factory);
             if let Some(factory) = factory {
                 links.local_jsx_namespace.set(ast::get_first_identifier(factory).text());
@@ -1582,7 +1579,7 @@ impl Checker {
                 }
                 let jsx_frag_pragma = ast::get_pragma_from_source_file(Some(file), "jsxfrag");
                 if let Some(jsx_frag_pragma) = jsx_frag_pragma {
-                    let factory = self.parse_isolated_entity_name(pragma_factory_argument(jsx_frag_pragma));
+                    let factory = checker::Checker::parse_isolated_entity_name(pragma_factory_argument(jsx_frag_pragma));
                     links.local_jsx_fragment_factory.set(factory);
                     return links.local_jsx_fragment_factory.get();
                 }
@@ -1590,14 +1587,14 @@ impl Checker {
         }
         if !self.compiler_options.jsx_fragment_factory.is_empty() {
             let jsx_fragment_factory = self.compiler_options.jsx_fragment_factory.clone();
-            return self.parse_isolated_entity_name(&jsx_fragment_factory);
+            return checker::Checker::parse_isolated_entity_name(&jsx_fragment_factory);
         }
         None
     }
 
     // jsx.go:1435
     // parser.ParseIsolatedEntityName returns nil for an invalid entity name, so the result is nil-able.
-    pub(crate) fn parse_isolated_entity_name(&mut self, name: &str) -> Option<P<Node>> {
+    pub(crate) fn parse_isolated_entity_name(name: &str) -> Option<P<Node>> {
         let result = tsrs_parser::parse_isolated_entity_name(name);
         if let Some(result) = result {
             mark_as_synthetic(result);
@@ -1662,7 +1659,7 @@ impl Checker {
     // jsx.go:1486
     // The specifier (the file loader's synthetic import) is None exactly when the file has no JSX runtime import
     // (empty module reference).
-    pub(crate) fn get_jsx_runtime_import_specifier(&mut self, file: P<SourceFile>) -> (String, Option<P<Node>>) {
+    pub(crate) fn get_jsx_runtime_import_specifier(&self, file: P<SourceFile>) -> (String, Option<P<Node>>) {
         self.program.get_jsx_runtime_import_specifier(file.path())
     }
 }

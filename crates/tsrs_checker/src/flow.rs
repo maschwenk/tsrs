@@ -56,7 +56,7 @@ fn is_flow_memo_checkpoint(flow: P<FlowNode>) -> bool {
 
 impl Checker {
     // flow.go:28
-    pub(crate) fn new_flow_type(&mut self, t: P<Type>, incomplete: bool) -> FlowType {
+    pub(crate) fn new_flow_type(&self, t: P<Type>, incomplete: bool) -> FlowType {
         let mut t = t;
         if incomplete && t.flags().intersects(TypeFlags::Never) {
             t = self.silent_never_type;
@@ -608,7 +608,7 @@ impl Checker {
                 return self.new_flow_type(t, flow_type.incomplete);
             }
             if f.declared() == self.auto_type || f.declared() == self.auto_array_type {
-                if self.is_empty_array_assignment(node) {
+                if Self::is_empty_array_assignment(node) {
                     let never_type = self.never_type;
                     return flow_type_of(self.get_evolving_array_type(never_type));
                 }
@@ -688,7 +688,7 @@ impl Checker {
     }
 
     // flow.go:283
-    pub(crate) fn is_empty_array_assignment(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_empty_array_assignment(node: P<Node>) -> bool {
         ast::is_variable_declaration(node) && node.initializer().is_some() && is_empty_array_literal(node.initializer().unwrap())
             || !ast::is_binding_element(node) && ast::is_binary_expression(node.parent().unwrap()) && is_empty_array_literal(node.parent().unwrap().as_binary_expression().right())
     }
@@ -742,7 +742,7 @@ impl Checker {
         // Don't narrow from 'any' if the predicate type is exactly 'Object' or 'Function'
         if let Some(predicate_type) = predicate.t.get() {
             if !(is_type_any(Some(t)) && (predicate_type == self.global_object_type || predicate_type == self.global_function_type)) {
-                let predicate_argument = self.get_type_predicate_argument(predicate, call_expression);
+                let predicate_argument = Self::get_type_predicate_argument(predicate, call_expression);
                 if let Some(predicate_argument) = predicate_argument {
                     if self.is_matching_reference(f.ref_node(), predicate_argument) {
                         return self.get_narrowed_type(t, predicate_type, assume_true, false /*checkDerived*/);
@@ -856,11 +856,10 @@ impl Checker {
             Kind::BinaryExpression => {
                 return self.narrow_type_by_binary_expression(f, t, expr, assume_true);
             }
-            Kind::PrefixUnaryExpression => {
-                if expr.as_prefix_unary_expression().operator == Kind::ExclamationToken {
+            Kind::PrefixUnaryExpression
+                if expr.as_prefix_unary_expression().operator == Kind::ExclamationToken => {
                     return self.narrow_type(f, t, expr.as_prefix_unary_expression().operand, !assume_true);
                 }
-            }
             _ => {}
         }
         t
@@ -1653,7 +1652,7 @@ impl Checker {
             }
             let mut u = c.undefined_type;
             if !t.flags().intersects(TypeFlags::Undefined) {
-                let unit_type = c.extract_unit_type(t);
+                let unit_type = checker::Checker::extract_unit_type(t);
                 u = c.get_regular_type_of_literal_type(unit_type);
             }
             !switch_types.iter().any(|&st| is_unit_type(st) && c.are_types_comparable(st, u))
@@ -1681,7 +1680,7 @@ impl Checker {
             || default_index.is_some_and(|index| index >= clause_start && index < clause_end);
         if has_default_clause {
             // In the default clause we filter constituents down to those that are not-equal to all handled cases.
-            let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(clause_start, clause_end, witnesses);
+            let not_equal_facts = Self::get_not_equal_facts_from_typeof_switch(clause_start, clause_end, witnesses);
             return self.filter_type(t, move |c, t| c.get_type_facts(t, not_equal_facts) == not_equal_facts);
         }
         // In the non-default cause we create a union of the type narrowed by each of the listed cases.
@@ -2108,19 +2107,16 @@ impl Checker {
     pub(crate) fn get_evolving_array_type(&mut self, element_type: P<Type>) -> P<Type> {
         let key = CachedTypeKey { kind: CachedTypeKind::EvolvingArrayType, type_id: element_type.id };
         let result = self.cached_types.get(&key).copied();
-        match result {
-            Some(result) => result,
-            None => {
-                let result = self.new_object_type(ObjectFlags::EvolvingArray, None);
-                result.as_evolving_array_type().element_type.set(Some(element_type));
-                self.cached_types.insert(key, result);
-                result
-            }
+        if let Some(result) = result { result } else {
+            let result = self.new_object_type(ObjectFlags::EvolvingArray, None);
+            result.as_evolving_array_type().element_type.set(Some(element_type));
+            self.cached_types.insert(key, result);
+            result
         }
     }
 
     // flow.go:1520
-    pub(crate) fn get_element_type_of_evolving_array_type(&mut self, t: P<Type>) -> P<Type> {
+    pub(crate) fn get_element_type_of_evolving_array_type(&self, t: P<Type>) -> P<Type> {
         if t.object_flags().intersects(ObjectFlags::EvolvingArray) {
             return t.as_evolving_array_type().element_type.get().unwrap();
         }
@@ -2281,7 +2277,7 @@ impl Checker {
                     if ast::is_identifier(source_arg) && ast::is_identifier(target_arg) {
                         let symbol = self.get_resolved_symbol(source_arg);
                         if symbol == self.get_resolved_symbol(target_arg)
-                            && (self.is_constant_variable(symbol) || self.is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol))
+                            && (self.is_constant_variable(symbol) || Self::is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol))
                         {
                             return self.is_matching_reference(source.expression().unwrap(), target.expression().unwrap());
                         }
@@ -2365,7 +2361,7 @@ impl Checker {
                 }
                 if ast::is_element_access_expression(node) && ast::is_identifier(node.as_element_access_expression().argument_expression) {
                     let symbol = self.get_resolved_symbol(node.as_element_access_expression().argument_expression);
-                    if self.is_constant_variable(symbol) || self.is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol) {
+                    if self.is_constant_variable(symbol) || Self::is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol) {
                         if !self.write_flow_cache_key(b, node.expression().unwrap(), declared_type, initial_type, flow_container) {
                             return false;
                         }
@@ -2507,7 +2503,7 @@ impl Checker {
                 if !ast::is_this_in_type_query(node) {
                     let symbol = self.get_resolved_symbol(node);
                     return self.is_constant_variable(symbol)
-                        || self.is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol)
+                        || Self::is_parameter_or_mutable_local_variable(symbol) && !self.is_symbol_assigned(symbol)
                         || symbol.value_declaration().is_some() && ast::is_function_expression(symbol.value_declaration().unwrap());
                 }
             }
@@ -2674,7 +2670,7 @@ impl Checker {
             let operand_type = self.check_expression_cached(expression.expression().unwrap());
             let operand_constraint = self.get_base_constraint_or_type(operand_type);
             // Get the not-equal flags for all handled cases.
-            let not_equal_facts = self.get_not_equal_facts_from_typeof_switch(0, 0, witnesses);
+            let not_equal_facts = Self::get_not_equal_facts_from_typeof_switch(0, 0, witnesses);
             if operand_constraint.flags().intersects(TypeFlags::AnyOrUnknown) {
                 // We special case the top types to be exhaustive when all cases are handled.
                 return TypeFacts::AllTypeofNE & not_equal_facts == TypeFacts::AllTypeofNE;
@@ -2692,11 +2688,11 @@ impl Checker {
             return false;
         }
         let regular_type = self.map_type(t, |c, t| Some(c.get_regular_type_of_literal_type(t))).unwrap();
-        self.each_type_contained_in(regular_type, &switch_types)
+        Self::each_type_contained_in(regular_type, &switch_types)
     }
 
     // flow.go:1978
-    pub(crate) fn each_type_contained_in(&mut self, source: P<Type>, types: &[P<Type>]) -> bool {
+    pub(crate) fn each_type_contained_in(source: P<Type>, types: &[P<Type>]) -> bool {
         if source.flags().intersects(TypeFlags::Union) {
             return !source.as_union_type().types().iter().any(|t| !types.contains(t));
         }
@@ -2734,7 +2730,6 @@ impl Checker {
     // Return the combined not-equal type facts for all cases except those between the start and end indices.
     // flow.go:2012
     pub(crate) fn get_not_equal_facts_from_typeof_switch(
-        &mut self,
         start: usize,
         end: usize,
         witnesses: &[&str],
@@ -2926,7 +2921,7 @@ impl Checker {
             }
             let declaration = symbol.value_declaration();
             if let Some(declaration) = declaration {
-                if self.is_declaration_with_explicit_type_annotation(declaration) {
+                if Self::is_declaration_with_explicit_type_annotation(declaration) {
                     return Some(self.get_type_of_symbol(symbol));
                 }
                 if ast::is_variable_declaration(declaration) && ast::is_for_of_statement(declaration.parent().unwrap().parent().unwrap()) {
@@ -2948,13 +2943,13 @@ impl Checker {
     }
 
     // flow.go:2197
-    pub(crate) fn is_declaration_with_explicit_type_annotation(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_declaration_with_explicit_type_annotation(node: P<Node>) -> bool {
         (ast::is_variable_declaration(node) || ast::is_property_declaration(node) || ast::is_property_signature_declaration(node) || ast::is_parameter_declaration(node)) && node.type_node().is_some()
-            || self.is_expando_property_function_with_return_type_annotation(node)
+            || Self::is_expando_property_function_with_return_type_annotation(node)
     }
 
     // flow.go:2202
-    pub(crate) fn is_expando_property_function_with_return_type_annotation(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_expando_property_function_with_return_type_annotation(node: P<Node>) -> bool {
         if ast::is_binary_expression(node) {
             let expr = node.as_binary_expression().right();
             if ast::is_function_like(expr) && expr.type_node().is_some() {
@@ -2992,9 +2987,8 @@ impl Checker {
                 let symbol = self.get_symbol_of_declaration(parent).unwrap();
                 if ast::is_static(container) {
                     return Some(self.get_type_of_symbol(symbol));
-                } else {
-                    return self.get_declared_type_of_symbol(symbol).as_interface_type().this_type.get();
                 }
+                return self.get_declared_type_of_symbol(symbol).as_interface_type().this_type.get();
             }
         }
         None
@@ -3080,8 +3074,8 @@ impl Checker {
     // flow.go:2314
     pub(crate) fn get_assigned_type_of_binary_expression(&mut self, node: P<Node>) -> P<Type> {
         let parent = node.parent().unwrap();
-        let is_destructuring_default_assignment = ast::is_array_literal_expression(parent) && self.is_destructuring_assignment_target(parent)
-            || ast::is_property_assignment(parent) && self.is_destructuring_assignment_target(parent.parent().unwrap());
+        let is_destructuring_default_assignment = ast::is_array_literal_expression(parent) && Self::is_destructuring_assignment_target(parent)
+            || ast::is_property_assignment(parent) && Self::is_destructuring_assignment_target(parent.parent().unwrap());
         if is_destructuring_default_assignment {
             let assigned_type = self.get_assigned_type(node);
             return self.get_type_with_default(assigned_type, Some(node.as_binary_expression().right()));
@@ -3166,7 +3160,7 @@ impl Checker {
     }
 
     // flow.go:2384
-    pub(crate) fn is_destructuring_assignment_target(&mut self, parent: P<Node>) -> bool {
+    pub(crate) fn is_destructuring_assignment_target(parent: P<Node>) -> bool {
         let grandparent = parent.parent().unwrap();
         ast::is_binary_expression(grandparent) && grandparent.as_binary_expression().left == parent
             || ast::is_for_of_statement(grandparent) && grandparent.initializer() == Some(parent)
@@ -3234,7 +3228,7 @@ impl Checker {
     }
 
     // flow.go:2451
-    pub(crate) fn get_type_predicate_argument(&mut self, predicate: P<TypePredicate>, call_expression: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_type_predicate_argument(predicate: P<TypePredicate>, call_expression: P<Node>) -> Option<P<Node>> {
         if predicate.kind.get() == TypePredicateKind::Identifier || predicate.kind.get() == TypePredicateKind::AssertsIdentifier {
             let arguments = call_expression.arguments();
             let parameter_index = predicate.parameter_index.get();
@@ -3541,7 +3535,7 @@ impl Checker {
                 let assignment_kind = get_assignment_target_kind(node);
                 if assignment_kind != AssignmentKind::None {
                     let symbol = self.get_resolved_symbol(node);
-                    if self.is_parameter_or_mutable_local_variable(symbol) {
+                    if Self::is_parameter_or_mutable_local_variable(symbol) {
                         let links = self.marked_assignment_symbol_links.get(symbol);
                         let pos = links.last_assignment_pos.get();
                         if pos != LastAssignmentPosition::BeyondAll {
@@ -3555,7 +3549,7 @@ impl Checker {
                                 links
                                     .last_assignment_pos
                                     .set(LastAssignmentPosition::Position(
-                                        self.extend_assignment_position(
+                                        Self::extend_assignment_position(
                                             Some(node),
                                             symbol.value_declaration().unwrap(),
                                         ),
@@ -3580,7 +3574,7 @@ impl Checker {
                 if !node.is_type_only() && !export_declaration.is_type_only && export_declaration.module_specifier.is_none() && !ast::is_string_literal(name) {
                     let symbol = self.resolve_entity_name(name, SymbolFlags::Value, true /*ignoreErrors*/, true /*dontResolveAlias*/, None);
                     if let Some(symbol) = symbol {
-                        if self.is_parameter_or_mutable_local_variable(symbol) {
+                        if Self::is_parameter_or_mutable_local_variable(symbol) {
                             let links = self.marked_assignment_symbol_links.get(symbol);
                             links
                                 .last_assignment_pos
@@ -3606,7 +3600,6 @@ impl Checker {
     // declaration node.
     // flow.go:2749
     pub(crate) fn extend_assignment_position(
-        &mut self,
         node: Option<P<Node>>,
         declaration: P<Node>,
     ) -> TextPos {

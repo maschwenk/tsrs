@@ -270,7 +270,7 @@ impl Checker {
     }
 
     // printer.go:249
-    pub(crate) fn value_to_string(&mut self, value: LiteralValue) -> String {
+    pub(crate) fn value_to_string(value: LiteralValue) -> String {
         crate::value_to_string(value)
     }
 
@@ -608,27 +608,24 @@ impl Checker {
             return extended_containers.to_vec();
         }
         // No results from files already being imported by this file - expand search (expensive, but not location-specific, so cached)
-        match self.modules_exporting(symbol) {
-            Some(found) => results = found,
-            None => {
-                let other_files = self.program.source_files();
-                results.extend(other_files.iter().filter_map(|&file| {
-                    if !ast::is_external_module(file) {
-                        return None;
-                    }
-                    // tsrs-only: a check leaf another checker may have freed; its answer is nil for any symbol this
-                    // checker can name here. Its export table holds only symbols declared in it (no alias, `export *`
-                    // or `export =`) and nothing outside it refers to it, so `symbol`, declared elsewhere, is neither
-                    // its export nor re-exported by it (`is_unreadable_check_leaf`).
-                    if self.is_unreadable_check_leaf(file) {
-                        return None;
-                    }
-                    let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
-                    let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
-                    ref_?;
-                    Some(sym)
-                }));
-            }
+        if let Some(found) = self.modules_exporting(symbol) { results = found } else {
+            let other_files = self.program.source_files();
+            results.extend(other_files.iter().filter_map(|&file| {
+                if !ast::is_external_module(file) {
+                    return None;
+                }
+                // tsrs-only: a check leaf another checker may have freed; its answer is nil for any symbol this
+                // checker can name here. Its export table holds only symbols declared in it (no alias, `export *`
+                // or `export =`) and nothing outside it refers to it, so `symbol`, declared elsewhere, is neither
+                // its export nor re-exported by it (`is_unreadable_check_leaf`).
+                if self.is_unreadable_check_leaf(file) {
+                    return None;
+                }
+                let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
+                let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
+                ref_?;
+                Some(sym)
+            }));
         }
         links.extended_containers.set(Some(alloc_slice(&results)));
         results

@@ -177,7 +177,7 @@ impl<T: ExpectedValue> Expected<T> {
         self.valid
     }
 
-    pub fn expected_json_type(&self) -> &'static str {
+    pub fn expected_json_type() -> &'static str {
         T::expected_json_type()
     }
 
@@ -194,7 +194,7 @@ impl<T: ExpectedValue> TypeValidatedField for Expected<T> {
         Expected::is_valid(self)
     }
     fn expected_json_type(&self) -> &'static str {
-        Expected::expected_json_type(self)
+        Expected::<T>::expected_json_type()
     }
     fn actual_json_type(&self) -> &'static str {
         Expected::actual_json_type(self)

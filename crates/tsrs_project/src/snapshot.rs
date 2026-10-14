@@ -477,7 +477,7 @@ impl Snapshot {
                     let _ = write!(details, " Documents: {:?}", change.resource_request.documents.iter().map(|d| d.0.as_str()).collect::<Vec<_>>());
                 }
                 if !change.resource_request.configured_project_documents.is_empty() {
-                    let _ = write!(details, 
+                    let _ = write!(details,
                         " ConfiguredProjectDocuments: {:?}",
                         change.resource_request.configured_project_documents.iter().map(|d| d.0.as_str()).collect::<Vec<_>>()
                     );
@@ -704,7 +704,6 @@ impl Snapshot {
             Some(auto_imports) => Arc::clone(auto_imports),
             None => autoimport::new_registry(Arc::clone(&store.to_path), self.user_preferences.clone()),
         };
-        let mut auto_imports_watch = None;
         let auto_imports = old_auto_imports.clone_registry(
             ctx,
             &autoimport::RegistryChange {
@@ -719,9 +718,7 @@ impl Snapshot {
             &auto_import_host,
             logger.fork("UpdateAutoImports"),
         );
-        if let Ok(auto_imports) = &auto_imports {
-            auto_imports_watch = self.auto_imports_watch.as_ref().map(|w| w.clone_with(auto_imports.node_modules_directories()));
-        }
+        let auto_imports_watch = self.auto_imports_watch.as_ref().map(|w| w.clone_with(auto_imports.node_modules_directories()));
 
         let (snapshot_fs, _) = fs.finalize();
         let snapshot_fs = Arc::new(snapshot_fs);
@@ -731,7 +728,7 @@ impl Snapshot {
             Arc::default(),
             compiler_options_for_inferred_projects,
             config,
-            auto_imports.ok(),
+            Some(auto_imports),
             auto_imports_watch,
         );
         new_snapshot.parent_id = self.id;

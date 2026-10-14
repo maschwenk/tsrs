@@ -244,7 +244,7 @@ fn remove_unused_imports(
     source_file: P<SourceFile>,
     type_checker: &mut Checker,
     program: &'static Program,
-    change_tracker: &mut change::Tracker,
+    change_tracker: &change::Tracker,
 ) -> Vec<P<Node>> {
     let compiler_options = program.options();
     let jsx_elements_present = source_file.as_node().subtree_facts().intersects(ast::SubtreeFacts::ContainsJsx);
@@ -467,7 +467,7 @@ fn coalesce_imports_worker(
     comparer: &dyn Fn(&str, &str) -> Ordering,
     specifier_comparer: &NodeComparer,
     source_file: Option<P<SourceFile>>,
-    change_tracker: &mut change::Tracker,
+    change_tracker: &change::Tracker,
 ) -> Vec<P<Node>> {
     if import_decls.is_empty() {
         return import_decls.to_vec();
@@ -849,7 +849,7 @@ fn coalesce_exports_worker(
     specifier_comparer: &NodeComparer,
     module_specifier_comparer: &dyn Fn(&str, &str) -> Ordering,
     source_file: Option<P<SourceFile>>,
-    change_tracker: &mut change::Tracker,
+    change_tracker: &change::Tracker,
 ) -> Vec<P<Node>> {
     if export_group.is_empty() {
         return export_group.to_vec();

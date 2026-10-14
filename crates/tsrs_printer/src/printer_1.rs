@@ -226,9 +226,8 @@ pub(crate) fn get_literal_text_of_node_worker(g: &mut NameGenerator, s: &printer
                 return format!("\"{}\"", escape_jsx_attribute_string(&text, QuoteChar::DoubleQuote));
             } else if flags.intersects(getLiteralTextFlags::NeverAsciiEscape) || s.emit_context.emit_flags(node).intersects(EmitFlags::NoAsciiEscaping) {
                 return format!("\"{}\"", escape_string(&text, QuoteChar::DoubleQuote));
-            } else {
-                return format!("\"{}\"", escape_non_ascii_string(&text, QuoteChar::DoubleQuote));
             }
+            return format!("\"{}\"", escape_non_ascii_string(&text, QuoteChar::DoubleQuote));
         }
     }
     // !!! Printer option to control whether to terminate unterminated literals
@@ -289,7 +288,7 @@ impl Printer {
         self.text_state.current_source_file.get()
     }
 
-    pub(crate) fn set_current_source_file(&mut self, source_file: Option<P<SourceFile>>) {
+    pub(crate) fn set_current_source_file(&self, source_file: Option<P<SourceFile>>) {
         self.text_state.current_source_file.set(source_file);
     }
 
@@ -488,7 +487,7 @@ impl Printer {
     }
 
     pub(crate) fn get_lines_between_nodes(
-        &mut self,
+        &self,
         parent: P<Node>,
         node1: P<Node>,
         node2: P<Node>,
@@ -546,7 +545,7 @@ impl Printer {
     }
 
     pub(crate) fn get_leading_line_terminator_count(
-        &mut self,
+        &self,
         parent_node: Option<P<Node>>,
         first_child: Option<P<Node>>,
         format: ListFormat,
@@ -604,7 +603,7 @@ impl Printer {
     }
 
     pub(crate) fn get_separating_line_terminator_count(
-        &mut self,
+        &self,
         previous_node: Option<P<Node>>,
         next_node: Option<P<Node>>,
         format: ListFormat,
@@ -641,7 +640,7 @@ impl Printer {
     }
 
     pub(crate) fn get_closing_line_terminator_count(
-        &mut self,
+        &self,
         parent_node: Option<P<Node>>,
         last_child: Option<P<Node>>,
         format: ListFormat,
@@ -835,7 +834,7 @@ impl Printer {
         self.emit_context.emit_flags(node).intersects(EmitFlags::MultiLine)
     }
 
-    pub(crate) fn should_emit_block_function_body_on_single_line(&mut self, body: P<Node>) -> bool {
+    pub(crate) fn should_emit_block_function_body_on_single_line(&self, body: P<Node>) -> bool {
         // We must emit a function body as a single-line body in the following case:
         // * The body has NodeEmitFlags.SingleLine specified.
 
@@ -914,7 +913,7 @@ impl Printer {
         !self.emit_context.emit_flags(node).intersects(EmitFlags::NoTrailingComments)
     }
 
-    pub(crate) fn should_emit_detached_comments(&self, node: P<Node>) -> bool {
+    pub(crate) fn should_emit_detached_comments(node: P<Node>) -> bool {
         if !is_source_file(node) {
             return true;
         }

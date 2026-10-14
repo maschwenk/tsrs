@@ -148,7 +148,7 @@ impl Checker {
         if let Some(t) = self.union_types.get(&key) {
             return t;
         }
-        let flags = precomputed_object_flags | self.get_propagating_flags_of_types(types, TypeFlags::Nullable);
+        let flags = precomputed_object_flags | Self::get_propagating_flags_of_types(types, TypeFlags::Nullable);
         let t = self.new_union_type(flags, types);
         t.as_union_type().set_origin(origin);
         t.set_alias(alias.alias());
@@ -160,7 +160,7 @@ impl Checker {
     }
 
     // checker.go:26227
-    pub fn union_types(&mut self) -> Vec<P<Type>> {
+    pub fn union_types(&self) -> Vec<P<Type>> {
         self.union_types.values().collect()
     }
 
@@ -189,7 +189,7 @@ impl Checker {
         }
         let mut types: Vec<P<Type>> = Vec::with_capacity(capacity);
         let mut includes = TypeFlags::empty();
-        fn add_type(c: &mut Checker, types: &mut Vec<P<Type>>, includes: &mut TypeFlags, t: P<Type>) {
+        fn add_type(c: &Checker, types: &mut Vec<P<Type>>, includes: &mut TypeFlags, t: P<Type>) {
             let flags = t.flags();
             // We ignore 'never' types in unions
             if flags.intersects(TypeFlags::Never) {
@@ -355,7 +355,7 @@ impl Checker {
     // checker.go:26344
     pub(crate) fn is_type_matched_by_template_literal_or_string_mapping(&mut self, t: P<Type>, template: P<Type>) -> bool {
         if template.flags().intersects(TypeFlags::TemplateLiteral) {
-            let comparer = self.compare_types_assignable_comparer();
+            let comparer = Self::compare_types_assignable_comparer();
             return self.is_type_matched_by_template_literal_type(t, template.as_template_literal_type(), comparer);
         }
         self.is_member_of_string_mapping(t, template)
@@ -537,8 +537,8 @@ impl Checker {
                         }
                         let relation = self.strict_subtype_relation;
                         if self.is_type_related_to(source, target, relation)
-                            && (!self.get_target_type(source).unwrap().object_flags().intersects(ObjectFlags::Class)
-                                || !self.get_target_type(target).unwrap().object_flags().intersects(ObjectFlags::Class)
+                            && (!Self::get_target_type(source).unwrap().object_flags().intersects(ObjectFlags::Class)
+                                || !Self::get_target_type(target).unwrap().object_flags().intersects(ObjectFlags::Class)
                                 || self.is_type_derived_from(source, target))
                         {
                             types.remove(i);
@@ -750,7 +750,7 @@ impl Checker {
                     r = self.get_union_type_ex(&constituents, UnionReduction::Literal, alias, origin);
                 }
             } else {
-                let propagated = self.get_propagating_flags_of_types(types, TypeFlags::Nullable /*excludeKinds*/);
+                let propagated = Self::get_propagating_flags_of_types(types, TypeFlags::Nullable /*excludeKinds*/);
                 r = self.new_intersection_type(object_flags | propagated, type_set);
                 r.set_alias(alias.alias());
             }
@@ -918,7 +918,7 @@ impl Checker {
     // first with a union containing an intersection of those primitive types, then remove the
     // other unions and return true. Otherwise, do nothing and return false.
     // checker.go:26813
-    pub(crate) fn intersect_unions_of_primitive_types(&mut self, types: &mut [P<Type>]) -> (Vec<P<Type>>, bool) {
+    pub(crate) fn intersect_unions_of_primitive_types(&mut self, types: &[P<Type>]) -> (Vec<P<Type>>, bool) {
         let mut types = types.to_vec();
         let Some(index) = types.iter().position(|&t| is_primitive_union(t)) else {
             return (types, false);
@@ -1014,7 +1014,7 @@ impl Checker {
 
     // checker.go:26900
     pub(crate) fn get_cross_product_intersections(&mut self, types: &[P<Type>], flags: IntersectionFlags) -> Vec<P<Type>> {
-        let count = self.get_cross_product_union_size(types);
+        let count = Self::get_cross_product_union_size(types);
         let mut intersections: Vec<P<Type>> = Vec::new();
         // Every iteration overwrites each union position; the others keep `types[j]`.
         let mut constituents = types.to_vec();
@@ -1094,12 +1094,12 @@ impl Checker {
                 return ready.call_signatures.get().is_empty() && ready.construct_signatures.get().is_empty() && ready.index_infos.get().is_empty() && !self.has_properties_of_structured_type(t);
             }
         }
-        let resolved = self.resolve_structured_type_members(t).unwrap();
+        let resolved = self.resolve_structured_type_members(t);
         self.is_empty_resolved_type(resolved)
     }
 
     // checker.go:26951
-    pub(crate) fn is_empty_resolved_type(&mut self, t: &'static StructuredType) -> bool {
+    pub(crate) fn is_empty_resolved_type(&self, t: &'static StructuredType) -> bool {
         !std::ptr::eq(t, self.any_function_type.as_structured_type())
             && t.properties().is_empty()
             && t.signatures().is_empty()
@@ -1425,7 +1425,7 @@ pub(crate) fn count_types(t: P<Type>) -> usize {
 
 impl Checker {
     // checker.go:27108
-    pub(crate) fn is_error_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_error_type(&self, t: P<Type>) -> bool {
         // The only 'any' types that have alias symbols are those manufactured by getTypeFromTypeAliasReference for
         // a reference to an unresolved symbol. We want those to behave like the errorType.
         t == self.error_type || t.flags().intersects(TypeFlags::Any) && t.alias().is_some()
@@ -1437,7 +1437,7 @@ impl Checker {
     /// `key` identifies the evaluation for `report_too_complex` (tsrs-only): the caller's cache key where it has one,
     /// so that what Go's cache would have told apart (an aliased and an alias-free intersection) is told apart here.
     pub(crate) fn check_cross_product_union(&mut self, types: &[P<Type>], key: u64) -> bool {
-        let size = self.get_cross_product_union_size(types);
+        let size = Self::get_cross_product_union_size(types);
         // tsrs-only: TSRS_TRACE_UNION_REDUCTION (uniontrace.rs).
         if size >= 1_000 && crate::uniontrace::enabled() {
             crate::uniontrace::report_cross_product(self, types, size);
@@ -1508,7 +1508,7 @@ impl Checker {
     }
 
     // checker.go:27130
-    pub(crate) fn get_cross_product_union_size(&mut self, types: &[P<Type>]) -> usize {
+    pub(crate) fn get_cross_product_union_size(types: &[P<Type>]) -> usize {
         let mut size = 1usize;
         for &t in types {
             if t.flags().intersects(TypeFlags::Union) {
@@ -1546,7 +1546,7 @@ impl Checker {
 
     fn get_index_type_ex_inner(&mut self, t: P<Type>, index_flags: IndexFlags) -> P<Type> {
         let t = self.get_reduced_type(t);
-        if self.is_no_infer_type(t) {
+        if Self::is_no_infer_type(t) {
             let index_type = self.get_index_type_ex(t.as_substitution_type().base_type().unwrap(), index_flags);
             return self.get_no_infer_type(index_type);
         } else if self.should_defer_index_type(t, index_flags) {
@@ -1704,14 +1704,14 @@ impl Checker {
     }
 
     // checker.go:27292
-    pub(crate) fn is_no_infer_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_no_infer_type(t: P<Type>) -> bool {
         // A NoInfer<T> type is represented as a substitution type with a TypeFlags.Unknown constraint.
         t.flags().intersects(TypeFlags::Substitution) && t.as_substitution_type().constraint.get().unwrap().flags().intersects(TypeFlags::Unknown)
     }
 
     // checker.go:27297
     pub(crate) fn get_substitution_intersection(&mut self, t: P<Type>) -> P<Type> {
-        if self.is_no_infer_type(t) {
+        if Self::is_no_infer_type(t) {
             return t.as_substitution_type().base_type().unwrap();
         }
         let s = t.as_substitution_type();
@@ -1721,7 +1721,7 @@ impl Checker {
     // checker.go:27304
     pub(crate) fn should_defer_index_type(&mut self, t: P<Type>, index_flags: IndexFlags) -> bool {
         t.flags().intersects(TypeFlags::InstantiableNonPrimitive)
-            || self.is_generic_tuple_type(t)
+            || Self::is_generic_tuple_type(t)
             || self.is_generic_mapped_type(t) && self.get_name_type_from_mapped_type(t).is_some()
             || t.flags().intersects(TypeFlags::Union) && !index_flags.intersects(IndexFlags::NoReducibleCheck) && self.is_generic_reducible_type(t)
             || t.flags().intersects(TypeFlags::Intersection)
@@ -1786,14 +1786,14 @@ impl Checker {
         // trigger a circularity. For example, `T extends { [P in keyof T & string as Captitalize<P>]: any }` is
         // a circular definition. For this reason, we only eagerly manifest the keys if the constraint is non-generic.
         if self.is_generic_index_type(constraint_type) {
-            if self.is_mapped_type_with_keyof_constraint_declaration(t) {
+            if Self::is_mapped_type_with_keyof_constraint_declaration(t) {
                 // We have a generic index and a homomorphic mapping and a key remapping - we need to defer
                 // the whole `keyof whatever` for later since it's not safe to resolve the shape of modifier type.
                 return self.get_index_type_for_generic_type(t, index_flags);
             }
             // Include the generic component in the resulting type.
             for_each_type(self, constraint_type, |c, key_type| add_member_for_key_type(c, &mut key_types, t, name_type, type_parameter, key_type));
-        } else if self.is_mapped_type_with_keyof_constraint_declaration(t) {
+        } else if Self::is_mapped_type_with_keyof_constraint_declaration(t) {
             let modifiers = self.get_modifiers_type_from_mapped_type(t);
             let modifiers_type = self.get_apparent_type(modifiers);
             // The 'T' in 'keyof T'
@@ -1979,7 +1979,7 @@ impl Checker {
         let mut prop_name = std::borrow::Cow::Borrowed("");
         let mut has_prop_name = false;
         if !access_node.is_some_and(is_private_identifier) {
-            prop_name = self.get_property_name_from_index(index_type, access_node);
+            prop_name = Self::get_property_name_from_index(index_type, access_node);
             has_prop_name = prop_name != InternalSymbolNameMissing;
         }
         if has_prop_name {
@@ -2033,9 +2033,8 @@ impl Checker {
                 } else if access_node.is_some_and(is_indexed_access_type_node) && self.contains_missing_type(prop_type) {
                     let undefined_type = self.undefined_type;
                     return Some(self.get_union_type(&[prop_type, undefined_type]));
-                } else {
-                    return Some(prop_type);
                 }
+                return Some(prop_type);
             }
             if every_type(self, object_type, |_, t| is_tuple_type(t)) && is_numeric_literal_name(&prop_name) {
                 let index = jsnum::from_string(&prop_name);
@@ -2048,7 +2047,7 @@ impl Checker {
                             return Some(self.undefined_type);
                         }
                         let type_string = self.type_to_string_exported(object_type);
-                        let arity = self.get_type_reference_arity(object_type);
+                        let arity = Self::get_type_reference_arity(object_type);
                         self.error(index_node, &diagnostics::Tuple_type_0_of_length_1_has_no_element_at_index_2, &[&type_string, &arity, &prop_name]);
                     } else {
                         let type_string = self.type_to_string_exported(object_type);
@@ -2097,9 +2096,8 @@ impl Checker {
                     if access_flags.intersects(AccessFlags::IncludeUndefined) {
                         let missing_type = self.missing_type;
                         return Some(self.get_union_type(&[index_info.value_type(), missing_type]));
-                    } else {
-                        return Some(index_info.value_type());
                     }
+                    return Some(index_info.value_type());
                 }
                 self.error_if_writing_to_readonly_index(Some(index_info), object_type, access_expression);
                 // When accessing an enum object with its own type,
@@ -2171,11 +2169,7 @@ impl Checker {
                                     let name = "[".to_string() + &symbol_name + "]";
                                     let type_string = self.type_to_string_exported(object_type);
                                     diagnostic = Some(new_diagnostic_for_node(Some(access_expression), Some(&diagnostics::Property_0_does_not_exist_on_type_1), &[&name, &type_string]));
-                                } else if index_type.flags().intersects(TypeFlags::StringLiteral) {
-                                    let value = literal_value_to_string(index_type.as_literal_type().value());
-                                    let type_string = self.type_to_string_exported(object_type);
-                                    diagnostic = Some(new_diagnostic_for_node(Some(access_expression), Some(&diagnostics::Property_0_does_not_exist_on_type_1), &[&value, &type_string]));
-                                } else if index_type.flags().intersects(TypeFlags::NumberLiteral) {
+                                } else if (index_type.flags().intersects(TypeFlags::StringLiteral)) || (index_type.flags().intersects(TypeFlags::NumberLiteral)) {
                                     let value = literal_value_to_string(index_type.as_literal_type().value());
                                     let type_string = self.type_to_string_exported(object_type);
                                     diagnostic = Some(new_diagnostic_for_node(Some(access_expression), Some(&diagnostics::Property_0_does_not_exist_on_type_1), &[&value, &type_string]));
@@ -2325,7 +2319,7 @@ impl Checker {
             // Allow assignments to readonly properties within constructors of the same class declaration.
             if symbol.flags().intersects(SymbolFlags::Property) && is_access_expression(expr) && expr.expression().unwrap().kind() == Kind::ThisKeyword {
                 // Look for if this is the constructor for the class that `symbol` is a property of.
-                let ctor = self.get_control_flow_container(expr);
+                let ctor = Self::get_control_flow_container(expr);
                 let Some(ctor) = ctor.filter(|&ctor| is_constructor_declaration(ctor)) else {
                     return true;
                 };
@@ -2347,7 +2341,7 @@ impl Checker {
             if is_identifier(node) {
                 let expression_symbol = self.get_resolved_symbol(node);
                 if expression_symbol.flags().intersects(SymbolFlags::Alias) {
-                    let declaration = self.get_declaration_of_alias_symbol(expression_symbol);
+                    let declaration = Self::get_declaration_of_alias_symbol(expression_symbol);
                     return declaration.is_some_and(is_namespace_import);
                 }
             }
@@ -2362,13 +2356,13 @@ impl Checker {
         if kind == thisAssignmentDeclarationKind::Constructor {
             constructor = location;
         } else if is_this_property(node) && self.is_auto_typed_property(prop) {
-            constructor = self.get_declaring_constructor(prop);
+            constructor = Self::get_declaring_constructor(prop);
         }
         Some(get_this_container(node, true /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/)) == constructor
     }
 
     // checker.go:27808
-    pub(crate) fn is_auto_typed_property(&mut self, symbol: P<Symbol>) -> bool {
+    pub(crate) fn is_auto_typed_property(&self, symbol: P<Symbol>) -> bool {
         // A property is auto-typed when its declaration has no type annotation or initializer and we're in
         // noImplicitAny mode or a .js file.
         let declaration = symbol.value_declaration();
@@ -2376,7 +2370,7 @@ impl Checker {
     }
 
     // checker.go:27815
-    pub(crate) fn get_declaring_constructor(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
+    pub(crate) fn get_declaring_constructor(symbol: P<Symbol>) -> Option<P<Node>> {
         let declarations = symbol.declarations();
         for &declaration in declarations {
             let container = get_this_container(declaration, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
@@ -2388,7 +2382,7 @@ impl Checker {
     }
 
     // checker.go:27825
-    pub(crate) fn get_property_name_from_index(&mut self, index_type: P<Type>, access_node: Option<P<Node>>) -> std::borrow::Cow<'static, str> {
+    pub(crate) fn get_property_name_from_index(index_type: P<Type>, access_node: Option<P<Node>>) -> std::borrow::Cow<'static, str> {
         if is_type_usable_as_property_name(index_type) {
             return get_property_name_from_type(index_type);
         }
@@ -2412,7 +2406,7 @@ impl Checker {
             return true;
         }
         if access_node.is_some_and(|n| !is_indexed_access_type_node(n)) {
-            return self.is_generic_tuple_type(object_type) && !index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.target_tuple_type()));
+            return Self::is_generic_tuple_type(object_type) && !index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.target_tuple_type()));
         }
         self.is_generic_object_type(object_type) && !(is_tuple_type(object_type) && index_type_less_than(self, index_type, get_total_fixed_element_count(object_type.target_tuple_type())))
             || self.is_generic_reducible_type(object_type)
@@ -2449,7 +2443,7 @@ impl Checker {
         // preserve NoInfer<T> only for types that could contain type variables, but we don't want to exhaustively
         // examine all object type members.
         t.flags().intersects(TypeFlags::UnionOrIntersection) && t.as_union_or_intersection_type().types().iter().any(|&t| self.is_no_infer_target_type(t))
-            || t.flags().intersects(TypeFlags::Substitution) && !self.is_no_infer_type(t) && self.is_no_infer_target_type(t.as_substitution_type().base_type().unwrap())
+            || t.flags().intersects(TypeFlags::Substitution) && !Self::is_no_infer_type(t) && self.is_no_infer_target_type(t.as_substitution_type().base_type().unwrap())
             || t.flags().intersects(TypeFlags::Object) && !self.is_empty_anonymous_object_type(t)
             || t.flags().intersects(TypeFlags::Instantiable & !TypeFlags::Substitution) && !self.is_pattern_literal_type(t)
     }
@@ -2484,7 +2478,7 @@ impl Checker {
 
     // checker.go:27906
     pub fn get_base_constraint_of_type(&mut self, t: P<Type>) -> Option<P<Type>> {
-        if t.flags().intersects(TypeFlags::InstantiableNonPrimitive | TypeFlags::UnionOrIntersection | TypeFlags::TemplateLiteral | TypeFlags::StringMapping | TypeFlags::Index) || self.is_generic_tuple_type(t) {
+        if t.flags().intersects(TypeFlags::InstantiableNonPrimitive | TypeFlags::UnionOrIntersection | TypeFlags::TemplateLiteral | TypeFlags::StringMapping | TypeFlags::Index) || Self::is_generic_tuple_type(t) {
             let constraint = self.get_resolved_base_constraint(t, BaseConstraintStack::default());
             if constraint != self.no_constraint_type && constraint != self.circular_constraint_type {
                 return Some(constraint);
@@ -2520,7 +2514,7 @@ impl Checker {
         }
         if !self.pop_type_resolution() {
             if t.flags().intersects(TypeFlags::TypeParameter) {
-                let error_node = self.get_constraint_declaration(t);
+                let error_node = Self::get_constraint_declaration(t);
                 if let Some(error_node) = error_node {
                     let type_string = self.type_to_string_exported(t);
                     let diagnostic = self.error(Some(error_node), &diagnostics::Type_parameter_0_has_a_circular_constraint, &[&type_string]);
@@ -2592,7 +2586,7 @@ impl Checker {
             let target = t.as_index_type().target().unwrap();
             if self.is_generic_mapped_type(target) {
                 let mapped_type = target;
-                if self.get_name_type_from_mapped_type(mapped_type).is_some() && !self.is_mapped_type_with_keyof_constraint_declaration(mapped_type) {
+                if self.get_name_type_from_mapped_type(mapped_type).is_some() && !Self::is_mapped_type_with_keyof_constraint_declaration(mapped_type) {
                     let index_type = self.get_index_type_for_mapped_type(mapped_type, IndexFlags::None);
                     return self.get_next_base_constraint(Some(index_type), stack);
                 }
@@ -2644,7 +2638,7 @@ impl Checker {
         } else if flags.intersects(TypeFlags::Substitution) {
             let intersection = self.get_substitution_intersection(t);
             return self.get_next_base_constraint(Some(intersection), stack);
-        } else if self.is_generic_tuple_type(t) {
+        } else if Self::is_generic_tuple_type(t) {
             // We substitute constraints for variadic elements only when the constraints are array types or
             // non-variadic tuple types as we want to avoid further (possibly unbounded) recursion.
             let element_types = self.get_element_types(t);
@@ -2655,7 +2649,7 @@ impl Checker {
                 if v.flags().intersects(TypeFlags::TypeParameter) && element_infos[i].flags.intersects(ElementFlags::Variadic) {
                     let constraint = self.get_next_base_constraint(Some(v), stack);
                     if let Some(constraint) = constraint {
-                        if constraint != v && every_type(self, constraint, |c, n| c.is_array_or_tuple_type(n) && !c.is_generic_tuple_type(n)) {
+                        if constraint != v && every_type(self, constraint, |c, n| c.is_array_or_tuple_type(n) && !checker::Checker::is_generic_tuple_type(n)) {
                             new_element = constraint;
                         }
                     }

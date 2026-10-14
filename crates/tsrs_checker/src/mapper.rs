@@ -432,7 +432,7 @@ impl Checker {
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
-    pub(crate) fn combine_type_mappers(&mut self, m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -> P<TypeMapper> {
+    pub(crate) fn combine_type_mappers(m1: Option<P<TypeMapper>>, m2: P<TypeMapper>) -> P<TypeMapper> {
         if let Some(m1) = m1 {
             return new_composite_type_mapper(m1, m2);
         }
@@ -454,7 +454,7 @@ impl Checker {
     /// This is used during inference when instantiating type parameter defaults.
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_backreference_mapper(
-        &mut self,
+        &self,
         context: P<InferenceContext>,
         index: usize,
     ) -> P<TypeMapper> {

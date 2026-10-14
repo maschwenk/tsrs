@@ -415,8 +415,8 @@ impl Checker {
                         if let Some(reporter) = error_reporter.as_mut() {
                             let a = self.symbol_to_string(target_symbol);
                             let b = self.symbol_to_string(target_property);
-                            let c = self.value_to_string(tv);
-                            let d = self.value_to_string(sv);
+                            let c = Self::value_to_string(tv);
+                            let d = Self::value_to_string(sv);
                             reporter(
                                 self,
                                 &diagnostics::Each_declaration_of_0_1_differs_in_its_value_where_2_was_expected_but_3_was_given,
@@ -439,7 +439,7 @@ impl Checker {
                             let known_string_value = source_value.or(target_value).unwrap();
                             let a = self.symbol_to_string(target_symbol);
                             let b = self.symbol_to_string(target_property);
-                            let c = self.value_to_string(known_string_value);
+                            let c = Self::value_to_string(known_string_value);
                             reporter(
                                 self,
                                 &diagnostics::One_value_of_0_1_is_the_string_2_and_the_other_is_assumed_to_be_an_unknown_numeric_value,
@@ -780,7 +780,7 @@ impl Checker {
                 continue;
             }
             let name_type = self.get_number_literal_type(Number(i as f64));
-            let check_node = self.get_effective_check_node(element).unwrap();
+            let check_node = Self::get_effective_check_node(element);
             reported_error = self.elaborate_element(
                 source,
                 target,
@@ -839,7 +839,7 @@ impl Checker {
                 &[&a, &b],
             ));
         } else {
-            let prop_name = self.get_property_name_from_index(name_type, None /*accessNode*/);
+            let prop_name = Self::get_property_name_from_index(name_type, None /*accessNode*/);
             let target_is_optional = self
                 .get_property_of_type(target, &prop_name)
                 .unwrap_or(self.unknown_symbol)
@@ -1378,7 +1378,7 @@ impl Checker {
         if let Some(t) = self.find_matching_discriminant_type(source, target, is_related_to) {
             return Some(t);
         }
-        if let Some(t) = self.find_matching_type_reference_or_type_alias_reference(source, target) {
+        if let Some(t) = Self::find_matching_type_reference_or_type_alias_reference(source, target) {
             return Some(t);
         }
         if let Some(t) = self.find_best_type_for_object_literal(source, target) {
@@ -1394,7 +1394,7 @@ impl Checker {
     }
 
     // relater.go:891
-    pub(crate) fn find_matching_type_reference_or_type_alias_reference(&mut self, source: P<Type>, union_target: P<Type>) -> Option<P<Type>> {
+    pub(crate) fn find_matching_type_reference_or_type_alias_reference(source: P<Type>, union_target: P<Type>) -> Option<P<Type>> {
         let source_object_flags = source.object_flags();
         if source_object_flags.intersects(ObjectFlags::Reference | ObjectFlags::Anonymous)
             && union_target.flags().intersects(TypeFlags::Union)
@@ -1618,7 +1618,7 @@ impl Checker {
         }
         let mut members: Vec<P<Symbol>> = Vec::new();
         let mut seen: FxHashSet<&'static str> = FxHashSet::default();
-        if let Some(declared_members) = self.resolve_declared_members(reduced.target().unwrap()).unwrap().declared_members.get() {
+        if let Some(declared_members) = self.resolve_declared_members(reduced.target().unwrap()).declared_members.get() {
             for (id, symbol) in declared_members.entries() {
                 if self.is_named_member(symbol, id) {
                     seen.insert(id);
@@ -1642,7 +1642,7 @@ impl Checker {
         let mut contained: Vec<P<Symbol>> = Vec::new();
         let mut rest: Vec<P<Symbol>> = Vec::new();
         for p in members {
-            if is_class_or_interface_container && self.is_declaration_contained_by(p, container.unwrap()) {
+            if is_class_or_interface_container && Self::is_declaration_contained_by(p, container.unwrap()) {
                 contained.push(p);
             } else {
                 rest.push(p);
@@ -1682,13 +1682,13 @@ pub(crate) fn exclude_properties<'a>(properties: &'a [P<Symbol>], excluded_prope
 
 impl TypeDiscriminator<'_> {
     // relater.go:1036
-    pub(crate) fn len(&mut self, c: &mut Checker) -> usize {
+    pub(crate) fn len(&self, c: &Checker) -> usize {
         let _ = c;
         self.props.len()
     }
 
     // relater.go:1040
-    pub(crate) fn name(&mut self, c: &mut Checker, index: usize) -> &'static str {
+    pub(crate) fn name(&self, c: &Checker, index: usize) -> &'static str {
         let _ = c;
         self.props[index].name()
     }
@@ -2103,7 +2103,7 @@ impl Checker {
                 self.variance_stack.push(VarianceStackEntry { symbol, type_parameters });
                 let mut variances = vec![VarianceFlags::Invariant; type_parameters.len()];
                 for (i, &tp) in type_parameters.iter().enumerate() {
-                    let modifiers = self.get_type_parameter_modifiers(tp);
+                    let modifiers = Self::get_type_parameter_modifiers(tp);
                     let variance: VarianceFlags;
                     if modifiers.intersects(ModifierFlags::Out) {
                         if modifiers.intersects(ModifierFlags::In) {
@@ -2198,7 +2198,7 @@ impl Checker {
     }
 
     // relater.go:1437
-    pub(crate) fn get_variance_stack_index(&mut self, symbol: P<Symbol>) -> Option<usize> {
+    pub(crate) fn get_variance_stack_index(&self, symbol: P<Symbol>) -> Option<usize> {
         for (i, entry) in self.variance_stack.iter().enumerate() {
             if entry.symbol == symbol {
                 return Some(i);
@@ -2228,12 +2228,12 @@ impl Checker {
     }
 
     // relater.go:1462
-    pub(crate) fn is_marker_type(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_marker_type(&self, t: P<Type>) -> bool {
         self.marker_types.has(&t)
     }
 
     // relater.go:1466
-    pub(crate) fn get_type_parameter_modifiers(&mut self, tp: P<Type>) -> ModifierFlags {
+    pub(crate) fn get_type_parameter_modifiers(tp: P<Type>) -> ModifierFlags {
         let mut flags = ModifierFlags::None;
         if let Some(symbol) = tp.symbol() {
             for d in symbol.declarations() {
@@ -2246,7 +2246,7 @@ impl Checker {
     // relater.go:1478
     // Return true if the given type reference has a 'void' type argument for a covariant type parameter.
     // See comment at call in recursiveTypeRelatedTo for when this case matters.
-    pub(crate) fn has_covariant_void_argument(&mut self, type_arguments: &[P<Type>], variances: &[VarianceFlags]) -> bool {
+    pub(crate) fn has_covariant_void_argument(type_arguments: &[P<Type>], variances: &[VarianceFlags]) -> bool {
         for (i, &v) in variances.iter().enumerate() {
             if v & VarianceFlags::VarianceMask == VarianceFlags::Covariant && type_arguments[i].flags().intersects(TypeFlags::Void) {
                 return true;
@@ -2258,7 +2258,7 @@ impl Checker {
     // relater.go:1487
     pub(crate) fn is_signature_assignable_to(&mut self, source: P<Signature>, target: P<Signature>, ignore_return_types: bool) -> bool {
         let check_mode = if ignore_return_types { SignatureCheckMode::IgnoreReturnTypes } else { SignatureCheckMode::None };
-        let compare_types = self.compare_types_assignable_comparer();
+        let compare_types = Self::compare_types_assignable_comparer();
         self.compare_signatures_related(source, target, check_mode, false /*reportErrors*/, None /*errorReporter*/, compare_types, None /*reportUnreliableMarkers*/)
             != Ternary::False
     }
@@ -2602,18 +2602,15 @@ impl Checker {
                     }
                 }
             }
-            let mut min_argument_count = match min_argument_count {
-                Some(min_argument_count) => min_argument_count,
-                None => {
-                    if strong_arity_for_untyped_js.is_empty()
-                        && signature
-                            .flags()
-                            .intersects(SignatureFlags::IsUntypedSignatureInJSFile)
-                    {
-                        return 0;
-                    }
-                    signature.min_argument_count()
+            let mut min_argument_count = if let Some(min_argument_count) = min_argument_count { min_argument_count } else {
+                if strong_arity_for_untyped_js.is_empty()
+                    && signature
+                        .flags()
+                        .intersects(SignatureFlags::IsUntypedSignatureInJSFile)
+                {
+                    return 0;
                 }
+                signature.min_argument_count()
             };
             if !void_is_non_optional.is_empty() {
                 return min_argument_count;
@@ -2711,11 +2708,10 @@ impl Checker {
             if pos >= parameter_count - 1 {
                 if pos == parameter_count - 1 {
                     return rest_type;
-                } else {
-                    let number_type = self.number_type;
-                    let t = self.get_indexed_access_type(rest_type, number_type);
-                    return self.create_array_type(t);
                 }
+                let number_type = self.number_type;
+                let t = self.get_indexed_access_type(rest_type, number_type);
+                return self.create_array_type(t);
             }
         }
         if pos >= parameter_count {
@@ -2758,7 +2754,7 @@ impl Checker {
         if pos < param_count {
             let decl = signature.parameters()[pos].value_declaration();
             if let Some(decl) = decl {
-                if self.is_valid_declaration_for_tuple_label(decl) {
+                if Self::is_valid_declaration_for_tuple_label(decl) {
                     return Some(decl);
                 }
             }
@@ -2776,7 +2772,7 @@ impl Checker {
                 return None;
             }
             if let Some(value_declaration) = rest_parameter.value_declaration() {
-                if self.is_valid_declaration_for_tuple_label(value_declaration) {
+                if Self::is_valid_declaration_for_tuple_label(value_declaration) {
                     return Some(value_declaration);
                 }
             }
@@ -2785,7 +2781,7 @@ impl Checker {
     }
 
     // relater.go:1887
-    pub(crate) fn is_valid_declaration_for_tuple_label(&mut self, d: P<Node>) -> bool {
+    pub(crate) fn is_valid_declaration_for_tuple_label(d: P<Node>) -> bool {
         is_named_tuple_member(d) || is_parameter_declaration(d) && d.name().is_some() && is_identifier(d.name().unwrap())
     }
 
@@ -2826,7 +2822,7 @@ impl Checker {
         end_skip_count: usize,
     ) -> P<Type> {
         let target = t.target_tuple_type();
-        let end_index = self.get_type_reference_arity(t).saturating_sub(end_skip_count);
+        let end_index = Self::get_type_reference_arity(t).saturating_sub(end_skip_count);
         if index > target.fixed_length() {
             if let Some(rest_array_type) = self.get_rest_array_type_of_tuple_type(t) {
                 return rest_array_type;
@@ -2972,8 +2968,8 @@ impl Checker {
                     }
                     return format!("{name}_n");
                 }
-                Kind::ArrayBindingPattern => {
-                    if has_dot_dot_dot_token(node) {
+                Kind::ArrayBindingPattern
+                    if has_dot_dot_dot_token(node) => {
                         let elements = name_node.elements();
                         let last_element = last_or_nil(elements);
                         let last_element_is_binding_element_rest = last_element
@@ -2993,7 +2989,6 @@ impl Checker {
                             );
                         }
                     }
-                }
                 _ => {}
             }
         }
@@ -3047,7 +3042,7 @@ impl Checker {
             if let Some(pred) = pred {
                 // Constituent type predicates must all have matching kinds. We don't create composite type predicates for assertions.
                 if pred.kind() != TypePredicateKind::This && pred.kind() != TypePredicateKind::Identifier
-                    || last.is_some() && !self.type_predicate_kinds_match(last.unwrap(), pred)
+                    || last.is_some() && !Self::type_predicate_kinds_match(last.unwrap(), pred)
                 {
                     return None;
                 }
@@ -3066,11 +3061,11 @@ impl Checker {
         }
         let last = last?;
         let composite_type = self.get_union_or_intersection_type(&types, is_union, UnionReduction::Literal);
-        Some(self.new_type_predicate(last.kind(), last.parameter_name(), last.parameter_index(), Some(composite_type)))
+        Some(Self::new_type_predicate(last.kind(), last.parameter_name(), last.parameter_index(), Some(composite_type)))
     }
 
     // relater.go:2113
-    pub(crate) fn type_predicate_kinds_match(&mut self, a: P<TypePredicate>, b: P<TypePredicate>) -> bool {
+    pub(crate) fn type_predicate_kinds_match(a: P<TypePredicate>, b: P<TypePredicate>) -> bool {
         a.kind() == b.kind() && a.parameter_index() == b.parameter_index()
     }
 
@@ -3087,7 +3082,7 @@ impl Checker {
             } else {
                 TypePredicateKind::This
             };
-            return self.new_type_predicate(
+            return Self::new_type_predicate(
                 kind,
                 "",      /*parameterName*/
                 Some(0), /*parameterIndex*/
@@ -3101,7 +3096,7 @@ impl Checker {
         };
         let name = predicate_node.parameter_name.text();
         let index = find_index(signature.parameters(), |p| p.name() == name);
-        self.new_type_predicate(kind, name, index, t)
+        Self::new_type_predicate(kind, name, index, t)
     }
 
     // relater.go:2133
@@ -3111,12 +3106,11 @@ impl Checker {
         if t == predicate.type_() {
             return predicate;
         }
-        self.new_type_predicate(predicate.kind(), predicate.parameter_name(), predicate.parameter_index(), t)
+        Self::new_type_predicate(predicate.kind(), predicate.parameter_name(), predicate.parameter_index(), t)
     }
 
     // relater.go:2141
     pub(crate) fn new_type_predicate(
-        &mut self,
         kind: TypePredicateKind,
         parameter_name: &str,
         parameter_index: Option<usize>,
@@ -3339,7 +3333,7 @@ impl Checker {
         let (Some(source), Some(target)) = (source, target) else {
             return Ternary::False;
         };
-        if !self.type_predicate_kinds_match(source, target) {
+        if !Self::type_predicate_kinds_match(source, target) {
             return Ternary::False;
         }
         if source.type_() == target.type_() {
@@ -3394,7 +3388,7 @@ impl Checker {
     }
 
     // relater.go:2354
-    pub(crate) fn template_literal_types_definitely_unrelated(&mut self, source: &'static TemplateLiteralType, target: &'static TemplateLiteralType) -> bool {
+    pub(crate) fn template_literal_types_definitely_unrelated(source: &'static TemplateLiteralType, target: &'static TemplateLiteralType) -> bool {
         // Two template literal types with differences in their starting or ending text spans are definitely unrelated.
         let source_texts = source.texts();
         let target_texts = target.texts();

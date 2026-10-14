@@ -18,6 +18,7 @@ pub struct MetadataTransformer {
 }
 
 // metadata.go:24
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_metadata_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(MetadataTransformer {
         base: Transformer::default(),
@@ -311,15 +312,15 @@ impl MetadataTransformer {
     fn get_old_type_metadata(&self, node: P<Node>, container: Option<P<Node>>) -> Vec<P<Node>> {
         let f = self.factory();
         let mut decorators: Vec<P<Node>> = Vec::new();
-        if self.should_add_type_metadata(node) {
+        if Self::should_add_type_metadata(node) {
             let type_metadata = f.new_metadata_helper("design:type", self.serializer().serialize_type_of_node(self.serializer_context(container), node, container));
             decorators.push(f.new_decorator(type_metadata));
         }
-        if self.should_add_param_types_metadata(node) {
+        if Self::should_add_param_types_metadata(node) {
             let param_types_metadata = f.new_metadata_helper("design:paramtypes", self.serializer().serialize_parameter_types_of_node(self.serializer_context(container), node, container));
             decorators.push(f.new_decorator(param_types_metadata));
         }
-        if self.should_add_return_type_metadata(node) {
+        if Self::should_add_return_type_metadata(node) {
             let return_type_metadata = f.new_metadata_helper("design:returntype", self.serializer().serialize_return_type_of_node(self.serializer_context(container), node));
             decorators.push(f.new_decorator(return_type_metadata));
         }
@@ -330,7 +331,7 @@ impl MetadataTransformer {
     fn get_new_type_metadata(&self, node: P<Node>, container: Option<P<Node>>) -> Vec<P<Node>> {
         let f = self.factory();
         let mut properties: Vec<P<Node>> = Vec::new();
-        if self.should_add_type_metadata(node) {
+        if Self::should_add_type_metadata(node) {
             properties.push(f.new_property_assignment(
                 None,
                 f.new_identifier("type"),
@@ -339,7 +340,7 @@ impl MetadataTransformer {
                 f.new_arrow_function(None, None, Some(f.new_node_list(vec![])), None, None, Some(f.new_token(Kind::EqualsGreaterThanToken)), Some(self.serializer().serialize_type_of_node(self.serializer_context(container), node, container))),
             ));
         }
-        if self.should_add_param_types_metadata(node) {
+        if Self::should_add_param_types_metadata(node) {
             properties.push(f.new_property_assignment(
                 None,
                 f.new_identifier("paramTypes"),
@@ -348,7 +349,7 @@ impl MetadataTransformer {
                 f.new_arrow_function(None, None, Some(f.new_node_list(vec![])), None, None, Some(f.new_token(Kind::EqualsGreaterThanToken)), Some(self.serializer().serialize_parameter_types_of_node(self.serializer_context(container), node, container))),
             ));
         }
-        if self.should_add_return_type_metadata(node) {
+        if Self::should_add_return_type_metadata(node) {
             properties.push(f.new_property_assignment(
                 None,
                 f.new_identifier("returnType"),
@@ -372,7 +373,7 @@ impl MetadataTransformer {
      *
      * @param node The node to test.
      */
-    fn should_add_type_metadata(&self, node: P<Node>) -> bool {
+    fn should_add_type_metadata(node: P<Node>) -> bool {
         matches!(node.kind(), Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor | Kind::PropertyDeclaration)
     }
 
@@ -384,7 +385,7 @@ impl MetadataTransformer {
      *
      * @param node The node to test.
      */
-    fn should_add_return_type_metadata(&self, node: P<Node>) -> bool {
+    fn should_add_return_type_metadata(node: P<Node>) -> bool {
         node.kind() == Kind::MethodDeclaration
     }
 
@@ -396,7 +397,7 @@ impl MetadataTransformer {
      *
      * @param node The node to test.
      */
-    fn should_add_param_types_metadata(&self, node: P<Node>) -> bool {
+    fn should_add_param_types_metadata(node: P<Node>) -> bool {
         match node.kind() {
             Kind::ClassDeclaration | Kind::ClassExpression => ast::get_first_constructor_with_body(node).is_some(),
             Kind::MethodDeclaration | Kind::GetAccessor | Kind::SetAccessor => true,

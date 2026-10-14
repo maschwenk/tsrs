@@ -162,7 +162,7 @@ impl<'h> Setup<'h> {
         }
         if t.object_flags().intersects(ObjectFlags::Mapped) {
             let mapped = t.as_mapped_type();
-            mapped.resolve_components(&mut self.checker, t);
+            tsrs_checker::MappedType::resolve_components(&mut self.checker, t);
             let tp = self.register_opt_type(mapped.type_parameter())?;
             let ct = self.register_opt_type(mapped.constraint_type())?;
             let nt = self.register_opt_type(mapped.name_type())?;

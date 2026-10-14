@@ -1040,9 +1040,7 @@ pub(crate) fn get_meaning_from_declaration(node: P<Node>) -> SemanticMeaning {
         Kind::EnumMember | Kind::ClassDeclaration => SemanticMeaning::Value | SemanticMeaning::Type,
 
         Kind::ModuleDeclaration => {
-            if ast::is_ambient_module(node) {
-                SemanticMeaning::Namespace | SemanticMeaning::Value
-            } else if ast::get_module_instance_state(node) == ast::ModuleInstanceState::Instantiated {
+            if (ast::is_ambient_module(node)) || (ast::get_module_instance_state(node) == ast::ModuleInstanceState::Instantiated) {
                 SemanticMeaning::Namespace | SemanticMeaning::Value
             } else {
                 SemanticMeaning::Namespace

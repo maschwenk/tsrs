@@ -1004,7 +1004,7 @@ pub(crate) fn set_field_from_value(field: FieldMut<'_>, val: &Value) {
 impl UserPreferences {
     // userpreferences.go:793
     // Returns the JSON value Go's encoder writes (json.Deterministic(true): object keys sorted).
-    pub fn marshal_json_to(&self) -> Result<Value, String> {
+    pub fn marshal_json_to(&self) -> Value {
         let mut config = OrderedMap::default();
 
         for info in field_info_cache() {
@@ -1034,7 +1034,7 @@ impl UserPreferences {
 
         let mut config = Value::Object(config);
         sort_object_keys(&mut config);
-        Ok(config)
+        config
     }
 }
 
@@ -1138,23 +1138,21 @@ pub fn parse_user_preferences(items: &OrderedMap<String, Value>) -> UserPreferen
     // Apply editor settings first (tabSize, indentSize, etc.) as raw-name defaults,
     // then overlay language-specific settings with increasing precedence:
     // editor < javascript < typescript < js/ts
-    if let Some(editor_item) = items.get("editor") {
-        if let Value::Object(editor_settings) = editor_item {
-            let mut normalized_settings = editor_settings.clone();
-            if let Some(tab_size) = normalized_settings.get("tabSize").cloned() {
-                if !normalized_settings.contains_key("indentSize") {
-                    normalized_settings.insert("indentSize".to_string(), tab_size);
-                }
+    if let Some(Value::Object(editor_settings)) = items.get("editor") {
+        let mut normalized_settings = editor_settings.clone();
+        if let Some(tab_size) = normalized_settings.get("tabSize").cloned() {
+            if !normalized_settings.contains_key("indentSize") {
+                normalized_settings.insert("indentSize".to_string(), tab_size);
             }
-            if let Some(insert_spaces) = normalized_settings.get("insertSpaces").cloned() {
-                if !normalized_settings.contains_key("convertTabsToSpaces") {
-                    normalized_settings.insert("convertTabsToSpaces".to_string(), insert_spaces);
-                }
-            }
-            let mut unstable = OrderedMap::default();
-            unstable.insert("unstable".to_string(), Value::Object(normalized_settings));
-            prefs = prefs.with_config(&unstable);
         }
+        if let Some(insert_spaces) = normalized_settings.get("insertSpaces").cloned() {
+            if !normalized_settings.contains_key("convertTabsToSpaces") {
+                normalized_settings.insert("convertTabsToSpaces".to_string(), insert_spaces);
+            }
+        }
+        let mut unstable = OrderedMap::default();
+        unstable.insert("unstable".to_string(), Value::Object(normalized_settings));
+        prefs = prefs.with_config(&unstable);
     }
     // Apply javascript, then typescript, then js/ts (highest precedence).
     prefs = (["javascript", "typescript", "js/ts"]).into_iter().fold(prefs, |mut prefs, section| {

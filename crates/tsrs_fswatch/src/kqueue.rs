@@ -423,27 +423,24 @@ impl kqueueBackend {
             return false;
         };
 
-        let fd = match entry.state {
-            Some(fd) => fd,
-            None => {
-                let fd = match open_for_events(&entry.watch_path) {
-                    Ok(fd) => fd,
-                    Err(err) => {
-                        if is_out_of_descriptors(&err) {
-                            w.events.set_error(err_out_of_descriptors(&entry.watch_path, &err));
-                        }
-                        return false;
+        let fd = if let Some(fd) = entry.state { fd } else {
+            let fd = match open_for_events(&entry.watch_path) {
+                Ok(fd) => fd,
+                Err(err) => {
+                    if is_out_of_descriptors(&err) {
+                        w.events.set_error(err_out_of_descriptors(&entry.watch_path, &err));
                     }
-                };
-                let ev = new_kevent(fd, libc::EVFILT_VNODE, libc::EV_ADD | libc::EV_CLEAR | libc::EV_ENABLE, vnodeFflags);
-                if kevent_register(self.kq.load(Ordering::SeqCst), &ev).is_err() {
-                    close_fd(fd);
                     return false;
                 }
-                st.set_entry_state(map_id, path, Some(fd));
-                st.fd_to_entry.insert(fd, (map_id, path.to_string()));
-                fd
+            };
+            let ev = new_kevent(fd, libc::EVFILT_VNODE, libc::EV_ADD | libc::EV_CLEAR | libc::EV_ENABLE, vnodeFflags);
+            if kevent_register(self.kq.load(Ordering::SeqCst), &ev).is_err() {
+                close_fd(fd);
+                return false;
             }
+            st.set_entry_state(map_id, path, Some(fd));
+            st.fd_to_entry.insert(fd, (map_id, path.to_string()));
+            fd
         };
         let sub = kqueueSubscription { id: self.next_id(), dir_watch: Arc::clone(w), path: path.to_string(), entries: map_id, fd };
         st.subs_by_path.entry(path.to_string()).or_default().push(sub);
@@ -494,17 +491,14 @@ impl kqueueBackend {
             let watch_path = base_entry.watch_path.clone();
             let watch_dir_start = format!("{watch_path}/");
 
-            let snapshot = match snapshots.get(&watch_path) {
-                Some(s) => Arc::clone(s),
-                None => {
-                    let Ok(disk_entries) = read_entries(&watch_path) else {
-                        continue;
-                    };
-                    let current_display_paths = disk_entries.iter().map(|(name, _)| format!("{dir_start}{name}")).collect();
-                    let s = Arc::new(diskSnapshot { entries: disk_entries, current_display_paths });
-                    snapshots.insert(watch_path.clone(), Arc::clone(&s));
-                    s
-                }
+            let snapshot = if let Some(s) = snapshots.get(&watch_path) { Arc::clone(s) } else {
+                let Ok(disk_entries) = read_entries(&watch_path) else {
+                    continue;
+                };
+                let current_display_paths = disk_entries.iter().map(|(name, _)| format!("{dir_start}{name}")).collect();
+                let s = Arc::new(diskSnapshot { entries: disk_entries, current_display_paths });
+                snapshots.insert(watch_path.clone(), Arc::clone(&s));
+                s
             };
 
             let map_id = sub.entries;

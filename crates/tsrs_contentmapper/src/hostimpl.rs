@@ -937,6 +937,7 @@ struct stderrLogger {
 
 impl stderrLogger {
     // hostimpl.go:426
+    #[expect(clippy::unnecessary_wraps, reason = "The logger adapter shares the fallible Write interface used by the content mapper host.")]
     fn write(&self, data: &[u8]) -> io::Result<usize> {
         let mut pending = lock(&self.mu);
         pending.extend_from_slice(data);

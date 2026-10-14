@@ -112,11 +112,10 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
         Kind::Identifier => {
             return evaluate_entity(host, expr, location);
         }
-        Kind::ElementAccessExpression | Kind::PropertyAccessExpression => {
-            if ast::is_entity_name_expression(expr.expression().unwrap()) {
+        Kind::ElementAccessExpression | Kind::PropertyAccessExpression
+            if ast::is_entity_name_expression(expr.expression().unwrap()) => {
                 return evaluate_entity(host, expr, location);
             }
-        }
         _ => {}
     }
     Result { value: None, is_syntactically_string, resolved_other_files, has_external_references }

@@ -101,6 +101,7 @@ enum typePrintMode {
 }
 
 // codeactions_fixmissingtypeannotation.go:88
+#[expect(clippy::unnecessary_wraps, reason = "CodeFixRegistration callbacks share a fallible result so the dispatcher propagates errors from other fixes.")]
 fn get_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> Result<Vec<CodeAction>, lsproto::Error> {
     let mut ch = fix_context.program.get_type_checker_for_file(ctx, fix_context.source_file);
 
@@ -140,6 +141,7 @@ fn get_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeFixCo
 }
 
 // codeactions_fixmissingtypeannotation.go:128
+#[expect(clippy::unnecessary_wraps, reason = "CodeFixRegistration callbacks share a fallible result so the dispatcher propagates errors from other fixes.")]
 fn get_all_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> Result<Option<CombinedCodeActions>, lsproto::Error> {
     let all_diags = get_all_diagnostics(ctx, fix_context.program, fix_context.source_file);
 
@@ -833,7 +835,7 @@ impl isolatedDeclarationsFixer<'_> {
 
         let enclosing_decl = ast::find_ancestor(node, ast::is_declaration).unwrap_or(self.source_file.as_node());
 
-        let flags = declaration_emit_node_builder_flags() | self.get_extra_flags(node, t);
+        let flags = declaration_emit_node_builder_flags() | Self::get_extra_flags(node, t);
 
         // For parameters that require adding implicit undefined, add it to the type
         if ast::is_parameter_declaration(node) && self.checker.requires_adding_implicit_undefined(node) {
@@ -845,7 +847,7 @@ impl isolatedDeclarationsFixer<'_> {
     }
 
     // codeactions_fixmissingtypeannotation.go:922
-    fn get_extra_flags(&self, node: P<Node>, t: P<Type>) -> Flags {
+    fn get_extra_flags(node: P<Node>, t: P<Type>) -> Flags {
         if (ast::is_variable_declaration(node) || (ast::is_property_declaration(node) && ast::has_syntactic_modifier(node, ModifierFlags::Static | ModifierFlags::Readonly)))
             && t.flags().intersects(TypeFlags::UniqueESSymbol)
         {

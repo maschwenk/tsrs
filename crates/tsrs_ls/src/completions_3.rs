@@ -90,23 +90,22 @@ pub(crate) fn get_contextual_type(
                 return get_contextual_type_for_conditional_expression(parent, position, file, type_checker);
             }
         }
-        Kind::CommaToken => {
+        Kind::CommaToken
             // When completing after `,` in an array literal (e.g., `[x, /*here*/]`),
             // we should provide contextual type for the element after the comma.
-            if ast::is_array_literal_expression(parent) {
+            if ast::is_array_literal_expression(parent) => {
                 let contextual_array_type = type_checker.get_contextual_type_exported(parent, ContextFlags::None);
                 if contextual_array_type.is_some() {
                     return type_checker.get_contextual_type_for_array_literal_at_position(contextual_array_type, parent, position);
                 }
                 return None;
             }
-        }
         _ => {}
     }
     // Default case: see if we're in an argument position.
     let arg_info = get_argument_info_for_completions(previous_token, position, file, type_checker);
     if let Some(arg_info) = arg_info {
-        type_checker.get_contextual_type_for_argument_at_index_exported(arg_info.invocation, arg_info.argument_index)
+        Some(type_checker.get_contextual_type_for_argument_at_index_exported(arg_info.invocation, arg_info.argument_index))
     } else if is_equality_operator_kind(previous_token.kind()) && ast::is_binary_expression(parent) && is_equality_operator_kind(parent.as_binary_expression().operator_token.kind()) {
         // completion at `x ===/**/`
         Some(type_checker.get_type_at_location(parent.as_binary_expression().left))
@@ -666,7 +665,6 @@ pub(crate) fn get_contextual_keywords(
 impl LanguageService {
     // completions.go:4029
     pub(crate) fn get_js_completion_entries(
-        &self,
         _ctx: &Context,
         file: P<SourceFile>,
         position: u32,
@@ -940,11 +938,10 @@ pub(crate) fn try_get_type_literal_node(node: Option<P<Node>>) -> Option<P<Node>
                 return Some(parent);
             }
         }
-        Kind::SemicolonToken | Kind::CommaToken | Kind::Identifier => {
-            if parent.kind() == Kind::PropertySignature && ast::is_type_literal_node(parent.parent().unwrap()) {
+        Kind::SemicolonToken | Kind::CommaToken | Kind::Identifier
+            if parent.kind() == Kind::PropertySignature && ast::is_type_literal_node(parent.parent().unwrap()) => {
                 return parent.parent();
             }
-        }
         _ => {}
     }
 
@@ -1025,24 +1022,23 @@ pub(crate) fn try_get_object_like_completion_container(
         Kind::Identifier => {
             if context_token.text() == "async" && ast::is_shorthand_property_assignment(parent) {
                 return parent.parent();
-            } else {
-                if ast::is_object_literal_expression(parent.parent().unwrap())
-                    && (ast::is_spread_assignment(parent)
-                        || ast::is_shorthand_property_assignment(parent)
-                            && get_line_of_position(
-                                file,
-                                context_token
-                                    .end()
-                                    .expect_source("parsed tokens have source positions"),
-                            ) != get_line_of_position(file, position))
-                {
-                    return parent.parent();
-                }
-                let ancestor_node = ast::find_ancestor(parent, ast::is_property_assignment);
-                if let Some(ancestor_node) = ancestor_node {
-                    if lsutil::get_last_token(Some(ancestor_node), file) == Some(context_token) && ast::is_object_literal_expression(ancestor_node.parent().unwrap()) {
-                        return ancestor_node.parent();
-                    }
+            }
+            if ast::is_object_literal_expression(parent.parent().unwrap())
+                && (ast::is_spread_assignment(parent)
+                    || ast::is_shorthand_property_assignment(parent)
+                        && get_line_of_position(
+                            file,
+                            context_token
+                                .end()
+                                .expect_source("parsed tokens have source positions"),
+                        ) != get_line_of_position(file, position))
+            {
+                return parent.parent();
+            }
+            let ancestor_node = ast::find_ancestor(parent, ast::is_property_assignment);
+            if let Some(ancestor_node) = ancestor_node {
+                if lsutil::get_last_token(Some(ancestor_node), file) == Some(context_token) && ast::is_object_literal_expression(ancestor_node.parent().unwrap()) {
+                    return ancestor_node.parent();
                 }
             }
         }
@@ -1686,7 +1682,7 @@ impl LanguageService {
         }
         let default_commit_characters = get_default_commit_characters(false /*isNewIdentifierLocation*/);
 
-        let lsp_item = self.create_lsp_completion_item(
+        let lsp_item = Self::create_lsp_completion_item(
             ctx,
             &full_closing_tag, /*name*/
             "",                /*insertText*/
@@ -1718,7 +1714,6 @@ impl LanguageService {
     // completions.go:5023
     #[expect(clippy::fn_params_excessive_bools, reason = "The boolean parameters preserve the upstream Go function signature.")]
     pub(crate) fn create_lsp_completion_item(
-        &self,
         _ctx: &Context,
         name: &str,
         insert_text: &str,
@@ -1831,7 +1826,7 @@ impl LanguageService {
         position: u32,
         optional_replacement_span: Option<lsproto::Range>,
     ) -> Option<CompletionList> {
-        let mut items = self.get_label_statement_completions(ctx, node, file, position);
+        let mut items = Self::get_label_statement_completions(ctx, node, file, position);
         if items.is_empty() {
             return None;
         }
@@ -1842,7 +1837,6 @@ impl LanguageService {
 
     // completions.go:5146
     fn get_label_statement_completions(
-        &self,
         ctx: &Context,
         node: P<Node>,
         file: P<SourceFile>,
@@ -1858,7 +1852,7 @@ impl LanguageService {
             if ast::is_labeled_statement(c) {
                 let name = c.label().unwrap().text();
                 if uniques.insert(name) {
-                    let lsp_item = self.create_lsp_completion_item(
+                    let lsp_item = Self::create_lsp_completion_item(
                         ctx,
                         name,
                         "", /*insertText*/

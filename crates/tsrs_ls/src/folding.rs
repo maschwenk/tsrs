@@ -16,6 +16,7 @@ use crate::utilities::is_in_comment;
 
 impl LanguageService {
     // folding.go:22
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_folding_range(&self, ctx: &Context, document_uri: &lsproto::DocumentUri) -> Result<lsproto::FoldingRangeResponse, lsproto::Error> {
         let (_, source_file) = self.get_program_and_file(document_uri);
         let mut projections = vec![source_file];

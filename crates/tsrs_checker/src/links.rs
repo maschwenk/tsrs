@@ -725,24 +725,21 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
         }
         let block = *self.blocks[b].get_or_insert_with(|| P::new(std::array::from_fn(|_| Cell::new(None))));
         let cell = &block.get()[(id >> INLINE_GROUP_SHIFT) as usize & (INLINE_BLOCK_GROUPS - 1)];
-        let group = match cell.get() {
-            Some(group) => group,
-            None => {
-                let group: P<InlineGroup<V>> = P::new(std::array::from_fn(|_| V::default()));
-                if let Some(p) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN) {
-                    let first = id & !(INLINE_GROUP as u32 - 1);
-                    if let Some(frozen) = p.narrow(first) {
-                        let frozen_group: &'static [V] = std::slice::from_ref(frozen);
-                        // SAFETY: `frozen` is the first value of the parent's group array of INLINE_GROUP values.
-                        let frozen_group = unsafe { std::slice::from_raw_parts(frozen_group.as_ptr(), INLINE_GROUP) };
-                        for (dst, src) in group.get().iter().zip(frozen_group) {
-                            dst.copy_link_from(src);
-                        }
+        let group = if let Some(group) = cell.get() { group } else {
+            let group: P<InlineGroup<V>> = P::new(std::array::from_fn(|_| V::default()));
+            if let Some(p) = self.parent.filter(|_| tsrs_core::sharedgraph::COMPILED_IN) {
+                let first = id & !(INLINE_GROUP as u32 - 1);
+                if let Some(frozen) = p.narrow(first) {
+                    let frozen_group: &'static [V] = std::slice::from_ref(frozen);
+                    // SAFETY: `frozen` is the first value of the parent's group array of INLINE_GROUP values.
+                    let frozen_group = unsafe { std::slice::from_raw_parts(frozen_group.as_ptr(), INLINE_GROUP) };
+                    for (dst, src) in group.get().iter().zip(frozen_group) {
+                        dst.copy_link_from(src);
                     }
                 }
-                cell.set(Some(group));
-                group
             }
+            cell.set(Some(group));
+            group
         };
         &group.get()[id as usize & (INLINE_GROUP - 1)]
     }

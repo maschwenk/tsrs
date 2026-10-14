@@ -379,7 +379,7 @@ function argFor(m: MemberInfo, vars: Map<MemberInfo, string>): string {
 function genCreateStringNode() {
     w("impl Decoder<'_> {");
     w("    /// Go `createStringNode`.");
-    w("    pub(crate) fn create_string_node(&mut self, kind: Kind, data: u32, common_data: u32) -> Result<P<Node>, DecodeError> {");
+    w("    pub(crate) fn create_string_node(&self, kind: Kind, data: u32, common_data: u32) -> Result<P<Node>, DecodeError> {");
     w("        let text = self.get_string(data & NODE_DATA_STRING_INDEX_MASK)?;");
     w("        let f = &self.factory;");
     w("        let _ = common_data;");
@@ -407,7 +407,7 @@ function genCreateStringNode() {
 
 function genCreateExtendedNode() {
     w("    /// Go `createExtendedNode`: dispatches to the hand-written `decode_extended_data_*` functions.");
-    w("    pub(crate) fn create_extended_node(&mut self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {");
+    w("    pub(crate) fn create_extended_node(&self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {");
     w("        match kind {");
     for (const node of api.nodes()) {
         const info = analyzeNode(node);
@@ -438,7 +438,7 @@ function genCreateChildrenNode() {
     }
 
     w("    /// Go `createChildrenNode`.");
-    w("    pub(crate) fn create_children_node(&mut self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {");
+    w("    pub(crate) fn create_children_node(&self, kind: Kind, data: u32, child_indices: &[usize], common_data: u32) -> Result<P<Node>, DecodeError> {");
     w("        let mask = (data & NODE_DATA_CHILD_MASK) as u8;");
     w("        let _ = (mask, common_data);");
     w("        let f = self.factory.clone();");
@@ -460,9 +460,9 @@ function genCreateChildrenNode() {
             // The pinned Go decoder fills `d.allocNodeSlice(n)` (a zero-length slice) by index, so it panics with
             // "index out of range [0] with length 0" for any non-empty raw list; reproduce that failure.
             if (ct === "rawNodeList") pre.push(`if !child_indices.is_empty() { return Err(DecodeError::GoDecoderPanic("runtime error: index out of range [0] with length 0".to_string())); }`, `let ${v}: &'static [P<Node>] = &[];`);
-            else if (ct === "nodeList") pre.push(hasCommonData ? `let ${v} = from_list(self.list_at(child_indices.first().copied().unwrap_or(0))?)?;` : `let ${v} = from_list(self.single_node_list_child(child_indices)?)?;`);
-            else if (ct === "modifierList") pre.push(`let ${v} = self.modifier_list_at(child_indices.first().copied().unwrap_or(0))?;`);
-            else pre.push(`let ${v} = from_node(self.single_child(child_indices)?)?;`);
+            else if (ct === "nodeList") pre.push(hasCommonData ? `let ${v} = from_list(self.list_at(child_indices.first().copied().unwrap_or(0)))?;` : `let ${v} = from_list(self.single_node_list_child(child_indices))?;`);
+            else if (ct === "modifierList") pre.push(`let ${v} = self.modifier_list_at(child_indices.first().copied().unwrap_or(0));`);
+            else pre.push(`let ${v} = from_node(self.single_child(child_indices))?;`);
             childVars.set(cp, v);
         }
         else if (info.childProps.length > 1) {
@@ -470,10 +470,10 @@ function genCreateChildrenNode() {
             info.childProps.forEach((m, i) => {
                 const ct = childType(m);
                 const v = ident(m.goParamName());
-                if (ct === "modifierList") pre.push(`let ${v} = self.modifier_list_at(it.next_if(mask, ${i}))?;`);
-                else if (ct === "rawNodeList") pre.push(`let ${v} = self.list_at(it.next_if(mask, ${i}))?.map_or(&[][..], |l| l.nodes());`);
-                else if (ct === "nodeList") pre.push(`let ${v} = from_list(self.list_at(it.next_if(mask, ${i}))?)?;`);
-                else pre.push(`let ${v} = from_node(self.node_at_opt(it.next_if(mask, ${i}))?)?;`);
+                if (ct === "modifierList") pre.push(`let ${v} = self.modifier_list_at(it.next_if(mask, ${i}));`);
+                else if (ct === "rawNodeList") pre.push(`let ${v} = self.list_at(it.next_if(mask, ${i})).map_or(&[][..], |l| l.nodes());`);
+                else if (ct === "nodeList") pre.push(`let ${v} = from_list(self.list_at(it.next_if(mask, ${i})))?;`);
+                else pre.push(`let ${v} = from_node(self.node_at_opt(it.next_if(mask, ${i})))?;`);
                 childVars.set(m, v);
             });
         }

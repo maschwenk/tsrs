@@ -70,7 +70,7 @@ impl Checker {
             return Vec::new();
         }
         let args = node.arguments();
-        let spread_index = self.get_spread_argument_index(args);
+        let spread_index = Self::get_spread_argument_index(args);
         if let Some(spread_index) = spread_index {
             // Create synthetic arguments from spreads of tuple types.
             let mut effective_args = args[..spread_index].to_vec();
@@ -111,7 +111,7 @@ impl Checker {
     }
 
     // checker.go:30597
-    pub(crate) fn get_spread_argument_index(&mut self, args: &[P<Node>]) -> Option<usize> {
+    pub(crate) fn get_spread_argument_index(args: &[P<Node>]) -> Option<usize> {
         find_index(args, |&arg| is_spread_argument(arg))
     }
 }
@@ -129,7 +129,7 @@ pub(crate) fn synthetic_expression_type(node: P<Node>) -> P<Type> {
 
 impl Checker {
     // checker.go:30605
-    pub(crate) fn create_synthetic_expression(&mut self, parent: P<Node>, t: P<Type>, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
+    pub(crate) fn create_synthetic_expression(&self, parent: P<Node>, t: P<Type>, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
         let result = self.factory.new_synthetic_expression(alloc(t), is_spread, tuple_name_source);
         result.set_loc(parent.loc());
         result.set_parent(Some(parent));
@@ -872,7 +872,7 @@ impl Checker {
 
     // checker.go:31160
     /// tsrs: appends to `types` in place (Go returns the appended slice).
-    pub(crate) fn append_contextual_property_type_constituent(&mut self, types: &mut Vec<P<Type>>, t: Option<P<Type>>) {
+    pub(crate) fn append_contextual_property_type_constituent(&self, types: &mut Vec<P<Type>>, t: Option<P<Type>>) {
         // any doesn't provide any contextual information but could spoil the overall result by nullifying contextual information
         // provided by other intersection constituents so it gets replaced with `unknown` as `T & unknown` is just `T` and all
         // types computed based on the contextual information provided by other constituens are still assignable to any
@@ -910,9 +910,8 @@ impl Checker {
                     return Some(self.discriminate_contextual_type_by_object_members(node, apparent_type));
                 } else if apparent_type.flags().intersects(TypeFlags::Union) && ast::is_jsx_attributes(node) {
                     return Some(self.discriminate_contextual_type_by_jsx_attributes(node, apparent_type));
-                } else {
-                    return Some(apparent_type);
                 }
+                return Some(apparent_type);
             }
         }
         None
@@ -921,12 +920,12 @@ impl Checker {
 
 impl ObjectLiteralDiscriminator {
     // checker.go:31208
-    pub(crate) fn len(&mut self, _c: &mut Checker) -> usize {
+    pub(crate) fn len(&self, _c: &mut Checker) -> usize {
         self.props.len() + self.members.len()
     }
 
     // checker.go:31212
-    pub(crate) fn name(&mut self, _c: &mut Checker, index: usize) -> &'static str {
+    pub(crate) fn name(&self, _c: &mut Checker, index: usize) -> &'static str {
         if index < self.props.len() {
             return self.props[index].symbol().unwrap().name();
         }
@@ -934,7 +933,7 @@ impl ObjectLiteralDiscriminator {
     }
 
     // checker.go:31219
-    pub(crate) fn matches(&mut self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
+    pub(crate) fn matches(&self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
         let prop_type;
         if index < self.props.len() {
             let prop = self.props[index];
@@ -963,35 +962,32 @@ impl Checker {
             return discriminated;
         }
         let discriminated = self.get_matching_union_constituent_for_object_literal(contextual_type, node);
-        let discriminated = match discriminated {
-            Some(discriminated) => discriminated,
-            None => {
-                let mut discriminant_properties = Vec::new();
-                discriminant_properties.extend(node.properties().iter().filter_map(|&p| {
-                    let keep = 'keep: {
-                        let Some(symbol) = p.symbol() else {
-                            break 'keep false;
-                        };
-                        if ast::is_property_assignment(p) {
-                            break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap())
-                                && self.is_discriminant_property(Some(contextual_type), symbol.name());
-                        }
-                        if ast::is_shorthand_property_assignment(p) {
-                            break 'keep self.is_discriminant_property(Some(contextual_type), symbol.name());
-                        }
-                        false
+        let discriminated = if let Some(discriminated) = discriminated { discriminated } else {
+            let mut discriminant_properties = Vec::new();
+            discriminant_properties.extend(node.properties().iter().filter_map(|&p| {
+                let keep = 'keep: {
+                    let Some(symbol) = p.symbol() else {
+                        break 'keep false;
                     };
-                    if keep { Some(p) } else { None }
-                }));
-                let mut discriminant_members = Vec::new();
-                discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter(|&s| {
-                    let node_members = node.symbol().unwrap().members();
-                    s.flags().intersects(SymbolFlags::Optional)
-                        && node_members.is_none_or(|m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name())
-                }));
-                let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
-                self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator)
-            }
+                    if ast::is_property_assignment(p) {
+                        break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap())
+                            && self.is_discriminant_property(Some(contextual_type), symbol.name());
+                    }
+                    if ast::is_shorthand_property_assignment(p) {
+                        break 'keep self.is_discriminant_property(Some(contextual_type), symbol.name());
+                    }
+                    false
+                };
+                if keep { Some(p) } else { None }
+            }));
+            let mut discriminant_members = Vec::new();
+            discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter(|&s| {
+                let node_members = node.symbol().unwrap().members();
+                s.flags().intersects(SymbolFlags::Optional)
+                    && node_members.is_none_or(|m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name())
+            }));
+            let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
+            self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator)
         };
         self.discriminated_contextual_types.insert(key, discriminated);
         discriminated
@@ -1121,7 +1117,7 @@ impl Checker {
 
     // checker.go:31375
     pub(crate) fn find_contextual_node(
-        &mut self,
+        &self,
         node: P<Node>,
         include_caches: bool,
     ) -> Option<usize> {
@@ -1220,7 +1216,7 @@ impl Checker {
     }
 
     // checker.go:31454
-    pub(crate) fn get_inference_context(&mut self, node: P<Node>) -> Option<P<InferenceContext>> {
+    pub(crate) fn get_inference_context(&self, node: P<Node>) -> Option<P<InferenceContext>> {
         if let Some(result) = self
             .inference_context_infos
             .iter()
@@ -1355,15 +1351,13 @@ impl Checker {
         } else if flags.intersects(TypeFlags::ESSymbolLike) {
             if self.strict_null_checks {
                 return TypeFacts::SymbolStrictFacts;
-            } else {
-                return TypeFacts::SymbolFacts;
             }
+            return TypeFacts::SymbolFacts;
         } else if flags.intersects(TypeFlags::NonPrimitive) {
             if self.strict_null_checks {
                 return TypeFacts::ObjectStrictFacts;
-            } else {
-                return TypeFacts::ObjectFacts;
             }
+            return TypeFacts::ObjectFacts;
         } else if flags.intersects(TypeFlags::Never) {
             return TypeFacts::None;
         } else if flags.intersects(TypeFlags::Union) {
@@ -1480,7 +1474,7 @@ impl Checker {
     }
 
     // checker.go:31690
-    pub(crate) fn recombine_unknown_type(&mut self, t: P<Type>) -> P<Type> {
+    pub(crate) fn recombine_unknown_type(&self, t: P<Type>) -> P<Type> {
         if t == self.unknown_union_type {
             return self.unknown_type;
         }
@@ -1498,7 +1492,7 @@ impl Checker {
     }
 
     // checker.go:31705
-    pub(crate) fn convert_auto_to_any(&mut self, t: P<Type>) -> P<Type> {
+    pub(crate) fn convert_auto_to_any(&self, t: P<Type>) -> P<Type> {
         if t == self.auto_type {
             return self.any_type;
         } else if t == self.auto_array_type {
@@ -1792,7 +1786,7 @@ impl Checker {
     }
 
     // checker.go:31973
-    pub(crate) fn get_target_type(&mut self, t: P<Type>) -> Option<P<Type>> {
+    pub(crate) fn get_target_type(t: P<Type>) -> Option<P<Type>> {
         if t.object_flags().intersects(ObjectFlags::Reference) {
             return t.as_type_reference().target.get();
         }
@@ -1802,7 +1796,7 @@ impl Checker {
     // checker.go:31980
     pub(crate) fn get_narrowable_type_for_reference(&mut self, t: P<Type>, reference: P<Node>, check_mode: CheckMode) -> P<Type> {
         let mut t = t;
-        if self.is_no_infer_type(t) {
+        if Self::is_no_infer_type(t) {
             t = t.as_substitution_type().base_type.get().unwrap();
         }
         // When the type of a reference is or contains an instantiable type with a union type constraint, and
@@ -1825,7 +1819,7 @@ impl Checker {
     /// answer read the reference's position, which the flow memo's key does not have.
     pub(crate) fn get_narrowable_type_for_flow_reference(&mut self, t: P<Type>, reference: P<Node>) -> (P<Type>, bool) {
         let mut t = t;
-        if self.is_no_infer_type(t) {
+        if Self::is_no_infer_type(t) {
             t = t.as_substitution_type().base_type.get().unwrap();
         }
         let position_read = some_type(self, t, super::checker::Checker::is_generic_type_with_union_constraint);
@@ -2025,7 +2019,7 @@ impl Checker {
                 }
                 // fallthrough (case ast.KindThisKeyword)
                 if node.kind() != Kind::ThisType {
-                    let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
+                    let container = Self::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
                     if ast::is_function_like(container) {
                         let sig = self.get_signature_from_declaration(container.unwrap());
                         if sig.this_parameter().is_some() {

@@ -32,6 +32,7 @@ pub struct asyncTransformer {
 }
 
 // async.go:37
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_async_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(asyncTransformer {
         base: Transformer::default(),
@@ -343,6 +344,7 @@ impl asyncTransformer {
     }
 
     // async.go:304
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_constructor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
         let modifiers = self.visitor().visit_modifiers(node.modifiers());
@@ -366,6 +368,7 @@ impl asyncTransformer {
     // This function will be called when one of the following conditions are met:
     // - The node is marked as async
     // async.go:325
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_method_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
@@ -398,6 +401,7 @@ impl asyncTransformer {
     }
 
     // async.go:358
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_get_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
         let modifiers = self.visitor().visit_modifiers(node.modifiers());
@@ -418,6 +422,7 @@ impl asyncTransformer {
     }
 
     // async.go:376
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_set_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
         let modifiers = self.visitor().visit_modifiers(node.modifiers());
@@ -442,6 +447,7 @@ impl asyncTransformer {
     // This function will be called when one of the following conditions are met:
     // - The node is marked async
     // async.go:398
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_function_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
@@ -478,6 +484,7 @@ impl asyncTransformer {
     // This function will be called when one of the following conditions are met:
     // - The node is marked async
     // async.go:435
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_function_expression(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
@@ -530,6 +537,7 @@ impl asyncTransformer {
     }
 
     // async.go:472 (body of visitArrowFunction after the deferred restore is set up)
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_arrow_function_worker(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
 
@@ -962,11 +970,10 @@ pub(crate) fn assignment_target_contains_super_property(node: P<Node>) -> bool {
                             return true;
                         }
                     }
-                    Kind::SpreadAssignment => {
-                        if assignment_target_contains_super_property(prop.as_spread_assignment().expression) {
+                    Kind::SpreadAssignment
+                        if assignment_target_contains_super_property(prop.as_spread_assignment().expression) => {
                             return true;
                         }
-                    }
                     _ => {}
                 }
 

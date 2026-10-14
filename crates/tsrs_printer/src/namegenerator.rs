@@ -126,15 +126,14 @@ impl NameGenerator {
                     // Node names generate unique names based on their original node
                     // and are cached based on that node's id.
                     return self.generate_name_for_node_cached(context.get_node_for_generated_name(name), is_private_identifier(name), auto_generate.flags, auto_generate.prefix, auto_generate.suffix);
-                } else {
-                    // Auto, Loop, and Unique names are cached based on their unique autoGenerateId.
-                    if let Some(auto_generated_name) = self.auto_generated_id_to_generated_name.as_ref().and_then(|m| m.get(&auto_generate.id)) {
-                        return auto_generated_name.clone();
-                    }
-                    let auto_generated_name = self.make_name(name);
-                    self.auto_generated_id_to_generated_name.get_or_insert_with(FxHashMap::default).insert(auto_generate.id, auto_generated_name.clone());
-                    return auto_generated_name;
                 }
+                // Auto, Loop, and Unique names are cached based on their unique autoGenerateId.
+                if let Some(auto_generated_name) = self.auto_generated_id_to_generated_name.as_ref().and_then(|m| m.get(&auto_generate.id)) {
+                    return auto_generated_name.clone();
+                }
+                let auto_generated_name = self.make_name(name);
+                self.auto_generated_id_to_generated_name.get_or_insert_with(FxHashMap::default).insert(auto_generate.id, auto_generated_name.clone());
+                return auto_generated_name;
             }
         }
         self.call_get_text_of_node(name)

@@ -493,6 +493,7 @@ impl<Params, Resp> RequestInfo<Params, Resp> {
 
 impl<Params: Json, Resp: Json> RequestInfo<Params, Resp> {
     // lsp.go:194. `result` is a response's raw result (None when the response had none).
+    #[expect(clippy::unused_self, reason = "RequestInfo exposes typed request and response codecs through the same instance API.")]
     pub fn unmarshal_result(&self, result: Option<&Value>) -> Result<Resp, JsonError> {
         let Some(raw) = result else {
             return Err(JsonError::plain("unexpected EOF"));

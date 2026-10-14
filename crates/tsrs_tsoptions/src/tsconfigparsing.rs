@@ -429,9 +429,8 @@ pub(crate) fn is_compiler_options_value(option: Option<&CommandLineOption>, valu
         if option.kind == CommandLineOptionKind::ListOrElement {
             if value.is_slice() {
                 return true;
-            } else {
-                return is_compiler_options_value(option.elements(), value);
             }
+            return is_compiler_options_value(option.elements(), value);
         }
         if option.kind == CommandLineOptionKind::String {
             return value.is_string();
@@ -562,17 +561,16 @@ pub(crate) fn convert_json_option(
                 CompilerOptionsValue::Null,
                 vec![new_compiler_diagnostic(&diagnostics::Option_0_can_only_be_specified_on_command_line, &[&opt.name])],
             );
-        } else {
-            return (
-                CompilerOptionsValue::Null,
-                vec![create_diagnostic_for_node_in_source_file_or_compiler_diagnostic(
-                    source_file,
-                    node_value,
-                    &diagnostics::Option_0_can_only_be_specified_on_command_line,
-                    &[&opt.name],
-                )],
-            );
         }
+        return (
+            CompilerOptionsValue::Null,
+            vec![create_diagnostic_for_node_in_source_file_or_compiler_diagnostic(
+                source_file,
+                node_value,
+                &diagnostics::Option_0_can_only_be_specified_on_command_line,
+                &[&opt.name],
+            )],
+        );
     }
     if is_compiler_options_value(Some(opt), &value) {
         match opt.kind {
@@ -583,9 +581,8 @@ pub(crate) fn convert_json_option(
             CommandLineOptionKind::ListOrElement => {
                 if value.is_slice() {
                     return convert_json_option_of_list_type(opt, value, base_path, property_assignment, value_expression, source_file);
-                } else {
-                    return convert_json_option(opt.elements().unwrap(), value, base_path, property_assignment, value_expression, source_file);
                 }
+                return convert_json_option(opt.elements().unwrap(), value, base_path, property_assignment, value_expression, source_file);
             }
             CommandLineOptionKind::Enum => {
                 if value.is_null() {
@@ -999,9 +996,8 @@ pub(crate) fn convert_to_json(
     let Some(root_expression) = root_expression else {
         if return_value {
             return (CompilerOptionsValue::EmptyStruct, Vec::new());
-        } else {
-            return (CompilerOptionsValue::Null, Vec::new());
         }
+        return (CompilerOptionsValue::Null, Vec::new());
     };
     let root_options = json_conversion_notifier.as_ref().map(|n| n.root_options);
     convert_property_value_to_json(source_file, root_expression, root_options, return_value, json_conversion_notifier)

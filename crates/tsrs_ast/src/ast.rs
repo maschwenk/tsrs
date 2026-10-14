@@ -929,6 +929,7 @@ impl Node {
         }
     }
 
+    #[expect(clippy::unnecessary_wraps, reason = "Node list accessors share an optional-list interface with nullable member, argument and parameter lists.")]
     pub fn statement_list(&self) -> Option<P<NodeList>> {
         match self.kind() {
             Kind::SourceFile => Some(self.as_source_file().statements),
@@ -1408,11 +1409,10 @@ pub fn get_declaration_from_name(name: Option<P<Node>>) -> Option<P<Node>> {
             fallthrough = true;
         }
         Kind::Identifier => fallthrough = true,
-        Kind::PrivateIdentifier => {
-            if is_declaration(parent) && parent.name() == Some(name) {
+        Kind::PrivateIdentifier
+            if is_declaration(parent) && parent.name() == Some(name) => {
                 return Some(parent);
             }
-        }
         _ => {}
     }
     if fallthrough {
@@ -2647,6 +2647,7 @@ impl CommentRange {
 }
 
 impl NodeFactory {
+    #[expect(clippy::unused_self, reason = "The factory keeps the same instance API for node construction, hooks and arena lifecycle operations.")]
     pub fn new_comment_range(
         &self,
         kind: Kind,
@@ -2746,6 +2747,7 @@ pub(crate) fn visit_each_child_jsdoc_parameter_or_property_tag(node: &JSDocParam
 }
 
 impl NodeFactory {
+    #[expect(clippy::unused_self, reason = "The factory keeps the same instance API for node construction, hooks and arena lifecycle operations.")]
     pub fn release_arenas(&self) {}
 }
 

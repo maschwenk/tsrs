@@ -16,7 +16,7 @@ struct InstantiationExpressionState {
 
 fn get_instantiated_signatures(c: &mut Checker, st: &InstantiationExpressionState, signatures: &'static [P<Signature>]) -> Cow<'static, [P<Signature>]> {
     let type_arguments = st.type_arguments;
-    let applicable_signatures = tsrs_core::filter(signatures, |sig| !sig.type_parameters.get().is_empty() && c.has_correct_type_argument_arity(*sig, type_arguments));
+    let applicable_signatures = tsrs_core::filter(signatures, |sig| !sig.type_parameters.get().is_empty() && checker::Checker::has_correct_type_argument_arity(*sig, type_arguments));
     let mapped = tsrs_core::same_map(&applicable_signatures, |sig| {
         let type_argument_types = c.check_type_arguments(*sig, type_arguments, true /*reportErrors*/, None);
         if !type_argument_types.is_empty() {
@@ -45,7 +45,7 @@ fn get_instantiated_type(c: &mut Checker, st: &mut InstantiationExpressionState,
 
 fn get_instantiated_type_part(c: &mut Checker, st: &mut InstantiationExpressionState, has_signatures: &mut bool, has_applicable_signature: &mut bool, t: P<Type>) -> P<Type> {
     if t.flags().intersects(TypeFlags::Object) {
-        let resolved = c.resolve_structured_type_members(t).unwrap();
+        let resolved = c.resolve_structured_type_members(t);
         let call_signatures = get_instantiated_signatures(c, st, resolved.call_signatures());
         let construct_signatures = get_instantiated_signatures(c, st, resolved.construct_signatures());
         *has_signatures = *has_signatures || !resolved.call_signatures().is_empty() || !resolved.construct_signatures().is_empty();
@@ -181,7 +181,7 @@ impl Checker {
     }
 
     // checker.go:10999
-    pub(crate) fn check_meta_property_keyword(&mut self, node: P<Node>) -> P<Type> {
+    pub(crate) fn check_meta_property_keyword(&self, node: P<Node>) -> P<Type> {
         // !!! This is effectively a helper for GetSymbolAtLocation and GetTypeAtLocation
         let _ = node;
         self.error_type
@@ -261,12 +261,11 @@ impl Checker {
                 }
                 _ => {}
             },
-            Kind::BigIntLiteral => {
-                if expr.operator == Kind::MinusToken {
+            Kind::BigIntLiteral
+                if expr.operator == Kind::MinusToken => {
                     let t = self.get_big_int_literal_type(jsnum::new_pseudo_big_int(&jsnum::parse_pseudo_big_int(expr.operand.text()), true /*negative*/));
                     return self.get_fresh_type_of_literal_type(t);
                 }
-            }
             _ => {}
         }
         match expr.operator {
@@ -478,7 +477,7 @@ impl Checker {
             return self.error_type;
         }
         if symbol == self.arguments_symbol {
-            if self.is_in_property_initializer_or_class_static_block(node, true /*ignoreArrowFunctions*/) {
+            if Self::is_in_property_initializer_or_class_static_block(node, true /*ignoreArrowFunctions*/) {
                 self.error(Some(node), &diagnostics::X_arguments_cannot_be_referenced_in_property_initializers_or_class_static_initialization_blocks, &[]);
                 return self.error_type;
             }
@@ -551,7 +550,7 @@ impl Checker {
                 return t;
             }
         } else if is_alias {
-            declaration = self.get_declaration_of_alias_symbol(symbol);
+            declaration = Self::get_declaration_of_alias_symbol(symbol);
         } else {
             return t;
         }
@@ -563,13 +562,13 @@ impl Checker {
         // or parameter. The flow container is the innermost function starting with which we analyze the control
         // flow graph to determine the control flow based type.
         let is_parameter = ast::get_root_declaration(declaration).kind() == Kind::Parameter;
-        let declaration_container = self.get_control_flow_container(declaration);
-        let mut flow_container = self.get_control_flow_container(node);
+        let declaration_container = Self::get_control_flow_container(declaration);
+        let mut flow_container = Self::get_control_flow_container(node);
         let is_outer_variable = flow_container != declaration_container;
         let is_spread_destructuring_assignment_target = node.parent().is_some()
             && node.parent().unwrap().parent().is_some()
             && ast::is_spread_assignment(node.parent().unwrap())
-            && self.is_destructuring_assignment_target(node.parent().unwrap().parent().unwrap());
+            && Self::is_destructuring_assignment_target(node.parent().unwrap().parent().unwrap());
         let is_module_exports = symbol.flags().intersects(SymbolFlags::ModuleExports);
         let type_is_automatic = t == self.auto_type || t == self.auto_array_type;
         let is_automatic_type_in_non_null = type_is_automatic && node.parent().unwrap().kind() == Kind::NonNullExpression;
@@ -580,9 +579,9 @@ impl Checker {
         while flow_container != declaration_container
             && (ast::is_function_expression_or_arrow_function(flow_container.unwrap()) || ast::is_object_literal_or_class_expression_method_or_accessor(flow_container.unwrap()))
             && (self.is_constant_variable(local_or_export_symbol) && t != self.auto_array_type
-                || self.is_parameter_or_mutable_local_variable(local_or_export_symbol) && self.is_past_last_assignment(local_or_export_symbol, Some(node)))
+                || Self::is_parameter_or_mutable_local_variable(local_or_export_symbol) && self.is_past_last_assignment(local_or_export_symbol, Some(node)))
         {
-            flow_container = self.get_control_flow_container(flow_container.unwrap());
+            flow_container = Self::get_control_flow_container(flow_container.unwrap());
         }
         // We only look for uninitialized variables in strict null checking mode, and only when we can analyze
         // the entire control flow graph from the variable's declaration (i.e. when the flow container and
@@ -593,7 +592,7 @@ impl Checker {
                     && !ast::is_for_in_or_of_statement(imm.parent().unwrap().parent())
                     && imm.initializer().is_none()
                     && imm.as_variable_declaration().exclamation_token().is_none()
-                    && self.is_mutable_local_variable_declaration(imm)
+                    && Self::is_mutable_local_variable_declaration(imm)
                     && !self.is_symbol_assigned_definitely(symbol)
             }
             None => false,
@@ -603,13 +602,13 @@ impl Checker {
             || (is_outer_variable && !is_never_initialized)
             || is_spread_destructuring_assignment_target
             || is_module_exports
-            || self.is_same_scoped_binding_element(node, declaration)
+            || Self::is_same_scoped_binding_element(node, declaration)
             || t != self.auto_type
                 && t != self.auto_array_type
                 && (!self.strict_null_checks
                     || t.flags().intersects(TypeFlags::AnyOrUnknown | TypeFlags::Void)
                     || crate::is_in_type_query(node)
-                    || self.is_in_ambient_or_type_node(node)
+                    || Self::is_in_ambient_or_type_node(node)
                     || node.parent().unwrap().kind() == Kind::ExportSpecifier)
             || ast::is_non_null_expression(node.parent().unwrap())
             || ast::is_variable_declaration(declaration) && declaration.as_variable_declaration().exclamation_token().is_some()
@@ -646,7 +645,7 @@ impl Checker {
                 }
                 return self.convert_auto_to_any(flow_type);
             }
-        } else if !assume_initialized && !self.contains_undefined_type(t) && self.contains_undefined_type(flow_type) {
+        } else if !assume_initialized && !Self::contains_undefined_type(t) && Self::contains_undefined_type(flow_type) {
             let symbol_string = self.symbol_to_string(symbol);
             self.error(Some(node), &diagnostics::Variable_0_is_used_before_being_assigned, &[&symbol_string]);
             // Return the declared type to reduce follow-on errors
@@ -660,7 +659,7 @@ impl Checker {
     }
 
     // checker.go:11402
-    pub(crate) fn is_same_scoped_binding_element(&mut self, node: P<Node>, declaration: P<Node>) -> bool {
+    pub(crate) fn is_same_scoped_binding_element(node: P<Node>, declaration: P<Node>) -> bool {
         if ast::is_binding_element(declaration) {
             let binding_element = ast::find_ancestor(node, ast::is_binding_element);
             return binding_element.is_some_and(|b| ast::get_root_declaration(b) == ast::get_root_declaration(declaration));
@@ -708,7 +707,7 @@ impl Checker {
     }
 
     // checker.go:11438
-    pub(crate) fn is_in_ambient_or_type_node(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_in_ambient_or_type_node(node: P<Node>) -> bool {
         node.flags().intersects(NodeFlags::Ambient)
             || ast::find_ancestor(node, |n| ast::is_interface_declaration(n) || ast::is_type_alias_declaration(n) || ast::is_js_type_alias_declaration(n) || ast::is_type_literal_node(n)).is_some()
     }
@@ -737,7 +736,7 @@ impl Checker {
         let parent_symbol = self.get_resolved_symbol_or_nil(left);
         let assignment_kind = get_assignment_target_kind(node);
         let mut widened_type = left_type;
-        if assignment_kind != AssignmentKind::None || self.is_method_access_for_call(node) {
+        if assignment_kind != AssignmentKind::None || Self::is_method_access_for_call(node) {
             widened_type = self.get_widened_type(left_type);
         }
         let apparent_type = self.get_apparent_type(widened_type);
@@ -755,7 +754,7 @@ impl Checker {
                     self.check_external_emit_helpers(node, ExternalEmitHelpers::ClassPrivateFieldGet);
                 }
             }
-            let lexically_scoped_symbol = self.lookup_symbol_for_private_identifier_declaration(right.text(), right);
+            let lexically_scoped_symbol = Self::lookup_symbol_for_private_identifier_declaration(right.text(), right);
             if assignment_kind != AssignmentKind::None
                 && lexically_scoped_symbol.is_some_and(|s| s.value_declaration().is_some_and(ast::is_method_declaration))
             {
@@ -914,8 +913,8 @@ impl Checker {
             if let Some(p) = prop {
                 if let Some(declaration) = p.value_declaration() {
                     if self.strict_property_initialization && ast::is_access_expression(node) && node.expression().unwrap().kind() == Kind::ThisKeyword {
-                        if self.is_property_without_initializer(declaration) && !ast::is_static(declaration) {
-                            let flow_container = self.get_control_flow_container(node);
+                        if Self::is_property_without_initializer(declaration) && !ast::is_static(declaration) {
+                            let flow_container = Self::get_control_flow_container(node);
                             if ast::is_constructor_declaration(flow_container.unwrap())
                                 && flow_container.unwrap().parent() == declaration.parent()
                                 && !declaration.flags().intersects(NodeFlags::Ambient)
@@ -925,7 +924,7 @@ impl Checker {
                         }
                     } else if ast::is_binary_expression(declaration)
                         && ast::is_property_access_expression(declaration.as_binary_expression().left)
-                        && self.get_control_flow_container(node) == self.get_control_flow_container(declaration)
+                        && Self::get_control_flow_container(node) == Self::get_control_flow_container(declaration)
                     {
                         assume_uninitialized = true;
                     }
@@ -934,7 +933,7 @@ impl Checker {
         }
         let initial_type = self.add_optionality_ex(prop_type, false /*isProperty*/, assume_uninitialized);
         let flow_type = self.get_flow_type_of_reference_ex(node, prop_type, initial_type, None, None);
-        if assume_uninitialized && !self.contains_undefined_type(prop_type) && self.contains_undefined_type(flow_type) {
+        if assume_uninitialized && !Self::contains_undefined_type(prop_type) && Self::contains_undefined_type(flow_type) {
             let symbol_string = self.symbol_to_string(prop.unwrap());
             self.error(Some(error_node), &diagnostics::Property_0_is_used_before_being_assigned, &[&symbol_string]);
             // Return the declared type to reduce follow-on errors
@@ -947,7 +946,7 @@ impl Checker {
     }
 
     // checker.go:11639
-    pub(crate) fn get_control_flow_container(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_control_flow_container(node: P<Node>) -> Option<P<Node>> {
         ast::find_ancestor(node.parent(), |node| {
             ast::is_function_like(node) && ast::get_immediately_invoked_function_expression(node).is_none()
                 || ast::is_module_block(node)
@@ -986,7 +985,7 @@ impl Checker {
     }
 
     // checker.go:11667
-    pub(crate) fn is_method_access_for_call(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_method_access_for_call(node: P<Node>) -> bool {
         let mut node = node;
         while ast::is_parenthesized_expression(node.parent().unwrap()) {
             node = node.parent().unwrap();
@@ -996,7 +995,7 @@ impl Checker {
 
     // Lookup the private identifier lexically.
     // checker.go:11675
-    pub(crate) fn lookup_symbol_for_private_identifier_declaration(&mut self, prop_name: &str, location: P<Node>) -> Option<P<Symbol>> {
+    pub(crate) fn lookup_symbol_for_private_identifier_declaration(prop_name: &str, location: P<Node>) -> Option<P<Symbol>> {
         let mut containing_class = get_containing_class_excluding_class_decorators(location);
         while let Some(cc) = containing_class {
             let symbol = cc.symbol().unwrap();
@@ -1269,11 +1268,10 @@ impl Checker {
             Kind::TypeReference => {
                 return Some(node.as_type_reference_node().type_name);
             }
-            Kind::ExpressionWithTypeArguments => {
-                if ast::is_entity_name_expression(node.expression().unwrap()) {
+            Kind::ExpressionWithTypeArguments
+                if ast::is_entity_name_expression(node.expression().unwrap()) => {
                     return node.expression();
                 }
-            }
             _ => {}
         }
         None
@@ -1307,7 +1305,7 @@ impl Checker {
         }
         let mut diagnostic: Option<P<Diagnostic>> = None;
         let declaration_name = right.text();
-        if !(!self.is_in_property_initializer_or_class_static_block(node, false /*ignoreArrowFunctions*/) || self.is_optional_property_declaration(value_declaration) || self.is_block_scoped_name_declared_before_use(value_declaration, right) || ast::is_access_expression(node) && ast::is_access_expression(node.expression().unwrap()))
+        if !(!Self::is_in_property_initializer_or_class_static_block(node, false /*ignoreArrowFunctions*/) || Self::is_optional_property_declaration(value_declaration) || self.is_block_scoped_name_declared_before_use(value_declaration, right) || ast::is_access_expression(node) && ast::is_access_expression(node.expression().unwrap()))
             && !(ast::is_method_declaration(value_declaration) && self.get_combined_modifier_flags_cached(value_declaration).intersects(ModifierFlags::Static))
             && (self.compiler_options.get_use_define_for_class_fields() || !self.is_property_declared_in_ancestor_class(prop))
         {
@@ -1325,7 +1323,7 @@ impl Checker {
     }
 
     // checker.go:11933
-    pub(crate) fn is_optional_property_declaration(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_optional_property_declaration(node: P<Node>) -> bool {
         ast::is_property_declaration(node) && !ast::has_accessor_modifier(node) && ast::is_question_token(node.postfix_token())
     }
 
@@ -1424,7 +1422,7 @@ impl Checker {
         {
             let parent_symbol = self.get_parent_of_symbol(prop);
             if let Some(parent_symbol) = parent_symbol {
-                if parent_symbol.flags().intersects(SymbolFlags::Class) && self.is_node_used_during_class_initialization(location) {
+                if parent_symbol.flags().intersects(SymbolFlags::Class) && Self::is_node_used_during_class_initialization(location) {
                     if let Some(error_node) = error_node {
                         let prop_string = self.symbol_to_string(prop);
                         let parent_string = self.symbol_to_string(parent_symbol);
@@ -1593,7 +1591,7 @@ impl Checker {
     }
 
     // checker.go:12152
-    pub(crate) fn is_node_used_during_class_initialization(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_node_used_during_class_initialization(node: P<Node>) -> bool {
         ast::find_ancestor_or_quit(node, |element| {
             if ast::is_constructor_declaration(element) && ast::node_is_present(element.body()) || ast::is_property_declaration(element) {
                 FindAncestorResult::True
@@ -1704,7 +1702,7 @@ impl Checker {
                 let mut this_type = self.get_this_type_of_object_literal_from_contextual_type(containing_literal, contextual_type);
                 if let Some(tt) = this_type {
                     let inference_context = self.get_inference_context(containing_literal);
-                    let mapper = self.get_mapper_from_context(inference_context);
+                    let mapper = Self::get_mapper_from_context(inference_context);
                     return Some(self.instantiate_type(tt, mapper));
                 }
                 // There was no contextual ThisType<T> for the containing object literal, so the contextual type
@@ -1818,9 +1816,9 @@ impl Checker {
     pub(crate) fn try_get_this_type_at_ex(&mut self, node: P<Node>, include_global_this: bool, container: Option<P<Node>>) -> Option<P<Type>> {
         let container = match container {
             Some(container) => container,
-            None => self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/).unwrap(),
+            None => Self::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/).unwrap(),
         };
-        if ast::is_function_like(container) && (!self.is_in_parameter_initializer_before_containing_function(node) || ast::get_this_parameter(container).is_some()) {
+        if ast::is_function_like(container) && (!Self::is_in_parameter_initializer_before_containing_function(node) || ast::get_this_parameter(container).is_some()) {
             let sig = match self.get_signature_of_full_signature_type(container) {
                 Some(sig) => sig,
                 None => self.get_signature_from_declaration(container),
@@ -1860,7 +1858,7 @@ impl Checker {
     }
 
     // checker.go:12391
-    pub(crate) fn get_this_container(&mut self, node: P<Node>, include_arrow_functions: bool, include_class_computed_property_name: bool) -> Option<P<Node>> {
+    pub(crate) fn get_this_container(node: P<Node>, include_arrow_functions: bool, include_class_computed_property_name: bool) -> Option<P<Node>> {
         let mut node = node;
         loop {
             let Some(parent) = node.parent() else {
@@ -1926,7 +1924,7 @@ impl Checker {
     }
 
     // checker.go:12438
-    pub(crate) fn is_in_parameter_initializer_before_containing_function(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_in_parameter_initializer_before_containing_function(node: P<Node>) -> bool {
         let mut node = node;
         let mut in_binding_initializer = false;
         while node.parent().is_some() && !ast::is_function_like(node.parent()) {
@@ -2121,7 +2119,7 @@ impl Checker {
                 // if a user tries to apply a bitwise operator to 2 boolean operands
                 // try and return them a helpful suggestion
                 if left_type.flags().intersects(TypeFlags::BooleanLike) && right_type.flags().intersects(TypeFlags::BooleanLike) {
-                    let suggested_operator = self.get_suggested_boolean_operator(operator);
+                    let suggested_operator = Self::get_suggested_boolean_operator(operator);
                     if suggested_operator != Kind::Unknown {
                         self.error(
                             Some(operator_token),
@@ -2145,11 +2143,10 @@ impl Checker {
                         Kind::GreaterThanGreaterThanGreaterThanToken | Kind::GreaterThanGreaterThanGreaterThanEqualsToken => {
                             self.report_operator_error(left_type, operator, right_type, error_node, None);
                         }
-                        Kind::AsteriskAsteriskToken | Kind::AsteriskAsteriskEqualsToken => {
-                            if self.language_version < ScriptTarget::ES2016 {
+                        Kind::AsteriskAsteriskToken | Kind::AsteriskAsteriskEqualsToken
+                            if self.language_version < ScriptTarget::ES2016 => {
                                 self.error(error_node, &diagnostics::Exponentiation_cannot_be_performed_on_bigint_values_unless_the_target_option_is_set_to_es2016_or_later, &[]);
                             }
-                        }
                         _ => {}
                     }
                     self.bigint_type
@@ -2322,7 +2319,7 @@ impl Checker {
                 right_type
             }
             Kind::CommaToken => {
-                if !self.compiler_options.allow_unreachable_code.is_true() && self.is_side_effect_free(left) && !self.is_indirect_call(left.parent().unwrap()) {
+                if !self.compiler_options.allow_unreachable_code.is_true() && self.is_side_effect_free(left) && !Self::is_indirect_call(left.parent().unwrap()) {
                     let sf = ast::get_source_file_of_node(left).unwrap();
                     let start = tsrs_scanner::skip_trivia(
                         sf.text(),
@@ -2664,7 +2661,7 @@ impl Checker {
     }
 
     // checker.go:12995
-    pub(crate) fn get_suggested_boolean_operator(&mut self, operator: Kind) -> Kind {
+    pub(crate) fn get_suggested_boolean_operator(operator: Kind) -> Kind {
         match operator {
             Kind::BarToken | Kind::BarEqualsToken => Kind::BarBarToken,
             Kind::CaretToken | Kind::CaretEqualsToken => Kind::ExclamationEqualsEqualsToken,
