@@ -41,7 +41,8 @@ for t in glob.glob(f"{out}/*-rep[1-9]*.time"):
     base = t[:-5]; m = re.match(r".*/(.+?)-(default|hub|locality)-c(\d+)-rep(\d+)$", base)
     if not m: continue
     proj, arm, k, rep = m.group(1), m.group(2), int(m.group(3)), int(m.group(4))
-    wall, peak = open(t).read().split()[:2]
+    last = [l for l in open(t).read().splitlines() if l.strip()][-1]   # GNU time prepends an exit-status line when tsrs exits non-zero
+    wall, peak = last.split()[:2]
     chk = re.search(r"Check time:\s+([\d.]+)s", open(base + ".out").read())
     ins = None
     if os.path.exists(base + ".perf"):
