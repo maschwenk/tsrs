@@ -56,3 +56,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64638](https://github.com/microsoft/TypeScript/commit/d61a7d235906e78be9b111de0ba060e28e67ecfa) | Port the custom-resolution flag and disk-layout diagnostic guard. |
 | [#64651](https://github.com/microsoft/TypeScript/commit/54f05ae22afd5f0ec5ec3ae0333b03efa1156fe6) | Port expression and object-literal element assertions for malformed assignments. |
 | [#64675](https://github.com/microsoft/TypeScript/commit/91521cf2299d54a40d46fcf500130d273ddfc947) | Upstream prefilters Go test.run patterns; tsrs uses its own --filter/--list selector and has no Go testing-name normalization. |
+| [#64647](https://github.com/microsoft/TypeScript/commit/4529d07ab5b7a2d2bbe0ef8b25edbed9f35b7b7f) | VS Code API client export; no tsrs extension. SDK source copies refresh with the final pin. |
