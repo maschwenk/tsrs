@@ -558,6 +558,10 @@ pub fn is_in_expression_context(node: P<Node>) -> bool {
         Kind::Decorator | Kind::JsxExpression | Kind::JsxSpreadAttribute | Kind::SpreadAssignment => true,
         Kind::ExpressionWithTypeArguments => parent.expression() == Some(node) && !is_part_of_type_node(parent),
         Kind::ShorthandPropertyAssignment => parent.as_shorthand_property_assignment().object_assignment_initializer() == Some(node),
+        Kind::FunctionExpression | Kind::ClassExpression => {
+            // The name of a function or class expression is a declaration name, not an expression.
+            parent.name() != Some(node)
+        }
         _ => is_expression_node(parent),
     }
 }

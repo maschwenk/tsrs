@@ -9,3 +9,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | --- | --- |
 | [#64547](https://github.com/microsoft/TypeScript/commit/9adc871ff47f79b3e99ff2b1cbe9efb140d76af8) | TypeScript's Azure Node installation task; no tsrs change. |
 | [#64545](https://github.com/microsoft/TypeScript/commit/697b847e11e91dfbff79f1d189b802b751999f03) | Port export modifiers on both alias and renamed expando exports. |
+| [#64482](https://github.com/microsoft/TypeScript/commit/81d3f3f5e89786acc33d1881a0864bb0bd68068b) | Port expression-context classification for named functions and classes. |
