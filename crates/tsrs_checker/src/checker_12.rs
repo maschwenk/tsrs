@@ -413,6 +413,7 @@ impl Checker {
                 .into_iter()
                 .filter_map(|symbol| if symbol.flags().intersects(SymbolFlags::TypeParameter) { Some(self.get_declared_type_of_symbol(symbol)) } else { None }),
         );
+        result.sort_by(|a, b| compare_types(self, Some(*a), Some(*b)));
         result
     }
 
