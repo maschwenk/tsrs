@@ -9,7 +9,7 @@ impl CommonJSModuleTransformer {
             self.discarded_value_visitor().visit_node(n.initializer),
             self.visitor().visit_node(n.condition),
             self.discarded_value_visitor().visit_node(n.incrementor),
-            self.emit_context().visit_iteration_body(Some(n.statement()), &mut self.top_level_nested_visitor()).unwrap(),
+            self.emit_context().visit_iteration_body(Some(n.statement()), &mut self.visitor()).unwrap(),
         )
     }
 
@@ -21,7 +21,7 @@ impl CommonJSModuleTransformer {
             n.await_modifier,
             self.discarded_value_visitor().visit_node(Some(n.initializer)).unwrap(),
             self.visitor().visit_node(Some(n.expression)).unwrap(),
-            self.emit_context().visit_iteration_body(Some(n.statement()), &mut self.top_level_nested_visitor()).unwrap(),
+            self.emit_context().visit_iteration_body(Some(n.statement()), &mut self.visitor()).unwrap(),
         )
     }
 

@@ -59,3 +59,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64647](https://github.com/microsoft/TypeScript/commit/4529d07ab5b7a2d2bbe0ef8b25edbed9f35b7b7f) | VS Code API client export; no tsrs extension. SDK source copies refresh with the final pin. |
 | [#64640](https://github.com/microsoft/TypeScript/commit/bea2e849e90b5ff2889f9e120e1e0fae5e17659b) | Port deferred import recovery, namespace-binding grammar diagnostics, plain-JS diagnostics and default helper handling. |
 | [#64670](https://github.com/microsoft/TypeScript/commit/0ba5d992db957fa444c3049e51243a056d3a9276) | Port raw private-identifier lookup and untransformed-kind guards for invalid class members. |
+| [#64676](https://github.com/microsoft/TypeScript/commit/0bd74f77b276e659df9f63c3c63377cf11d1d86a) | Port normal CommonJS visitors for for-loop bodies. |
