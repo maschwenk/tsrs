@@ -284,6 +284,23 @@ impl Session {
         r
     }
 
+    pub(crate) fn handle_get_symbol_of_declaration(&self, p: Params) -> ApiResult<Response> {
+        let lease = self.acquire_cached_source_file(p.get("file"))?;
+        let result = (|| {
+            let table = self.node_index_table(lease.source_file());
+            let index = p.u64("index")? as usize;
+            if index == 0 || index >= table.nodes.len() {
+                return Err(ApiError::client(format!("declaration node index {index} is out of range")));
+            }
+            let node = table.nodes[index].filter(|&node| tsrs_ast::is_declaration(node))
+                .ok_or_else(|| ApiError::client(format!("node index {index} is not a declaration")))?;
+            let symbol = node.symbol().ok_or_else(|| ApiError::client(format!("declaration node index {index} has no binder symbol")))?;
+            crate::checker::file_symbol_response(self, symbol).and_then(|value| json_response(&value))
+        })();
+        lease.release();
+        result
+    }
+
     pub(crate) fn handle_release_source_file(&self, p: Params) -> ApiResult<Response> {
         let id = p.u64("lease")?;
         if id == 0 {

@@ -22,3 +22,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64558](https://github.com/microsoft/TypeScript/commit/edf7da4e93ab65e1f7766deae156c35132c0cde3) | Port reverse-mapped emit expansion, cycle diagnostics, and declaration-based depth limits. |
 | [#64574](https://github.com/microsoft/TypeScript/commit/02c1c9a6ab49334a5ca9c1d7852647b7a3fad18a) | Port the empty-statement fallback after CommonJS hoisting. |
 | [#64566](https://github.com/microsoft/TypeScript/commit/237b14a5d98f8e8f748ff36002fdd99786230d90) | Port first-declaration interface/enum diagnostics and once-per-checker merged export checks, replacing the old scheduling workaround. |
+| [#64571](https://github.com/microsoft/TypeScript/commit/688d86d7f647781565dc1f6438a4fb09b5179160) | Port getSymbolOfDeclaration with exact cached-AST ownership and index validation; SDK refresh is included with the final pin. |

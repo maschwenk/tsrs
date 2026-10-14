@@ -54,6 +54,10 @@ impl Drop for CheckerSnapshotState {
     }
 }
 
+pub(crate) fn file_symbol_response(session: &Session, symbol: P<tsrs_ast::Symbol>) -> ApiResult<Value> {
+    setup::file_symbol_response(&SessionHost { session }, symbol).map_err(to_api_error)
+}
+
 /// Core entry point. `None` only for methods this lane does not recognize.
 pub(crate) fn handle(session: &Session, method: &str, params: &Value) -> Option<ApiResult<Response>> {
     let host = SessionHost { session };

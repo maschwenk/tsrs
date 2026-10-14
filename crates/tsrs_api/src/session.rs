@@ -372,6 +372,7 @@ impl Session {
             "retainSourceFile" => return self.handle_retain_source_file(p),
             "releaseSourceFile" => return self.handle_release_source_file(p),
             "getCachedSourceFile" => return self.handle_get_cached_source_file(p),
+            "getSymbolOfDeclaration" => return self.handle_get_symbol_of_declaration(p),
             _ => {}
         }
         let result = match method {
