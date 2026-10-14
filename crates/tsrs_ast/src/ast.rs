@@ -563,6 +563,70 @@ pub(crate) trait NodeRareTail: NodePayload {
         assert!(std::mem::offset_of!(NodeAlloc<Self>, data) == std::mem::offset_of!(NodeAllocRare<Self, Self::Rare>, data));
 }
 
+/// A field type that `Node::slot` / `Node::base_at` may read as a `V`: a node-valued field (`P<T>`, `Option<P<T>>`,
+/// either in an `OwnedCell`) as `Option<P<T>>`, a base struct as itself. `slot_table!` checks every entry against it.
+///
+/// # Safety
+/// A `Self` must be a valid `V` with the same size and alignment: `P<T>` is a non-zero handle and `Option<P<T>>` uses
+/// the zero niche for `None`; `OwnedCell` and `Cell` are `repr(transparent)`.
+pub(crate) unsafe trait Slot<V> {}
+// SAFETY: the same type.
+unsafe impl<V> Slot<V> for V {}
+// SAFETY: see the trait.
+unsafe impl<T: 'static> Slot<Option<P<T>>> for P<T> {}
+// SAFETY: see the trait.
+unsafe impl<T: 'static> Slot<Option<P<T>>> for OwnedCell<P<T>> {}
+// SAFETY: see the trait.
+unsafe impl<T: 'static> Slot<Option<P<T>>> for OwnedCell<Option<P<T>>> {}
+
+/// Compile-time type check of a `slot_table!` entry.
+pub(crate) const fn check_slot<V, F: Slot<V>>(_: &F) {}
+
+/// A field's offset from the node header as a slot-table entry (0 is the header itself, so it means "no such field").
+pub(crate) const fn slot_offset(offset: usize) -> u16 {
+    assert!(offset > 0 && offset <= u16::MAX as usize);
+    offset as u16
+}
+
+/// A per-data-tag table of field offsets for the accessors that read one field of many data structs
+/// (`Node::name()`, `modifiers()`, `expression()`, `declaration_data()`, ...): entry `NodeDataTag::X as usize` is the
+/// offset of `X.<path>` from the node header, 0 for data structs without the field. The accessor is then one table
+/// load and one field load, where a match over the data tags compiled to a jump table and a call
+/// (notes/perf-ast-accessors.md). Every entry's field type is checked against `$v` (`Slot`).
+macro_rules! slot_table {
+    ($v:ty; $($data:ident . $($field:ident).+),* $(,)?) => {{
+        let mut t = [0u16; 256];
+        $(
+            const _: fn(&$data) = |d| $crate::ast::check_slot::<$v, _>(&d.$($field).+);
+            t[$crate::NodeDataTag::$data as usize] = $crate::ast::slot_offset(
+                std::mem::offset_of!($crate::ast::NodeAlloc<$data>, data) + std::mem::offset_of!($data, $($field).+),
+            );
+        )*
+        t
+    }};
+}
+pub(crate) use slot_table;
+
+/// A slot-table entry for a field of a data struct's rare tail (`NodeAllocRare`): the field's offset from the header,
+/// with `RARE_SLOT` set. The field reads as `None` unless the node has its rare tail.
+pub(crate) const RARE_SLOT: u16 = 0x8000;
+
+pub(crate) const fn rare_slot_offset(offset: usize) -> u16 {
+    assert!(offset > 0 && offset < RARE_SLOT as usize);
+    RARE_SLOT | offset as u16
+}
+
+/// The `RARE_SLOT` entry for `$data`'s rare field `$field`, type-checked against `$v`.
+macro_rules! rare_slot {
+    ($v:ty; $data:ident . $field:ident) => {{
+        type Rare = <$data as $crate::ast::NodeRareTail>::Rare;
+        const _: fn(&Rare) = |r| $crate::ast::check_slot::<$v, _>(&r.$field);
+        $crate::ast::rare_slot_offset(
+            std::mem::offset_of!($crate::ast::NodeAllocRare<$data, Rare>, rare) + std::mem::offset_of!(Rare, $field),
+        )
+    }};
+}
+
 // Node accessors. Accessors that dispatch over the node data (name(), modifiers(), *_data(), as_*(),
 // for_each_child(), ...) are generated in generated.rs.
 
@@ -591,6 +655,55 @@ impl Node {
         // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is
         // `self`, so its data struct lives at this offset from the header, for the rest of the process.
         unsafe { tsrs_core::ptr::arena_neighbor(self, std::mem::offset_of!(NodeAlloc<T>, data) as isize) }
+    }
+
+    /// The `Option<P<T>>` field `offset` bytes after this node's header (a `slot_table!` entry for its data tag);
+    /// `None` for offset 0.
+    ///
+    /// # Safety
+    /// `offset` is 0 or the entry for `self.data_tag()` of a `slot_table!` whose value type is `Option<P<T>>`.
+    #[inline]
+    pub(crate) unsafe fn slot<T: 'static>(&self, offset: u16) -> Option<P<T>> {
+        if offset == 0 {
+            return None;
+        }
+        #[expect(clippy::cast_ptr_alignment, reason = "a field offset in the node's allocation, which is 8-byte aligned")]
+        // SAFETY: the offset is inside the node's allocation (`NodeAlloc` of the data struct its tag names).
+        let at = unsafe { std::ptr::from_ref::<Node>(self).cast::<u8>().add(offset as usize).cast::<Option<P<T>>>() };
+        // SAFETY: the node was allocated as a `NodeAlloc` of the data struct its tag names (see `payload`), whose
+        // field at this offset reads as an `Option<P<T>>` (`Slot`); arena nodes are never moved or freed.
+        unsafe { at.read() }
+    }
+
+    /// `slot` for a table that may hold `RARE_SLOT` entries: a rare field reads as `None` when the node has no rare
+    /// tail.
+    ///
+    /// # Safety
+    /// As for `slot`, where a `RARE_SLOT` entry comes from `rare_slot!` for this node's data struct.
+    #[inline]
+    pub(crate) unsafe fn slot_or_rare<T: 'static>(&self, entry: u16) -> Option<P<T>> {
+        if entry & RARE_SLOT != 0 && !self.header.get().has_rare_tail() {
+            return None;
+        }
+        // SAFETY: by the caller; a node with its rare tail was allocated as a `NodeAllocRare` (`new_node_with_rare`).
+        unsafe { self.slot(entry & !RARE_SLOT) }
+    }
+
+    /// The base struct `offset` bytes after this node's header (a `slot_table!` entry for its data tag); `None` for
+    /// offset 0.
+    ///
+    /// # Safety
+    /// `offset` is 0 or the entry for `self.data_tag()` of a `slot_table!` whose value type is `B`.
+    #[inline]
+    pub(crate) unsafe fn base_at<B: 'static>(&self, offset: u16) -> Option<&'static B> {
+        if offset == 0 {
+            return None;
+        }
+        // SAFETY: the offset is inside the node's allocation (`NodeAlloc` of the data struct its tag names), at a
+        // field of type `B` (so aligned for it).
+        let at = unsafe { std::ptr::from_ref::<Node>(self).cast::<u8>().add(offset as usize).cast::<B>() };
+        // SAFETY: as in `slot`; the base struct lives as long as the node.
+        Some(unsafe { &*at })
     }
 
     /// The arena pointer for this node. Every `Node` is created by `NodeFactory`/`new_node` in the leak
@@ -789,7 +902,57 @@ impl Node {
         }
     }
 
+    /// Go `Expression()`. The data structs that serve only kinds Go handles read through a slot table; the rest
+    /// (`CaseOrDefaultClause`: Go panics on a default clause) and the panic take the match.
+    #[inline]
     pub fn expression(&self) -> Option<P<Node>> {
+        static SLOTS: [u16; 256] = slot_table!(Option<P<Node>>;
+            PropertyAccessExpression.expression,
+            ElementAccessExpression.expression,
+            ParenthesizedExpression.expression,
+            CallExpression.expression,
+            NewExpression.expression,
+            ExpressionWithTypeArguments.expression,
+            ComputedPropertyName.expression,
+            NonNullExpression.expression,
+            TypeAssertion.expression,
+            AsExpression.expression,
+            SatisfiesExpression.expression,
+            TypeOfExpression.expression,
+            SpreadAssignment.expression,
+            SpreadElement.expression,
+            TemplateSpan.expression,
+            DeleteExpression.expression,
+            VoidExpression.expression,
+            AwaitExpression.expression,
+            YieldExpression.expression,
+            PartiallyEmittedExpression.expression,
+            IfStatement.expression,
+            DoStatement.expression,
+            WhileStatement.expression,
+            WithStatement.expression,
+            ForInOrOfStatement.expression,
+            SwitchStatement.expression,
+            ExpressionStatement.expression,
+            ReturnStatement.expression,
+            ThrowStatement.expression,
+            ExternalModuleReference.expression,
+            ExportAssignment.expression,
+            Decorator.expression,
+            JsxExpression.expression,
+            JsxSpreadAttribute.expression,
+        );
+        let offset = SLOTS[self.data_tag() as usize];
+        if offset == 0 {
+            return self.expression_by_kind();
+        }
+        // SAFETY: `SLOTS` is indexed by the data tag and holds offsets of `Option<P<Node>>` slots.
+        unsafe { self.slot(offset) }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn expression_by_kind(&self) -> Option<P<Node>> {
         match self.kind() {
             Kind::PropertyAccessExpression => Some(self.as_property_access_expression().expression),
             Kind::ElementAccessExpression => Some(self.as_element_access_expression().expression),
@@ -964,8 +1127,62 @@ impl Node {
         }
     }
 
-    /// Go `Type()`.
+    /// Go `Type()`. Read through a slot table for the data structs whose kinds Go reads one field of (the
+    /// function-like ones through their `FunctionLikeBase`); the other kinds take the match.
+    #[inline]
     pub fn type_node(&self) -> Option<P<Node>> {
+        static SLOTS: [u16; 256] = slot_table!(Option<P<Node>>;
+            VariableDeclaration.type_,
+            ParameterDeclaration.type_,
+            PropertySignatureDeclaration.type_,
+            PropertyDeclaration.type_,
+            PropertyAssignment.type_,
+            ShorthandPropertyAssignment.type_,
+            TypePredicateNode.type_,
+            ParenthesizedTypeNode.type_,
+            TypeOperatorNode.type_,
+            MappedTypeNode.type_,
+            TypeAssertion.type_,
+            AsExpression.type_,
+            SatisfiesExpression.type_,
+            TypeAliasDeclaration.type_,
+            NamedTupleMember.type_,
+            OptionalTypeNode.type_,
+            RestTypeNode.type_,
+            TemplateLiteralTypeSpan.type_,
+            JSDocTypeExpression.type_,
+            JSDocParameterOrPropertyTag.type_expression,
+            JSDocNullableType.type_,
+            JSDocNonNullableType.type_,
+            JSDocOptionalType.type_,
+            ExportAssignment.type_,
+            BinaryExpression.type_,
+            FunctionDeclaration.function_like_base.type_,
+            CallSignatureDeclaration.function_like_base.type_,
+            ConstructSignatureDeclaration.function_like_base.type_,
+            ConstructorDeclaration.function_like_base.type_,
+            GetAccessorDeclaration.function_like_base.type_,
+            SetAccessorDeclaration.function_like_base.type_,
+            IndexSignatureDeclaration.function_like_base.type_,
+            MethodSignatureDeclaration.function_like_base.type_,
+            MethodDeclaration.function_like_base.type_,
+            ArrowFunction.function_like_base.type_,
+            FunctionExpression.function_like_base.type_,
+            FunctionTypeNode.function_like_base.type_,
+            ConstructorTypeNode.function_like_base.type_,
+            JSDocSignature.function_like_base.type_,
+        );
+        let offset = SLOTS[self.data_tag() as usize];
+        if offset == 0 {
+            return self.type_node_by_kind();
+        }
+        // SAFETY: `SLOTS` is indexed by the data tag and holds offsets of `Option<P<Node>>` slots.
+        unsafe { self.slot(offset) }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn type_node_by_kind(&self) -> Option<P<Node>> {
         match self.kind() {
             Kind::VariableDeclaration => self.as_variable_declaration().type_.get(),
             Kind::Parameter => self.as_parameter_declaration().type_.get(),
@@ -1024,7 +1241,38 @@ impl Node {
         }
     }
 
+    /// Go `Initializer()`. Read through a slot table (the rare initializers of parameters, binding elements and
+    /// property signatures as `RARE_SLOT` entries); the other kinds take the match, which panics like Go.
+    #[inline]
     pub fn initializer(&self) -> Option<P<Node>> {
+        static SLOTS: [u16; 256] = {
+            let mut t = slot_table!(Option<P<Node>>;
+                VariableDeclaration.initializer,
+                PropertyDeclaration.initializer,
+                PropertyAssignment.initializer,
+                EnumMember.initializer,
+                ForStatement.initializer,
+                ForInOrOfStatement.initializer,
+                JsxAttribute.initializer,
+            );
+            t[NodeDataTag::ParameterDeclaration as usize] = rare_slot!(Option<P<Node>>; ParameterDeclaration.initializer);
+            t[NodeDataTag::BindingElement as usize] = rare_slot!(Option<P<Node>>; BindingElement.initializer);
+            t[NodeDataTag::PropertySignatureDeclaration as usize] =
+                rare_slot!(Option<P<Node>>; PropertySignatureDeclaration.initializer);
+            t
+        };
+        let entry = SLOTS[self.data_tag() as usize];
+        if entry == 0 {
+            return self.initializer_by_kind();
+        }
+        // SAFETY: `SLOTS` is indexed by the data tag and holds offsets of `Option<P<Node>>` slots, rare ones from
+        // `rare_slot!`.
+        unsafe { self.slot_or_rare(entry) }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn initializer_by_kind(&self) -> Option<P<Node>> {
         match self.kind() {
             Kind::VariableDeclaration => self.as_variable_declaration().initializer.get(),
             Kind::Parameter => self.as_parameter_declaration().initializer(),

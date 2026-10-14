@@ -508,6 +508,12 @@ with the switch off, which is why it is not in the default build.
   Relater round (notes/perf-icount-relater.md; another large private monorepo, DynamoRIO counts): an exact early exit
   from the deeply-nested walk (+0.04% single-threaded), `Relation::set` through hashbrown's `entry` (-0.005%, noise),
   a Bloom filter of names in `some_property_reduces_to_never`'s counts (+0.03%).
+- From notes/perf-ast-accessors.md (kept: the generic AST accessors read through per-data-tag offset tables,
+  -1.5% to -3.1% exact single-threaded instructions): a fixed-offset `repr(C)` prefix for the node data structs,
+  the type-side `repr(C)` change carried over, was not built. No accessor's field is in every data struct, so it
+  still needs a per-tag test (the same load as the table), and one offset per field leaves a 4-byte hole in every
+  struct with a later field but not an earlier one. The same tables out of line (`#[inline(never)]`): -1.3% to
+  -1.9%, about 60% of the inlined gain, for 84 KB less text.
 
 - Standard parsing/whitespace helper cleanup ([rust-stdlib-helpers.md](rust-stdlib-helpers.md)), applied at the
   user's request: exact whitespace predicates and integer contracts, with Go syntax/range wording retained.
