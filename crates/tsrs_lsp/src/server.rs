@@ -1863,35 +1863,36 @@ impl Server {
         let mut seen_renames: rustc_hash::FxHashMap<lsproto::DocumentUri, bool> = rustc_hash::FxHashMap::default();
         let mut document_changes: Vec<lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile> = Vec::new();
 
+        // tsrs-only: one call with every rename, so edits for files that import several renamed files are computed
+        // against all of the moves at once. Go computed each rename separately, and the per-rename edits conflicted.
+        let renames: Vec<(lsproto::DocumentUri, lsproto::DocumentUri)> = params.files.iter().map(|file| (file.old_uri.clone(), file.new_uri.clone())).collect();
         for language_service in &services {
-            for file in &params.files {
-                let changes = language_service.get_edits_for_file_rename(ctx, &file.old_uri, &file.new_uri);
-                for change in changes {
-                    if let Some(rename_file) = &change.rename_file {
-                        if !seen_renames.get(&rename_file.old_uri).copied().unwrap_or(false) {
-                            seen_renames.insert(rename_file.old_uri.clone(), true);
-                            document_changes.push(change);
-                        }
-                    } else if let Some(text_document_edit) = &change.text_document_edit {
-                        let uri = text_document_edit.text_document.uri.clone();
-                        let mut deduped: Vec<lsproto::TextEditOrAnnotatedTextEditOrSnippetTextEdit> = Vec::new();
-                        deduped.extend(text_document_edit.edits.iter().filter_map(|edit| {
-                            if let Some(text_edit) = &edit.text_edit {
-                                let key = (uri.clone(), text_edit.range);
-                                let entry = seen_edits.entry(key);
-                                if matches!(&entry, Entry::Occupied(entry) if *entry.get() == text_edit.new_text) {
-                                    return None;
-                                }
-                                entry.insert_entry(text_edit.new_text.clone());
+            let changes = language_service.get_edits_for_file_renames(ctx, &renames);
+            for change in changes {
+                if let Some(rename_file) = &change.rename_file {
+                    if !seen_renames.get(&rename_file.old_uri).copied().unwrap_or(false) {
+                        seen_renames.insert(rename_file.old_uri.clone(), true);
+                        document_changes.push(change);
+                    }
+                } else if let Some(text_document_edit) = &change.text_document_edit {
+                    let uri = text_document_edit.text_document.uri.clone();
+                    let mut deduped: Vec<lsproto::TextEditOrAnnotatedTextEditOrSnippetTextEdit> = Vec::new();
+                    deduped.extend(text_document_edit.edits.iter().filter_map(|edit| {
+                        if let Some(text_edit) = &edit.text_edit {
+                            let key = (uri.clone(), text_edit.range);
+                            let entry = seen_edits.entry(key);
+                            if matches!(&entry, Entry::Occupied(entry) if *entry.get() == text_edit.new_text) {
+                                return None;
                             }
-                            Some(edit.clone())
-                        }));
-                        if !deduped.is_empty() {
-                            document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
-                                text_document_edit: Some(lsproto::TextDocumentEdit { text_document: text_document_edit.text_document.clone(), edits: deduped }),
-                                ..Default::default()
-                            });
+                            entry.insert_entry(text_edit.new_text.clone());
                         }
+                        Some(edit.clone())
+                    }));
+                    if !deduped.is_empty() {
+                        document_changes.push(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+                            text_document_edit: Some(lsproto::TextDocumentEdit { text_document: text_document_edit.text_document.clone(), edits: deduped }),
+                            ..Default::default()
+                        });
                     }
                 }
             }

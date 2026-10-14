@@ -405,3 +405,105 @@ fn a_bad_root_uri_falls_back_to_the_server_directory() {
     assert!(msg.error.is_none() && resp.is_some(), "{:?}", msg.error);
     let _ = close_client.close();
 }
+
+// Not a Go test. `workspace/willRenameFiles` sends a `documentChanges` workspace edit with one entry per changed file or
+// renamed companion file; returns (uri, edit text) for each text edit and (old uri, new uri) for each file rename.
+fn will_rename_files(files: &[(&str, &str)], renames: &[(&str, &str)]) -> (Vec<(String, String)>, Vec<(String, String)>) {
+    use crate::lsptestutil::{acknowledge_registrations, new_lsp_client, test_server_options};
+
+    let (client, close_client) = new_lsp_client(test_server_options("/home/projects", files), Some(acknowledge_registrations()));
+    let capabilities = lsproto::ClientCapabilities {
+        workspace: Some(lsproto::WorkspaceClientCapabilities {
+            workspace_edit: Some(lsproto::WorkspaceEditClientCapabilities { document_changes: Some(true), ..Default::default() }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let (init_msg, _) = client.send_request(lsproto::INITIALIZE_INFO, lsproto::InitializeParams { capabilities, ..Default::default() });
+    assert!(init_msg.error.is_none(), "Initialize failed");
+    client.send_notification(lsproto::INITIALIZED_INFO, lsproto::InitializedParams::default());
+    client.server.init_complete().wait();
+    let (file_name, text) = files.iter().find(|(name, _)| name.ends_with(".ts")).unwrap();
+    client.send_notification(
+        lsproto::TEXT_DOCUMENT_DID_OPEN_INFO,
+        lsproto::DidOpenTextDocumentParams {
+            text_document: lsproto::TextDocumentItem {
+                uri: lsproto::DocumentUri::from(format!("file://{file_name}")),
+                language_id: lsproto::LanguageKind::TypeScript,
+                text: text.to_string(),
+                ..Default::default()
+            },
+        },
+    );
+    let params = lsproto::RenameFilesParams {
+        files: renames
+            .iter()
+            .map(|(old, new)| lsproto::FileRename { old_uri: lsproto::DocumentUri::from(format!("file://{old}")), new_uri: lsproto::DocumentUri::from(format!("file://{new}")) })
+            .collect(),
+    };
+    let (msg, resp) = client.send_request(lsproto::WORKSPACE_WILL_RENAME_FILES_INFO, params);
+    assert!(msg.error.is_none(), "{:?}", msg.error);
+    let _ = close_client.close();
+    let mut edits = Vec::new();
+    let mut file_renames = Vec::new();
+    for change in resp.and_then(|r| r.workspace_edit).and_then(|e| e.document_changes).unwrap_or_default() {
+        if let Some(rename) = change.rename_file {
+            file_renames.push((rename.old_uri.to_string(), rename.new_uri.to_string()));
+        }
+        if let Some(text_document_edit) = change.text_document_edit {
+            let uri = text_document_edit.text_document.uri.to_string();
+            edits.extend(text_document_edit.edits.into_iter().map(|edit| (uri.clone(), edit.text_edit.expect("a plain text edit").new_text)));
+        }
+    }
+    (edits, file_renames)
+}
+
+// Not a Go test (Go rewrites every unresolved relative import, here `../../../x` to `../../x`, since the path climbs
+// past the root). A file whose unresolved imports point at nothing renamed gets no edit.
+#[test]
+fn will_rename_files_leaves_unrelated_unresolved_imports_alone() {
+    let files = [
+        ("/home/projects/tsconfig.json", "{}"),
+        ("/home/projects/a.ts", "export const a = 1;\n"),
+        ("/home/projects/b.ts", "import { a } from \"./a\";\nimport { x } from \"../../../x\";\nimport { y } from \"./missing\";\n"),
+        ("/home/projects/c.ts", "/// <reference path=\"../../../y.d.ts\" />\nimport { x } from \"../../../x\";\n"),
+    ];
+    let (edits, _) = will_rename_files(&files, &[("/home/projects/a.ts", "/home/projects/a2.ts")]);
+    assert_eq!(edits, vec![("file:///home/projects/b.ts".to_string(), "./a2".to_string())]);
+}
+
+// Not a Go test (Go computes each rename on its own, so `./b` in a.ts got both `../src/b` and `../lib/b` here). The
+// renames of a file and a file it imports are computed together.
+#[test]
+fn will_rename_files_computes_several_renames_together() {
+    let files = [
+        ("/home/projects/tsconfig.json", "{}"),
+        ("/home/projects/src/a.ts", "import { b } from \"./b\";\nimport { c } from \"./c\";\n"),
+        ("/home/projects/src/b.ts", "export const b = 1;\n"),
+        ("/home/projects/src/c.ts", "export const c = 1;\n"),
+        ("/home/projects/main.ts", "import { b } from \"./src/b\";\nimport { a } from \"./src/a\";\n"),
+    ];
+    let (mut edits, _) = will_rename_files(
+        &files,
+        &[("/home/projects/src/a.ts", "/home/projects/lib/a.ts"), ("/home/projects/src/b.ts", "/home/projects/lib/b.ts")],
+    );
+    edits.sort();
+    let edit = |file: &str, text: &str| (format!("file:///home/projects/{file}"), text.to_string());
+    assert_eq!(edits, vec![edit("main.ts", "./lib/a"), edit("main.ts", "./lib/b"), edit("src/a.ts", "../src/c")]);
+}
+
+// Not a Go test (Go took the new declaration file's extension from the old name, so `foo.css` was renamed to
+// `bar.css` here though bar.d.ts is not a declaration for a .css file).
+#[test]
+fn will_rename_files_renames_the_companion_only_for_a_matching_declaration() {
+    let files = [
+        ("/home/projects/tsconfig.json", "{}"),
+        ("/home/projects/index.ts", "export {};\n"),
+        ("/home/projects/foo.d.css.ts", "export {};\n"),
+        ("/home/projects/foo.css", ""),
+    ];
+    let (_, renames) = will_rename_files(&files, &[("/home/projects/foo.d.css.ts", "/home/projects/bar.d.ts")]);
+    assert_eq!(renames, Vec::<(String, String)>::new());
+    let (_, renames) = will_rename_files(&files, &[("/home/projects/foo.d.css.ts", "/home/projects/bar.d.css.ts")]);
+    assert_eq!(renames, vec![("file:///home/projects/foo.css".to_string(), "file:///home/projects/bar.css".to_string())]);
+}

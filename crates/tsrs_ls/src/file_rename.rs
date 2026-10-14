@@ -17,6 +17,12 @@ use crate::lsconv::{self, Converters};
 // file_rename.go:22
 type pathUpdater<'a> = Box<dyn Fn(&str) -> Option<String> + 'a>;
 
+// tsrs-only (`update_imports_for_file_rename`): whether the rename moves the file or directory a relative specifier
+// in `import_from_path` points at.
+fn relative_target_moved(old_to_new: &pathUpdater, import_from_path: &str, relative_specifier: &str) -> bool {
+    old_to_new(&tspath::normalize_path(&tspath::combine_paths(&tspath::get_directory_path(import_from_path), &[relative_specifier]))).is_some()
+}
+
 // file_rename.go:24
 struct toImport {
     new_file_name: String,
@@ -31,50 +37,28 @@ struct movedFile {
 
 impl LanguageService {
     // file_rename.go:34
-    pub fn get_edits_for_file_rename(
+    /// tsrs-only: the edits for renaming several files or directories at once (`workspace/willRenameFiles`). Go
+    /// computes each rename on its own and the server concatenates the edits, so where one renamed file imports
+    /// another, the import got two rewrites of the same range, each as if only one of the files moved. Here one path
+    /// updater maps every renamed path, so each import is rewritten once, for where both files end up.
+    pub fn get_edits_for_file_renames(
         &self,
         ctx: &Context,
-        old_uri: &lsproto::DocumentUri,
-        new_uri: &lsproto::DocumentUri,
+        renames: &[(lsproto::DocumentUri, lsproto::DocumentUri)],
     ) -> Vec<lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile> {
         let program = self.get_program();
-        let old_path = old_uri.file_name();
-        let new_path = new_uri.file_name();
+        let renames: Vec<(String, String)> = renames.iter().map(|(old_uri, new_uri)| (old_uri.file_name(), new_uri.file_name())).collect();
 
-        let old_to_new = self.create_path_updater(&old_path, &new_path);
+        let old_to_new = self.create_path_updater(&renames);
 
         let mut change_tracker = change::new_tracker(ctx, &program.options(), self.format_options(), Arc::clone(&self.converters));
-        self.update_tsconfig_files(program, &mut change_tracker, &old_to_new, &old_path, &new_path);
+        self.update_tsconfig_files(program, &mut change_tracker, &old_to_new, &renames);
         self.update_imports_for_file_rename(program, &mut change_tracker, &old_to_new);
 
         let mut document_changes: Vec<lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile> = Vec::new();
 
-        // When renaming e.g. `foo.d.css.ts` -> `bar.d.css.ts`, also rename `foo.css` -> `bar.css` if it exists.
-        if tspath::is_declaration_file_name(&old_path) && tspath::is_declaration_file_name(&new_path) {
-            let dts_ext = tspath::get_declaration_file_extension(&old_path);
-            let original_extensions = tspath::get_possible_original_input_extension_for_extension(&dts_ext);
-            document_changes.extend(original_extensions.iter().filter_map(|ext| {
-                let old_original_path = tspath::change_full_extension(&old_path, ext);
-                if self.host.file_exists(&old_original_path) {
-                    let new_dts_ext = tspath::get_declaration_file_extension(&old_path);
-                    let new_original_extensions = tspath::get_possible_original_input_extension_for_extension(&new_dts_ext);
-                    if new_original_extensions.contains(ext) {
-                        let new_original_path = tspath::change_full_extension(&new_path, ext);
-                        Some(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
-                            rename_file: Some(lsproto::RenameFile {
-                                old_uri: lsconv::file_name_to_document_uri(&old_original_path),
-                                new_uri: lsconv::file_name_to_document_uri(&new_original_path),
-                                ..Default::default()
-                            }),
-                            ..Default::default()
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
-            }));
+        for (old_path, new_path) in &renames {
+            self.add_companion_file_renames(old_path, new_path, &mut document_changes);
         }
 
         let (changes, _) = change_tracker.get_changes();
@@ -95,34 +79,67 @@ impl LanguageService {
     }
 
     // file_rename.go:87
-    fn create_path_updater<'a>(&'a self, old_path: &str, new_path: &str) -> pathUpdater<'a> {
+    // When renaming e.g. `foo.d.css.ts` -> `bar.d.css.ts`, also rename `foo.css` -> `bar.css` if it exists.
+    fn add_companion_file_renames(&self, old_path: &str, new_path: &str, document_changes: &mut Vec<lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile>) {
+        if !tspath::is_declaration_file_name(old_path) || !tspath::is_declaration_file_name(new_path) {
+            return;
+        }
+        let dts_ext = tspath::get_declaration_file_extension(old_path);
+        let original_extensions = tspath::get_possible_original_input_extension_for_extension(&dts_ext);
+        // tsrs-only: Go takes the new declaration extension from the old path, so the companion was renamed even when
+        // the new name is another kind of declaration file (`foo.d.css.ts` -> `foo.d.ts` renamed `foo.css` too).
+        let new_dts_ext = tspath::get_declaration_file_extension(new_path);
+        let new_original_extensions = tspath::get_possible_original_input_extension_for_extension(&new_dts_ext);
+        document_changes.extend(original_extensions.iter().filter_map(|ext| {
+            let old_original_path = tspath::change_full_extension(old_path, ext);
+            if !self.host.file_exists(&old_original_path) || !new_original_extensions.contains(ext) {
+                return None;
+            }
+            let new_original_path = tspath::change_full_extension(new_path, ext);
+            Some(lsproto::TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
+                rename_file: Some(lsproto::RenameFile {
+                    old_uri: lsconv::file_name_to_document_uri(&old_original_path),
+                    new_uri: lsconv::file_name_to_document_uri(&new_original_path),
+                    ..Default::default()
+                }),
+                ..Default::default()
+            })
+        }));
+    }
+
+    // Maps a path to where `renames` (old, new) moves it: the first rename of the path itself, else the first rename
+    // of a directory that contains it.
+    fn create_path_updater<'a>(&'a self, renames: &[(String, String)]) -> pathUpdater<'a> {
         let compare_options = ComparePathsOptions { use_case_sensitive_file_names: self.use_case_sensitive_file_names(), ..Default::default() };
-        let trimmed_old_path = tspath::remove_trailing_directory_separator(old_path).to_string();
-        let old_path = old_path.to_string();
-        let new_path = new_path.to_string();
+        let renames: Vec<(String, String, String)> =
+            renames.iter().map(|(old_path, new_path)| (old_path.clone(), tspath::remove_trailing_directory_separator(old_path).to_string(), new_path.clone())).collect();
         Box::new(move |path: &str| -> Option<String> {
-            if tspath::compare_paths(path, &old_path, &compare_options).is_eq() {
+            if let Some((_, _, new_path)) = renames.iter().find(|(old_path, _, _)| tspath::compare_paths(path, old_path, &compare_options).is_eq()) {
                 return Some(new_path.clone());
             }
-            // Trim the directory prefix ourselves (rather than using
-            // tspath.StartsWithDirectory followed by a separate slice on
-            // len(oldPath)) so the containment check and the suffix we return can
-            // never disagree, and so we don't slice path by a byte count derived
-            // from a canonicalized/differently-cased string: case-folding can
-            // change a path's UTF-8 byte length without changing its rune count
-            // (e.g. the Kelvin sign 'K' folds to the single-byte 'k'), which
-            // could otherwise put len(oldPath) out of range of path.
-            if let Some(suffix) = tspath::trim_file_path_prefix(path, &trimmed_old_path, self.use_case_sensitive_file_names()) {
-                if suffix.starts_with('/') || suffix.starts_with('\\') {
-                    return Some(format!("{new_path}{suffix}"));
-                }
-            }
-            None
+            renames.iter().find_map(|(_, trimmed_old_path, new_path)| self.rename_inside_directory(path, trimmed_old_path, new_path))
         })
     }
 
+    fn rename_inside_directory(&self, path: &str, trimmed_old_path: &str, new_path: &str) -> Option<String> {
+        // Trim the directory prefix ourselves (rather than using
+        // tspath.StartsWithDirectory followed by a separate slice on
+        // len(oldPath)) so the containment check and the suffix we return can
+        // never disagree, and so we don't slice path by a byte count derived
+        // from a canonicalized/differently-cased string: case-folding can
+        // change a path's UTF-8 byte length without changing its rune count
+        // (e.g. the Kelvin sign 'K' folds to the single-byte 'k'), which
+        // could otherwise put len(oldPath) out of range of path.
+        if let Some(suffix) = tspath::trim_file_path_prefix(path, trimmed_old_path, self.use_case_sensitive_file_names()) {
+            if suffix.starts_with('/') || suffix.starts_with('\\') {
+                return Some(format!("{new_path}{suffix}"));
+            }
+        }
+        None
+    }
+
     // file_rename.go:109
-    fn update_tsconfig_files(&self, program: &'static Program, change_tracker: &mut change::Tracker, old_to_new: &pathUpdater, old_path: &str, new_path: &str) {
+    fn update_tsconfig_files(&self, program: &'static Program, change_tracker: &mut change::Tracker, old_to_new: &pathUpdater, renames: &[(String, String)]) {
         let command_line = program.command_line();
         let Some(config_file) = command_line.config_file else {
             return;
@@ -144,16 +161,18 @@ impl LanguageService {
                 if found_exact_match || property_name != "include" || !ast::is_array_literal_expression(initializer) {
                     return;
                 }
-                let (old_spec, is_default) = command_line.get_matched_include_spec(old_path);
-                if !old_spec.is_empty() && !is_default {
-                    let (new_spec, _) = command_line.get_matched_include_spec(new_path);
-                    if new_spec.is_empty() {
-                        let elements = initializer.elements();
-                        if !elements.is_empty() {
-                            let literal = change_tracker
-                                .node_factory
-                                .new_string_literal(alloc_str(&relative_path_from_directory(&config_dir, new_path, use_case_sensitive_file_names)), TokenFlags::None);
-                            change_tracker.insert_node_after(config_file, elements[elements.len() - 1], literal);
+                for (old_path, new_path) in renames {
+                    let (old_spec, is_default) = command_line.get_matched_include_spec(old_path);
+                    if !old_spec.is_empty() && !is_default {
+                        let (new_spec, _) = command_line.get_matched_include_spec(new_path);
+                        if new_spec.is_empty() {
+                            let elements = initializer.elements();
+                            if !elements.is_empty() {
+                                let literal = change_tracker
+                                    .node_factory
+                                    .new_string_literal(alloc_str(&relative_path_from_directory(&config_dir, new_path, use_case_sensitive_file_names)), TokenFlags::None);
+                                change_tracker.insert_node_after(config_file, elements[elements.len() - 1], literal);
+                            }
                         }
                     }
                 }
@@ -216,7 +235,7 @@ impl LanguageService {
             let new_import_from_path = new_from_old.unwrap_or_else(|| old_file_name.clone());
 
             for r in source_file.referenced_files() {
-                if !tspath::is_external_module_name_relative(&r.file_name) {
+                if !tspath::is_external_module_name_relative(&r.file_name) || !(file_moved || relative_target_moved(old_to_new, &old_file_name, &r.file_name)) {
                     continue;
                 }
                 let updated = self.update_relative_path(old_to_new, &old_file_name, &new_import_from_path, &r.file_name);
@@ -270,7 +289,12 @@ impl LanguageService {
                 return updated;
             }
             // Fall back to a regular path update for unresolved module.
-            if tspath::is_external_module_name_relative(import_literal.text()) {
+            // tsrs-only: only when the importing file or the specifier's target moved. Go rewrote every unresolved
+            // relative specifier, and a recomputed path can differ from one that is not wrong (one climbing past the
+            // root, as in some packages' declaration files), so every rename edited such files.
+            if tspath::is_external_module_name_relative(import_literal.text())
+                && (importing_source_file_moved || relative_target_moved(old_to_new, source_file.file_name(), import_literal.text()))
+            {
                 return self.update_relative_path(old_to_new, source_file.file_name(), new_import_from_path, import_literal.text());
             }
             return String::new();
