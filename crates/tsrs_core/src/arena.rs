@@ -501,7 +501,7 @@ impl Arena {
 /// possible pointer; with the arena next to the malloc heap (around 0x200_0000_0000), any pair of 32-bit fields
 /// whose second half is 0x200 (a common flag value) "points" into it, which shows up as spurious would-free
 /// violations. Bytes 4-5 = 00 7c (NUL then `|`) are rare in numbers and text.
-#[cfg(feature = "alloc-profile")]
+#[cfg(all(feature = "alloc-profile", not(compressed_ptrs)))]
 fn census_chunk(size: usize) -> *mut u8 {
     use std::sync::atomic::AtomicUsize;
     unsafe extern "C" {
