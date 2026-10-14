@@ -61,3 +61,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64670](https://github.com/microsoft/TypeScript/commit/0ba5d992db957fa444c3049e51243a056d3a9276) | Port raw private-identifier lookup and untransformed-kind guards for invalid class members. |
 | [#64676](https://github.com/microsoft/TypeScript/commit/0bd74f77b276e659df9f63c3c63377cf11d1d86a) | Port normal CommonJS visitors for for-loop bodies. |
 | [#64642](https://github.com/microsoft/TypeScript/commit/9055b588528600681abb8d95b3f1f39ef1707e4a) | Port inferred-project cleanup and program construction before workspace symbol queries. |
+| [#64469](https://github.com/microsoft/TypeScript/commit/a501b11f64592a18287664ecc478a09659ad3134) | Port resolved-target helper; retain the equivalent ordered external-module scan instead of adding an unmeasured container index/cache under the repository performance rules. |

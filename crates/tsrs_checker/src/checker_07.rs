@@ -2017,17 +2017,17 @@ impl Checker {
         self.merged_symbols.insert(source, target);
     }
 
+    pub(crate) fn get_resolved_target(&mut self, symbol: P<Symbol>) -> P<Symbol> {
+        let merged = self.get_merged_symbol(symbol);
+        let resolved = self.resolve_symbol(merged);
+        self.get_merged_symbol(resolved)
+    }
+
     // checker.go:14605
     pub(crate) fn get_symbol_if_same_reference(&mut self, s1: P<Symbol>, s2: P<Symbol>) -> Option<P<Symbol>> {
-        let m1 = self.get_merged_symbol(s1);
-        let r1 = self.resolve_symbol(m1);
-        let a = self.get_merged_symbol(r1);
-        let m2 = self.get_merged_symbol(s2);
-        let r2 = self.resolve_symbol(m2);
-        let b = self.get_merged_symbol(r2);
-        if a == b {
-            return Some(s1);
-        }
+        let a = self.get_resolved_target(s1);
+        let b = self.get_resolved_target(s2);
+        if a == b { return Some(s1); }
         None
     }
 
