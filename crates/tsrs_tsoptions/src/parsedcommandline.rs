@@ -205,6 +205,9 @@ impl ParsedCommandLine {
                 self.use_case_sensitive_file_names(),
             );
             if !tspath::contains_path(root_directory, file, &self.compare_paths_options) {
+                // Kept with the command line, not in the region of whoever asks first (a checker resolving a
+                // `rewriteRelativeImportExtensions` import into a referenced project; docs/LSP.md "Memory management").
+                let _region = tsrs_core::arena::enter_owner(std::ptr::from_ref(self) as usize);
                 self.common_source_directory_errors.lock().unwrap().push(tsrs_ast::new_compiler_diagnostic(
                     &tsrs_diagnostics::File_0_is_not_under_rootDir_1_rootDir_is_expected_to_contain_all_source_files,
                     &[&absolute_source_file_path, &root_directory],
@@ -557,5 +560,32 @@ impl OutputPathsHost for ParsedCommandLine {
 
     fn use_case_sensitive_file_names(&self) -> bool {
         ParsedCommandLine::use_case_sensitive_file_names(self)
+    }
+}
+
+#[cfg(test)]
+mod common_source_directory_region_test {
+    use tsrs_core::arena::Region;
+    use tsrs_core::tspath::ComparePathsOptions;
+    use tsrs_core::{CompilerOptions, P};
+
+    use super::new_parsed_command_line;
+
+    // The first `common_source_directory` call can come from a checker (a `rewriteRelativeImportExtensions` import into
+    // a referenced project) while its region is the allocation target; the rootDir errors it records are read later
+    // from the command line, which outlives that region.
+    #[test]
+    fn root_dir_errors_are_not_kept_in_the_asking_region() {
+        let options = P::new(CompilerOptions { root_dir: "/lib".to_string(), ..Default::default() });
+        let compare = ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: "/".to_string() };
+        let config = P::new(new_parsed_command_line(options, vec!["/lib/a.ts".to_string(), "/shared/s.ts".to_string()], Vec::new(), compare));
+        let region = Region::new(1 << 20);
+        {
+            let _scope = region.enter();
+            assert_eq!(config.common_source_directory(), "/lib/");
+        }
+        let diagnostics = config.get_config_file_parsing_diagnostics();
+        assert_eq!(diagnostics.len(), 1);
+        assert!(Region::containing(diagnostics[0].addr()).is_none_or(|r| !r.ptr_eq(&region)), "rootDir error allocated in the region");
     }
 }

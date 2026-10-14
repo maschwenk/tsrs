@@ -165,13 +165,14 @@ own, so its free lists and checkpoints are its own (a recycling site frees into 
 debug builds assert it). It keeps a drop list of the values allocated in it whose type needs drop, and freeing it
 runs those drops, so heap memory owned by links and tables goes too. Lazily filled data of a shared object is routed
 to the object's own region (`arena::enter_owner(addr)`: `SourceFile`'s JSDoc cache, line and position maps, name
-table, identifier set, token cache, declaration map; the program's symlink cache goes to the full build's region);
-process-wide statics allocate in the thread arena (`arena::enter_thread_arena`). Entries of a table that later
-versions share or copy and any thread may fill (the resolution data's package.json cache, the dts-faking host's
-symlinks) use `arena::enter_table_owner`: the current target if the table lives in it, else the thread arena,
-without waiting for a region another thread has entered (parse workers fill the cache while the building thread holds the full build's region). Regions bump upwards and their
-chunks are carved from per-thread slabs, and a file region is trimmed after binding: tens of thousands of file
-regions would otherwise each cost a partly used page.
+table, identifier set, token cache, declaration map; a command line's rootDir errors; the program's symlink cache
+goes to the full build's region); process-wide statics allocate in the thread arena (`arena::enter_thread_arena`).
+Entries of a table that later versions share or copy and any thread may fill (the resolution data's package.json
+cache, the dts-faking host's symlinks) use `arena::enter_table_owner`: the current target if the table lives in it,
+else the thread arena, without waiting for a region another thread has entered (parse workers fill the cache while
+the building thread holds the full build's region). Regions bump upwards and their chunks are carved from per-thread
+slabs, and a file region is trimmed after binding: tens of thousands of file regions would otherwise each cost a
+partly used page.
 
 Two ownership constraints matter when changing this code:
 
