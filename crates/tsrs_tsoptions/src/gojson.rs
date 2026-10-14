@@ -281,9 +281,12 @@ pub fn compiler_options_to_go_json(options: &CompilerOptions) -> Value {
     Value::Object(o)
 }
 
+/// Distinguishes an unknown compiler-option name from a zero-valued option.
+///
 /// Go `json.Marshal` of the one core.CompilerOptions field whose json tag is `name`, as
-/// `contentmapper.MarshalDeclaredOptions` finds it by reflection: `None` when no field has that tag, `Some(None)` when
-/// the field is zero (`reflect.Value.IsZero`, the same values `omitzero` omits).
+/// `contentmapper.MarshalDeclaredOptions` finds it by reflection: `None` when no field has that tag,
+/// `Some(None)` when the field is zero (`reflect.Value.IsZero`, the same values `omitzero` omits).
+#[expect(clippy::option_option, reason = "Distinguishes no matching serializer or field from a matching nil value, as in Go.")]
 pub fn compiler_option_to_go_json(options: &CompilerOptions, name: &str) -> Option<Option<Value>> {
     let unknown = |json: &str| options.api_unknown_enum_values.iter().find(|(k, _)| *k == json).map(|(_, n)| Value::Number(*n as f64));
     macro_rules! fields {
@@ -300,7 +303,7 @@ pub fn compiler_option_to_go_json(options: &CompilerOptions, name: &str) -> Opti
 /// JSON names and Go integer widths of the core.CompilerOptions fields Go decodes from JSON integers.
 pub fn compiler_options_integer_fields() -> Vec<(&'static str, u32)> {
     let mut out = Vec::new();
-    let options = CompilerOptions::default();
+    let options = tsrs_core::CompilerOptions::default();
     fn bits<T: GoJson>(_: &T) -> u32 {
         T::INTEGER_BITS
     }
@@ -317,7 +320,7 @@ pub fn compiler_options_integer_fields() -> Vec<(&'static str, u32)> {
 pub const BUILD_OPTIONS_INTEGER_FIELDS: &[(&str, u32)] = &[("builders", 64)];
 
 pub fn compiler_options_from_go_json(value: &Value) -> Result<CompilerOptions, String> {
-    let mut options = CompilerOptions::default();
+    let mut options = tsrs_core::CompilerOptions::default();
     let Some(o) = object(value, "core.CompilerOptions")? else { return Ok(options) };
     macro_rules! fields {
         ($($field:ident: $json:literal,)*) => {

@@ -109,10 +109,11 @@ pub struct CompilationResult {
     pub emit: Option<crate::emit_harness::EmitOutputs>,
 }
 
-/// Dev metric for the option sweep (docs/EMIT.md section 13, wave E12): `TSRS_TEST_DTS_ONLY=1` with `--baselines js`
-/// compiles every test that emits declarations with `emitDeclarationOnly` forced on and compares only the `.d.ts`
-/// outputs with the `.d.ts` sections of the reference `.js` baseline (compiler_runner::extract_dts_block). Not a gate:
-/// forcing the option can change diagnostics. Write the results elsewhere (`TSRS_TEST_RESULTS=...`).
+/// Dev metric for the option sweep (docs/EMIT.md section 13, wave E12): `TSRS_TEST_DTS_ONLY=1` with
+/// `--baselines js` compiles every test that emits declarations with `emitDeclarationOnly` forced on and
+/// compares only the `.d.ts` outputs with the `.d.ts` sections of the reference `.js` baseline
+/// (`compiler_runner::extract_dts_block`). Not a gate: forcing the option can change diagnostics. Write the
+/// results elsewhere (`TSRS_TEST_RESULTS=...`).
 pub fn dts_only_mode() -> bool {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     *ON.get_or_init(|| std::env::var("TSRS_TEST_DTS_ONLY").as_deref() == Ok("1"))

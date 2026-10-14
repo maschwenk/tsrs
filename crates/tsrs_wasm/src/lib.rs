@@ -98,7 +98,7 @@ mod abi {
 
     #[unsafe(no_mangle)]
     pub extern "C" fn tsrs_output() -> *const u8 {
-        OUTPUT.with_borrow(|output| output.as_ptr())
+        OUTPUT.with_borrow(Vec::as_ptr)
     }
 
     #[unsafe(no_mangle)]

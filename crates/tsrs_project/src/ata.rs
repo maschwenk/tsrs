@@ -21,7 +21,7 @@ impl TypingsInfo {
             && match (&self.unresolved_imports, &other.unresolved_imports) {
                 (None, None) => true,
                 (Some(a), Some(b)) => a.equals(b),
-                (Some(a), None) | (None, Some(a)) => a.len() == 0,
+                (Some(a), None) | (None, Some(a)) => a.is_empty(),
             }
     }
 }

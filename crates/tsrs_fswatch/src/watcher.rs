@@ -312,12 +312,14 @@ pub fn fanotify() -> &'static dyn Watcher {
 
 static WRITE_SETTLING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// tsrs-only, process-wide: on backends that report when a writer closes a file (inotify), callbacks wait until
-/// every file being written has been closed, then fire at once. Go fires the first event after a quiet period
-/// immediately, so a save is seen right after its truncation and the file is read half-written; batching for a
-/// fixed time instead adds that time to every save. FSEvents has no close event: there a file that is empty when
-/// its event arrives counts as being written (a truncation whose data has not followed yet), until an event shows
-/// it non-empty. kqueue ignores the setting. For the CLI's `--watch`, which turns it on before it watches anything.
+/// tsrs-only, process-wide: on backends that report when a writer closes a file (inotify), callbacks wait
+/// until every file being written has been closed, then fire at once.
+///
+/// Go fires the first event after a quiet period immediately, so a save is seen right after its truncation
+/// and the file is read half-written; batching for a fixed time instead adds that time to every save.
+/// `FSEvents` has no close event: there a file that is empty when its event arrives counts as being written
+/// (a truncation whose data has not followed yet), until an event shows it non-empty. kqueue ignores the
+/// setting. For the CLI's `--watch`, which turns it on before it watches anything.
 pub fn set_write_settling(on: bool) {
     WRITE_SETTLING.store(on, std::sync::atomic::Ordering::Relaxed);
 }
@@ -643,7 +645,7 @@ impl Watcher for watcher {
         }
         let mut prepared: Vec<preparedWatch> = Vec::with_capacity(requests.len());
         let mut unique_dir_watches: Vec<Arc<dirWatch>> = Vec::with_capacity(requests.len());
-        let mut seen_dir_watches: FxHashSet<dwKey> = FxHashSet::with_capacity_and_hasher(requests.len(), Default::default());
+        let mut seen_dir_watches: FxHashSet<dwKey> = FxHashSet::with_capacity_and_hasher(requests.len(), rustc_hash::FxBuildHasher);
         let rollback = |prepared: &[preparedWatch]| {
             for p in prepared.iter().rev() {
                 p.dw.unwatch(p.id);
@@ -1176,7 +1178,7 @@ impl dirWatch {
         let mut changed = false;
         let comparisons = Mutex::new(comparisonCache::default());
         let deleted = comparisonPath { path: path.to_string(), cache: Some(&comparisons), ..Default::default() };
-        for cb in st.callbacks.iter_mut() {
+        for cb in &mut st.callbacks {
             if cb.delivered || cb.terminal.is_some() || cb.since_seq >= seq {
                 continue;
             }

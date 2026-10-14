@@ -191,6 +191,7 @@ impl Tracker {
     // fromLSPEditRange converts an LSP range to a source file range. For a content-mapped file, an original
     // range may have several projections; this selects the one belonging to sourceFile. A range with no exact
     // projection cannot be written back and marks the file unmappable.
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn from_lsp_edit_range(&mut self, source_file: P<SourceFile>, lsproto_range: lsproto::Range) -> TextRange {
         let spans = self.converters.from_lsp_range_for_source_file(source_file, lsproto_range, Feature::All);
         if let Some(result) = spans.iter().find_map(|span| if span.fidelity.is_exact() && span.script == source_file { Some(span.span) } else { None }) {
@@ -208,6 +209,7 @@ impl Tracker {
     // mapped back to the original document. If it does not fall entirely within a single verbatim span, the
     // edit cannot be represented safely: the file is recorded so GetChanges drops its edits, and a best-effort
     // range is returned so the accumulated edits stay well-formed.
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub(crate) fn to_lsp_edit_range(&mut self, source_file: P<SourceFile>, text_range: TextRange) -> lsproto::Range {
         let (r, fidelity) = self.converters.to_lsp_range(&source_file, text_range);
         if !fidelity.is_exact() {
@@ -347,8 +349,8 @@ impl Tracker {
     // (after the close paren for function-like, after the name/exclamation/question for variable-like).
     // Returns true if successful.
     pub fn try_insert_type_annotation(&mut self, source_file: P<SourceFile>, node: P<Node>, type_node: P<Node>) -> bool {
-        let end_node: Option<P<Node>>;
-        if ast::is_function_like(Some(node)) {
+
+        let end_node: Option<P<Node>> = if ast::is_function_like(Some(node)) {
             let mut e = astnav::find_child_of_kind(node, Kind::CloseParenToken, source_file);
             if e.is_none() {
                 if !ast::is_arrow_function(node) {
@@ -361,7 +363,7 @@ impl Tracker {
                 }
                 e = Some(params[0]);
             }
-            end_node = e;
+            e
         } else {
             let mut e = match node.kind() {
                 Kind::VariableDeclaration => node.as_variable_declaration().exclamation_token(),
@@ -373,8 +375,8 @@ impl Tracker {
             if e.is_none() {
                 e = node.name();
             }
-            end_node = e;
-        }
+            e
+        };
         let Some(end_node) = end_node else {
             return false;
         };
@@ -823,9 +825,7 @@ impl Tracker {
         source_file: P<SourceFile>,
         node: P<Node>,
     ) -> Option<i32> {
-        let Some(members) = get_members_or_properties(node) else {
-            return None;
-        };
+        let members = get_members_or_properties(node)?;
 
         let mut indentation = None;
         let text = source_file.text();

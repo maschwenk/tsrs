@@ -18,8 +18,10 @@ bitflags::bitflags! {
 
 /// Go `func(string, bool) bool` callback (Printer.isFileLevelUniqueNameInCurrentFile).
 pub type IsFileLevelUniqueNameFn = Rc<dyn Fn(&str, bool) -> bool>;
-/// Go `func(*ast.Node) string` callback (Printer.getTextOfNode). It receives the generator back (PORTING.md callback
-/// convention) because the printer's implementation re-enters `generate_name` for generated names.
+/// Go `func(*ast.Node) string` callback (Printer.getTextOfNode).
+///
+/// It receives the generator back (PORTING.md callback convention) because the printer's implementation
+/// re-enters `generate_name` for generated names.
 pub type GetTextOfNodeFn = Rc<dyn Fn(&mut NameGenerator, P<Node>) -> String>;
 
 #[derive(Default)]

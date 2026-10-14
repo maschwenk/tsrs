@@ -126,8 +126,8 @@ struct Counts {
     correct: usize,
     snapshot_gone: usize,
     stale_handle_rejected: usize,
-    /// Correct answers on S_k whose response arrived after the response to S_k's release: the request
-    /// was in flight while the snapshot was released.
+    /// Correct answers on `S_k` whose response arrived after the response to `S_k`'s release: the request was
+    /// in flight while the snapshot was released.
     correct_across_release: usize,
     other: Vec<String>,
 }

@@ -13,10 +13,12 @@ impl Obj {
     pub fn new() -> Obj {
         Obj(OrderedMap::default())
     }
+    #[must_use]
     pub fn set(mut self, key: &str, value: Value) -> Obj {
         self.0.insert(key.to_string(), value);
         self
     }
+    #[must_use]
     pub fn set_opt(self, key: &str, value: Option<Value>) -> Obj {
         match value {
             Some(v) => self.set(key, v),
@@ -25,6 +27,7 @@ impl Obj {
     }
     /// Go encoding/json/v2 `omitempty`: omitted when the encoded value is `null`, `""`, `[]` or `{}`
     /// (unlike v1, `false` and `0` are NOT omitted).
+    #[must_use]
     pub fn set_omitempty(self, key: &str, value: Value) -> Obj {
         let empty = match &value {
             Value::Null => true,

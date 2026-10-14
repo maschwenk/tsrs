@@ -271,12 +271,8 @@ fn get_actual_indentation_for_list_item_before_comma(
     options: &FormatCodeSettings,
 ) -> Option<i32> {
     // previous token is comma that separates items in list - find the previous item and try to derive indentation from it
-    if comma_token.parent().is_none() {
-        return None;
-    }
-    let Some(containing_list) = get_containing_list(comma_token, source_file) else {
-        return None;
-    };
+    comma_token.parent()?;
+    let containing_list = get_containing_list(comma_token, source_file)?;
     let comma_index = containing_list
         .nodes()
         .iter()
@@ -968,12 +964,14 @@ pub fn node_will_indent_child(
         | Kind::DefaultClause => return true,
         Kind::CaseBlock => return settings.indent_switch_case.is_true_or_unknown(),
         Kind::VariableDeclaration | Kind::PropertyAssignment | Kind::BinaryExpression => {
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if settings.indent_multi_line_object_literal_beginning_on_blank_line.is_false_or_unknown()
                 && source_file.is_some()
                 && child_kind == Kind::ObjectLiteralExpression
             {
                 return range_is_on_one_line(child.unwrap().loc(), source_file.unwrap());
             }
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if parent.kind() == Kind::BinaryExpression && source_file.is_some() && child_kind == Kind::JsxElement {
                 let source_file = source_file.unwrap();
                 let parent_start_line = scanner::get_ecma_line_of_position(
@@ -1015,6 +1013,7 @@ pub fn node_will_indent_child(
         | Kind::GetAccessor
         | Kind::SetAccessor => return child_kind != Kind::Block,
         Kind::ArrowFunction => {
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if source_file.is_some() && child_kind == Kind::ParenthesizedExpression {
                 return range_is_on_one_line(child.unwrap().loc(), source_file.unwrap());
             }

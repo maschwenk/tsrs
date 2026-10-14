@@ -1,6 +1,6 @@
 //! Rust-encoded bytes decoded by the real pinned JavaScript client. Needs Node.js and an installed
 //! typescript@7.1.0-dev.20260930.4 package: `TSRS_CODEC_ORACLE=<dir>/node_modules/typescript cargo test -p
-//! tsrs_api_codec --test node_client`. Without TSRS_CODEC_ORACLE the test reports that it was skipped.
+//! tsrs_api_codec --test node_client`. Without `TSRS_CODEC_ORACLE` the test reports that it was skipped.
 
 #[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]
 mod common;
@@ -90,7 +90,7 @@ fn rust_encodings_decode_in_the_pinned_js_client() {
         let decoded = decode_nodes(&bytes).unwrap();
         let text = {
             let _scope = decoded.region().enter();
-            tsrs_printer::new_printer(Default::default(), Default::default(), None).emit(decoded.root(), None)
+            tsrs_printer::new_printer(tsrs_printer::PrinterOptions::default(), tsrs_printer::PrintHandlers::default(), None).emit(decoded.root(), None)
         };
         std::fs::write(out_dir.join("synthetic.union.rust.print.txt"), text).unwrap();
     }

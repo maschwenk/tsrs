@@ -292,7 +292,7 @@ impl LanguageService {
             }
         }
 
-        let mut unique_set: FxHashSet<String> = FxHashSet::with_capacity_and_hasher(uniques.len(), Default::default());
+        let mut unique_set: FxHashSet<String> = FxHashSet::with_capacity_and_hasher(uniques.len(), rustc_hash::FxBuildHasher);
         unique_set.extend(uniques.keys().map(std::clone::Clone::clone));
         Ok((unique_set, sorted_entries))
     }
@@ -455,6 +455,7 @@ impl LanguageService {
             }
         }
 
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if origin_is_promise(origin) && data.property_access_to_convert.is_some() {
             let property_access_to_convert = data.property_access_to_convert.unwrap();
             if insert_text.is_empty() {
@@ -858,9 +859,7 @@ impl LanguageService {
             if display_name.is_empty() {
                 return None;
             }
-            let Some(entry) = self.get_entry_for_object_literal_method_completion(ctx, type_checker, member, enclosing_declaration, file) else {
-                return None;
-            };
+            let entry = self.get_entry_for_object_literal_method_completion(ctx, type_checker, member, enclosing_declaration, file)?;
             Some(objectLiteralMethodSymbol {
                 symbol: member,
                 origin: symbolOriginInfo {

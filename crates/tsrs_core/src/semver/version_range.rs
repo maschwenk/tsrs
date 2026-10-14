@@ -150,6 +150,7 @@ pub(crate) struct VersionComparator {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
+#[expect(clippy::enum_variant_names, reason = "The variant names preserve the upstream Go enum names.")]
 pub(crate) enum ComparatorOperator {
     RangeLessThan,
     RangeLessThanEqual,
@@ -262,19 +263,17 @@ pub(crate) fn parse_alternatives(text: &str) -> Option<Vec<Vec<VersionComparator
         let mut comparators = Vec::new();
 
         if let Some(hyphen_match) = hyphen_reg_exp_find_string_submatch(r) {
-            if let Some(parsed_comparators) = parse_hyphen(hyphen_match[1], hyphen_match[2]) {
+            {
+                let parsed_comparators = parse_hyphen(hyphen_match[1], hyphen_match[2])?;
                 comparators.extend(parsed_comparators);
-            } else {
-                return None;
             }
         } else {
             comparators = whitespace_reg_exp_split(r).into_iter().try_fold(comparators, |mut comparators, simple| {
                 let m = range_reg_exp_find_string_submatch(simple.trim())?;
 
-                if let Some(parsed_comparators) = parse_comparator(m[1], m[2]) {
+                {
+                    let parsed_comparators = parse_comparator(m[1], m[2])?;
                     comparators.extend(parsed_comparators);
-                } else {
-                    return None;
                 }
 
                 Some(comparators)

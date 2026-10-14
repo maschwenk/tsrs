@@ -194,8 +194,8 @@ impl CallbackFs {
         }
     }
 
-    /// SetConnection: must be called once the transport connection exists, before any filesystem
-    /// operation that needs a callback. Later calls are ignored.
+    /// `SetConnection`: must be called once the transport connection exists, before any filesystem operation
+    /// that needs a callback. Later calls are ignored.
     pub fn set_connection(&self, conn: Arc<dyn Caller>) {
         let _ = self.conn.set(conn);
     }

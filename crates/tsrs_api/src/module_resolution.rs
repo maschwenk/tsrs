@@ -516,7 +516,7 @@ impl Session {
             drop(unsafe { Box::from_raw(host) });
         }
         let (resolved, trace) = result.map_err(ApiError::internal)?;
-        let trace: Vec<String> = trace.iter().map(|t| tsrs_diagnostics::localize(Some(t.message), Default::default(), &t.args)).collect();
+        let trace: Vec<String> = trace.iter().map(|t| tsrs_diagnostics::localize(Some(t.message), tsrs_diagnostics::Key::default(), &t.args)).collect();
         Ok(Obj::new().set("resolvedModule", resolved_module_response(&resolved)).set_opt("trace", (!trace.is_empty()).then(|| strings(trace))).build())
     }
 }

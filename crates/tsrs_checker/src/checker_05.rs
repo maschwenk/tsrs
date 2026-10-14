@@ -105,9 +105,7 @@ impl Checker {
         modifiers_mask: ModifierFlags,
     ) -> Option<P<constructorAccessibilityError>> {
         if let Some(result) = signatures.iter().find_map(|&signature| {
-            let Some(declaration) = signature.declaration() else {
-                return None;
-            };
+            let declaration = signature.declaration()?;
             let modifiers = get_selected_modifier_flags(declaration, modifiers_mask);
             // (1) Public constructors and (2) constructor functions are always accessible.
             if modifiers.is_empty() || !is_constructor_declaration(declaration) {
@@ -1703,7 +1701,7 @@ impl Checker {
 
     /**
      * TS 1.0 spec: 4.12
-     * If FuncExpr is of type Any, or of an object type that has no call or construct signatures
+     * If `FuncExpr` is of type Any, or of an object type that has no call or construct signatures
      * but is a subtype of the Function interface, the call is an untyped function call.
      */
     // checker.go:10125
@@ -1920,16 +1918,16 @@ impl Checker {
         }
 
         let will_transform_es_decorators = !self.legacy_decorators && self.language_version < LanguageFeatureMinimumTarget.class_and_class_element_decorators;
-        let location: Option<P<Node>>;
-        if will_transform_es_decorators && class_or_constructor_parameter_is_decorated(false, node) {
+
+        let location: Option<P<Node>> = if will_transform_es_decorators && class_or_constructor_parameter_is_decorated(false, node) {
             let mut loc = node;
             if let Some(first_decorator) = node.decorators().first().copied() {
                 loc = first_decorator;
             }
-            location = Some(loc);
+            Some(loc)
         } else {
-            location = self.get_first_transformable_static_class_element(node);
-        }
+            self.get_first_transformable_static_class_element(node)
+        };
 
         if let Some(location) = location {
             self.check_external_emit_helpers(location, ExternalEmitHelpers::SetFunctionName);

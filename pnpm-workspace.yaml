@@ -1,5 +1,9 @@
 packages:
   - npm
+  - playground
+allowBuilds:
+  '@parcel/watcher': false
+
 
 # The nightly is verified against the TypeScript commit pinned in Cargo.toml.
 minimumReleaseAgeExclude:

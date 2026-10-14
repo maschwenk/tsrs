@@ -135,7 +135,7 @@ impl RegistryCloneHost for autoImportRegistryCloneHost {
             Err(_) => P::new(InfoCacheEntry {
                 directory_exists: true,
                 package_directory: alloc_str(&tspath::get_directory_path(file_name)),
-                contents: Some(P::new(PackageJson::new(Default::default(), false))),
+                contents: Some(P::new(PackageJson::new(tsrs_module::packagejson::Fields::default(), false))),
             }),
             Ok(fields) => P::new(InfoCacheEntry {
                 directory_exists: true,

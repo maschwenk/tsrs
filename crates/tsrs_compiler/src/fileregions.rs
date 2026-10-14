@@ -98,9 +98,11 @@ pub struct LeafSettings {
 /// at any count.
 pub const MAX_DEFAULT_CHECKERS: usize = 16;
 
-/// Whether the CLI may parse declaration-file member lists lazily (notes/mem-lazy-dts-members.md): `TSRS_LAZY_DTS=0`
-/// turns it off, and so do the debug modes that walk or freeze the whole program (the reachability census, the
-/// shared-object check).
+/// Keeps lazy declaration parsing within its supported CLI modes.
+///
+/// Whether the CLI may parse declaration-file member lists lazily (notes/mem-lazy-dts-members.md):
+/// `TSRS_LAZY_DTS=0` turns it off, and so do the debug modes that walk or freeze the whole program (the
+/// reachability census, the shared-object check).
 pub fn lazy_dts_allowed() -> bool {
     if std::env::var_os("TSRS_LAZY_DTS").is_some_and(|v| v == "0" || v == "off") {
         return false;
@@ -109,9 +111,12 @@ pub fn lazy_dts_allowed() -> bool {
     !census && !tsrs_core::ptr::shared_check::enabled()
 }
 
-/// Parses and binds declaration-file member lists lazily in every program created from here on, process-wide (the CLI
-/// before `new_program` when no declaration file is type-checked; `TSRS_LAZY_DTS=force` in the test runner, to check
-/// that forcing every list gives the same baselines). Never in the language server or the API.
+/// Enables lazy declaration parsing for subsequent CLI programs.
+///
+/// Parses and binds declaration-file member lists lazily in every program created from here on, process-wide
+/// (the CLI before `new_program` when no declaration file is type-checked; `TSRS_LAZY_DTS=force` in the test
+/// runner, to check that forcing every list gives the same baselines). Never in the language server or the
+/// API.
 pub fn enable_lazy_dts() {
     tsrs_parser::enable_lazy_dts();
     tsrs_binder::enable_lazy_dts();
@@ -122,19 +127,22 @@ pub fn enable_lazy_dts() {
 // Relaxed (stores and loads): set by the CLI before the program is created.
 static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Before the checkers of a multi-checker pass are created: parses and binds, in parallel on the worker pool, the lazy
-/// member lists that every checker asks for at the start, so that the checkers do not wait for one another on them
-/// (notes/mem-lazy-dts-members.md, "Shared lists"). Two sets, each a property of the program, not of a run:
+/// Before the checkers of a multi-checker pass are created: parses and binds, in parallel on the worker pool,
+/// the lazy member lists that every checker asks for at the start, so that the checkers do not wait for one
+/// another on them (notes/mem-lazy-dts-members.md, "Shared lists"). Two sets, each a property of the program,
+/// not of a run:
 ///
-/// - the global libraries: every declaration file that enters the program through a default lib, a `lib` option or
-///   `/// <reference lib>`, an automatic type directive, the `types` option or a `/// <reference types>` directive, and
-///   the files those pull in with `/// <reference path>` (`@types/node`'s `index.d.ts` references the rest of the
-///   package). Their globals and ambient modules are what every checker resolves first; module-scoped packages that
-///   enter only through imports stay lazy;
-/// - the interfaces and classes that merge into the global scope more than once (declared in several script files or
-///   `declare global` blocks): `initialize_checker` clones the first symbol's tables and merges the others into them.
+/// - the global libraries: every declaration file that enters the program through a default lib, a `lib`
+///   option or `/// <reference lib>`, an automatic type directive, the `types` option or a
+///   `/// <reference types>` directive, and the files those pull in with `/// <reference path>`
+///   (`@types/node`'s `index.d.ts` references the rest of the package). Their globals and ambient modules
+///   are what every checker resolves first; module-scoped packages that enter only through imports stay lazy;
+/// - the interfaces and classes that merge into the global scope more than once (declared in several script
+///   files or `declare global` blocks): `initialize_checker` clones the first symbol's tables and merges
+///   the others into them.
 ///
-/// Forcing a list early changes nothing observable (`lazylist`). `TSRS_LAZY_DTS_SHARED=0` forces only the merges.
+/// Forcing a list early changes nothing observable (`lazylist`). `TSRS_LAZY_DTS_SHARED=0` forces only the
+/// merges.
 pub(crate) fn force_shared_lists(program: &crate::program::Program) {
     // Relaxed: see `LAZY_DTS`.
     if !LAZY_DTS.load(std::sync::atomic::Ordering::Relaxed) {
@@ -154,7 +162,7 @@ pub(crate) fn force_shared_lists(program: &crate::program::Program) {
             table.for_each(|name, symbol| by_name.entry(name).or_default().push(symbol));
         }
     };
-    for &file in program.files.iter() {
+    for &file in program.files {
         if !ast::is_external_or_common_js_module(file) {
             add(file.locals());
         }
@@ -210,14 +218,16 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
     program.files.iter().copied().filter(|f| f.is_declaration_file() && global.contains(&*f.path().0)).collect()
 }
 
+/// Reads the leaf-reclamation policy selected for CLI programs.
+///
 /// `TSRS_FREE_LEAVES`, a comma-separated list: unset frees the predicted leaves when the program gets at most
-/// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees them at any
-/// count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing; `stats` reports
-/// (`stats_report`); `all` gives every TypeScript root file a region (`LeafSettings::every_file`), at any count. Off
-/// under the debug modes that walk files or checker data after the pass (`TSRS_FILE_TIMES` walks every tree;
-/// `TSRS_ASSIGNMENT_STATS`, the work and heap censuses walk checker tables) or that must see every block alive (the
-/// reachability census, `TSRS_CENSUS=1`). Off without compressed pointers on unix (`Region::retire_on_free`),
-/// whatever the value.
+/// `MAX_DEFAULT_CHECKERS` checkers (`checkers`: the most it can get, `checker_count_upper_bound`); `1` frees
+/// them at any count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing;
+/// `stats` reports (`stats_report`); `all` gives every TypeScript root file a region
+/// (`LeafSettings::every_file`), at any count. Off under the debug modes that walk files or checker data
+/// after the pass (`TSRS_FILE_TIMES` walks every tree; `TSRS_ASSIGNMENT_STATS`, the work and heap censuses
+/// walk checker tables) or that must see every block alive (the reachability census, `TSRS_CENSUS=1`). Off
+/// without compressed pointers on unix (`Region::retire_on_free`), whatever the value.
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
@@ -255,11 +265,14 @@ pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     settings
 }
 
-/// Turns file regions on for the programs created from here on, process-wide (the CLI, before `new_program`; never
-/// the language server, the API or the test harnesses). Predicted paths are matched relative to `current_directory`.
-/// From now on, `bind` binds a file that was parsed in a registered region of its own in that region, so its binder
-/// data is freed with it (a watch session's file regions, tsrs_execute watchmem.rs). Opt-in: in a process with other
-/// registered regions (API builds), a region containing a file may be held by the building thread.
+/// Gives subsequent CLI programs per-file arena ownership.
+///
+/// Turns file regions on for the programs created from here on, process-wide (the CLI, before `new_program`;
+/// never the language server, the API or the test harnesses). Predicted paths are matched relative to
+/// `current_directory`. From now on, `bind` binds a file that was parsed in a registered region of its own in
+/// that region, so its binder data is freed with it (a watch session's file regions, `tsrs_execute`
+/// watchmem.rs). Opt-in: in a process with other registered regions (API builds), a region containing a file
+/// may be held by the building thread.
 pub fn bind_in_file_regions() {
     // Relaxed: set before the session parses anything; the binding threads get their work through locks taken after.
     OWN_FILE_REGIONS.store(true, Ordering::Relaxed);
@@ -470,15 +483,17 @@ fn leaf_referred(program: &Program, has_region: impl Fn(P<SourceFile>) -> bool +
     program.leaf_referred.get_or_init(|| referred_files(program, |file| stats() || has_region(file)))
 }
 
-/// The files for which `wanted` holds that another file of the program refers to: every file with an include reason
-/// other than being a root (an import, a `/// <reference path>`, a type reference directive, a lib reference, a
-/// default lib, an automatic type directive), and every target of a resolved import, module augmentation or type
-/// reference directive of another file. A file that refers only to itself is not counted.
+/// The files for which `wanted` holds that another file of the program refers to: every file with an include
+/// reason other than being a root (an import, a `/// <reference path>`, a type reference directive, a lib
+/// reference, a default lib, an automatic type directive), and every target of a resolved import, module
+/// augmentation or type reference directive of another file. A file that refers only to itself is not
+/// counted.
 ///
-/// This runs inside the check time, before the pass. The resolutions (vscode: 110k) are read on the worker pool, like
-/// the import graph of the checker assignment (checkerpool.rs `get_import_adjacency`), and a resolved name is looked
-/// up by the name itself first (`files_by_name`): normalizing every name (`get_source_file_for_resolved_module`) took
-/// 24 ms on one thread, and collecting every importer's names before that another 3-5 ms on one thread.
+/// This runs inside the check time, before the pass. The resolutions (vscode: 110k) are read on the worker
+/// pool, like the import graph of the checker assignment (checkerpool.rs `get_import_adjacency`), and a
+/// resolved name is looked up by the name itself first (`files_by_name`): normalizing every name
+/// (`get_source_file_for_resolved_module`) took 24 ms on one thread, and collecting every importer's names
+/// before that another 3-5 ms on one thread.
 fn referred_files(program: &Program, wanted: impl Fn(P<SourceFile>) -> bool + Sync) -> FxHashSet<P<SourceFile>> {
     let mut referred = FxHashSet::default();
     // builds a set; the order of insertion cannot be seen
@@ -523,15 +538,15 @@ fn files_by_name(program: &Program) -> FxHashMap<&str, P<SourceFile>> {
     program.files.iter().filter(|&&file| program.files_by_path.get(file.path()) == Some(&file)).map(|file| (file.file_name(), *file)).collect()
 }
 
-/// Whether nothing of `file` can be reached from another file that does not refer to it. It is a type-checked,
-/// non-declaration TypeScript external module (its top-level declarations are module scoped; JavaScript is excluded
-/// because CommonJS exports and expando assignments can declare globals), with no module augmentation (including
-/// `declare global`), no ambient module, no pattern ambient module, no UMD global (`export as namespace`), and no
-/// `// @ts-check` directive (read through the file by `skip_type_checking`). And it exports no alias (`export ...
-/// from`, `export *`, `export =`, `export { local }`, `export default <name>`): the checker's whole-program loops
-/// (`getAlternativeContainingModules`) ask every module whether it re-exports a symbol, and a module whose exports
-/// are its own declarations answers no for any symbol declared elsewhere, so they can skip it
-/// (`Checker::is_unreadable_check_leaf`).
+/// Whether nothing of `file` can be reached from another file that does not refer to it. It is a
+/// type-checked, non-declaration TypeScript external module (its top-level declarations are module scoped;
+/// JavaScript is excluded because `CommonJS` exports and expando assignments can declare globals), with no
+/// module augmentation (including `declare global`), no ambient module, no pattern ambient module, no UMD
+/// global (`export as namespace`), and no `// @ts-check` directive (read through the file by
+/// `skip_type_checking`). And it exports no alias (`export ... from`, `export *`, `export =`, `export { local
+/// }`, `export default <name>`): the checker's whole-program loops (`getAlternativeContainingModules`) ask
+/// every module whether it re-exports a symbol, and a module whose exports are its own declarations answers
+/// no for any symbol declared elsewhere, so they can skip it (`Checker::is_unreadable_check_leaf`).
 fn adds_nothing(program: &Program, file: P<SourceFile>) -> bool {
     if program.skip_type_checking(file, false)
         || file.is_declaration_file.get()

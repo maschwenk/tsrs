@@ -1,6 +1,6 @@
-//! printNode parity: the pinned Go server's `handlePrintNode` (DecodeNodes + printer, golden `print/*.go.txt`
+//! printNode parity: the pinned Go server's `handlePrintNode` (`DecodeNodes` + printer, golden `print/*.go.txt`
 //! or `*.go.err`) against `decode_nodes` + `tsrs_printer` on the same bytes. Inputs: the Go server's own
-//! SourceFile encodings, the pinned JS client encoder's encodings of the same trees, and client-factory
+//! `SourceFile` encodings, the pinned JS client encoder's encodings of the same trees, and client-factory
 //! synthesized trees (all positions -1, i.e. 0xFFFFFFFF on the wire) encoded by the client's encodeNode.
 
 #[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]

@@ -231,11 +231,11 @@ impl Checker {
                 let inferences = n.inferences.borrow();
                 for (info, outcome) in inferences.iter().zip(entry.infos.iter()) {
                     info.candidates.clear();
-                    for &t in outcome.candidates.iter() {
+                    for &t in &outcome.candidates {
                         info.candidates.push(t);
                     }
                     info.contra_candidates.clear();
-                    for &t in outcome.contra_candidates.iter() {
+                    for &t in &outcome.contra_candidates {
                         info.contra_candidates.push(t);
                     }
                     info.priority.set(outcome.priority);
@@ -268,7 +268,7 @@ impl Checker {
         let after = self.infer_memo_effects();
         let hidden_reset = count_zero && self.expression_checks != expression_checks;
         let effects = in_instantiation || hidden_reset || after != before || flags & (crate::flowmemo::FLAG_EFFECTS | crate::flowmemo::FLAG_TYPE_CACHE) != 0;
-        let tainted = !taint.is_pure() || self.skip_direct_inference_nodes.len() != 0;
+        let tainted = !taint.is_pure() || !self.skip_direct_inference_nodes.is_empty();
         if steps < min_steps() || effects || tainted {
             count(stats && steps >= min_steps() && after.created != before.created, &NOT_STORED_CREATED, 1);
             count(stats && steps >= min_steps() && after.total_instantiation_count != before.total_instantiation_count, &NOT_STORED_INSTANTIATED, 1);
@@ -289,7 +289,7 @@ impl Checker {
 
     /// Builds the walk's key in `key`; false when the call is not memoized.
     fn infer_memo_key(&self, key: &mut Vec<u32>, n: P<InferenceState>, source: P<Type>, target: P<Type>) -> bool {
-        if self.skip_direct_inference_nodes.len() != 0 {
+        if !self.skip_direct_inference_nodes.is_empty() {
             return false;
         }
         let inferences = n.inferences.borrow();

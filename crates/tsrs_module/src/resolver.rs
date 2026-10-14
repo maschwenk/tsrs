@@ -700,9 +700,7 @@ impl<'r> ResolutionState<'r> {
     // Returns nil if typeRoots is not configured or if no matching module is found in any typeRoot directory.
     fn resolve_from_type_root(&mut self) -> Option<Resolved> {
         let compiler_options = self.compiler_options.get();
-        let Some(type_roots) = compiler_options.type_roots.as_ref() else {
-            return None;
-        };
+        let type_roots = compiler_options.type_roots.as_ref()?;
         for type_root in type_roots {
             let candidate = self.get_candidate_from_type_root(type_root);
             let directory_exists = self.fs().directory_exists(type_root);
@@ -1157,13 +1155,13 @@ impl<'r> ResolutionState<'r> {
             // Note: this differs from Strada's tryLoadInputFileForPath in that it
             // does not attempt to perform "guesses", instead requring a clear root indicator.
 
-            let root_dir: String;
-            if !compiler_options.root_dir.is_empty() {
+
+            let root_dir: String = if !compiler_options.root_dir.is_empty() {
                 // A `rootDir` compiler option strongly indicates the root location
-                root_dir = compiler_options.root_dir.clone();
+                compiler_options.root_dir.clone()
             } else if !compiler_options.config_file_path.is_empty() {
                 // When no explicit rootDir is set, treat the config file's directory as the project root, which establishes the common source directory, so no other locations need to be checked.
-                root_dir = tspath::get_directory_path(&compiler_options.config_file_path);
+                tspath::get_directory_path(&compiler_options.config_file_path)
             } else {
                 // replace empty string with `.` - the reverse of the operation done when entries are built - so main entrypoint errors don't look weird
                 let entry_arg = if entry.is_empty() { "." } else { entry };
@@ -1179,7 +1177,7 @@ impl<'r> ResolutionState<'r> {
                 );
                 self.diagnostics.push(diagnostic);
                 return unresolved();
-            }
+            };
 
             let candidate_directories = self.get_output_directories();
             for candidate_dir in &candidate_directories {
@@ -2027,7 +2025,7 @@ impl<'r> ResolutionState<'r> {
                 let mut module_name = if !package_file.is_empty() {
                     tspath::get_relative_path_from_directory(candidate, &package_file, &ComparePathsOptions::default())
                 } else {
-                    tspath::get_relative_path_from_directory(candidate, &index_path, &ComparePathsOptions::default())
+                    tspath::get_relative_path_from_directory(candidate, &index_path, &tsrs_core::tspath::ComparePathsOptions::default())
                 };
                 if tspath::is_encoded_dynamic_file_name(candidate) {
                     module_name = tspath::decode_dynamic_uri_path(&module_name);
@@ -2393,7 +2391,7 @@ pub fn try_parse_patterns<V>(path_mappings: Option<&OrderedMap<String, V>>) -> P
             }
         }
     }
-    let mut by_prefix: rustc_hash::FxHashMap<Box<[u8]>, Vec<u32>> = Default::default();
+    let mut by_prefix: rustc_hash::FxHashMap<Box<[u8]>, Vec<u32>> = rustc_hash::FxHashMap::default();
     for (i, pattern) in patterns.iter().enumerate() {
         let PatternKind::Wildcard(star) = pattern.kind else { unreachable!("exact patterns are in the string set") };
         let prefix: Box<[u8]> = pattern.text.as_bytes()[..star].into();
@@ -2765,9 +2763,7 @@ impl ResolutionState<'_> {
                 entrypoints.extend(files.iter().filter_map(|file| {
                     let mut logical_file = tspath::get_relative_path_from_directory(package_json.package_directory, file, &ComparePathsOptions { use_case_sensitive_file_names: case_sensitive, ..Default::default() });
                     if dynamic_package { logical_file = tspath::decode_dynamic_uri_path(&logical_file); }
-                    let Some(mut matched_star) = self.get_matched_star_for_pattern_entrypoint(&logical_file, leading_slice, trailing_slice, case_sensitive) else {
-                        return None;
-                    };
+                    let mut matched_star = self.get_matched_star_for_pattern_entrypoint(&logical_file, leading_slice, trailing_slice, case_sensitive)?;
                     if dynamic_package { matched_star = tspath::encode_dynamic_logical_module_specifier(&matched_star); }
                     let resolved_subpath = subpath.replacen('*', &matched_star, 1);
                     let resolved_subpath = resolved_subpath.strip_prefix("./").unwrap_or(&resolved_subpath);

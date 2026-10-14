@@ -232,7 +232,7 @@ function genGetChildrenPropertyMask() {
             if (ct === "modifierList") check = `has_modifiers(n.modifiers())`;
             else if (ct === "rawNodeList") check = `!${getter(m)}.is_empty()`;
             else check = `present(${getter(m)})`;
-            const shifted = `(${check} as u8) << ${i}`;
+            const shifted = i === 0 ? `${check} as u8` : `(${check} as u8) << ${i}`;
             return info.childProps.length === 1 ? shifted : `(${shifted})`;
         });
         w(`        ${kindPat(node)} => {`);

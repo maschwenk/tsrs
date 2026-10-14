@@ -27,7 +27,7 @@ impl Host for TestHost {
 
 #[test]
 fn decoder_reads_what_the_generator_writes() {
-    let mut r#gen = new_generator("main.js", "", "/", ComparePathsOptions::default());
+    let mut r#gen = new_generator("main.js", "", "/", tsrs_core::tspath::ComparePathsOptions::default());
     let s = r#gen.add_source("/main.ts");
     let n = r#gen.add_name("foo");
     r#gen.add_source_mapping(0, 4, s, 1, 2).unwrap();

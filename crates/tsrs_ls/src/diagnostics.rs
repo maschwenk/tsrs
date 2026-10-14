@@ -68,7 +68,7 @@ impl LanguageService {
         // them at position 0.
         let mut synthesized_by_file: OrderedMap<P<SourceFile>, Vec<P<Diagnostic>>> = OrderedMap::default();
         for diag_slice in diagnostics {
-            for &diag in diag_slice.iter() {
+            for &diag in *diag_slice {
                 if is_synthesized_content_mapped_diagnostic(diag) {
                     synthesized_by_file.entry(diag.file().unwrap()).or_default().push(diag);
                     continue;

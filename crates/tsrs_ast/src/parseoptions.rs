@@ -22,14 +22,14 @@ pub fn get_external_module_indicator_options(
     metadata: &SourceFileMetaData,
 ) -> ExternalModuleIndicatorOptions {
     if tspath::is_declaration_file_name(file_name) {
-        return ExternalModuleIndicatorOptions::default();
+        return crate::parseoptions::ExternalModuleIndicatorOptions::default();
     }
 
     match options.get_emit_module_detection_kind() {
         // All non-declaration files are modules, declaration files still do the usual isFileProbablyExternalModule
         ModuleDetectionKind::Force => ExternalModuleIndicatorOptions { jsx: false, force: true },
         // Files are modules if they have imports, exports, or import.meta
-        ModuleDetectionKind::Legacy => ExternalModuleIndicatorOptions::default(),
+        ModuleDetectionKind::Legacy => crate::parseoptions::ExternalModuleIndicatorOptions::default(),
         // If module is nodenext or node16, all esm format files are modules
         // If jsx is react-jsx or react-jsxdev then jsx tags force module-ness
         // otherwise, the presence of import or export statments (or import.meta) implies module-ness
@@ -37,7 +37,7 @@ pub fn get_external_module_indicator_options(
             jsx: options.jsx == JsxEmit::ReactJSX || options.jsx == JsxEmit::ReactJSXDev,
             force: is_file_forced_to_be_module_by_format(file_name, options, metadata),
         },
-        ModuleDetectionKind::None => ExternalModuleIndicatorOptions::default(),
+        ModuleDetectionKind::None => crate::parseoptions::ExternalModuleIndicatorOptions::default(),
     }
 }
 

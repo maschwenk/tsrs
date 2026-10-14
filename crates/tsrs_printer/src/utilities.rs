@@ -849,14 +849,14 @@ fn match_string(text: &str, pos: &mut usize, expected: &str) -> bool {
 
 fn match_quoted_string(text: &str, pos: &mut usize) -> bool {
     let mut text_pos = *pos;
-    let quote_char;
-    if match_rune(text, &mut text_pos, '\'' as stringutil::Rune) {
-        quote_char = '\'' as stringutil::Rune;
+
+    let quote_char = if match_rune(text, &mut text_pos, '\'' as stringutil::Rune) {
+        '\'' as stringutil::Rune
     } else if match_rune(text, &mut text_pos, '"' as stringutil::Rune) {
-        quote_char = '"' as stringutil::Rune;
+        '"' as stringutil::Rune
     } else {
         return false;
-    }
+    };
     while text_pos < text.len() {
         let (ch, size) = stringutil::decode_rune(&text.as_bytes()[text_pos..]);
         text_pos += size;

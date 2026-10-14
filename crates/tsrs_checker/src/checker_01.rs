@@ -136,7 +136,7 @@ use rustc_hash::FxHashMap;
 
 // checker.go:1128
 pub(crate) fn create_file_index_map(files: &[P<SourceFile>]) -> FxHashMap<P<SourceFile>, usize> {
-    let mut result = FxHashMap::with_capacity_and_hasher(files.len(), Default::default());
+    let mut result = FxHashMap::with_capacity_and_hasher(files.len(), rustc_hash::FxBuildHasher);
     result.extend(files.iter().enumerate().map(|(i, file)| (*file, i)));
     result
 }
@@ -355,7 +355,7 @@ impl Checker {
         //       apparent type of the module - either globalObjectType or globalFunctionType - which wouldn't exist if we
         //       did module augmentations prior to finalizing the global types.
         for list in &augmentations {
-            for &augmentation in list.iter() {
+            for &augmentation in *list {
                 // Merge 'global' module augmentations. This needs to be done after global symbol table is initialized to
                 // make sure that all ambient modules are indexed
                 if ast::is_global_scope_augmentation(augmentation.parent().unwrap()) {
@@ -400,7 +400,7 @@ impl Checker {
         // merge _nonglobal_ module augmentations.
         // this needs to be done after global symbol table is initialized to make sure that all ambient modules are indexed
         for list in &augmentations {
-            for &augmentation in list.iter() {
+            for &augmentation in *list {
                 if !ast::is_global_scope_augmentation(augmentation.parent().unwrap()) {
                     self.merge_module_augmentation(augmentation);
                 }
@@ -421,6 +421,7 @@ impl Checker {
 
     // Pattern ambient modules are merged together if they have the same pattern and identical import attributes type.
     // checker.go:1409
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn merge_pattern_ambient_modules(&mut self) {
         let mut groups_by_pattern: FxHashMap<String, Vec<usize>> = FxHashMap::default();
         // Go builds fresh `&ast.PatternAmbientModule{...}` values and mutates their Symbol; they are only published at the end.

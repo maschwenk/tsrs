@@ -206,8 +206,9 @@ impl<T> Drop for FrozenRefMut<'_, T> {
 }
 
 /// `Cell<T>` for fields of shared arena objects (binder symbols) that only their owner writes: after binding,
-/// checkers write these fields only on objects they created themselves (transient symbols). Checked builds
-/// verify that with `shared_check` (`TSRS_CHECK_SHARED=1`); otherwise it is a plain `Cell`.
+/// checkers write these fields only on objects they created themselves (transient symbols).
+///
+/// Checked builds verify that with `shared_check` (`TSRS_CHECK_SHARED=1`); otherwise it is a plain `Cell`.
 #[repr(transparent)]
 #[derive(Default)]
 pub struct OwnedCell<T>(Cell<T>);
@@ -314,9 +315,11 @@ impl Default for OwnedStrCell {
     }
 }
 
-/// `OwnedCell<&'static str>` in 8 bytes with two tag bits for the owner (`tags` / `set_tags`; `set` keeps them): the
-/// address in the low 48 bits, the length in the next 14, the tags in the top 2. A string of `0x3FFF` bytes or more
-/// (or at an address above 2^48) is copied into the arena after a `u32` length (`PackedStr`'s long form).
+/// `OwnedCell<&'static str>` in 8 bytes with two tag bits for the owner (`tags` / `set_tags`; `set` keeps
+/// them): the address in the low 48 bits, the length in the next 14, the tags in the top 2.
+///
+/// A string of `0x3FFF` bytes or more (or at an address above 2^48) is copied into the arena after a `u32`
+/// length (`PackedStr`'s long form).
 pub struct OwnedTaggedStrCell(Cell<u64>);
 
 const TAGGED_LEN_SHIFT: u32 = 48;
@@ -397,9 +400,10 @@ impl Default for OwnedTaggedStrCell {
     }
 }
 
-/// `OwnedCell<&'static [T]>` for slices of handles in arena objects: a `SliceCell` (12 bytes, 4-aligned), or with
-/// compressed pointers, where a struct of handles packs tighter, a `ThinSliceCell` (8 bytes). `get` returns exactly
-/// the slice last `set`.
+/// `OwnedCell<&'static [T]>` for slices of handles in arena objects: a `SliceCell` (12 bytes, 4-aligned), or
+/// with compressed pointers, where a struct of handles packs tighter, a `ThinSliceCell` (8 bytes).
+///
+/// `get` returns exactly the slice last `set`.
 pub struct OwnedPSliceCell<T: 'static>(
     #[cfg(not(compressed_ptrs))] crate::ptr::SliceCell<T>,
     #[cfg(compressed_ptrs)] crate::ptr::ThinSliceCell<T>,

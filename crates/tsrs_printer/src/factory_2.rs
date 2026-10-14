@@ -857,6 +857,7 @@ impl crate::NodeFactory {
     }
 
     // factory.go:1122
+    #[expect(clippy::fn_params_excessive_bools, reason = "The boolean parameters preserve the upstream Go function signature.")]
     pub fn new_es_decorate_class_element_context_object(
         &self,
         kind: &str,

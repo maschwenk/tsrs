@@ -289,10 +289,11 @@ const UTF8_CONT_MASK: u8 = 0x3F; // data bits carried by a continuation byte
 const SURROGATE_UTF8_BYTE1_MIN: u8 = 0xA0;
 const SURROGATE_UTF8_BYTE1_MAX: u8 = 0xBF;
 
-/// Returns the Go `string(ch)` encoding, except that a lone surrogate becomes the WTF-8
-/// sentinel bytes. Such a `String` is not valid UTF-8 (Go strings are byte strings): only
-/// compare, hash, concatenate, slice at ASCII boundaries, or decode it with
-/// `decode_js_string_rune`; never call `chars()` on it.
+/// Encodes a rune while preserving lone surrogates.
+///
+/// Returns the Go `string(ch)` encoding, except that a lone surrogate becomes the WTF-8 sentinel bytes. Such
+/// a `String` is not valid UTF-8 (Go strings are byte strings): only compare, hash, concatenate, slice at
+/// ASCII boundaries, or decode it with `decode_js_string_rune`; never call `chars()` on it.
 pub fn encode_js_string_rune(ch: Rune) -> String {
     if is_surrogate(ch) {
         let bytes = vec![

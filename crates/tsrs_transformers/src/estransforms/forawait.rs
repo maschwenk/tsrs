@@ -568,15 +568,13 @@ impl forawaitTransformer {
 
         let asterisk_token = if flags.intersects(FunctionFlags::Async) { None } else { node.as_method_declaration().asterisk_token() };
 
-        let parameters;
-        let body;
-        if flags.intersects(FunctionFlags::Async) && flags.intersects(FunctionFlags::Generator) {
-            parameters = Some(self.transform_async_generator_function_parameter_list(node));
-            body = Some(self.transform_async_generator_function_body(node));
+
+
+        let (parameters, body) = if flags.intersects(FunctionFlags::Async) && flags.intersects(FunctionFlags::Generator) {
+            (Some(self.transform_async_generator_function_parameter_list(node)), Some(self.transform_async_generator_function_body(node)))
         } else {
-            parameters = self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor());
-            body = self.emit_context().visit_function_body(node.body(), &mut self.visitor());
-        }
+            (self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor()), self.emit_context().visit_function_body(node.body(), &mut self.visitor()))
+        };
 
         let name = self.visitor().visit_node(node.name()).unwrap();
         let updated = self.factory().update_method_declaration(
@@ -604,15 +602,13 @@ impl forawaitTransformer {
 
         let asterisk_token = if flags.intersects(FunctionFlags::Async) { None } else { node.as_function_declaration().asterisk_token() };
 
-        let parameters;
-        let body;
-        if flags.intersects(FunctionFlags::Async) && flags.intersects(FunctionFlags::Generator) {
-            parameters = Some(self.transform_async_generator_function_parameter_list(node));
-            body = Some(self.transform_async_generator_function_body(node));
+
+
+        let (parameters, body) = if flags.intersects(FunctionFlags::Async) && flags.intersects(FunctionFlags::Generator) {
+            (Some(self.transform_async_generator_function_parameter_list(node)), Some(self.transform_async_generator_function_body(node)))
         } else {
-            parameters = self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor());
-            body = self.emit_context().visit_function_body(node.body(), &mut self.visitor());
-        }
+            (self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor()), self.emit_context().visit_function_body(node.body(), &mut self.visitor()))
+        };
 
         let updated = self.factory().update_function_declaration(
             node,
@@ -657,15 +653,13 @@ impl forawaitTransformer {
 
         let asterisk_token = if flags.intersects(FunctionFlags::Async) { None } else { node.as_function_expression().asterisk_token() };
 
-        let parameters;
-        let body;
-        if flags.intersects(FunctionFlags::Async) && flags.intersects(FunctionFlags::Generator) {
-            parameters = Some(self.transform_async_generator_function_parameter_list(node));
-            body = Some(self.transform_async_generator_function_body(node));
+
+
+        let (parameters, body) = if flags.intersects(FunctionFlags::Async) && flags.intersects(FunctionFlags::Generator) {
+            (Some(self.transform_async_generator_function_parameter_list(node)), Some(self.transform_async_generator_function_body(node)))
         } else {
-            parameters = self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor());
-            body = self.emit_context().visit_function_body(node.body(), &mut self.visitor());
-        }
+            (self.emit_context().visit_parameters(node.parameter_list(), &mut self.visitor()), self.emit_context().visit_function_body(node.body(), &mut self.visitor()))
+        };
 
         let updated = self.factory().update_function_expression(
             node,

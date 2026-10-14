@@ -38,129 +38,129 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
     match node.kind() {
         Kind::QualifiedName => {
             let n = node.as_qualified_name();
-            ((present(n.left()) as u8) << 0)
+            (present(n.left()) as u8)
                 | ((present(n.right()) as u8) << 1)
         }
         Kind::ComputedPropertyName => {
             let n = node.as_computed_property_name();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::Decorator => {
             let n = node.as_decorator();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::IfStatement => {
             let n = node.as_if_statement();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.then_statement()) as u8) << 1)
                 | ((present(n.else_statement()) as u8) << 2)
         }
         Kind::DoStatement => {
             let n = node.as_do_statement();
-            ((present(n.statement()) as u8) << 0)
+            (present(n.statement()) as u8)
                 | ((present(n.expression()) as u8) << 1)
         }
         Kind::WhileStatement => {
             let n = node.as_while_statement();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.statement()) as u8) << 1)
         }
         Kind::ForStatement => {
             let n = node.as_for_statement();
-            ((present(n.initializer()) as u8) << 0)
+            (present(n.initializer()) as u8)
                 | ((present(n.condition()) as u8) << 1)
                 | ((present(n.incrementor()) as u8) << 2)
                 | ((present(n.statement()) as u8) << 3)
         }
         Kind::ForInStatement | Kind::ForOfStatement => {
             let n = node.as_for_in_or_of_statement();
-            ((present(n.await_modifier()) as u8) << 0)
+            (present(n.await_modifier()) as u8)
                 | ((present(n.initializer()) as u8) << 1)
                 | ((present(n.expression()) as u8) << 2)
                 | ((present(n.statement()) as u8) << 3)
         }
         Kind::BreakStatement => {
             let n = node.as_break_statement();
-            (present(n.label()) as u8) << 0
+            present(n.label()) as u8
         }
         Kind::ContinueStatement => {
             let n = node.as_continue_statement();
-            (present(n.label()) as u8) << 0
+            present(n.label()) as u8
         }
         Kind::ReturnStatement => {
             let n = node.as_return_statement();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::WithStatement => {
             let n = node.as_with_statement();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.statement()) as u8) << 1)
         }
         Kind::SwitchStatement => {
             let n = node.as_switch_statement();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.case_block()) as u8) << 1)
         }
         Kind::CaseBlock => {
             let n = node.as_case_block();
-            (present(n.clauses()) as u8) << 0
+            present(n.clauses()) as u8
         }
         Kind::CaseClause | Kind::DefaultClause => {
             let n = node.as_case_or_default_clause();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.statements()) as u8) << 1)
         }
         Kind::ThrowStatement => {
             let n = node.as_throw_statement();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::TryStatement => {
             let n = node.as_try_statement();
-            ((present(n.try_block()) as u8) << 0)
+            (present(n.try_block()) as u8)
                 | ((present(n.catch_clause()) as u8) << 1)
                 | ((present(n.finally_block()) as u8) << 2)
         }
         Kind::CatchClause => {
             let n = node.as_catch_clause();
-            ((present(n.variable_declaration()) as u8) << 0)
+            (present(n.variable_declaration()) as u8)
                 | ((present(n.block()) as u8) << 1)
         }
         Kind::LabeledStatement => {
             let n = node.as_labeled_statement();
-            ((present(n.label()) as u8) << 0)
+            (present(n.label()) as u8)
                 | ((present(n.statement()) as u8) << 1)
         }
         Kind::ExpressionStatement => {
             let n = node.as_expression_statement();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::Block => {
             let n = node.as_block();
-            (present(n.statements()) as u8) << 0
+            present(n.statements()) as u8
         }
         Kind::VariableStatement => {
             let n = node.as_variable_statement();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.declaration_list()) as u8) << 1)
         }
         Kind::VariableDeclaration => {
             let n = node.as_variable_declaration();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8)
                 | ((present(n.exclamation_token()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
                 | ((present(n.initializer()) as u8) << 3)
         }
         Kind::VariableDeclarationList => {
             let n = node.as_variable_declaration_list();
-            (present(n.declarations()) as u8) << 0
+            present(n.declarations()) as u8
         }
         Kind::ObjectBindingPattern | Kind::ArrayBindingPattern => {
             let n = node.as_binding_pattern();
-            (present(n.elements()) as u8) << 0
+            present(n.elements()) as u8
         }
         Kind::Parameter => {
             let n = node.as_parameter_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.dot_dot_dot_token()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
                 | ((present(n.question_token()) as u8) << 3)
@@ -169,18 +169,18 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::BindingElement => {
             let n = node.as_binding_element();
-            ((present(n.dot_dot_dot_token()) as u8) << 0)
+            (present(n.dot_dot_dot_token()) as u8)
                 | ((present(n.property_name()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
                 | ((present(n.initializer()) as u8) << 3)
         }
         Kind::MissingDeclaration => {
             let n = node.as_missing_declaration();
-            (has_modifiers(n.modifiers()) as u8) << 0
+            has_modifiers(n.modifiers()) as u8
         }
         Kind::FunctionDeclaration => {
             let n = node.as_function_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.asterisk_token()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
                 | ((present(n.type_parameters()) as u8) << 3)
@@ -190,7 +190,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ClassDeclaration => {
             let n = node.as_class_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.type_parameters()) as u8) << 2)
                 | ((present(n.heritage_clauses()) as u8) << 3)
@@ -198,7 +198,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ClassExpression => {
             let n = node.as_class_expression();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.type_parameters()) as u8) << 2)
                 | ((present(n.heritage_clauses()) as u8) << 3)
@@ -206,11 +206,11 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::HeritageClause => {
             let n = node.as_heritage_clause();
-            (present(n.types()) as u8) << 0
+            present(n.types()) as u8
         }
         Kind::InterfaceDeclaration => {
             let n = node.as_interface_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.type_parameters()) as u8) << 2)
                 | ((present(n.heritage_clauses()) as u8) << 3)
@@ -218,84 +218,84 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration => {
             let n = node.as_type_alias_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.type_parameters()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
         }
         Kind::EnumMember => {
             let n = node.as_enum_member();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8)
                 | ((present(n.initializer()) as u8) << 1)
         }
         Kind::EnumDeclaration => {
             let n = node.as_enum_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.members()) as u8) << 2)
         }
         Kind::ModuleBlock => {
             let n = node.as_module_block();
-            (present(n.statements()) as u8) << 0
+            present(n.statements()) as u8
         }
         Kind::ImportDeclaration | Kind::JSImportDeclaration => {
             let n = node.as_import_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.import_clause()) as u8) << 1)
                 | ((present(n.module_specifier()) as u8) << 2)
                 | ((present(n.attributes()) as u8) << 3)
         }
         Kind::ExternalModuleReference => {
             let n = node.as_external_module_reference();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::NamespaceImport => {
             let n = node.as_namespace_import();
-            (present(n.name()) as u8) << 0
+            present(n.name()) as u8
         }
         Kind::NamedImports => {
             let n = node.as_named_imports();
-            (present(n.elements()) as u8) << 0
+            present(n.elements()) as u8
         }
         Kind::ExportAssignment => {
             let n = node.as_export_assignment();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.type_()) as u8) << 1)
                 | ((present(n.expression()) as u8) << 2)
         }
         Kind::NamespaceExportDeclaration => {
             let n = node.as_namespace_export_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
         }
         Kind::NamespaceExport => {
             let n = node.as_namespace_export();
-            (present(n.name()) as u8) << 0
+            present(n.name()) as u8
         }
         Kind::NamedExports => {
             let n = node.as_named_exports();
-            (present(n.elements()) as u8) << 0
+            present(n.elements()) as u8
         }
         Kind::ExportSpecifier => {
             let n = node.as_export_specifier();
-            ((present(n.property_name()) as u8) << 0)
+            (present(n.property_name()) as u8)
                 | ((present(n.name()) as u8) << 1)
         }
         Kind::CallSignature => {
             let n = node.as_call_signature_declaration();
-            ((present(n.type_parameters()) as u8) << 0)
+            (present(n.type_parameters()) as u8)
                 | ((present(n.parameters()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
         }
         Kind::ConstructSignature => {
             let n = node.as_construct_signature_declaration();
-            ((present(n.type_parameters()) as u8) << 0)
+            (present(n.type_parameters()) as u8)
                 | ((present(n.parameters()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
         }
         Kind::Constructor => {
             let n = node.as_constructor_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.type_parameters()) as u8) << 1)
                 | ((present(n.parameters()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
@@ -303,7 +303,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::GetAccessor => {
             let n = node.as_get_accessor_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.type_parameters()) as u8) << 2)
                 | ((present(n.parameters()) as u8) << 3)
@@ -312,7 +312,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::SetAccessor => {
             let n = node.as_set_accessor_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.type_parameters()) as u8) << 2)
                 | ((present(n.parameters()) as u8) << 3)
@@ -321,13 +321,13 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::IndexSignature => {
             let n = node.as_index_signature_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.parameters()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
         }
         Kind::MethodSignature => {
             let n = node.as_method_signature_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.postfix_token()) as u8) << 2)
                 | ((present(n.type_parameters()) as u8) << 3)
@@ -336,7 +336,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::MethodDeclaration => {
             let n = node.as_method_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.asterisk_token()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
                 | ((present(n.postfix_token()) as u8) << 3)
@@ -347,7 +347,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::PropertySignature => {
             let n = node.as_property_signature_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.postfix_token()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
@@ -355,7 +355,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::PropertyDeclaration => {
             let n = node.as_property_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.postfix_token()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
@@ -363,12 +363,12 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ClassStaticBlockDeclaration => {
             let n = node.as_class_static_block_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.body()) as u8) << 1)
         }
         Kind::BinaryExpression => {
             let n = node.as_binary_expression();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.left()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
                 | ((present(n.operator_token()) as u8) << 3)
@@ -376,20 +376,20 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::PrefixUnaryExpression => {
             let n = node.as_prefix_unary_expression();
-            (present(n.operand()) as u8) << 0
+            present(n.operand()) as u8
         }
         Kind::PostfixUnaryExpression => {
             let n = node.as_postfix_unary_expression();
-            (present(n.operand()) as u8) << 0
+            present(n.operand()) as u8
         }
         Kind::YieldExpression => {
             let n = node.as_yield_expression();
-            ((present(n.asterisk_token()) as u8) << 0)
+            (present(n.asterisk_token()) as u8)
                 | ((present(n.expression()) as u8) << 1)
         }
         Kind::ArrowFunction => {
             let n = node.as_arrow_function();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.type_parameters()) as u8) << 1)
                 | ((present(n.parameters()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
@@ -398,7 +398,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::FunctionExpression => {
             let n = node.as_function_expression();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.asterisk_token()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
                 | ((present(n.type_parameters()) as u8) << 3)
@@ -408,17 +408,17 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::AsExpression => {
             let n = node.as_as_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.type_()) as u8) << 1)
         }
         Kind::SatisfiesExpression => {
             let n = node.as_satisfies_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.type_()) as u8) << 1)
         }
         Kind::ConditionalExpression => {
             let n = node.as_conditional_expression();
-            ((present(n.condition()) as u8) << 0)
+            (present(n.condition()) as u8)
                 | ((present(n.question_token()) as u8) << 1)
                 | ((present(n.when_true()) as u8) << 2)
                 | ((present(n.colon_token()) as u8) << 3)
@@ -426,77 +426,77 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::PropertyAccessExpression => {
             let n = node.as_property_access_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.question_dot_token()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
         }
         Kind::ElementAccessExpression => {
             let n = node.as_element_access_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.question_dot_token()) as u8) << 1)
                 | ((present(n.argument_expression()) as u8) << 2)
         }
         Kind::CallExpression => {
             let n = node.as_call_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.question_dot_token()) as u8) << 1)
                 | ((present(n.type_arguments()) as u8) << 2)
                 | ((present(n.arguments()) as u8) << 3)
         }
         Kind::NewExpression => {
             let n = node.as_new_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.type_arguments()) as u8) << 1)
                 | ((present(n.arguments()) as u8) << 2)
         }
         Kind::MetaProperty => {
             let n = node.as_meta_property();
-            (present(n.name()) as u8) << 0
+            present(n.name()) as u8
         }
         Kind::NonNullExpression => {
             let n = node.as_non_null_expression();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::SpreadElement => {
             let n = node.as_spread_element();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::TemplateExpression => {
             let n = node.as_template_expression();
-            ((present(n.head()) as u8) << 0)
+            (present(n.head()) as u8)
                 | ((present(n.template_spans()) as u8) << 1)
         }
         Kind::TemplateSpan => {
             let n = node.as_template_span();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.literal()) as u8) << 1)
         }
         Kind::TaggedTemplateExpression => {
             let n = node.as_tagged_template_expression();
-            ((present(n.tag()) as u8) << 0)
+            (present(n.tag()) as u8)
                 | ((present(n.question_dot_token()) as u8) << 1)
                 | ((present(n.type_arguments()) as u8) << 2)
                 | ((present(n.template()) as u8) << 3)
         }
         Kind::ParenthesizedExpression => {
             let n = node.as_parenthesized_expression();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::ArrayLiteralExpression => {
             let n = node.as_array_literal_expression();
-            (present(n.elements()) as u8) << 0
+            present(n.elements()) as u8
         }
         Kind::ObjectLiteralExpression => {
             let n = node.as_object_literal_expression();
-            (present(n.properties()) as u8) << 0
+            present(n.properties()) as u8
         }
         Kind::SpreadAssignment => {
             let n = node.as_spread_assignment();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::PropertyAssignment => {
             let n = node.as_property_assignment();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.postfix_token()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
@@ -504,7 +504,7 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::ShorthandPropertyAssignment => {
             let n = node.as_shorthand_property_assignment();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.postfix_token()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
@@ -513,94 +513,94 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::DeleteExpression => {
             let n = node.as_delete_expression();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::TypeOfExpression => {
             let n = node.as_type_of_expression();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::VoidExpression => {
             let n = node.as_void_expression();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::AwaitExpression => {
             let n = node.as_await_expression();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::TypeAssertionExpression => {
             let n = node.as_type_assertion();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8)
                 | ((present(n.expression()) as u8) << 1)
         }
         Kind::UnionType => {
             let n = node.as_union_type_node();
-            (present(n.types()) as u8) << 0
+            present(n.types()) as u8
         }
         Kind::IntersectionType => {
             let n = node.as_intersection_type_node();
-            (present(n.types()) as u8) << 0
+            present(n.types()) as u8
         }
         Kind::ConditionalType => {
             let n = node.as_conditional_type_node();
-            ((present(n.check_type()) as u8) << 0)
+            (present(n.check_type()) as u8)
                 | ((present(n.extends_type()) as u8) << 1)
                 | ((present(n.true_type()) as u8) << 2)
                 | ((present(n.false_type()) as u8) << 3)
         }
         Kind::TypeOperator => {
             let n = node.as_type_operator_node();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::InferType => {
             let n = node.as_infer_type_node();
-            (present(n.type_parameter()) as u8) << 0
+            present(n.type_parameter()) as u8
         }
         Kind::ArrayType => {
             let n = node.as_array_type_node();
-            (present(n.element_type()) as u8) << 0
+            present(n.element_type()) as u8
         }
         Kind::IndexedAccessType => {
             let n = node.as_indexed_access_type_node();
-            ((present(n.object_type()) as u8) << 0)
+            (present(n.object_type()) as u8)
                 | ((present(n.index_type()) as u8) << 1)
         }
         Kind::TypeReference => {
             let n = node.as_type_reference_node();
-            ((present(n.type_name()) as u8) << 0)
+            (present(n.type_name()) as u8)
                 | ((present(n.type_arguments()) as u8) << 1)
         }
         Kind::ExpressionWithTypeArguments => {
             let n = node.as_expression_with_type_arguments();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.type_arguments()) as u8) << 1)
         }
         Kind::LiteralType => {
             let n = node.as_literal_type_node();
-            (present(n.literal()) as u8) << 0
+            present(n.literal()) as u8
         }
         Kind::TypePredicate => {
             let n = node.as_type_predicate_node();
-            ((present(n.asserts_modifier()) as u8) << 0)
+            (present(n.asserts_modifier()) as u8)
                 | ((present(n.parameter_name()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
         }
         Kind::ImportAttribute => {
             let n = node.as_import_attribute();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8)
                 | ((present(n.value()) as u8) << 1)
         }
         Kind::ImportAttributes => {
             let n = node.as_import_attributes();
-            (present(n.attributes()) as u8) << 0
+            present(n.attributes()) as u8
         }
         Kind::TypeQuery => {
             let n = node.as_type_query_node();
-            ((present(n.expr_name()) as u8) << 0)
+            (present(n.expr_name()) as u8)
                 | ((present(n.type_arguments()) as u8) << 1)
         }
         Kind::MappedType => {
             let n = node.as_mapped_type_node();
-            ((present(n.readonly_token()) as u8) << 0)
+            (present(n.readonly_token()) as u8)
                 | ((present(n.type_parameter()) as u8) << 1)
                 | ((present(n.name_type()) as u8) << 2)
                 | ((present(n.question_token()) as u8) << 3)
@@ -609,235 +609,235 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::TypeLiteral => {
             let n = node.as_type_literal_node();
-            (present(n.members()) as u8) << 0
+            present(n.members()) as u8
         }
         Kind::TupleType => {
             let n = node.as_tuple_type_node();
-            (present(n.elements()) as u8) << 0
+            present(n.elements()) as u8
         }
         Kind::NamedTupleMember => {
             let n = node.as_named_tuple_member();
-            ((present(n.dot_dot_dot_token()) as u8) << 0)
+            (present(n.dot_dot_dot_token()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.question_token()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
         }
         Kind::OptionalType => {
             let n = node.as_optional_type_node();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::RestType => {
             let n = node.as_rest_type_node();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::ParenthesizedType => {
             let n = node.as_parenthesized_type_node();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::FunctionType => {
             let n = node.as_function_type_node();
-            ((present(n.type_parameters()) as u8) << 0)
+            (present(n.type_parameters()) as u8)
                 | ((present(n.parameters()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
         }
         Kind::ConstructorType => {
             let n = node.as_constructor_type_node();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.type_parameters()) as u8) << 1)
                 | ((present(n.parameters()) as u8) << 2)
                 | ((present(n.type_()) as u8) << 3)
         }
         Kind::TemplateLiteralType => {
             let n = node.as_template_literal_type_node();
-            ((present(n.head()) as u8) << 0)
+            (present(n.head()) as u8)
                 | ((present(n.template_spans()) as u8) << 1)
         }
         Kind::TemplateLiteralTypeSpan => {
             let n = node.as_template_literal_type_span();
-            ((present(n.type_()) as u8) << 0)
+            (present(n.type_()) as u8)
                 | ((present(n.literal()) as u8) << 1)
         }
         Kind::SyntheticExpression => {
             let n = node.as_synthetic_expression();
-            (present(n.tuple_name_source()) as u8) << 0
+            present(n.tuple_name_source()) as u8
         }
         Kind::PartiallyEmittedExpression => {
             let n = node.as_partially_emitted_expression();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::JsxElement => {
             let n = node.as_jsx_element();
-            ((present(n.opening_element()) as u8) << 0)
+            (present(n.opening_element()) as u8)
                 | ((present(n.children()) as u8) << 1)
                 | ((present(n.closing_element()) as u8) << 2)
         }
         Kind::JsxAttributes => {
             let n = node.as_jsx_attributes();
-            (present(n.properties()) as u8) << 0
+            present(n.properties()) as u8
         }
         Kind::JsxNamespacedName => {
             let n = node.as_jsx_namespaced_name();
-            ((present(n.namespace()) as u8) << 0)
+            (present(n.namespace()) as u8)
                 | ((present(n.name()) as u8) << 1)
         }
         Kind::JsxOpeningElement => {
             let n = node.as_jsx_opening_element();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_arguments()) as u8) << 1)
                 | ((present(n.attributes()) as u8) << 2)
         }
         Kind::JsxSelfClosingElement => {
             let n = node.as_jsx_self_closing_element();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_arguments()) as u8) << 1)
                 | ((present(n.attributes()) as u8) << 2)
         }
         Kind::JsxFragment => {
             let n = node.as_jsx_fragment();
-            ((present(n.opening_fragment()) as u8) << 0)
+            (present(n.opening_fragment()) as u8)
                 | ((present(n.children()) as u8) << 1)
                 | ((present(n.closing_fragment()) as u8) << 2)
         }
         Kind::JsxAttribute => {
             let n = node.as_jsx_attribute();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8)
                 | ((present(n.initializer()) as u8) << 1)
         }
         Kind::JsxSpreadAttribute => {
             let n = node.as_jsx_spread_attribute();
-            (present(n.expression()) as u8) << 0
+            present(n.expression()) as u8
         }
         Kind::JsxClosingElement => {
             let n = node.as_jsx_closing_element();
-            (present(n.tag_name()) as u8) << 0
+            present(n.tag_name()) as u8
         }
         Kind::JsxExpression => {
             let n = node.as_jsx_expression();
-            ((present(n.dot_dot_dot_token()) as u8) << 0)
+            (present(n.dot_dot_dot_token()) as u8)
                 | ((present(n.expression()) as u8) << 1)
         }
         Kind::SyntaxList => {
             let n = node.as_syntax_list();
-            (!n.children().is_empty() as u8) << 0
+            !n.children().is_empty() as u8
         }
         Kind::JSDoc => {
             let n = node.as_jsdoc();
-            ((present(n.comment()) as u8) << 0)
+            (present(n.comment()) as u8)
                 | ((present(n.tags()) as u8) << 1)
         }
         Kind::JSDocTypeExpression => {
             let n = node.as_jsdoc_type_expression();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::JSDocNonNullableType => {
             let n = node.as_jsdoc_non_nullable_type();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::JSDocNullableType => {
             let n = node.as_jsdoc_nullable_type();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::JSDocVariadicType => {
             let n = node.as_jsdoc_variadic_type();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::JSDocOptionalType => {
             let n = node.as_jsdoc_optional_type();
-            (present(n.type_()) as u8) << 0
+            present(n.type_()) as u8
         }
         Kind::JSDocTypeTag => {
             let n = node.as_jsdoc_type_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocUnknownTag => {
             let n = node.as_jsdoc_unknown_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.comment()) as u8) << 1)
         }
         Kind::JSDocTemplateTag => {
             let n = node.as_jsdoc_template_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.constraint()) as u8) << 1)
                 | ((present(n.type_parameters()) as u8) << 2)
                 | ((present(n.comment()) as u8) << 3)
         }
         Kind::JSDocReturnTag => {
             let n = node.as_jsdoc_return_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocPublicTag => {
             let n = node.as_jsdoc_public_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.comment()) as u8) << 1)
         }
         Kind::JSDocPrivateTag => {
             let n = node.as_jsdoc_private_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.comment()) as u8) << 1)
         }
         Kind::JSDocProtectedTag => {
             let n = node.as_jsdoc_protected_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.comment()) as u8) << 1)
         }
         Kind::JSDocReadonlyTag => {
             let n = node.as_jsdoc_readonly_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.comment()) as u8) << 1)
         }
         Kind::JSDocOverrideTag => {
             let n = node.as_jsdoc_override_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.comment()) as u8) << 1)
         }
         Kind::JSDocDeprecatedTag => {
             let n = node.as_jsdoc_deprecated_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.comment()) as u8) << 1)
         }
         Kind::JSDocSeeTag => {
             let n = node.as_jsdoc_see_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.name_expression()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocImplementsTag => {
             let n = node.as_jsdoc_implements_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.class_name()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocAugmentsTag => {
             let n = node.as_jsdoc_augments_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.class_name()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocSatisfiesTag => {
             let n = node.as_jsdoc_satisfies_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocThrowsTag => {
             let n = node.as_jsdoc_throws_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocThisTag => {
             let n = node.as_jsdoc_this_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocImportTag => {
             let n = node.as_jsdoc_import_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.import_clause()) as u8) << 1)
                 | ((present(n.module_specifier()) as u8) << 2)
                 | ((present(n.attributes()) as u8) << 3)
@@ -845,86 +845,86 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::JSDocCallbackTag => {
             let n = node.as_jsdoc_callback_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
                 | ((present(n.comment()) as u8) << 3)
         }
         Kind::JSDocOverloadTag => {
             let n = node.as_jsdoc_overload_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.comment()) as u8) << 2)
         }
         Kind::JSDocTypedefTag => {
             let n = node.as_jsdoc_typedef_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.type_expression()) as u8) << 1)
                 | ((present(n.name()) as u8) << 2)
                 | ((present(n.comment()) as u8) << 3)
         }
         Kind::JSDocSignature => {
             let n = node.as_jsdoc_signature();
-            ((present(n.type_parameters()) as u8) << 0)
+            (present(n.type_parameters()) as u8)
                 | ((present(n.parameters()) as u8) << 1)
                 | ((present(n.type_()) as u8) << 2)
         }
         Kind::JSDocNameReference => {
             let n = node.as_jsdoc_name_reference();
-            (present(n.name()) as u8) << 0
+            present(n.name()) as u8
         }
         Kind::ModuleDeclaration => {
             let n = node.as_module_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.attributes()) as u8) << 2)
                 | ((present(n.body()) as u8) << 3)
         }
         Kind::ImportEqualsDeclaration => {
             let n = node.as_import_equals_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.module_reference()) as u8) << 2)
         }
         Kind::ExportDeclaration => {
             let n = node.as_export_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.export_clause()) as u8) << 1)
                 | ((present(n.module_specifier()) as u8) << 2)
                 | ((present(n.attributes()) as u8) << 3)
         }
         Kind::ImportType => {
             let n = node.as_import_type_node();
-            ((present(n.argument()) as u8) << 0)
+            (present(n.argument()) as u8)
                 | ((present(n.attributes()) as u8) << 1)
                 | ((present(n.qualifier()) as u8) << 2)
                 | ((present(n.type_arguments()) as u8) << 3)
         }
         Kind::ImportClause => {
             let n = node.as_import_clause();
-            ((present(n.name()) as u8) << 0)
+            (present(n.name()) as u8)
                 | ((present(n.named_bindings()) as u8) << 1)
         }
         Kind::ImportSpecifier => {
             let n = node.as_import_specifier();
-            ((present(n.property_name()) as u8) << 0)
+            (present(n.property_name()) as u8)
                 | ((present(n.name()) as u8) << 1)
         }
         Kind::JSDocLink => {
             let n = node.as_jsdoc_link();
-            (present(n.name()) as u8) << 0
+            present(n.name()) as u8
         }
         Kind::JSDocLinkPlain => {
             let n = node.as_jsdoc_link_plain();
-            (present(n.name()) as u8) << 0
+            present(n.name()) as u8
         }
         Kind::JSDocLinkCode => {
             let n = node.as_jsdoc_link_code();
-            (present(n.name()) as u8) << 0
+            present(n.name()) as u8
         }
         Kind::TypeParameter => {
             let n = node.as_type_parameter_declaration();
-            ((has_modifiers(n.modifiers()) as u8) << 0)
+            (has_modifiers(n.modifiers()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.constraint()) as u8) << 2)
                 | ((present(n.expression()) as u8) << 3)
@@ -932,16 +932,16 @@ pub(crate) fn children_property_mask(node: P<Node>) -> u8 {
         }
         Kind::SyntheticReferenceExpression => {
             let n = node.as_synthetic_reference_expression();
-            ((present(n.expression()) as u8) << 0)
+            (present(n.expression()) as u8)
                 | ((present(n.this_arg()) as u8) << 1)
         }
         Kind::JSDocTypeLiteral => {
             let n = node.as_jsdoc_type_literal();
-            (!n.jsdoc_property_tags().is_empty() as u8) << 0
+            !n.jsdoc_property_tags().is_empty() as u8
         }
         Kind::JSDocParameterTag | Kind::JSDocPropertyTag => {
             let n = node.as_jsdoc_parameter_or_property_tag();
-            ((present(n.tag_name()) as u8) << 0)
+            (present(n.tag_name()) as u8)
                 | ((present(n.name()) as u8) << 1)
                 | ((present(n.type_expression()) as u8) << 2)
                 | ((present(n.comment()) as u8) << 3)

@@ -229,6 +229,7 @@ impl Converters {
     // include each virtual projection covered by segments that participate in feature; it returns no
     // results when no projection qualifies. Normal scripts return one exact span.
     // converters.go:127
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub fn from_lsp_range<T: Script + Clone>(&self, script: T, text_range: lsproto::Range, feature: Feature) -> Vec<MappedSpan<T>> {
         self.lsp_range_to_virtual_for_scripts(&[script], text_range, feature)
     }
@@ -237,6 +238,7 @@ impl Converters {
     // supplemental content-mapper outputs, results include every qualifying virtual projection across the
     // canonical and supplemental files. Projections not participating in feature are omitted.
     // converters.go:134
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub fn from_lsp_range_for_source_file(&self, file: P<SourceFile>, text_range: lsproto::Range, feature: Feature) -> Vec<MappedSpan<P<SourceFile>>> {
         let files = source_file_projections(file);
         self.lsp_range_to_virtual_for_scripts(&files, text_range, feature)
@@ -253,6 +255,7 @@ impl Converters {
     //
     // The result contains the script intersection even though both viewport endpoints are outside it.
     // converters.go:149
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub fn from_lsp_range_intersecting_for_source_file(
         &self,
         file: P<SourceFile>,
@@ -321,6 +324,7 @@ impl Converters {
     // results include each virtual projection whose segment participates in feature; it returns no results
     // when no projection qualifies. Normal scripts return one exact position.
     // converters.go:211
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub fn from_lsp_position<T: Script + Clone>(&self, script: T, position: lsproto::Position, feature: Feature) -> Vec<MappedPosition<T>> {
         self.lsp_position_to_virtual_for_scripts(&[script], position, feature)
     }
@@ -329,6 +333,7 @@ impl Converters {
     // supplemental content-mapper outputs, results include every qualifying virtual projection across the
     // canonical and supplemental files. Projections not participating in feature are omitted.
     // converters.go:218
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub fn from_lsp_position_for_source_file(
         &self,
         file: P<SourceFile>,
@@ -341,6 +346,7 @@ impl Converters {
 
     // FromLSPRangeToOriginal converts an LSP range in a content-mapped document directly to original-text offsets.
     // converters.go:224
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub fn from_lsp_range_to_original(&self, script: &dyn Script, text_range: lsproto::Range) -> TextRange {
         let original = OriginalTextScript { file_name: script.original_file_name(), text: script.original_text() };
         new_text_range(

@@ -107,6 +107,7 @@ impl Checker {
     }
 
     // flow.go:81
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn get_flow_type_of_reference_ex(&mut self, reference: P<Node>, declared_type: P<Type>, initial_type: P<Type>, flow_container: Option<P<Node>>, flow_node: Option<P<FlowNode>>) -> P<Type> {
         if self.flow_analysis_disabled {
             return self.error_type;
@@ -1709,7 +1710,7 @@ impl Checker {
         let has_default_clause = clause_start == clause_end
             || default_index.is_some_and(|index| index >= clause_start && index < clause_end);
         // First, narrow away all of the cases that preceded this set of cases.
-        for element in clauses[..clause_start].iter() {
+        for element in &clauses[..clause_start] {
             let clause = *element;
             if clause.kind() == Kind::CaseClause {
                 t = self.narrow_type(f, t, clause.expression().unwrap(), false /*assumeTrue*/);
@@ -2556,6 +2557,7 @@ impl Checker {
     }
 
     // flow.go:1861
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_reference_candidate(&mut self, node: P<Node>) -> P<Node> {
         match node.kind() {
             Kind::ParenthesizedExpression => {
@@ -2576,6 +2578,7 @@ impl Checker {
     }
 
     // flow.go:1876
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_reference_root(&mut self, node: P<Node>) -> P<Node> {
         let parent = node.parent().unwrap();
         if ast::is_parenthesized_expression(parent)
@@ -3398,6 +3401,7 @@ impl Checker {
     }
 
     // flow.go:2589
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_false_expression(&mut self, expr: P<Node>) -> bool {
         let node = ast::skip_parentheses(expr);
         if node.kind() == Kind::FalseKeyword {

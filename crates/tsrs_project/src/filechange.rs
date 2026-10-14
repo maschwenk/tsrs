@@ -58,6 +58,7 @@ pub struct FileChangeSummary {
 
 impl FileChangeSummary {
     // filechange.go:58 (Go's value receiver copies the struct and clones the sets; Rust `clone` does both)
+    #[must_use]
     pub fn clone_summary(&self) -> FileChangeSummary {
         self.clone()
     }

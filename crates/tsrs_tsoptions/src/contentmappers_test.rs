@@ -218,8 +218,8 @@ fn test_static_content_mapper_transform_identity() {
     let options_a = named("vue", r#"{"mode":"a"}"#, "vue", "1.0.0", &[]);
     let options_b = named("vue", r#"{"mode":"b"}"#, "vue", "1.0.0", &[]);
     assert_ne!(
-        options_a.transform_identity(Some(&CompilerOptions::default())),
-        options_b.transform_identity(Some(&CompilerOptions::default()))
+        options_a.transform_identity(Some(&tsrs_core::CompilerOptions::default())),
+        options_b.transform_identity(Some(&tsrs_core::CompilerOptions::default()))
     );
 }
 

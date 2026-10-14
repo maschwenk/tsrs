@@ -36,7 +36,7 @@ pub struct SessionOptions {
     pub default_library_path: String,
     /// Base filesystem (normally `bundled::wrap_fs(osvfs::fs())`, optionally wrapped by the callback FS).
     pub fs: Arc<dyn FS>,
-    /// Go `UseBinaryResponses`: true for the sync MessagePack protocol, false for JSON-RPC.
+    /// Go `UseBinaryResponses`: true for the sync `MessagePack` protocol, false for JSON-RPC.
     pub binary_responses: bool,
     /// Go `RunExternalCode` (false by default). Forwarded to the project session, but API projects get no content
     /// mapper project yet (see `Session::new`), so content-mapped files are not transformed.
@@ -134,7 +134,7 @@ impl Session {
                 push_diagnostics_enabled: false,
                 run_external_code: options.run_external_code,
                 debounce_delay: std::time::Duration::ZERO,
-                checker_pool_options: Default::default(),
+                checker_pool_options: tsrs_project::CheckerPoolOptions::default(),
             }),
             fs: options.fs,
             client: None,
@@ -160,11 +160,11 @@ impl Session {
             closed: Mutex::new(false),
             batch_pages: Mutex::new(FxHashMap::default()),
             next_batch_page: AtomicU64::new(0),
-            module_resolvers: Default::default(),
+            module_resolvers: crate::module_resolution::ModuleResolvers::default(),
             base_fs,
             weak_self: Weak::clone(weak_self),
-            build_state: Default::default(),
-            source_files: Default::default(),
+            build_state: crate::build::BuildState::default(),
+            source_files: crate::sourcefiles::SourceFileState::default(),
             build_backend: Mutex::new(None),
         })
     }
@@ -324,7 +324,7 @@ impl Session {
                 }
                 // `null` decodes to the zero-value struct: handlers see `{}`.
                 if matches!(value, Value::Null) {
-                    Value::Object(Default::default())
+                    Value::Object(tsrs_core::collections::OrderedMap::default())
                 } else {
                     value
                 }
@@ -333,7 +333,7 @@ impl Session {
         // Go decodes the whole params struct before any lookup (see predecode.rs).
         let lexemes = match crate::methods::params_type(method) {
             Some(t) => crate::predecode::predecode(method, t, &params, raw_params)?,
-            None => Default::default(),
+            None => rustc_hash::FxHashMap::default(),
         };
         let go_type = crate::methods::params_type(method);
         let typed = |e: ApiError| match (e.kind.clone(), go_type) {

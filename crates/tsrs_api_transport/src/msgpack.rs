@@ -6,7 +6,7 @@ use std::io::{BufReader, BufWriter, Read, Write};
 use crate::message::{read_exact_bounded, Id, Message, Response, ResponseError, TransportError, DEFAULT_MAX_FRAME_BYTES};
 use crate::protocol::{ProtocolReader, ProtocolWriter};
 
-/// protocol_msgpack.go MessageType.
+/// `protocol_msgpack.go` `MessageType`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(u8)]
 pub enum MessageType {
@@ -87,7 +87,7 @@ impl<R: Read> MessagePackReader<R> {
         Ok(buf)
     }
 
-    /// protocol_msgpack.go readTuple.
+    /// `protocol_msgpack.go` readTuple.
     pub fn read_tuple(&mut self) -> Result<Tuple, TransportError> {
         let t = self.read_byte(true)?;
         if t != MSGPACK_FIXED_ARRAY3 {
@@ -130,7 +130,7 @@ impl<R: Read> MessagePackReader<R> {
 }
 
 impl<R: Read + Send> ProtocolReader for MessagePackReader<R> {
-    /// protocol_msgpack.go ReadMessage. The protocol has no request IDs: the method name is the ID.
+    /// `protocol_msgpack.go` `ReadMessage`. The protocol has no request IDs: the method name is the ID.
     fn read_message(&mut self) -> Result<Message, TransportError> {
         let tuple = self.read_tuple()?;
         let method = tsrs_core::utf8::from_utf8_lossy(&tuple.method).into_owned();
@@ -166,8 +166,8 @@ impl<W: Write> MessagePackWriter<W> {
         MessagePackWriter { w: BufWriter::with_capacity(64 * 1024, w) }
     }
 
-    /// protocol_msgpack.go writeTuple: message type as a positive fixint, then two bin fields,
-    /// then a flush.
+    /// `protocol_msgpack.go` writeTuple: message type as a positive fixint, then two bin fields, then a
+    /// flush.
     pub fn write_tuple(&mut self, msg_type: MessageType, method: &[u8], payload: &[u8]) -> Result<(), TransportError> {
         self.w.write_all(&[MSGPACK_FIXED_ARRAY3, msg_type as u8])?;
         self.write_bin(method)?;

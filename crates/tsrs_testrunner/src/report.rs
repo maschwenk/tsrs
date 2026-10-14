@@ -65,7 +65,7 @@ pub fn load_summary(path: &Path) -> Summary {
     let Ok(v) = serde_json::from_str::<Value>(&text) else { return summary };
     summary.extend(v["tests"].as_array().into_iter().flatten().filter_map(|t| {
         let s = |k: &str| t[k].as_str().unwrap_or("").to_string();
-        let Some(class) = Class::parse(t["class"].as_str().unwrap_or("")) else { return None };
+        let class = Class::parse(t["class"].as_str().unwrap_or(""))?;
         let extra = |k: &str| t[k].as_str().and_then(Class::parse).map(|c| (c, s(&format!("{k}_diff"))));
         Some((
             s("id"),

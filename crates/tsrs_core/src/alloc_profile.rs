@@ -32,6 +32,8 @@ fn grow(n: usize) {
     HEAP_PEAK.fetch_max(now, Ordering::Relaxed);
 }
 
+// SAFETY: allocation and deallocation forward each caller's pointer and layout unchanged to mimalloc;
+// profiling only records those operations and never changes ownership of their allocations.
 unsafe impl GlobalAlloc for CountingAllocator {
     unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
         // SAFETY: the `GlobalAlloc` caller guarantees that `layout` is valid; it is passed through unchanged.
@@ -242,7 +244,7 @@ mod heap_sample {
             // SAFETY: `raw` has room for DEPTH + 3 frames.
             let n = unsafe { backtrace(raw.as_mut_ptr(), raw.len() as i32) } as usize;
             let mut stack: Stack = [0; DEPTH];
-            if IN_ARENA.with(|c| c.get()) {
+            if IN_ARENA.with(std::cell::Cell::get) {
                 stack[0] = 1; // inside an arena allocation (`ArenaScope`)
             } else {
                 for (i, f) in raw.iter().take(n).skip(3).enumerate() {
@@ -309,6 +311,7 @@ mod heap_sample {
             let Some(state) = guard.as_ref() else { return };
             let mut by_epoch: Vec<i64> = vec![0; epoch as usize + 1];
             let mut per_stack: FxHashMap<u32, i64> = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
             for &(id, weight, e) in state.live.values() {
                 if (e as usize) < by_epoch.len() {
                     by_epoch[e as usize] += weight as i64;
@@ -322,7 +325,7 @@ mod heap_sample {
             rows.truncate(top);
             (by_epoch, rows)
         };
-        let mb = |b: i64| b as f64 / 1048576.0;
+        let mb = |b: i64| b as f64 / 1_048_576.0;
         let hist: Vec<String> = by_epoch.iter().enumerate().map(|(e, &b)| format!("{e}:{:.1}", mb(b))).collect();
         unsafe extern "C" {
             fn mi_process_info(elapsed: *mut usize, user: *mut usize, system: *mut usize, rss: *mut usize, peak_rss: *mut usize, commit: *mut usize, peak_commit: *mut usize, faults: *mut usize);
@@ -332,9 +335,9 @@ mod heap_sample {
         unsafe { mi_process_info(&raw mut v[0], &raw mut v[1], &raw mut v[2], &raw mut v[3], &raw mut v[4], &raw mut v[5], &raw mut v[6], &raw mut v[7]) };
         eprintln!(
             "\n== heap after cycle {epoch}: live {:.1} MB (exact), mimalloc committed {:.1} MB, rss {:.1} MB; sampled live by epoch MB: {}",
-            heap as f64 / 1048576.0,
-            v[5] as f64 / 1048576.0,
-            v[3] as f64 / 1048576.0,
+            heap as f64 / 1_048_576.0,
+            v[5] as f64 / 1_048_576.0,
+            v[3] as f64 / 1_048_576.0,
             hist.join(" ")
         );
         unsafe extern "C" {
@@ -363,7 +366,7 @@ mod heap_sample {
                 eprintln!("             <arena chunks>");
                 continue;
             }
-            for name in stack.iter().filter(|&&ip| ip > 1).filter_map(|ip| own_frame(names.get(ip).map(|s| s.as_str()).unwrap_or("?"))).take(10) {
+            for name in stack.iter().filter(|&&ip| ip > 1).filter_map(|ip| own_frame(names.get(ip).map_or("?", std::string::String::as_str))).take(10) {
                 eprintln!("             {name}");
             }
         }
@@ -411,7 +414,7 @@ mod heap_sample {
             stack
                 .iter()
                 .filter(|&&ip| ip > 1)
-                .filter_map(|ip| own_frame(names.get(ip).map(|s| s.as_str()).unwrap_or("?")))
+                .filter_map(|ip| own_frame(names.get(ip).map_or("?", std::string::String::as_str)))
                 .take(limit)
                 .collect()
         };
@@ -444,7 +447,7 @@ mod heap_sample {
             groups.sort_by_key(|g| g.0);
             eprintln!("\n-- heap outside arena chunks by thread (sampled): live MB / at heap peak MB --");
             for (g, live, peak) in groups {
-                eprintln!("{:>12} {:>10.1} {:>10.1}", group_name(g), live as f64 / 1048576.0, peak as f64 / 1048576.0);
+                eprintln!("{:>12} {:>10.1} {:>10.1}", group_name(g), live as f64 / 1_048_576.0, peak as f64 / 1_048_576.0);
             }
         }
         let mut order: Vec<usize> = (0..sites.len()).collect();
@@ -485,16 +488,16 @@ mod heap_sample {
         }
         eprintln!(
             "\nheap outside arena chunks (sampled): live {:.1} MB, allocated {:.1} MB",
-            live as f64 / 1048576.0,
-            total as f64 / 1048576.0
+            live as f64 / 1_048_576.0,
+            total as f64 / 1_048_576.0
         );
         order.sort_by_key(|&i| -sites[i].1);
         print("live", &order, &|i| sites[i].1, &mut names);
         let peak_live: i64 = sites.iter().filter(|s| s.0[0] != 1).map(|s| s.3).sum();
         eprintln!(
             "\nheap at its peak (snapshot at {:.1} MB counted): sampled live outside arena chunks {:.1} MB",
-            state.peak_heap as f64 / 1048576.0,
-            peak_live as f64 / 1048576.0
+            state.peak_heap as f64 / 1_048_576.0,
+            peak_live as f64 / 1_048_576.0
         );
         order.sort_by_key(|&i| -sites[i].3);
         print("live at the heap peak", &order, &|i| sites[i].3, &mut names);
@@ -539,7 +542,7 @@ thread_local! {
             would_free: Vec::new(),
             countdown: 0,
         }));
-        THREADS.lock().unwrap().push(data.clone());
+        THREADS.lock().unwrap().push(std::sync::Arc::clone(&data));
         data
     });
 }
@@ -564,7 +567,7 @@ impl Drop for ArenaScope {
 pub(crate) fn register_arena(arena: &'static crate::arena::Arena) {
     let name = census::with_guard(|| std::thread::current().name().unwrap_or("?").to_string());
     let mut arenas = ARENAS.lock().unwrap();
-    arenas.push(arena as *const crate::arena::Arena as usize);
+    arenas.push(std::ptr::from_ref::<crate::arena::Arena>(arena) as usize);
     census::with_guard(|| ARENA_THREADS.lock().unwrap().push(name));
 }
 
@@ -661,7 +664,7 @@ pub(crate) fn census_would_free_since(since: usize) {
 pub(crate) fn record(site: &'static Location<'static>, ty: &'static str, bytes: usize, addr: usize) {
     let _ = LOCAL.try_with(|local| {
         let mut data = local.lock().unwrap();
-        let key = (site as *const Location as usize, ty.as_ptr() as usize ^ ty.len());
+        let key = (std::ptr::from_ref::<Location>(site) as usize, ty.as_ptr() as usize ^ ty.len());
         let next = data.sites.len() as u32;
         let idx = *data.index.entry(key).or_insert(next);
         if idx == next {
@@ -718,7 +721,8 @@ pub fn dump() {
     let mut sites: FxHashMap<Key, (&'static Location<'static>, &'static str, Entry)> = FxHashMap::default();
     for t in THREADS.lock().unwrap().iter() {
         let data = t.lock().unwrap();
-        for (k, &i) in data.index.iter() {
+        #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
+        for (k, &i) in &data.index {
             let v = &data.sites[i as usize];
             let e = &mut sites.entry(*k).or_insert((v.0, v.1, Entry::default())).2;
             e.count += v.2.count;
@@ -792,13 +796,14 @@ pub fn dump() {
     }
 
     let mut by_type: FxHashMap<String, Entry> = FxHashMap::default();
+    #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
     for v in sites.values() {
         let e = by_type.entry(short_type(v.1)).or_default();
         e.count += v.2.count;
         e.bytes += v.2.bytes;
     }
     let mut types: Vec<_> = by_type.into_iter().collect();
-    types.sort_by(|a, b| b.1.bytes.cmp(&a.1.bytes));
+    types.sort_by_key(|a| std::cmp::Reverse(a.1.bytes));
     eprintln!("\n-- arena by type (top {top}) --");
     eprintln!("{:>10} {:>6} {:>12} {:>8}  type", "MB", "%", "count", "B/each");
     for (ty, e) in types.iter().take(top) {
@@ -817,12 +822,12 @@ pub fn dump() {
     heap_sample::dump(std::env::var("TSRS_HEAP_PROFILE_TOP").ok().and_then(|s| s.parse().ok()).unwrap_or(25));
 
     let mut list: Vec<_> = sites.into_values().collect();
-    list.sort_by(|a, b| b.2.bytes.cmp(&a.2.bytes));
+    list.sort_by_key(|a| std::cmp::Reverse(a.2.bytes));
     eprintln!("\n-- arena by call site (top {top}) --");
     eprintln!("{:>10} {:>6} {:>12} {:>8}  site / type", "MB", "%", "count", "B/each");
     for (loc, ty, e) in list.iter().take(top) {
         let file = loc.file();
-        let file = file.find("crates/").map(|i| &file[i + 7..]).unwrap_or(file);
+        let file = file.find("crates/").map_or(file, |i| &file[i + 7..]);
         eprintln!(
             "{:>10} {:>6.2} {:>12} {:>8}  {}:{}  {}",
             mb(e.bytes),

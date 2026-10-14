@@ -31,8 +31,9 @@ pub fn client_golden(name: &str) -> Vec<u8> {
     std::fs::read(crate_dir().join("tests/golden").join(format!("{name}.client.bin"))).unwrap()
 }
 
-/// Parses and binds `text` the way the pinned server's `createSourceFile` does (snapshothost.AcquireSourceFile →
-/// parse cache: ParseSourceFile, Hash = xxh3-128 of the content, BindSourceFile), in a region the caller owns.
+/// Parses and binds `text` the way the pinned server's `createSourceFile` does
+/// (snapshothost.AcquireSourceFile → parse cache: `ParseSourceFile`, Hash = xxh3-128 of the content,
+/// `BindSourceFile`), in a region the caller owns.
 pub fn parse_like_server(name: &str, text: &str) -> (Region, P<SourceFile>) {
     let file_name = format!("/fixtures/{name}");
     let region = Region::new(1 << 16);
@@ -56,7 +57,7 @@ pub fn rd(b: &[u8], o: usize) -> u32 {
     u32::from_le_bytes(b[o..o + 4].try_into().unwrap())
 }
 
-/// One line per node record, like the pinned encoder_test.go `formatEncodedSourceFile` plus data/flags.
+/// One line per node record, like the pinned `encoder_test.go` `formatEncodedSourceFile` plus data/flags.
 pub fn dump(b: &[u8]) -> Vec<String> {
     let nodes = rd(b, HEADER_OFFSET_NODES) as usize;
     let mut out = Vec::new();
@@ -133,8 +134,8 @@ fn string_at(b: &[u8], idx: u32) -> String {
 
 /// Encoding-independent view of a tree: one line per record with its depth, kind, range, flags, child mask /
 /// commonData and the *contents* of its strings and extended data (not their table indices). Subtrees rooted
-/// at `JSDoc` records are dropped (the decoders attach no JSDoc, as in Go) unless `keep_jsdoc`. The root
-/// SourceFile line omits its extended data (structured metadata is not reconstructed by DecodeNodes).
+/// at `JSDoc` records are dropped (the decoders attach no `JSDoc`, as in Go) unless `keep_jsdoc`. The root
+/// `SourceFile` line omits its extended data (structured metadata is not reconstructed by `DecodeNodes`).
 pub fn structural(b: &[u8], keep_jsdoc: bool) -> Vec<String> {
     let nodes = rd(b, HEADER_OFFSET_NODES) as usize;
     let ext = rd(b, HEADER_OFFSET_EXTENDED_DATA) as usize;

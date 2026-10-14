@@ -93,8 +93,8 @@ impl<'a> projectReferenceParser<'a> {
     // projectreferenceparser.go:68
     fn init_mapper(&self, tasks: &[taskId], mapper: &mut projectReferenceFileMapper) {
         let total_references = self.tasks_by_file_name.len() + 1;
-        mapper.config_to_project_reference = FxHashMap::with_capacity_and_hasher(total_references, Default::default());
-        mapper.references_in_config_file = FxHashMap::with_capacity_and_hasher(total_references, Default::default());
+        mapper.config_to_project_reference = FxHashMap::with_capacity_and_hasher(total_references, rustc_hash::FxBuildHasher);
+        mapper.references_in_config_file = FxHashMap::with_capacity_and_hasher(total_references, rustc_hash::FxBuildHasher);
         mapper.source_to_project_reference = FxHashMap::default();
         mapper.output_dts_to_project_reference = FxHashMap::default();
         let root = self.init_mapper_worker(tasks, &mut FxHashSet::default(), mapper);

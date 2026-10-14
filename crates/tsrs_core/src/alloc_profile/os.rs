@@ -54,6 +54,7 @@ mod imp {
             let slide = _dyld_get_image_vmaddr_slide(0);
             let mut p = header.cast::<u8>().add(std::mem::size_of::<MachHeader64>());
             for _ in 0..(*header).ncmds {
+                #[expect(clippy::cast_ptr_alignment, reason = "dyld's 64-bit Mach-O header and load commands are 8-byte aligned.")]
                 let cmd = &*p.cast::<SegmentCommand64>();
                 if cmd.cmd == LC_SEGMENT_64 && cmd.segname.starts_with(b"__DATA") {
                     let name = String::from_utf8_lossy(&cmd.segname).trim_end_matches('\0').to_string();
@@ -83,7 +84,7 @@ mod imp {
             }
             let text = cmd.output().map(|o| crate::utf8::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
             let mut lines = text.lines();
-            out.extend(chunk.iter().map(|ip| lines.next().map(str::to_string).unwrap_or_else(|| format!("{ip:#x}"))));
+            out.extend(chunk.iter().map(|ip| lines.next().map_or_else(|| format!("{ip:#x}"), str::to_string)));
         }
         out
     }

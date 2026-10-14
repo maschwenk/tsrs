@@ -15,7 +15,7 @@ use crate::handler::{ApiError, ApiResult};
 use crate::session::Session;
 use crate::wire::{strings, Obj, Params};
 
-/// `tsoptions.ParseConfigHost` over the session's base filesystem (Go passes the SnapshotHost).
+/// `tsoptions.ParseConfigHost` over the session's base filesystem (Go passes the `SnapshotHost`).
 pub(crate) struct ApiParseConfigHost {
     pub fs: Arc<dyn FS>,
     pub cwd: String,

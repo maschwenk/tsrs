@@ -121,7 +121,7 @@ fn has_config(session: &Session, path: &str) -> bool {
     session.snapshot().config_file_registry.get_config(&p(path)).is_some()
 }
 
-fn same(a: &Option<Shared<Project>>, b: &Option<Shared<Project>>) -> bool {
+fn same(a: Option<&Shared<Project>>, b: Option<&Shared<Project>>) -> bool {
     match (a, b) {
         (Some(a), Some(b)) => Shared::ptr_eq(a, b),
         (None, None) => true,
@@ -173,7 +173,7 @@ fn when_project_found_is_solution_referencing_default_project_indirectly() {
     assert!(src_project.is_some());
 
     // Verify the default project is the source project
-    assert!(same(&snapshot.get_default_project(&uri(main_uri)), &src_project));
+    assert!(same((snapshot.get_default_project(&uri(main_uri))).as_ref(), (src_project).as_ref()));
 
     // Searched configs should be present while file is open
     assert!(has_config(&session, "/user/username/projects/myproject/tsconfig.json"), "solution config should be present");
@@ -260,7 +260,7 @@ fn when_project_found_is_solution_referencing_default_project_indirectly_through
     assert!(src_project.is_some());
 
     // Verify the default project is the source project (found through indirect2, not indirect1)
-    assert!(same(&snapshot.get_default_project(&uri(main_uri)), &src_project));
+    assert!(same((snapshot.get_default_project(&uri(main_uri))).as_ref(), (src_project).as_ref()));
 
     // Searched configs should be present while file is open
     for config in ["tsconfig.json", "tsconfig-indirect1.json", "tsconfig-indirect2.json", "tsconfig-src.json"] {
@@ -291,7 +291,7 @@ fn when_project_found_is_project_with_own_files_referencing_the_file_from_refere
     assert!(snapshot.project_collection.configured_project(&p("/user/username/projects/myproject/tsconfig.json")).is_some());
 
     // Verify the default project is the source project
-    assert!(same(&snapshot.get_default_project(&uri(main_uri)), &src_project));
+    assert!(same((snapshot.get_default_project(&uri(main_uri))).as_ref(), (src_project).as_ref()));
 
     // Searched configs should be present while file is open
     assert!(has_config(&session, "/user/username/projects/myproject/tsconfig.json"), "solution config should be present");
@@ -371,7 +371,7 @@ fn when_file_is_not_part_of_first_config_tree_found_looks_into_ancestor_folder_a
     assert!(snapshot.project_collection.configured_project(&p("/home/src/projects/project/tsconfig.json")).is_some());
 
     // Verify the default project is the demos project (not the app project that excludes demos files)
-    assert!(same(&snapshot.get_default_project(&uri(u)), &demo_project));
+    assert!(same((snapshot.get_default_project(&uri(u))).as_ref(), (demo_project).as_ref()));
 
     // Searched configs should be present while file is open
     assert!(has_config(&session, "/home/src/projects/project/app/tsconfig.json"), "app config should be present");
@@ -567,7 +567,7 @@ fn file_moves_to_inferred_project_after_import_is_deleted() {
     let snapshot = session.snapshot();
     let configured_project = snapshot.project_collection.configured_project(&p("/project/tsconfig.json"));
     assert!(configured_project.is_some(), "configured project should exist");
-    assert!(same(&snapshot.get_default_project(&dep_uri), &configured_project), "dependency should be in the configured project initially");
+    assert!(same((snapshot.get_default_project(&dep_uri)).as_ref(), (configured_project).as_ref()), "dependency should be in the configured project initially");
 
     // Step 3: Delete the import from the root file
     session.did_change_file(

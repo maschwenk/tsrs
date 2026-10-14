@@ -504,6 +504,7 @@ fn get_checker_association_policy(total_weight: i64, declaration_weight: i64, ch
 // getCheckerAssociationsInOrder partitions the import graph using a weighted adaptation
 // of FENNEL's streaming graph-partitioning objective with gamma = 3/2. A None order means
 // stable program order. Ties are deterministic.
+#[expect(clippy::float_cmp, reason = "Exact score ties preserve the deterministic scheduling tie-breaker.")]
 fn get_checker_associations_in_order(
     file_weights: &[i64],
     adjacent_files: &[Vec<usize>],
@@ -1752,9 +1753,11 @@ mod default_checker_tests {
     }
 }
 
-/// tsrs-only: the most checkers a program created with these options can get (`checkerPool::new`), known before its
-/// files are: `--checkers`, one when single-threaded, else the machine's default (fileregions.rs decides its default
-/// with it).
+/// Determines the checker limit before program files are loaded.
+///
+/// tsrs-only: the most checkers a program created with these options can get (`checkerPool::new`), known
+/// before its files are: `--checkers`, one when single-threaded, else the machine's default (fileregions.rs
+/// decides its default with it).
 pub fn checker_count_upper_bound(options: &tsrs_core::CompilerOptions, single_threaded: bool) -> usize {
     let count = if single_threaded || options.single_threaded.is_true() {
         1
@@ -1959,6 +1962,7 @@ const REFINE_STOP_IMBALANCE: f64 = 0.01;
 // load by more than 0.25% of the mean. Starting from the previous run's placement, few moves keep most groups in
 // the context their costs were measured in, and later runs correct what a move mispredicted. Deterministic for a
 // given cache: ties go to the stronger import affinity to the destination, then to the lower group and checker.
+#[expect(clippy::float_cmp, reason = "Exact score ties preserve the deterministic scheduling tie-breaker.")]
 fn refine_group_associations(associations: &mut [usize], costs: &[i64], adjacency: &[Vec<usize>], checker_count: usize) {
     let mut loads = vec![0f64; checker_count];
     for (g, &c) in associations.iter().enumerate() {

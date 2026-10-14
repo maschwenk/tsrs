@@ -344,6 +344,7 @@ impl Printer {
     // literal expressions or binary plus expressions that all share the same literal kind.
     // It is used to determine whether the right-hand operand of a binary plus expression can be
     // emitted without parentheses.
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_literal_kind_of_binary_plus_operand(&self, node: P<Node>) -> Kind {
         let node = skip_partially_emitted_expressions(node);
 

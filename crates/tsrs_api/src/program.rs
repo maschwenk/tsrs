@@ -112,7 +112,7 @@ impl Session {
         let (sd, program) = self.program_of(p)?;
         let emit_only = Self::emit_only(p)?;
         let capture = sd.file_system.as_ref().is_some_and(|fs| fs.is_full());
-        let outputs: Mutex<rustc_hash::FxHashMap<String, String>> = Mutex::new(Default::default());
+        let outputs: Mutex<rustc_hash::FxHashMap<String, String>> = Mutex::new(rustc_hash::FxHashMap::default());
         let fs = self.base_fs();
         let write = |file_name: &str, text: &str, _data: &mut WriteFileData| -> Result<(), String> {
             if capture {

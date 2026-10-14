@@ -58,6 +58,7 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:52
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn create_member_from_symbol(
         &mut self,
         symbol: P<Symbol>,
@@ -289,6 +290,7 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:208
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn create_signature_declaration_from_signature(
         &mut self,
         signature: P<Signature>,
@@ -451,6 +453,7 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:305
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn create_signature_declaration_from_signatures(
         &mut self,
         signatures: &[P<Signature>],

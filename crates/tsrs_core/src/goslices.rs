@@ -1,8 +1,10 @@
-//! Go standard library `slices` functions ported with Go's exact algorithm (go1.27 `slices/sort.go`,
-//! `slices/zsortanyfunc.go`), for comparators whose sequence of calls is observable: the checker's
-//! `CompareTypes` / `compareSymbols` assign symbol ids lazily as a last resort, so which pairs a sort or
-//! search compares decides which symbols get ids first. Rust's `sort_by` / `binary_search_by` return the
-//! same results for a total order but compare different pairs.
+//! Preserves Go's comparison-call order when it affects checker history.
+//!
+//! Go standard library `slices` functions ported with Go's exact algorithm (go1.27 `slices/sort.go`, `slices/zsortanyfunc.go`), for comparators whose sequence of calls is observable: the checker's `CompareTypes` / `compareSymbols` assign symbol ids lazily as a last resort, so which pairs a sort or search compares decides which symbols get ids first.
+//!
+//!
+//! Rust's `sort_by` / `binary_search_by` return the same results for a total order but compare different
+//! pairs.
 
 use std::cmp::Ordering;
 

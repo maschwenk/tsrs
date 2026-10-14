@@ -1,8 +1,8 @@
 //! Port of `internal/printer` (TypeScript 7): the AST -> text emitter the checker uses to render types, symbols and
-//! signatures in diagnostics (via its node builder), plus the writers and the EmitContext side tables it reads.
+//! signatures in diagnostics (via its node builder), plus the writers and the `EmitContext` side tables it reads.
 //!
 //! Public API (Go name -> Rust):
-//! - `PrinterOptions` (all Go fields, snake_case; `Default`), `PrintHandlers` (`Default`; hooks are
+//! - `PrinterOptions` (all Go fields, `snake_case`; `Default`), `PrintHandlers` (`Default`; hooks are
 //!   `Option<Box<dyn FnMut(Option<P<Node>>)>>` / `Option<Box<dyn FnMut(Option<P<NodeList>>)>>`, `has_global_name:
 //!   Option<Rc<dyn Fn(&str) -> bool>>`, `map_source_position: Option<Box<dyn Fn(SourceMapSource, i32) ->
 //!   Option<(SourceMapSource, i32)>>>` (Go `MapSourcePosition`)).
@@ -15,7 +15,7 @@
 //!     `Printer::emit_source_file(&mut self, source_file: P<SourceFile>) -> String`.
 //!   - pub fields `options: PrinterOptions`, `print_handlers: PrintHandlers` (Go's embedded `PrintHandlers`),
 //!     `id_to_symbol: Option<FxHashMap<P<Node>, P<Symbol>>>` (Go `IdToSymbol`).
-//! - Writers: `trait EmitTextWriter` (Go interface, snake_case methods: `write`, `write_keyword`, …, `string() -> String`,
+//! - Writers: `trait EmitTextWriter` (Go interface, `snake_case` methods: `write`, `write_keyword`, …, `string() -> String`,
 //!   `clear`, `get_text_pos/get_line/get_indent -> i32`, `get_column -> UTF16Offset`, …; `Box<W>` implements it too),
 //!   `new_text_writer(new_line: &str, indent_size: usize) -> Box<dyn EmitTextWriter>` (0 = default 4),
 //!   `get_single_line_string_writer() -> (Box<dyn EmitTextWriter>, impl FnOnce())` (the closure is Go's release func),
@@ -53,12 +53,12 @@
 //!   `range_start_positions_are_on_same_line`, `positions_are_on_same_line`, `get_lines_between_positions`,
 //!   `is_recognized_triple_slash_comment`, `is_pinned_comment`, `format_generated_name`, `NameGenerator`.
 //!
-//! - Emit (docs/EMIT.md): factory_2.rs holds the rest of `factory.go` (transform helpers, `New*Helper` constructors,
-//!   declaration names); helpers_defs.rs the helper definitions of `helpers.go` (statics, `P::from_static`);
+//! - Emit (docs/EMIT.md): `factory_2.rs` holds the rest of `factory.go` (transform helpers, `New*Helper` constructors,
+//!   declaration names); `helpers_defs.rs` the helper definitions of `helpers.go` (statics, `P::from_static`);
 //!   Go `printer.EmitHost` is `tsrs_transformers::EmitHost` (its `GetEmitResolver` returns the `Resolver` that lives there).
 //!
 //! Not ported: source-map name indices (Go's `emitPosName`/`emitSourcePosName` are commented out), `emitresolver.go`
-//! (the Rust form is `tsrs_transformers::Resolver`), JSDoc emit (`emitJSDocNode` panics like Go).
+//! (the Rust form is `tsrs_transformers::Resolver`), `JSDoc` emit (`emitJSDocNode` panics like Go).
 
 mod changetrackerwriter;
 mod emitcontext;

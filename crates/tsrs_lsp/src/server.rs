@@ -1126,6 +1126,7 @@ impl Server {
             if let Err(err) = result {
                 if err.is(MESSAGE_MARSHAL_ERROR) && msg.kind == MessageKind::Response {
                     let resp = msg.as_response();
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if resp.id.is_some() && resp.error.is_none() {
                         let id = resp.id.as_ref().unwrap();
                         self.logger.errorf(format_args!("failed to marshal response for request {id}: {err}"));
@@ -1904,7 +1905,7 @@ impl Server {
         }
 
         // Go map (random iteration order).
-        let mut changes: tsrs_core::collections::OrderedMap<lsproto::DocumentUri, Vec<lsproto::TextEdit>> = Default::default();
+        let mut changes: tsrs_core::collections::OrderedMap<lsproto::DocumentUri, Vec<lsproto::TextEdit>> = tsrs_core::collections::OrderedMap::default();
         for change in &document_changes {
             if let Some(text_document_edit) = &change.text_document_edit {
                 let uri = text_document_edit.text_document.uri.clone();
@@ -2027,6 +2028,7 @@ impl Server {
                 Ok(())
             });
         };
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if params.text_document.is_some() && self.session().config().workspace_symbols_scope == lsutil::WorkspaceSymbolsScope::CurrentProject {
             let uri = params.text_document.as_ref().unwrap().uri.clone();
             self.session().with_snapshot_for_document(ctx, &uri, |snapshot| {
@@ -2807,6 +2809,7 @@ fn go_sprint_value(v: &lsproto::Value) -> String {
 }
 
 // Go `%v` of a float64 (strconv 'g' with the shortest representation; exponent form for large/small values).
+#[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
 fn go_format_float(f: f64) -> String {
     if f == f.trunc() && f.abs() < 1e21 {
         return format!("{}", f as i64);

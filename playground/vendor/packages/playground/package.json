@@ -1,0 +1,30 @@
+{
+  "name": "@typescript/playground",
+  "version": "0.1.2",
+  "main": "dist/index.js",
+  "license": "MIT",
+  "private": true,
+  "types": "../../typescriptlang-org/static/js/playground/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "//bootstrap": "node scripts/getListOfPluginsFromNPM.js",
+    "build-fast-test": "esbuild src/index.ts --outdir=../typescriptlang-org/static/js/playground/2  --format=esm --target=es2020 --bundle",
+    "build": "tsc",
+    "test": "jest"
+  },
+  "dependencies": {
+    "@typescript/playground-worker": "workspace:*",
+    "@typescript/sandbox": "workspace:*",
+    "esbuild": "^0.27.3"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/react": "^18.3.28",
+    "jest": "^30.2.0",
+    "monaco-editor": "^0.32.1",
+    "monaco-typescript": "^4.10.0",
+    "typescript": "*"
+  }
+}

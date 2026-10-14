@@ -25,6 +25,7 @@ pub const DEFAULT_HANDLER_STACK_SIZE: usize = 256 << 20;
 struct Pending {
     calls: FxHashMap<Id, mpsc::SyncSender<Message>>,
     /// Some once the connection is terminal; the inner value is the recorded cause, if any.
+    #[expect(clippy::option_option, reason = "Distinguishes an open connection, a normal close, and a close with a recorded error.")]
     terminal: Option<Option<String>>,
 }
 
@@ -163,7 +164,7 @@ impl AsyncConn {
 
     fn dispatch(&self, msg: &Message) {
         if msg.is_notification() {
-            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
+            let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: std::sync::Arc::default() };
             let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
             return;
         }
@@ -221,7 +222,7 @@ impl AsyncConn {
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth: 0, callbacks: Arc::clone(&self.callbacks), state: std::sync::Arc::default() };
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
         }));

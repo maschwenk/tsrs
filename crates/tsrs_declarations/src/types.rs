@@ -99,8 +99,8 @@ impl DeclarationTransformer {
         self.base.factory()
     }
 
-    /// Go `tx.Visitor().Visit(node)`: calls the visit callback directly (no SyntaxList lifting); Go's `visit`
-    /// returns nil for a nil node.
+    /// Go `tx.Visitor().Visit(node)`: calls the visit callback directly (no `SyntaxList` lifting); Go's
+    /// `visit` returns nil for a nil node.
     pub fn visit_fn(&self, node: Option<P<Node>>) -> Option<P<Node>> {
         let node = node?;
         let mut v = self.visitor();

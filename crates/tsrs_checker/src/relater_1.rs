@@ -664,6 +664,7 @@ impl Checker {
     }
 
     // relater.go:474
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_or_has_generic_conditional(&mut self, t: P<Type>) -> bool {
         t.flags().intersects(TypeFlags::Conditional)
             || (t.flags().intersects(TypeFlags::Intersection) && t.types().iter().any(|&t| self.is_or_has_generic_conditional(t)))
@@ -1040,7 +1041,7 @@ impl Checker {
      *    a property is considered known if it is known in any constituent type.
      *    @param targetType a type to search a given name in
      *    @param name a property name to search
-     *    @param isComparingJsxAttributes a boolean flag indicating whether we are searching in JsxAttributesType
+     *    @param isComparingJsxAttributes a boolean flag indicating whether we are searching in `JsxAttributesType`
      */
     pub(crate) fn is_known_property(&mut self, target_type: P<Type>, name: &str, is_comparing_jsx_attributes: bool) -> bool {
         if target_type.flags().intersects(TypeFlags::Object) {
@@ -1502,6 +1503,7 @@ impl Checker {
     /// property of `get_properties_of_type(target)` by position, the source property it looked up (`Some(found)`)
     /// or `None` where it looked nothing up. Nothing is recorded when it walks a lazy member table's declared members
     /// instead (`found` is then left empty), or past an unmatched property.
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub(crate) fn get_unmatched_property_recording(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, found: &mut Vec<Option<Option<P<Symbol>>>>) -> Option<P<Symbol>> {
         self.get_unmatched_properties_worker_ex(source, target, require_optional_properties, false, None, Some(found))
     }
@@ -1518,6 +1520,7 @@ impl Checker {
         self.get_unmatched_properties_worker_ex(source, target, require_optional_properties, match_discriminant_properties, props_out, None)
     }
 
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn get_unmatched_properties_worker_ex(&mut self, source: P<Type>, target: P<Type>, require_optional_properties: bool, match_discriminant_properties: bool, props_out: Option<&mut Vec<P<Symbol>>>, found: Option<&mut Vec<Option<Option<P<Symbol>>>>>) -> Option<P<Symbol>> {
         let mut props_out = props_out;
         let lazy_properties = if self.lazy_unmatched { self.get_lazy_properties_in_order(target) } else { None };
@@ -1656,7 +1659,7 @@ impl Checker {
 // relater.go:1008
 /// tsrs: borrows `properties` when nothing is excluded (nearly always: the set is empty).
 pub(crate) fn exclude_properties<'a>(properties: &'a [P<Symbol>], excluded_properties: &Set<String>) -> std::borrow::Cow<'a, [P<Symbol>]> {
-    if excluded_properties.len() == 0 || properties.is_empty() {
+    if excluded_properties.is_empty() || properties.is_empty() {
         return properties.into();
     }
     let mut reduced: Vec<P<Symbol>> = Vec::new();
@@ -1975,6 +1978,7 @@ impl Checker {
     }
 
     /// See `discriminant_property_types`.
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn known_property_or_index_type(&mut self, t: P<Type>, key: HashedName<'_>) -> Option<Option<P<Type>>> {
         if t.flags() != TypeFlags::Object
             || t.object_flags_lazy() & (ObjectFlags::MembersResolved | ObjectFlags::Mapped) != ObjectFlags::MembersResolved
@@ -2085,6 +2089,7 @@ impl Checker {
     // generic type are structurally compared. We infer the variance information by comparing
     // instantiations of the generic type for type arguments with known relations. The function
     // returns an empty slice when invoked recursively for the given generic type.
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn get_variances_worker(&mut self, symbol: P<Symbol>, type_parameters: &'static [P<Type>]) -> Vec<VarianceFlags> {
         let links = self.variance_links.get(symbol);
         let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, <[types::VarianceFlags]>::len);
@@ -2209,15 +2214,15 @@ impl Checker {
         if self.is_error_type(t) {
             return t;
         }
-        let result;
-        if symbol.flags().intersects(SymbolFlags::TypeAlias) {
+
+        let result = if symbol.flags().intersects(SymbolFlags::TypeAlias) {
             let type_parameters = self.type_alias_links.get(symbol).type_parameters.get();
             let type_arguments = self.instantiate_types(type_parameters, Some(mapper));
-            result = self.get_type_alias_instantiation(symbol, &type_arguments, None);
+            self.get_type_alias_instantiation(symbol, &type_arguments, None)
         } else {
             let type_arguments = self.instantiate_types(t.as_interface_type().type_parameters(), Some(mapper));
-            result = self.create_type_reference(t, &type_arguments);
-        }
+            self.create_type_reference(t, &type_arguments)
+        };
         self.marker_types.add(result);
         result
     }
@@ -2231,7 +2236,7 @@ impl Checker {
     pub(crate) fn get_type_parameter_modifiers(&mut self, tp: P<Type>) -> ModifierFlags {
         let mut flags = ModifierFlags::None;
         if let Some(symbol) = tp.symbol() {
-            for d in symbol.declarations().iter() {
+            for d in symbol.declarations() {
                 flags |= d.modifier_flags();
             }
         }
@@ -2720,18 +2725,19 @@ impl Checker {
         let mut types: Vec<P<Type>> = Vec::with_capacity(length);
         let mut infos: Vec<TupleElementInfo> = Vec::with_capacity(length);
         for i in 0..length {
-            let flags;
-            if rest_type.is_none() || i < length - 1 {
+
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
+            let flags = if rest_type.is_none() || i < length - 1 {
                 types.push(self.get_type_at_position(source, i + pos));
-                flags = if i + pos < min_argument_count {
+                if i + pos < min_argument_count {
                     ElementFlags::Required
                 } else {
                     ElementFlags::Optional
-                };
+                }
             } else {
                 types.push(rest_type.unwrap());
-                flags = ElementFlags::Variadic;
-            }
+                ElementFlags::Variadic
+            };
             let labeled_declaration = self.get_nameable_declaration_at_position(source, i + pos);
             infos.push(TupleElementInfo {
                 flags,
@@ -2922,6 +2928,7 @@ impl Checker {
     }
 
     // relater.go:1992
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_tuple_element_label_from_binding_element(
         &mut self,
         node: P<Node>,
@@ -3490,17 +3497,17 @@ impl Checker {
             remaining_end_text
         };
         let add_match = |c: &mut Checker, s: usize, p: usize, seg: &mut usize, pos: &mut usize, matches: &mut Vec<P<Type>>| {
-            let match_type;
-            if s == *seg {
+
+            let match_type = if s == *seg {
                 let text = stringutil::combine_surrogate_pairs(&get_source_text(s)[*pos..p]);
-                match_type = c.get_string_literal_type(&text);
+                c.get_string_literal_type(&text)
             } else {
                 let mut match_texts: Vec<&str> = Vec::with_capacity(s - *seg + 1);
                 match_texts.push(&source_texts[*seg][*pos..]);
                 match_texts.extend_from_slice(&source_texts[*seg + 1..s]);
                 match_texts.push(&get_source_text(s)[..p]);
-                match_type = c.get_template_literal_type(&match_texts, &source_types[*seg..s]);
-            }
+                c.get_template_literal_type(&match_texts, &source_types[*seg..s])
+            };
             matches.push(match_type);
             *seg = s;
             *pos = p;

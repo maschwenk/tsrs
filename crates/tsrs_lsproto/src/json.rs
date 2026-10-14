@@ -86,6 +86,7 @@ impl JsonError {
         SemanticError { err: err.into(), plain: true, ..Default::default() }.into()
     }
 
+    #[must_use]
     pub fn within(mut self, token: &str) -> JsonError {
         if !self.plain && !self.sealed {
             self.pointer.push(token.to_string());
@@ -95,6 +96,7 @@ impl JsonError {
 
     // The error of a fresh `json.Unmarshal` returned from an unmarshal method: json/v2 fills in the
     // current position only if the error has none.
+    #[must_use]
     pub fn seal(mut self) -> JsonError {
         if !self.pointer.is_empty() {
             self.sealed = true;
@@ -102,6 +104,7 @@ impl JsonError {
         self
     }
 
+    #[must_use]
     pub fn within_index(self, index: usize) -> JsonError {
         self.within(&index.to_string())
     }
@@ -577,7 +580,7 @@ impl ObjectWriter {
     }
 
     // A pointer/slice/map/interface field with omitzero: omitted when nil.
-    pub fn opt<T: Json>(&mut self, name: &str, v: &Option<T>) {
+    pub fn opt<T: Json>(&mut self, name: &str, v: Option<&T>) {
         if let Some(v) = v {
             self.m.insert(name.to_string(), v.to_json());
         }

@@ -115,10 +115,7 @@ impl LanguageService {
     pub(crate) fn try_get_source_position(&self, file_name: &str, position: TextPos) -> Option<DocumentPosition> {
         let new_pos = self.try_get_source_position_worker(file_name, position);
         if let Some(new_pos) = &new_pos {
-            if self.read_file(&new_pos.file_name).is_none() {
-                // File doesn't exist
-                return None;
-            }
+            self.read_file(&new_pos.file_name)?;
         }
         new_pos
     }
@@ -149,10 +146,7 @@ impl LanguageService {
     pub(crate) fn try_get_generated_position(&self, file_name: &str, position: TextPos) -> Option<DocumentPosition> {
         let new_pos = self.try_get_generated_position_worker(file_name, position);
         if let Some(new_pos) = &new_pos {
-            if self.read_file(&new_pos.file_name).is_none() {
-                // File doesn't exist
-                return None;
-            }
+            self.read_file(&new_pos.file_name)?;
         }
         new_pos
     }

@@ -138,10 +138,12 @@ impl FileMode {
         !self.intersects(FileMode::Type)
     }
 
+    #[must_use]
     pub fn perm(self) -> FileMode {
         self & FileMode::Perm
     }
 
+    #[must_use]
     pub fn type_(self) -> FileMode {
         self & FileMode::Type
     }

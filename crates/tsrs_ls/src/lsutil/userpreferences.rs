@@ -620,6 +620,7 @@ pub(crate) fn parse_import_module_specifier_ending_preference(val: &Value) -> Im
 // typeSerializers maps a field type to a function that serializes a value of that type.
 // For types which do not serialize as-is (tristate, enums, etc). Returns None for a type without an entry; the inner
 // None is Go's nil.
+#[expect(clippy::option_option, reason = "Distinguishes no matching serializer or field from a matching nil value, as in Go.")]
 pub(crate) fn type_serializers(field: &FieldRef<'_>) -> Option<Option<Value>> {
     Some(match field {
         FieldRef::Tristate(v) => match **v {
@@ -766,7 +767,7 @@ pub(crate) fn unstable_name_index() -> &'static FxHashMap<&'static str, usize> {
     static INDEX: OnceLock<FxHashMap<&'static str, usize>> = OnceLock::new();
     INDEX.get_or_init(|| {
         let infos = field_info_cache();
-        let mut index = FxHashMap::with_capacity_and_hasher(infos.len(), Default::default());
+        let mut index = FxHashMap::with_capacity_and_hasher(infos.len(), rustc_hash::FxBuildHasher);
         index.extend(infos.iter().enumerate().filter_map(|(i, info)| if !info.raw_name.is_empty() { Some((info.raw_name, i)) } else { None }));
         index
     })

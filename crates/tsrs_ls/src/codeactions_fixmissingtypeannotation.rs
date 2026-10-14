@@ -292,9 +292,7 @@ impl isolatedDeclarationsFixer<'_> {
             }
 
             let sym_type = self.checker.get_type_of_symbol_exported(symbol);
-            let Some(type_node) = self.type_to_minimized_reference_type(sym_type, expando_func, declaration_emit_node_builder_flags()) else {
-                return None;
-            };
+            let type_node = self.type_to_minimized_reference_type(sym_type, expando_func, declaration_emit_node_builder_flags())?;
 
             let var_decl = factory.new_variable_declaration(factory.new_identifier(symbol.name()), None, Some(type_node), None);
             let export_token = factory.new_token(Kind::ExportKeyword);
@@ -801,14 +799,12 @@ impl isolatedDeclarationsFixer<'_> {
             return self.relative_type(node);
         }
 
-        let t: Option<P<Type>>;
 
-        if is_value_signature_declaration(Some(node)) {
+
+        let t: Option<P<Type>> = if is_value_signature_declaration(Some(node)) {
             let signature = self.checker.get_signature_from_declaration_exported(node);
             if let Some(type_predicate) = self.checker.get_type_predicate_of_signature_exported(signature) {
-                let Some(predicate_type) = type_predicate.type_() else {
-                    return None;
-                };
+                let predicate_type = type_predicate.type_()?;
                 let enclosing_decl = ast::find_ancestor(node, ast::is_declaration).unwrap_or(self.source_file.as_node());
                 let mut flags = declaration_emit_node_builder_flags();
                 if predicate_type.flags().intersects(TypeFlags::UniqueESSymbol) {
@@ -816,10 +812,10 @@ impl isolatedDeclarationsFixer<'_> {
                 }
                 return self.checker.type_predicate_to_type_predicate_node(type_predicate, Some(enclosing_decl), flags, None);
             }
-            t = Some(self.checker.get_return_type_of_signature_exported(signature));
+            Some(self.checker.get_return_type_of_signature_exported(signature))
         } else {
-            t = Some(self.checker.get_type_at_location(node));
-        }
+            Some(self.checker.get_type_at_location(node))
+        };
 
         let mut t = t?;
 

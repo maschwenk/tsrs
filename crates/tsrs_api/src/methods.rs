@@ -10,7 +10,7 @@ pub enum Owner { Core, Checker }
 pub enum Status {
     /// Dispatches to a real implementation covered by tests.
     Supported,
-    /// Dispatches, but with documented gaps (see docs/NODE_API.md).
+    /// Dispatches, but with documented gaps (see `docs/NODE_API.md`).
     Partial,
     /// Not implemented: dispatch returns an explicit `api: unsupported method` error.
     NotImplemented,

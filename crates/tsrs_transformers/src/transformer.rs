@@ -2,9 +2,11 @@
 
 use crate::*;
 
-/// Go `transformers.Transformer`, embedded by value in each transformer. Transformers are arena handles (`&self`
-/// methods), so the fields Go assigns in `NewTransformer` are `OnceCell`s. The visitor carries no state besides its
-/// callback, factory and hooks, so `visitor()` hands out a copy (Go shares one `*NodeVisitor`, which is re-entrant).
+/// Go `transformers.Transformer`, embedded by value in each transformer.
+///
+/// Transformers are arena handles (`&self` methods), so the fields Go assigns in `NewTransformer` are
+/// `OnceCell`s. The visitor carries no state besides its callback, factory and hooks, so `visitor()` hands
+/// out a copy (Go shares one `*NodeVisitor`, which is re-entrant).
 #[derive(Default)]
 pub struct Transformer {
     pub emit_context: OnceCell<P<EmitContext>>,

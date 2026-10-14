@@ -153,9 +153,10 @@ pub fn current_request() -> Option<RequestContext> {
     CURRENT.with(|c| c.borrow().clone())
 }
 
-/// The current request's identity, to carry onto threads that do work for it (e.g. compiler workers
-/// reading files through the callback filesystem). Client calls made inside `enter` are attributed to
-/// that request instead of being unattributed (see module docs).
+/// The current request's identity, to carry onto threads that do work for it (e.g.
+///
+/// compiler workers reading files through the callback filesystem). Client calls made inside `enter` are
+/// attributed to that request instead of being unattributed (see module docs).
 #[derive(Clone, Debug)]
 pub struct RequestScope(RequestContext);
 
@@ -204,9 +205,10 @@ fn holder_possibly_stuck(holder: &Arc<RequestState>, conn: &CallbackState) -> bo
     true
 }
 
-/// Per-acquisition contention state for an exclusive resource that cannot use `lock_for_request`
-/// (e.g. a checker lease). Create one when an acquisition first finds the resource taken, call
-/// `may_deadlock` on every re-check, and drop it when the acquisition ends (success or failure).
+/// Per-acquisition contention state for an exclusive resource that cannot use `lock_for_request` (e.g.
+///
+/// a checker lease). Create one when an acquisition first finds the resource taken, call `may_deadlock` on
+/// every re-check, and drop it when the acquisition ends (success or failure).
 pub struct ContentionWait {
     holder: Option<Arc<RequestState>>,
     stuck_since: Option<Instant>,
@@ -279,10 +281,11 @@ thread_local! {
 
 const EPISODE_GAP: Duration = Duration::from_millis(200);
 
-/// Legacy predicate without per-acquisition state; prefer `ContentionWait`. Treats any client call on
-/// the connection as the holder's. On async connections the grace period is tracked per thread and
-/// request: a new acquisition by the same request within 200 ms of a previous contended check inherits
-/// that wait's start, so it can fail up to one grace period early. Kept so existing callers compile.
+/// Legacy predicate without per-acquisition state; prefer `ContentionWait`.
+///
+/// Treats any client call on the connection as the holder's. On async connections the grace period is tracked
+/// per thread and request: a new acquisition by the same request within 200 ms of a previous contended check
+/// inherits that wait's start, so it can fail up to one grace period early. Kept so existing callers compile.
 pub fn blocking_may_deadlock() -> bool {
     let Some(cx) = current_request() else { return false };
     if cx.callbacks.waiting_on_client() == 0 {
@@ -346,10 +349,14 @@ impl<T> Drop for RequestGuard<'_, T> {
     }
 }
 
-/// Locks `mutex` for an API request without deadlocking on callback re-entry: waits like Go while the
-/// holder makes progress, and fails with `reentrancy_error` when the holder is possibly stuck on the
-/// client (immediately on sync, after the grace period on async; see module docs). Outside a request it
-/// is a plain blocking lock. Poisoned locks are recovered (the connection already reported the panic).
+/// Detects callback re-entry that would otherwise deadlock an API request.
+///
+/// Locks `mutex` for an API request without deadlocking on callback re-entry: waits like Go while the holder
+/// makes progress, and fails with `reentrancy_error` when the holder is possibly stuck on the client
+/// (immediately on sync, after the grace period on async; see module docs).
+///
+/// Outside a request it is a plain blocking lock. Poisoned locks are recovered (the connection already
+/// reported the panic).
 pub fn lock_for_request<'a, T>(mutex: &'a Mutex<T>, resource: &str) -> Result<RequestGuard<'a, T>, ApiError> {
     let key = std::ptr::from_ref::<Mutex<T>>(mutex) as usize;
     let Some(cx) = current_request() else {

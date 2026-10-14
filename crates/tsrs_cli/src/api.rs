@@ -75,7 +75,7 @@ pub(crate) fn new_api_session(flags: &ApiFlags) -> Result<(Arc<Session>, Arc<Cal
     Ok((session, callback_fs))
 }
 
-/// Adapts the core session to the transport's handler (contract: crates/tsrs_api_transport/README.md).
+/// Adapts the core session to the transport's handler (contract: `crates/tsrs_api_transport/README.md`).
 struct SessionHandler(Arc<Session>);
 
 impl transport::Handler for SessionHandler {

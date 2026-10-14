@@ -68,9 +68,9 @@ impl usingDeclarationTransformer {
 
         let f = self.factory();
         let emit_context = self.emit_context();
-        let visited: P<Node>;
+
         let using_kind = get_using_kind_of_statements(node.statements.nodes());
-        if using_kind != usingKind::None {
+        let visited: P<Node> = if using_kind != usingKind::None {
             // Imports and exports must stay at the top level. This means we must hoist all imports, exports, and
             // top-level function declarations and bindings out of the `try` statements we generate (see using.go for
             // the worked example). We hoist bindings, functions, imports and exports to a new outer statement list
@@ -143,10 +143,10 @@ impl usingDeclarationTransformer {
                 top_level_statements.push(f.new_export_assignment(None /*modifiers*/, true /*isExportEquals*/, None /*typeNode*/, export_equals_binding));
             }
 
-            visited = f.update_source_file(node.as_node(), f.new_node_list(top_level_statements), node.end_of_file_token);
+            f.update_source_file(node.as_node(), f.new_node_list(top_level_statements), node.end_of_file_token)
         } else {
-            visited = self.visitor().visit_each_child(Some(node.as_node())).unwrap();
-        }
+            self.visitor().visit_each_child(Some(node.as_node())).unwrap()
+        };
         emit_context.add_emit_helper(visited, &emit_context.read_emit_helpers());
         self.export_vars.borrow_mut().clear();
         *self.export_bindings.borrow_mut() = None;

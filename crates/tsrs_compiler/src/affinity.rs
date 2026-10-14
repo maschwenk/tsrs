@@ -43,10 +43,10 @@ const MU: f64 = 1.0;
 const GAMMA: f64 = 0.5;
 const MAX_PASSES: usize = 3;
 pub(crate) const MIN_CHECKERS: usize = 16;
-/// From LARGE_MIN_CHECKERS checkers on when at least LARGE_PROGRAM_FILES files are checked. On the 38k-file codebase
-/// at 8 checkers each checker holds a smaller share of the modules than on the ~10k-file projects the 8-checker
-/// regressions above were measured on: there the term lowers user-space instructions by 3.3%, CPU time by 4%, wall
-/// time by 4% and peak RSS by 3.6%.
+/// From `LARGE_MIN_CHECKERS` checkers on when at least `LARGE_PROGRAM_FILES` files are checked. On the
+/// 38k-file codebase at 8 checkers each checker holds a smaller share of the modules than on the ~10k-file
+/// projects the 8-checker regressions above were measured on: there the term lowers user-space instructions
+/// by 3.3%, CPU time by 4%, wall time by 4% and peak RSS by 3.6%.
 pub(crate) const LARGE_MIN_CHECKERS: usize = 8;
 pub(crate) const LARGE_PROGRAM_FILES: usize = 24_000;
 

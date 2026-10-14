@@ -14,7 +14,7 @@ use std::time::Duration;
 static EXCLUSIVE: RwLock<()> = RwLock::new(());
 
 fn shared() -> RwLockReadGuard<'static, ()> {
-    EXCLUSIVE.read().unwrap_or_else(|e| e.into_inner())
+    EXCLUSIVE.read().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 struct Watch {
@@ -243,7 +243,7 @@ fn slow_to_check_project(name: &str) -> PathBuf {
 fn an_edit_during_the_first_build_is_seen(args: &[&str]) {
     let dir = slow_to_check_project(&format!("during-{}", args[0].trim_start_matches('-')));
     let started = std::time::Instant::now();
-    assert!(fresh(&dir).is_empty());
+    assert_eq!(fresh(&dir), [] as [std::string::String; 0]);
     let build_time = started.elapsed();
 
     // The edit must land after the first build read a.ts and before its watches exist: when the first report already
@@ -308,7 +308,7 @@ fn wakeups(pid: u32) -> u64 {
 #[test]
 fn an_idle_watch_does_not_wake_up() {
     // Alone: the other tests' writes under the same temporary directory reach this watch's streams too.
-    let _alone = EXCLUSIVE.write().unwrap_or_else(|e| e.into_inner());
+    let _alone = EXCLUSIVE.write().unwrap_or_else(std::sync::PoisonError::into_inner);
     let dir = project("idle", &[("tsconfig.json", TSCONFIG), ("src/a.ts", "export const a = 1;\n")]);
     let mut watch = Watch::start(&dir);
     watch.assert_idle(Duration::from_millis(500));

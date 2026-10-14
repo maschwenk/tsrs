@@ -154,6 +154,7 @@ impl<T: Named + Clone> Index<T> {
 
     // index.go:156
     // Clone creates a new Index containing only entries for which filter returns true.
+    #[must_use]
     pub fn clone_filtered(&self, filter: impl Fn(&T) -> bool) -> Index<T> {
         let mut new_idx = Index { entries: Vec::with_capacity(self.entries.len()), index: FxHashMap::default() };
 

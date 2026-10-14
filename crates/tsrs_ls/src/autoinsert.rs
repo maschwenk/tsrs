@@ -39,6 +39,7 @@ impl LanguageService {
             element = token.parent();
         }
 
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if element.is_some() && is_unclosed_tag(element.unwrap()) {
             let tag_name_node = element.unwrap().as_jsx_element().opening_element.tag_name();
             // Slight divergence from Strada - we don't use the verbatim text from the opening tag.

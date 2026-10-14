@@ -18,7 +18,7 @@ impl ParseConfigHost for configHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -43,7 +43,7 @@ fn config() -> P<tsoptions::ParsedCommandLine> {
     let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(FILES.iter().map(|&(k, v)| (k, v)), true));
     let host: &'static configHost = Box::leak(Box::new(configHost { fs }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, host, None);
-    assert!(diagnostics.is_empty());
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     P::new(config.unwrap())
 }
 
@@ -92,5 +92,5 @@ fn incremental_emit_matches_a_plain_emit_file_by_file() {
     // The emit diagnostics are kept for the file that reported them only.
     let mut kept = incremental.snapshot.emit_diagnostics_per_file.keys();
     kept.sort();
-    assert_eq!(kept.iter().map(|p| p.as_str()).collect::<Vec<_>>(), ["/src/c.ts"]);
+    assert_eq!(kept.iter().map(tsrs_core::tspath::Path::as_str).collect::<Vec<_>>(), ["/src/c.ts"]);
 }

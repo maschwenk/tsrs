@@ -27,13 +27,13 @@ pub struct Stream {
 }
 
 impl Stream {
-    /// StdioTransport. Stdout is the wire: nothing else in the process may write to it.
+    /// `StdioTransport`. Stdout is the wire: nothing else in the process may write to it.
     pub fn stdio() -> Stream {
         Stream { reader: Box::new(std::io::stdin()), writer: Box::new(std::io::stdout()), closer: None }
     }
 }
 
-/// PipeTransport: listens on `path` (removing a stale socket file first) and accepts one connection.
+/// `PipeTransport`: listens on `path` (removing a stale socket file first) and accepts one connection.
 pub struct PipeListener {
     #[cfg(unix)]
     listener: std::os::unix::net::UnixListener,
@@ -92,8 +92,8 @@ pub fn generate_pipe_path(name: &str) -> PathBuf {
     std::env::temp_dir().join(name)
 }
 
-/// A caller slot filled once the connection exists (Go: SetConnection after Accept), so the
-/// session and callback filesystem can be built before the connection that owns them.
+/// A caller slot filled once the connection exists (Go: `SetConnection` after Accept), so the session and
+/// callback filesystem can be built before the connection that owns them.
 #[derive(Default)]
 pub struct LateCaller(OnceLock<Arc<dyn Caller>>);
 
@@ -135,7 +135,7 @@ pub struct ServeOptions {
 }
 
 impl ServeOptions {
-    /// `--api` (sync, MessagePack) or `--api --async` (JSON-RPC).
+    /// `--api` (sync, `MessagePack`) or `--api --async` (JSON-RPC).
     pub fn new(is_async: bool) -> ServeOptions {
         ServeOptions {
             protocol: if is_async { WireProtocol::JsonRpc } else { WireProtocol::MessagePack },

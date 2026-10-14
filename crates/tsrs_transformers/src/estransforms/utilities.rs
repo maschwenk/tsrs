@@ -122,17 +122,17 @@ impl superAccessState {
     pub fn substitute_call_expression_with_super_access(&self, call: P<Node>, visitor: &mut NodeVisitor) -> P<Node> {
         let f = self.factory();
         let expression = call.as_call_expression().expression;
-        let target;
 
-        if ast::is_property_access_expression(expression) {
+
+        let target = if ast::is_property_access_expression(expression) {
             // super.x(args) → _super.x.call(this, args)
-            target = f.new_property_access_expression(self.super_binding.get().unwrap(), None, expression.as_property_access_expression().name, NodeFlags::None);
+            f.new_property_access_expression(self.super_binding.get().unwrap(), None, expression.as_property_access_expression().name, NodeFlags::None)
         } else if ast::is_element_access_expression(expression) {
             // super[x](args) → _superIndex(x).call(this, args) or _superIndex(x).value.call(this, args)
-            target = self.create_super_element_access_in_async_method(expression.as_element_access_expression().argument_expression);
+            self.create_super_element_access_in_async_method(expression.as_element_access_expression().argument_expression)
         } else {
             return visitor.visit_each_child(Some(call)).unwrap();
-        }
+        };
 
         let call_target = f.new_property_access_expression(target, None, f.new_identifier("call"), NodeFlags::None);
 

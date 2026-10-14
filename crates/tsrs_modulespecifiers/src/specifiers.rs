@@ -295,12 +295,9 @@ pub fn get_each_file_name_of_module(
         &host.get_global_typings_cache_location(),
         &tspath::get_directory_path(&full_imported_file_name),
         |real_path_directory: &str| -> Option<bool> {
-            let Some(symlink_set) = symlink_cache
+            let symlink_set = symlink_cache
                 .directories_by_realpath()
-                .load(&tspath::to_path(real_path_directory, &cwd, host.use_case_sensitive_file_names()).ensure_trailing_directory_separator())
-            else {
-                return None;
-            }; // Continue to ancestor directory
+                .load(&tspath::to_path(real_path_directory, &cwd, host.use_case_sensitive_file_names()).ensure_trailing_directory_separator())?; // Continue to ancestor directory
 
             // Don't want to a package to globally import from itself (importNameCodeFix_symlink_own_package.ts)
             if tspath::starts_with_directory(importing_file_name, real_path_directory, host.use_case_sensitive_file_names()) {

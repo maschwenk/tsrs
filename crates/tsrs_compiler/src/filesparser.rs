@@ -471,7 +471,7 @@ impl speculation<'_> {
         }
         let imports = file.imports();
         out.extend(resolutions.imports.iter().take(imports.len()).filter_map(|entry| {
-            let Some(prepared) = entry.as_ref().and_then(|entry| entry.prepared.as_ref()) else { return None };
+            let prepared = entry.as_ref().and_then(|entry| entry.prepared.as_ref())?;
             if !prepared.elide_on_depth { Some((prepared.normalized_file_path.to_string(), prepared.path.clone())) } else { None }
         }));
         out
@@ -893,7 +893,7 @@ impl filesParser {
 
         // The per-file maps get one entry per file: sized once (vscode: 10.4k entries; a map's iteration order is never
         // relied on, see the `iter_over_hash_type` expectations of their readers).
-        let mut files_by_path: FxHashMap<Path, P<SourceFile>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
+        let mut files_by_path: FxHashMap<Path, P<SourceFile>> = FxHashMap::with_capacity_and_hasher(total_file_count, rustc_hash::FxBuildHasher);
         // stores 'filename -> file association' ignoring case
         // used to track cases when two file names differ only in casing
         let mut tasks_seen_by_name_ignore_case: Option<FxHashMap<String, TaskId>> =
@@ -902,9 +902,9 @@ impl filesParser {
         let mut include_data = fileIncludeData::default();
         let can_use_project_reference_source = loader.opts.can_use_project_reference_source();
         let mut output_file_to_project_reference_source: FxHashMap<Path, String> = FxHashMap::default();
-        let mut resolved_modules: FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
-        let mut type_resolutions_in_file: FxHashMap<Path, ModeAwareCache<P<ResolvedTypeReferenceDirective>>> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
-        let mut source_file_meta_datas: FxHashMap<Path, SourceFileMetaData> = FxHashMap::with_capacity_and_hasher(total_file_count, Default::default());
+        let mut resolved_modules: FxHashMap<Path, ModeAwareCache<P<ResolvedModule>>> = FxHashMap::with_capacity_and_hasher(total_file_count, rustc_hash::FxBuildHasher);
+        let mut type_resolutions_in_file: FxHashMap<Path, ModeAwareCache<P<ResolvedTypeReferenceDirective>>> = FxHashMap::with_capacity_and_hasher(total_file_count, rustc_hash::FxBuildHasher);
+        let mut source_file_meta_datas: FxHashMap<Path, SourceFileMetaData> = FxHashMap::with_capacity_and_hasher(total_file_count, rustc_hash::FxBuildHasher);
         let mut jsx_runtime_import_specifiers: FxHashMap<Path, P<jsxRuntimeImportSpecifier>> = FxHashMap::default();
         let mut import_helpers_import_specifiers: FxHashMap<Path, P<Node>> = FxHashMap::default();
         let mut source_files_found_searching_node_modules: FxHashSet<Path> = FxHashSet::default();

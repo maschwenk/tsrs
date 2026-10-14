@@ -1,11 +1,13 @@
-//! `TSRS_MEM_SPLIT=1` (debug stat, any build): splits the resident memory at three points of a run into the thread
-//! arenas' used bytes, the resident but never used parts of their chunks, the allocator heap's live blocks and the
-//! rest it keeps resident, thread stacks and file-backed pages, and prints one block per point on stderr
-//! (notes/mem-linux-residency-32.md). The points: `parse end` (the program is parsed and bound, before checker
-//! creation), `check end` (every checker of the type-check pass has finished its files and its thread is still
-//! alive: the moment memory peaks) and `exit`. `TSRS_MEM_SPLIT=purge` also makes the allocator purge its freed memory
-//! after `check end` and prints the split again. Linux reads `/proc/self/smaps` and `/proc/self/status`; elsewhere only
-//! the arena and heap lines print.
+//! Reports how resident memory is divided between arenas and the allocator.
+//!
+//! `TSRS_MEM_SPLIT=1` (debug stat, any build): splits the resident memory at three points of a run into the thread arenas' used bytes, the resident but never used parts of their chunks, the allocator heap's live blocks and the rest it keeps resident, thread stacks and file-backed pages, and prints one block per point on stderr (notes/mem-linux-residency-32.md).
+//!
+//!
+//! The points: `parse end` (the program is parsed and bound, before checker creation), `check end` (every
+//! checker of the type-check pass has finished its files and its thread is still alive: the moment memory
+//! peaks) and `exit`. `TSRS_MEM_SPLIT=purge` also makes the allocator purge its freed memory after `check
+//! end` and prints the split again. Linux reads `/proc/self/smaps` and `/proc/self/status`; elsewhere
+//! only the arena and heap lines print.
 
 use std::fmt::Write;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -27,9 +29,11 @@ pub fn enabled() -> bool {
     mode() != 0
 }
 
+/// Distinguishes reusable allocator pages from live heap storage.
+///
 /// `TSRS_MEM_SPLIT=purge`: after the `check end` report, the allocator purges every arena's freed memory
-/// (`mi_collect(true)`) and the split is printed again, which shows how much of the heap's resident rest is freed
-/// memory not yet given back.
+/// (`mi_collect(true)`) and the split is printed again, which shows how much of the heap's resident rest is
+/// freed memory not yet given back.
 pub fn purge_after_check() -> bool {
     mode() == 2
 }
@@ -308,9 +312,13 @@ mod linux {
     }
 }
 
-/// tsrs-only (`--maxMemory`, notes/mem-recycle-checkers.md): the process's memory in bytes as the system accounts it
-/// for limits: the physical footprint on macOS (what `/usr/bin/time -l` reports as peak memory footprint), the resident
-/// set on Linux (`/proc/self/statm`). Re-read at most every 5 ms; callers between two checked files share the value.
+/// Reads the memory usage that the operating system charges to the process.
+///
+/// tsrs-only (`--maxMemory`, notes/mem-recycle-checkers.md): the process's memory in bytes as the system
+/// accounts it for limits: the physical footprint on macOS (what `/usr/bin/time -l` reports as peak memory
+/// footprint), the resident set on Linux (`/proc/self/statm`).
+///
+/// Re-read at most every 5 ms; callers between two checked files share the value.
 pub fn process_memory() -> usize {
     use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
     use std::sync::OnceLock;

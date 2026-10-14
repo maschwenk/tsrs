@@ -242,9 +242,10 @@ impl Program {
         }
     }
 
-    /// tsrs-only (a watch session's file regions, tsrs_execute watchmem.rs): calls `f` with each source file that the
-    /// diagnostics the snapshot keeps refer to, related information and message chains included. Diagnostics copied
-    /// from an older snapshot refer to the file versions they were reported for, which need not be the program's.
+    /// tsrs-only (a watch session's file regions, `tsrs_execute` watchmem.rs): calls `f` with each source
+    /// file that the diagnostics the snapshot keeps refer to, related information and message chains
+    /// included. Diagnostics copied from an older snapshot refer to the file versions they were reported for,
+    /// which need not be the program's.
     pub fn for_each_diagnostic_file(&self, f: &mut dyn FnMut(P<SourceFile>)) {
         fn visit(diagnostics: &[P<Diagnostic>], f: &mut dyn FnMut(P<SourceFile>)) {
             for d in diagnostics {
@@ -274,10 +275,11 @@ impl Program {
         }
     }
 
-    /// tsrs-only (watch mode): replaces every diagnostic the snapshot keeps with a copy in the current allocation
-    /// target (`DiagnosticExt::copy_deep`), so that the regions of the diagnostics it copied from the old snapshot
-    /// and of those the replaced program's checkers made (tsrs_compiler checkerpool.rs `SlotChecker`) can be freed.
-    /// Not for the test harness, which reads the old snapshot's diagnostics too: some are shared with this one.
+    /// tsrs-only (watch mode): replaces every diagnostic the snapshot keeps with a copy in the current
+    /// allocation target (`DiagnosticExt::copy_deep`), so that the regions of the diagnostics it copied from
+    /// the old snapshot and of those the replaced program's checkers made (`tsrs_compiler` checkerpool.rs
+    /// `SlotChecker`) can be freed. Not for the test harness, which reads the old snapshot's diagnostics too:
+    /// some are shared with this one.
     pub fn copy_diagnostics(&self) {
         for map in [&self.snapshot.semantic_diagnostics_per_file, &self.snapshot.emit_diagnostics_per_file] {
             map.range(|_, cache| {

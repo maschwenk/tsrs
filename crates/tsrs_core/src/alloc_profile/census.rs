@@ -148,7 +148,7 @@ pub(super) fn on_alloc(p: *mut u8, size: usize) {
     if MODE.load(Ordering::Relaxed) & 1 == 1 {
         return;
     }
-    if IN_ARENA.try_with(|c| c.get()).unwrap_or(false) {
+    if IN_ARENA.try_with(std::cell::Cell::get).unwrap_or(false) {
         return; // arena chunk: its blocks are recorded by `record`
     }
     unless_guarded(|| {
@@ -309,6 +309,7 @@ impl Table {
         let mut p = from;
         while p <= last {
             // SAFETY: `p .. p + 8` lies inside a live block or a mapped root range; the bytes are only inspected.
+            #[expect(clippy::volatile_composites, reason = "The census scans unaligned byte windows in mapped memory, not MMIO registers.")]
             let w = unsafe { std::ptr::read_volatile(p as *const [u8; 8]) };
             let w = u64::from_ne_bytes(w);
             if w != 0 {
@@ -362,8 +363,10 @@ pub fn active() -> bool {
     recording()
 }
 
-/// Freezes the tables, marks everything reachable from `roots` (addresses; each marks the block it points into),
-/// the current thread's stack and the main image's data segments, and prints the census to stderr.
+/// Measures allocation reachability from recorded roots.
+///
+/// Freezes the tables, marks everything reachable from `roots` (addresses; each marks the block it points
+/// into), the current thread's stack and the main image's data segments, and prints the census to stderr.
 #[inline(never)]
 pub fn run(roots: &[usize]) {
     if !recording() {
@@ -372,7 +375,7 @@ pub fn run(roots: &[usize]) {
     // The stack is scanned from this frame up: the census's own frames below it hold, in unset slots, words from
     // its own work (block addresses it sorted and indexed, freed ones included), which are not program state.
     let marker = 0u64;
-    STACK_LOW.store(std::hint::black_box(&marker) as *const u64 as usize & !7, Ordering::SeqCst);
+    STACK_LOW.store(std::ptr::from_ref::<u64>(std::hint::black_box(&marker)) as usize & !7, Ordering::SeqCst);
     MODE.store(3, Ordering::SeqCst);
     with_guard(|| run_frozen(roots));
 }
@@ -423,7 +426,7 @@ fn mb(b: u64) -> String {
 /// row name), for offline grouping.
 static TSV: Mutex<Option<std::io::BufWriter<std::fs::File>>> = Mutex::new(None);
 
-fn print_table(title: &str, rows: &mut Vec<(String, Agg)>, top: usize) {
+fn print_table(title: &str, rows: &mut [(String, Agg)], top: usize) {
     rows.sort_by(|a, b| b.1.ubytes().cmp(&a.1.ubytes()).then(b.1.bytes.cmp(&a.1.bytes)));
     if let Some(out) = TSV.lock().unwrap().as_mut() {
         use std::io::Write;
@@ -468,7 +471,7 @@ fn run_frozen(roots: &[usize]) {
             .sites
             .iter()
             .map(|&(loc, ty, _)| {
-                let key = (loc as *const Location as usize, ty.as_ptr() as usize ^ ty.len());
+                let key = (std::ptr::from_ref::<Location>(loc) as usize, ty.as_ptr() as usize ^ ty.len());
                 let next = classes.len() as u32;
                 let id = *class_index.entry(key).or_insert(next);
                 if id == next {
@@ -498,8 +501,9 @@ fn run_frozen(roots: &[usize]) {
     let stacks = STACKS.lock().unwrap().take().map_or_else(Vec::new, |t| t.stacks);
     classes.extend((0..stacks.len() as u32).map(|stack| Class::Heap { stack }));
     let mut oversized = 0u64;
-    for shard in LIVE.iter() {
-        if let Some(map) = shard.lock().unwrap().take() {
+    for shard in &LIVE {
+        let map = shard.lock().unwrap().take();
+        if let Some(map) = map {
             blocks.reserve(map.len());
             blocks.extend(map.into_iter().filter_map(|(a, (size, stack, seq))| {
                 if size == 0 {
@@ -626,11 +630,11 @@ fn run_frozen(roots: &[usize]) {
             let ty = short_type(ty);
             by_type.entry(ty.clone()).or_default().add(a);
             let file = loc.file();
-            let file = file.find("crates/").map(|i| &file[i + 7..]).unwrap_or(file);
+            let file = file.find("crates/").map_or(file, |i| &file[i + 7..]);
             by_site.push((format!("{}:{}  {}", file, loc.line(), ty), *a));
         }
     }
-    print_table("arena by type", &mut by_type.into_iter().collect(), top);
+    print_table("arena by type", &mut by_type.into_iter().collect::<Vec<_>>(), top);
     print_table("arena by call site (one level, #[track_caller])", &mut by_site, top);
 
     let t_resolve = Instant::now();
@@ -685,11 +689,12 @@ fn run_frozen(roots: &[usize]) {
         by_fn.entry(site.clone()).or_default().add(&a);
         by_fn_caller.entry(f.join("  <-  ")).or_default().add(&a);
     }
-    print_table("heap by allocating function", &mut by_fn.into_iter().collect(), top);
-    print_table("heap by allocating function <- caller", &mut by_fn_caller.into_iter().collect(), top);
+    print_table("heap by allocating function", &mut by_fn.into_iter().collect::<Vec<_>>(), top);
+    print_table("heap by allocating function <- caller", &mut by_fn_caller.into_iter().collect::<Vec<_>>(), top);
 
     let mut arena_fn: FxHashMap<String, Agg> = FxHashMap::default();
     let mut arena_fn_caller: FxHashMap<String, Agg> = FxHashMap::default();
+    #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
     for (&(class, stack), a) in &sampled {
         let Class::Arena { ty, .. } = classes[class as usize] else { continue };
         let ty = short_type(ty);
@@ -699,17 +704,18 @@ fn run_frozen(roots: &[usize]) {
         arena_fn_caller.entry(format!("{ty}  {}", f.join("  <-  "))).or_default().add(a);
     }
     let title = format!("arena by type and allocating function (sampled 1/{rate}, scaled)");
-    print_table(&title, &mut arena_fn.into_iter().collect(), top);
+    print_table(&title, &mut arena_fn.into_iter().collect::<Vec<_>>(), top);
     let title = format!("arena by type and allocating function <- callers (sampled 1/{rate}, scaled)");
-    print_table(&title, &mut arena_fn_caller.into_iter().collect(), top);
+    print_table(&title, &mut arena_fn_caller.into_iter().collect::<Vec<_>>(), top);
     eprintln!(
         "\ncensus time: collect {:.1} s, sort+index {:.1} s, mark {:.1} s, resolve {:.1} s",
         t_collect.as_secs_f64(),
-        (t_build - t_collect).as_secs_f64(),
-        (t_mark - t_build).as_secs_f64(),
+        t_build.checked_sub(t_collect).unwrap().as_secs_f64(),
+        t_mark.checked_sub(t_build).unwrap().as_secs_f64(),
         t_resolve.elapsed().as_secs_f64()
     );
-    if let Some(mut out) = TSV.lock().unwrap().take() {
+    let out = TSV.lock().unwrap().take();
+    if let Some(mut out) = out {
         use std::io::Write;
         let _ = out.flush();
     }
@@ -791,7 +797,7 @@ fn class_name(c: &Class) -> String {
     match c {
         Class::Arena { loc, ty } => {
             let file = loc.file();
-            let file = file.find("crates/").map(|i| &file[i + 7..]).unwrap_or(file);
+            let file = file.find("crates/").map_or(file, |i| &file[i + 7..]);
             format!("{}:{}  {}", file, loc.line(), short_type(ty))
         }
         Class::Heap { stack } => format!("heap block (stack {stack})"),
@@ -832,12 +838,12 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         mb(bytes) + " MB"
     );
     let mut rows: Vec<(u32, (u64, u64))> = by_class.into_iter().collect();
-    rows.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
+    rows.sort_by_key(|a| std::cmp::Reverse(a.1 .1));
     for (class, (n, b)) in rows.iter().take(25) {
         eprintln!("  would-free {:>10} blocks {:>9} MB  {}", n, mb(*b), class_name(&classes[*class as usize]));
     }
     let mut rows: Vec<(u32, (u64, u64))> = violations.into_iter().collect();
-    rows.sort_by(|a, b| b.1 .0.cmp(&a.1 .0));
+    rows.sort_by_key(|a| std::cmp::Reverse(a.1 .0));
     for (class, (n, b)) in rows.iter().take(25) {
         eprintln!("  conservatively reachable {:>10} blocks {:>9} MB  {}", n, mb(*b), class_name(&classes[*class as usize]));
     }
@@ -862,8 +868,11 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     let mut via: Vec<u32> = vec![u32::MAX; n];
     let mut strong: FxHashMap<usize, String> = FxHashMap::default();
     let mut work: Vec<u32> = Vec::new();
-    // SAFETY (all reads): inside a recorded live block or a mapped root range; the bytes are only inspected.
-    let read = |p: usize| u64::from_ne_bytes(unsafe { std::ptr::read_volatile(p as *const [u8; 8]) });
+    #[expect(clippy::volatile_composites, reason = "The census scans unaligned byte windows in mapped memory, not MMIO registers.")]
+    let read = |p: usize| {
+        // SAFETY: inside a recorded live block or a mapped root range; the bytes are only inspected.
+        u64::from_ne_bytes(unsafe { std::ptr::read_volatile(p as *const [u8; 8]) })
+    };
     let layouts = class_layouts(classes);
     eprintln!(
         "  registered layouts: {} entries, {} arena classes covered",
@@ -925,7 +934,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         if let Some(j) = from {
             let rb = table.blocks[j];
             let niche = |o: usize| o >= 8 && o <= rb.size as usize && (read(rb.start as usize + o - 8) >> 8) == 0x0080_0000_0000_0000;
-            if off % 8 == 0 && (niche(off) || (off >= 8 && niche(off - 8))) {
+            if off.is_multiple_of(8) && (niche(off) || (off >= 8 && niche(off - 8))) {
                 return None;
             }
         }
@@ -938,7 +947,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
             let aimed = off_t == 0
                 || (tags && off_t < 8 && (class_is(b.class, "TypeMapper") || class_is(b.class, "InferenceContext") || class_is(b.class, "InferenceContextRare")))
                 || is_heap(b.class)
-                || (slice && off_t % 8 == 0);
+                || (slice && off_t.is_multiple_of(8));
             if aimed && (w >> 48 == 0 || packed || flagged) {
                 match wf_seq.get(&i) {
                     None => return Some(i),
@@ -1040,12 +1049,12 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     // mapper and type list are never recycled.)
     let mut ips: Vec<usize> = Vec::new();
     let heap_stack = |r: &str| -> Option<usize> { r.strip_prefix("heap block (stack ")?.split(')').next()?.parse().ok() };
-    ips.extend(strong.values().filter_map(|r| if let Some(k) = heap_stack(r) { Some(stacks[k].iter().copied()) } else { None }).flatten());
+    ips.extend(strong.values().filter_map(|r| heap_stack(r).map(|k| stacks[k].iter().copied())).flatten());
     // Also name the heap blocks on the referrer chains of the reported violations.
     let heap_class_stack = |c: u32| -> Option<usize> {
         match &classes[c as usize] {
             Class::Heap { stack } => Some(*stack as usize),
-            _ => None,
+            Class::Arena { .. } => None,
         }
     };
     // `TSRS_CENSUS_CHAINS=N`: how many violations are printed with their referrer chain (default 20).
@@ -1085,7 +1094,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         }
     }
     let mut rows: Vec<(u32, (u64, u64))> = only_weak.into_iter().collect();
-    rows.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
+    rows.sort_by_key(|a| std::cmp::Reverse(a.1 .1));
     for (class, (n, b)) in rows.iter().take(12) {
         eprintln!("  only conservatively reachable {:>10} blocks {:>9} MB  {}", n, mb(*b), class_name(&classes[*class as usize]));
     }
@@ -1096,6 +1105,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
     );
     eprintln!("  strongly reachable freed blocks (violations): {}", strong.len());
     let mut by_referrer: FxHashMap<String, u64> = FxHashMap::default();
+    #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
     for r in strong.values() {
         let class = r.split(" +").next().unwrap_or(r).split(" [").next().unwrap_or(r).to_string();
         let key = match heap_frames(r) {
@@ -1105,13 +1115,14 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
         *by_referrer.entry(key).or_default() += 1;
     }
     let mut rows: Vec<(String, u64)> = by_referrer.into_iter().collect();
-    rows.sort_by(|a, b| b.1.cmp(&a.1));
+    rows.sort_by_key(|a| std::cmp::Reverse(a.1));
     for (k, n) in rows.iter().take(25) {
         eprintln!("    violations {n:>8} from {k}");
     }
     // By freed block's class and referrer field (class + offset): one row per violation class.
     let mut by_edge: FxHashMap<String, u64> = FxHashMap::default();
-    for (&i, r) in strong.iter() {
+    #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
+    for (&i, r) in &strong {
         let referrer = r.split(" (words").next().unwrap_or(r).split(" [").next().unwrap_or(r);
         let referrer = match heap_frames(r) {
             Some(f) => format!("{referrer} {{{}}}", f.join(" <- ")),
@@ -1177,7 +1188,7 @@ fn check_would_free(table: &Table, classes: &[Class], stacks: &[Stack], scan: &[
 fn v0_crate(name: &str) -> Option<&str> {
     let rest = &name[name.find("Cs")? + 2..];
     let rest = &rest[rest.find('_')? + 1..];
-    let digits = rest.bytes().take_while(|b| b.is_ascii_digit()).count();
+    let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
     let len: usize = rest[..digits].parse().ok()?;
     // An identifier that starts with `_` or a digit has a `_` separator after its length.
     let at = if rest[digits..].starts_with('_') { digits + 1 } else { digits };

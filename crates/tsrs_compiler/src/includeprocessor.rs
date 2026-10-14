@@ -50,7 +50,7 @@ impl includeProcessor {
             #[expect(clippy::iter_over_hash_type, reason = "see the comment above")]
             for resolutions in p.resolved_modules.values() {
                 for resolved_module in resolutions.values() {
-                    for &diag in resolved_module.resolution_diagnostics.iter() {
+                    for &diag in resolved_module.resolution_diagnostics {
                         computed.add(diag);
                     }
                 }
@@ -58,7 +58,7 @@ impl includeProcessor {
             #[expect(clippy::iter_over_hash_type, reason = "see the comment above")]
             for type_resolutions in p.type_resolutions_in_file.values() {
                 for resolved_type_ref in type_resolutions.values() {
-                    for &diag in resolved_type_ref.resolution_diagnostics.iter() {
+                    for &diag in resolved_type_ref.resolution_diagnostics {
                         computed.add(diag);
                     }
                 }

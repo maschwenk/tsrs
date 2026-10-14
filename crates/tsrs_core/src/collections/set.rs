@@ -13,7 +13,7 @@ impl<T: Hash + Eq> Default for Set<T> {
 }
 
 pub fn new_set_with_size_hint<T: Hash + Eq>(hint: usize) -> Set<T> {
-    Set { m: FxHashSet::with_capacity_and_hasher(hint, Default::default()) }
+    Set { m: FxHashSet::with_capacity_and_hasher(hint, rustc_hash::FxBuildHasher) }
 }
 
 impl<T: Hash + Eq> Set<T> {
@@ -37,6 +37,10 @@ impl<T: Hash + Eq> Set<T> {
         self.m.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.m.is_empty()
+    }
+
     pub fn keys(&self) -> &FxHashSet<T> {
         &self.m
     }
@@ -57,6 +61,7 @@ impl<T: Hash + Eq> Set<T> {
         self.m.extend(other.m.iter().cloned());
     }
 
+    #[must_use]
     pub fn unioned_with(&self, other: &Set<T>) -> Set<T>
     where
         T: Clone,

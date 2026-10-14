@@ -49,6 +49,7 @@ pub enum ExportSyntax {
     // export = x
     Equals,
     // export as namespace x
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     UMD,
     // export * from "module"
     Star,

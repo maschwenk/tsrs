@@ -123,7 +123,7 @@ impl Cloneable for realpathAliasSet {
     // snapshotfs.go:82
     fn clone_value(&self) -> realpathAliasSet {
         let mut clone = realpathAliasSet::default();
-        if self.paths.len() > 0 {
+        if !self.paths.is_empty() {
             clone.paths = self.paths.clone();
         }
         clone
@@ -368,7 +368,7 @@ impl snapshotFSBuilder {
                         e.change(&mut |alias_set: &mut realpathAliasSet| {
                             alias_set.paths.delete(deleted_path);
                         });
-                        if e.value().unwrap().paths.len() == 0 {
+                        if e.value().unwrap().paths.is_empty() {
                             e.delete();
                         }
                     });
@@ -572,7 +572,7 @@ impl snapshotFSBuilder {
 
     // snapshotfs.go:503
     pub(crate) fn mark_dirty_files(&self, mut change: FileChangeSummary) -> FileChangeSummary {
-        if change.changed.len() > 0 {
+        if !change.changed.is_empty() {
             let filtered_changed: SyncSet<lsproto::DocumentUri> = SyncSet::default();
             let wg = new_work_group(false);
             #[expect(clippy::iter_over_hash_type, reason = "per-entry reload plus a set insert; Go runs these in parallel")]
@@ -689,7 +689,7 @@ impl snapshotFSBuilder {
         previous_open_files: &FxHashMap<Path, Arc<dyn FileHandle>>,
         open_files: &FxHashMap<Path, Arc<dyn FileHandle>>,
     ) -> FileChangeSummary {
-        if change.deleted.len() > 0 {
+        if !change.deleted.is_empty() {
             let mut filtered_deleted: Set<lsproto::DocumentUri> = Set::default();
             #[expect(clippy::iter_over_hash_type, reason = "filters into a new set; pure inserts; Go ranges the set too")]
             for uri in change.deleted.keys() {
@@ -706,7 +706,7 @@ impl snapshotFSBuilder {
             change.deleted = filtered_deleted;
         }
 
-        if change.changed.len() > 0 {
+        if !change.changed.is_empty() {
             let mut filtered_changed: Set<lsproto::DocumentUri> = Set::default();
             // filters into a new set; pure inserts; Go ranges the set too
             filtered_changed.m.extend(change.changed.keys().iter().filter_map(|uri| {

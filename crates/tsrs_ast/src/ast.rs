@@ -84,9 +84,11 @@ pub struct NodeFactoryHooks {
     pub on_clone: Option<NodeUpdateHook>,  // Hooks the cloning of a node.
 }
 
-/// Go `*ast.NodeFactory`. A handle: every method takes `&self`, and `clone()` yields another handle to the same
-/// factory (shared hooks and counters), like copying the Go pointer. So `f.new_x(f.new_y())` works and a factory can
-/// be shared by a visitor, the node builder and an emit context.
+/// Go `*ast.NodeFactory`.
+///
+/// A handle: every method takes `&self`, and `clone()` yields another handle to the same factory (shared
+/// hooks and counters), like copying the Go pointer. So `f.new_x(f.new_y())` works and a factory can be
+/// shared by a visitor, the node builder and an emit context.
 #[derive(Default, Clone)]
 pub struct NodeFactory {
     pub(crate) hooks: NodeFactoryHooks,
@@ -411,14 +413,16 @@ impl ModifierList {
 
 // AST Node
 
-/// Go `ast.Node`. The node's data struct (Go: the struct that embeds `NodeBase`) is allocated together with the
-/// header, right after it (`NodeAlloc`); `data_tag()` says which struct it is. `node.data()` returns it as a
+/// Go `ast.Node`.
+///
+/// The node's data struct (Go: the struct that embeds `NodeBase`) is allocated together with the header,
+/// right after it (`NodeAlloc`); `data_tag()` says which struct it is. `node.data()` returns it as a
 /// `NodeData`, `as_*()` and the generated accessors read it in place. Data structs without fields (`Token`,
 /// `KeywordTypeNode`, ...) allocate only the header.
 ///
-/// The header is 24 bytes: the kind, the data tag and the parent pointer share one word (`NodeHeaderWord`), and the
-/// id is stored in 32 bits (ids still come from a 64-bit counter and are returned as `NodeId`; more than
-/// `u32::MAX` node ids panic, like symbol ids). 23M nodes on the private monorepo.
+/// The header is 24 bytes: the kind, the data tag and the parent pointer share one word (`NodeHeaderWord`),
+/// and the id is stored in 32 bits (ids still come from a 64-bit counter and are returned as `NodeId`; more
+/// than `u32::MAX` node ids panic, like symbol ids). 23M nodes on the private monorepo.
 pub struct Node {
     header: OwnedCell<NodeHeaderWord>,
     pub flags: OwnedCell<NodeFlags>,
@@ -428,10 +432,14 @@ pub struct Node {
 
 const _: () = assert!(std::mem::size_of::<Node>() == 24);
 
-/// Census builds (`TSRS_CENSUS=1`): registers the fields of AST arena types that the census's strong mark must not
-/// read as plain pointers (`tsrs_core::census_layout`), from the current layouts: node headers (flags, id and range;
-/// the parent word is not decoded), identifier words, symbol parent words, diagnostics' scalars. Once per process;
-/// nothing in other builds.
+/// Keeps scalar AST fields out of the census's pointer scan.
+///
+/// Census builds (`TSRS_CENSUS=1`): registers the fields of AST arena types that the census's strong mark
+/// must not read as plain pointers (`tsrs_core::census_layout`), from the current layouts: node headers
+/// (flags, id and range; the parent word is not decoded), identifier words, symbol parent words, diagnostics'
+/// scalars.
+///
+/// Once per process; nothing in other builds.
 pub fn census_layouts() {
     if !tsrs_core::census_recording() {
         return;
@@ -745,8 +753,8 @@ impl Node {
         }
     }
 
-    /// Go `Text()`. Joined texts (JsxNamespacedName, JSDoc text) are allocated in the arena.
-    /// Identifiers (most calls) inline; the other kinds out of line.
+    /// Go `Text()`. Joined texts (`JsxNamespacedName`, `JSDoc` text) are allocated in the arena. Identifiers
+    /// (most calls) inline; the other kinds out of line.
     #[inline]
     pub fn text(&self) -> &'static str {
         if self.kind() == Kind::Identifier {
@@ -1640,7 +1648,7 @@ impl NodeFactory {
 }
 
 impl ImportAttributes {
-    /// Go `(*ImportAttributesNode).GetResolutionModeOverride`; `node` is the ImportAttributes node or None.
+    /// Go `(*ImportAttributesNode).GetResolutionModeOverride`; `node` is the `ImportAttributes` node or None.
     pub fn get_resolution_mode_override(
         node: Option<P<Node>>,
         mut grammar_error_on_node: Option<&mut dyn FnMut(P<Node>, &'static diagnostics::Message, &[&dyn std::fmt::Display]) -> bool>,
@@ -2050,7 +2058,7 @@ impl SourceFile {
         let _region = self.owner_region();
         self.name_table.get_or_init(|| {
             let mut name_table: tsrs_core::collections::OrderedMap<&'static str, NameTableEntry> =
-                Default::default();
+                tsrs_core::collections::OrderedMap::default();
             let file: &'static SourceFile = self.as_node().as_source_file();
             fn walk(
                 node: P<Node>,
@@ -2365,7 +2373,7 @@ impl Node {
         unsafe { P::from_arena(self.as_flow_reduce_label_data()) }
     }
 
-    /// `P<SourceFile>` for a SourceFile node (Go code that holds `*ast.SourceFile`).
+    /// `P<SourceFile>` for a `SourceFile` node (Go code that holds `*ast.SourceFile`).
     #[inline]
     pub fn as_source_file_p(&self) -> P<SourceFile> {
         // SAFETY: the data struct of an arena node (8-aligned: it follows the 24-byte header).

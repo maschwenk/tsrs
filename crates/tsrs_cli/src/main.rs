@@ -1,5 +1,5 @@
 // The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", miri)))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(feature = "alloc-profile")]
@@ -115,7 +115,10 @@ fn mimalloc_collect(force: bool) {
         fn mi_collect(force: bool);
     }
     // SAFETY: collects the calling thread's heap; no arguments to get wrong.
+    #[cfg(not(miri))]
     unsafe { mi_collect(force) };
+    #[cfg(miri)]
+    let _ = force;
 }
 
 // mimalloc-safe builds the `no_thp` feature as mimalloc's `allow_thp = 0`, and with that mimalloc turns transparent

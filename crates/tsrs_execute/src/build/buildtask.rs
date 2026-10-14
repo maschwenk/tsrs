@@ -41,6 +41,7 @@ pub(crate) struct buildInfoEntry {
     build_info: Option<Arc<BuildInfo>>,
     path: Path,
     m_time: Option<SystemTime>,
+    #[expect(clippy::option_option, reason = "Distinguishes an unchecked declaration timestamp from a checked missing timestamp.")]
     dts_time: Option<Option<SystemTime>>,
 }
 

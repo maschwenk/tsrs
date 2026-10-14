@@ -74,6 +74,7 @@ impl Checker {
 
     // checker.go:21793
     #[cfg_attr(feature = "site-counts", track_caller)]
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn create_union_or_intersection_property(&mut self, containing_type: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
         let mut prop_flags = SymbolFlags::None;
         let mut single_prop: Option<P<Symbol>> = None;
@@ -256,7 +257,7 @@ impl Checker {
             } else if prop.value_declaration().is_some() && prop.value_declaration() != first_value_declaration {
                 has_non_uniform_value_declaration = true;
             }
-            for &declaration in prop.declarations().iter() {
+            for &declaration in prop.declarations() {
                 tsrs_core::append_if_unique(&mut declarations, declaration);
             }
             let t = self.get_type_of_symbol(prop);
@@ -385,7 +386,7 @@ impl Checker {
     // checker.go:22041
     pub(crate) fn has_common_declaration(&mut self, symbols: &[P<Symbol>]) -> bool {
         let mut common_declarations: OrderedSet<P<Node>> = OrderedSet::default();
-        for symbol in symbols.iter() {
+        for symbol in symbols {
             let symbol_declarations = symbol.declarations();
             if symbol_declarations.is_empty() {
                 return false;
@@ -1050,6 +1051,7 @@ impl Checker {
     }
 
     #[inline(never)]
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
         if self.instantiation_stack.len() == 100 || self.instantiation_count >= 5_000_000 {
             // We have reached 100 recursive type instantiations, or 5M type instantiations caused by the same statement
@@ -1189,7 +1191,7 @@ impl Checker {
 
     // checker.go:22600
     pub(crate) fn clear_active_mapper_caches(&mut self) {
-        for cache in self.active_type_mappers_caches.iter_mut() {
+        for cache in &mut self.active_type_mappers_caches {
             cache.clear();
         }
     }
@@ -1292,7 +1294,7 @@ impl Checker {
             }
             let new_types = changed.as_deref().unwrap_or(types);
             let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), Some(m)) } else { None };
-            let alias = AliasArg::given_or_pending(alias, &pending);
+            let alias = AliasArg::given_or_pending(alias, pending.as_ref());
             let result = if source.flags().intersects(TypeFlags::Intersection) {
                 self.get_intersection_type_ex(new_types, IntersectionFlags::None, alias)
             } else {
@@ -1307,7 +1309,7 @@ impl Checker {
             return self.get_index_type(target);
         } else if flags.intersects(TypeFlags::IndexedAccess) {
             let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), Some(m)) } else { None };
-            let alias = AliasArg::given_or_pending(alias, &pending);
+            let alias = AliasArg::given_or_pending(alias, pending.as_ref());
             let d = t.as_indexed_access_type();
             let object_type = self.instantiate_type(d.object_type().unwrap(), Some(m));
             let index_type = self.instantiate_type(d.index_type().unwrap(), Some(m));
@@ -1422,7 +1424,7 @@ impl Checker {
             self.map_type_with_composite_mapper(tp, t.mapper(), m.unwrap())
         }));
         let pending = if alias.is_none() { self.instantiate_type_alias_pending(t.alias(), m) } else { None };
-        let new_alias = AliasArg::given_or_pending(alias, &pending);
+        let new_alias = AliasArg::given_or_pending(alias, pending.as_ref());
         // Go `data := target.AsObjectType()`; `data.instantiations` is `self.object_type_instantiations[target]`
         // (the target is a declared anonymous or mapped type or a deferred reference, never an interface or tuple).
         assert!(target.try_as_interface_type().is_none(), "object type instantiation of an interface target");
@@ -1439,6 +1441,7 @@ impl Checker {
             let too_complex_before = self.too_complex_reports;
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
                 new_mapper = self.combine_type_mappers(Some(new_mapper), m.unwrap());
             }
@@ -2522,22 +2525,22 @@ impl Checker {
                 && (num_type_arguments < min_type_argument_count
                     || num_type_arguments > type_parameters.len())
             {
-                let message: &'static Message;
+
 
                 let missing_augments_tag = is_js && is_expression_with_type_arguments(node) && !is_jsdoc_augments_tag(node.parent().unwrap());
-                if missing_augments_tag {
-                    message = if min_type_argument_count < type_parameters.len() {
+                let message: &'static Message = if missing_augments_tag {
+                    if min_type_argument_count < type_parameters.len() {
                         &diagnostics::Expected_0_1_type_arguments_provide_these_with_an_extends_tag
                     } else {
                         &diagnostics::Expected_0_type_arguments_provide_these_with_an_extends_tag
-                    };
+                    }
                 } else {
-                    message = if min_type_argument_count < type_parameters.len() {
+                    if min_type_argument_count < type_parameters.len() {
                         &diagnostics::Generic_type_0_requires_between_1_and_2_type_arguments
                     } else {
                         &diagnostics::Generic_type_0_requires_1_type_argument_s
-                    };
-                }
+                    }
+                };
                 let type_str = self.type_to_string_ex(t, None /*enclosingDeclaration*/, TypeFormatFlags::WriteArrayAsGenericType, None);
                 let num_type_parameters = type_parameters.len();
                 self.error(Some(node), message, &[&type_str, &min_type_argument_count, &num_type_parameters]);
@@ -2613,6 +2616,7 @@ impl Checker {
     // resolve their constituent types. We include SyntaxKind.TypeReference because type arguments
     // of type aliases are eagerly resolved.
     // checker.go:23718
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_resolved_by_type_alias(&mut self, node: P<Node>) -> bool {
         let parent = node.parent().unwrap();
         match parent.kind() {

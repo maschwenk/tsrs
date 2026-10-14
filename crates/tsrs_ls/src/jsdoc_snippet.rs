@@ -410,7 +410,7 @@ fn template_to_snippet(template: &str, new_line: &str) -> String {
 // jsdoc_snippet.go:377
 fn strip_jsdoc_template_indentation(template: &str, new_line: &str) -> String {
     let mut lines: Vec<String> = template.split(new_line).map(std::string::ToString::to_string).collect();
-    for line in lines.iter_mut() {
+    for line in &mut lines {
         let trimmed = line.trim_start_matches([' ', '\t']).to_string();
         if trimmed.starts_with('/') {
             *line = trimmed;

@@ -716,6 +716,7 @@ impl NodeBuilderImpl {
     }
 
     // pseudotypenodebuilder.go:689
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn pseudo_type_to_type(&self, c: &mut Checker, t: Option<P<PseudoType>>) -> Option<P<Type>> {
         // !!! TODO: only literal types currently mapped because this is only used to determine if literal contextual typing need apply to the pseudotype
         // If this is used more broadly, the implementation needs to be filled out more to handle the structural pseudotypes - signatures, objects, tuples, etc

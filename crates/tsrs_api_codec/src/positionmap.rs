@@ -1,7 +1,10 @@
-//! UTF-8 ⇄ UTF-16 offset mapping with the exact semantics of the pinned Go `ast.PositionMap`
-//! (`tsc/internal/ast/positionmap.go`), including WTF-8 lone surrogates (3 bytes, 1 UTF-16 unit) and invalid
-//! bytes (1 byte, 1 unit). `tsrs_ast::compute_position_map` decodes with `chars()` and therefore only handles
-//! valid UTF-8; the codec needs the Go behavior because API clients can send text with lone surrogates.
+//! Preserves Go's UTF-8 and UTF-16 position-mapping semantics.
+//!
+//! UTF-8 ⇄ UTF-16 offset mapping with the exact semantics of the pinned Go `ast.PositionMap` (`tsc/internal/ast/positionmap.go`), including WTF-8 lone surrogates (3 bytes, 1 UTF-16 unit) and invalid bytes (1 byte, 1 unit).
+//!
+//!
+//! `tsrs_ast::compute_position_map` decodes with `chars()` and therefore only handles valid UTF-8; the
+//! codec needs the Go behavior because API clients can send text with lone surrogates.
 
 use tsrs_core::stringutil::decode_js_string_rune_bytes;
 

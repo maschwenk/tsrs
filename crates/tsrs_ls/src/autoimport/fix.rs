@@ -962,7 +962,9 @@ impl View {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum fileSyntaxKind {
     Ambiguous,
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     ESM,
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     CJS,
 }
 
@@ -1008,9 +1010,7 @@ fn detect_syntax_indicators(file: P<SourceFile>, options: &CompilerOptions) -> (
         if imp.flags().intersects(NodeFlags::Synthesized) {
             return None;
         }
-        let Some(parent) = imp.parent() else {
-            return None;
-        };
+        let parent = imp.parent()?;
         match parent.kind() {
             Kind::ImportDeclaration | Kind::JSImportDeclaration | Kind::ExportDeclaration => return Some((true, has_cjs)),
             Kind::ExternalModuleReference => {

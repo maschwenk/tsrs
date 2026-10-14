@@ -104,7 +104,7 @@ impl Checker {
                 // named union per constituent, were most of the `compare_types` calls on the 38k-file codebase.
                 let mut named: FxHashSet<P<Type>> = FxHashSet::default();
                 // Extend each known-length constituent slice so the set reserves before inserting.
-                for u in named_unions.iter() { named.extend(u.types().iter().copied()); }
+                for u in &named_unions { named.extend(u.types().iter().copied()); }
                 reduced_types.extend(type_set.iter().copied().filter(|t| !named.contains(t)));
             } else {
                 reduced_types
@@ -277,6 +277,7 @@ impl Checker {
     }
 
     // checker.go:26294
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn add_named_unions(&mut self, named_unions: &[P<Type>], types: &[P<Type>]) -> Vec<P<Type>> {
         let mut named_unions = named_unions.to_vec();
         for &t in types {
@@ -1662,6 +1663,7 @@ impl Checker {
     }
 
     // checker.go:27259
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_key_type_included(&mut self, key_type: P<Type>, include: TypeFlags) -> bool {
         key_type.flags().intersects(include)
             || key_type.flags().intersects(TypeFlags::Intersection) && key_type.types().iter().any(|&t| self.is_key_type_included(t, include))
@@ -1807,13 +1809,13 @@ impl Checker {
         }
         // We had to pick apart the constraintType to potentially map/filter it - compare the final resulting list with the
         // original constraintType, so we can return the union that preserves aliases/origin data if possible.
-        let result;
-        if index_flags.intersects(IndexFlags::NoIndexSignatures) {
+
+        let result = if index_flags.intersects(IndexFlags::NoIndexSignatures) {
             let union = self.get_union_type(&key_types);
-            result = self.filter_type(union, |_, t| !t.flags().intersects(TypeFlags::Any | TypeFlags::String));
+            self.filter_type(union, |_, t| !t.flags().intersects(TypeFlags::Any | TypeFlags::String))
         } else {
-            result = self.get_union_type(&key_types);
-        }
+            self.get_union_type(&key_types)
+        };
         if result.flags().intersects(TypeFlags::Union) && constraint_type.flags().intersects(TypeFlags::Union) && get_type_list_key(result.types()) == get_type_list_key(constraint_type.types()) {
             return constraint_type;
         }
@@ -1987,6 +1989,7 @@ impl Checker {
             }
             let prop = self.get_property_of_type(object_type, &prop_name);
             if let Some(prop) = prop {
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if access_flags.intersects(AccessFlags::ReportDeprecated)
                     && access_node.is_some()
                     && !prop.declarations().is_empty()
@@ -2036,6 +2039,7 @@ impl Checker {
             }
             if every_type(self, object_type, |_, t| is_tuple_type(t)) && is_numeric_literal_name(&prop_name) {
                 let index = jsnum::from_string(&prop_name);
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if access_node.is_some() && every_type(self, object_type, |_, t| !t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
                     let index_node = get_index_node_for_access_expression(access_node.unwrap());
                     if is_tuple_type(object_type) {
@@ -2085,6 +2089,7 @@ impl Checker {
                     }
                     return None;
                 }
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if access_node.is_some() && index_info.key_type() == self.string_type && !self.is_type_assignable_to_kind(index_type, TypeFlags::String | TypeFlags::Number) {
                     let index_node = get_index_node_for_access_expression(access_node.unwrap());
                     let index_string = self.type_to_string_exported(index_type);

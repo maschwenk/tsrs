@@ -33,6 +33,7 @@ impl Tristate {
         self == Tristate::Unknown
     }
 
+    #[must_use]
     pub fn default_if_unknown(self, value: Tristate) -> Tristate {
         if self == Tristate::Unknown {
             return value;

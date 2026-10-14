@@ -86,8 +86,8 @@ fn deep_nesting_is_bounded() {
     assert!(tsrs_api_transport::strictjson::validate(ok.as_bytes()).is_ok());
 }
 
-/// Grammar errors: every input of go_syntax_oracle.json (decoded by the pinned Go binary into `any`)
-/// is accepted or rejected exactly as Go does, with Go's error text (pointer and offset rules included).
+/// Grammar errors: every input of `go_syntax_oracle.json` (decoded by the pinned Go binary into `any`) is
+/// accepted or rejected exactly as Go does, with Go's error text (pointer and offset rules included).
 #[test]
 fn syntax_errors_match_pinned_go_text() {
     let cases: Vec<Value> = serde_json::from_str(include_str!("fixtures/go_syntax_oracle.json")).unwrap();

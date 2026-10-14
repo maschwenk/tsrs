@@ -423,11 +423,11 @@ pub(crate) fn emit_files(ctx: &Context, program: P<Program>, options: &EmitOptio
         ctx,
         program,
         is_for_dts_errors,
-        signatures: Default::default(),
-        emit_signatures: Default::default(),
-        latest_changed_dts_files: Default::default(),
-        deleted_pending_kinds: Default::default(),
-        emit_updates: Default::default(),
+        signatures: std::sync::Mutex::default(),
+        emit_signatures: std::sync::Mutex::default(),
+        latest_changed_dts_files: std::sync::Mutex::default(),
+        deleted_pending_kinds: std::sync::Mutex::default(),
+        emit_updates: std::sync::Mutex::default(),
         has_emit_diagnostics: AtomicBool::new(false),
     };
 

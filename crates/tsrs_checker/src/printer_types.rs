@@ -1,7 +1,8 @@
-//! Declarations that printer.rs / symbolaccessibility / symboltracker signatures reference: the node-builder and printer
-//! types from other Go packages (`nodebuilder`, `printer`), the non-function declarations of `symbolaccessibility.go`
-//! and `symboltracker.go`, and the seam to the `tsrs_printer` crate. The node builder's own data model is in
-//! nodebuilder_types.rs.
+//! Shares node-builder and printer declarations without introducing import cycles.
+//!
+//! Declarations that printer.rs / symbolaccessibility / symboltracker signatures reference: the node-builder and printer types from other Go packages (`nodebuilder`, `printer`), the non-function declarations of `symbolaccessibility.go` and `symboltracker.go`, and the seam to the `tsrs_printer` crate.
+//!
+//! The node builder's own data model is in `nodebuilder_types.rs`.
 
 use bitflags::bitflags;
 

@@ -3,9 +3,11 @@
 use tsrs_ast::Kind;
 use tsrs_core::TextPos;
 
-/// String offsets + string data sections. Strings that equal the slice of file text at their node's position are
-/// stored as a range of the file text; everything else is appended after it. All offsets are UTF-8 (WTF-8) byte
-/// offsets into the string data section, exactly as the pinned Go encoder writes them.
+/// String offsets + string data sections.
+///
+/// Strings that equal the slice of file text at their node's position are stored as a range of the file text;
+/// everything else is appended after it. All offsets are UTF-8 (WTF-8) byte offsets into the string data
+/// section, exactly as the pinned Go encoder writes them.
 pub struct StringTable<'a> {
     file_text: &'a [u8],
     other_strings: Vec<u8>,

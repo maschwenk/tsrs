@@ -48,9 +48,11 @@ pub struct ModulePath {
     pub is_redirect: bool,
 }
 
-/// Go `ModuleSpecifierGenerationHost`. `CommonSourceDirectory`, `ContentMapperExtensions`, `GetCurrentDirectory` and
-/// `UseCaseSensitiveFileNames` come from the supertrait `outputpaths.OutputPathsHost` (Go passes the host to
-/// `outputpaths` functions). `ast.HasFileName` parameters are `P<SourceFile>`.
+/// Go `ModuleSpecifierGenerationHost`.
+///
+/// `CommonSourceDirectory`, `ContentMapperExtensions`, `GetCurrentDirectory` and `UseCaseSensitiveFileNames`
+/// come from the supertrait `outputpaths.OutputPathsHost` (Go passes the host to `outputpaths` functions).
+/// `ast.HasFileName` parameters are `P<SourceFile>`.
 pub trait ModuleSpecifierGenerationHost: OutputPathsHost {
     // GetModuleResolutionCache() any // !!! TODO: adapt new resolution cache model
     fn get_symlink_cache(&self) -> P<KnownSymlinks>;
@@ -76,11 +78,12 @@ pub trait ModuleSpecifierGenerationHost: OutputPathsHost {
     }
 }
 
-/// tsrs-only: memo for `try_get_module_name_from_exports`, a pure function of its arguments and of the program (its
-/// compiler options, package.json contents and output paths). Declaration emit asks for the same (module file,
-/// package) pair from every file that prints a type from that module, and each answer walks the package's
-/// `exports` map. A host returns one only if it lives as long as the program it describes, and only for that
-/// program's own options object.
+/// tsrs-only: memo for `try_get_module_name_from_exports`, a pure function of its arguments and of the
+/// program (its compiler options, package.json contents and output paths).
+///
+/// Declaration emit asks for the same (module file, package) pair from every file that prints a type from
+/// that module, and each answer walks the package's `exports` map. A host returns one only if it lives as
+/// long as the program it describes, and only for that program's own options object.
 #[derive(Default)]
 pub struct ExportsModuleNameCache(std::sync::Mutex<FxHashMap<String, String>>);
 
@@ -184,10 +187,13 @@ pub enum MatchingMode {
 
 // preferences.go
 
+/// Carries borrowed inputs into the preferred-ending callback.
+///
 /// Go's `getAllowedEndingsInPreferredOrder` func field closes over `(prefs, host, compilerOptions,
-/// importingSourceFile, oldImportSpecifier)`; a `'static` boxed closure cannot capture the borrowed host and options,
-/// so the owned captures are stored here and `get_allowed_endings_in_preferred_order(host, compiler_options, mode)`
-/// (preferences.rs) takes the other two from the caller, which always holds the same ones Go captured.
+/// importingSourceFile, oldImportSpecifier)`; a `'static` boxed closure cannot capture the borrowed host and
+/// options, so the owned captures are stored here and `get_allowed_endings_in_preferred_order(host,
+/// compiler_options, mode)` (preferences.rs) takes the other two from the caller, which always holds the same
+/// ones Go captured.
 pub struct ModuleSpecifierPreferences {
     pub relative_preference: RelativePreferenceKind,
     pub exclude_regexes: Vec<String>,

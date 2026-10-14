@@ -69,6 +69,7 @@ pub(crate) struct SplitConfig {
     pub(crate) divisor: u64,
     pub(crate) min_share_percent: u64,
     // `stats`: Some(None) prints to stderr, Some(Some(path)) appends to the file.
+    #[expect(clippy::option_option, reason = "Distinguishes disabled statistics, stderr output, and output to a file.")]
     pub(crate) stats: Option<Option<String>>,
 }
 

@@ -93,10 +93,10 @@ pub fn is_bindable_object_define_property_call(node: P<Node>) -> bool {
 /**
  * A declaration has a dynamic name if all of the following are true:
  *   1. The declaration has a computed property name.
- *   2. The computed name is *not* expressed as a StringLiteral.
- *   3. The computed name is *not* expressed as a NumericLiteral.
- *   4. The computed name is *not* expressed as a PlusToken or MinusToken
- *      immediately followed by a NumericLiteral.
+ *   2. The computed name is *not* expressed as a `StringLiteral`.
+ *   3. The computed name is *not* expressed as a `NumericLiteral`.
+ *   4. The computed name is *not* expressed as a `PlusToken` or `MinusToken`
+ *      immediately followed by a `NumericLiteral`.
  */
 pub fn has_dynamic_name(declaration: P<Node>) -> bool {
     get_name_of_declaration(declaration).is_some_and(is_dynamic_name)
