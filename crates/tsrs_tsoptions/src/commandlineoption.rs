@@ -14,6 +14,13 @@ use crate::enummaps::{
 };
 use crate::tsconfigparsing::CommandLineOptionNameMap;
 
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum CommandLineOptionPathKind { None, File, Directory, FileOrDirectory, SourceMapLocation, FileSpec, PathPattern, ResolvedPathPattern, ConfigLocator }
+impl CommandLineOptionPathKind {
+    pub fn is_rooted(self) -> bool { matches!(self, Self::File | Self::Directory | Self::FileOrDirectory | Self::ResolvedPathPattern) }
+    pub fn is_file_system_path(self) -> bool { matches!(self, Self::File | Self::Directory | Self::FileOrDirectory) }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum CommandLineOptionKind {
     String,
@@ -67,6 +74,7 @@ pub struct CommandLineOption {
     pub kind: CommandLineOptionKind,
 
     // used in parsing
+    pub path_kind: CommandLineOptionPathKind,
     pub is_file_path: bool,
     pub is_tsconfig_only: bool,
     pub is_command_line_only: bool,
@@ -125,6 +133,7 @@ impl CommandLineOption {
         name: "",
         short_name: "",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::None,
         is_file_path: false,
         is_tsconfig_only: false,
         is_command_line_only: false,
@@ -195,6 +204,7 @@ pub(crate) static COMMAND_LINE_OPTION_ELEMENTS: LazyLock<FxHashMap<&'static str,
         "rootDirs",
         CommandLineOption {
             name: "rootDirs",
+            path_kind: CommandLineOptionPathKind::Directory,
             kind: CommandLineOptionKind::String,
             is_file_path: true,
             ..CommandLineOption::DEFAULT
@@ -204,6 +214,7 @@ pub(crate) static COMMAND_LINE_OPTION_ELEMENTS: LazyLock<FxHashMap<&'static str,
         "typeRoots",
         CommandLineOption {
             name: "typeRoots",
+            path_kind: CommandLineOptionPathKind::Directory,
             kind: CommandLineOptionKind::String,
             is_file_path: true,
             ..CommandLineOption::DEFAULT

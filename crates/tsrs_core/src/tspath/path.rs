@@ -235,7 +235,7 @@ pub fn get_encoded_root_length(path: &str) -> EncodedRootLength {
             && let Some(scheme_end) = rest.find('/')
         {
             let scheme_end = scheme_end + DYNAMIC_URI_FILE_NAME_PREFIX.len();
-            return EncodedRootLength::Disk(path[scheme_end + 1..].find('/').map_or(ln, |authority_end| scheme_end + authority_end + 2));
+            return path[scheme_end + 1..].find('/').map_or(EncodedRootLength::Url(ln), |authority_end| EncodedRootLength::Disk(scheme_end + authority_end + 2));
         }
         return EncodedRootLength::Disk(2); // Untitled: "^/"
     }
@@ -636,6 +636,7 @@ pub fn normalize_path(path: &str) -> String {
         path
     };
     if let Some(normalized) = simple_normalize_path(path) {
+        if !normalized.is_empty() && normalized.len() == get_root_length(&normalized) { return ensure_trailing_directory_separator(&normalized); }
         return normalized.into_owned();
     }
     let mut normalized = get_normalized_absolute_path(path, "");
@@ -742,7 +743,7 @@ pub fn to_file_name_lower_case(file_name: &str) -> String {
 
 pub fn to_path(file_name: &str, base_path: &str, use_case_sensitive_file_names: bool) -> Path {
     let mut non_canonicalized_path =
-        if is_rooted_disk_path(file_name) { normalize_path(file_name) } else { get_normalized_absolute_path(file_name, base_path) };
+        get_normalized_absolute_path(file_name, base_path);
     if is_encoded_dynamic_file_name(&non_canonicalized_path) {
         return Path::new(canonical_dynamic_uri_path(&non_canonicalized_path));
     }
@@ -1126,12 +1127,18 @@ impl Path {
     // Since Path values are already rooted, reduced, and case-canonicalized,
     // this is a simple string prefix check.
     pub fn contains_path(&self, child: &Path) -> bool {
-        let p = self.0.as_bytes();
-        let c = child.0.as_bytes();
-        if p.is_empty() {
-            return false;
-        }
-        p == c || c.len() > p.len() && c.starts_with(p) && (p[p.len() - 1] == b'/' || c[p.len()] == b'/')
+        if self.0.is_empty() { return false; }
+        let parent_root_length = get_root_length(&self.0);
+        let child_root_length = get_root_length(&child.0);
+        let parent_root = &self.0[..parent_root_length];
+        let child_root = &child.0[..child_root_length];
+        let dynamic = is_encoded_dynamic_file_name(&self.0) || is_encoded_dynamic_file_name(&child.0);
+        let roots_equal = if dynamic { parent_root.trim_end_matches('/') == child_root.trim_end_matches('/') } else { stringutil::equate_string_case_insensitive(parent_root, child_root) };
+        if !roots_equal { return false; }
+        let parent = &self.0[parent_root_length..];
+        let child = &child.0[child_root_length..];
+        parent == child || child.len() > parent.len() && child.starts_with(parent) && (parent.is_empty() || parent.ends_with('/') || child.as_bytes()[parent.len()] == b'/')
+
     }
 }
 
@@ -1317,3 +1324,27 @@ pub fn compare_number_of_directory_separators(path1: &str, path2: &str) -> Order
 #[cfg(test)]
 #[path = "path_test.rs"]
 mod path_test;
+
+/// Validates the wire representation of a rooted, normalized path without changing its spelling.
+pub fn is_rooted_normalized_path(path: &str) -> bool {
+    if path.is_empty() || path.contains('\\') || has_rooted_url_suffix(path) { return false; }
+    let root = get_root_length(path);
+    root != 0 && !path[root..].starts_with('/') && !has_relative_path_segment(&path[root..]) &&
+        if path.len() == root { has_trailing_directory_separator(path) } else { !has_trailing_directory_separator(path) }
+}
+
+pub fn is_canonical_path_key(path: &str) -> bool { path.is_empty() || is_rooted_normalized_path(path) }
+
+fn has_rooted_url_suffix(path: &str) -> bool {
+    is_url(path) && path.split_once("://").is_some_and(|(_, rest)| rest.contains(['?', '#']))
+}
+
+/// Resolves a path supplied at an API boundary, preserving normalized rooted spelling.
+pub fn to_rooted_path(path: &str, cwd: &str) -> String {
+    assert!(!path.is_empty(), "path must not be empty");
+    assert!(!has_rooted_url_suffix(path), "path must not contain a URL query or fragment");
+    assert!(get_root_length(path) != 0 || !is_url(cwd) || !path.contains(['?', '#']), "relative URL path must not contain a query or fragment");
+    let normalized = get_normalized_absolute_path(path, cwd);
+    assert!(get_root_length(&normalized) != 0 && !has_rooted_url_suffix(&normalized), "path must be rooted");
+    if normalized.len() == get_root_length(&normalized) { ensure_trailing_directory_separator(&normalized) } else { normalized }
+}

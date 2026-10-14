@@ -374,10 +374,15 @@ impl LanguageService {
         let mut without_index = String::new();
         let specifier_text = specifier.text();
         if !specifier_text.ends_with("/index") && !specifier_text.ends_with("/index.js") {
-            let candidate = tspath::remove_file_extension(file_name);
-            if let Some(trimmed) = candidate.strip_suffix("/index") {
-                without_index = trimmed.to_string();
+            if tspath::remove_file_extension(&tspath::get_base_file_name(file_name)) == "index" {
+                let root_length = tspath::get_root_length(file_name);
+                let root = &file_name[..root_length];
+                let relative = &file_name[root_length..];
+                if !((root == "/" || tspath::is_dynamic_file_name(root)) && tspath::remove_file_extension(relative) == "index") {
+                    without_index = tspath::get_directory_path(file_name);
+                }
             }
+
         }
 
         let mut display_name = file_name.to_string();
@@ -412,7 +417,7 @@ impl LanguageService {
     // For example, if specifier "a.js" resolves to file a.ts, renaming "a.js" -> "b.js" should mean file rename a.ts -> b.ts.
     // rename.go:351
     fn get_new_file_name_for_module_rename(&self, old_path: &str, specifier_text: &str, new_name: &str) -> String {
-        let mut new_path = tspath::combine_paths(&tspath::get_directory_path(old_path), &[new_name]);
+        let mut new_path = tspath::to_rooted_path(new_name, &tspath::get_directory_path(old_path));
         let ignore_case = !self.use_case_sensitive_file_names();
         let old_ext = if tspath::is_declaration_file_name(old_path) {
             tspath::get_declaration_file_extension(old_path)

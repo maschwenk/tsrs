@@ -222,7 +222,7 @@ impl<'h> Setup<'h> {
     }
 
     pub(crate) fn source_file(&self, file: &DocumentIdentifier) -> CheckerResult<P<SourceFile>> {
-        self.program.get_source_file(&file.to_file_name()).ok_or_else(|| CheckerError::client(format!("source file not found: {}", file.display())))
+        self.program.get_source_file(&file.to_file_name(self.program.get_current_directory())).ok_or_else(|| CheckerError::client(format!("source file not found: {}", file.display())))
     }
 
     pub(crate) fn resolve_node(&self, handle: &str) -> CheckerResult<P<Node>> {

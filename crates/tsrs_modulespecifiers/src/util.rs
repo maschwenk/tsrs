@@ -283,8 +283,9 @@ pub fn get_node_module_path_parts(full_path: &str) -> Option<NodeModulePathParts
                 }
             }
             nodeModulesPathParseState::NodeModules | nodeModulesPathParseState::Scope => {
+                if part_start + 1 >= full_path.len() { return None; }
                 if state == nodeModulesPathParseState::NodeModules
-                    && full_path.as_bytes()[part_start + 1] == b'@'
+                    && full_path.as_bytes().get(part_start + 1) == Some(&b'@')
                 {
                     state = nodeModulesPathParseState::Scope;
                 } else {

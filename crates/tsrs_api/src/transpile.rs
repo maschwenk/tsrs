@@ -12,7 +12,6 @@ use tsrs_compiler::{EmitOnly, EmitOptions, ProgramOptions, WriteFileData};
 use tsrs_core::context::Context;
 use tsrs_core::json::Value;
 use tsrs_core::{tspath, CompilerOptions, JsxEmit, Tristate, P};
-use tsrs_tsoptions::gojson;
 use tsrs_vfs::{Entries, FileInfo, FS};
 
 use crate::handler::{ApiError, ApiResult};
@@ -233,11 +232,10 @@ struct ParsedTranspileOptions {
     report_diagnostics: bool,
 }
 
-fn parse_options(v: &Value) -> ApiResult<ParsedTranspileOptions> {
+fn parse_options(v: &Value, cwd: &str) -> ApiResult<ParsedTranspileOptions> {
     let p = Params(v);
     let compiler_options = if p.has("compilerOptions") {
-        let mut options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
-        crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), &mut options);
+        let options = crate::config::finalize_compiler_options(p.get("compilerOptions"), cwd)?;
         Some(options)
     } else {
         None
@@ -247,7 +245,7 @@ fn parse_options(v: &Value) -> ApiResult<ParsedTranspileOptions> {
 
 impl Session {
     pub(crate) fn handle_transpile(&self, p: Params, declaration: bool) -> ApiResult<Value> {
-        let o = parse_options(p.get("options"))?;
+        let o = parse_options(p.get("options"), self.current_directory())?;
         let out = transpile(p.str("input")?, o.compiler_options.as_ref(), &o.file_name, o.report_diagnostics, declaration)?;
         Ok(transpile_response(out))
     }
@@ -255,7 +253,7 @@ impl Session {
     pub(crate) fn handle_transpile_from_file(&self, p: Params, declaration: bool) -> ApiResult<Value> {
         let file_name = tspath::get_normalized_absolute_path(p.str("fileName")?, self.current_directory());
         let input = self.base_fs().read_file(&file_name).ok_or_else(|| ApiError::client(format!("could not read file {file_name:?}")))?;
-        let o = parse_options(p.get("options"))?;
+        let o = parse_options(p.get("options"), self.current_directory())?;
         let out = transpile(&input, o.compiler_options.as_ref(), &file_name, o.report_diagnostics, declaration)?;
         Ok(transpile_response(out))
     }

@@ -99,9 +99,9 @@ impl symbolExtractor<'_> {
     fn get_module_id(&self, file: P<SourceFile>) -> ModuleID {
         if let (Some(realpath), Some(to_path)) = (&self.realpath, &self.to_path) {
             let realpath = realpath(file.file_name());
-            return ModuleID(to_path(&realpath).to_string());
+            return ModuleID::File(to_path(&realpath).to_string());
         }
-        ModuleID(file.path().to_string())
+        ModuleID::File(file.path().to_string())
     }
 
     // extract.go:89
@@ -139,7 +139,7 @@ impl exportExtractor<'_> {
             let mut exports = Vec::with_capacity(export_count);
             for &statement in file.statements.nodes() {
                 if ast::is_module_with_string_literal_name(statement) && is_non_pattern_ambient_module_declaration(file, statement) {
-                    self.extract_from_module_declaration(statement, file, &ModuleID(statement.name().unwrap().text().to_string()), "", &mut exports);
+                    self.extract_from_module_declaration(statement, file, &ModuleID::Ambient(statement.name().unwrap().text().to_string()), "", &mut exports);
                 }
             }
             return exports;
@@ -176,20 +176,23 @@ impl exportExtractor<'_> {
         }
         for &decl in &module_augmentations {
             let name = decl.name().unwrap().as_string_literal().text();
-            let mut module_id = ModuleID(name.to_string());
+            let mut module_id = ModuleID::Ambient(name.to_string());
             let mut module_file_name = String::new();
+            let mut unresolved_module_specifier = String::new();
             if tspath::is_external_module_name_relative(name) {
                 let resolved = self.module_resolver.resolve_module_name(name, file.file_name(), ModuleKind::CommonJS, None).unwrap().0;
                 if resolved.is_resolved() {
                     module_file_name = resolved.resolved_file_name.to_string();
-                    module_id = ModuleID((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).to_string());
+                    module_id = ModuleID::File((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).to_string());
                 } else {
-                    // :shrug:
+                    unresolved_module_specifier = name.to_string();
                     module_file_name = tspath::resolve_path(&tspath::get_directory_path(file.file_name()), &[name]);
-                    module_id = ModuleID((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).to_string());
+                    module_id = ModuleID::File((self.symbol_extractor.to_path.as_ref().unwrap())(&module_file_name).to_string());
                 }
             }
+            let export_start = exports.len();
             self.extract_from_module_declaration(decl, file, &module_id, &module_file_name, &mut exports);
+            for export in &mut exports[export_start..] { Arc::make_mut(export).unresolved_module_specifier.clone_from(&unresolved_module_specifier); }
         }
         exports
     }
@@ -388,7 +391,7 @@ impl symbolExtractor<'_> {
                 }
                 export.script_element_kind = lsutil::get_symbol_kind(self.try_checker(checker_lease), ts, decl);
                 export.script_element_kind_modifiers = lsutil::get_symbol_modifiers(self.try_checker(checker_lease), Some(ts));
-                let mut target_module_id = ModuleID(ast::get_source_file_of_node(decl).unwrap().path().to_string());
+                let mut target_module_id = ModuleID::File(ast::get_source_file_of_node(decl).unwrap().path().to_string());
                 if let Some(parent) = parent {
                     if parent.is_external_module() {
                         if let Some(id) = self.get_module_id_for_symbol(parent) {
@@ -563,5 +566,5 @@ fn file_name_for_default_export_name(target_symbol: Option<P<Symbol>>, module_fi
     if !module_file_name.is_empty() {
         return module_file_name.to_string();
     }
-    module_id.0.clone()
+    module_id.as_str().to_string()
 }

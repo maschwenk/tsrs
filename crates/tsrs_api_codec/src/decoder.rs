@@ -25,6 +25,7 @@ pub enum DecodeError {
     InvalidCommonData { kind: Kind, value: u32 },
     MissingChild,
     InvalidSourceFileName(String),
+    InvalidSourceFilePath(String),
     Unsupported(Kind),
     /// Input on which the pinned Go decoder panics (the server recovers and returns `panic: <message>`); the
     /// Rust decoder fails at the same point instead of decoding more than Go can.
@@ -53,6 +54,7 @@ impl std::fmt::Display for DecodeError {
             DecodeError::InvalidExtendedData(s) => write!(f, "invalid extended data: {s}"),
             DecodeError::InvalidCommonData { kind, value } => write!(f, "invalid common data {value} for {kind:?}"),
             DecodeError::MissingChild => write!(f, "missing required child"),
+            DecodeError::InvalidSourceFilePath(s) => write!(f, "invalid source file path {s:?}"),
             DecodeError::InvalidSourceFileName(s) => write!(f, "invalid source file name {s:?}"),
             DecodeError::Unsupported(k) => write!(f, "{k:?} cannot be decoded"),
             DecodeError::GoDecoderPanic(m) => write!(f, "{m}"),
@@ -348,11 +350,8 @@ impl<'a> Decoder<'a> {
             6 => ScriptKind::JSON,
             v => return Err(DecodeError::InvalidExtendedData(format!("scriptKind {v}"))),
         };
-        if tspath::get_encoded_root_length(file_name) == tspath::EncodedRootLength::Relative
-            || file_name != tspath::normalize_path(file_name)
-        {
-            return Err(DecodeError::InvalidSourceFileName(file_name.to_string()));
-        }
+        if !tspath::is_canonical_path_key(path) { return Err(DecodeError::InvalidSourceFilePath(path.to_string())); }
+        if !tspath::is_rooted_normalized_path(file_name) { return Err(DecodeError::InvalidSourceFileName(file_name.to_string())); }
         let parse_opts = read_le32(self.raw, HEADER_OFFSET_PARSE_OPTIONS).unwrap();
         let opts = SourceFileParseOptions {
             file_name: file_name.to_string(),

@@ -178,6 +178,7 @@ impl Session {
     /// Go `snapshotData.resolveNodeHandle`.
     pub(crate) fn resolve_node_handle(&self, program: &'static Program, handle: &str) -> ApiResult<P<Node>> {
         let parsed = codec::parse_node_handle(handle).ok_or_else(|| ApiError::client(format!("invalid node handle {handle:?}")))?;
+        if !tspath::is_canonical_path_key(parsed.path) { return Err(ApiError::client(format!("invalid node handle {handle:?}"))); }
         let file = program
             .get_source_file_by_path(&tspath::Path::new(parsed.path))
             .ok_or_else(|| ApiError::client(format!("node handle {handle:?} could not be resolved (file may not be loaded or handle may be stale)")))?;
@@ -240,7 +241,7 @@ impl Session {
         if !is_valid_create_script_kind(sk) || (raw_kind != 0 && script_kind_from(raw_kind as u64).is_none()) {
             return Err(ApiError::client(format!("invalid scriptKind {}", if raw_kind != 0 { raw_kind } else { sk as i64 })));
         }
-        let file_name = tspath::get_normalized_absolute_path(file_name, self.current_directory());
+        let file_name = tspath::to_rooted_path(file_name, self.current_directory());
         let options = SourceFileParseOptions { path: self.to_path(&file_name), file_name, ..Default::default() };
         Ok(self.snapshot_host.acquire_source_file(options, text, sk))
     }
@@ -321,7 +322,7 @@ impl Session {
         let sd = self.snapshot_data(p.u64("snapshot")?)?;
         let program = sd.get_program(&tsrs_project::ID(p.str("project")?.to_string()))?;
         let file = p.document("file")?;
-        let r = self.encode_source_file_response(program.get_source_file(&file.to_file_name()));
+        let r = self.encode_source_file_response(program.get_source_file(&file.to_file_name(program.get_current_directory())));
         drop(sd);
         r
     }
@@ -334,7 +335,7 @@ impl Session {
         let Some(config) = command_line.config_file else { return self.encode_source_file_response(None) };
         let cs = self.use_case_sensitive_file_names();
         let cwd = program.get_current_directory();
-        let requested = tspath::to_path(&file.to_file_name(), cwd, cs);
+        let requested = tspath::to_path(&file.to_file_name(program.get_current_directory()), cwd, cs);
         if *config.source_file.path() == requested {
             return self.encode_source_file_response(Some(config.source_file));
         }

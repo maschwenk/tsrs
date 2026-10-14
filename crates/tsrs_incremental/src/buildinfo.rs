@@ -819,6 +819,12 @@ impl BuildInfo {
         if let Some(entries) = &self.options {
             for (option, value) in entries {
                 let value = json_to_option_value(value);
+                if build_info_directory.is_empty() {
+                    if let Some(option) = tsoptions::COMMAND_LINE_COMPILER_OPTIONS_MAP.get(option) {
+                        let path_kind = if option.kind == tsoptions::CommandLineOptionKind::List { option.elements().map_or(tsoptions::CommandLineOptionPathKind::None, |o| o.path_kind) } else { option.path_kind };
+                        if path_kind.is_rooted() { continue; }
+                    }
+                }
                 if !build_info_directory.is_empty() {
                     if let Some(result) =
                         tsoptions::convert_option_to_absolute_path(option, &value, &tsoptions::COMMAND_LINE_COMPILER_OPTIONS_MAP, build_info_directory)
@@ -863,13 +869,15 @@ impl BuildInfo {
         // Roots of the File
         let mut root_to_resolved: OrderedMap<Path, Path> = OrderedMap::default();
         let mut resolved_to_root: FxHashMap<Path, Path> = FxHashMap::default();
+        let mut resolved_root_file_names = FxHashMap::default();
+        let mut root_file_names = FxHashMap::default();
         let to_path = |file_name: &str| tspath::to_path(file_name, build_info_directory, compare_path_options.use_case_sensitive_file_names);
 
         // Create map from resolvedRoot to Root
         resolved_to_root.extend(self.resolved_root.iter().filter_map(|resolved| {
             let resolved_root = self.file_name(resolved.resolved);
             let root = self.file_name(resolved.root);
-            if !resolved_root.is_empty() && !root.is_empty() { Some((to_path(resolved_root), to_path(root))) } else { None }
+            if !resolved_root.is_empty() && !root.is_empty() { root_file_names.insert(to_path(root), tspath::get_normalized_absolute_path(root, build_info_directory)); Some((to_path(resolved_root), to_path(root))) } else { None }
         }));
 
         let mut add_root = |resolved_root: &str, file_info: Option<&BuildInfoFileInfo>| {
@@ -877,10 +885,13 @@ impl BuildInfo {
                 return;
             }
             let resolved_root_path = to_path(resolved_root);
+            let resolved_name = tspath::get_normalized_absolute_path(resolved_root, build_info_directory);
+            resolved_root_file_names.insert(resolved_root_path.clone(), resolved_name.clone());
             if let Some(root_path) = resolved_to_root.get(&resolved_root_path) {
                 root_to_resolved.insert(root_path.clone(), resolved_root_path.clone());
             } else {
                 root_to_resolved.insert(resolved_root_path.clone(), resolved_root_path.clone());
+                root_file_names.insert(resolved_root_path.clone(), resolved_name);
             }
             if let Some(file_info) = file_info {
                 resolved_root_file_infos.insert(resolved_root_path, file_info.clone());
@@ -899,7 +910,7 @@ impl BuildInfo {
             }
         }
 
-        BuildInfoRootInfoReader { resolved_root_file_infos, root_to_resolved }
+        BuildInfoRootInfoReader { resolved_root_file_infos, root_to_resolved, resolved_root_file_names, root_file_names }
     }
 }
 
@@ -926,19 +937,23 @@ fn get_normalized_paths(paths: &[String], build_info_directory: &str) -> Vec<Str
 pub struct BuildInfoRootInfoReader {
     resolved_root_file_infos: FxHashMap<Path, BuildInfoFileInfo>,
     root_to_resolved: OrderedMap<Path, Path>,
+    resolved_root_file_names: FxHashMap<Path, String>,
+    root_file_names: FxHashMap<Path, String>,
 }
 
 impl BuildInfoRootInfoReader {
     // buildInfo.go:640
-    pub fn get_build_info_file_info(&self, input_file_path: &Path) -> (Option<&BuildInfoFileInfo>, Path) {
+    pub fn get_build_info_file_info(&self, input_file_path: &Path) -> (Option<&BuildInfoFileInfo>, String) {
         if let Some(info) = self.resolved_root_file_infos.get(input_file_path) {
-            return (Some(info), input_file_path.clone());
+            return (Some(info), self.resolved_root_file_names[input_file_path].clone());
         }
         if let Some(resolved) = self.root_to_resolved.get(input_file_path) {
-            return (self.resolved_root_file_infos.get(resolved), resolved.clone());
+            return (self.resolved_root_file_infos.get(resolved), self.resolved_root_file_names[resolved].clone());
         }
-        (None, Path::default())
+        (None, String::new())
     }
+
+    pub fn root_file_name(&self, path: &Path) -> &str { self.root_file_names.get(path).expect("root file name not found") }
 
     // buildInfo.go:650
     pub fn roots(&self) -> impl Iterator<Item = &Path> {

@@ -132,12 +132,12 @@ impl toBuildInfo<'_> {
     // snapshottobuildinfo.go:108
     fn to_relative_to_build_info_compiler_option_value(&self, option: &CommandLineOption, v: CompilerOptionsValue) -> CompilerOptionsValue {
         if option.kind == CommandLineOptionKind::List {
-            if option.elements().unwrap().is_file_path {
+            if option.elements().unwrap().path_kind.is_rooted() {
                 if let CompilerOptionsValue::StringArray(arr) = &v {
                     return CompilerOptionsValue::StringArray(arr.iter().map(|s| self.relative_to_build_info(s)).collect());
                 }
             }
-        } else if option.is_file_path {
+        } else if option.path_kind.is_rooted() {
             if let CompilerOptionsValue::String(s) = &v {
                 if !s.is_empty() {
                     return CompilerOptionsValue::String(self.relative_to_build_info(s));

@@ -567,7 +567,7 @@ impl LanguageService {
         }
 
         let script_path = file.path().clone();
-        let script_directory = script_path.get_directory_path();
+        let script_directory = tspath::get_directory_path(file.file_name());
         let options = program.options();
         let extension_options = self.get_extension_options(&options, referenceKind::ModuleSpecifier, file, mode, Some(checker));
 
@@ -1057,7 +1057,7 @@ fn get_base_directories_from_root_dirs(root_dirs: &[String], base_path: &str, sc
         if root_directory.len() > script_directory.len() {
             relative_directory = String::new();
         } else {
-            relative_directory = script_directory[root_directory.len()..].to_string();
+            relative_directory = tspath::get_relative_path_from_directory(root_directory, script_directory, &compare_paths_options);
         }
     }
 
@@ -1185,7 +1185,9 @@ impl LanguageService {
                         let version_paths = contents.get_version_paths(None);
                         let paths = version_paths.get_paths();
                         if let Some(paths) = paths.filter(|p| !p.is_empty()) {
-                            let path_in_package = base_directory[tspath::ensure_trailing_directory_separator(&package_json_directory).len()..].to_string();
+                            let mut path_in_package = tspath::get_relative_path_from_directory(&package_json_directory, &base_directory, &ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: String::new() });
+                            assert!(!tspath::path_is_absolute(&path_in_package) && !path_in_package.starts_with(".."), "package json directory must be an ancestor of the completion directory");
+                            if !path_in_package.is_empty() { path_in_package = tspath::ensure_trailing_directory_separator(&path_in_package); }
                             if self.add_completion_entries_from_paths(result, program, &path_in_package, &package_json_directory, extension_options, paths) {
                                 // One of the `versionPaths` was matched, which will block relative resolution
                                 // to files and folders from here.
@@ -1648,10 +1650,9 @@ fn remove_leading_directory_separator(path: &str) -> &str {
 // string_completions.go:1838
 fn get_possible_original_input_path_without_changing_ext(file_path: &str, ignore_case: bool, output_dir: &str, get_common_source_directory: &dyn Fn() -> String) -> String {
     if !output_dir.is_empty() {
-        return tspath::resolve_path(
-            &get_common_source_directory(),
-            &[&tspath::get_relative_path_from_directory(output_dir, file_path, &ComparePathsOptions { use_case_sensitive_file_names: !ignore_case, ..Default::default() })],
-        );
+        let relative = tspath::get_relative_path_from_directory(output_dir, file_path, &ComparePathsOptions { use_case_sensitive_file_names: !ignore_case, ..Default::default() });
+        if tspath::path_is_absolute(&relative) { return file_path.to_string(); }
+        return tspath::resolve_path(&get_common_source_directory(), &[&relative]);
     }
     file_path.to_string()
 }
@@ -2005,7 +2006,7 @@ impl LanguageService {
             ),
         )?;
 
-        let script_path = tspath::get_directory_path(file.path());
+        let script_path = tspath::get_directory_path(file.file_name());
 
         let mut names: Vec<moduleCompletionNameAndKind> = Vec::new();
         match kind.as_str() {

@@ -209,35 +209,20 @@ impl DocumentIdentifier {
     /// Go `DocumentIdentifier.UnmarshalJSONFrom`. `pointer` is the JSON pointer of the value; the error
     /// text after core's `failed to unmarshal *api.<T>: json: ` prefix is Go's.
     fn decode(v: &Value, pointer: &str) -> CheckerResult<DocumentIdentifier> {
-        let got = match v {
-            Value::String(s) => return Ok(DocumentIdentifier { file_name: s.clone(), uri: String::new() }),
-            Value::Object(map) => {
-                // Go reads `uri` with `ReadToken().String()`: a scalar is taken as its literal text
-                // (`null` becomes the URI "null", which later fails as an invalid URI, as in Go).
-                return match map.get("uri") {
-                    None => Ok(DocumentIdentifier::default()),
-                    Some(Value::String(uri)) => Ok(DocumentIdentifier { file_name: String::new(), uri: uri.clone() }),
-                    Some(Value::Null) => Ok(DocumentIdentifier { file_name: String::new(), uri: "null".to_string() }),
-                    Some(Value::Bool(b)) => Ok(DocumentIdentifier { file_name: String::new(), uri: b.to_string() }),
-                    Some(n @ Value::Number(_)) => Ok(DocumentIdentifier { file_name: String::new(), uri: tsrs_core::json::marshal(n).unwrap_or_default() }),
-                    Some(_) => Err(CheckerError::invalid(format!("cannot unmarshal into Go api.DocumentIdentifier within \"{pointer}\": DocumentIdentifier: unsupported uri value"))),
-                };
-            }
-            Value::Null => "null",
-            Value::Number(_) | Value::Integer(_) => "number",
-            Value::Bool(true) => "true",
-            Value::Bool(false) => "false",
-            Value::Array(_) => "[",
-        };
-        Err(CheckerError::invalid(format!("cannot unmarshal into Go api.DocumentIdentifier within \"{pointer}\": DocumentIdentifier: expected string or object, got {got}")))
+        crate::predecode::check_document(v, pointer).map_err(CheckerError::invalid)?;
+        match v {
+            Value::String(s) => Ok(DocumentIdentifier { file_name: s.clone(), uri: String::new() }),
+            Value::Object(o) => { let Value::String(uri) = o.get("uri").unwrap() else { unreachable!("validated URI") }; Ok(DocumentIdentifier { file_name: String::new(), uri: uri.clone() }) },
+            _ => unreachable!("validated DocumentIdentifier"),
+        }
     }
 
     /// Go `DocumentIdentifier.ToFileName`.
-    pub(crate) fn to_file_name(&self) -> String {
+    pub(crate) fn to_file_name(&self, cwd: &str) -> String {
         if !self.uri.is_empty() {
             return DocumentUri(self.uri.clone()).file_name();
         }
-        self.file_name.clone()
+        tsrs_core::tspath::to_rooted_path(&self.file_name, cwd)
     }
 
     /// Go `DocumentIdentifier.String` (used in error messages).

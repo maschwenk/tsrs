@@ -6,13 +6,24 @@ use super::view::View;
 impl View {
     // specifiers.go:9
     pub fn get_module_specifier(&self, export: &Export, user_preferences: &modulespecifiers::UserPreferences) -> (String, ResultKind) {
-        // Ambient module
-        if modulespecifiers::path_is_bare_specifier(&export.module_id.0) {
-            let specifier = &export.module_id.0;
+        if !export.unresolved_module_specifier.is_empty() {
+            let mut specifier = export.unresolved_module_specifier.clone();
+            if tsrs_core::tspath::path_is_relative(&specifier) {
+                specifier = tsrs_core::tspath::get_relative_path_from_directory(&tsrs_core::tspath::get_directory_path(self.importing_file.file_name()), &export.module_file_name, &tsrs_core::tspath::ComparePathsOptions {
+                    use_case_sensitive_file_names: self.program.use_case_sensitive_file_names(), current_directory: String::new(),
+                });
+                if tsrs_core::tspath::path_is_absolute(&specifier) { return (String::new(), ResultKind::None); }
+                specifier = tsrs_core::tspath::ensure_path_is_non_module_name(&specifier);
+            }
+            if modulespecifiers::is_excluded_by_regex(&specifier, &user_preferences.auto_import_specifier_exclude_regexes) { return (String::new(), ResultKind::None); }
+            return (specifier, ResultKind::Relative);
+        }
+        if export.module_id.is_ambient() {
+            let specifier = export.module_id.as_str();
             if modulespecifiers::is_excluded_by_regex(specifier, &user_preferences.auto_import_specifier_exclude_regexes) {
                 return (String::new(), ResultKind::None);
             }
-            return (export.module_id.0.clone(), ResultKind::Ambient);
+            return (export.module_id.as_str().to_string(), ResultKind::Ambient);
         }
 
         let registry = self.registry();

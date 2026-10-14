@@ -48,7 +48,7 @@ pub fn project_response(p: &Project) -> Value {
     };
     Obj::new()
         .set("id", s(p.id().0))
-        .set("configFileName", s(config_file_name))
+        .set_opt("configFileName", (!config_file_name.is_empty()).then(|| s(config_file_name)))
         .set("currentDirectory", s(p.current_directory()))
         .set("dirty", b(p.is_dirty()))
         .set("parsedCommandLine", config_file_response(&command_line))
@@ -128,8 +128,7 @@ impl Session {
         p.object()?;
         let cwd = self.current_directory();
         let root_file_names = DocumentIdentifier::parse_list(p.array("rootFiles")?, "rootFiles")?.iter().map(|d| d.to_absolute_file_name(cwd)).collect();
-        let mut options = gojson::compiler_options_from_go_json(p.get("compilerOptions")).map_err(ApiError::invalid_request)?;
-        crate::predecode::exact_compiler_options_ints(p.get("compilerOptions"), &mut options);
+        let options = crate::config::finalize_compiler_options(p.get("compilerOptions"), cwd)?;
         let mut request = APICreateProgramRequest {
             root_file_names,
             compiler_options: Some(P::new(options)),

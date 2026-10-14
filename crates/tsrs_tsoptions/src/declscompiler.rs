@@ -3,7 +3,7 @@ use std::sync::LazyLock;
 use tsrs_core::{ScriptTarget, Tristate};
 use tsrs_diagnostics as diagnostics;
 
-use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, DefaultValueDescription, ExtraValidation};
+use crate::commandlineoption::{CommandLineOption, CommandLineOptionKind, CommandLineOptionPathKind, DefaultValueDescription, ExtraValidation};
 use crate::parsinghelpers::for_each_compiler_options_field;
 use crate::tsconfigparsing::COMMAND_LINE_COMPILER_OPTIONS_MAP;
 use tsrs_core::CompilerOptions;
@@ -113,6 +113,7 @@ static COMMON_OPTIONS_WITH_BUILD_ITEMS: [CommandLineOption; 29] = [
     CommandLineOption {
         name: "generateCpuProfile",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::File,
         is_file_path: true,
         category: Some(&diagnostics::Compiler_Diagnostics),
         description: Some(&diagnostics::Emit_a_v8_CPU_profile_of_the_compiler_run_for_debugging),
@@ -122,6 +123,7 @@ static COMMON_OPTIONS_WITH_BUILD_ITEMS: [CommandLineOption; 29] = [
     CommandLineOption {
         name: "generateTrace",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::Directory,
         is_file_path: true,
         category: Some(&diagnostics::Compiler_Diagnostics),
         description: Some(&diagnostics::Generates_an_event_trace_and_a_list_of_types),
@@ -251,6 +253,7 @@ static COMMON_OPTIONS_WITH_BUILD_ITEMS: [CommandLineOption; 29] = [
     CommandLineOption {
         name: "pprofDir",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::Directory,
         is_file_path: true,
         category: Some(&diagnostics::Command_line_Options),
         description: Some(&diagnostics::Generate_pprof_CPU_Slashmemory_profiles_to_the_given_directory),
@@ -342,6 +345,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "project",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::FileOrDirectory,
         short_name: "p",
         is_file_path: true,
         show_in_simplified_help_view: true,
@@ -446,6 +450,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "outFile",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::File,
         is_file_path: true,
         show_in_simplified_help_view: true,
         category: Some(&diagnostics::Emit),
@@ -458,6 +463,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "outDir",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::Directory,
         is_file_path: true,
         show_in_simplified_help_view: true,
         category: Some(&diagnostics::Emit),
@@ -470,6 +476,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "rootDir",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::Directory,
         is_file_path: true,
         category: Some(&diagnostics::Modules),
         description: Some(&diagnostics::Specify_the_root_folder_within_your_source_files),
@@ -492,6 +499,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "tsBuildInfoFile",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::File,
         is_file_path: true,
         category: Some(&diagnostics::Projects),
         default_value_description: DefaultValueDescription::Str(".tsbuildinfo"),
@@ -788,6 +796,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "baseUrl",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::Directory,
         is_file_path: true,
         category: Some(&diagnostics::Modules),
         description: Some(&diagnostics::Specify_the_base_directory_to_resolve_non_relative_module_names),
@@ -932,6 +941,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "sourceRoot",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::SourceMapLocation,
         category: Some(&diagnostics::Emit),
         description: Some(&diagnostics::Specify_the_root_path_for_debuggers_to_find_the_reference_source_code),
         affects_build_info: true,
@@ -941,6 +951,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "mapRoot",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::SourceMapLocation,
         category: Some(&diagnostics::Emit),
         description: Some(&diagnostics::Specify_the_location_where_debugger_should_locate_map_files_instead_of_generated_locations),
         affects_build_info: true,
@@ -1165,6 +1176,7 @@ static OPTIONS_FOR_COMPILER_ITEMS: [CommandLineOption; 97] = [
     CommandLineOption {
         name: "declarationDir",
         kind: CommandLineOptionKind::String,
+        path_kind: CommandLineOptionPathKind::Directory,
         is_file_path: true,
         category: Some(&diagnostics::Emit),
         description: Some(&diagnostics::Specify_the_output_directory_for_generated_declaration_files),

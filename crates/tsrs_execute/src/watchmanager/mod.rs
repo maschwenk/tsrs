@@ -50,6 +50,7 @@ impl WatchBackend for FsWatchBackend {
 }
 
 struct watchedDir {
+    dir: String,
     closer: Option<Box<dyn tsrs_fswatch::Watch>>,
     recursive: bool,
     // Identity for handleWatchTerminated (Go compares *watchedDir pointers).
@@ -81,11 +82,12 @@ pub struct WatchManager {
     debug_log: std::sync::OnceLock<SyncWriter>,
     warn_writer: SyncWriter,
     dir_exists: Box<dyn Fn(&str) -> bool + Send + Sync>,
+    use_case_sensitive_file_names: bool,
 }
 
 impl WatchManager {
     /// Go `NewWatchManager`.
-    pub fn new(warn_writer: SyncWriter, dir_exists: Box<dyn Fn(&str) -> bool + Send + Sync>) -> Arc<WatchManager> {
+    pub fn new(warn_writer: SyncWriter, dir_exists: Box<dyn Fn(&str) -> bool + Send + Sync>, use_case_sensitive_file_names: bool) -> Arc<WatchManager> {
         Arc::new(WatchManager {
             mu: Mutex::new(WatchState { backend: None, watched_dirs: FxHashMap::default(), next_id: 0 }),
             changed: Mutex::new(changedState::default()),
@@ -95,8 +97,11 @@ impl WatchManager {
             debug_log: std::sync::OnceLock::new(),
             warn_writer,
             dir_exists,
+            use_case_sensitive_file_names,
         })
     }
+
+    fn path_key(&self, dir: &str) -> String { tspath::to_path(dir, "", self.use_case_sensitive_file_names).to_string() }
 
     pub fn lock(&self) -> MutexGuard<'_, WatchState> {
         self.mu.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
@@ -211,8 +216,9 @@ impl WatchManager {
         self.debug(|| format!("[watch] watch terminated: {dir}\n"));
         let stale = {
             let mut state = self.lock();
-            match state.watched_dirs.get(dir) {
-                Some(wd) if wd.id == id => state.watched_dirs.remove(dir).and_then(|wd| wd.closer),
+            let key = self.path_key(dir);
+            match state.watched_dirs.get(&key) {
+                Some(wd) if wd.id == id => state.watched_dirs.remove(&key).and_then(|wd| wd.closer),
                 _ => None,
             }
         };
@@ -253,7 +259,7 @@ impl WatchManager {
 
     /// Go `ResolveDesiredDirs`: each wanted directory, or its nearest existing ancestor (non-recursive).
     pub fn resolve_desired_dirs(&self, desired_dirs: &FxHashMap<String, bool>) -> FxHashMap<String, bool> {
-        let mut resolved: FxHashMap<String, bool> = FxHashMap::with_capacity_and_hasher(desired_dirs.len(), Default::default());
+        let mut resolved: FxHashMap<String, (String, bool)> = FxHashMap::with_capacity_and_hasher(desired_dirs.len(), Default::default());
         #[expect(clippy::iter_over_hash_type, reason = "Go ranges over a map too; the result is a map merged with `||`")]
         for (dir, &recursive) in desired_dirs {
             // Only directories on disk can be watched. The embedded libs (bundled:///libs) exist in the FS but not on disk.
@@ -280,10 +286,10 @@ impl WatchManager {
             if watch_dir != *dir {
                 self.debug(|| format!("[watch] resolved {dir} to ancestor {watch_dir}\n"));
             }
-            let entry = resolved.entry(watch_dir).or_insert(false);
-            *entry = *entry || watch_recursive;
+            let entry = resolved.entry(self.path_key(&watch_dir)).or_insert((watch_dir, false));
+            entry.1 = entry.1 || watch_recursive;
         }
-        resolved
+        resolved.into_values().collect()
     }
 
     /// Go `ReconcileWatches`: open the missing watches, close the stale ones, recreate those whose recursion changed.
@@ -291,27 +297,35 @@ impl WatchManager {
         if state.backend.is_none() {
             return Ok(());
         }
+        let mut desired_by_path: FxHashMap<String, (String, bool)> = FxHashMap::default();
+        let mut sorted: Vec<_> = desired_dirs.iter().collect();
+        sorted.sort();
+        for (dir, &recursive) in sorted {
+            let entry = desired_by_path.entry(self.path_key(dir)).or_insert_with(|| (dir.clone(), false));
+            entry.1 |= recursive;
+        }
         let mut additions: Vec<(String, bool)> = Vec::new();
         let mut changes: Vec<(String, bool)> = Vec::new();
-        let stale: Vec<String> = state.watched_dirs.keys().filter(|d| !desired_dirs.contains_key(*d)).cloned().collect();
+        let stale: Vec<String> = state.watched_dirs.keys().filter(|d| !desired_by_path.contains_key(*d)).cloned().collect();
         for dir in stale {
             self.debug(|| format!("[watch] closing stale dir watch: {dir}\n"));
             if let Some(closer) = state.watched_dirs.remove(&dir).and_then(|wd| wd.closer) {
                 let _ = closer.close();
             }
         }
-        let mut desired: Vec<(&String, &bool)> = desired_dirs.iter().collect();
+        let mut desired: Vec<_> = desired_by_path.iter().collect();
         // Go ranges a map; sorted here so backends see a stable order.
         desired.sort();
-        for (dir, &recursive) in desired {
-            match state.watched_dirs.get(dir) {
+        for (key, (dir, recursive)) in desired {
+            let recursive = *recursive;
+            match state.watched_dirs.get(key) {
                 None => {
                     self.debug(|| format!("[watch] watching directory {dir} (recursive={recursive})\n"));
                     additions.push((dir.clone(), recursive));
                 }
                 Some(wd) if wd.recursive != recursive => {
                     self.debug(|| format!("[watch] recreating dir watch {dir} (recursive {}→{recursive})\n", wd.recursive));
-                    if let Some(closer) = state.watched_dirs.remove(dir).and_then(|wd| wd.closer) {
+                    if let Some(closer) = state.watched_dirs.remove(key).and_then(|wd| wd.closer) {
                         let _ = closer.close();
                     }
                     changes.push((dir.clone(), recursive));
@@ -338,7 +352,7 @@ impl WatchManager {
         match backend.watch_directories(requests) {
             Ok(closers) => {
                 for (((dir, recursive), id), closer) in updates.into_iter().zip(ids).zip(closers) {
-                    state.watched_dirs.insert(dir, watchedDir { closer: Some(closer), recursive, id });
+                    state.watched_dirs.insert(self.path_key(&dir), watchedDir { dir, closer: Some(closer), recursive, id });
                 }
                 Ok(())
             }
@@ -353,12 +367,12 @@ impl WatchManager {
 
     /// Go `IsPathUnderWatch`.
     pub fn is_path_under_watch(state: &WatchState, path: &str, opts: &ComparePathsOptions) -> bool {
-        state.watched_dirs.keys().any(|dir| tspath::contains_path(dir, path, opts))
+        state.watched_dirs.values().any(|w| tspath::contains_path(&w.dir, path, opts))
     }
 
     /// The watched directories and whether each is recursive (diagnostics and tests).
     pub fn watched_dirs(state: &WatchState) -> Vec<(String, bool)> {
-        let mut dirs: Vec<(String, bool)> = state.watched_dirs.iter().map(|(d, w)| (d.clone(), w.recursive)).collect();
+        let mut dirs: Vec<(String, bool)> = state.watched_dirs.values().map(|w| (w.dir.clone(), w.recursive)).collect();
         dirs.sort();
         dirs
     }
@@ -407,7 +421,7 @@ impl DirWatchSet {
     }
 
     fn canonical(&self, dir: &str) -> String {
-        tspath::get_canonical_file_name(dir, self.use_case_sensitive_file_names)
+        tspath::to_path(dir, "", self.use_case_sensitive_file_names).to_string()
     }
 
     pub fn set(&mut self, dir: &str, recursive: bool) {

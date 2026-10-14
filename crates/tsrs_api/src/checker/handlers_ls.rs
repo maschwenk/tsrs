@@ -109,7 +109,7 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
     }
     let sd = snapshot_ctx(host, p)?;
     let file = p.document("file")?;
-    let file_name = file.to_file_name();
+    let file_name = file.to_file_name(sd.program()?.get_current_directory());
     let position = p.u32("position")?;
     let trigger = match p.raw("triggerCharacter") {
         None => None,
@@ -211,7 +211,7 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
 pub(crate) fn get_import_adder_edits(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
     let sd = snapshot_ctx(host, p)?;
     let file = p.document("file")?;
-    let file_name = file.to_file_name();
+    let file_name = file.to_file_name(sd.program()?.get_current_directory());
     let mut program = sd.program()?;
     let mut source_file = program.get_source_file(&file_name).ok_or_else(|| CheckerError::client(format!("source file not found: {}", file.display())))?;
     let project_id = LsProjectID(sd.project.clone());

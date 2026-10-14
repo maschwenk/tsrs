@@ -26,7 +26,7 @@ fn nullable_diagnostics(diags: &[P<Diagnostic>]) -> Value {
 
 /// Go `resolveOptionalSourceFile` for a present identifier.
 pub(crate) fn resolve_source_file(program: &Program, file: &DocumentIdentifier) -> ApiResult<P<SourceFile>> {
-    program.get_source_file(&file.to_file_name()).ok_or_else(|| ApiError::client(format!("source file not found: {file}")))
+    program.get_source_file(&file.to_file_name(program.get_current_directory())).ok_or_else(|| ApiError::client(format!("source file not found: {file}")))
 }
 
 #[derive(Clone, Copy)]
@@ -197,7 +197,7 @@ impl Session {
     pub(crate) fn handle_get_source_file_metadata(&self, p: Params) -> ApiResult<Value> {
         let (_sd, program) = self.program_of(p)?;
         let file = p.document("file")?;
-        let Some(source_file) = program.get_source_file(&file.to_file_name()) else { return Ok(Value::Null) };
+        let Some(source_file) = program.get_source_file(&file.to_file_name(program.get_current_directory())) else { return Ok(Value::Null) };
         let path = source_file.path();
         let meta = program.get_source_file_meta_data(path).clone();
         Ok(Obj::new()

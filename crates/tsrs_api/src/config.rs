@@ -174,3 +174,48 @@ impl Session {
         Ok(config_file_response(&parsed))
     }
 }
+
+/// Go RawCompilerOptions.Finalize: API options are parsed after rooted paths are resolved.
+pub(crate) fn finalize_compiler_options(v: &Value, cwd: &str) -> ApiResult<tsrs_core::CompilerOptions> {
+    let mut result = tsrs_core::CompilerOptions::default();
+    let Value::Object(raw) = v else {
+        return if matches!(v, Value::Null) { Ok(result) } else { Err(ApiError::invalid_request("cannot unmarshal non-object JSON value into RawCompilerOptions")) };
+    };
+    for (key, value) in raw {
+        let option = tsrs_tsoptions::COMMAND_LINE_COMPILER_OPTIONS_MAP.get(key);
+        if option.is_some_and(|o| key != o.name) { continue; }
+        let path_kind = if let Some(option) = option {
+            if option.kind == tsrs_tsoptions::CommandLineOptionKind::List { option.elements().map_or(tsrs_tsoptions::CommandLineOptionPathKind::None, |o| o.path_kind) } else { option.path_kind }
+        } else if key == "configFilePath" { tsrs_tsoptions::CommandLineOptionPathKind::File }
+        else if key == "allowNonTsExtensions" || key == "suppressOutputPathCheck" { tsrs_tsoptions::CommandLineOptionPathKind::None }
+        else { continue; };
+        let mut parsed = json_to_options_value(value);
+        if path_kind.is_rooted() {
+            let resolve = |path: &str| {
+                let substituted = if path.to_ascii_lowercase().starts_with("${configdir}") { path.replacen("${configDir}", "./", 1) } else { path.to_string() };
+                tspath::get_normalized_absolute_path(&substituted, cwd)
+            };
+            if option.is_some_and(|o| o.kind == tsrs_tsoptions::CommandLineOptionKind::List) {
+                parsed = tsrs_tsoptions::parse_string_array(&parsed).map_or(CompilerOptionsValue::NilArray, |paths| CompilerOptionsValue::Array(paths.iter().map(|path| CompilerOptionsValue::String(resolve(path))).collect()));
+            } else if let CompilerOptionsValue::String(path) = &parsed {
+                if !path.is_empty() { parsed = CompilerOptionsValue::String(resolve(path)); }
+            }
+        }
+        tsrs_tsoptions::parse_compiler_options(key, &parsed, &mut result);
+    }
+    Ok(result)
+}
+
+#[cfg(test)]
+mod raw_compiler_options_tests {
+    use super::*;
+    #[test]
+    fn resolves_rooted_option_paths_and_retains_source_map_locations() {
+        let raw = tsrs_core::json::unmarshal(r#"{"outDir":"../out","rootDirs":["src","${configDir}/generated"],"sourceRoot":"https://example.com/src/","noEmit":"true","NoEmit":true}"#).unwrap();
+        let options = finalize_compiler_options(&raw, "/project/config").unwrap();
+        assert_eq!(options.out_dir, "/project/out");
+        assert_eq!(options.root_dirs.unwrap(), ["/project/config/src", "/project/config/generated"]);
+        assert_eq!(options.source_root, "https://example.com/src/");
+        assert_eq!(options.no_emit, tsrs_core::Tristate::False);
+    }
+}

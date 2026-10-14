@@ -953,7 +953,7 @@ impl BuildTask {
             // File was root file when project was built but its not any more
             return upToDateStatus::with(
                 upToDateStatusType::OutOfDateRoots,
-                statusData::InputOutputName(inputOutputName { input: root.to_string(), output: build_info_path }),
+                statusData::InputOutputName(inputOutputName { input: get_build_info_root_info_reader().root_file_name(root).to_string(), output: build_info_path }),
             );
         }
 
@@ -961,7 +961,7 @@ impl BuildTask {
             let mut resolved_roots: Set<Path> = Set::default();
             resolved_roots.m.extend(get_build_info_root_info_reader().roots().filter_map(|root| {
                 let (_, resolved) = get_build_info_root_info_reader().get_build_info_file_info(root);
-                if !resolved.is_empty() { Some(resolved) } else { None }
+                if !resolved.is_empty() { Some(orchestrator.to_path(&resolved)) } else { None }
             }));
             for (index, build_info_file_info) in build_info.file_infos.iter().enumerate() {
                 let build_info_file_name = &build_info.file_names[index];

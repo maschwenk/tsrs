@@ -197,7 +197,7 @@ impl projectReferenceDtsFakingVfs {
         // If it contains node_modules check if its one of the symlinked path we know of
         let mut exists = false;
         known_directory_links.range(|directory_path, known_directory_link| {
-            if !file_or_directory_path.as_str().starts_with(directory_path.as_str()) {
+            if *directory_path == file_or_directory_path || !directory_path.contains_path(&file_or_directory_path) {
                 return true;
             }
             let Some(known_directory_link) = known_directory_link else {

@@ -501,11 +501,9 @@ pub(crate) fn diagnostic_to_string_builder(diagnostic: Option<P<Diagnostic>>, fi
     if diagnostic.file() != Some(file) {
         // Go dereferences diagnostic.File() here; a file-less diagnostic would panic.
         let diagnostic_file = diagnostic.file().unwrap();
-        builder.push_str(&tspath::ensure_path_is_non_module_name(&tspath::get_relative_path_from_directory(
-            &tspath::get_directory_path(file.path()),
-            diagnostic_file.path(),
-            &ComparePathsOptions::default(),
-        )));
+        let relative = tspath::get_relative_path_from_directory(&tspath::get_directory_path(file.file_name()), diagnostic_file.file_name(), &ComparePathsOptions::default());
+        if tspath::path_is_absolute(&relative) { builder.push_str(diagnostic_file.file_name()); } else { builder.push_str(&tspath::ensure_path_is_non_module_name(&relative)); }
+
     }
     if diagnostic.file().is_some() {
         // Go prints the raw ints: a synthetic position is -1, and its length 0.

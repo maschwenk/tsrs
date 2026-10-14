@@ -239,7 +239,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         Some(config_file) => tspath::get_normalized_absolute_path(config_file.source_file.file_name(), &curr_dir),
         None => curr_dir.clone(),
     };
-    let lookup = |root_file: &String| {
+    let lookup = |(index, root_file): (usize, &String)| {
         let _regions = crate::programregions::enter(opts.regions.as_deref());
         let abs_path = tspath::get_normalized_absolute_path(root_file, &curr_dir);
         // A root file reason is never a referenced-file reason, which is all the lookup asks of it.
@@ -249,7 +249,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
             &loader.supported_extensions,
             &loader.supported_extensions_with_json_if_resolve_json_module,
             &abs_path,
-            root_file,
+            loader.opts.config.root_file_name_for_diagnostic(index),
             &containing_file,
             false,
         );
@@ -259,10 +259,10 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         (abs_path, looked_up, path)
     };
     let looked_up: Vec<(String, (String, Option<sourceFileFromReferenceDiagnostic>), Path)> = if single_threaded {
-        root_files.iter().map(lookup).collect()
+        root_files.iter().enumerate().map(lookup).collect()
     } else {
         use rayon::prelude::*;
-        crate::program::worker_pool().install(|| root_files.par_iter().map(lookup).collect())
+        crate::program::worker_pool().install(|| root_files.par_iter().enumerate().map(lookup).collect())
     };
     for (index, (abs_path, (resolved_file, diagnostic), path)) in looked_up.into_iter().enumerate() {
         let mut reason = FileIncludeReason::new(fileIncludeKind::RootFile);

@@ -50,22 +50,24 @@ pub struct DocumentPositionMapper {
 }
 
 // source_mapper.go:52
-pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawSourceMap, source_root_field: Option<&str>, null_sources: &[bool], map_path: &str) -> DocumentPositionMapper {
+pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawSourceMap, source_root_field: Option<&str>, null_sources: &[bool], map_path: &str) -> Option<DocumentPositionMapper> {
     let map_directory = tspath::get_directory_path(map_path);
     let mut source_url_prefix = source_root_field.unwrap_or("").to_string();
     // TypeScript and established consumers treat an explicit empty sourceRoot as absent.
     if !source_url_prefix.is_empty() && !source_url_prefix.ends_with('/') { source_url_prefix.push('/'); }
-    let generated_absolute_file_path = tspath::get_normalized_absolute_path(&source_map.file, &map_directory);
+    let generated_absolute_file_path = try_resolve_source_map_path(&source_map.file, &map_directory)?;
+    let mut unmapped_sources = null_sources.to_vec();
+    unmapped_sources.resize(source_map.sources.len(), false);
     let source_file_absolute_paths: Vec<String> = source_map.sources.iter().enumerate().map(|(i, source)| {
-        if null_sources.get(i).copied().unwrap_or(false) { return String::new(); }
+        if unmapped_sources.get(i).copied().unwrap_or(false) { return String::new(); }
         let source_with_prefix = format!("{source_url_prefix}{source}");
-        if source_with_prefix.is_empty() { map_path.to_string() } else { tspath::get_normalized_absolute_path(&source_with_prefix, &map_directory) }
+        if source_with_prefix.is_empty() { map_path.to_string() } else { try_resolve_source_map_path(&source_with_prefix, &map_directory).unwrap_or_else(|| { unmapped_sources[i] = true; String::new() }) }
     }).collect();
     let use_case_sensitive_file_names = host.use_case_sensitive_file_names();
     let mut source_to_source_index_map: FxHashMap<String, Vec<u32>> = FxHashMap::default();
     for (i, source) in source_file_absolute_paths.iter().enumerate() {
-        if null_sources.get(i).copied().unwrap_or(false) { continue; }
-        source_to_source_index_map.entry(tspath::get_canonical_file_name(source, use_case_sensitive_file_names)).or_default().push(i as u32);
+        if unmapped_sources.get(i).copied().unwrap_or(false) { continue; }
+        source_to_source_index_map.entry(tspath::to_path(source, "", use_case_sensitive_file_names).to_string()).or_default().push(i as u32);
     }
 
     let mut decoded_mappings: Vec<MappedPosition> = Vec::new();
@@ -93,7 +95,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
             (source_index, mapping.source_line, mapping.source_character)
         {
             let line_info = source_file_absolute_paths.get(source_index as usize)
-                .filter(|_| !null_sources.get(source_index as usize).copied().unwrap_or(false))
+                .filter(|_| !unmapped_sources.get(source_index as usize).copied().unwrap_or(false))
                 .and_then(|file_name| host.get_ecma_line_info(file_name));
             if let Some(line_info) = &line_info {
                 let pos = tsrs_scanner::compute_position_of_line_and_utf16_character(
@@ -163,14 +165,14 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
         a.generated_position == b.generated_position && a.source_index == b.source_index && a.source_position == b.source_position
     });
 
-    DocumentPositionMapper {
+    Some(DocumentPositionMapper {
         use_case_sensitive_file_names,
         source_file_absolute_paths,
         source_mappings_by_path,
         generated_absolute_file_path,
         generated_mappings,
         source_mappings,
-    }
+    })
 }
 
 // source_mapper.go:164
@@ -209,7 +211,7 @@ impl DocumentPositionMapper {
 
     // source_mapper.go:197
     pub fn get_generated_position(&self, loc: &DocumentPosition) -> Option<DocumentPosition> {
-        let source_mappings = self.source_mappings_by_path.get(&tspath::get_canonical_file_name(&loc.file_name, self.use_case_sensitive_file_names))?;
+        let source_mappings = self.source_mappings_by_path.get(tspath::to_path(&loc.file_name, "", self.use_case_sensitive_file_names).as_str())?;
         let target_index = source_mappings.partition_point(|m| m.source_position < Some(loc.pos));
 
         if target_index >= source_mappings.len() {
@@ -253,7 +255,7 @@ pub fn get_document_position_mapper(host: &dyn Host, generated_file_name: &str) 
     }
     possible_map_locations.push(format!("{generated_file_name}.map"));
     if let Some(result) = possible_map_locations.iter().find_map(|location| {
-        let map_file_name = tspath::get_normalized_absolute_path(location, &tspath::get_directory_path(generated_file_name));
+        let map_file_name = try_resolve_source_map_path(location, &tspath::get_directory_path(generated_file_name))?;
         if let Some(map_file_contents) = host.read_file(&map_file_name) {
             return Some(convert_document_to_source_mapper(host, &map_file_contents, &map_file_name));
         }
@@ -272,7 +274,7 @@ pub(crate) fn convert_document_to_source_mapper(host: &dyn Host, contents: &str,
     if source_map.sources.is_empty() || source_map.file.is_empty() || source_map.mappings.is_empty() { return None; }
     // Don't support source maps that contain inlined sources.
     if source_map.sources_content.as_deref().unwrap_or(&[]).iter().any(std::option::Option::is_some) { return None; }
-    Some(create_document_position_mapper(host, source_map, parsed.source_root.as_deref(), &parsed.null_sources, map_file_name))
+    create_document_position_mapper(host, source_map, parsed.source_root.as_deref(), &parsed.null_sources, map_file_name)
 }
 
 pub(crate) struct ParsedRawSourceMap {
@@ -374,3 +376,11 @@ fn base64_std_decode_string(s: &str) -> Option<Vec<u8>> {
 #[cfg(test)]
 #[path = "source_mapper_test.rs"]
 mod source_mapper_test;
+
+fn try_resolve_source_map_path(path: &str, directory: &str) -> Option<String> {
+    if path.is_empty() { return None; }
+    let absolute = if tspath::path_is_absolute(path) { path.to_string() } else { tspath::combine_paths(directory, &[path]) };
+    if tspath::is_url(&absolute) && absolute.split_once("://").is_some_and(|(_, rest)| rest.contains(['?', '#'])) { return None; }
+    if !tspath::path_is_absolute(&absolute) { return None; }
+    Some(tspath::get_normalized_absolute_path(&absolute, ""))
+}

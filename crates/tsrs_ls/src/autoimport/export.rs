@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use tsrs_ast::{self as ast, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{self as checker, Checker};
-use tsrs_core::tspath::{self, Path};
+use tsrs_core::tspath::Path;
 use tsrs_core::P;
 
 use super::extract::new_symbol_extractor;
@@ -10,17 +10,20 @@ use super::util::try_get_module_id_and_file_name_of_module_symbol;
 use crate::lsutil::{ScriptElementKind, ScriptElementKindModifier};
 
 // export.go:17
-// ModuleID uniquely identifies a module across multiple declarations.
-// If the export is from an ambient module declaration, this is the module name.
-// If the export is from a module augmentation, this is the Path() of the resolved module file.
-// Otherwise this is the Path() of the exporting source file.
+// ModuleID distinguishes file modules from ambient module specifiers.
 #[derive(Clone, Default, PartialEq, Eq, Hash, PartialOrd, Ord, Debug)]
-pub struct ModuleID(pub String);
-
+pub enum ModuleID {
+    #[default]
+    Invalid,
+    File(String),
+    Ambient(String),
+}
+impl ModuleID {
+    pub fn as_str(&self) -> &str { match self { Self::Invalid => "", Self::File(s) | Self::Ambient(s) => s } }
+    pub fn is_ambient(&self) -> bool { matches!(self, Self::Ambient(_)) }
+}
 impl std::fmt::Display for ModuleID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.0)
-    }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result { f.write_str(self.as_str()) }
 }
 
 // export.go:19
@@ -67,6 +70,7 @@ impl ExportSyntax {
 pub struct Export {
     pub export_id: ExportID,
     pub module_file_name: String,
+    pub unresolved_module_specifier: String,
     pub syntax: ExportSyntax,
     pub flags: SymbolFlags,
     pub(crate) local_name: String,
@@ -112,8 +116,8 @@ impl Export {
 
     // export.go:85
     pub fn ambient_module_name(&self) -> &str {
-        if !tspath::is_external_module_name_relative(&self.module_id.0) {
-            return &self.module_id.0;
+        if self.module_id.is_ambient() {
+            return self.module_id.as_str();
         }
         ""
     }
@@ -147,7 +151,7 @@ pub fn symbol_to_export(symbol: P<Symbol>, ch: &mut Checker) -> Option<Arc<Expor
     let file_symbol = file.symbol()?;
 
     let module_symbol = ch.get_merged_symbol(file_symbol);
-    let module_id = ModuleID(file.path().to_string());
+    let module_id = ModuleID::File(file.path().to_string());
     let module_file_name = file.file_name().to_string();
     let skipped = ch.skip_alias(symbol);
     let target = ch.get_merged_symbol(skipped);

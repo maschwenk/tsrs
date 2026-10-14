@@ -1349,7 +1349,8 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
     }
     let freer = crate::watchmem::Freer::new(opts.testing.is_some());
     let fs = sys.fs();
-    let wm = WatchManager::new(Arc::new(move |t: &str| sys.write(t)), Box::new(move |d: &str| fs.directory_exists(d)));
+    let use_case_sensitive_file_names = fs.use_case_sensitive_file_names();
+    let wm = WatchManager::new(Arc::new(move |t: &str| sys.write(t)), Box::new(move |d: &str| fs.directory_exists(d)), use_case_sensitive_file_names);
     if watch && let Some(backend) = opts.testing.and_then(tsc::CommandLineTesting::watch_backend) {
         WatchManager::set_backend(&mut wm.lock(), backend);
     }

@@ -201,6 +201,7 @@ pub fn change_extension(path: &str, new_extension: &str) -> String {
 pub fn change_full_extension(path: &str, new_extension: &str) -> String {
     let declaration_extension = get_declaration_file_extension(path);
     if !declaration_extension.is_empty() {
+        if new_extension.is_empty() { return path[..path.len() - declaration_extension.len()].to_string(); }
         let ext = if !new_extension.starts_with('.') { format!(".{new_extension}") } else { new_extension.to_string() };
         return format!("{}{}", &path[..path.len() - declaration_extension.len()], ext);
     }

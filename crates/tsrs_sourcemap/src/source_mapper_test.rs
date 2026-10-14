@@ -195,3 +195,17 @@ fn document_position_mapper_rejects_inlined_sources() {
     let host = test_host("", Some(&r#gen.string()));
     assert!(get_document_position_mapper(&host, "/out/main.js").is_none());
 }
+
+#[test]
+fn source_mapper_ignores_source_url_suffix() {
+    let host = TestHost { files: FxHashMap::from_iter([("/project/out/out.d.ts".to_string(), "generated".to_string())]) };
+    let mapper = convert_document_to_source_mapper(&host, r#"{"version":3,"file":"out.d.ts","sources":["https://example.com/source.ts?version=1"],"names":[],"mappings":"AAAA"}"#, "/project/out/out.d.ts.map").unwrap();
+    assert!(mapper.get_source_position(&DocumentPosition { file_name: "/project/out/out.d.ts".to_string(), pos: 0 }).is_none());
+}
+
+#[test]
+fn source_mapper_ignores_external_map_url_suffix() {
+    let generated_file = "/project/out/out.d.ts";
+    let host = TestHost { files: FxHashMap::from_iter([(generated_file.to_string(), "declare const value: number;\n//# sourceMappingURL=https://example.com/out.d.ts.map?version=1".to_string())]) };
+    assert!(get_document_position_mapper(&host, generated_file).is_none());
+}

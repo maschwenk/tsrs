@@ -158,6 +158,7 @@ pub enum DocumentIdentifier {
 
 impl DocumentIdentifier {
     pub fn parse(v: &Value, key: &str) -> ApiResult<DocumentIdentifier> {
+        crate::predecode::check_document(v, key).map_err(ApiError::invalid_request)?;
         match v {
             Value::String(s) => Ok(DocumentIdentifier::FileName(s.clone())),
             // proto.go `DocumentIdentifier.UnmarshalJSONFrom`: an explicit null is an error (an absent field is the
@@ -175,16 +176,16 @@ impl DocumentIdentifier {
         v.iter().map(|d| DocumentIdentifier::parse(d, key)).collect()
     }
     /// Go `ToFileName`.
-    pub fn to_file_name(&self) -> String {
+    pub fn to_file_name(&self, cwd: &str) -> String {
         match self {
-            DocumentIdentifier::FileName(f) => f.clone(),
+            DocumentIdentifier::FileName(f) => tsrs_core::tspath::to_rooted_path(f, cwd),
             DocumentIdentifier::Uri(u) => tsrs_lsproto::DocumentUri(u.clone()).file_name(),
         }
     }
     /// Go `ToAbsoluteFileName`.
     pub fn to_absolute_file_name(&self, cwd: &str) -> String {
         match self {
-            DocumentIdentifier::FileName(f) => tsrs_core::tspath::get_normalized_absolute_path(f, cwd),
+            DocumentIdentifier::FileName(f) => tsrs_core::tspath::to_rooted_path(f, cwd),
             DocumentIdentifier::Uri(u) => tsrs_lsproto::DocumentUri(u.clone()).file_name(),
         }
     }

@@ -777,7 +777,9 @@ pub(crate) fn try_get_module_name_as_node_module(
     let case_sensitive = host.use_case_sensitive_file_names();
     let mut module_specifier = path_obj.file_name.clone();
     let mut is_package_root_path = false;
-    if !package_name_only {
+    if !package_name_only && parts.package_root_index.is_none() {
+        module_specifier = process_ending(&path_obj.file_name, &allowed_endings, options, Some(host));
+    } else if !package_name_only {
         let mut package_root_index = parts.package_root_index;
         let mut module_file_name = String::new();
         loop {
@@ -825,16 +827,10 @@ pub(crate) fn try_get_module_name_as_node_module(
     // if node_modules folder is in this folder or any of its parent folders, no need to keep it.
     let path_to_top_level_node_modules = &module_specifier[0..parts.top_level_node_modules_index];
 
-    if !stringutil::has_prefix(
-        &info.source_directory,
-        path_to_top_level_node_modules,
-        case_sensitive,
-    ) || !global_typings_cache_location.is_empty()
-        && stringutil::has_prefix(
-            &global_typings_cache_location,
-            path_to_top_level_node_modules,
-            case_sensitive,
-        )
+    let compare = tspath::ComparePathsOptions { use_case_sensitive_file_names: case_sensitive, current_directory: String::new() };
+    let search_root = if path_to_top_level_node_modules.is_empty() { &module_specifier[..tspath::get_root_length(&module_specifier)] } else { path_to_top_level_node_modules };
+    if !tspath::contains_path(search_root, &info.source_directory, &compare) ||
+        !global_typings_cache_location.is_empty() && tspath::contains_path(search_root, &global_typings_cache_location, &compare)
     {
         return String::new();
     }
@@ -965,37 +961,15 @@ pub(crate) fn try_directory_with_package_json(
         // package got pulled into the program anyway, e.g. transitively through a file that *is* reachable. It
         // happens very easily in fourslash tests though, since every test file listed gets included. See
         // importNameCodeFix_typesVersions.ts for an example.)
-        let main_export_file = tspath::to_path(&main_file_relative, &package_root_path, host.use_case_sensitive_file_names());
-        let compare_opt = tspath::ComparePathsOptions {
-            use_case_sensitive_file_names: host.use_case_sensitive_file_names(),
-            current_directory: host.get_current_directory().to_string(),
-        };
-        if tspath::compare_paths(
-            tspath::remove_file_extension(&main_export_file),
-            tspath::remove_file_extension(&module_file_to_try),
-            &compare_opt,
-        ) == std::cmp::Ordering::Equal
-        {
-            // ^ An arbitrary removal of file extension for this comparison is almost certainly wrong
-            return pkgJsonDirAttemptResult { module_file_to_try, package_root_path, ..Default::default() };
-        } else if package_json_content.is_none()
-            || package_json_content.unwrap().fields.type_.value != "module"
-                && !tspath::file_extension_is_one_of(&module_file_to_try, tspath::EXTENSIONS_NOT_SUPPORTING_EXTENSIONLESS_RESOLUTION)
-                && stringutil::has_prefix(&module_file_to_try, &main_export_file, host.use_case_sensitive_file_names())
-                && tspath::compare_paths(
-                    &tspath::get_directory_path(&module_file_to_try),
-                    tspath::remove_trailing_directory_separator(&main_export_file),
-                    &compare_opt,
-                ) == std::cmp::Ordering::Equal
-                && tspath::remove_file_extension(&tspath::get_base_file_name(&module_file_to_try))
-                    == "index"
-        {
-            // if mainExportFile is a directory, which contains moduleFileToTry, we just try index file
-            // example mainExportFile: `pkg/lib` and moduleFileToTry: `pkg/lib/index`, we can use packageRootPath
-            // but this behavior is deprecated for packages with "type": "module", so we only do this for packages without "type": "module"
-            // and make sure that the extension on index.{???} is something that supports omitting the extension
-            return pkgJsonDirAttemptResult { module_file_to_try, package_root_path, ..Default::default() };
-        }
+        let main_export_file = tspath::get_normalized_absolute_path(&main_file_relative, &package_root_path);
+        let compare = tspath::ComparePathsOptions { use_case_sensitive_file_names: host.use_case_sensitive_file_names(), current_directory: String::new() };
+        let same_file = !tspath::has_trailing_directory_separator(&main_file_relative) && tspath::compare_paths(tspath::remove_file_extension(&main_export_file), tspath::remove_file_extension(&module_file_to_try), &compare).is_eq();
+        let directory_index = package_json_content.is_none_or(|c| c.fields.type_.value != "module") &&
+            !tspath::file_extension_is_one_of(&module_file_to_try, tspath::EXTENSIONS_NOT_SUPPORTING_EXTENSIONLESS_RESOLUTION) &&
+            tspath::compare_paths(&tspath::get_directory_path(&module_file_to_try), &main_export_file, &compare).is_eq() &&
+            tspath::remove_file_extension(&tspath::get_base_file_name(&module_file_to_try)) == "index";
+        if same_file || directory_index { return pkgJsonDirAttemptResult { module_file_to_try, package_root_path, ..Default::default() }; }
+
     }
 
     pkgJsonDirAttemptResult { module_file_to_try, ..Default::default() }
@@ -1282,6 +1256,7 @@ pub(crate) fn try_get_module_name_from_exports_or_imports(
 
             match mode {
                 MatchingMode::Exact => {
+                    if tspath::has_trailing_directory_separator(str_value) { return String::new(); }
                     if !extension_swapped_target.is_empty()
                         && tspath::compare_paths(
                             &extension_swapped_target,

@@ -513,79 +513,35 @@ mod emit {
             })
         }
 
-        // emitter.go:460
-        fn get_source_map_directory(&self, map_options: &CompilerOptions, file_path: &str, source_file: Option<P<SourceFile>>) -> String {
-            if !map_options.source_root.is_empty() {
-                return self.host.common_source_directory();
+        fn get_map_root_directory(&self, map_root: &str, source_file: Option<P<SourceFile>>) -> String {
+            let base = if tspath::get_root_length(map_root) == 0 { self.host.common_source_directory() } else { self.host.get_current_directory().to_string() };
+            let directory = tspath::get_normalized_absolute_path(&tspath::normalize_slashes(map_root), &base);
+            if let Some(source_file) = source_file {
+                return tspath::get_directory_path(&outputpaths::get_source_file_path_in_new_dir(source_file.file_name(), &directory, self.host.get_current_directory(), &self.host.common_source_directory(), self.host.use_case_sensitive_file_names()));
             }
-            if !map_options.map_root.is_empty() {
-                let mut source_map_dir = tspath::normalize_slashes(&map_options.map_root);
-                if let Some(source_file) = source_file {
-                    // For modules or multiple emit files the mapRoot will have directory structure like the sources
-                    // So if src\a.ts and src\lib\b.ts are compiled together user would be moving the maps into mapRoot\a.js.map and mapRoot\lib\b.js.map
-                    source_map_dir = tspath::get_directory_path(&outputpaths::get_source_file_path_in_new_dir(
-                        source_file.file_name(),
-                        &source_map_dir,
-                        self.host.get_current_directory(),
-                        &self.host.common_source_directory(),
-                        self.host.use_case_sensitive_file_names(),
-                    ));
-                }
-                if tspath::get_root_length(&source_map_dir) == 0 {
-                    // The relative paths are relative to the common directory
-                    source_map_dir = tspath::combine_paths(&self.host.common_source_directory(), &[&source_map_dir]);
-                }
-                return source_map_dir;
-            }
-            tspath::get_directory_path(&tspath::normalize_path(file_path))
+            directory
         }
 
-        // emitter.go:443
-        pub(crate) fn get_source_mapping_url(
-            &self,
-            map_options: &CompilerOptions,
-            source_map_generator: &mut SourceMapGenerator,
-            file_path: &str,
-            source_map_file_path: &str,
-            source_file: Option<P<SourceFile>>,
-        ) -> String {
-            if map_options.inline_source_map.is_true() {
-                // Encode the sourceMap into the sourceMap url
-                return source_map_generator.base64_data_url();
-            }
+        fn get_source_map_directory(&self, map_options: &CompilerOptions, file_path: &str, source_file: Option<P<SourceFile>>) -> String {
+            if !map_options.source_root.is_empty() { return self.host.common_source_directory(); }
+            if !map_options.map_root.is_empty() { return self.get_map_root_directory(&map_options.map_root, source_file); }
+            tspath::get_directory_path(file_path)
+        }
 
-            let source_map_file = tspath::get_base_file_name(&tspath::normalize_slashes(source_map_file_path));
+        pub(crate) fn get_source_mapping_url(&self, map_options: &CompilerOptions, source_map_generator: &mut SourceMapGenerator, file_path: &str, source_map_file_path: &str, source_file: Option<P<SourceFile>>) -> String {
+            if map_options.inline_source_map.is_true() { return source_map_generator.base64_data_url(); }
+            let source_map_file = tspath::get_base_file_name(source_map_file_path);
             if !map_options.map_root.is_empty() {
-                let mut source_map_dir = tspath::normalize_slashes(&map_options.map_root);
-                if let Some(source_file) = source_file {
-                    // For modules or multiple emit files the mapRoot will have directory structure like the sources
-                    // So if src\a.ts and src\lib\b.ts are compiled together user would be moving the maps into mapRoot\a.js.map and mapRoot\lib\b.js.map
-                    source_map_dir = tspath::get_directory_path(&outputpaths::get_source_file_path_in_new_dir(
-                        source_file.file_name(),
-                        &source_map_dir,
-                        self.host.get_current_directory(),
-                        &self.host.common_source_directory(),
-                        self.host.use_case_sensitive_file_names(),
-                    ));
+                let directory = self.get_map_root_directory(&map_options.map_root, source_file);
+                let source_map_path = tspath::get_normalized_absolute_path(&source_map_file, &directory);
+                if tspath::get_root_length(&map_options.map_root) == 0 {
+                    return stringutil::encode_uri(&tspath::get_relative_path_to_directory_or_url(&tspath::get_directory_path(file_path), &source_map_path, true, &ComparePathsOptions { use_case_sensitive_file_names: self.host.use_case_sensitive_file_names(), current_directory: String::new() }));
                 }
-                if tspath::get_root_length(&source_map_dir) == 0 {
-                    // The relative paths are relative to the common directory
-                    source_map_dir = tspath::combine_paths(&self.host.common_source_directory(), &[&source_map_dir]);
-                    return stringutil::encode_uri(&tspath::get_relative_path_to_directory_or_url(
-                        &tspath::get_directory_path(&tspath::normalize_path(file_path)), // get the relative sourceMapDir path based on jsFilePath
-                        &tspath::combine_paths(&source_map_dir, &[&source_map_file]), // this is where user expects to see sourceMap
-                        /*isAbsolutePathAnUrl*/ true,
-                        &ComparePathsOptions {
-                            use_case_sensitive_file_names: self.host.use_case_sensitive_file_names(),
-                            current_directory: self.host.get_current_directory().to_string(),
-                        },
-                    ));
-                } else {
-                    return stringutil::encode_uri(&tspath::combine_paths(&source_map_dir, &[&source_map_file]));
-                }
+                return stringutil::encode_uri(&source_map_path);
             }
             stringutil::encode_uri(&source_map_file)
         }
+
     }
 
     // emitter.go:295

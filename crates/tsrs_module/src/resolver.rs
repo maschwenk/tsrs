@@ -1138,6 +1138,7 @@ impl<'r> ResolutionState<'r> {
     }
 
     fn try_load_input_file_for_path(&mut self, final_path: &str, entry: &str, package_path: &str, is_imports: bool) -> Option<Resolved> {
+        if tspath::has_trailing_directory_separator(final_path) { return continue_searching(); }
         let compiler_options = self.compiler_options.get();
         // Replace any references to outputs for files in the program with the input files to support package self-names used with outDir
         if !self.is_config_lookup
@@ -1180,7 +1181,7 @@ impl<'r> ResolutionState<'r> {
                 return unresolved();
             }
 
-            let candidate_directories = self.get_output_directories_for_base_directory(&root_dir);
+            let candidate_directories = self.get_output_directories();
             for candidate_dir in &candidate_directories {
                 if tspath::contains_path(
                     candidate_dir,
@@ -1191,12 +1192,10 @@ impl<'r> ResolutionState<'r> {
                     },
                 ) {
                     // The matched export is looking up something in either the out declaration or js dir, now map the written path back into the source dir and source extension
-                    let path_fragment = if final_path.len() > candidate_dir.len() {
-                        &final_path[candidate_dir.len() + 1..] // +1 to also remove directory separator
-                    } else {
-                        ""
-                    };
-                    let possible_input_base = tspath::combine_paths(&root_dir, &[path_fragment]);
+                    let path_fragment = tspath::get_relative_path_from_directory(candidate_dir, final_path, &ComparePathsOptions {
+                        use_case_sensitive_file_names: self.fs().use_case_sensitive_file_names(), current_directory: String::new(),
+                    });
+                    let possible_input_base = tspath::combine_paths(&root_dir, &[&path_fragment]);
                     let js_and_dts_extensions = [
                         tspath::EXTENSION_MJS,
                         tspath::EXTENSION_CJS,
@@ -1233,23 +1232,12 @@ impl<'r> ResolutionState<'r> {
         continue_searching()
     }
 
-    fn get_output_directories_for_base_directory(&self, common_source_dir_guess: &str) -> Vec<String> {
-        let compiler_options = self.compiler_options.get();
-        // Config file output paths are processed to be relative to the host's current directory, while
-        // otherwise the paths are resolved relative to the common source dir the compiler puts together
-        let current_dir = if !compiler_options.config_file_path.is_empty() { self.current_directory() } else { common_source_dir_guess };
-        let mut candidate_directories = Vec::new();
-        if !compiler_options.declaration_dir.is_empty() {
-            candidate_directories.push(tspath::get_normalized_absolute_path(
-                &tspath::combine_paths(current_dir, &[&compiler_options.declaration_dir]),
-                self.current_directory(),
-            ));
-        }
-        if !compiler_options.out_dir.is_empty() && compiler_options.out_dir != compiler_options.declaration_dir {
-            candidate_directories
-                .push(tspath::get_normalized_absolute_path(&tspath::combine_paths(current_dir, &[&compiler_options.out_dir]), self.current_directory()));
-        }
-        candidate_directories
+    fn get_output_directories(&self) -> Vec<String> {
+        let options = self.compiler_options.get();
+        let mut result = Vec::new();
+        if !options.declaration_dir.is_empty() { result.push(options.declaration_dir.clone()); }
+        if !options.out_dir.is_empty() && options.out_dir != options.declaration_dir { result.push(options.out_dir.clone()); }
+        result
     }
 
     fn load_module_from_nearest_node_modules_directory(&mut self, types_scope_only: bool) -> Option<Resolved> {
@@ -1601,7 +1589,7 @@ impl<'r> ResolutionState<'r> {
                 normalized_root.push('/');
             }
             let is_longest_matching_prefix =
-                candidate.starts_with(&normalized_root) && (matched_normalized_prefix.is_empty() || matched_normalized_prefix.len() < normalized_root.len());
+                tspath::contains_path(&normalized_root, &candidate, &ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: String::new() }) && (candidate.len() > normalized_root.trim_end_matches('/').len() || tspath::has_trailing_directory_separator(&candidate)) && (matched_normalized_prefix.is_empty() || matched_normalized_prefix.len() < normalized_root.len());
 
             trace!(self.tracer, diagnostics::Checking_if_0_is_the_longest_matching_prefix_for_1_2, normalized_root, candidate, is_longest_matching_prefix);
 
@@ -1613,7 +1601,9 @@ impl<'r> ResolutionState<'r> {
 
         if !matched_normalized_prefix.is_empty() {
             trace!(self.tracer, diagnostics::Longest_matching_prefix_for_0_is_1, candidate, matched_normalized_prefix);
-            let suffix = &candidate[matched_normalized_prefix.len()..];
+            let suffix = tspath::get_relative_path_from_directory(&matched_normalized_prefix, &candidate, &ComparePathsOptions { use_case_sensitive_file_names: true, current_directory: String::new() });
+            let suffix = if tspath::has_trailing_directory_separator(&candidate) && !suffix.is_empty() { tspath::ensure_trailing_directory_separator(&suffix) } else { suffix };
+            let suffix = suffix.as_str();
 
             // first - try to load from a initial location
             trace!(self.tracer, diagnostics::Loading_0_from_the_root_dir_1_candidate_location_2, suffix, matched_normalized_prefix, candidate);
@@ -1726,12 +1716,15 @@ impl<'r> ResolutionState<'r> {
 
         let extension = &candidate[extensionless.len()..];
         trace!(self.tracer, diagnostics::File_name_0_has_a_1_extension_stripping_it, candidate, extension);
-        self.try_adding_extensions(extensionless, extensions, extension)
+        self.try_adding_extensions_in_directory(extensionless, &tspath::get_directory_path(candidate), extensions, extension)
     }
 
     fn try_adding_extensions(&mut self, extensionless: &str, extensions: Extensions, original_extension: &str) -> Option<Resolved> {
-        let directory = tspath::get_directory_path(extensionless);
-        if !directory.is_empty() && !self.fs().directory_exists(&directory) {
+        self.try_adding_extensions_in_directory(extensionless, &tspath::get_directory_path(extensionless), extensions, original_extension)
+    }
+
+    fn try_adding_extensions_in_directory(&mut self, extensionless: &str, directory: &str, extensions: Extensions, original_extension: &str) -> Option<Resolved> {
+        if !directory.is_empty() && !self.fs().directory_exists(directory) {
             return continue_searching();
         }
 
@@ -1927,6 +1920,7 @@ impl<'r> ResolutionState<'r> {
 
     // Go returns `(fileName, ok)`; the name is only used when `ok`.
     fn try_file(&mut self, file_name: &str) -> Option<String> {
+        if tspath::has_trailing_directory_separator(file_name) { return None; }
         let compiler_options = self.compiler_options.get();
         let module_suffixes: &[String] = compiler_options.module_suffixes.as_deref().unwrap_or(&[]);
         if module_suffixes.is_empty() {

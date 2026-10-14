@@ -129,7 +129,7 @@ impl View {
             let exports = search_fn(bucket);
             results.reserve(exports.len());
             results.extend(exports.into_iter().filter_map(|e| {
-                if e.module_id.0 == self.importing_file.path().as_str() {
+                if e.module_id == ModuleID::File(self.importing_file.path().to_string()) {
                     // Don't auto-import from the importing file itself
                     return None;
                 }

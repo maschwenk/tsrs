@@ -66,6 +66,8 @@ def convert_field(key, value):
         return f"name: {value}"
     if key == "ShortName":
         return f"short_name: {value}"
+    if key == "PathKind":
+        return "path_kind: CommandLineOptionPathKind::" + value.removeprefix("CommandLineOptionPathKind")
     if key == "Kind":
         return f"kind: CommandLineOptionKind::{KIND[value]}"
     if key in ("Category", "Description"):
