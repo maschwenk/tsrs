@@ -1365,7 +1365,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3070
-    pub(crate) fn type_reference_to_type_node(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> {
+    pub(crate) fn array_or_tuple_type_to_node(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> {
         let mut type_arguments: Vec<P<Type>> = c.get_type_arguments(t).to_vec();
         let target = t.target().unwrap();
         if target == c.global_array_type || target == c.global_readonly_array_type {
@@ -1381,7 +1381,8 @@ impl NodeBuilderImpl {
             } else {
                 Some(self.f.new_type_operator_node(Kind::ReadonlyKeyword, array_type))
             }
-        } else if target.object_flags().intersects(ObjectFlags::Tuple) {
+        } else {
+            assert!(target.object_flags().intersects(ObjectFlags::Tuple));
             let element_infos = target.as_tuple_type().element_infos.get();
             type_arguments = type_arguments
                 .iter()
@@ -1446,7 +1447,13 @@ impl NodeBuilderImpl {
             self.ctx().encountered_error.set(true);
             None
             // TODO: GH#18217
-        } else if self.ctx().flags.get().intersects(Flags::WriteClassExpressionAsTypeLiteral)
+        }
+    }
+
+    pub(crate) fn type_reference_to_type_node(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> {
+        let type_arguments: Vec<P<Type>> = c.get_type_arguments(t).to_vec();
+        let target = t.target().unwrap();
+        if self.ctx().flags.get().intersects(Flags::WriteClassExpressionAsTypeLiteral)
             && t.symbol().unwrap().value_declaration().is_some()
             && ast::is_class_like(t.symbol().unwrap().value_declaration().unwrap())
             && !c.is_value_symbol_accessible(t.symbol(), self.ctx().enclosing_declaration.get())
@@ -1548,9 +1555,22 @@ impl NodeBuilderImpl {
             return Some(self.create_elided_information_placeholder(c));
         }
 
-        let type_id = t.id;
+        let is_array_or_tuple = c.is_array_or_tuple_type(t);
+        let type_id = if is_array_or_tuple {
+            // Deferred and regular references share a cycle identity.
+            let arguments = c.get_type_arguments(t);
+            c.create_type_reference(t.target().unwrap(), arguments).id
+        } else {
+            t.id
+        };
+        if self.ctx().visited_types.borrow().has(&type_id) {
+            return Some(self.create_cyclic_structure_placeholder(c));
+        }
         let is_constructor_object = t.object_flags().intersects(ObjectFlags::Anonymous) && t.symbol().is_some() && t.symbol().unwrap().flags().intersects(SymbolFlags::Class);
-        let id: Option<CompositeSymbolIdentity> = if t.object_flags().intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_some() {
+        let id: Option<CompositeSymbolIdentity> = if is_array_or_tuple {
+            // Do not bound finite container nesting by the shared Array symbol or tuple origin.
+            None
+        } else if t.object_flags().intersects(ObjectFlags::Reference) && t.as_type_reference().node.get().is_some() {
             Some(CompositeSymbolIdentity { is_constructor_node: false, symbol_id: SymbolId(0), node_id: ast::get_node_id(t.as_type_reference().node.get().unwrap()) })
         } else if t.flags().intersects(TypeFlags::Conditional) {
             Some(CompositeSymbolIdentity { is_constructor_node: false, symbol_id: SymbolId(0), node_id: ast::get_node_id(t.as_conditional_type().root.get().unwrap().node.get().unwrap()) })
@@ -1558,7 +1578,13 @@ impl NodeBuilderImpl {
         // Since instantiations of the same anonymous type have the same symbol, tracking symbols instead
         // of types allows us to catch circular references to instantiations of the same anonymous type
 
-        let key = CompositeTypeCacheIdentity { type_id, flags: self.ctx().flags.get(), internal_flags: self.ctx().internal_flags.get() };
+        let infer_type_parameters = self.ctx().infer_type_parameters.get();
+        let key = CompositeTypeCacheIdentity {
+            type_id,
+            flags: self.ctx().flags.get(),
+            internal_flags: self.ctx().internal_flags.get(),
+            infer_type_parameters: if infer_type_parameters.is_empty() { CacheHashKey::default() } else { crate::checker_09::get_type_list_key(infer_type_parameters) },
+        };
         // Don't rely on type cache if we're expanding a type, because we need to compute `canIncreaseExpansionDepth`.
         let can_use_cache = self.ctx().max_expansion_depth.get().is_none();
         if can_use_cache
@@ -1876,7 +1902,9 @@ impl NodeBuilderImpl {
                 self.ctx().depth.set(self.ctx().depth.get() - 1);
                 return result;
             }
-            if t.as_type_reference().node.get().is_some() {
+            if c.is_array_or_tuple_type(t) {
+                return self.visit_and_transform_type(c, t, |c, b, t| b.array_or_tuple_type_to_node(c, t));
+            } else if t.as_type_reference().node.get().is_some() {
                 return self.visit_and_transform_type(c, t, |c, b, t| b.type_reference_to_type_node(c, t));
             } else {
                 return self.type_reference_to_type_node(c, t);

@@ -54,6 +54,7 @@ pub struct CompositeTypeCacheIdentity {
     pub type_id: TypeId,
     pub flags: Flags,
     pub internal_flags: InternalFlags,
+    pub infer_type_parameters: CacheHashKey,
 }
 
 #[derive(Default)]
