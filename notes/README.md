@@ -48,6 +48,8 @@ For current implementation guidance, use the [emit guide](../docs/EMIT.md),
 The initial [emit plan](../docs/history/EMIT.md) and [language-server port log](../docs/history/LSP.md)
 are archived separately from those guides.
 
+API binary responses use padded standard [Rust Base64 encoding](rust-base64.md).
+
 Other useful entry points are [content mappers](contentmappers.md), [WebAssembly](wasm-build.md),
 [performance round 2](perf-round2.md), [performance round 3](perf-round3.md),
 [memory round 2](mem-round2.md) and [memory round 3](mem-round3.md).

@@ -420,6 +420,11 @@ with the switch off, which is why it is not in the default build.
   starting a new victim late (only trims the extra stealing a loaded machine causes): within the noise. One thief per
   queue at a time cost vscode 2% of check time at 9-12 checkers (1-7% at 4-16 when a thief never gave up its place);
   the landed limit is checkers/4 at a time from 8 to 15.
+- Requested rust base64 encoding ([rust-base64.md](rust-base64.md)): production code -11 lines. Five-pair
+  Mac screening on Compiler/Compiler-Unions: -0.005% to +0.005% single instructions,
+  +0.130% to +0.557% default RSS. Retained for maintenance at the user's request, with no
+  qualifying performance gain or speedup claim.
+
 - Memory-traffic work at 32 checkers (notes/perf-memory-traffic-32.md): IPC is equal or higher at 32 checkers than at
   1 (vscode 1.92 -> 1.96) and miss rates are low, so padding, pinning, prefetching and hot/cold splits have nothing to
   win; `ReferenceInstantiations` slot hashes (A2) were within noise (+11 MiB peak).

@@ -10,6 +10,7 @@ description = "Transport layer for the tsgo-compatible programmatic API (--api):
 workspace = true
 
 [dependencies]
+base64.workspace = true
 tsrs_vfs.workspace = true
 tsrs_core.workspace = true
 rustc-hash.workspace = true

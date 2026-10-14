@@ -1,20 +1,9 @@
 // Standard (RFC 4648, padded) base64, matching Go's encoding/json marshaling of []byte.
 
-const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+use ::base64::Engine as _;
 
 pub fn encode(data: &[u8]) -> String {
-    let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
-    out.extend(data.chunks(3).flat_map(|chunk| {
-        let b = [chunk[0], *chunk.get(1).unwrap_or(&0), *chunk.get(2).unwrap_or(&0)];
-        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | b[2] as u32;
-        [
-            ALPHABET[(n >> 18) as usize & 63] as char,
-            ALPHABET[(n >> 12) as usize & 63] as char,
-            if chunk.len() > 1 { ALPHABET[(n >> 6) as usize & 63] as char } else { '=' },
-            if chunk.len() > 2 { ALPHABET[n as usize & 63] as char } else { '=' },
-        ]
-    }));
-    out
+    ::base64::engine::general_purpose::STANDARD.encode(data)
 }
 
 #[cfg(test)]
