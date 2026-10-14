@@ -2161,8 +2161,8 @@ impl Program {
         let mut cache = self.declaration_diagnostic_cache.lock().unwrap();
         if !cache.contains_key(&source_file) {
             // The diagnostics live in the checker's region (the language server's pool keeps it while the cache does).
-            for d in &diagnostics {
-                tsrs_core::arena::note_escape(d.addr());
+            for &d in &diagnostics {
+                tsrs_ast::note_diagnostic_escape(d);
             }
         }
         cache.entry(source_file).or_insert(diagnostics).clone()

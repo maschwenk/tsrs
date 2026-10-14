@@ -589,6 +589,31 @@ fn get_diagnostic_path(d: P<Diagnostic>) -> &'static str {
     }
 }
 
+/// tsrs-only (memory regions): `tsrs_core::arena::note_escape` for the diagnostic and everything it refers to (its
+/// text, message chain and related information, recursively). A diagnostic can share those with one made elsewhere:
+/// `clone_diagnostic` copies the references, so a merged copy in another region (or the thread arena) still points
+/// into the region of the diagnostic it was cloned from.
+pub fn note_diagnostic_escape(d: P<Diagnostic>) {
+    use tsrs_core::arena::note_escape;
+    note_escape(d.addr());
+    for s in [d.source(), d.message_text()] {
+        if !s.is_empty() {
+            note_escape(s.as_ptr().addr());
+        }
+    }
+    if let Some(info) = d.repopulate_info() {
+        note_escape(std::ptr::from_ref(info).addr());
+    }
+    for list in [d.message_chain(), d.related_information()] {
+        if !list.is_empty() {
+            note_escape(list.as_ptr().addr());
+        }
+        for &item in list {
+            note_diagnostic_escape(item);
+        }
+    }
+}
+
 pub fn equal_diagnostics(d1: P<Diagnostic>, d2: P<Diagnostic>) -> bool {
     if d1 == d2 {
         return true;

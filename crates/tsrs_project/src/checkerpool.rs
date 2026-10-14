@@ -190,6 +190,17 @@ pub fn with_checker_data_lease(ctx: &Context) -> Context {
     ctx.with_value(checkerDataLeaseKey(Arc::new(checkerDataLease::default())))
 }
 
+// mergeGlobalDiagnosticsFromCheckerLocked's merge. Region hook: the pool keeps the regions of the diagnostics it
+// accumulates, including those a merged copy refers to (`compact_and_merge_related_infos` clones a diagnostic outside
+// the checker's region, sharing its text, chain and related information).
+fn accumulate_global_diagnostics(all: &[P<Diagnostic>]) -> Vec<P<Diagnostic>> {
+    let accumulated = sort_and_deduplicate_diagnostics(all);
+    for &d in &accumulated {
+        tsrs_ast::note_diagnostic_escape(d);
+    }
+    accumulated
+}
+
 // checkerpool.go:84
 pub(crate) fn new_checker_pool(mut opts: CheckerPoolOptions, program: &'static Program, log: Option<Box<dyn Fn(&str) + Send + Sync>>) -> Arc<checkerPool> {
     if opts.max_checkers == 0 {
@@ -726,11 +737,7 @@ impl checkerPool {
         let before = st.global_diag_accumulated.len();
         let mut all = std::mem::take(&mut st.global_diag_accumulated);
         all.extend(globals);
-        st.global_diag_accumulated = sort_and_deduplicate_diagnostics(&all);
-        // Region hook: the pool keeps the regions of the diagnostics it accumulates.
-        for d in &st.global_diag_accumulated {
-            tsrs_core::arena::note_escape(d.addr());
-        }
+        st.global_diag_accumulated = accumulate_global_diagnostics(&all);
         if st.global_diag_accumulated.len() != before {
             st.global_diag_changed = true;
         }

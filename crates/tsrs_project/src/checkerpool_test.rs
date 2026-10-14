@@ -652,3 +652,26 @@ fn checker_pool_thread_lease_for_background_context() {
     drop(ctx);
     assert_eq!(pool.region_counts(), (0, 0, 0), "freed once the request is done");
 }
+
+// tsrs-only (memory regions): global diagnostics that differ only in related information are merged into a copy made
+// outside the checker's region (the pool merges after the checker's region scope ends), which still refers to the
+// originals' related information; the pool must keep that region.
+#[test]
+fn checker_pool_merged_global_diagnostic_keeps_the_checker_region() {
+    use tsrs_ast::{new_compiler_diagnostic, DiagnosticExt};
+    use tsrs_diagnostics as diagnostics;
+    let region = Region::new(1 << 16);
+    let (first, second) = {
+        let _scope = region.enter();
+        let related = |name: &str| new_compiler_diagnostic(&diagnostics::X_0_is_declared_here, &[&name]);
+        (
+            new_compiler_diagnostic(&diagnostics::Cannot_find_global_type_0, &[&"Array"]).add_related_info(Some(related("a"))),
+            new_compiler_diagnostic(&diagnostics::Cannot_find_global_type_0, &[&"Array"]).add_related_info(Some(related("b"))),
+        )
+    };
+    let merged = accumulate_global_diagnostics(&[first, second]);
+    assert_eq!(merged.len(), 1);
+    assert!(Region::containing(merged[0].addr()).is_none_or(|r| !r.ptr_eq(&region)), "the merged copy is made outside the region");
+    assert_eq!(merged[0].related_information().len(), 2);
+    assert!(region.escaped(), "the region of the merged diagnostics' related information is kept");
+}

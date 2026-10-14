@@ -101,8 +101,10 @@ idle checker, be canceled and dispose it meanwhile. So (checkerpool.rs):
 - **Pinned.** A checker held without a lease (callers outside the dispatch loop, the API checker) is parked as before.
 - **Escaped.** `arena::note_escape(addr)` / `Region::mark_escaped` mark a region whose data was stored in a pool- or
   program-lifetime structure; such a checker is parked as before. Sites: the pool's accumulated global diagnostics
-  (every kept diagnostic's region, after each merge), the program's declaration diagnostics cache (when it stores
-  diagnostics), the include processor's lazily made diagnostics (the target current when it fills them, when there
+  (after each merge, the region of every kept diagnostic and of what it refers to, `note_diagnostic_escape`: a
+  diagnostic merged with one that differs only in related information is a copy made outside the checker's region
+  that shares the originals' text, chain and related information), the program's declaration diagnostics cache (when
+  it stores diagnostics), the include processor's lazily made diagnostics (the target current when it fills them, when there
   are processing diagnostics). Audited and needing nothing: the program's other lazily filled fields (heap values,
   file pointers, or routed to the full build's region: symlink cache; package.json entries: `enter_table_owner`),
   snapshot and project lazily filled fields (heap values, filled without a checker held), source-file lazy data
