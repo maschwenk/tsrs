@@ -157,9 +157,14 @@ impl Checker {
         self.check_not_canceled();
         let saved_checking_file = self.checking_file.replace(source_file);
         self.ctx = Some(ctx.clone());
-        // Only what this piece adds is handed back: this checker may already hold diagnostics located in the file from
-        // checking its own files (a symbol-level check reports at every declaration of the symbol); those the owner
-        // finds for itself when it checks the file, exactly as it does for a file that is not split.
+        // Handed back: what this piece adds anywhere in the file, and all this checker holds inside the piece's
+        // statements, also what it reported before the piece. This checker may already hold diagnostics located in the
+        // file from checking its own files: a symbol-level check reports at every declaration of the symbol, and the
+        // owner finds those outside the piece for itself, exactly as it does for a file that is not split. But a check
+        // a checker runs once (a computed property name, a circular alias) does not report again when the piece
+        // reaches the same node, and the owner never checks the piece's statements.
+        let piece = &source_file.statements.nodes()[statements.clone()];
+        let piece_span = piece.first().zip(piece.last()).map(|(first, last)| (first.pos().expect_source("parsed statement"), last.end().expect_source("parsed statement")));
         let before: rustc_hash::FxHashSet<P<Diagnostic>> = self.diagnostics.get_diagnostics_for_file(source_file).into_iter().collect();
         let suggestions_before: rustc_hash::FxHashSet<P<Diagnostic>> = self.suggestion_diagnostics.get_diagnostics_for_file(source_file).into_iter().collect();
         if !self.source_file_links.get(source_file).type_checked.get() {
@@ -177,7 +182,8 @@ impl Checker {
         self.flush_too_complex_reports();
         self.ctx = None;
         self.checking_file = saved_checking_file;
-        let added = |all: Vec<P<Diagnostic>>, before: &rustc_hash::FxHashSet<P<Diagnostic>>| all.into_iter().filter(|d| !before.contains(d)).collect::<Vec<_>>();
+        let in_piece = |d: P<Diagnostic>| piece_span.zip(d.pos()).is_some_and(|((pos, end), at)| pos <= at && at <= end);
+        let added = |all: Vec<P<Diagnostic>>, before: &rustc_hash::FxHashSet<P<Diagnostic>>| all.into_iter().filter(|&d| !before.contains(&d) || in_piece(d)).collect::<Vec<_>>();
         (added(self.diagnostics.get_diagnostics_for_file(source_file), &before), added(self.suggestion_diagnostics.get_diagnostics_for_file(source_file), &suggestions_before))
     }
 

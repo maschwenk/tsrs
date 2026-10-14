@@ -242,10 +242,13 @@ impl SplitFile {
             let mut by_other: Vec<usize> = results.iter().filter(|r| r.by_other).map(|r| r.piece).collect();
             drop(results);
             by_other.sort_unstable();
+            // What the owner held for the file before checking those pieces is in the split output anyway (a piece
+            // also hands back what its checker held inside it); the comparison is about what checking them adds.
+            let held: rustc_hash::FxHashSet<P<Diagnostic>> = checker.file_diagnostics_so_far(self.file).into_iter().collect();
             let mut found = Vec::new();
             found.extend(by_other.into_iter().flat_map(|k| {
                 let (added, _) = checker.check_source_file_piece(ctx, self.file, self.pieces[k].clone());
-                added
+                added.into_iter().filter(|d| !held.contains(d))
             }));
             *self.owner_found.lock().unwrap() = found;
             checker.add_piece_diagnostics(self.file, &[], &[]);
@@ -327,5 +330,106 @@ impl SplitFile {
             results = self.finished.wait(results).unwrap();
         }
         results
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use tsrs_core::P;
+    use tsrs_tsoptions::{self as tsoptions, ParseConfigHost};
+    use tsrs_vfs::{vfstest, FS};
+
+    use super::SplitFile;
+    use crate::{new_compiler_host, new_program, Context, ProgramOptions};
+
+    struct ConfigHost {
+        fs: Arc<dyn FS>,
+    }
+
+    impl ParseConfigHost for ConfigHost {
+        fn fs(&self) -> &dyn FS {
+            &*self.fs
+        }
+        fn get_current_directory(&self) -> &'static str {
+            "/"
+        }
+    }
+
+    fn program(files: &[(&'static str, &'static str)]) -> &'static crate::Program {
+        let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(files.iter().map(|&(k, v)| (k, v)), true));
+        let config_host: &'static ConfigHost = Box::leak(Box::new(ConfigHost { fs: Arc::clone(&fs) }));
+        let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, config_host, None);
+        assert_eq!(diagnostics.len(), 0, "tsconfig.json");
+        new_program(ProgramOptions::new(P::new(config.unwrap()), new_compiler_host("/", fs, "", None, None, None)))
+    }
+
+    /// A piece's checker may have reported a diagnostic inside the piece's statements before it runs the piece: here it
+    /// checks `index.ts` first, which resolves `Type` and reports TS2464 on the computed property name once. When the
+    /// piece reaches the same node the check is cached and reports nothing new, and the owner never checks that
+    /// statement, so the piece must hand back what its checker holds inside its statements, not only what it added.
+    #[test]
+    fn a_piece_hands_back_what_its_checker_reported_before_it() {
+        let files = [
+            ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true,"strict":true,"noEmit":true},"files":["type.d.ts","index.ts"]}"#),
+            (
+                "/src/type.d.ts",
+                "export declare namespace Foo {\n  enum Enum { A = \"a\", B = \"b\" }\n}\nexport type Type = { x?: { [Foo.Enum]: 0 } };\n",
+            ),
+            ("/src/index.ts", "import { type Type } from \"./type\";\nexport const foo = { ...({} as Type) };\n"),
+        ];
+        let program = program(&files);
+        let declaration = program.get_source_file("/src/type.d.ts").unwrap();
+        let index = program.get_source_file("/src/index.ts").unwrap();
+        let ctx = Context::default();
+        let ts2464 = |diagnostics: &[P<tsrs_ast::Diagnostic>]| diagnostics.iter().filter(|d| d.code() == 2464).count();
+
+        let mut owner = tsrs_checker::new_checker(program);
+        let mut other = tsrs_checker::new_checker(program);
+        other.get_diagnostics_exported(&ctx, index);
+        assert_eq!(ts2464(&other.file_diagnostics_so_far(declaration)), 1, "checking index.ts reports the TS2464 in type.d.ts");
+
+        // The file in two pieces: the namespace on the owner, the type alias on the other checker.
+        let split = SplitFile::new(declaration, vec![0..1, 1..2], false);
+        split.run_queued_piece(&mut other, &ctx, 1);
+        split.run_owner(&mut owner, &ctx);
+        assert_eq!(ts2464(&owner.get_diagnostics_exported(&ctx, declaration)), 1, "the split check of type.d.ts lost its TS2464");
+
+        // What one checker reports for the file.
+        let mut whole = tsrs_checker::new_checker(program);
+        assert_eq!(ts2464(&whole.get_diagnostics_exported(&ctx, declaration)), 1);
+    }
+
+    /// Shadow mode checks the other checkers' pieces again on the owner and compares. What the owner already held
+    /// inside those pieces is in the split output anyway; here the owner reported the export-star collision in
+    /// `c.d.ts` while checking `d.ts`, and the piece's checker, which checks `export * from "./b"` without computing
+    /// the module's exports, never does. That is not a difference.
+    #[test]
+    fn shadow_mode_ignores_what_the_owner_held_before() {
+        let files = [
+            ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true,"module":"commonjs","noEmit":true},"files":["a.d.ts","b.d.ts","c.d.ts","d.ts"]}"#),
+            ("/src/a.d.ts", "export declare class A {}\nexport declare class B {}\n"),
+            ("/src/b.d.ts", "export declare class B {}\nexport declare class C {}\n"),
+            ("/src/c.d.ts", "export type * from \"./a\";\nexport * from \"./b\";\n"),
+            ("/src/d.ts", "import { B, C } from \"./c\";\nexport let b: B = new B(), c: C = new C();\n"),
+        ];
+        let program = program(&files);
+        let declaration = program.get_source_file("/src/c.d.ts").unwrap();
+        let ctx = Context::default();
+        let ts2308 = |diagnostics: &[P<tsrs_ast::Diagnostic>]| diagnostics.iter().filter(|d| d.code() == 2308).count();
+
+        let mut owner = tsrs_checker::new_checker(program);
+        let mut other = tsrs_checker::new_checker(program);
+        owner.get_diagnostics_exported(&ctx, program.get_source_file("/src/d.ts").unwrap());
+        assert_eq!(ts2308(&owner.file_diagnostics_so_far(declaration)), 1, "checking d.ts reports the TS2308 in c.d.ts");
+
+        let split = SplitFile::new(declaration, vec![0..1, 1..2], true);
+        split.run_queued_piece(&mut other, &ctx, 1);
+        assert_eq!(ts2308(&other.file_diagnostics_so_far(declaration)), 0, "the piece's checker does not report it");
+        split.run_owner(&mut owner, &ctx);
+        let whole = owner.get_diagnostics_exported(&ctx, declaration);
+        assert_eq!(ts2308(&whole), 1);
+        split.shadow_compare(&whole);
     }
 }
