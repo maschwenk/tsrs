@@ -2088,7 +2088,7 @@ impl Checker {
                 if name_text != "meta" {
                     let parent = node.parent().unwrap();
                     let is_callee = is_call_expression(parent) && parent.expression() == Some(node);
-                    if name_text == "defer" {
+                    if ast::is_import_phase_meta_property(node) {
                         if !is_callee {
                             return self.grammar_error_at_pos(
                                 node,
@@ -2101,7 +2101,7 @@ impl Checker {
                         }
                     } else {
                         if is_callee {
-                            return self.grammar_error_on_node(node_name, &diagnostics::X_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_or_defer, &[&name_text]);
+                            return self.grammar_error_on_node(node_name, &diagnostics::X_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_defer_or_source, &[&name_text]);
                         }
                         return self.grammar_error_on_node(node_name, &diagnostics::X_0_is_not_a_valid_meta_property_for_keyword_1_Did_you_mean_2, &[&name_text, &scanner::token_to_string(meta_property.keyword_token), &"meta"]);
                     }
@@ -2445,9 +2445,16 @@ impl Checker {
                         return self.grammar_error_on_node(node, &diagnostics::Named_imports_are_not_allowed_in_a_deferred_import, &[]);
                     }
                 }
-                if self.module_kind != ModuleKind::ESNext && self.module_kind != ModuleKind::Preserve {
+                if !self.module_kind.supports_deferred_imports() {
                     return self.grammar_error_on_node(node, &diagnostics::Deferred_imports_are_only_supported_when_the_module_flag_is_set_to_esnext_or_preserve, &[]);
                 }
+            }
+            Kind::SourceKeyword => {
+                if import_clause.named_bindings.is_some() { return self.grammar_error_on_node(node, &diagnostics::Named_and_namespace_imports_are_not_allowed_in_a_source_phase_import, &[]); }
+                if import_clause.name.is_none() { return self.grammar_error_on_node(node, &diagnostics::A_source_phase_import_must_specify_a_local_binding, &[]); }
+                if !self.module_kind.supports_source_phase_imports() { return self.grammar_error_on_node(node, &diagnostics::Source_phase_imports_are_only_supported_when_the_module_option_is_set_to_esnext_nodenext_or_preserve, &[]); }
+                let specifier = get_module_specifier_from_node(node.parent().unwrap()).unwrap();
+                if self.get_emit_syntax_for_module_specifier_expression(specifier) == ModuleKind::CommonJS { return self.grammar_error_on_node(node, &diagnostics::Source_phase_imports_are_not_allowed_on_statements_that_compile_to_CommonJS_require_calls, &[]); }
             }
             _ => {}
         }
@@ -2500,8 +2507,10 @@ impl Checker {
             return self.grammar_error_on_node(node, get_verbatim_module_syntax_error_message(node), &[]);
         }
 
-        if node.expression().unwrap().kind() == Kind::MetaProperty {
-            if self.module_kind != ModuleKind::ESNext && self.module_kind != ModuleKind::Preserve {
+        if ast::is_import_source_meta_property(node.expression().unwrap()) {
+            if !self.module_kind.supports_source_phase_imports() { return self.grammar_error_on_node(node, &diagnostics::Source_phase_imports_are_only_supported_when_the_module_option_is_set_to_esnext_nodenext_or_preserve, &[]); }
+        } else if ast::is_import_defer_meta_property(node.expression().unwrap()) {
+            if !self.module_kind.supports_deferred_imports() {
                 return self.grammar_error_on_node(node, &diagnostics::Deferred_imports_are_only_supported_when_the_module_flag_is_set_to_esnext_or_preserve, &[]);
             }
         } else if self.module_kind == ModuleKind::ES2015 {
@@ -2509,6 +2518,9 @@ impl Checker {
         }
 
         let node_as_call = node.as_call_expression();
+        if ast::is_source_phase_import_call(node) {
+            if let Some(token) = node_as_call.question_dot_token() { return self.grammar_error_on_node(token, &diagnostics::Optional_chaining_cannot_be_used_with_import_source, &[]); }
+        }
         if node_as_call.type_arguments().is_some() {
             return self.grammar_error_on_node(node, &diagnostics::This_use_of_import_is_invalid_import_calls_can_be_written_but_they_must_have_parentheses_and_cannot_have_type_arguments, &[]);
         }

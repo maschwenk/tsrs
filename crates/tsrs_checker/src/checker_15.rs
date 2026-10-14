@@ -2105,7 +2105,7 @@ impl Checker {
                 None
             }
             Kind::ImportKeyword | Kind::NewKeyword => {
-                if node.kind() == Kind::ImportKeyword && ast::is_meta_property(parent) && parent.text() == "defer" {
+                if node.kind() == Kind::ImportKeyword && ast::is_import_phase_meta_property(parent) {
                     return None;
                 }
                 // fallthrough (case ast.KindNewKeyword)

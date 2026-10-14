@@ -92,8 +92,7 @@ impl Session {
             file = Some(resolve_source_file(program, &p.document("sourceFile")?)?);
         }
         let file = file.ok_or_else(|| ApiError::client("moduleSpecifier must have a SourceFile ancestor or sourceFile must be provided"))?;
-        let mode = program.get_mode_for_usage_location(file, node);
-        Ok(program.get_resolved_module(file, node.text(), mode).map_or(Value::Null, |r| resolved_module_response(&r)))
+        Ok(program.get_resolved_module_from_module_specifier(file, node).map_or(Value::Null, |r| resolved_module_response(&r)))
     }
 
     pub(crate) fn handle_get_resolved_type_reference_directive(&self, p: Params) -> ApiResult<Value> {

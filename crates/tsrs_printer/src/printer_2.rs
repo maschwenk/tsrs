@@ -615,8 +615,8 @@ impl Printer {
     pub(crate) fn emit_meta_property(&mut self, node: P<Node>) {
         let state = self.enter_node(node);
         let n = node.as_meta_property();
-        self.emit_token(n.keyword_token, node.pos(), WriteKind::Punctuation, node);
-        self.write_punctuation(".");
+        let pos = self.emit_token(n.keyword_token, node.pos(), WriteKind::Punctuation, node);
+        self.emit_token(Kind::DotToken, pos, WriteKind::Punctuation, node);
         self.emit_identifier_name(n.name());
         self.exit_node(node, state);
     }

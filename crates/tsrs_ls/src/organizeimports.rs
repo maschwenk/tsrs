@@ -488,12 +488,23 @@ fn coalesce_imports_worker(
 
     for attribute_key in &attribute_keys {
         let import_group_same_attrs = &import_groups_by_attributes[attribute_key];
-        let categorized = get_categorized_imports(import_group_same_attrs);
+        let mut categorized = get_categorized_imports(import_group_same_attrs);
 
         if let Some(i) = categorized.import_without_clause {
             coalesced_imports.push(i);
         }
 
+        categorized.source_phase_imports.sort_by(|a, b| {
+            let a = a.as_import_declaration().import_clause.unwrap();
+            let b = b.as_import_declaration().import_clause.unwrap();
+            match (a.name(), b.name()) {
+                (None, None) => std::cmp::Ordering::Equal,
+                (None, Some(_)) => std::cmp::Ordering::Greater,
+                (Some(_), None) => std::cmp::Ordering::Less,
+                _ => specifier_comparer(a, b),
+            }
+        });
+        coalesced_imports.extend(categorized.source_phase_imports);
         let factory = NodeFactory::new(NodeFactoryHooks::default());
 
         for (i, group) in [categorized.regular_imports, categorized.type_only_imports].into_iter().enumerate() {
@@ -645,6 +656,7 @@ fn coalesce_imports_worker(
 // organizeimports.go:644
 struct categorizedImports {
     import_without_clause: Option<P<Node>>,
+    source_phase_imports: Vec<P<Node>>,
     type_only_imports: importGroup,
     regular_imports: importGroup,
 }
@@ -667,6 +679,7 @@ impl importGroup {
 // organizeimports.go:660
 fn get_categorized_imports(import_decls: &[P<Node>]) -> categorizedImports {
     let mut import_without_clause: Option<P<Node>> = None;
+    let mut source_phase_imports = Vec::new();
     let mut type_only_imports = importGroup::default();
     let mut regular_imports = importGroup::default();
 
@@ -679,6 +692,7 @@ fn get_categorized_imports(import_decls: &[P<Node>]) -> categorizedImports {
         };
 
         let clause = clause_node.as_import_clause();
+        if clause.phase_modifier.get() == Kind::SourceKeyword { source_phase_imports.push(import_decl); continue; }
         let group = if clause_node.is_type_only() { &mut type_only_imports } else { &mut regular_imports };
 
         let name = clause.name();
@@ -697,7 +711,7 @@ fn get_categorized_imports(import_decls: &[P<Node>]) -> categorizedImports {
         }
     }
 
-    categorizedImports { import_without_clause, type_only_imports, regular_imports }
+    categorizedImports { import_without_clause, source_phase_imports, type_only_imports, regular_imports }
 }
 
 // organizeimports.go:700

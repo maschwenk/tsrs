@@ -12,7 +12,7 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-GO_FILE = os.path.join(ROOT, "ts-ref", "tsc", "internal", "diagnostics", "diagnostics_generated.go")
+GO_FILE = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "ts-ref", "tsc", "internal", "diagnostics", "diagnostics_generated.go")
 OUT_FILE = os.path.join(ROOT, "crates", "tsrs_diagnostics", "src", "generated.rs")
 
 GO_STR = r'"(?:[^"\\]|\\.)*"'

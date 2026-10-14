@@ -199,6 +199,7 @@ keywords! {
     "return" => ReturnKeyword,
     "satisfies" => SatisfiesKeyword,
     "set" => SetKeyword,
+    "source" => SourceKeyword,
     "static" => StaticKeyword,
     "string" => StringKeyword,
     "super" => SuperKeyword,

@@ -453,6 +453,10 @@ impl ModuleKind {
         self >= ModuleKind::ES2015 && self <= ModuleKind::ESNext
     }
 
+    pub fn supports_deferred_imports(self) -> bool { matches!(self, Self::ESNext | Self::Preserve) }
+
+    pub fn supports_source_phase_imports(self) -> bool { matches!(self, Self::ESNext | Self::NodeNext | Self::Preserve) }
+
     pub fn supports_import_attributes(self) -> bool {
         ModuleKind::Node18 <= self && self <= ModuleKind::NodeNext || self == ModuleKind::Preserve || self == ModuleKind::ESNext
     }

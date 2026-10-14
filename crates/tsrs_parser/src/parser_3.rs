@@ -1308,10 +1308,10 @@ impl Parser {
                 // This is an 'import.*' metaproperty (i.e. 'import.meta')
                 self.next_token(); // advance past the 'import'
                 self.next_token(); // advance past the dot
-                let name = self.parse_identifier_name();
+                let name = self.parse_import_meta_property_name();
                 let node = self.factory.new_meta_property(Kind::ImportKeyword, name);
                 expression = self.finish_node(node, pos);
-                if expression.text() == "defer" {
+                if ast::is_import_phase_meta_property(expression) {
                     if self.token == Kind::OpenParenToken || self.token == Kind::LessThanToken {
                         self.source_flags |= NodeFlags::PossiblyContainsDynamicImport;
                     }
@@ -1334,6 +1334,13 @@ impl Parser {
 
     pub(crate) fn next_token_is_dot(&mut self) -> bool {
         self.next_token() == Kind::DotToken
+    }
+
+    pub(crate) fn parse_import_meta_property_name(&mut self) -> P<Node> {
+        if matches!(self.token, Kind::DeferKeyword | Kind::SourceKeyword) && self.current_import_phase_modifier() == Kind::Unknown {
+            self.parse_error_at_current_token(&diagnostics::Keywords_cannot_contain_escape_characters, &[]);
+        }
+        self.parse_identifier_name()
     }
 
     pub(crate) fn parse_super_expression(&mut self) -> P<Node> {
@@ -2277,7 +2284,7 @@ impl Parser {
             | Kind::FinallyKeyword => true,
             Kind::ImportKeyword => self.is_start_of_declaration() || self.is_next_token_open_paren_or_less_than_or_dot(),
             Kind::ConstKeyword | Kind::ExportKeyword => self.is_start_of_declaration(),
-            Kind::AsyncKeyword | Kind::DeclareKeyword | Kind::InterfaceKeyword | Kind::ModuleKeyword | Kind::NamespaceKeyword | Kind::TypeKeyword | Kind::GlobalKeyword | Kind::DeferKeyword => {
+            Kind::AsyncKeyword | Kind::DeclareKeyword | Kind::InterfaceKeyword | Kind::ModuleKeyword | Kind::NamespaceKeyword | Kind::TypeKeyword | Kind::GlobalKeyword | Kind::DeferKeyword | Kind::SourceKeyword => {
                 // When these don't start a declaration, they're an identifier in an expression statement
                 true
             }
@@ -2323,7 +2330,7 @@ impl Parser {
                 //   I {}
                 //
                 // could be legal, it would add complexity for very little gain.
-                Kind::InterfaceKeyword | Kind::TypeKeyword | Kind::DeferKeyword => return self.next_token_is_identifier_on_same_line(),
+                Kind::InterfaceKeyword | Kind::TypeKeyword | Kind::DeferKeyword | Kind::SourceKeyword => return self.next_token_is_identifier_on_same_line(),
                 Kind::ModuleKeyword | Kind::NamespaceKeyword => return self.next_token_is_identifier_or_string_literal_on_same_line(),
                 Kind::AbstractKeyword | Kind::AccessorKeyword | Kind::AsyncKeyword | Kind::DeclareKeyword | Kind::PrivateKeyword | Kind::ProtectedKeyword | Kind::PublicKeyword | Kind::ReadonlyKeyword => {
                     let previous_token = self.token;
@@ -2345,7 +2352,7 @@ impl Parser {
                 }
                 Kind::ImportKeyword => {
                     self.next_token();
-                    return self.token == Kind::DeferKeyword || self.token == Kind::StringLiteral || self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken || token_is_identifier_or_keyword(self.token);
+                    return self.token == Kind::DeferKeyword || self.token == Kind::SourceKeyword || self.token == Kind::StringLiteral || self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken || token_is_identifier_or_keyword(self.token);
                 }
                 Kind::ExportKeyword => {
                     self.next_token();

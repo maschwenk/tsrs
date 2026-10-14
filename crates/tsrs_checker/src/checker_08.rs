@@ -142,6 +142,7 @@ impl Checker {
     pub(crate) fn resolve_external_module_name_worker(&mut self, location: Option<P<Node>>, module_reference_expression: Option<P<Node>>, module_not_found_error: Option<&'static Message>, ignore_errors: bool, is_for_augmentation: bool, import_attributes_type: Option<P<Type>>) -> Option<P<Symbol>> {
         if let Some(module_reference_expression) = module_reference_expression {
             if ast::is_string_literal_like(module_reference_expression) {
+                if module_reference_expression.parent().is_some_and(ast::is_source_phase_import) { return None; }
                 return self.resolve_external_module(location, module_reference_expression.text(), module_not_found_error, if !ignore_errors { Some(module_reference_expression) } else { None }, is_for_augmentation, import_attributes_type);
             }
         }

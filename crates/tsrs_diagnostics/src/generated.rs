@@ -3792,7 +3792,7 @@ pub static Named_imports_are_not_allowed_in_a_deferred_import: Message = Message
 
 pub static Deferred_imports_are_only_supported_when_the_module_flag_is_set_to_esnext_or_preserve: Message = Message { code: 18060, category: Category::Error, key: Key("Deferred_imports_are_only_supported_when_the_module_flag_is_set_to_esnext_or_preserve_18060"), text: "Deferred imports are only supported when the '--module' flag is set to 'esnext' or 'preserve'.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
 
-pub static X_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_or_defer: Message = Message { code: 18061, category: Category::Error, key: Key("_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_or_defer_18061"), text: "'{0}' is not a valid meta-property for keyword 'import'. Did you mean 'meta' or 'defer'?", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
+pub static X_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_defer_or_source: Message = Message { code: 18061, category: Category::Error, key: Key("_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_defer_or_source_18061"), text: "'{0}' is not a valid meta-property for keyword 'import'. Did you mean 'meta', 'defer', or 'source'?", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
 
 pub static Regular_expression_pattern_modifiers_are_only_available_when_targeting_0_or_later: Message = Message { code: 18062, category: Category::Error, key: Key("Regular_expression_pattern_modifiers_are_only_available_when_targeting_0_or_later_18062"), text: "Regular expression pattern modifiers are only available when targeting '{0}' or later.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
 
@@ -3891,6 +3891,16 @@ pub static The_content_mapper_returned_diagnostic_directives_with_overlapping_vi
 pub static The_invalid_diagnostic_directive_is_in_supplemental_output_0_returned_by_the_content_mapper: Message = Message { code: 18109, category: Category::Message, key: Key("The_invalid_diagnostic_directive_is_in_supplemental_output_0_returned_by_the_content_mapper_18109"), text: "The invalid diagnostic directive is in supplemental output {0} returned by the content mapper.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
 
 pub static Diagnostic_directive_0_returned_by_the_content_mapper_has_an_invalid_unusedExpectDirectiveIndex: Message = Message { code: 18110, category: Category::Message, key: Key("Diagnostic_directive_0_returned_by_the_content_mapper_has_an_invalid_unusedExpectDirectiveIndex_18110"), text: "Diagnostic directive {0} returned by the content mapper has an invalid 'unusedExpectDirectiveIndex'.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
+
+pub static A_source_phase_import_must_specify_a_local_binding: Message = Message { code: 18111, category: Category::Error, key: Key("A_source_phase_import_must_specify_a_local_binding_18111"), text: "A source phase import must specify a local binding.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
+
+pub static Named_and_namespace_imports_are_not_allowed_in_a_source_phase_import: Message = Message { code: 18112, category: Category::Error, key: Key("Named_and_namespace_imports_are_not_allowed_in_a_source_phase_import_18112"), text: "Named and namespace imports are not allowed in a source phase import.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
+
+pub static Source_phase_imports_are_only_supported_when_the_module_option_is_set_to_esnext_nodenext_or_preserve: Message = Message { code: 18113, category: Category::Error, key: Key("Source_phase_imports_are_only_supported_when_the_module_option_is_set_to_esnext_nodenext_or_preserve_18113"), text: "Source phase imports are only supported when the '--module' option is set to 'esnext', 'nodenext', or 'preserve'.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
+
+pub static Optional_chaining_cannot_be_used_with_import_source: Message = Message { code: 18114, category: Category::Error, key: Key("Optional_chaining_cannot_be_used_with_import_source_18114"), text: "Optional chaining cannot be used with 'import.source'.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
+
+pub static Source_phase_imports_are_not_allowed_on_statements_that_compile_to_CommonJS_require_calls: Message = Message { code: 18115, category: Category::Error, key: Key("Source_phase_imports_are_not_allowed_on_statements_that_compile_to_CommonJS_require_calls_18115"), text: "Source phase imports are not allowed on statements that compile to CommonJS 'require' calls.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
 
 pub static X_nodenext_if_module_is_nodenext_node16_if_module_is_node16_or_node18_otherwise_bundler: Message = Message { code: 69010, category: Category::Message, key: Key("nodenext_if_module_is_nodenext_node16_if_module_is_node16_or_node18_otherwise_bundler_69010"), text: "`nodenext` if `module` is `nodenext`; `node16` if `module` is `node16` or `node18`; otherwise, `bundler`.", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
 
@@ -4432,7 +4442,7 @@ pub static Sort_Imports: Message = Message { code: 95208, category: Category::Me
 
 pub static JSDoc_comment: Message = Message { code: 95209, category: Category::Message, key: Key("JSDoc_comment_95209"), text: "JSDoc comment", reports_unnecessary: false, elided_in_compatibility_pyramid: false, reports_deprecated: false };
 
-pub(crate) static ALL_MESSAGES: [&Message; 2215] = [
+pub(crate) static ALL_MESSAGES: [&Message; 2220] = [
     &Unterminated_string_literal,
     &Identifier_expected,
     &X_0_expected,
@@ -6328,7 +6338,7 @@ pub(crate) static ALL_MESSAGES: [&Message; 2215] = [
     &Default_imports_are_not_allowed_in_a_deferred_import,
     &Named_imports_are_not_allowed_in_a_deferred_import,
     &Deferred_imports_are_only_supported_when_the_module_flag_is_set_to_esnext_or_preserve,
-    &X_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_or_defer,
+    &X_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_defer_or_source,
     &Regular_expression_pattern_modifiers_are_only_available_when_targeting_0_or_later,
     &Duplicate_named_capturing_groups_are_only_available_when_targeting_0_or_later,
     &Private_identifiers_cannot_be_used_in_destructuring_patterns,
@@ -6378,6 +6388,11 @@ pub(crate) static ALL_MESSAGES: [&Message; 2215] = [
     &The_content_mapper_returned_diagnostic_directives_with_overlapping_virtual_ranges,
     &The_invalid_diagnostic_directive_is_in_supplemental_output_0_returned_by_the_content_mapper,
     &Diagnostic_directive_0_returned_by_the_content_mapper_has_an_invalid_unusedExpectDirectiveIndex,
+    &A_source_phase_import_must_specify_a_local_binding,
+    &Named_and_namespace_imports_are_not_allowed_in_a_source_phase_import,
+    &Source_phase_imports_are_only_supported_when_the_module_option_is_set_to_esnext_nodenext_or_preserve,
+    &Optional_chaining_cannot_be_used_with_import_source,
+    &Source_phase_imports_are_not_allowed_on_statements_that_compile_to_CommonJS_require_calls,
     &X_nodenext_if_module_is_nodenext_node16_if_module_is_node16_or_node18_otherwise_bundler,
     &File_is_a_CommonJS_module_it_may_be_converted_to_an_ES_module,
     &This_constructor_function_may_be_converted_to_a_class_declaration,

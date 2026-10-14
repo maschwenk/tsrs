@@ -2395,6 +2395,10 @@ impl Checker {
             }
             import_attributes_type = self.get_type_of_property_of_type(options_type, "with");
         }
+        if is_source_phase_import_call(node) {
+            let t = self.get_global_abstract_module_source_type();
+            return self.create_promise_return_type(node, t);
+        }
         // resolveExternalModuleName will return undefined if the moduleReferenceExpression is not a string literal
         let module_symbol = self.resolve_external_module_name(node, specifier, false /*ignoreErrors*/, import_attributes_type);
         if let Some(module_symbol) = module_symbol {

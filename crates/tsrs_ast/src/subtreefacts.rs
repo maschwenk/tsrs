@@ -550,7 +550,7 @@ impl Node {
                     | propagate_subtree_facts(d.question_dot_token())
                     | propagate_eraseable_syntax_list_subtree_facts(d.type_arguments())
                     | propagate_node_list_subtree_facts(d.arguments(), propagate_subtree_facts)
-                    | if_else(d.expression().kind() == Kind::ImportKeyword, F::ContainsDynamicImport, NONE)
+                    | if_else(d.expression().kind() == Kind::ImportKeyword || crate::is_import_phase_meta_property(d.expression()), F::ContainsDynamicImport, NONE)
             }
             NodeData::NewExpression(d) => {
                 prop(d.expression())

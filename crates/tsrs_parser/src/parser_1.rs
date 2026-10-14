@@ -2952,6 +2952,7 @@ impl Parser {
         let after_import_pos = self.node_pos();
         // We don't parse the identifier here in await context, instead we will report a grammar error in the checker.
         let save_has_await_identifier = self.statement_has_await_identifier;
+        let phase_modifier_candidate = self.current_import_phase_modifier();
         let mut identifier = None;
         if self.is_identifier() {
             identifier = Some(self.parse_identifier());
@@ -2966,22 +2967,13 @@ impl Parser {
             if self.is_identifier() {
                 identifier = Some(self.parse_identifier());
             }
-        } else if identifier.is_some_and(|identifier| identifier.text() == "defer") {
-            let should_parse_as_defer_modifier = if self.token == Kind::FromKeyword {
-                !self.look_ahead(Parser::next_token_is_token_string_literal)
-            } else {
-                self.token != Kind::CommaToken && self.token != Kind::EqualsToken
-            };
-            if should_parse_as_defer_modifier {
-                phase_modifier = Kind::DeferKeyword;
-                identifier = None;
-                if self.is_identifier() {
-                    identifier = Some(self.parse_identifier());
-                }
-            }
+        } else if identifier.is_some() && phase_modifier_candidate != Kind::Unknown && self.should_parse_import_phase_modifier() {
+            phase_modifier = phase_modifier_candidate;
+            identifier = None;
+            if self.is_identifier() { identifier = Some(self.parse_identifier()); }
         }
         if let Some(identifier) = identifier {
-            if !self.token_after_imported_identifier_definitely_produces_import_declaration() && phase_modifier != Kind::DeferKeyword {
+            if self.token_after_imported_identifier_allows_import_equals_declaration() && phase_modifier != Kind::DeferKeyword && phase_modifier != Kind::SourceKeyword {
                 let import_equals = self.parse_import_equals_declaration(pos, jsdoc, modifiers, identifier, phase_modifier == Kind::TypeKeyword);
                 let import_equals = self.check_js_syntax(import_equals);
                 self.statement_has_await_identifier = save_has_await_identifier; // Import= declaration is always parsed in an Await context, no need to reparse
@@ -3009,10 +3001,24 @@ impl Parser {
         self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken
     }
 
-    pub(crate) fn token_after_imported_identifier_definitely_produces_import_declaration(&mut self) -> bool {
-        // In `import id ___`, the current token decides whether to produce
-        // an ImportDeclaration or ImportEqualsDeclaration.
-        self.token == Kind::CommaToken || self.token == Kind::FromKeyword
+    pub(crate) fn token_after_imported_identifier_allows_import_equals_declaration(&mut self) -> bool {
+        !matches!(self.token, Kind::CommaToken | Kind::FromKeyword)
+    }
+
+    pub(crate) fn should_parse_import_phase_modifier(&mut self) -> bool {
+        match self.token {
+            Kind::CommaToken | Kind::EqualsToken => false,
+            Kind::FromKeyword => !self.look_ahead(Parser::next_token_is_token_string_literal),
+            _ => true,
+        }
+    }
+
+    pub(crate) fn current_import_phase_modifier(&self) -> Kind {
+        match self.scanner.token_text() {
+            "defer" => Kind::DeferKeyword,
+            "source" => Kind::SourceKeyword,
+            _ => Kind::Unknown,
+        }
     }
 
     pub(crate) fn parse_import_equals_declaration(
@@ -3076,6 +3082,10 @@ impl Parser {
             let import_clause = self.parse_import_clause(identifier, pos, phase_modifier, skip_jsdoc_leading_asterisks);
             self.parse_expected(Kind::FromKeyword);
             return Some(import_clause);
+        }
+        if phase_modifier == Kind::SourceKeyword {
+            let clause = self.factory.new_import_clause(phase_modifier, None, None);
+            return Some(self.finish_node(clause, pos));
         }
         None
     }

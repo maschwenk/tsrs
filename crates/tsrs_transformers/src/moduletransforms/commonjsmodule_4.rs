@@ -472,7 +472,7 @@ impl CommonJSModuleTransformer {
                 needs_rewrite = true;
             }
         }
-        if ast::is_import_call(node) && self.should_transform_import_call() {
+        if node.expression().unwrap().kind() == Kind::ImportKeyword && self.should_transform_import_call() {
             return self.visit_import_call_expression(node, needs_rewrite);
         }
         if needs_rewrite {

@@ -2225,6 +2225,18 @@ impl Checker {
 
     // checker.go:14757
     pub(crate) fn get_target_of_import_clause(&mut self, node: P<Node>) -> Option<P<Symbol>> {
+        if node.as_import_clause().phase_modifier.get() == Kind::SourceKeyword {
+            let alias = self.get_symbol_of_declaration(node).unwrap();
+            let links = self.alias_symbol_links.get(alias);
+            if links.immediate_target.get().is_none() {
+                let symbol = self.new_symbol(SymbolFlags::FunctionScopedVariable, node.name().unwrap().text());
+                symbol.set_declarations_static(alias.declarations());
+                let t = self.get_global_abstract_module_source_type();
+                self.value_symbol_links.get(symbol).resolved_type.set(Some(t));
+                links.immediate_target.set(Some(symbol));
+            }
+            return links.immediate_target.get();
+        }
         let module_specifier = get_module_specifier_from_node(node.parent().unwrap()).unwrap();
         let import_attributes_type = self.get_type_from_import_attributes(ast::get_import_attributes(node.parent().unwrap()));
         let module_symbol = self.resolve_external_module_name(node, module_specifier, false /*ignoreErrors*/, import_attributes_type);

@@ -179,7 +179,8 @@ pub enum Kind {
     BigIntKeyword,
     OverrideKeyword,
     OfKeyword,
-    DeferKeyword, // LastKeyword and LastToken and LastContextualKeyword
+    DeferKeyword,
+    SourceKeyword, // LastKeyword and LastToken and LastContextualKeyword
     // Parse tree nodes
     // Names
     QualifiedName,
@@ -395,7 +396,7 @@ impl Kind {
     pub const FirstReservedWord: Kind = Kind::BreakKeyword;
     pub const LastReservedWord: Kind = Kind::WithKeyword;
     pub const FirstKeyword: Kind = Kind::BreakKeyword;
-    pub const LastKeyword: Kind = Kind::DeferKeyword;
+    pub const LastKeyword: Kind = Kind::SourceKeyword;
     pub const FirstFutureReservedWord: Kind = Kind::ImplementsKeyword;
     pub const LastFutureReservedWord: Kind = Kind::YieldKeyword;
     pub const FirstTypeNode: Kind = Kind::TypePredicate;
@@ -418,7 +419,7 @@ impl Kind {
     pub const FirstJSDocTagNode: Kind = Kind::JSDocUnknownTag;
     pub const LastJSDocTagNode: Kind = Kind::JSDocImportTag;
     pub const FirstContextualKeyword: Kind = Kind::AbstractKeyword;
-    pub const LastContextualKeyword: Kind = Kind::DeferKeyword;
+    pub const LastContextualKeyword: Kind = Kind::SourceKeyword;
     pub const LastUnaryOperator: Kind = Kind::TildeToken;
     pub const FirstTriviaToken: Kind = Kind::SingleLineCommentTrivia;
     pub const LastTriviaToken: Kind = Kind::ConflictMarkerTrivia;

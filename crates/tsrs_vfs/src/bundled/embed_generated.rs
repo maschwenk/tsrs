@@ -107,6 +107,7 @@ pub(crate) static EMBEDDED_CONTENTS: &[(&str, &str)] = &[
     ("libs/lib.esnext.disposable.d.ts", include_str!("../../libs/lib.esnext.disposable.d.ts")),
     ("libs/lib.esnext.full.d.ts", include_str!("../../libs/lib.esnext.full.d.ts")),
     ("libs/lib.esnext.intl.d.ts", include_str!("../../libs/lib.esnext.intl.d.ts")),
+    ("libs/lib.esnext.modulesource.d.ts", include_str!("../../libs/lib.esnext.modulesource.d.ts")),
     ("libs/lib.esnext.promise.d.ts", include_str!("../../libs/lib.esnext.promise.d.ts")),
     ("libs/lib.esnext.sharedmemory.d.ts", include_str!("../../libs/lib.esnext.sharedmemory.d.ts")),
     ("libs/lib.esnext.temporal.d.ts", include_str!("../../libs/lib.esnext.temporal.d.ts")),

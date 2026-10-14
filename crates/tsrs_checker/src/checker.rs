@@ -1380,6 +1380,7 @@ pub struct Checker {
     pub get_global_promise_type_cache: Option<P<Type>>,
     pub get_global_promise_type_checked_cache: Option<P<Type>>,
     pub get_global_promise_like_type_cache: Option<P<Type>>,
+    pub get_global_abstract_module_source_type_cache: Option<P<Type>>,
     pub get_global_promise_constructor_symbol_cache: Option<Option<P<Symbol>>>,
     pub get_global_promise_constructor_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
     pub get_global_omit_symbol_cache: Option<Option<P<Symbol>>>,
@@ -1791,6 +1792,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         get_global_promise_type_cache: None,
         get_global_promise_type_checked_cache: None,
         get_global_promise_like_type_cache: None,
+        get_global_abstract_module_source_type_cache: None,
         get_global_promise_constructor_symbol_cache: None,
         get_global_promise_constructor_symbol_or_nil_cache: None,
         get_global_omit_symbol_cache: None,
@@ -2290,6 +2292,7 @@ impl Checker {
             get_global_promise_type_cache: base.get_global_promise_type_cache.clone(),
             get_global_promise_type_checked_cache: base.get_global_promise_type_checked_cache.clone(),
             get_global_promise_like_type_cache: base.get_global_promise_like_type_cache.clone(),
+            get_global_abstract_module_source_type_cache: base.get_global_abstract_module_source_type_cache.clone(),
             get_global_promise_constructor_symbol_cache: base.get_global_promise_constructor_symbol_cache.clone(),
             get_global_promise_constructor_symbol_or_nil_cache: base.get_global_promise_constructor_symbol_or_nil_cache.clone(),
             get_global_omit_symbol_cache: base.get_global_omit_symbol_cache.clone(),
@@ -2640,6 +2643,13 @@ impl Checker {
         }
         let t = self.get_global_type("ImportCallOptions", 0 /*arity*/, true /*reportErrors*/);
         self.get_global_import_call_options_type_checked_cache = Some(t);
+        t
+    }
+
+    pub(crate) fn get_global_abstract_module_source_type(&mut self) -> P<Type> {
+        if let Some(t) = self.get_global_abstract_module_source_type_cache { return t; }
+        let t = self.get_global_type("AbstractModuleSource", 0, true);
+        self.get_global_abstract_module_source_type_cache = Some(t);
         t
     }
 

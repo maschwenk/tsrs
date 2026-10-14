@@ -415,7 +415,7 @@ impl Session {
         let uri = file.to_uri(self.current_directory());
         let prepared = snapshot.get_default_project(&uri).is_some_and(|project| {
             snapshot.auto_imports.as_ref().is_some_and(|registry| {
-                registry.is_prepared_for_importing_file(&uri.file_name(), &tsrs_ls::autoimport::ProjectID(project.id().0.clone()), snapshot.user_preferences())
+                registry.is_prepared_for_importing_file(&uri.file_name(), &tsrs_ls::autoimport::ProjectID(project.id().0), snapshot.user_preferences())
             })
         });
         if !prepared {

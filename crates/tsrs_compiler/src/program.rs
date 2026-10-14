@@ -797,7 +797,7 @@ impl Program {
             && ast::is_external_or_common_js_module(file1) == ast::is_external_or_common_js_module(file2)
             && file1.uses_uri_style_node_core_modules() == file2.uses_uri_style_node_core_modules()
             && equal_func(file1.imports(), file2.imports(), |n1, n2| {
-                equal_module_specifiers(n1, n2) && self.get_mode_for_usage_location(file1, n1) == self.get_mode_for_usage_location(file2, n2)
+                equal_module_specifiers(n1, n2) && self.get_mode_for_usage_location(file1, n1) == self.get_mode_for_usage_location(file2, n2) && n1.parent().is_some_and(ast::is_source_phase_import) == n2.parent().is_some_and(ast::is_source_phase_import)
             })
             && equal_func(file1.module_augmentations(), file2.module_augmentations(), equal_module_augmentation_names)
             && file1.ambient_module_names() == file2.ambient_module_names()
@@ -1040,6 +1040,7 @@ impl Program {
 
     pub fn get_resolved_module_from_module_specifier(&self, file: P<SourceFile>, module_specifier: P<Node>) -> Option<P<ResolvedModule>> {
         assert!(ast::is_string_literal_like(module_specifier), "moduleSpecifier must be a StringLiteralLike");
+        if module_specifier.parent().is_some_and(ast::is_source_phase_import) { return None; }
         let mode = self.get_mode_for_usage_location(file, module_specifier);
         self.get_resolved_module(file, module_specifier.text(), mode)
     }
@@ -2676,7 +2677,7 @@ impl Program {
                     continue;
                 }
                 'imports: for &imp in file.imports() {
-                    if tspath::is_external_module_name_relative(imp.text()) {
+                    if imp.parent().is_some_and(ast::is_source_phase_import) || tspath::is_external_module_name_relative(imp.text()) {
                         continue;
                     }
                     if self.resolved_modules.contains_key(file.path()) {
@@ -3151,6 +3152,12 @@ fn plain_js_errors() -> &'static FxHashSet<i32> {
             &diagnostics::A_rest_parameter_must_be_last_in_a_parameter_list,
             &diagnostics::A_rest_parameter_or_binding_pattern_may_not_have_a_trailing_comma,
             &diagnostics::A_return_statement_cannot_be_used_inside_a_class_static_block,
+            &diagnostics::A_source_phase_import_must_specify_a_local_binding,
+            &diagnostics::Named_and_namespace_imports_are_not_allowed_in_a_source_phase_import,
+            &diagnostics::Optional_chaining_cannot_be_used_with_import_source,
+            &diagnostics::Source_phase_imports_are_not_allowed_on_statements_that_compile_to_CommonJS_require_calls,
+            &diagnostics::Source_phase_imports_are_only_supported_when_the_module_option_is_set_to_esnext_nodenext_or_preserve,
+            &diagnostics::X_0_is_not_a_valid_meta_property_for_keyword_import_Did_you_mean_meta_defer_or_source,
             &diagnostics::A_set_accessor_cannot_have_rest_parameter,
             &diagnostics::A_set_accessor_must_have_exactly_one_parameter,
             &diagnostics::An_export_declaration_can_only_be_used_at_the_top_level_of_a_module,
