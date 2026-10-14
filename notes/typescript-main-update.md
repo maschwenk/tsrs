@@ -51,3 +51,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64617](https://github.com/microsoft/TypeScript/commit/afd02f14863971d7a1b424f7c5a7e6a4eb2f92a7) | Port JSDocParameterTag type annotation lookup. |
 | [#64636](https://github.com/microsoft/TypeScript/commit/1a78786ca751559170857893fe3e01eba7c69997) | Port import-type qualifier exclusion from local import reference marking. |
 | [#64160](https://github.com/microsoft/TypeScript/commit/21b260b4e7e5123727f33d506fa686fecc258b1a) | Port top-level import filtering in document symbols. |
+| [#64633](https://github.com/microsoft/TypeScript/commit/c3f14c2fe8971440d5a8bf1432d36bb26828c7c7) | Port object-literal parent tracking during decorator metadata emit. |

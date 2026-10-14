@@ -58,6 +58,7 @@ impl MetadataTransformer {
         match node.kind() {
             Kind::ClassDeclaration => self.visit_class_declaration(node),
             Kind::ClassExpression => self.visit_class_expression(node),
+            Kind::ObjectLiteralExpression => self.visit_object_literal_expression(node),
             Kind::PropertyDeclaration => self.visit_property_declaration(node),
             Kind::MethodDeclaration => self.visit_method_declaration(node),
             Kind::SetAccessor => self.visit_set_accessor(node),
@@ -92,6 +93,14 @@ impl MetadataTransformer {
     // metadata.go:77
     fn set_current_lexical_scope(&self, node: Option<P<Node>>) {
         self.current_lexical_scope.set(node);
+    }
+
+    fn visit_object_literal_expression(&self, node: P<Node>) -> P<Node> {
+        let old_parent = self.parent.get();
+        self.parent.set(Some(node));
+        let result = self.visitor().visit_each_child(Some(node)).unwrap();
+        self.set_parent(old_parent);
+        result
     }
 
     // metadata.go:81
