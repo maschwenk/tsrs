@@ -180,7 +180,7 @@ importers:
 
   playground:
     dependencies:
-      '@ts-rs/wasm':
+      '@tsrs/wasm':
         specifier: link:../npm/tsrs-wasm
         version: link:../npm/tsrs-wasm
       lz-string:

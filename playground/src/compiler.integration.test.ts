@@ -12,7 +12,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { tsc } from "@ts-rs/wasm";
+import { tsc } from "@tsrs/wasm";
 import { compilerDefaults, createProject } from "./project";
 
 const native =

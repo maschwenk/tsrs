@@ -13,7 +13,7 @@
     "test:browser": "playwright test"
   },
   "dependencies": {
-    "@ts-rs/wasm": "link:../npm/tsrs-wasm",
+    "@tsrs/wasm": "link:../npm/tsrs-wasm",
     "lz-string": "1.5.0",
     "monaco-editor": "0.32.1",
     "react": "18.3.1",

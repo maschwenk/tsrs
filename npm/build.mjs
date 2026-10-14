@@ -15,7 +15,7 @@
 //
 // The package name comes from npm/tsrs/package.json; Linux platform packages have a `-gnu` or `-musl` suffix. The version is
 // `<workspace version>-ts<[workspace.metadata.typescript] version>` from the workspace Cargo.toml, for every package
-// including `@ts-rs/wasm` (npm/tsrs-wasm). The main package lists exactly the platforms given here, so a
+// including `@tsrs/wasm` (npm/tsrs-wasm). The main package lists exactly the platforms given here, so a
 // release never points at a platform package that was not published.
 
 import { execFileSync } from "node:child_process";
@@ -200,7 +200,7 @@ function stripSourceConditions(value) {
     );
 }
 
-// `@ts-rs/wasm`: npm/tsrs-wasm's published files, the module tools/wasm/build.sh wrote, LICENSE and NOTICE,
+// `@tsrs/wasm`: npm/tsrs-wasm's published files, the module tools/wasm/build.sh wrote, LICENSE and NOTICE,
 // at the native packages' version (the module's `--version` prints the same, from crates/tsrs_execute/build.rs).
 function stageWasm(module, out, versions, license, notice) {
     const srcDir = path.join(npmDir, "tsrs-wasm");
@@ -284,7 +284,7 @@ function main() {
         if (!fs.existsSync(binary)) throw new Error(`binary for ${triple} not found: ${binary}`);
         const { os, cpu, libc } = TARGETS[triple];
         const platform = `${os}-${cpu}${libc ? `-${libc === "glibc" ? "gnu" : libc}` : ""}`;
-        const platformName = `@ts-rs/${platform}`;
+        const platformName = `@tsrs/${platform}`;
         const dir = path.join(opts.out, `${baseName}-${platform}`);
         fs.mkdirSync(dir, { recursive: true });
 

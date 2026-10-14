@@ -16,7 +16,7 @@ export default function getExePath() {
 
     const __dirname = path.dirname(fileURLToPath(import.meta.url));
     const pkg = JSON.parse(fs.readFileSync(path.join(__dirname, "..", "package.json"), "utf8"));
-    const platformPackagePrefix = "@ts-rs/";
+    const platformPackagePrefix = "@tsrs/";
     const platformPackageName = getPlatformPackageName();
     const exeName = process.platform === "win32" ? "tsrs.exe" : "tsrs";
 

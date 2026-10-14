@@ -1,5 +1,5 @@
 import metadata from "./generated/compiler.json";
-import type { Diagnostic } from "@ts-rs/wasm";
+import type { Diagnostic } from "@tsrs/wasm";
 
 export type CompilerOptions = Record<string, unknown>;
 export interface SourceFile {

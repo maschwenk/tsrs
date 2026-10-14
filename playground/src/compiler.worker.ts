@@ -1,5 +1,5 @@
-import { tsc } from "@ts-rs/wasm";
-import wasmURL from "@ts-rs/wasm/tsrs.wasm?url";
+import { tsc } from "@tsrs/wasm";
+import wasmURL from "@tsrs/wasm/tsrs.wasm?url";
 import { createProject, type Compilation, type CompileRequest } from "./project";
 
 self.onmessage = async ({ data }: MessageEvent<CompileRequest>) => {

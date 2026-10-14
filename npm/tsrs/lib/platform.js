@@ -37,5 +37,5 @@ function isMusl() {
 
 export function getPlatformPackageName(os = process.platform, cpu = process.arch) {
     const suffix = os === "linux" ? (isMusl() ? "-musl" : "-gnu") : "";
-    return `@ts-rs/${os}-${cpu}${suffix}`;
+    return `@tsrs/${os}-${cpu}${suffix}`;
 }
