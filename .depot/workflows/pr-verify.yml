@@ -60,7 +60,7 @@ env:
   CARGO_TERM_COLOR: always
   # `depot ci run` and pull request runs have no inputs; these fallbacks are the defaults above.
   RUNNER_CPUS: ${{ inputs.cpus || '32' }}
-  BASE: ${{ inputs.base || 'port/typescript-64794' }}
+  BASE: ${{ inputs.base || 'main' }}
   PROJECTS: ${{ inputs.projects || 'all' }}
   CHECKERS: ${{ inputs.checkers || '1,4,16,32' }}
   REPS: ${{ inputs.reps || '3' }}
