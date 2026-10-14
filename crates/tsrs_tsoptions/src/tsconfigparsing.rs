@@ -1743,7 +1743,6 @@ fn parse_json_config_file_content_worker(
     let mut seen_content_mapper_extensions: FxHashSet<String> =
         FxHashSet::with_capacity_and_hasher(total_content_mapper_extensions, Default::default());
     let mut content_mapper_extensions: Vec<String> = Vec::with_capacity(total_content_mapper_extensions);
-    let native_extensions: Vec<&str> = tspath::ALL_SUPPORTED_EXTENSIONS_WITH_JSON.iter().flat_map(|g| g.iter().copied()).collect();
     let canonical_extension = |extension: &str| tspath::get_canonical_file_name(extension, host.fs().use_case_sensitive_file_names());
     for (j, mapper) in content_mappers.iter_mut().enumerate() {
         let mut valid_extensions: Vec<String> = Vec::with_capacity(mapper.definition.extensions.len());
@@ -1756,7 +1755,9 @@ fn parse_json_config_file_content_worker(
                     content_mapper_source_file,
                     ext_node,
                 ));
-            } else if native_extensions.iter().any(|native_extension| tsrs_core::stringutil::equal_fold(native_extension, ext)) {
+            } else if ext.contains(['/', '\\']) {
+                errors.push(set_content_mapper_diagnostic_location(new_compiler_diagnostic(&diagnostics::Content_mapper_extension_0_must_not_contain_path_separators, &[ext]), content_mapper_source_file, ext_node));
+            } else if crate::contentmappers::has_reserved_source_extension(ext) {
                 errors.push(set_content_mapper_diagnostic_location(
                     new_compiler_diagnostic(
                         &diagnostics::Content_mapper_file_extension_0_is_a_built_in_extension_and_cannot_be_registered_by_a_content_mapper,
@@ -1780,6 +1781,17 @@ fn parse_json_config_file_content_worker(
             }
         }
         mapper.definition.extensions = valid_extensions;
+        if let Some(output_extensions) = &mapper.definition.output_extensions { for (source, output) in output_extensions {
+            let output_node = get_content_mapper_syntax(content_mapper_source_file, Some(content_mapper_indices[j]), "outputExtensions");
+            for extension in [source, output] {
+                let diagnostic = if extension.contains(['/', '\\']) { Some(new_compiler_diagnostic(&diagnostics::Content_mapper_extension_0_must_not_contain_path_separators, &[extension])) }
+                    else if !crate::contentmappers::is_valid_extension(extension) { Some(new_compiler_diagnostic(&diagnostics::Content_mapper_output_extension_0_must_be_non_empty_and_begin_with_a, &[extension])) } else { None };
+                if let Some(diagnostic) = diagnostic { errors.push(set_content_mapper_diagnostic_location(diagnostic, content_mapper_source_file, output_node)); }
+            }
+            if !mapper.definition.extensions.iter().any(|extension| canonical_extension(extension) == canonical_extension(source)) {
+                errors.push(set_content_mapper_diagnostic_location(new_compiler_diagnostic(&diagnostics::Content_mapper_output_extension_mapping_source_0_is_not_registered_by_this_content_mapper, &[source]), content_mapper_source_file, output_node));
+            }
+        } }
     }
     if !content_mappers.is_empty() && !parsed_config.options.as_ref().is_some_and(|o| o.run_external_code.is_true()) {
         errors.push(set_content_mapper_diagnostic_location(
@@ -1816,6 +1828,19 @@ fn parse_json_config_file_content_worker(
                 continue;
             }
             mapper.manifest = manifest;
+            let raw_mapper = &content_mappers_of_raw.slice_value.as_ref().unwrap()[content_mapper_indices[j]];
+            if !raw_mapper.as_object().is_some_and(|object| object.contains_key("outputExtensions")) {
+                mapper.definition.output_extensions.clone_from(&mapper.manifest.default_output_extensions);
+            }
+            for source in &mapper.definition.extensions {
+                let output = crate::parsedcommandline::get_content_mapper_output_extension(mapper.definition.output_extensions.as_ref(), source, !host.fs().use_case_sensitive_file_names());
+                if let Some(output) = output {
+                    let identity = source == output || !host.fs().use_case_sensitive_file_names() && tsrs_core::stringutil::equal_fold(source, output);
+                    if !identity && !parsed_config.options.as_ref().is_some_and(|options| options.rewrite_relative_import_extensions.is_true()) {
+                        errors.push(set_content_mapper_diagnostic_location(new_compiler_diagnostic(&diagnostics::Content_mapper_output_extension_mapping_from_0_to_1_requires_rewriteRelativeImportExtensions_to_be_enabled, &[source, &output]), content_mapper_source_file, get_content_mapper_syntax(content_mapper_source_file, Some(content_mapper_indices[j]), "")));
+                    }
+                }
+            }
             resolved_content_mappers.push(mapper);
         }
         content_mappers = resolved_content_mappers;

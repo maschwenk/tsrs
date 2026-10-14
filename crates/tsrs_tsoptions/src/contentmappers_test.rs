@@ -270,3 +270,20 @@ fn test_transform_identity_hashes_declared_options_json() {
     let undeclared = Mapper { manifest: Manifest { name: "vue".to_string(), ..Default::default() }, ..Default::default() };
     assert_eq!(undeclared.transform_identity(Some(&options)), xxhash_rust::xxh3::xxh3_128(b"vue\0\0{}"));
 }
+
+// Port of TestContentMapperExtensionRewritesPreserveLongestExtension.
+#[test]
+fn content_mapper_extension_rewrites_preserve_longest_extension() {
+    let mut mapper = mapper("", &[".z", ".y.z", ".identity.y.z", ".unmapped.y.z"]);
+    mapper.definition.output_extensions = Some([(String::from(".z"), String::from(".js")), (String::from(".y.z"), String::from(".mjs")), (String::from(".identity.y.z"), String::from(".identity.y.z"))].into());
+    let mut command_line = new_parsed_command_line(P::new(CompilerOptions { declaration: Tristate::True, out_dir: "/dist".to_string(), ..Default::default() }), vec!["/src/Widget.y.z".to_string(), "/src/Widget.identity.y.z".to_string(), "/src/Widget.unmapped.y.z".to_string()], Vec::new(), ComparePathsOptions { current_directory: "/".to_string(), use_case_sensitive_file_names: true });
+    command_line.parsed_config.content_mappers = vec![mapper].into();
+    let rewrites = command_line.content_mapper_extension_rewrites();
+    assert!(rewrites.windows(2).all(|pair| pair[0].source.len() >= pair[1].source.len()));
+    for file in ["./Widget.identity.y.z", "./Widget.unmapped.y.z"] { assert_eq!(tsrs_core::tspath::rewrite_extension(file, &rewrites, true), (file.to_string(), false)); }
+    assert_eq!(command_line.get_output_file_names(), ["/dist/Widget.d.mts", "/dist/Widget.d.identity.y.z.ts", "/dist/Widget.d.unmapped.y.z.ts"]);
+    command_line.compare_paths_options.use_case_sensitive_file_names = false;
+    let options = CompilerOptions { out_dir: "/dist".to_string(), ..Default::default() };
+    assert_eq!(crate::outputpaths::get_external_output_file_name("/src/Widget.Y.Z", &options, &command_line), "/dist/Widget.mjs");
+    assert_eq!(crate::outputpaths::get_output_declaration_file_name_worker("/src/Widget.Y.Z", &options, &command_line), "/dist/Widget.d.mts");
+}

@@ -980,9 +980,15 @@ impl crate::NodeFactory {
 
     // Allocates a new Call expression to the `__rewriteRelativeImportExtension` helper.
     // factory.go:1300
-    pub fn new_rewrite_relative_import_extensions_helper(&self, first_argument: P<Node>, preserve_jsx: bool) -> P<Node> {
+    pub fn new_rewrite_relative_import_extensions_helper(&self, first_argument: P<Node>, preserve_jsx: bool, extra_extensions: &[tsrs_core::tspath::ExtensionRewrite], case_sensitive: bool) -> P<Node> {
         self.emit_context().request_emit_helper(helper(&REWRITE_RELATIVE_IMPORT_EXTENSIONS_HELPER));
-        let arguments = if preserve_jsx { vec![first_argument, self.new_token(Kind::TrueKeyword)] } else { vec![first_argument] };
+        let mut arguments = if preserve_jsx { vec![first_argument, self.new_token(Kind::TrueKeyword)] } else { vec![first_argument] };
+        if !extra_extensions.is_empty() {
+            arguments = vec![first_argument, self.new_token(if preserve_jsx { Kind::TrueKeyword } else { Kind::FalseKeyword })];
+            let properties = extra_extensions.iter().map(|extension| self.new_property_assignment(None, self.new_string_literal(self.alloc_text(&extension.source), TokenFlags::None), None, None, self.new_string_literal(self.alloc_text(&extension.target), TokenFlags::None))).collect();
+            arguments.push(self.new_object_literal_expression(self.new_node_list(properties), false));
+            if !case_sensitive { arguments.push(self.new_token(Kind::TrueKeyword)); }
+        }
         self.new_helper_call("__rewriteRelativeImportExtension", arguments)
     }
 }

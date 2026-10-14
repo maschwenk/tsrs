@@ -116,6 +116,7 @@ impl ExpectedValue for ContentMapperFields {
                         "exec" => self.exec.unmarshal_json(member),
                         "compilerOptions" => self.compiler_options.unmarshal_json(member),
                         "dynamicConfig" => self.dynamic_config.unmarshal_json(member),
+                        "outputExtensions" => self.output_extensions.unmarshal_json(member),
                         _ => {}
                     }
                 }

@@ -29,6 +29,8 @@ pub struct TransformOptions {
     pub compiler_options: P<CompilerOptions>,
     pub resolver: ReferenceResolverRef,
     pub emit_resolver: Option<Resolver>,
+    pub content_mapper_extension_rewrites: Vec<tspath::ExtensionRewrite>,
+    pub case_sensitive: bool,
     pub get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
 }
 

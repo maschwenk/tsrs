@@ -19792,7 +19792,7 @@ impl Json for ProjectInfoResult {
 }
 
 // Inline content mapper manifest supplied by a contributing extension.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ContentMapperManifest {
     // Human-readable mapper name.
     pub name: String,
@@ -19811,6 +19811,9 @@ pub struct ContentMapperManifest {
 
     // Whether the mapper uses project-scoped dynamic configuration.
     pub dynamic_config: Option<bool>,
+
+    // Default source-to-runtime output extension mappings.
+    pub output_extensions: Option<OrderedMap<String, String>>,
 }
 
 impl Json for ContentMapperManifest {
@@ -19818,13 +19821,14 @@ impl Json for ContentMapperManifest {
     const GO_POINTER: bool = true;
 
     fn to_json(&self) -> Value {
-        let mut w = ObjectWriter::new(6);
+        let mut w = ObjectWriter::new(7);
         w.field("name", &self.name);
         w.opt("version", &self.version);
         w.field("exec", &self.exec);
         w.opt("cwd", &self.cwd);
         w.opt("compilerOptions", &self.compiler_options);
         w.opt("dynamicConfig", &self.dynamic_config);
+        w.opt("outputExtensions", &self.output_extensions);
         w.finish()
     }
 
@@ -19848,6 +19852,7 @@ impl Json for ContentMapperManifest {
                 "cwd" => s.cwd = opt_non_null(k, v, Self::GO_TYPE)?,
                 "compilerOptions" => s.compiler_options = opt_non_null(k, v, Self::GO_TYPE)?,
                 "dynamicConfig" => s.dynamic_config = opt_non_null(k, v, Self::GO_TYPE)?,
+                "outputExtensions" => s.output_extensions = opt_non_null(k, v, Self::GO_TYPE)?,
                 _ => {}
             }
         }

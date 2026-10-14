@@ -7,3 +7,6 @@ pub use extension::*;
 pub use dynamic::*;
 pub use ignoredpaths::*;
 pub use path::*;
+
+mod extensionrewrite;
+pub use extensionrewrite::*;

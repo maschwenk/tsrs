@@ -1,6 +1,6 @@
 use crate::stringutil;
 use crate::tspath;
-use crate::{CompilerOptions, ScriptKind};
+use crate::ScriptKind;
 use rustc_hash::FxHashMap;
 use std::borrow::Cow;
 use std::cmp::Ordering;
@@ -603,13 +603,6 @@ pub fn index_after(s: &str, pattern: &str, start_index: usize) -> Option<usize> 
     s[start_index..]
         .find(pattern)
         .map(|matched| matched + start_index)
-}
-
-pub fn should_rewrite_module_specifier(specifier: &str, compiler_options: &CompilerOptions) -> bool {
-    compiler_options.rewrite_relative_import_extensions.is_true()
-        && tspath::path_is_relative(specifier)
-        && !tspath::is_declaration_file_name(specifier)
-        && tspath::has_ts_file_extension(specifier)
 }
 
 pub fn single_element_slice<T>(element: Option<T>) -> Vec<T> {

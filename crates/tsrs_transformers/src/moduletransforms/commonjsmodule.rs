@@ -12,6 +12,8 @@ pub struct CommonJSModuleTransformer {
     pub(crate) assignment_pattern_visitor: OnceCell<NodeVisitor>, // visits assignment patterns in a destructuring assignment
     pub compiler_options: P<CompilerOptions>,
     pub resolver: ReferenceResolverRef,
+    pub(crate) content_mapper_extension_rewrites: Vec<tspath::ExtensionRewrite>,
+    pub(crate) case_sensitive: bool,
     pub get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
     pub module_kind: ModuleKind,
     pub language_version: ScriptTarget,
@@ -32,6 +34,8 @@ pub fn new_common_js_module_transformer(opts: &TransformOptions) -> Option<P<Tra
         discarded_value_visitor: OnceCell::new(),
         assignment_pattern_visitor: OnceCell::new(),
         compiler_options,
+        content_mapper_extension_rewrites: opts.content_mapper_extension_rewrites.clone(),
+        case_sensitive: opts.case_sensitive,
         resolver: opts.resolver,
         get_emit_module_format_of_file: Rc::clone(&opts.get_emit_module_format_of_file),
         module_kind: compiler_options.get_emit_module_kind(),

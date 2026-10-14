@@ -91,6 +91,7 @@ bitflags! {
         const NoSyntacticPrinter = 1 << 1;
         const DoNotIncludeSymbolChain = 1 << 2;
         const AllowUnresolvedNames = 1 << 3;
+        const RewriteModuleSpecifiers = 1 << 4;
     }
 }
 

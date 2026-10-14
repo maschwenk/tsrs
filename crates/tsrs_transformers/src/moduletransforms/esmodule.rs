@@ -3,6 +3,8 @@ use super::*;
 pub struct ESModuleTransformer {
     pub base: Transformer,
     compiler_options: P<CompilerOptions>,
+    pub(crate) content_mapper_extension_rewrites: Vec<tspath::ExtensionRewrite>,
+    pub(crate) case_sensitive: bool,
     get_emit_module_format_of_file: Rc<dyn Fn(P<SourceFile>) -> ModuleKind>,
     current_source_file: Cell<Option<P<SourceFile>>>,
     import_require_statements: RefCell<Option<importRequireStatements>>,
@@ -20,6 +22,8 @@ pub fn new_es_module_transformer(opts: &TransformOptions) -> Option<P<Transforme
     let tx = P::new(ESModuleTransformer {
         base: Transformer::default(),
         compiler_options,
+        content_mapper_extension_rewrites: opts.content_mapper_extension_rewrites.clone(),
+        case_sensitive: opts.case_sensitive,
         get_emit_module_format_of_file: Rc::clone(&opts.get_emit_module_format_of_file),
         current_source_file: Cell::new(None),
         import_require_statements: RefCell::new(None),
@@ -117,7 +121,7 @@ impl ESModuleTransformer {
             return node;
         }
         let n = node.as_import_declaration();
-        let updated_module_specifier = rewrite_module_specifier(self.emit_context(), Some(n.module_specifier), &self.compiler_options);
+        let updated_module_specifier = rewrite_module_specifier(self.emit_context(), Some(n.module_specifier), &self.compiler_options, &self.content_mapper_extension_rewrites, self.case_sensitive);
         let mut v = self.visitor();
         self.factory().update_import_declaration(node, None /*modifiers*/, v.visit_node(n.import_clause), updated_module_specifier.unwrap(), v.visit_node(n.attributes()))
     }
@@ -201,7 +205,7 @@ impl ESModuleTransformer {
 
         let f = self.factory();
         let mut v = self.visitor();
-        let updated_module_specifier = rewrite_module_specifier(self.emit_context(), Some(module_specifier), &self.compiler_options);
+        let updated_module_specifier = rewrite_module_specifier(self.emit_context(), Some(module_specifier), &self.compiler_options, &self.content_mapper_extension_rewrites, self.case_sensitive);
         if self.compiler_options.module > ModuleKind::ES2015 || n.export_clause.is_none_or(|c| !ast::is_namespace_export(c)) {
             // Either ill-formed or don't need to be transformed.
             return Some(f.update_export_declaration(node, None /*modifiers*/, false /*isTypeOnly*/, n.export_clause, updated_module_specifier, v.visit_node(n.attributes())));
@@ -260,9 +264,9 @@ impl ESModuleTransformer {
 
         let first = n.arguments.nodes()[0];
         let argument = if ast::is_string_literal_like(first) {
-            rewrite_module_specifier(self.emit_context(), Some(first), &self.compiler_options).unwrap()
+            rewrite_module_specifier(self.emit_context(), Some(first), &self.compiler_options, &self.content_mapper_extension_rewrites, self.case_sensitive).unwrap()
         } else {
-            f.new_rewrite_relative_import_extensions_helper(first, self.compiler_options.jsx == tsrs_core::JsxEmit::Preserve)
+            f.new_rewrite_relative_import_extensions_helper(first, self.compiler_options.jsx == tsrs_core::JsxEmit::Preserve, &self.content_mapper_extension_rewrites, self.case_sensitive)
         };
 
         let mut arguments: Vec<P<Node>> = Vec::new();
@@ -284,7 +288,7 @@ impl ESModuleTransformer {
 
         let mut args: Vec<P<Node>> = Vec::new();
         if let Some(module_name) = module_name {
-            args.push(rewrite_module_specifier(emit_context, Some(module_name), &self.compiler_options).unwrap());
+            args.push(rewrite_module_specifier(emit_context, Some(module_name), &self.compiler_options, &self.content_mapper_extension_rewrites, self.case_sensitive).unwrap());
         }
 
         if self.compiler_options.get_emit_module_kind() == ModuleKind::Preserve {

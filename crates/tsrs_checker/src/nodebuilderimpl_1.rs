@@ -1456,7 +1456,19 @@ impl NodeBuilderImpl {
                 result.import_attributes_type = Some(import_attributes_type);
             }
         }
+        result.specifier = self.rewrite_content_mapped_module_specifier(c, result.specifier);
         result
+    }
+
+    pub(crate) fn rewrite_content_mapped_module_specifier(&self, c: &mut Checker, specifier: &'static str) -> &'static str {
+        if self.ctx().internal_flags.get().intersects(InternalFlags::RewriteModuleSpecifiers) && c.compiler_options.rewrite_relative_import_extensions.is_true() {
+            let host = self.ctx().host;
+            let rewrites = host.content_mapper_extension_rewrites();
+            if tspath::should_rewrite_extension(specifier, &rewrites, host.use_case_sensitive_file_names()) {
+                return self.f.alloc_text(&tspath::rewrite_extension(specifier, &rewrites, host.use_case_sensitive_file_names()).0);
+            }
+        }
+        specifier
     }
 
     // nodebuilderimpl.go:1347

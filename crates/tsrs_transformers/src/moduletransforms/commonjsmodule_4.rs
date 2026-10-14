@@ -521,9 +521,9 @@ impl CommonJSModuleTransformer {
         } else if first_argument.is_some() && rewrite_or_shim {
             let first_argument = first_argument.unwrap();
             if ast::is_string_literal(first_argument) {
-                rewrite_module_specifier(self.emit_context(), Some(first_argument), &self.compiler_options)
+                rewrite_module_specifier(self.emit_context(), Some(first_argument), &self.compiler_options, &self.content_mapper_extension_rewrites, self.case_sensitive)
             } else {
-                Some(f.new_rewrite_relative_import_extensions_helper(first_argument, self.compiler_options.jsx == tsrs_core::JsxEmit::Preserve))
+                Some(f.new_rewrite_relative_import_extensions_helper(first_argument, self.compiler_options.jsx == tsrs_core::JsxEmit::Preserve, &self.content_mapper_extension_rewrites, self.case_sensitive))
             }
         } else {
             first_argument
@@ -603,11 +603,11 @@ impl CommonJSModuleTransformer {
             let mut first_argument = v.visit_node(Some(n.arguments.nodes()[0])).unwrap();
             let first_argument_changed;
             if ast::is_string_literal_like(first_argument) {
-                let rewritten = rewrite_module_specifier(self.emit_context(), Some(first_argument), &self.compiler_options).unwrap();
+                let rewritten = rewrite_module_specifier(self.emit_context(), Some(first_argument), &self.compiler_options, &self.content_mapper_extension_rewrites, self.case_sensitive).unwrap();
                 first_argument_changed = rewritten != first_argument;
                 first_argument = rewritten;
             } else {
-                first_argument = f.new_rewrite_relative_import_extensions_helper(first_argument, self.compiler_options.jsx == tsrs_core::JsxEmit::Preserve);
+                first_argument = f.new_rewrite_relative_import_extensions_helper(first_argument, self.compiler_options.jsx == tsrs_core::JsxEmit::Preserve, &self.content_mapper_extension_rewrites, self.case_sensitive);
                 first_argument_changed = true;
             }
 

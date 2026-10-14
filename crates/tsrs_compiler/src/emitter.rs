@@ -622,6 +622,8 @@ mod emit {
             compiler_options: options,
             resolver: reference_resolver,
             emit_resolver: Some(emit_resolver),
+            content_mapper_extension_rewrites: tsrs_tsoptions::outputpaths::OutputPathsHost::content_mapper_extension_rewrites(host),
+            case_sensitive: host.use_case_sensitive_file_names(),
             get_emit_module_format_of_file: std::rc::Rc::new(move |file| host.get_emit_module_format_of_file(file)),
         };
 

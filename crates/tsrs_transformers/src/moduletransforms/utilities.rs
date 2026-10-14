@@ -13,12 +13,14 @@ pub(crate) fn is_declaration_name_of_enum_or_namespace(emit_context: P<EmitConte
 }
 
 // utilities.go:22
-pub(crate) fn rewrite_module_specifier(emit_context: P<EmitContext>, node: Option<P<Node>>, compiler_options: &CompilerOptions) -> Option<P<Node>> {
+pub(crate) fn rewrite_module_specifier(emit_context: P<EmitContext>, node: Option<P<Node>>, compiler_options: &CompilerOptions, rewrites: &[tspath::ExtensionRewrite], case_sensitive: bool) -> Option<P<Node>> {
     let node = node?;
-    if !ast::is_string_literal(node) || !tsrs_core::should_rewrite_module_specifier(node.text(), compiler_options) {
+    if !ast::is_string_literal(node) || !compiler_options.rewrite_relative_import_extensions.is_true() {
         return Some(node);
     }
-    let updated_text = tspath::change_extension(node.text(), tsrs_tsoptions::outputpaths::get_output_extension(node.text(), compiler_options.jsx));
+    if !tspath::should_rewrite_extension(node.text(), rewrites, case_sensitive) { return Some(node); }
+    let (updated, rewritten) = tspath::rewrite_extension(node.text(), rewrites, case_sensitive);
+    let updated_text = if rewritten { updated } else { tspath::change_extension(node.text(), tsrs_tsoptions::outputpaths::get_output_extension(node.text(), compiler_options.jsx)) };
     if updated_text != node.text() {
         let updated = emit_context.factory.new_string_literal(alloc_str(&updated_text), node.as_string_literal().token_flags());
         emit_context.set_original(updated, node);

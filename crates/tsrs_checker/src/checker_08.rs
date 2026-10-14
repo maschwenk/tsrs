@@ -263,6 +263,10 @@ impl Checker {
             }
 
             if error_node.is_some() && !resolved_module.is_custom_resolution {
+                let rewrites = self.program.content_mapper_extension_rewrites();
+                let case_sensitive = self.program.use_case_sensitive_file_names();
+                let (_, mapped_specifier) = tspath::rewrite_extension(module_reference, &rewrites, case_sensitive);
+                let check_declaration_rewrite = self.compiler_options.get_emit_declarations() && mapped_specifier && tspath::path_is_relative(module_reference) && !importing_source_file.is_declaration_file.get();
                 if resolved_module.resolved_using_ts_extension && tspath::is_declaration_file_name(module_reference) {
                     if ast::find_ancestor(location, ast::is_emittable_import).is_some() {
                         let ts_extension = tspath::try_extract_ts_extension(module_reference);
@@ -288,13 +292,14 @@ impl Checker {
                         self.error(error_node, &diagnostics::An_import_path_can_only_end_with_a_0_extension_when_allowImportingTsExtensions_is_enabled, &[&ts_extension]);
                     }
                 } else if self.compiler_options.rewrite_relative_import_extensions.is_true()
-                    && !location.flags().intersects(NodeFlags::Ambient)
+                    && (!location.flags().intersects(NodeFlags::Ambient) || check_declaration_rewrite)
                     && !tspath::is_declaration_file_name(module_reference)
-                    && !ast::is_literal_import_type_node(location)
-                    && !ast::is_part_of_type_only_import_or_export_declaration(location)
+                    && (!ast::is_literal_import_type_node(location) && !ast::is_part_of_type_only_import_or_export_declaration(location) || check_declaration_rewrite)
                 {
-                    let should_rewrite = should_rewrite_module_specifier(module_reference, &self.compiler_options);
-                    if !resolved_module.resolved_using_ts_extension && should_rewrite {
+                    let should_rewrite = tspath::should_rewrite_extension(module_reference, &rewrites, case_sensitive);
+                    let mapped_source = !source_file.content_mapper().is_empty() && tspath::rewrite_extension(source_file.file_name(), &rewrites, case_sensitive).1;
+                    let resolved_using_rewritable_extension = resolved_module.resolved_using_ts_extension || resolved_module.resolved_using_extra_extensions && !source_file.content_mapper().is_empty() && mapped_source;
+                    if !resolved_using_rewritable_extension && should_rewrite {
                         let relative_to_source_file = tspath::get_relative_path_from_file(
                             &tspath::get_normalized_absolute_path(importing_source_file.file_name(), &self.program.get_current_directory()),
                             resolved_module.resolved_file_name,
@@ -304,10 +309,10 @@ impl Checker {
                             },
                         );
                         self.error(error_node, &diagnostics::This_relative_import_path_is_unsafe_to_rewrite_because_it_looks_like_a_file_name_but_actually_resolves_to_0, &[&relative_to_source_file]);
-                    } else if resolved_module.resolved_using_ts_extension && !should_rewrite && self.program.source_file_may_be_emitted(source_file, false) {
-                        let ext = tspath::get_any_extension_from_path(module_reference, &[], false);
+                    } else if resolved_using_rewritable_extension && !should_rewrite && (mapped_source || self.program.source_file_may_be_emitted(source_file, false)) {
+                        let ext = if mapped_source { tspath::get_extension_rewrite(source_file.file_name(), &rewrites, case_sensitive).unwrap().source.clone() } else { tspath::get_any_extension_from_path(module_reference, &[], false) };
                         self.error(error_node, &diagnostics::This_import_uses_a_0_extension_to_resolve_to_an_input_TypeScript_file_but_will_not_be_rewritten_during_emit_because_it_is_not_a_relative_path, &[&ext]);
-                    } else if resolved_module.resolved_using_ts_extension && should_rewrite {
+                    } else if resolved_using_rewritable_extension && should_rewrite {
                         if let Some(redirect) = self.program.get_redirect_for_resolution(source_file) {
                             let own_root_dir = self.program.common_source_directory();
                             let other_root_dir = redirect.common_source_directory();

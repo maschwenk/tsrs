@@ -886,6 +886,8 @@ impl Program {
     }
 
     // program.go:537
+    pub fn content_mapper_extension_rewrites(&self) -> Vec<tspath::ExtensionRewrite> { self.opts.config.content_mapper_extension_rewrites() }
+
     pub fn command_line(&self) -> P<ParsedCommandLine> {
         self.opts.config
     }
@@ -1975,6 +1977,7 @@ impl Program {
         if !options.no_emit.is_true() && !options.suppress_output_path_check.is_true() {
             let mut emit_files_seen: FxHashSet<String> = FxHashSet::default();
             let mut emit_file_names: Vec<String> = Vec::new();
+            let external_output_source_files: Vec<P<SourceFile>> = self.get_source_files().iter().copied().filter(|file| !file.content_mapper().is_empty() && !self.is_source_file_from_external_library(*file) && self.get_project_reference_from_source(file.path()).is_none()).collect();
             tsoptions::outputpaths::for_each_emitted_file(
                 &*self,
                 &options,
@@ -1983,9 +1986,11 @@ impl Program {
                     emit_file_names.push(paths.source_map_file_path().to_string());
                     emit_file_names.push(paths.declaration_file_path().to_string());
                     emit_file_names.push(paths.declaration_map_path().to_string());
+                    emit_file_names.push(paths.external_output_file_path().to_string());
                     false
                 },
                 &self.get_source_files_to_emit(None, false, false),
+                &external_output_source_files,
                 false,
             );
             emit_file_names.push(self.opts.config.get_build_info_file_name());
@@ -3231,6 +3236,8 @@ impl tsoptions::outputpaths::OutputPathsHost for Program {
     fn content_mapper_extensions(&self) -> Vec<String> {
         self.opts.config.content_mapper_extensions()
     }
+
+    fn content_mapper_extension_rewrites(&self) -> Vec<tspath::ExtensionRewrite> { self.opts.config.content_mapper_extension_rewrites() }
 
     fn get_current_directory(&self) -> &str {
         Program::get_current_directory(self)

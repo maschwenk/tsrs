@@ -263,6 +263,18 @@ impl DeclarationTransformer {
     pub(crate) fn rewrite_module_specifier(&self, parent: P<Node>, input: Option<P<Node>>) -> Option<P<Node>> {
         let input = input?;
         self.result_has_external_module_indicator.set(self.result_has_external_module_indicator.get() || (parent.kind() != Kind::ModuleDeclaration && parent.kind() != Kind::ImportType));
+        if ast::is_string_literal(input) && self.compiler_options.rewrite_relative_import_extensions.is_true() {
+            let rewrites = self.host.content_mapper_extension_rewrites();
+            let case_sensitive = self.host.use_case_sensitive_file_names();
+            if !tspath::should_rewrite_extension(input.text(), &rewrites, case_sensitive) { return Some(input); }
+            let (rewritten, ok) = tspath::rewrite_extension(input.text(), &rewrites, case_sensitive);
+            if ok {
+                let result = self.factory().new_string_literal(self.factory().alloc_text(&rewritten), input.as_string_literal().token_flags());
+                self.emit_context().set_original(result, input);
+                self.emit_context().assign_comment_and_source_map_ranges(result, input);
+                return Some(result);
+            }
+        }
         Some(input)
     }
 

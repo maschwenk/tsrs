@@ -98,6 +98,7 @@ pub fn get_common_source_directory(
 pub trait OutputPathsHost {
     fn common_source_directory(&self) -> String;
     fn content_mapper_extensions(&self) -> Vec<String>;
+    fn content_mapper_extension_rewrites(&self) -> Vec<tspath::ExtensionRewrite> { Vec::new() }
     fn get_current_directory(&self) -> &str;
     fn use_case_sensitive_file_names(&self) -> bool;
 }
@@ -108,9 +109,11 @@ pub struct OutputPaths {
     source_map_file_path: String,
     declaration_file_path: String,
     declaration_map_path: String,
+    external_output_file_path: String,
 }
 
 impl OutputPaths {
+    pub fn external_output_file_path(&self) -> &str { &self.external_output_file_path }
     pub fn declaration_file_path(&self) -> &str {
         &self.declaration_file_path
     }
@@ -150,6 +153,7 @@ pub fn get_output_paths_for(source_file: P<SourceFile>, options: &CompilerOption
             },
         ) == std::cmp::Ordering::Equal;
     let mut paths = OutputPaths::default();
+    if !source_file.content_mapper().is_empty() { paths.external_output_file_path = get_external_output_file_name(source_file.file_name(), options, host); }
     if source_file.content_mapper().is_empty()
         && (force.js || options.emit_declaration_only != tsrs_core::Tristate::True)
         && !is_json_emitted_to_same_location
@@ -169,15 +173,26 @@ pub fn get_output_paths_for(source_file: P<SourceFile>, options: &CompilerOption
 }
 
 pub fn for_each_emitted_file(
-    host: &dyn OutputPathsHost,
-    options: &CompilerOptions,
-    mut action: impl FnMut(&OutputPaths, P<SourceFile>) -> bool,
-    source_files: &[P<SourceFile>],
-    force_dts_emit: bool,
+    host: &dyn OutputPathsHost, options: &CompilerOptions, mut action: impl FnMut(&OutputPaths, P<SourceFile>) -> bool,
+    source_files: &[P<SourceFile>], external_output_source_files: &[P<SourceFile>], force_dts_emit: bool,
 ) -> bool {
-    source_files.iter().any(|&source_file| {
-        action(&get_output_paths_for(source_file, options, host, ForceEmitPaths { dts: force_dts_emit, ..Default::default() }), source_file)
-    })
+    let mut seen = rustc_hash::FxHashSet::default();
+    for &source_file in source_files {
+        seen.insert(source_file);
+        if action(&get_output_paths_for(source_file, options, host, ForceEmitPaths { dts: force_dts_emit, ..Default::default() }), source_file) { return true; }
+    }
+    for &source_file in external_output_source_files {
+        if seen.contains(&source_file) { continue; }
+        let paths = OutputPaths { external_output_file_path: get_external_output_file_name(source_file.file_name(), options, host), ..Default::default() };
+        if action(&paths, source_file) { return true; }
+    }
+    false
+}
+
+pub fn get_external_output_file_name(input_file_name: &str, options: &CompilerOptions, host: &dyn OutputPathsHost) -> String {
+    let output_path = get_output_path_without_changing_extension(input_file_name, &options.out_dir, host);
+    let (rewritten, ok) = tspath::rewrite_extension(&output_path, &host.content_mapper_extension_rewrites(), host.use_case_sensitive_file_names());
+    if ok { rewritten } else { String::new() }
 }
 
 fn extension_refs(extensions: &[String]) -> Vec<&str> {
@@ -262,11 +277,17 @@ pub fn get_declaration_emit_output_file_path(file: &str, options: &CompilerOptio
 }
 
 pub fn change_to_declaration_extension(path: &str, host: &dyn OutputPathsHost) -> String {
+    let (rewritten, ok) = tspath::rewrite_extension(path, &host.content_mapper_extension_rewrites(), host.use_case_sensitive_file_names());
+    if ok { return change_to_declaration_extension_worker(&rewritten); }
     let extensions = host.content_mapper_extensions();
     let extension = tspath::get_longest_extension_from_path(path, &extension_refs(&extensions), false);
     if !extension.is_empty() {
         return format!("{}.d{}.ts", tspath::remove_extension(path, &extension), extension);
     }
+    change_to_declaration_extension_worker(path)
+}
+
+fn change_to_declaration_extension_worker(path: &str) -> String {
     let mut path_without_extension = tspath::remove_file_extension(path);
     if path_without_extension == path {
         let extension = tspath::get_any_extension_from_path(path, &[], false);

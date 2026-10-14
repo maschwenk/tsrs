@@ -903,6 +903,10 @@ impl Checker {
                                     if !self.has_signature_with_arity_greater_than(symbol, 4) {
                                         self.error(Some(location), &diagnostics::This_syntax_requires_an_imported_helper_named_1_with_2_parameters_which_is_not_compatible_with_the_one_in_0_Consider_upgrading_your_version_of_0, &[&externalHelpersModuleNameText, &name, &5]);
                                     }
+                                } else if helper.intersects(ExternalEmitHelpers::RewriteRelativeImportExtension) && !self.program.content_mapper_extension_rewrites().is_empty() {
+                                    if !self.has_signature_with_arity_greater_than(symbol, 3) {
+                                        self.error(Some(location), &diagnostics::This_syntax_requires_an_imported_helper_named_1_with_2_parameters_which_is_not_compatible_with_the_one_in_0_Consider_upgrading_your_version_of_0, &[&externalHelpersModuleNameText, &name, &4]);
+                                    }
                                 }
                             }
                         }

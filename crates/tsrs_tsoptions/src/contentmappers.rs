@@ -5,6 +5,8 @@
 // A mapper is declared in tsconfig (Definition), its implementation is described by fields in its npm
 // package's package.json (Manifest), and the two are combined once the package is resolved (Mapper).
 
+use std::collections::BTreeMap;
+
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
 use tsrs_core::collections::{new_ordered_map_with_size_hint, OrderedMap};
 use tsrs_core::json;
@@ -23,6 +25,7 @@ use crate::tsconfigparsing::{ParseConfigHost, ResolverHost};
 pub struct Definition {
     pub package: String,
     pub extensions: Vec<String>,
+    pub output_extensions: Option<BTreeMap<String, String>>,
     // json.Value: the raw JSON text, empty when absent.
     pub options: String,
 }
@@ -38,6 +41,7 @@ pub struct Manifest {
     pub exec: Vec<String>,
     pub compiler_options: Vec<String>,
     pub dynamic_config: bool,
+    pub default_output_extensions: Option<BTreeMap<String, String>>,
 }
 
 // Mapper is a resolved content mapper: its tsconfig Definition combined with the Manifest resolved from
@@ -59,6 +63,16 @@ pub(crate) const SUPPORTED_VIRTUAL_EXTENSIONS: [&str; 9] = [".js", ".jsx", ".mjs
 // contentmapper.go:62
 pub fn is_supported_virtual_extension(extension: &str) -> bool {
     SUPPORTED_VIRTUAL_EXTENSIONS.contains(&extension)
+}
+
+pub fn is_valid_extension(extension: &str) -> bool {
+    extension.len() > 1 && extension.starts_with('.') && !extension.contains(['/', '\\'])
+}
+
+pub fn has_reserved_source_extension(extension: &str) -> bool {
+    tspath::ALL_SUPPORTED_EXTENSIONS_WITH_JSON.iter().flat_map(|extensions| extensions.iter()).any(|native| {
+        extension.len() >= native.len() && extension.get(extension.len() - native.len()..).is_some_and(|suffix| tsrs_core::stringutil::equal_fold(suffix, native))
+    })
 }
 
 impl Mapper {
@@ -123,6 +137,15 @@ impl Mapper {
         buf.extend_from_slice(self.definition.options.as_bytes());
         buf.push(0);
         buf.extend_from_slice(options_json.as_bytes());
+        if let Some(extensions) = &self.definition.output_extensions { if !extensions.is_empty() {
+            buf.push(0);
+            let mut output_json = String::from("{");
+            for (i, (source, target)) in extensions.iter().enumerate() {
+                if i > 0 { output_json.push(','); }
+                json::write_compact_string(&mut output_json, source); output_json.push(':'); json::write_compact_string(&mut output_json, target);
+            }
+            output_json.push('}'); buf.extend_from_slice(output_json.as_bytes());
+        } }
         xxhash_rust::xxh3::xxh3_128(&buf)
     }
 
@@ -246,5 +269,18 @@ pub(crate) fn resolve_content_mapper_manifest(
     };
     let compiler_options = cm.compiler_options.value.clone();
     let dynamic_config = cm.dynamic_config.value;
-    (Manifest { name, version, exec, compiler_options, dynamic_config }, package_directory, None)
+    let default_output_extensions = match cm.output_extensions.get_value() {
+        Some(values) => Some(values.iter().map(|(source, target)| (source.clone(), target.clone())).collect::<BTreeMap<_, _>>()),
+        None if cm.output_extensions.is_present() => return (Manifest::default(), package_directory, Some(new_compiler_diagnostic(&diagnostics::The_typescript_contentMapper_outputExtensions_of_the_content_mapper_package_0_must_be_an_object_with_string_values, &[&package_name]))),
+        None => None,
+    };
+    if let Some(values) = &default_output_extensions { for (source, output) in values {
+        for extension in [source, output] { if extension.contains(['/', '\\']) {
+            return (Manifest::default(), package_directory, Some(new_compiler_diagnostic(&diagnostics::Content_mapper_extension_0_must_not_contain_path_separators, &[extension])));
+        } }
+        if !is_valid_extension(source) || !is_valid_extension(output) {
+            return (Manifest::default(), package_directory, Some(new_compiler_diagnostic(&diagnostics::The_typescript_contentMapper_outputExtensions_of_the_content_mapper_package_0_contains_an_invalid_mapping_from_1_to_2_Extensions_must_be_non_empty_and_begin_with_a, &[&package_name, source, output])));
+        }
+    } }
+    (Manifest { name, version, exec, compiler_options, dynamic_config, default_output_extensions }, package_directory, None)
 }

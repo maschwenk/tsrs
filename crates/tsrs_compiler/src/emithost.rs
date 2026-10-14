@@ -41,6 +41,8 @@ impl OutputPathsHost for EmitHost {
         OutputPathsHost::content_mapper_extensions(self.program)
     }
 
+    fn content_mapper_extension_rewrites(&self) -> Vec<tsrs_core::tspath::ExtensionRewrite> { self.program.content_mapper_extension_rewrites() }
+
     fn get_current_directory(&self) -> &str {
         let _outer = tsrs_core::arena::escape_scratch();
         OutputPathsHost::get_current_directory(self.program)

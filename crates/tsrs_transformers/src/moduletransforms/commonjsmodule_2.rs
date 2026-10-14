@@ -93,7 +93,7 @@ impl CommonJSModuleTransformer {
         let mut args: Vec<P<Node>> = Vec::new();
         let module_name = get_external_module_name_literal(f, node, self.current_source_file.get(), None /*host*/, None /*resolver*/, &self.compiler_options);
         if let Some(module_name) = module_name {
-            args.push(rewrite_module_specifier(self.emit_context(), Some(module_name), &self.compiler_options).unwrap());
+            args.push(rewrite_module_specifier(self.emit_context(), Some(module_name), &self.compiler_options, &self.content_mapper_extension_rewrites, self.case_sensitive).unwrap());
         }
         f.new_call_expression(f.new_identifier("require"), None /*questionDotToken*/, None /*typeArguments*/, f.new_node_list(args), NodeFlags::None)
     }

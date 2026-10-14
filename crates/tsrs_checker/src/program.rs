@@ -32,6 +32,7 @@ pub trait Program: Send + Sync {
     fn get_project_reference_from_source(&self, path: &Path) -> Option<P<SourceOutputAndProjectReference>>;
     fn get_redirect_for_resolution(&self, file: P<SourceFile>) -> Option<P<ParsedCommandLine>>;
     fn common_source_directory(&self) -> String;
+    fn content_mapper_extension_rewrites(&self) -> Vec<tsrs_core::tspath::ExtensionRewrite> { self.as_module_specifier_generation_host().content_mapper_extension_rewrites() }
 
     // Host (modulespecifiers.ModuleSpecifierGenerationHost) methods used by checker code
     fn use_case_sensitive_file_names(&self) -> bool;

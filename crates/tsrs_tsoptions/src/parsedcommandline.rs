@@ -385,6 +385,20 @@ impl ParsedCommandLine {
         self.content_mappers().iter().flat_map(|m| m.definition.extensions.iter().cloned()).collect()
     }
 
+    pub fn content_mapper_extension_rewrites(&self) -> Vec<tspath::ExtensionRewrite> {
+        let mut result = Vec::new(); let mut has_non_identity_mapping = false;
+        let ignore_case = !self.use_case_sensitive_file_names();
+        for mapper in self.content_mappers() { for source in &mapper.definition.extensions {
+            let target = get_content_mapper_output_extension(mapper.definition.output_extensions.as_ref(), source, ignore_case);
+            let target = if target.is_none_or(|target| target == source || ignore_case && tsrs_core::stringutil::equal_fold(target, source)) { source.as_str() }
+                else { has_non_identity_mapping = true; target.unwrap() };
+            result.push(tspath::ExtensionRewrite { source: source.clone(), target: target.to_string() });
+        } }
+        if !has_non_identity_mapping { return Vec::new(); }
+        result.sort_by_key(|rewrite| std::cmp::Reverse(rewrite.source.len()));
+        result
+    }
+
     // GetContentMapperForFileName returns the configured content mapper whose extensions include fileName,
     // or nil if no content mapper is registered for the file's extension.
     pub fn get_content_mapper_for_file_name(&self, file_name: &str) -> Option<&Mapper> {
@@ -565,6 +579,8 @@ impl OutputPathsHost for ParsedCommandLine {
         ParsedCommandLine::content_mapper_extensions(self)
     }
 
+    fn content_mapper_extension_rewrites(&self) -> Vec<tspath::ExtensionRewrite> { ParsedCommandLine::content_mapper_extension_rewrites(self) }
+
     fn get_current_directory(&self) -> &str {
         ParsedCommandLine::get_current_directory(self)
     }
@@ -599,4 +615,11 @@ mod common_source_directory_region_test {
         assert_eq!(diagnostics.len(), 1);
         assert!(Region::containing(diagnostics[0].addr()).is_none_or(|r| !r.ptr_eq(&region)), "rootDir error allocated in the region");
     }
+}
+
+pub(crate) fn get_content_mapper_output_extension<'a>(extensions: Option<&'a std::collections::BTreeMap<String, String>>, source: &str, ignore_case: bool) -> Option<&'a str> {
+    let extensions = extensions?;
+    if let Some(output) = extensions.get(source) { return Some(output); }
+    if ignore_case { return extensions.iter().find_map(|(key, value)| tsrs_core::stringutil::equal_fold(key, source).then_some(value.as_str())); }
+    None
 }

@@ -141,6 +141,10 @@ pub(crate) fn parse_content_mapper(value: &CompilerOptionsValue) -> (Option<Mapp
             &[&"contentMapper.extensions", &"string[]"],
         ));
     }
+    if let Some(output) = v.get("outputExtensions").filter(|v| !matches!(v, CompilerOptionsValue::Null)) {
+        if let Some(values) = parse_string_string_map_strict(output) { mapper.definition.output_extensions = Some(values); }
+        else { errors.push(new_compiler_diagnostic(&diagnostics::Compiler_option_0_requires_a_value_of_type_1, &[&"contentMapper.outputExtensions", &"object or null"])); }
+    }
     if let Some(options) = v.get("options") {
         if !matches!(options, CompilerOptionsValue::Object(_)) {
             errors.push(new_compiler_diagnostic(
@@ -949,4 +953,9 @@ pub fn convert_option_to_absolute_path(
         }
     }
     None
+}
+
+pub(crate) fn parse_string_string_map_strict(value: &CompilerOptionsValue) -> Option<std::collections::BTreeMap<String, String>> {
+    let CompilerOptionsValue::Object(object) = value else { return None; };
+    object.iter().map(|(key, value)| match value { CompilerOptionsValue::String(value) => Some((key.clone(), value.clone())), _ => None }).collect()
 }

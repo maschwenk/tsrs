@@ -98,6 +98,7 @@ pub struct ContentMapperFields {
     pub exec: Expected<Vec<String>>,
     pub compiler_options: Expected<Vec<String>>,
     pub dynamic_config: Expected<bool>,
+    pub output_extensions: Expected<rustc_hash::FxHashMap<String, String>>,
 }
 
 #[derive(Clone, Debug, Default, PartialEq)]

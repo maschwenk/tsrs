@@ -38,7 +38,7 @@ fn emit(files: &[(&str, &str)], file: &str, transforms: &[TransformerFactory]) -
     let resolver = Resolver::new(checker.new_emit_resolver(context), slot);
     let options = program.options();
     slot.lend(&mut checker, || {
-        let opts = TransformOptions { context, compiler_options: options, resolver: ReferenceResolverRef::Emit(resolver), emit_resolver: Some(resolver), get_emit_module_format_of_file: Rc::new(|_| tsrs_core::ModuleKind::ESNext) };
+        let opts = TransformOptions { context, compiler_options: options, resolver: ReferenceResolverRef::Emit(resolver), emit_resolver: Some(resolver), content_mapper_extension_rewrites: Vec::new(), case_sensitive: true, get_emit_module_format_of_file: Rc::new(|_| tsrs_core::ModuleKind::ESNext) };
         let mut result = source_file;
         result = transforms.iter().fold(result, |mut result, t| {
             result = t(&opts).unwrap().transform_source_file(result);

@@ -299,9 +299,10 @@ impl NodeBuilderImpl {
 
     // nodecopy.go:270
     pub(crate) fn rewrite_module_specifier(&self, c: &mut Checker, parent: P<Node>, lit: P<Node>) -> P<Node> {
-        let new_name = self.get_module_specifier_override(c, parent, lit);
+        let mut new_name = self.get_module_specifier_override(c, parent, lit);
         if new_name.is_empty() {
-            return lit;
+            new_name = self.rewrite_content_mapped_module_specifier(c, lit.text()).to_string();
+            if new_name == lit.text() { return lit; }
         }
         let res = self.f.new_string_literal(self.f.alloc_text(&new_name), TokenFlags::None);
         self.e.set_original(res, lit);

@@ -85,3 +85,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64563](https://github.com/microsoft/TypeScript/commit/09e0de0ade21319a358d8dcea11240c0a322bbef) | Azure parallel release jobs; tsrs maintains its own release pipeline. |
 | [#64762](https://github.com/microsoft/TypeScript/commit/3789ddb12afb2ab5adc4f1148603bf3f38319f50) | Port the three-high-bit symbol table identity mask. |
 | [#64741](https://github.com/microsoft/TypeScript/commit/6656c1c12c9049974a9adcd4653a895f26ab16ce) | Upstream GitHub Actions dependency bumps; tsrs maintains its own workflow pins. |
+| [#64581](https://github.com/microsoft/TypeScript/commit/c9b2c8e29c934895a720c14d8e424580d2e56721) | Port manifest/config validation, runtime and declaration rewriting, output collision paths, helper arity and cache identity; longest-extension/path units and process e2e cases pass. LSP contributions and the runner external-code gap remain documented. |

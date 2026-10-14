@@ -143,7 +143,7 @@ pub const declarationEmitNodeBuilderFlags: nodebuilder::Flags = nodebuilder::Fla
     .union(nodebuilder::Flags::NoTruncation);
 
 // transform.go:223
-pub const declarationEmitInternalNodeBuilderFlags: nodebuilder::InternalFlags = nodebuilder::InternalFlags::AllowUnresolvedNames;
+pub const declarationEmitInternalNodeBuilderFlags: nodebuilder::InternalFlags = nodebuilder::InternalFlags::AllowUnresolvedNames.union(nodebuilder::InternalFlags::RewriteModuleSpecifiers);
 
 // tracker.go:12
 pub struct SymbolTrackerImpl {
