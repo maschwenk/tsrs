@@ -34,9 +34,6 @@ targeting `wasm32-wasip1` (WASI Preview 1).
 
 ## Learn more
 
-The [browser playground](https://github.com/maschwenk/tsrs/tree/main/playground) can be run locally or built as a static
-site. It uses tsrs WASM for checking and emit, with the vendored TypeScript Playground UI and basic editor features.
-
 - [CLI usage and memory tuning](https://github.com/maschwenk/tsrs/blob/main/docs/USAGE.md)
 - [Editor setup](https://github.com/maschwenk/tsrs/blob/main/docs/LSP.md#editor-setup)
 - [Node API (unstable)](https://github.com/maschwenk/tsrs/blob/main/docs/NODE_API.md)
