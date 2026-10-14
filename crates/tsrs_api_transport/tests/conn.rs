@@ -306,3 +306,54 @@ fn stdout_frames_are_flushed_per_message() {
     assert_eq!(&buf[..n], b"\x93\x04\xc4\x04ping\xc4\x06\"pong\"");
     let _ = std::io::stdout().flush();
 }
+
+// Port of TestSyncConnAnswersNestedRequestsInStackOrder: an outer handler finishes while a deeper call waits.
+#[test]
+fn sync_nested_requests_finish_in_stack_order() {
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    struct GatedHandler {
+        a: Mutex<mpsc::Receiver<()>>,
+        b: Mutex<mpsc::Receiver<()>>,
+        entered: mpsc::Sender<String>,
+        finished: mpsc::Sender<String>,
+    }
+    impl Handler for GatedHandler {
+        fn handle_request(&self, _: &RequestContext, _: &str, params: &[u8]) -> Result<Response, ApiError> {
+            let name: String = serde_json::from_slice(params).unwrap();
+            self.entered.send(name.clone()).unwrap();
+            let gate = if name == "a" { &self.a } else { &self.b };
+            gate.lock().unwrap().recv().unwrap();
+            self.finished.send(name).unwrap();
+            Ok(Response::Json(params.to_vec()))
+        }
+    }
+    let (server_r, client_w) = std::io::pipe().unwrap();
+    let (client_r, server_w) = std::io::pipe().unwrap();
+    let (a_tx, a_rx) = mpsc::channel();
+    let (b_tx, b_rx) = mpsc::channel();
+    let (entered_tx, entered_rx) = mpsc::channel();
+    let (finished_tx, finished_rx) = mpsc::channel();
+    let handler = Arc::new(GatedHandler { a: Mutex::new(a_rx), b: Mutex::new(b_rx), entered: entered_tx, finished: finished_tx });
+    let conn = SyncConn::new(Box::new(MessagePackReader::new(server_r)), Box::new(MessagePackWriter::new(server_w)), handler, ConnOptions::default());
+    let mut peer = MsgpackClient { w: MessagePackWriter::new(client_w), r: MessagePackReader::new(client_r) };
+    let a_conn = Arc::clone(&conn);
+    let a = thread::spawn(move || a_conn.call("callback", Some(br#""a""#)));
+    assert_eq!(peer.recv(), (MessageType::Call, "callback".into(), br#""a""#.to_vec()));
+    peer.send(MessageType::Request, "resolve", br#""a""#);
+    assert_eq!(entered_rx.recv_timeout(Duration::from_secs(2)).unwrap(), "a");
+    let b = thread::spawn(move || conn.call("callback", Some(br#""b""#)));
+    assert_eq!(peer.recv(), (MessageType::Call, "callback".into(), br#""b""#.to_vec()));
+    peer.send(MessageType::Request, "resolve", br#""b""#);
+    assert_eq!(entered_rx.recv_timeout(Duration::from_secs(2)).unwrap(), "b");
+    a_tx.send(()).unwrap();
+    assert_eq!(finished_rx.recv_timeout(Duration::from_secs(2)).unwrap(), "a");
+    b_tx.send(()).unwrap();
+    assert_eq!(peer.recv(), (MessageType::Response, "resolve".into(), br#""b""#.to_vec()));
+    peer.send(MessageType::CallResponse, "callback", br#""b""#);
+    assert_eq!(peer.recv(), (MessageType::Response, "resolve".into(), br#""a""#.to_vec()));
+    peer.send(MessageType::CallResponse, "callback", br#""a""#);
+    assert_eq!(b.join().unwrap().unwrap(), br#""b""#);
+    assert_eq!(a.join().unwrap().unwrap(), br#""a""#);
+}

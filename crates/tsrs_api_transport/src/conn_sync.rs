@@ -4,7 +4,7 @@
 // released, so callbacks can re-enter the API without deadlocking.
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::{Arc, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::time::Instant;
 
 use crate::handler::{panic_message, Caller, CancellationToken, Handler, RequestContext};
@@ -15,6 +15,8 @@ use crate::timing::{server_timing_snapshot, TimingCollector, METHOD_GET_SERVER_T
 struct SyncIo {
     reader: Box<dyn ProtocolReader>,
     writer: Box<dyn ProtocolWriter>,
+    calls: u32,
+    reading: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -38,6 +40,7 @@ impl Default for ConnOptions {
 
 pub struct SyncConn {
     io: Mutex<SyncIo>,
+    turn: Condvar,
     handler: Arc<dyn Handler>,
     timing: Option<TimingCollector>,
     cancel: CancellationToken,
@@ -52,7 +55,8 @@ impl SyncConn {
         options: ConnOptions,
     ) -> Arc<SyncConn> {
         Arc::new(SyncConn {
-            io: Mutex::new(SyncIo { reader, writer }),
+            io: Mutex::new(SyncIo { reader, writer, calls: 0, reading: false }),
+            turn: Condvar::new(),
             handler,
             timing: options.collect_timing.then(TimingCollector::default),
             cancel: options.shutdown.child(),
@@ -72,6 +76,15 @@ impl SyncConn {
 
     fn lock(&self) -> MutexGuard<'_, SyncIo> {
         self.io.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    fn lock_turn(&self, depth: u32) -> MutexGuard<'_, SyncIo> {
+        let mut io = self.lock();
+        while io.calls != depth {
+            io = self.turn.wait(io).unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+        io.reading = depth > 0;
+        io
     }
 
     /// Run: processes messages until EOF (Ok) or a fatal error. Always cancels the token on exit.
@@ -105,9 +118,9 @@ impl SyncConn {
         }
     }
 
-    fn write_response(&self, msg: &Message, result: &Result<Response, ResponseError>) -> Result<(), TransportError> {
+    fn write_response(&self, msg: &Message, depth: u32, result: &Result<Response, ResponseError>) -> Result<(), TransportError> {
         let id = msg.id.as_ref().expect("requests have an id");
-        let mut io = self.lock();
+        let mut io = self.lock_turn(depth);
         let written = match result {
             Ok(response) => match io.writer.write_response(id, response) {
                 // An unencodable result (invalid JSON from the handler) becomes an error response
@@ -125,13 +138,13 @@ impl SyncConn {
             METHOD_GET_SERVER_TIMING => {
                 let snapshot = server_timing_snapshot(self.timing.as_ref());
                 let json = serde_json::to_vec(&snapshot).expect("timing serializes");
-                return self.write_response(msg, &Ok(Response::Json(json)));
+                return self.write_response(msg, depth, &Ok(Response::Json(json)));
             }
             METHOD_RESET_SERVER_TIMING => {
                 if let Some(t) = &self.timing {
                     t.reset();
                 }
-                return self.write_response(msg, &Ok(Response::null()));
+                return self.write_response(msg, depth, &Ok(Response::null()));
             }
             _ => {}
         }
@@ -148,7 +161,7 @@ impl SyncConn {
             Ok(Err(err)) => Err(ResponseError { code: err.code, message: err.message }),
             Err(payload) => Err(ResponseError::internal(panic_message(&*payload))),
         };
-        self.write_response(msg, &result)
+        self.write_response(msg, depth, &result)
     }
 
     fn handle_notification(&self, msg: &Message, depth: u32) {
@@ -159,39 +172,64 @@ impl SyncConn {
     /// Call: serialized; the msgpack protocol uses the method name as the response ID.
     pub fn call(&self, method: &str, params: Option<&[u8]>) -> Result<Vec<u8>, TransportError> {
         let mut io = self.lock();
+        while io.reading {
+            io = self.turn.wait(io).unwrap_or_else(std::sync::PoisonError::into_inner);
+        }
+        io.calls += 1;
+        io.reading = true;
+        let depth = io.calls;
+        let (mut io, result) = self.call_worker(io, depth, method, params);
+        io.calls -= 1;
+        io.reading = false;
+        self.turn.notify_all();
+        result
+    }
+
+    fn call_worker<'a>(
+        &'a self,
+        mut io: MutexGuard<'a, SyncIo>,
+        depth: u32,
+        method: &str,
+        params: Option<&[u8]>,
+    ) -> (MutexGuard<'a, SyncIo>, Result<Vec<u8>, TransportError>) {
         if self.cancel.is_cancelled() {
-            return Err(TransportError::Closed(None));
+            return (io, Err(TransportError::Closed(None)));
         }
         let id = crate::message::Id::string(method);
-        io.writer.write_request(&id, method, params)?;
-        let depth = crate::reentrancy::current_request().map_or(0, |cx| cx.depth) + 1;
+        if let Err(error) = io.writer.write_request(&id, method, params) {
+            return (io, Err(error));
+        }
         let _waiting = self.callbacks.enter();
         loop {
             let msg = match io.reader.read_message() {
                 Ok(msg) => msg,
-                Err(TransportError::Eof) => return Err(TransportError::Closed(Some(format!("EOF while waiting for {method:?} response")))),
-                Err(e) => return Err(e),
+                Err(TransportError::Eof) => return (io, Err(TransportError::Closed(Some(format!("EOF while waiting for {method:?} response"))))),
+                Err(e) => return (io, Err(e)),
             };
             if msg.is_response() && msg.id.as_ref().is_some_and(|id| id.to_string() == method) {
                 if let Some(err) = msg.error {
-                    return Err(TransportError::Remote(err));
+                    return (io, Err(TransportError::Remote(err)));
                 }
-                return Ok(msg.result.unwrap_or_default());
+                return (io, Ok(msg.result.unwrap_or_default()));
             }
             if msg.is_request() {
+                io.reading = false;
+                self.turn.notify_all();
                 drop(io);
                 let handled = self.handle_request(&msg, depth);
                 io = self.lock();
-                handled?;
+                if let Err(error) = handled { return (io, Err(error)); }
                 continue;
             }
             if msg.is_notification() {
+                io.reading = false;
+                self.turn.notify_all();
                 drop(io);
                 self.handle_notification(&msg, depth);
-                io = self.lock();
+                io = self.lock_turn(depth);
                 continue;
             }
-            return Err(TransportError::Unexpected(format!("ipc: unexpected message while waiting for {method:?} response")));
+            return (io, Err(TransportError::Unexpected(format!("ipc: unexpected message while waiting for {method:?} response"))));
         }
     }
 
