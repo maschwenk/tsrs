@@ -619,6 +619,7 @@ pub struct CacheStats {
 #[derive(Default)]
 pub struct RegistryChange {
     pub requested_file: Path,
+    pub requested_file_name: String,
     pub open_files: FxHashMap<Path, String>,
     pub changed: Set<lsproto::DocumentUri>,
     pub created: Set<lsproto::DocumentUri>,
@@ -727,15 +728,11 @@ impl registryBuilder<'_> {
         // Go maps (random iteration order).
         let mut needed_projects: FxHashSet<ProjectID> = FxHashSet::default();
         let mut needed_directories: FxHashMap<Path, String> = FxHashMap::default();
-        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the needed project set and directory map keyed by path; Go ranges the map too")]
-        for (path, file_name) in &change.open_files {
-            if let (Some(project_id), _) = self.host.get_default_project(path) {
-                needed_projects.insert(project_id);
-            }
+        let mut add_needed_directories = |path: &Path, file_name: &str| {
             if tspath::is_dynamic_file_name(file_name) {
-                continue;
+                return;
             }
-            let mut dir = file_name.clone();
+            let mut dir = file_name.to_string();
             let mut dir_path = path.clone();
             loop {
                 dir = tspath::get_directory_path(&dir);
@@ -749,6 +746,16 @@ impl registryBuilder<'_> {
                 }
                 needed_directories.insert(dir_path.clone(), dir.clone());
             }
+        };
+        #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the needed project set and directory map keyed by path; Go ranges the map too")]
+        for (path, file_name) in &change.open_files {
+            if let (Some(project_id), _) = self.host.get_default_project(path) {
+                needed_projects.insert(project_id);
+            }
+            if tspath::is_dynamic_file_name(file_name) {
+                continue;
+            }
+            add_needed_directories(path, file_name);
 
             if !self.specifier_cache.has(path) {
                 self.specifier_cache.set(path.clone(), Arc::new(SyncMap::default()));
@@ -756,6 +763,7 @@ impl registryBuilder<'_> {
         }
 
         if !change.requested_file.is_empty() {
+            add_needed_directories(&change.requested_file, &change.requested_file_name);
             if let (Some(project_id), _) = self.host.get_default_project(&change.requested_file) {
                 needed_projects.insert(project_id);
             }

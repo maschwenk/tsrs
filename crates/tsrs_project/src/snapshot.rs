@@ -162,6 +162,8 @@ pub struct APIReconfigureProgramRequest {
 // to the language server are out of scope (docs/LSP.md).
 #[derive(Default)]
 pub struct APISnapshotRequest {
+    pub user_preferences: Option<UserPreferences>,
+    pub prepare_auto_imports: lsproto::DocumentUri,
     pub open_projects: Option<Set<String>>,
     pub close_projects: Option<Set<Path>>,
     pub open_files: Option<FxHashMap<Path, String>>,
@@ -697,8 +699,10 @@ impl Snapshot {
         // pure map inserts; Go ranges the map too
         open_files.extend(overlays.iter().map(|(path, overlay)| (path.clone(), overlay.base.file_name.clone())));
         let mut prepare_auto_imports = Path::default();
+        let mut prepare_auto_imports_file_name = String::new();
         if !change.resource_request.auto_imports.0.is_empty() {
             prepare_auto_imports = change.resource_request.auto_imports.path(self.use_case_sensitive_file_names());
+            prepare_auto_imports_file_name = change.resource_request.auto_imports.file_name();
         }
         let old_auto_imports = match &self.auto_imports {
             Some(auto_imports) => Arc::clone(auto_imports),
@@ -709,6 +713,7 @@ impl Snapshot {
             ctx,
             &autoimport::RegistryChange {
                 requested_file: prepare_auto_imports,
+                requested_file_name: prepare_auto_imports_file_name,
                 open_files,
                 changed: change.file_changes.changed.clone(),
                 created: change.file_changes.created.clone(),

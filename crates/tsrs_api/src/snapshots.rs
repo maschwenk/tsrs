@@ -172,6 +172,14 @@ impl Session {
     fn to_api_snapshot_request(&self, p: Params) -> ApiResult<(APISnapshotRequest, RequestEcho)> {
         let cwd = self.current_directory().to_string();
         let mut req = APISnapshotRequest::default();
+        if !matches!(p.get("userPreferences"), Value::Null) {
+            let mut preferences = tsrs_ls::lsutil::new_default_user_preferences();
+            preferences.unmarshal_json_from(p.get("userPreferences")).map_err(ApiError::invalid_request)?;
+            req.user_preferences = Some(preferences);
+        }
+        if !matches!(p.get("prepareAutoImports"), Value::Null) {
+            req.prepare_auto_imports = p.document("prepareAutoImports")?.to_uri(&cwd);
+        }
         for d in DocumentIdentifier::parse_list(p.array("openProjects")?, "openProjects")? {
             let config_file_name = d.to_absolute_file_name(&cwd);
             let id = parse_configured_project_id(&self.to_path(&config_file_name))
@@ -399,6 +407,23 @@ impl Session {
         Ok(Some((Arc::new(fs), params.kind == requestfs::Kind::Full)))
     }
 
+    fn validate_prepared_auto_imports(&self, snapshot: &Snapshot, p: Params) -> ApiResult<()> {
+        if matches!(p.get("prepareAutoImports"), Value::Null) {
+            return Ok(());
+        }
+        let file = p.document("prepareAutoImports")?;
+        let uri = file.to_uri(self.current_directory());
+        let prepared = snapshot.get_default_project(&uri).is_some_and(|project| {
+            snapshot.auto_imports.as_ref().is_some_and(|registry| {
+                registry.is_prepared_for_importing_file(&uri.file_name(), &tsrs_ls::autoimport::ProjectID(project.id().0.clone()), snapshot.user_preferences())
+            })
+        });
+        if !prepared {
+            return Err(ApiError::client(format!("could not prepare auto-imports for {file}")));
+        }
+        Ok(())
+    }
+
     pub(crate) fn handle_create_snapshot(&self, p: Params) -> ApiResult<Value> {
         if !matches!(p.0, Value::Null) {
             p.object()?;
@@ -431,6 +456,10 @@ impl Session {
                 return Err(ApiError::client(format!("failed to create snapshot: {}", err.message)));
             }
         };
+        if let Err(e) = self.validate_prepared_auto_imports(&snapshot, p) {
+            snapshot.deref();
+            return Err(e);
+        }
         if let Err(e) = Self::module_resolution_error(&snapshot) {
             snapshot.deref();
             return Err(e);
@@ -476,6 +505,10 @@ impl Session {
                 return Err(ApiError::client(format!("failed to update snapshot: {}", err.message)));
             }
         };
+        if let Err(e) = self.validate_prepared_auto_imports(&snapshot, changes) {
+            snapshot.deref();
+            return Err(e);
+        }
         if let Err(e) = Self::module_resolution_error(&snapshot) {
             snapshot.deref();
             return Err(e);
