@@ -41,3 +41,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64608](https://github.com/microsoft/TypeScript/commit/cb72b2e17b75557db7e3286d835544aef5d85f6c) | Localized Go diagnostics; tsrs documents English-only diagnostics. |
 | [#64597](https://github.com/microsoft/TypeScript/commit/f9f8d01292562242b6e7c7142e46ed7e470926f9) | Port TokensAreOnSameLine to compare the next token start instead of its end. |
 | [#64621](https://github.com/microsoft/TypeScript/commit/50d70a3f5f453a79a4323b263165da51f656a4e3) | Port CompareTypes ordering for inferred type parameters. |
+| [#64620](https://github.com/microsoft/TypeScript/commit/6b3da828d7f59669ba3b26e9a466b7bde9a5f6d4) | Removal of legacy localized resources; no corresponding resources in tsrs. |
