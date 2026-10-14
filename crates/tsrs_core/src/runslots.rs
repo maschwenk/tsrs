@@ -11,6 +11,9 @@
 //! A job takes a slot to run (`run`) and gives it back while it waits for something another job may hold
 //! (`blocking`: a checker, a client response, another thread forcing a lazy list), as a blocked goroutine gives back
 //! its P, so a waiting job never keeps a runnable one from running. A wait that is not marked only keeps its slot.
+//! A job coming back from `blocking` takes its slot back without waiting, even over capacity: it may hold a lock
+//! that every slot holder is waiting for, and waiting for a slot there would deadlock. New jobs (`run`) still wait
+//! until fewer than the capacity run.
 //! Threads that never took a slot (the dispatch loop, background tasks) are not limited, and `blocking` is a no-op
 //! on them.
 
@@ -43,7 +46,8 @@ pub fn run<R>(f: impl FnOnce() -> R) -> R {
     f()
 }
 
-/// Runs `f`, which waits, without holding this thread's slot, and takes a slot again before returning.
+/// Runs `f`, which waits, without holding this thread's slot, and takes its slot back before returning (without
+/// waiting for one to be free).
 pub fn blocking<R>(f: impl FnOnce() -> R) -> R {
     if !HOLDS_SLOT.with(Cell::get) {
         return f();
@@ -83,7 +87,9 @@ struct reacquireOnDrop;
 
 impl Drop for reacquireOnDrop {
     fn drop(&mut self) {
-        acquire();
+        let s = get_slots();
+        *s.in_use.lock().unwrap_or_else(std::sync::PoisonError::into_inner) += 1;
+        HOLDS_SLOT.with(|h| h.set(true));
     }
 }
 

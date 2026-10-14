@@ -12,8 +12,7 @@ fn run_limits_concurrency_and_blocking_gives_the_slot_back() {
     // At most `n` jobs run at once, and a burst of 3n uses all `n`.
     let running = Arc::new(AtomicUsize::new(0));
     let peak = Arc::new(AtomicUsize::new(0));
-    let threads: Vec<_> = (0..3 * n)
-        .map(|_| {
+    let threads: Vec<_> = std::iter::repeat_with(|| {
             let (running, peak) = (Arc::clone(&running), Arc::clone(&peak));
             std::thread::spawn(move || {
                 run(|| {
@@ -24,6 +23,7 @@ fn run_limits_concurrency_and_blocking_gives_the_slot_back() {
                 });
             })
         })
+        .take(3 * n)
         .collect();
     for t in threads {
         t.join().unwrap();
@@ -34,8 +34,7 @@ fn run_limits_concurrency_and_blocking_gives_the_slot_back() {
     let (go_tx, go_rx) = mpsc::channel::<()>();
     let go_rx = Arc::new(Mutex::new(go_rx));
     let (done_tx, done_rx) = mpsc::channel::<()>();
-    let waiters: Vec<_> = (0..n)
-        .map(|_| {
+    let waiters: Vec<_> = std::iter::repeat_with(|| {
             let (go_rx, done_tx) = (Arc::clone(&go_rx), done_tx.clone());
             std::thread::spawn(move || {
                 run(|| {
@@ -44,6 +43,7 @@ fn run_limits_concurrency_and_blocking_gives_the_slot_back() {
                 });
             })
         })
+        .take(n)
         .collect();
     std::thread::sleep(Duration::from_millis(50));
     let releaser = std::thread::spawn(move || {
@@ -58,6 +58,49 @@ fn run_limits_concurrency_and_blocking_gives_the_slot_back() {
     }
     releaser.join().unwrap();
     for t in waiters {
+        t.join().unwrap();
+    }
+
+    // A job that waits in `blocking` while it holds a lock gets its slot back although `n` jobs hold every slot,
+    // waiting (unmarked) for that lock: waiting for a slot there would deadlock.
+    let lock = Arc::new(Mutex::new(()));
+    let (locked_tx, locked_rx) = mpsc::channel::<()>();
+    let (wake_tx, wake_rx) = mpsc::channel::<()>();
+    let (done_tx, done_rx) = mpsc::channel::<()>();
+    let holder = {
+        let (lock, done_tx) = (Arc::clone(&lock), done_tx.clone());
+        std::thread::spawn(move || {
+            run(|| {
+                let _guard = lock.lock().unwrap();
+                locked_tx.send(()).unwrap();
+                blocking(|| wake_rx.recv().unwrap());
+            });
+            done_tx.send(()).unwrap();
+        })
+    };
+    locked_rx.recv().unwrap();
+    let in_run = Arc::new(AtomicUsize::new(0));
+    let contenders: Vec<_> = std::iter::repeat_with(|| {
+            let (lock, in_run, done_tx) = (Arc::clone(&lock), Arc::clone(&in_run), done_tx.clone());
+            std::thread::spawn(move || {
+                run(|| {
+                    in_run.fetch_add(1, Ordering::SeqCst);
+                    drop(lock.lock().unwrap());
+                });
+                done_tx.send(()).unwrap();
+            })
+        })
+        .take(n)
+        .collect();
+    while in_run.load(Ordering::SeqCst) < n {
+        std::thread::sleep(Duration::from_millis(1));
+    }
+    wake_tx.send(()).unwrap();
+    for _ in 0..=n {
+        done_rx.recv_timeout(Duration::from_secs(10)).expect("the lock holder got its slot back while every slot was held");
+    }
+    holder.join().unwrap();
+    for t in contenders {
         t.join().unwrap();
     }
 
