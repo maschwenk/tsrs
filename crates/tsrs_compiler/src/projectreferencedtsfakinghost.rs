@@ -151,6 +151,9 @@ impl projectReferenceDtsFakingVfs {
             // not symlinked
             return;
         }
+        // The host lives with the project reference file mapper, which every program version cloned from this build
+        // shares; a lookup can come from a checker or a later version's region (docs/LSP.md "Memory management").
+        let _owner = tsrs_core::arena::enter_table_owner(std::ptr::from_ref(&self.known_symlinks) as usize);
         self.known_symlinks.set_directory(
             directory,
             directory_path,
@@ -205,6 +208,8 @@ impl projectReferenceDtsFakingVfs {
                 if is_file {
                     // Store the real path for the file
                     let absolute_path = tspath::get_normalized_absolute_path(file_or_directory, self.host.get_current_directory());
+                    // As in `handle_directory_could_be_symlink`.
+                    let _owner = tsrs_core::arena::enter_table_owner(std::ptr::from_ref(&self.known_symlinks) as usize);
                     self.known_symlinks.set_file(
                         &absolute_path,
                         file_or_directory_path.clone(),
@@ -238,5 +243,45 @@ impl projectReferenceDtsFakingVfs {
             return result;
         }
         Tristate::Unknown
+    }
+}
+
+#[cfg(test)]
+mod region_tests {
+    use std::sync::Arc;
+
+    use tsrs_core::arena::Region;
+    use tsrs_core::tspath::Path;
+    use tsrs_core::{CompilerOptions, P};
+    use tsrs_module::symlinks::KnownSymlinks;
+    use tsrs_vfs::{vfstest, FS};
+
+    use super::projectReferenceDtsFakingVfs;
+    use crate::projectreferencefilemapper::{projectReferenceFileMapper, resolution_host_for};
+
+    // A symlinked node_modules directory the build never probed, first seen while a region is the allocation target
+    // (a checker's, looking up a package.json for a module specifier): the host shared by later program versions must
+    // not keep its records in that region.
+    #[test]
+    fn symlinked_directory_first_seen_in_a_region_is_not_kept_there() {
+        let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(
+            [("/lib/src/deep/thing.ts", vfstest::MapFile::from("export {};")), ("/app/node_modules/@x/lib", vfstest::symlink("/lib"))],
+            true,
+        ));
+        let host = resolution_host_for(crate::new_compiler_host("/", fs, "", None, None, None));
+        let config = P::new(tsrs_tsoptions::new_parsed_command_line(P::new(CompilerOptions::default()), Vec::new(), Vec::new(), Default::default()));
+        let mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(projectReferenceFileMapper::new(config, true)));
+        let vfs = projectReferenceDtsFakingVfs { host, project_reference_file_mapper: mapper, known_symlinks: KnownSymlinks::default() };
+        let region = Region::new(1 << 20);
+        {
+            let _scope = region.enter();
+            assert!(vfs.directory_exists("/app/node_modules/@x/lib/src/deep"));
+        }
+        let in_region = |addr: usize| Region::containing(addr).is_some_and(|r| r.ptr_eq(&region));
+        let link = vfs.known_symlinks.directories().load(&Path::from("/app/node_modules/@x/lib/src/deep/")).flatten().expect("the link is recorded");
+        assert_eq!(link.real_path.as_str(), "/lib/src/deep/");
+        assert!(!in_region(link.addr()), "directory link allocated in the region");
+        let set = vfs.known_symlinks.directories_by_realpath().load(&link.real_path).expect("the realpath's symlink set is recorded");
+        assert!(!in_region(set.addr()), "symlink set allocated in the region");
     }
 }

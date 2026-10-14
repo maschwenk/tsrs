@@ -156,6 +156,7 @@ for server data; see [the memory design](../notes/lsp-mem.md) and
 | auto-import registry update scratch (module and alias resolvers, extraction checkers, resolution caches) | GC | **scratch region** per `Registry::clone_registry`, freed before it returns; files the update acquired are released at the end of the snapshot clone as in Go (and freed when nothing else holds them) |
 | auto-import registry versions (buckets, indexes, entrypoints: heap; directories' package.json entries: arena) | GC | heap values by Rust ownership; the package.json entries an update reads for `directories` go to a **package.json region** of that update, held by every registry version whose directories still refer into it (`Registry::regions`) |
 | package.json cache entries of a program's resolution data (copied to its clones) | GC | the original cache's region when added while that region is the allocation target (the full build); otherwise the thread arena (`arena::enter_table_owner`) |
+| symlinked directories and files the project-reference dts-faking host learns (the host is shared by every version cloned from a full build) | GC | the thread arena (`arena::enter_table_owner`; the host's table is on the heap): a module specifier lookup can add one while a checker or a later version's region is the target |
 | request-scoped results (lsproto values, strings) | GC | ordinary Rust ownership |
 
 Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
@@ -166,9 +167,9 @@ runs those drops, so heap memory owned by links and tables goes too. Lazily fill
 to the object's own region (`arena::enter_owner(addr)`: `SourceFile`'s JSDoc cache, line and position maps, name
 table, identifier set, token cache, declaration map; the program's symlink cache goes to the full build's region);
 process-wide statics allocate in the thread arena (`arena::enter_thread_arena`). Entries of a table that later
-versions copy and any thread may fill (the resolution data's package.json cache) use `arena::enter_table_owner`:
-the current target if the table lives in it, else the thread arena, without waiting for a region another thread has
-entered (parse workers fill the cache while the building thread holds the full build's region). Regions bump upwards and their
+versions share or copy and any thread may fill (the resolution data's package.json cache, the dts-faking host's
+symlinks) use `arena::enter_table_owner`: the current target if the table lives in it, else the thread arena,
+without waiting for a region another thread has entered (parse workers fill the cache while the building thread holds the full build's region). Regions bump upwards and their
 chunks are carved from per-thread slabs, and a file region is trimmed after binding: tens of thousands of file
 regions would otherwise each cost a partly used page.
 
