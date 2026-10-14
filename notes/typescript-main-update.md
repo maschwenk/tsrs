@@ -43,3 +43,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64621](https://github.com/microsoft/TypeScript/commit/50d70a3f5f453a79a4323b263165da51f656a4e3) | Port CompareTypes ordering for inferred type parameters. |
 | [#64620](https://github.com/microsoft/TypeScript/commit/6b3da828d7f59669ba3b26e9a466b7bde9a5f6d4) | Removal of legacy localized resources; no corresponding resources in tsrs. |
 | [#64624](https://github.com/microsoft/TypeScript/commit/bcd7c422559da26b7e60a46a41cf5503a360d106) | Rust already stores its idle cleanup timer; no behavior change needed. |
+| [#64632](https://github.com/microsoft/TypeScript/commit/ca197b7b8586900c3b75c0365fac31cfcaaacca7) | Port restarting imports when another arrival lowers the node_modules depth. |

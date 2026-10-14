@@ -648,10 +648,10 @@ impl filesParser {
         } else {
             depth
         };
-        if loader.files_parser.datas[data]
+        let lowered = loader.files_parser.datas[data]
             .lowest_depth
-            .is_none_or(|lowest_depth| current_depth < lowest_depth)
-        {
+            .is_none_or(|lowest_depth| current_depth < lowest_depth);
+        if lowered {
             // If we're seeing this task at a lower depth than before,
             // reprocess its subtasks to ensure they are loaded.
             loader.files_parser.datas[data].lowest_depth = Some(current_depth);
@@ -678,7 +678,7 @@ impl filesParser {
                     loader.files_parser.datas[data].started_sub_tasks = true;
                 }
             }
-            if !loader.tasks[task_by_file_name].started_sub_tasks && load_sub_tasks {
+            if load_sub_tasks && (lowered || !loader.tasks[task_by_file_name].started_sub_tasks) {
                 loader.tasks[task_by_file_name].started_sub_tasks = true;
                 // `start` reads the sub tasks themselves, never this task's list; it is lent out and put back.
                 let sub_tasks = std::mem::take(&mut loader.tasks[task_by_file_name].sub_tasks);
