@@ -250,8 +250,13 @@ jobs:
               tar xzf /tmp/binaryen.tgz -C /tmp
               echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
 
-      - name: Install wasm32-wasip1 target
-        run: rustup target add wasm32-wasip1
+      # The whole toolchain before the parallel builds: a cargo that finds a component of rust-toolchain.toml missing
+      # downloads it, and cargos downloading at once fail ("component download failed for rustfmt"). That happens
+      # when the Rust cache misses, as on a pull request that changes Cargo.lock (#516).
+      - name: Install the toolchain and the wasm32-wasip1 target
+        run: |
+          rustup toolchain install
+          rustup target add wasm32-wasip1
 
       - name: Bench cache keys
         id: bench-keys
