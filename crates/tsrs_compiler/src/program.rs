@@ -227,6 +227,9 @@ pub struct Program {
     pub(crate) leaf_referred: OnceLock<rustc_hash::FxHashSet<P<SourceFile>>>,
     // tsrs-only: `checkerpool::tsgo_default_check_slots`, built on first use.
     pub(crate) tsgo_check_slots: OnceLock<FxHashMap<P<SourceFile>, (u32, u32)>>,
+    // tsrs-only: the import graph those slots are computed from (`checkerpool::get_import_adjacency`), which a program
+    // made by `reuse_program` takes over: it has the same files at the same indices with the same imports.
+    pub(crate) tsgo_import_adjacency: OnceLock<Arc<[Vec<usize>]>>,
     // tsrs-only: `ProgramOptions::checker_recycling`.
     pub(crate) checker_recycling: bool,
     canonical_diagnostics: bool,
@@ -480,6 +483,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
         leaf_referred: OnceLock::new(),
         tsgo_check_slots: OnceLock::new(),
+        tsgo_import_adjacency: OnceLock::new(),
         checker_recycling: opts.checker_recycling,
         canonical_diagnostics: opts.canonical_diagnostics,
         checker_regions: opts.checker_regions,
@@ -708,6 +712,7 @@ impl Program {
             leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
             leaf_referred: OnceLock::new(),
             tsgo_check_slots: OnceLock::new(),
+            tsgo_import_adjacency: OnceLock::new(),
             checker_recycling: false,
             canonical_diagnostics: self.canonical_diagnostics,
             checker_regions: self.checker_regions,
@@ -717,6 +722,7 @@ impl Program {
             own_region,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
+        try_reuse(&result.tsgo_import_adjacency, &self.tsgo_import_adjacency);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
         try_reuse(&result.package_names, &self.package_names);
         let index = result.files.iter().position(|file| file.path() == new_file_some.path()).unwrap();

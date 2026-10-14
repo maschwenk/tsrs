@@ -239,6 +239,39 @@ fn a_reused_program_keeps_the_checker_assignment() {
     assert_eq!(cloned.pool().state().associations, associations);
 }
 
+// tsrs-only: a program made by `reuse_program` takes over the import graph of tsgo's default-pool slots
+// (`Program::tsgo_import_adjacency`) and computes the same slots as a fresh program of the edited files, also when
+// the edit changes the reparsed file's weight.
+#[test]
+fn a_reused_program_computes_the_tsgo_slots_of_a_fresh_one() {
+    let files = [
+        ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true,"types":[]}}"#),
+        ("/src/a.ts", "export const a = 1;"),
+        ("/src/b.ts", "import { a } from './a'; export const b = a;"),
+        ("/src/c.ts", "import { b } from './b'; export const c = b;"),
+        ("/src/d.ts", "export const d = 1;"),
+        ("/src/e.ts", "import { d } from './d'; import { a } from './a'; export const e = d + a;"),
+    ];
+    let comment = format!("// {}\n", "x".repeat(20_000));
+    let edited_a = format!("{comment}export const a = 1;");
+    let edited = [files[0], ("/src/a.ts", edited_a.as_str()), files[2], files[3], files[4], files[5]];
+    let by_path = |program: &'static Program| -> Vec<(String, (u32, u32))> {
+        let mut slots: Vec<_> = crate::checkerpool::tsgo_default_check_slots(program).into_iter().map(|(file, slot)| (file.file_name().to_string(), slot)).collect();
+        slots.sort();
+        slots
+    };
+
+    let p = new_program(ProgramOptions::new(config_for(&files), host_for(&files)));
+    let before = by_path(p);
+    let (reused_program, _, reused) = p.reuse_program(&Path::from("/src/a.ts"), host_for(&edited), None, None);
+    assert!(reused);
+    let reused_program = reused_program.unwrap();
+    assert!(Arc::ptr_eq(reused_program.tsgo_import_adjacency.get().unwrap(), p.tsgo_import_adjacency.get().unwrap()));
+    let fresh = by_path(new_program(ProgramOptions::new(config_for(&edited), host_for(&edited))));
+    assert_ne!(before, fresh, "the edit must move a slot");
+    assert_eq!(by_path(reused_program), fresh);
+}
+
 // A spread lowered for ES2015 under a type assertion: the return's expression is a partially emitted expression
 // around the synthesized `Object.assign` call. The printer's leading-newline check reads the comments at the
 // synthesized node's position, of which Go's scanner yields none (position -1); tsrs panicked there.

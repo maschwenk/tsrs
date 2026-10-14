@@ -1423,6 +1423,10 @@ fn splitmix64(state: &mut u64) -> u64 {
 
 // Go `createCheckers`' association step (FENNEL over the import graph, see above).
 fn go_associations(program: &Program, checker_count: usize, concurrent: bool) -> Vec<usize> {
+    go_associations_with_adjacency(program, checker_count, &get_import_adjacency(program, concurrent))
+}
+
+fn go_associations_with_adjacency(program: &Program, checker_count: usize, adjacent_files: &[Vec<usize>]) -> Vec<usize> {
     let files = &program.files;
     let mut base_weights = vec![0i64; files.len()];
     let mut import_counts = vec![0i64; files.len()];
@@ -1450,11 +1454,10 @@ fn go_associations(program: &Program, checker_count: usize, concurrent: bool) ->
         }
     }
     let file_weights = get_checker_association_weights(&base_weights, &import_counts);
-    let adjacent_files = get_import_adjacency(program, concurrent);
     let file_order = get_checker_association_order(&file_weights, &is_declaration_file, policy.prioritize_source_files);
     get_checker_associations_in_order(
         &file_weights,
-        &adjacent_files,
+        adjacent_files,
         file_order.as_deref(),
         checker_count,
         policy.balance_penalty_multiplier,
@@ -1484,7 +1487,15 @@ fn inherited_associations(program: &Program, checker_count: usize, previous: &ch
 pub(crate) fn tsgo_default_check_slots(program: &Program) -> FxHashMap<P<SourceFile>, (u32, u32)> {
     let checker_count = GO_DEFAULT_CHECKERS.min(program.files.len() as i64).max(1) as usize;
     // Called while holding a checker and initializing a OnceLock: nested worker-pool jobs could re-enter either.
-    let associations = if checker_count > 1 { go_associations(program, checker_count, false) } else { vec![0; program.files.len()] };
+    // The import graph comes from the program this one reuses when there is one (`Program::tsgo_import_adjacency`):
+    // resolving every import again took 19 of the 21 ms this costs in each one-file watch cycle on a 9.4k-file
+    // project. The weights are computed again: an edit can change the reparsed file's text length.
+    let associations = if checker_count > 1 {
+        let adjacency = program.tsgo_import_adjacency.get_or_init(|| std::sync::Arc::from(get_import_adjacency(program, false)));
+        go_associations_with_adjacency(program, checker_count, adjacency)
+    } else {
+        vec![0; program.files.len()]
+    };
     program
         .files
         .iter()
