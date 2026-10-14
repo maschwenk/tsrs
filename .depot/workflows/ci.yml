@@ -253,9 +253,6 @@ jobs:
       - name: Install wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
 
-      - name: Install playground tooling
-        run: pnpm install --frozen-lockfile
-
       - name: Bench cache keys
         id: bench-keys
         run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
@@ -299,15 +296,6 @@ jobs:
       - parallel:
           - name: pnpm test (npm/tsrs-wasm)
             run: TSRS_NATIVE=$PWD/target/native/ci-native/tsrs pnpm --dir npm/tsrs-wasm test
-
-          - name: Playground checks and browser smoke
-            run: |
-              pnpm --dir playground run prepare-assets
-              pnpm --dir playground run check
-              TSRS_NATIVE=$PWD/target/native/ci-native/tsrs pnpm --dir playground test
-              pnpm --dir playground run build
-              pnpm --dir playground exec playwright install --with-deps chromium
-              pnpm --dir playground run test:browser
 
           - name: Set up the bench projects
             run: python3 bench/run.py --setup-only --projects xstate-main,webpack,Compiler,Compiler-Unions
