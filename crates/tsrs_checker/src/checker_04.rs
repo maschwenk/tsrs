@@ -2297,15 +2297,12 @@ impl Checker {
         // Check if the index type is assignable to 'keyof T' for the object type.
         let object_type = t.as_indexed_access_type().object_type.get().unwrap();
         let index_type = t.as_indexed_access_type().index_type.get().unwrap();
-        // skip index type deferral on remapping mapped types
-        let object_index_type = if self.is_generic_mapped_type(object_type) && self.get_mapped_type_name_type_kind(object_type) == MappedTypeNameTypeKind::Remapping {
-            self.get_index_type_for_mapped_type(object_type, IndexFlags::None)
-        } else {
-            self.get_index_type_ex(object_type, IndexFlags::None)
-        };
         let number_type = self.number_type;
         let has_number_index_info = self.get_index_info_of_type(object_type, number_type).is_some();
-        if every_type(self, index_type, |c, t| c.is_type_assignable_to(t, object_index_type) || has_number_index_info && c.is_applicable_index_type(t, number_type)) {
+        if every_type(self, index_type, |c, t| {
+            let object_index_type = c.get_index_type_ex(object_type, IndexFlags::None);
+            c.is_type_assignable_to(t, object_index_type) || has_number_index_info && c.is_applicable_index_type(t, number_type)
+        }) {
             if access_node.kind() == Kind::ElementAccessExpression
                 && is_assignment_target(access_node)
                 && object_type.object_flags().intersects(ObjectFlags::Mapped)

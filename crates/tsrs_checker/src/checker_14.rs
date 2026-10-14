@@ -110,6 +110,16 @@ impl Checker {
             return self.get_simplified_indexed_access_type(t, writing);
         } else if t.flags().intersects(TypeFlags::Conditional) {
             return self.get_simplified_conditional_type(t, writing);
+        } else if t.flags().intersects(TypeFlags::Index) {
+            return self.get_simplified_index_type(t);
+        }
+        t
+    }
+
+    pub(crate) fn get_simplified_index_type(&mut self, t: P<Type>) -> P<Type> {
+        let target = t.as_index_type().target().unwrap();
+        if self.is_generic_mapped_type(target) && self.get_name_type_from_mapped_type(target).is_some() && !self.is_mapped_type_with_keyof_constraint_declaration(target) {
+            return self.get_index_type_for_mapped_type(target, IndexFlags::None);
         }
         t
     }

@@ -79,3 +79,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64353](https://github.com/microsoft/TypeScript/commit/d11c0719574ac9124d58089cabea61bc346de3be) | Copy corrected class and method decorator examples from upstream. |
 | [#63424](https://github.com/microsoft/TypeScript/commit/ba1819f3f98b74662aaca9ba67f6b0c10edd67da) | Copy the ES2023 Intl.PluralRules.selectRange declaration. |
 | [#64588](https://github.com/microsoft/TypeScript/commit/b5c34ba0c61a756c8abaf133236dddf982c27f45) | Port includeSymbolNameInDescription and preserve the diagnostic identifier text in auto-import fixes. |
+| [#64772](https://github.com/microsoft/TypeScript/commit/a0a0ff55cab4a1f81b7123ab219c97a2f1ed703d) | Port index-type simplification and standard indexed-access assignability checking. |
