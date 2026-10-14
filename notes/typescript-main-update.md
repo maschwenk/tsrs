@@ -14,3 +14,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64525](https://github.com/microsoft/TypeScript/commit/619d485a639c83a2d82860b5797db4984cecfc91) | Port the guard against contextual typing by the owning class. |
 | [#64243](https://github.com/microsoft/TypeScript/commit/792ffccb90f548cd3bdd7fc0b44f0ca9e1b169a7) | Port string-literal-only module import attribute annotations. |
 | [#64530](https://github.com/microsoft/TypeScript/commit/c4d731aae17e83b73f48ece1dcb2d42b02179da0) | Port constraint filtering for pure return inference in recursive calls. |
+| [#64559](https://github.com/microsoft/TypeScript/commit/79feed291a5c6c1d42ec040c4b42e7c2e9a1e2c4) | Azure VSIX release templates; tsrs has no corresponding pipeline. |
