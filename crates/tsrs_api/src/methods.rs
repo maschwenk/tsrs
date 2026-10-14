@@ -1,5 +1,5 @@
 // Pinned method inventory: every `Method` constant in microsoft/TypeScript
-// tsc/internal/api/proto.go @ b85298b6a81f772d080b0455de0ca9d744cd6fd6 (173 entries, same order).
+// tsc/internal/api/proto.go @ b85298b6a81f772d080b0455de0ca9d744cd6fd6 (177 entries, same order).
 // `status` is the honest implementation state in tsrs; it must only become `Supported` when a real
 // compiler-backed test exercises the method (docs/NODE_API.md keeps the matrix in sync).
 
@@ -18,7 +18,7 @@ pub enum Status {
 
 pub struct MethodInfo { pub name: &'static str, pub owner: Owner, pub status: Status }
 
-pub const METHODS: [MethodInfo; 173] = [
+pub const METHODS: [MethodInfo; 177] = [
     MethodInfo { name: "release", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "releaseSourceFile", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "retainSourceFile", owner: Owner::Core, status: Status::Partial },
@@ -149,6 +149,10 @@ pub const METHODS: [MethodInfo; 173] = [
     MethodInfo { name: "getAliasedSymbol", owner: Owner::Checker, status: Status::Partial },
     MethodInfo { name: "getImmediateAliasedSymbol", owner: Owner::Checker, status: Status::Partial },
     MethodInfo { name: "getTargetSymbol", owner: Owner::Checker, status: Status::Partial },
+    MethodInfo { name: "getMergedSymbol", owner: Owner::Checker, status: Status::Supported },
+    MethodInfo { name: "getSymbolOfNode", owner: Owner::Checker, status: Status::Supported },
+    MethodInfo { name: "getSymbolOfDeclarationForChecker", owner: Owner::Checker, status: Status::Supported },
+    MethodInfo { name: "getParentOfSymbolForChecker", owner: Owner::Checker, status: Status::Supported },
     MethodInfo { name: "getExportSymbolOfSymbolForChecker", owner: Owner::Checker, status: Status::Partial },
     MethodInfo { name: "getFullyQualifiedName", owner: Owner::Checker, status: Status::Partial },
     MethodInfo { name: "getExportsOfModule", owner: Owner::Checker, status: Status::Partial },
@@ -330,6 +334,10 @@ pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
     ("getAliasedSymbol", Some("CheckerSymbolParams")),
     ("getImmediateAliasedSymbol", Some("CheckerSymbolParams")),
     ("getTargetSymbol", Some("CheckerSymbolParams")),
+    ("getMergedSymbol", Some("CheckerSymbolParams")),
+    ("getSymbolOfNode", Some("CheckerNodeParams")),
+    ("getSymbolOfDeclarationForChecker", Some("CheckerNodeParams")),
+    ("getParentOfSymbolForChecker", Some("CheckerSymbolParams")),
     ("getExportSymbolOfSymbolForChecker", Some("CheckerSymbolParams")),
     ("getFullyQualifiedName", Some("CheckerSymbolParams")),
     ("getExportsOfModule", Some("CheckerSymbolParams")),

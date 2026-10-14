@@ -157,6 +157,8 @@ pub(crate) enum AliasQuery {
     ImmediateAliased,
     Target,
     ExportSymbol,
+    Merged,
+    Parent,
 }
 
 pub(crate) fn alias_query(host: &dyn CheckerHost, p: &Params, query: AliasQuery) -> CheckerResult<Value> {
@@ -166,6 +168,8 @@ pub(crate) fn alias_query(host: &dyn CheckerHost, p: &Params, query: AliasQuery)
         AliasQuery::Aliased => Some(s.c().get_aliased_symbol(symbol)),
         AliasQuery::ImmediateAliased => s.c().get_immediate_aliased_symbol_exported(symbol),
         AliasQuery::Target => s.c().get_target_symbol_exported(symbol),
+        AliasQuery::Merged => Some(s.c().get_merged_symbol_exported(symbol)),
+        AliasQuery::Parent => s.c().get_parent_of_symbol_exported(symbol),
         AliasQuery::ExportSymbol => Some(s.c().get_export_symbol_of_symbol(symbol)),
     };
     s.opt_symbol_response(result)
@@ -356,4 +360,11 @@ fn compare_file_symbols(left: &P<Symbol>, right: &P<Symbol>) -> Ordering {
     }
     // Go compares the (escaped-name) strings bytewise.
     left.name().cmp(right.name()).then_with(|| tsrs_ast::get_symbol_id(*left).0.cmp(&tsrs_ast::get_symbol_id(*right).0))
+}
+
+pub(crate) fn get_node_symbol(host: &dyn CheckerHost, p: &Params, declaration: bool) -> CheckerResult<Value> {
+    let mut s = setup(host, p)?;
+    let node = s.resolve_node(p.string("location")?)?;
+    let symbol = if declaration { s.c().get_symbol_of_declaration_exported(node) } else { s.c().get_symbol_of_node_exported(node) };
+    s.opt_symbol_response(symbol)
 }

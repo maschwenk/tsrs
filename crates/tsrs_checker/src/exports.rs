@@ -128,6 +128,10 @@ impl Checker {
         self.get_merged_symbol(symbol)
     }
 
+    pub fn get_symbol_of_node_exported(&mut self, node: P<Node>) -> Option<P<Symbol>> { self.get_symbol_of_node(node) }
+    pub fn get_symbol_of_declaration_exported(&mut self, node: P<Node>) -> Option<P<Symbol>> { self.get_symbol_of_declaration(node) }
+    pub fn get_parent_of_symbol_exported(&mut self, symbol: P<Symbol>) -> Option<P<Symbol>> { self.get_parent_of_symbol(symbol) }
+
     // exports.go:107
     pub fn try_find_ambient_module_exported(&mut self, module_name: &str) -> Option<P<Symbol>> {
         self.try_find_ambient_module(module_name, true /* withAugmentations */)

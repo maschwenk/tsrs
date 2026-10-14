@@ -273,7 +273,7 @@ const MAIN_FILE: &str = "/p/main.ts";
 
 #[test]
 fn coverage_inventory_matches_pinned_proto_and_dispatch() {
-    assert_eq!(PINNED_METHODS.len(), 172);
+    assert_eq!(PINNED_METHODS.len(), 177);
     let mut seen = rustc_hash::FxHashSet::default();
     for row in PINNED_METHODS {
         assert!(seen.insert(row.method), "duplicate {}", row.method);
@@ -1202,4 +1202,27 @@ fn completions_at_a_client_offset_inside_a_character() {
     let h = TestHost::new(&[("/p/tsconfig.json", TSCONFIG), ("/p/main.ts", text)]);
     let at = utf16_pos(text, "\u{1F600}") + 1;
     h.ok("getCompletionsAtPosition", &h.sp(&format!(r#""file":"/p/main.ts","position":{at},"includeSymbol":false"#)));
+}
+
+#[test]
+fn merged_symbol_methods_share_checker_ownership() {
+    let h = TestHost::new(&[
+        ("/p/tsconfig.json", r#"{"compilerOptions":{"noEmit":true},"files":["a.ts","b.ts"]}"#),
+        ("/p/a.ts", "namespace M { export interface A { x: string } }"),
+        ("/p/b.ts", "namespace M { export interface B { y: number } }"),
+    ]);
+    let a = h.symbol_at("/p/a.ts", "namespace M { export interface A { x: string } }", "M {");
+    let b = h.symbol_at("/p/b.ts", "namespace M { export interface B { y: number } }", "M {");
+    let merged_a = h.ok("getMergedSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&a))));
+    let merged_b = h.ok("getMergedSymbol", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&b))));
+    assert_eq!(merged_a, merged_b);
+    assert_eq!(arr(field(&merged_a, "declarations")).len(), 2);
+    let declaration = json::marshal_string(&str_of(&arr(field(&merged_a, "declarations"))[0]));
+    let from_node = h.ok("getSymbolOfNode", &h.sp(&format!(r#""location":{declaration}"#)));
+    let from_declaration = h.ok("getSymbolOfDeclarationForChecker", &h.sp(&format!(r#""location":{declaration}"#)));
+    assert_eq!(merged_a, from_node);
+    assert_eq!(merged_a, from_declaration);
+    let member = h.symbol_at("/p/a.ts", "namespace M { export interface A { x: string } }", "A {");
+    let parent = h.ok("getParentOfSymbolForChecker", &h.sp(&format!(r#""symbol":{}"#, h.symbol_ref(&member))));
+    assert_eq!(parent, merged_a);
 }
