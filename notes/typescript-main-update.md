@@ -46,3 +46,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64632](https://github.com/microsoft/TypeScript/commit/ca197b7b8586900c3b75c0365fac31cfcaaacca7) | Port restarting imports when another arrival lowers the node_modules depth. |
 | [#64646](https://github.com/microsoft/TypeScript/commit/a1ef42b9ea7032fa60df127d42b4c86fd2a110ee) | Port eager checking of constructor-defined properties for class declarations and deferred class expressions. |
 | [#64584](https://github.com/microsoft/TypeScript/commit/fc636a691f1dbdbc9ba678911891a9e85ec283bf) | Port the async-disposable using diagnostic; the async client disposal Promise changes are included in the SDK refresh with the final pin. |
+| [#64604](https://github.com/microsoft/TypeScript/commit/de61e696214322f72d967bd17c58c50e44b2920d) | Copy the merged DOM library generator update verbatim from the upstream commit. |
