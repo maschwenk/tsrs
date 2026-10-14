@@ -390,8 +390,14 @@ impl JsonParser<'_> {
         if self.pos + 4 > self.s.len() {
             return self.err("invalid escape sequence");
         }
-        let text = std::str::from_utf8(&self.s[self.pos..self.pos + 4]).map_err(|e| e.to_string())?;
-        let v = u32::from_str_radix(text, 16).or_else(|_| self.err("invalid escape sequence"))?;
+        // jsonwire.parseHexUint16: exactly four hex digits (`u32::from_str_radix` would take a leading '+').
+        let mut v = 0;
+        for &c in &self.s[self.pos..self.pos + 4] {
+            let Some(digit) = (c as char).to_digit(16) else {
+                return self.err("invalid escape sequence");
+            };
+            v = v * 16 + digit;
+        }
         self.pos += 4;
         Ok(v)
     }
@@ -483,6 +489,14 @@ mod tests {
             let Value::Number(n) = unmarshal(text).unwrap() else { panic!() };
             let expected: f64 = text.parse().unwrap();
             assert_eq!(n.to_bits(), expected.to_bits(), "{text}");
+        }
+    }
+
+    #[test]
+    fn unicode_escape_needs_four_hex_digits() {
+        assert_eq!(unmarshal(r#""\u0041\u00e9\u00C9""#).unwrap(), Value::String("AéÉ".to_string()));
+        for text in [r#""\u+041""#, r#""\u-041""#, r#""\u 041""#, r#""\u004""#, r#""\ud83d\u+e00""#] {
+            assert!(unmarshal(text).unwrap_err().starts_with("jsontext: invalid escape sequence"), "{text}");
         }
     }
 
