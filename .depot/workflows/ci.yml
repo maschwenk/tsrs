@@ -234,21 +234,22 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
-      - parallel:
-          - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
-            with:
-              save-cache: false
-              cache-key: warm
+      # Not in a parallel group: a step there may not keep the PATH it adds (GITHUB_PATH). setup-node's pnpm was lost
+      # that way on #516 ("pnpm: command not found" in the pnpm test step), depending on which step finished last.
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: false
+          cache-key: warm
 
-          - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
-          # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
-          - name: Install binaryen 133
-            run: |
-              curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
-              echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
-              tar xzf /tmp/binaryen.tgz -C /tmp
-              echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
+      # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
+      - name: Install binaryen 133
+        run: |
+          curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
+          tar xzf /tmp/binaryen.tgz -C /tmp
+          echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
 
       - name: Install wasm32-wasip1 target
         run: rustup target add wasm32-wasip1
