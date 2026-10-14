@@ -239,22 +239,21 @@ jobs:
           sparse-checkout: tsc/testdata
           persist-credentials: false
 
-      - parallel:
-          - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
-            with:
-              save-cache: false
-              cache-key: warm
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: false
+          cache-key: warm
 
-          - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
-          # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
-          - name: Install binaryen 133
-            run: |
-              exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
-              curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
-              echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
-              tar xzf /tmp/binaryen.tgz -C /tmp
-              echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
+      # Ubuntu's binaryen package is older; the module sizes in notes/wasm-build.md come from version 133.
+      - name: Install binaryen 133
+        run: |
+          exec > >(tee -a /tmp/wasm-ci.log) 2>&1; echo "== step"
+          curl -sSLf -o /tmp/binaryen.tgz https://github.com/WebAssembly/binaryen/releases/download/version_133/binaryen-version_133-x86_64-linux.tar.gz
+          echo "2dc9c7813f5375db93d96ead4b78222fcc3e2677bbb832297af4797782a37489  /tmp/binaryen.tgz" | sha256sum -c -
+          tar xzf /tmp/binaryen.tgz -C /tmp
+          echo /tmp/binaryen-version_133/bin >> "$GITHUB_PATH"
 
       # The whole toolchain before the parallel builds: a cargo that finds a component of rust-toolchain.toml missing
       # downloads it, and cargos downloading at once fail ("component download failed for rustfmt"). That happens
