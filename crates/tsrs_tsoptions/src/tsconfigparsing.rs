@@ -2021,7 +2021,7 @@ pub fn create_diagnostic_at_reference_syntax(
     args: &[&dyn Display],
 ) -> Option<P<Diagnostic>> {
     // Programs created through the API have references but no config file: the caller reports the diagnostic
-    // without a location (Go dereferences nil here).
+    // without a location, matching the upstream nil-config guard.
     let source_file = config.config_file?.source_file;
     for_each_ts_config_prop_array(Some(source_file), "references", |property| {
         let initializer = property.initializer().unwrap();
