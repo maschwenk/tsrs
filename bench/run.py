@@ -154,7 +154,9 @@ def ensure_checkout(name: str, repo: str, commit: str, install: str | None, dest
         if install:
             # The install command selects the upstream tool version. Keep Corepack from switching the
             # pnpm launcher first (or refusing to launch it in a Yarn project).
-            sh(install, cwd=dest, env=dict(os.environ, CI="true", HUSKY="0", COREPACK_ENABLE_PROJECT_SPEC="0"))
+            # setup-node's npmrc contains ${NODE_AUTH_TOKEN}; Yarn 1 rejects an unset variable even for public packages.
+            sh(install, cwd=dest, env=dict(os.environ, CI="true", HUSKY="0", COREPACK_ENABLE_PROJECT_SPEC="0",
+                                         NODE_AUTH_TOKEN=os.environ.get("NODE_AUTH_TOKEN", "")))
 
     retry(name, attempt)
     (dest / MARKER).write_text(json.dumps(want))
