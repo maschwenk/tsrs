@@ -284,3 +284,7 @@ Checked in the code on 2026-10-10; collected from the porting waves' notes.
   table stores -1 for it, which reads as "appears more than once"; tsrs stores the same. Go to definition and source
   definition on `this` point at the tag name (`definition.rs`, `get_file_and_start_pos_from_declaration`) where Go
   converts -1 to the start of the file.
+- A line that ends in U+2028 / U+2029 ends before the line break (`get_line_end_of_position`, completions_2.rs). Go
+  subtracts one byte, which ends the line inside the break's three-byte encoding: a `#region` / `#endregion` line's
+  folding range then ends two characters later and its collapsed text ends in two U+FFFD, and a `/**` followed by
+  the break gets JSDoc tag completions instead of the JSDoc template that `\n` gets.

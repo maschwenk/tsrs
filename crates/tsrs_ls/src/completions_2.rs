@@ -1337,7 +1337,11 @@ pub(crate) fn get_line_end_of_position(file: P<SourceFile>, pos: u32) -> u32 {
             .end()
             .expect_source("parsed source files have source positions")
     } else {
-        line_starts[line + 1] - 1
+        // Go subtracts one byte for the line break, which lands inside the three-byte UTF-8 encoding of U+2028 /
+        // U+2029; end the line before the whole line break so the callers' slices stay on character boundaries.
+        let next_line_start = line_starts[line + 1];
+        let line_break = file.text()[..next_line_start as usize].chars().next_back().expect("a line start after 0 follows a line break");
+        next_line_start - u32::try_from(line_break.len_utf8()).expect("a char is at most 4 bytes")
     };
     let full_text = file.text().as_bytes();
     if last_char_pos > 0 && (last_char_pos as usize) < full_text.len() && full_text[last_char_pos as usize] == b'\n' && full_text[(last_char_pos - 1) as usize] == b'\r' {

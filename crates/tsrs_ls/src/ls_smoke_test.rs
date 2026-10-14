@@ -228,3 +228,24 @@ fn jsdoc_this_parameter() {
     assert_eq!(json(&ls.provide_definition(&ctx, &uri, position_of(A, "this.length")).unwrap()), this_definition);
     assert_eq!(json(&ls.provide_source_definition(&ctx, &uri, position_of(A, "this.length")).unwrap()), this_definition);
 }
+
+// U+2028 / U+2029 end an ECMAScript line. Slicing up to "next line start - 1" (Go's arithmetic) cut through their
+// three-byte encoding and panicked; the line now ends before the whole line break, so a region's collapsed text and
+// end do not include part of it (tsgo-ref returns `foo` plus two U+FFFD and an end two characters later; docs/LSP.md,
+// "Deviations from Go"). The JSDoc template after `/**` matches tsgo-ref's for the same text with `\n`.
+#[test]
+fn ecma_line_separators() {
+    const A: &str = "// #region foo\u{2028}let a = 1;\n// #endregion\u{2028}let b = 2;\n/**\u{2029}function f(x) {}\n";
+    let files = [("/tsconfig.json", r#"{"files":["a.ts"]}"#), ("/a.ts", A)];
+    let (ls, _) = setup(&files);
+    let mut caps = lsproto::ResolvedClientCapabilities::default();
+    caps.text_document.folding_range.folding_range.collapsed_text = true;
+    let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(caps));
+    let uri = lsconv::file_name_to_document_uri("/a.ts");
+    assert_eq!(
+        json(&ls.provide_folding_range(&ctx, &uri).unwrap()),
+        r#"[{"startLine":0,"startCharacter":0,"endLine":1,"endCharacter":13,"kind":"region","collapsedText":"foo"},{"startLine":2,"startCharacter":0,"endLine":3,"endCharacter":0,"kind":"comment"}]"#
+    );
+    let completion = json(&ls.provide_completion(&ctx, &uri, position_of(A, "\u{2029}function"), None).unwrap());
+    assert!(completion.contains(r#""label":"/** */""#), "{completion}");
+}
