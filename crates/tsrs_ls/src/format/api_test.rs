@@ -79,3 +79,20 @@ fn huge_indent_sizes_are_clamped() {
     let pad = |level: usize| " ".repeat(level * MAX_INDENT_SIZE as usize);
     assert_eq!(new_text, format!("function f() {{\n{}if(a) {{\n{}b();\n{}}}\n}}\n", pad(1), pad(2), pad(1)));
 }
+
+// tsrs-only: a selection from a comment to inside the first token after more comments trims each line once. Go (and
+// TypeScript) trimmed the lines after the first comment twice, sending the same delete edits twice.
+#[test]
+fn selection_trims_trailing_whitespace_once() {
+    let ctx = with_format_code_settings(&FormatContext::default(), settings(4, 4, 0, Tristate::True, |_| {}), "\n");
+    let text = "/* a\n*/  \n\n \t\n// b\ndeclare module \"x\" { }\n";
+    let source_file = parse_for_test("/a.d.ts", text, ScriptKind::TS);
+    let start = text.find("*/").unwrap() as u32;
+    let end = text.find("declare").unwrap() as u32 + 4;
+    let edits = format_selection(&ctx, source_file, start, end);
+    let ranges: Vec<(u32, u32)> = edits.iter().map(|e| (e.pos(), e.end())).collect();
+    let after_comment = text.find("*/").unwrap() as u32 + 2;
+    let blank = text.find(" \t").unwrap() as u32;
+    assert_eq!(ranges, vec![(after_comment, after_comment + 2), (blank, blank + 2)]);
+    assert_eq!(apply_bulk_edits(text, &edits), "/* a\n*/\n\n\n// b\ndeclare module \"x\" { }\n");
+}

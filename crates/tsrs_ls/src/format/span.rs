@@ -1313,12 +1313,17 @@ impl FormatSpanWorker {
                     );
                 }
 
-                start_pos = trivia
-                    .loc
-                    .end()
-                    .expect_source("formatting ranges have source positions")
-                    .checked_add(1)
-                    .expect("source position overflow");
+                // tsrs-only: never move back. Go (and TypeScript) set the start after every comment, so after
+                // `process_range` left the previous range at the last comment, an earlier comment moved the start
+                // back and the lines between were trimmed twice (duplicate, overlapping delete edits).
+                start_pos = start_pos.max(
+                    trivia
+                        .loc
+                        .end()
+                        .expect_source("formatting ranges have source positions")
+                        .checked_add(1)
+                        .expect("source position overflow"),
+                );
             }
         }
 
