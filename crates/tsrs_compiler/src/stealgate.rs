@@ -52,7 +52,11 @@ pub(crate) fn config() -> Option<&'static GateConfig> {
     static VALUE: OnceLock<Option<GateConfig>> = OnceLock::new();
     VALUE
         .get_or_init(|| {
-            let spec = std::env::var("TSRS_STEAL_GATE").ok().filter(|v| !v.is_empty())?;
+            // Stacked bench build: `hub` is the default; TSRS_STEAL_GATE=none (or empty) turns every gate off.
+            let spec = std::env::var("TSRS_STEAL_GATE").unwrap_or_else(|_| "hub".to_string());
+            if spec.is_empty() || spec == "none" {
+                return None;
+            }
             let mut cfg = GateConfig::default();
             for rule in spec.split(',') {
                 let mut parts = rule.split(':');
