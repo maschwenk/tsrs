@@ -4,8 +4,11 @@ use crate::*;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, Default)]
 pub struct InferenceKey {
-    pub s: TypeId,
-    pub t: TypeId,
+    pub source: TypeId,
+    pub target: TypeId,
+    pub priority: InferencePriority,
+    pub contravariant: bool,
+    pub bivariant: bool,
 }
 
 /// Arena handle (`P<InferenceState>`), pooled through `Checker::freeinference_state` like Go.

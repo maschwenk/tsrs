@@ -72,16 +72,7 @@ impl Checker {
         if let (Some(source_alias), Some(target_alias)) = (source.alias(), target.alias()) {
             if source_alias.symbol() == target_alias.symbol() {
                 if !source_alias.type_arguments().is_empty() || !target_alias.type_arguments().is_empty() {
-                    // Source and target are types originating in the same generic type alias declaration.
-                    // Simply infer from source type arguments to target type arguments, with defaults applied.
-                    let alias_symbol = source_alias.symbol().unwrap();
-                    let params = self.type_alias_links.get(alias_symbol).type_parameters.get();
-                    let min_params = self.get_min_type_argument_count(params);
-                    let node_is_in_js_file = ast::is_in_js_file(alias_symbol.value_declaration());
-                    let source_types = self.fill_missing_type_arguments(source_alias.type_arguments(), params, min_params, node_is_in_js_file);
-                    let target_types = self.fill_missing_type_arguments(target_alias.type_arguments(), params, min_params, node_is_in_js_file);
-                    let variances = self.get_alias_variances(alias_symbol);
-                    self.infer_from_type_arguments(n, &source_types, &target_types, &variances);
+                    self.invoke_once(n, source, target, Checker::infer_from_alias_type_arguments);
                 }
                 // And if there weren't any type arguments, there's no reason to run inference as the types must be the same.
                 return;
@@ -231,10 +222,7 @@ impl Checker {
             && !(source.as_type_reference().node.get().is_some() && target.as_type_reference().node.get().is_some())
         {
             // If source and target are references to the same generic type, infer from type arguments
-            let source_type_arguments = self.get_type_arguments(source);
-            let target_type_arguments = self.get_type_arguments(target);
-            let variances = self.get_variances(source.as_type_reference().target.get().unwrap());
-            self.infer_from_type_arguments(n, source_type_arguments, target_type_arguments, &variances);
+            self.invoke_once(n, source, target, Checker::infer_from_reference_type_arguments);
         } else if source.flags().intersects(TypeFlags::Index) && target.flags().intersects(TypeFlags::Index) {
             self.infer_from_contravariant_types(n, source.as_index_type().target().unwrap(), target.as_index_type().target().unwrap());
         } else if (is_literal_type(source) || source.flags().intersects(TypeFlags::String)) && target.flags().intersects(TypeFlags::Index) {
@@ -283,6 +271,28 @@ impl Checker {
                 self.invoke_once(n, source, target, super::checker::Checker::infer_from_object_types);
             }
         }
+    }
+
+    pub(crate) fn infer_from_alias_type_arguments(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+        // Source and target are types originating in the same generic type alias declaration.
+        // Simply infer from source type arguments to target type arguments, with defaults applied.
+        let source_alias = source.alias().unwrap();
+        let target_alias = target.alias().unwrap();
+        let alias_symbol = source_alias.symbol().unwrap();
+        let params = self.type_alias_links.get(alias_symbol).type_parameters.get();
+        let min_params = self.get_min_type_argument_count(params);
+        let node_is_in_js_file = ast::is_in_js_file(alias_symbol.value_declaration());
+        let source_types = self.fill_missing_type_arguments(source_alias.type_arguments(), params, min_params, node_is_in_js_file);
+        let target_types = self.fill_missing_type_arguments(target_alias.type_arguments(), params, min_params, node_is_in_js_file);
+        let variances = self.get_alias_variances(alias_symbol);
+        self.infer_from_type_arguments(n, &source_types, &target_types, &variances);
+    }
+
+    pub(crate) fn infer_from_reference_type_arguments(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>) {
+        let source_type_arguments = self.get_type_arguments(source);
+        let target_type_arguments = self.get_type_arguments(target);
+        let variances = self.get_variances(source.target().unwrap());
+        self.infer_from_type_arguments(n, source_type_arguments, target_type_arguments, &variances);
     }
 
     // inference.go:284
@@ -343,7 +353,13 @@ impl Checker {
     // between the same pair of types.
     // inference.go:335
     pub(crate) fn invoke_once(&mut self, n: P<InferenceState>, source: P<Type>, target: P<Type>, mut action: impl FnMut(&mut Checker, P<InferenceState>, P<Type>, P<Type>)) {
-        let key = InferenceKey { s: source.id, t: target.id };
+        let key = InferenceKey {
+            source: source.id,
+            target: target.id,
+            priority: n.priority.get(),
+            contravariant: n.contravariant.get(),
+            bivariant: n.bivariant.get(),
+        };
         if let Some(status) = n.visited.get(&key) {
             n.inference_priority.set(min_priority(n.inference_priority.get(), status));
             return;
@@ -757,10 +773,7 @@ impl Checker {
             && (source.target() == target.target() || self.is_array_type(source) && self.is_array_type(target))
         {
             // If source and target are references to the same generic type, infer from type arguments
-            let source_type_arguments = self.get_type_arguments(source);
-            let target_type_arguments = self.get_type_arguments(target);
-            let variances = self.get_variances(source.target().unwrap());
-            self.infer_from_type_arguments(n, source_type_arguments, target_type_arguments, &variances);
+            self.infer_from_reference_type_arguments(n, source, target);
             return;
         }
         if self.is_generic_mapped_type(source) && self.is_generic_mapped_type(target) {

@@ -17,3 +17,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64559](https://github.com/microsoft/TypeScript/commit/79feed291a5c6c1d42ec040c4b42e7c2e9a1e2c4) | Azure VSIX release templates; tsrs has no corresponding pipeline. |
 | [#64522](https://github.com/microsoft/TypeScript/commit/64c5fa0b92ade9b5f14db616d351ffe1990ca7fd) | Upstream customConditions fixture correction; consumed from the new pinned corpus. |
 | [#64555](https://github.com/microsoft/TypeScript/commit/5f5dee5b610526cf3c597457cca336fde65e5f11) | VSIX signing command; tsrs has no corresponding release artifact. |
+| [#64553](https://github.com/microsoft/TypeScript/commit/c8e9b7d259268e30605ed14910cb8d118929ed63) | Port invokeOnce for alias/reference arguments and its priority/variance key. |
