@@ -81,11 +81,13 @@ There is no global identifier interner (mem-round2 measured one and rejected it)
 
 - Identifiers and binder flow nodes carry a **text index**, a slot in `SOURCE_TEXTS` (2^20 slots, registered once per
   parse, in parse-start order; `tsrs_ast/src/identifier.rs`).
-- An identifier's 64-bit word is the text index, or a flow node's address / 8 (bits 0..45), plus length and mode
-  bits. The text itself is a slice of the file's source text, found by the node's end position.
-- Flow nodes hold the text index (`FlowNode::new(.., text_index)`), so an identifier whose slot holds a flow pointer
-  can still find its text.
-- `SIDE_FLOW` handles the case where the indices differ (empty in practice).
+- An identifier's 64-bit word holds the text index, the flow node, the length and mode bits. With compressed
+  pointers (the default on unix) the flow node's 32-bit handle and the text index sit side by side. With plain
+  pointers the word holds the text index or a flow node's address / 8 (bits 0..45). The text itself is a slice of
+  the file's source text, found by the node's end position.
+- With plain pointers, flow nodes hold the text index (`FlowNode::new(.., text_index)`), so an identifier whose slot
+  holds a flow pointer can still find its text, and `SIDE_FLOW` handles the case where the indices differ (empty in
+  practice).
 
 A cached file must therefore get the same text index in every process. The design reserves the upper half of
 `SOURCE_TEXTS` for cache ordinals: a cacheable miss is parsed with index `CACHE_TEXT_BASE + ordinal`, and a hit

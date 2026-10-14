@@ -867,13 +867,25 @@ impl Node {
     }
 
     /// Go `Text()`. Joined texts (`JsxNamespacedName`, `JSDoc` text) are allocated in the arena. Identifiers
-    /// (most calls) inline; the other kinds out of line.
-    #[inline]
+    /// (most calls) inline, tested by data tag so the identifier's data is read without a second check; the other
+    /// kinds out of line.
+    #[expect(clippy::inline_always, reason = "measured: with #[inline] LLVM kept 14 out-of-line copies, 36 instructions a call")]
+    #[inline(always)]
     pub fn text(&self) -> &'static str {
-        if self.kind() == Kind::Identifier {
-            return self.as_identifier().text();
+        if let Some(identifier) = self.identifier_data() {
+            return identifier.text();
         }
         self.text_of_non_identifier()
+    }
+
+    /// The identifier data of an identifier node, `None` for other nodes: one data-tag test, where `is_identifier()`
+    /// and `as_identifier()` test the kind and then assert the tag.
+    #[inline]
+    pub fn identifier_data(&self) -> Option<&'static crate::identifier::Identifier> {
+        if self.data_tag() == NodeDataTag::Identifier {
+            return Some(self.payload());
+        }
+        None
     }
 
     #[inline(never)]
