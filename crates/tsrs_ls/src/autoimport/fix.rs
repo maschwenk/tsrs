@@ -77,6 +77,7 @@ impl Fix {
         format_options: FormatCodeSettings,
         converters: &Arc<Converters>,
         preferences: &UserPreferences,
+        include_symbol_name_in_description: bool,
     ) -> (Vec<lsproto::TextEdit>, String, bool) {
         let mut tracker = change::new_tracker(ctx, &compiler_options, format_options, Arc::clone(converters));
         match self.kind {
@@ -98,6 +99,9 @@ impl Fix {
                     preferences,
                 );
                 let (edits, safe) = file_edits(&mut tracker, file);
+                if include_symbol_name_in_description {
+                    return (edits, diagnostics::Import_0_from_1.localize(&[&self.name, &self.module_specifier]), safe);
+                }
                 (edits, diagnostics::Update_import_from_0.localize(&[&self.module_specifier]), safe)
             }
             lsproto::AutoImportFixKind::AddNew => {
@@ -141,6 +145,9 @@ impl Fix {
                 // 	addNamespaceQualifier(tracker, file, qualification)
                 // }
                 let (edits, safe) = file_edits(&mut tracker, file);
+                if include_symbol_name_in_description {
+                    return (edits, diagnostics::Import_0_from_1.localize(&[&self.name, &self.module_specifier]), safe);
+                }
                 (edits, diagnostics::Add_import_from_0.localize(&[&self.module_specifier]), safe)
             }
             lsproto::AutoImportFixKind::PromoteTypeOnly => {
