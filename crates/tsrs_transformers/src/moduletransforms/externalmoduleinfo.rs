@@ -413,6 +413,6 @@ pub(crate) fn get_import_needs_import_default_helper(node: P<Node>) -> bool {
         && (ast::is_default_import(node)
             || matches!(import_clause, Some(import_clause) if {
                 let named_bindings = import_clause.as_import_clause().named_bindings;
-                named_bindings.is_some_and(ast::is_named_imports) && contains_default_reference(named_bindings)
+                contains_default_reference(named_bindings)
             }))
 }

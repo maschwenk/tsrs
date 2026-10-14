@@ -2440,6 +2440,9 @@ impl Checker {
                 if import_clause.name.is_some() {
                     return self.grammar_error_on_node(node, &diagnostics::Default_imports_are_not_allowed_in_a_deferred_import, &[]);
                 }
+                if import_clause.named_bindings.is_none() {
+                    return self.grammar_error_on_node(node, &diagnostics::A_deferred_import_must_specify_a_namespace_binding, &[]);
+                }
                 if let Some(named_bindings) = import_clause.named_bindings {
                     if named_bindings.kind() == Kind::NamedImports {
                         return self.grammar_error_on_node(node, &diagnostics::Named_imports_are_not_allowed_in_a_deferred_import, &[]);

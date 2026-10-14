@@ -3083,7 +3083,7 @@ impl Parser {
             self.parse_expected(Kind::FromKeyword);
             return Some(import_clause);
         }
-        if phase_modifier == Kind::SourceKeyword {
+        if phase_modifier == Kind::DeferKeyword || phase_modifier == Kind::SourceKeyword {
             let clause = self.factory.new_import_clause(phase_modifier, None, None);
             return Some(self.finish_node(clause, pos));
         }
