@@ -119,6 +119,11 @@ jobs:
           fetch-depth: 0 # the merge base with origin/<base>
           persist-credentials: false
 
+      # `depot ci run` applies the local diff right after the checkout, unstaged. oxc-project/setup-rust ends with
+      # `git restore .`, which would drop it; staging it keeps it.
+      - name: Keep the local diff
+        run: git add -A
+
       - name: Runner hardware
         run: |
           nproc; free -g; df -h / | tail -1

@@ -40,7 +40,15 @@ jobs:
     runs-on: ${{ format('depot-ubuntu-24.04-{0}', inputs.cpus || '16') }}
     timeout-minutes: 150
     steps:
-      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+      # actions/checkout: `depot ci run` applies the local diff only after this step.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+
+      # `depot ci run` applies the local diff right after the checkout, unstaged. oxc-project/setup-rust ends with
+      # `git restore .`, which would drop it; staging it keeps it.
+      - name: Keep the local diff
+        run: git add -A
 
       - name: Runner hardware
         run: |
