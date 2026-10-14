@@ -593,3 +593,22 @@ pub fn format_diagnostics_status_and_time(output: &mut dyn Write, time: &str, di
     w!(output, "{} - ", time);
     write_flattened_diagnostic_message(output, diag, &format_opts.new_line);
 }
+
+// diagnosticwriter.go:596 ScreenStartingCodes
+fn is_screen_starting_code(code: i32) -> bool {
+    code == diagnostics::Starting_compilation_in_watch_mode.code() || code == diagnostics::File_change_detected_Starting_incremental_compilation.code()
+}
+
+// diagnosticwriter.go:601
+pub fn try_clear_screen(output: &mut dyn Write, diag: P<Diagnostic>, options: &tsrs_core::CompilerOptions) -> bool {
+    if !options.preserve_watch_output.is_true()
+        && !options.extended_diagnostics.is_true()
+        && !options.diagnostics.is_true()
+        && is_screen_starting_code(diag.code())
+    {
+        // Clear screen and move cursor to home position
+        w!(output, "\x1B[2J\x1B[3J\x1B[H");
+        return true;
+    }
+    false
+}

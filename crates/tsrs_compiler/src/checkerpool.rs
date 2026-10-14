@@ -39,7 +39,7 @@ pub struct CheckerHandle {
 enum checkerHandleKind {
     // The built-in pool's checkers live behind a mutex per checker (Go `locks[i]`).
     // The scope makes the checker's region (`SlotChecker::region`) the allocation target while the handle is held.
-    Locked { guard: MutexGuard<'static, SlotChecker>, _scope: Option<tsrs_core::arena::ScratchScope> },
+    Locked { guard: MutexGuard<'static, SlotChecker>, _scope: Option<CheckerScope> },
     // A checker owned by an external pool, which tracks exclusivity itself (Go project pool's `heldBy`).
     External { checker: NonNull<Checker>, release: Option<Box<dyn FnOnce()>> },
 }
@@ -181,40 +181,59 @@ struct CheckerSlot(Mutex<SlotChecker>);
 // tsrs-only (notes/mem-recycle-checkers.md): a checker of the built-in pool and, when the type-check pass may retire
 // checkers (`max_memory`), the region that holds everything it allocates. The region is the allocation target
 // whenever the checker runs (`enter`), so dropping the checker and then the region gives back all of its memory.
+//
+// With `ProgramOptions::checker_diagnostic_regions` (watch mode), the diagnostics the checker makes go to a second region of the slot
+// (`arena::Region::route_diagnostics`), freed with the program like the checker's: the snapshot that keeps some of
+// them copies those (tsrs_incremental `Program::copy_diagnostics`).
 pub(crate) struct SlotChecker {
     checker: Box<Checker>,
     region: Option<tsrs_core::arena::Region>,
+    diagnostics: Option<tsrs_core::arena::Region>,
+}
+
+/// `SlotChecker::enter`.
+pub(crate) struct CheckerScope {
+    // Before the region's scope: the route applies while the region is the target.
+    _route: Option<tsrs_core::arena::DiagnosticRoute>,
+    _scope: tsrs_core::arena::ScratchScope,
 }
 
 impl SlotChecker {
     fn new(program: &'static Program, in_region: bool) -> SlotChecker {
         if !in_region {
-            return SlotChecker { checker: new_checker(program), region: None };
+            return SlotChecker { checker: new_checker(program), region: None, diagnostics: None };
         }
         let region = tsrs_core::arena::Region::new_scratch(1 << 20);
+        let diagnostics = program.checker_diagnostic_regions.then(|| tsrs_core::arena::Region::new_scratch(64 << 10));
         let checker = {
             let _scope = region.enter_scratch();
+            // Merging the globals reports duplicate declarations.
+            let _route = diagnostics.as_ref().map(tsrs_core::arena::Region::route_diagnostics);
             new_checker(program)
         };
-        SlotChecker { checker, region: Some(region) }
+        SlotChecker { checker, region: Some(region), diagnostics }
     }
 
     // A replacement for a retired checker: a fork of the frozen shared-graph seed when there is one (it starts with the
     // seed's graph instead of rebuilding it), else a fresh checker; in a region of its own either way.
-    fn new_replacement(program: &'static Program) -> SlotChecker {
+    // The retired checker's diagnostics stay with the slot: the pool's results refer to them.
+    fn new_replacement(program: &'static Program, diagnostics: Option<tsrs_core::arena::Region>) -> SlotChecker {
         let region = tsrs_core::arena::Region::new_scratch(1 << 20);
         let checker = {
             let _scope = region.enter_scratch();
+            let _route = diagnostics.as_ref().map(tsrs_core::arena::Region::route_diagnostics);
             let fork = crate::sharedgraph::fresh_fork();
             fork.unwrap_or_else(|| new_checker(program))
         };
-        SlotChecker { checker, region: Some(region) }
+        SlotChecker { checker, region: Some(region), diagnostics }
     }
 
     // Makes the checker's region the allocation target (and the thread's scratch region, so that lazily filled
-    // data of shared objects and diagnostics escape it: `arena::escape_scratch`) until the scope is dropped.
-    fn enter(&self) -> Option<tsrs_core::arena::ScratchScope> {
-        self.region.as_ref().map(tsrs_core::arena::Region::enter_scratch)
+    // data of shared objects and diagnostics escape it: `arena::escape_scratch`) until the scope is dropped. The
+    // diagnostics go to the slot's diagnostics region if it has one.
+    fn enter(&self) -> Option<CheckerScope> {
+        let scope = self.region.as_ref()?.enter_scratch();
+        Some(CheckerScope { _route: self.diagnostics.as_ref().map(tsrs_core::arena::Region::route_diagnostics), _scope: scope })
     }
 
     // Bytes of arena the checker holds (its region's chunks), 0 without a region.
@@ -333,6 +352,8 @@ pub(crate) struct poolState {
     // The checker that runs each program file: the static assignment until stealing moves a file to the checker that
     // checks it, so later passes over the file (declaration diagnostics, emit) use the checker that has its state.
     owners: Vec<std::sync::atomic::AtomicU32>,
+    // The static assignment `owners` started from, for a program that reuses this one (`inherited_associations`).
+    pub(crate) associations: Vec<usize>,
     // Estimated work per program file (checked_file_weights), what stealing balances.
     weights: Vec<i64>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, files each checker took from other checkers.
@@ -424,6 +445,8 @@ pub(crate) struct checkerPool {
     checker_count: usize,
     single_threaded: bool,
     state: OnceLock<poolState>,
+    // tsrs-only: the file assignment of the pool of the program this one reuses (`inherited_associations`).
+    pub(crate) inherited_associations: Option<Vec<usize>>,
 }
 
 /*
@@ -613,7 +636,7 @@ fn get_checker_association_weights(base_weights: &[i64], import_counts: &[i64]) 
 
 impl checkerPool {
     // checkerpool.go:305 newCheckerPool / checkerpool.go:309 newCheckerPoolWithTracing (tracing is not ported).
-    pub(crate) fn new(program: &'static Program) -> checkerPool {
+    pub(crate) fn new(program: &'static Program, previous: Option<&checkerPool>) -> checkerPool {
         // Go's default is a constant 4; tsrs picks it per machine and program (default_checker_count).
         let checker_count: i64 = if program.single_threaded() {
             1
@@ -626,7 +649,8 @@ impl checkerPool {
         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
         let checker_count = checker_count.min(program.files.len() as i64).clamp(1, 256) as usize;
 
-        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new() }
+        let inherited_associations = previous.and_then(|previous| inherited_associations(program, checker_count, previous));
+        checkerPool { program, checker_count, single_threaded: program.single_threaded() || checker_count == 1, state: OnceLock::new(), inherited_associations }
     }
 
     // checkerpool.go:331
@@ -690,7 +714,7 @@ impl checkerPool {
                 // With the shared graph (sharedgraph.rs) the pool's checkers are plain until the type-check pass makes
                 // them forks of the seed.
                 run_work_group(self.single_threaded, self.checker_count, |i| {
-                    let c = SlotChecker::new(program, recycle);
+                    let c = SlotChecker::new(program, recycle || program.checker_regions);
                     if shared && i == 0 {
                         crate::sharedgraph::note_fresh_checker(&c.checker);
                     }
@@ -699,7 +723,10 @@ impl checkerPool {
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
                 tsrs_core::phases::record("Checkers: create", create_start.elapsed());
-                let associations = tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count));
+                let associations = match &self.inherited_associations {
+                    Some(associations) => associations.clone(),
+                    None => tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count)),
+                };
                 (checkers, associations)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
@@ -718,12 +745,14 @@ impl checkerPool {
             let files = &program.files;
             let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
+            let associations_for_reuse = associations;
             let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
             poolState {
                 shared_graph: shared,
                 checkers,
                 file_indices,
                 owners,
+                associations: associations_for_reuse,
                 weights,
                 group_stolen: Mutex::new(Vec::new()),
                 group_runs: Mutex::new(Vec::new()),
@@ -996,7 +1025,8 @@ impl checkerPool {
     // diagnostics of the files the old checker checked have been collected, and no later pass runs a checker over
     // them (the CLI's `--noEmit` check, as for leaf freeing).
     fn retire_checker(&self, state: &poolState, slot: &mut SlotChecker) {
-        let mut old = std::mem::replace(slot, SlotChecker::new_replacement(self.program));
+        let diagnostics = slot.diagnostics.take();
+        let mut old = std::mem::replace(slot, SlotChecker::new_replacement(self.program, diagnostics));
         {
             let _scope = old.enter();
             // Making the replacement left the thread's overlay (sharedgraph.rs): the old checker reads its own again.
@@ -1430,6 +1460,21 @@ fn go_associations(program: &Program, checker_count: usize, concurrent: bool) ->
         policy.balance_penalty_multiplier,
         None,
     )
+}
+
+// tsrs-only: the file assignment a program made by `reuse_program` takes over from `previous`, the pool of the
+// program it reuses, instead of computing its own: the files are the same, at the same indices, except for one
+// that was reparsed with the same imports. Computing the locality assignment of a large program takes longer than
+// the rest of a one-file watch cycle (12 ms of 80 on a 9.4k-file project), and its output is a function of the
+// program alone (see CheckerAssignment), so any assignment gives the same diagnostics and emit. The other
+// assignments are computed again: `go` keeps tsgo's assignment-dependent cache, and the debug ones should differ
+// per program.
+fn inherited_associations(program: &Program, checker_count: usize, previous: &checkerPool) -> Option<Vec<usize>> {
+    let state = previous.state.get()?;
+    let reusable = matches!(checker_assignment(), CheckerAssignment::Locality)
+        && previous.checker_count == checker_count
+        && state.associations.len() == program.files.len();
+    reusable.then(|| state.associations.clone())
 }
 
 // tsrs-only: where tsgo's compiler pool at its default checker count (`newCheckerPool`) type checks each file: the

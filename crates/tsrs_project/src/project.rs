@@ -309,7 +309,7 @@ pub(crate) fn new_inferred_project_command_line(
     errors: Vec<P<Diagnostic>>,
 ) -> P<ParsedCommandLine> {
     let mut command_line = tsoptions::new_parsed_command_line(compiler_options, root_file_names, project_references, compare_paths_options);
-    command_line.parsed_config.content_mappers = content_mappers;
+    command_line.parsed_config.content_mappers = content_mappers.into();
     command_line.errors = errors;
     P::new(command_line)
 }

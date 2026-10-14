@@ -429,6 +429,26 @@ suite in the default checker mode with forced splits and compare its lists with 
 330 test programs are split). `cargo test -p tsrs_cli --test split_check` runs testdata/split-check in every mode
 against tsgo-ref's output.
 
+## What survives a watch cycle: the per-cycle heap report
+
+An alloc-profile build prints, after each watch cycle (`--watch` and `-b --watch`, on the free thread once the
+cycle's frees are done), the exact live Rust heap, mimalloc's committed memory and the process RSS, the sampled live
+bytes by the cycle that allocated them (epoch 0 is the first build), and the stacks of the bytes allocated by a cycle
+that are still live `TSRS_CYCLE_REPORT_AGE` (default 4) cycles later, the top `TSRS_CYCLE_REPORT_TOP` (default 12).
+`TSRS_CYCLE_MI_STATS=1` adds mimalloc's own statistics (blocks in use per size class, pages, abandoned pages,
+committed). It needs the heap sampler on:
+
+```sh
+CARGO_TARGET_DIR=target/prof CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_DEBUG=line-tables-only \
+  cargo build --release -p tsrs_cli --features alloc-profile
+TSRS_HEAP_PROFILE=1 TSRS_HEAP_PROFILE_RATE=65536 target/prof/release/tsrs --watch -p . 2> cycles.err
+```
+
+Rows whose first frames are `alloc_profile::record` are the profiler's own per-site table growing (its newest buffer
+always looks like a survivor); leave them out. The build is several times slower than release, and the counting
+allocator's mimalloc does not take the collect hook (`set_heap_hooks`), so its committed and RSS numbers are those of
+a watch without the post-cycle collect. notes/watch-macos.md ("Memory") has a worked example.
+
 ## Profiling
 
 Profile the `dist` profile. It inherits `release` (fat LTO, one codegen unit, symbols stripped, no debug info);

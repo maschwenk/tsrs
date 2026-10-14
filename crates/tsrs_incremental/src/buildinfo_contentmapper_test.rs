@@ -13,7 +13,7 @@ use crate::{content_mapper_identities, read_build_info_program, BuildInfo, Build
 // buildinfo_contentmapper_test.go:16
 fn config_with_mappers(mappers: Vec<Mapper>) -> P<ParsedCommandLine> {
     let mut config = new_parsed_command_line(P::new(CompilerOptions::default()), Vec::new(), Vec::new(), Default::default());
-    config.parsed_config.content_mappers = mappers;
+    config.parsed_config.content_mappers = mappers.into();
     P::new(config)
 }
 

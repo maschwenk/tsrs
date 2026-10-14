@@ -23,6 +23,24 @@ use std::ops::Deref;
 thread_local! {
     /// The thread's own arena, set on first use (`own_arena`) and cleared by `release_own_arena`.
     static ARENA: std::cell::Cell<Option<&'static Arena>> = const { std::cell::Cell::new(None) };
+    /// Hands the thread's own arena on when the thread exits (`own_arena` registers it).
+    static RELEASE_AT_EXIT: ReleaseAtExit = const { ReleaseAtExit };
+}
+
+/// `release_own_arena` when the thread exits: a thread that ended without it kept its arena, which no thread
+/// allocated in again. A watch session starts threads for each cycle (the signature job, the threads of the pools
+/// that end with their program): on vscode, a thread arena (1 MiB) more about every 15 edits.
+struct ReleaseAtExit;
+
+impl Drop for ReleaseAtExit {
+    fn drop(&mut self) {
+        // The other thread locals may be gone: a scope cannot be open any more (its guard lived on the stack).
+        if arena::no_scope_open_at_exit()
+            && let Some(a) = ARENA.with(std::cell::Cell::take)
+        {
+            arena::give_spare_arena(a);
+        }
+    }
 }
 
 fn new_thread_arena() -> &'static Arena {
@@ -50,6 +68,9 @@ pub(crate) fn own_arena() -> &'static Arena {
         None => {
             let a = arena::take_spare_arena().unwrap_or_else(new_thread_arena);
             c.set(Some(a));
+            // Fails only while the thread exits (a destructor that allocates after the arena was handed on): that
+            // arena stays with the thread.
+            let _ = RELEASE_AT_EXIT.try_with(|_| ());
             a
         }
     })

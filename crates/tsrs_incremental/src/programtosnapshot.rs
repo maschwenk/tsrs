@@ -22,14 +22,15 @@ pub(crate) fn program_to_snapshot(program: &'static CompilerProgram, old_program
             return old_program.snapshot;
         }
     }
-    let snapshot = P::new(Snapshot {
+    // Recycled: a watch session frees the snapshot it replaces (`Program::drop_replaced`).
+    let snapshot = P::new_recycled(Snapshot {
         hash_with_text,
         file_order: program.get_source_files().iter().map(|file| file.path().clone()).collect(),
         ..Default::default()
     });
     snapshot.options.set(Some(program.options()));
     snapshot.check_pending.set(program.options().no_check.is_true());
-    let mut to = toProgramSnapshot { program, old_program, snapshot, global_file_removed: false };
+    let mut to = toProgramSnapshot { program, old_program, snapshot, global_file_removed: false, has_deleted_files: false, global_scope_lost: false };
 
     if to.snapshot.can_use_incremental_state() {
         to.reuse_from_old_program();
@@ -45,6 +46,8 @@ pub(crate) fn program_to_snapshot(program: &'static CompilerProgram, old_program
 // What computeProgramFileChanges' per-file function stores into the snapshot besides the file info and references.
 struct fileChange {
     add_to_change_set: bool,
+    // The old state had the file affecting the global scope and the new program does not (handle_global_scope_change).
+    global_scope_lost: bool,
     emit_diagnostics: Option<DiagnosticsCache>,
     semantic_diagnostics: Option<DiagnosticsCache>,
     emit_signature: Option<EmitSignature>,
@@ -55,6 +58,10 @@ struct toProgramSnapshot {
     old_program: Option<P<Program>>,
     snapshot: P<Snapshot>,
     global_file_removed: bool,
+    // Files of the old state that the new program does not have (compute_program_file_changes).
+    has_deleted_files: bool,
+    // A file of the new program lost the global scope its old state had (compute_program_file_changes).
+    global_scope_lost: bool,
 }
 
 impl toProgramSnapshot {
@@ -107,34 +114,59 @@ impl toProgramSnapshot {
         let ambient_module_files_by_checker = AmbientModuleFilesByChecker::default();
         // Files of the old state that the new program does not have.
         let mut deleted_files: rustc_hash::FxHashSet<Path> = rustc_hash::FxHashSet::default();
-        if let Some(old) = old {
+        if let Some(old) = old
+            && !self.old_program.and_then(|p| p.program).is_some_and(|old_program| same_file_paths(old_program, self.program, old.file_infos.size()))
+        {
             deleted_files.extend(
                 old.file_infos.keys().into_iter().filter_map(|path| if self.program.get_source_file_by_path(&path).is_none() { Some(path) } else { None }),
             );
         }
+        self.has_deleted_files = !deleted_files.is_empty();
+        // The file of each path in the old compiler program, to reuse the versions of the files the new program shares
+        // with it (`reused_version`).
+        let old_compiler_program = self.old_program.and_then(|p| p.program);
+        let shared_ambient_paths = SharedAmbientPaths::default();
+        // tsrs-only: in a program `reuse_program` made from the old state's program, the files it did not reparse keep
+        // their references. A file's references are the files declaring the module symbols of its imports and module
+        // augmentations, and the files declaring ambient modules, plus the paths of its triple-slash and type
+        // references. The module resolution is the old program's, and the reparsed file has the same imports, module
+        // augmentation and ambient module names: every module symbol has the same declaring files. Looking up the
+        // imports of every file again took 11 ms of a 50 ms one-file watch cycle on a 9.4k-file project.
+        let keeps_references = |file: P<SourceFile>| {
+            old_compiler_program.is_some_and(|old_program| self.program.is_reuse_of(old_program) && old_program.get_source_file_by_path(file.path()) == Some(file))
+        };
         let new_options = self.snapshot.options();
         // programtosnapshot.go:91: Go queues the per-file work on a work group and lets each function store into the
         // snapshot's sync maps. Here the per-file work runs on the program's worker pool and only reads shared state;
         // its results are stored in file order afterwards, so the maps are filled in the same order as a sequential run.
         let compute = |file: P<SourceFile>, checker_references: Option<checkerReferences>| -> (FileInfo, Option<std::sync::Arc<RefSet>>, fileChange) {
             // programtosnapshot.go:94
-            let version = if !file.content_mapper().is_empty() {
-                self.snapshot.compute_hash(&format!("{}\x00{}", file.original_text(), file.content_mapper_transform_identity()))
-            } else {
-                self.snapshot.compute_hash(file.text())
+            let old_file_info = old.and_then(|old| old.file_infos.load(file.path()));
+            let version = match reused_version(old_compiler_program, old_file_info.as_ref(), file) {
+                Some(version) => version,
+                None if !file.content_mapper().is_empty() => {
+                    self.snapshot.compute_hash(&format!("{}\x00{}", file.original_text(), file.content_mapper_transform_identity()))
+                }
+                None => self.snapshot.compute_hash(file.text()),
             };
             let implied_node_format = self.program.get_source_file_meta_data(file.path()).implied_node_format;
             let affects_global_scope = file_affects_global_scope(file);
             let mut signature = String::new();
-            let checker_references = checker_references.unwrap_or_else(|| {
-                let mut checker = self.program.get_type_checker_for_file_exclusive(&Context::default(), file);
-                checker_references_of(file, &mut checker, &ambient_module_files_by_checker)
-            });
             let old_references = old.and_then(|old| old.referenced_map.get_references(file.path()));
-            let new_references = referenced_files_of(self.program, file, checker_references, old_references.as_ref());
-            let mut change = fileChange { add_to_change_set: false, emit_diagnostics: None, semantic_diagnostics: None, emit_signature: None };
+            let new_references = if keeps_references(file) {
+                old_references.clone()
+            } else {
+                let checker_references = checker_references.unwrap_or_else(|| {
+                    let mut checker = self.program.get_type_checker_for_file_exclusive(&Context::default(), file);
+                    checker_references_of(file, &mut checker, &ambient_module_files_by_checker)
+                });
+                referenced_files_of(self.program, file, checker_references, old_references.as_ref(), &shared_ambient_paths)
+            };
+            let mut change =
+                fileChange { add_to_change_set: false, global_scope_lost: false, emit_diagnostics: None, semantic_diagnostics: None, emit_signature: None };
             if let Some(old) = old {
-                if let Some(old_file_info) = old.file_infos.load(file.path()) {
+                if let Some(old_file_info) = old_file_info {
+                    change.global_scope_lost = old_file_info.affects_global_scope && !affects_global_scope;
                     if old_file_info.version != version
                         || old_file_info.affects_global_scope != affects_global_scope
                         || old_file_info.implied_node_format != implied_node_format
@@ -190,8 +222,10 @@ impl toProgramSnapshot {
             // order) instead of 18 workers taking turns on 4 checker locks per file; then the rest of the per-file
             // work on the worker pool. Without a pool of its own the program locks per file.
             let checker_references: Vec<std::sync::OnceLock<checkerReferences>> = files.iter().map(|_| std::sync::OnceLock::new()).collect();
-            let batched = self.program.for_each_checker_group(files, |checker, i, file| {
-                let _ = checker_references[i].set(checker_references_of(file, checker, &ambient_module_files_by_checker));
+            let looked_up: Vec<usize> = (0..files.len()).filter(|&i| !keeps_references(files[i])).collect();
+            let looked_up_files: Vec<P<SourceFile>> = looked_up.iter().map(|&i| files[i]).collect();
+            let batched = self.program.for_each_checker_group(&looked_up_files, |checker, j, file| {
+                let _ = checker_references[looked_up[j]].set(checker_references_of(file, checker, &ambient_module_files_by_checker));
             });
             let checker_references: Vec<Option<checkerReferences>> =
                 checker_references.into_iter().map(|r| if batched { r.into_inner() } else { None }).collect();
@@ -222,6 +256,20 @@ impl toProgramSnapshot {
             self.snapshot.build_info_emit_pending.set(true);
         }
         // Source/order/option changes can change a merge's declarations even when its slots remain equal.
+        // tsrs-only: a changed file moves a report site only by adding or removing a declaration of a merged
+        // interface, so it counts when its new or old text declares an interface. Without the old text (a program
+        // loaded from build info) every changed file counts. Counting every changed file made a comment edit in
+        // a watch recheck every checked file that declares an interface: 690 -> 70 ms per edit on vscode
+        // (notes/watch-interface-refresh.md).
+        let declares_interface_before_or_after = |file: P<SourceFile>| {
+            contains_interface_declaration(file.as_node())
+                || match old_compiler_program {
+                    Some(old_program) => old_program
+                        .get_source_file_by_path(file.path())
+                        .is_some_and(|old_file| old_file != file && contains_interface_declaration(old_file.as_node())),
+                    None => true,
+                }
+        };
         let refresh_interface_diagnostics = reporting_policy_changed
             || canonical_diagnostics
                 && old.is_some_and(|old| {
@@ -229,7 +277,10 @@ impl toProgramSnapshot {
                         || old.options().skip_lib_check != new_options.skip_lib_check
                         || old.options().skip_default_lib_check != new_options.skip_default_lib_check
                         || !deleted_files.is_empty()
-                        || results.iter().any(|(_, _, change)| change.add_to_change_set)
+                        || files
+                            .iter()
+                            .zip(&results)
+                            .any(|(&file, (_, _, change))| change.add_to_change_set && declares_interface_before_or_after(file))
                 });
         for (&file, (info, new_references, mut change)) in files.iter().zip(results) {
             if refresh_interface_diagnostics
@@ -243,6 +294,7 @@ impl toProgramSnapshot {
                 self.snapshot.referenced_map.store_shared_references(file.path().clone(), new_references);
             }
             if old.is_some() {
+                self.global_scope_lost |= change.global_scope_lost;
                 if change.add_to_change_set {
                     self.snapshot.add_file_to_change_set(file.path().clone());
                 }
@@ -264,6 +316,10 @@ impl toProgramSnapshot {
 
     // programtosnapshot.go:160
     fn handle_file_delete(&mut self) {
+        // Ranging the old file infos finds nothing when no file was deleted.
+        if !self.has_deleted_files {
+            return;
+        }
         if let Some(old_program) = self.old_program {
             // If the global file is removed, add all files as changed
             old_program.snapshot.file_infos.range(|file_path, old_info| {
@@ -285,24 +341,12 @@ impl toProgramSnapshot {
 
     // programtosnapshot.go:180
     fn handle_global_scope_change(&mut self) {
-        let Some(old_program) = self.old_program else { return };
-        if self.global_file_removed {
+        if self.old_program.is_none() || self.global_file_removed {
             return;
         }
-        let mut global_scope_lost = false;
-        old_program.snapshot.file_infos.range(|file_path, old_info| {
-            if !old_info.affects_global_scope {
-                return true;
-            }
-            if let Some(new_info) = self.snapshot.file_infos.load(file_path) {
-                if !new_info.affects_global_scope {
-                    global_scope_lost = true;
-                    return false;
-                }
-            }
-            true
-        });
-        if global_scope_lost {
+        // Go ranges the old file infos for a file that affected the global scope and no longer does; each file's
+        // compute function recorded that for its own file (fileChange::global_scope_lost).
+        if self.global_scope_lost {
             for &file in self.snapshot.get_all_files_excluding_default_library_file(self.program, None) {
                 self.snapshot.add_file_to_change_set(file.path().clone());
             }
@@ -468,6 +512,7 @@ fn referenced_files_of(
     file: P<SourceFile>,
     checker_references: checkerReferences,
     old: Option<&std::sync::Arc<RefSet>>,
+    shared_ambient_paths: &SharedAmbientPaths,
 ) -> Option<std::sync::Arc<RefSet>> {
     let checkerReferences { import_files, augmentation_files, ambient_module_files } = checker_references;
     let (ambient_files, ambient_file_set, ambient_paths) = &*ambient_module_files;
@@ -488,8 +533,28 @@ fn referenced_files_of(
         }));
     }
 
+    // The ambient module files' paths are the checker's shared part of the set (RefSet); the file's own paths are
+    // the rest. The file itself is left out of the shared part (Go filters `file != decl file` there), but stays in
+    // its own part when a triple-slash reference names it.
+    let file_is_ambient = ambient_file_set.contains(&file);
+    let in_shared = |path: &Path| ambient_paths.has(path) && !(file_is_ambient && path == file.path());
+
     if let Some(old) = old {
-        if references_equal(program, file, &import_files, &augmentation_files, ambient_files, ambient_file_set, &file_name_paths, old) {
+        // An old set whose shared part has the same paths, minus the same file, is equal when the own parts are: both
+        // own parts leave out the rest of the shared paths. Comparing the shared parts once per pair of sets instead
+        // of once per file matters when every file shares several hundred ambient module files.
+        let same_shared = old.shared().is_some_and(|(old_shared, old_skip)| {
+            old_skip == file_is_ambient.then(|| file.path()) && shared_ambient_paths.same(old_shared, ambient_paths)
+        });
+        let equal = if same_shared {
+            let mut own: Vec<&Path> = import_files.iter().chain(&augmentation_files).map(|f| f.path()).chain(&file_name_paths).filter(|p| !in_shared(p)).collect();
+            own.sort_unstable();
+            own.dedup();
+            own.len() == old.own().len() && own.iter().all(|p| old.own().has(p))
+        } else {
+            references_equal(program, file, &import_files, &augmentation_files, ambient_files, ambient_file_set, &file_name_paths, old)
+        };
+        if equal {
             return Some(Arc::clone(old));
         }
     }
@@ -497,12 +562,6 @@ fn referenced_files_of(
     // We need to use a set here since the code can contain the same import twice,
     // but that will only be one dependency.
     // To avoid invernal conversion, the key of the referencedFiles map must be of type Path
-    //
-    // The ambient module files' paths are the checker's shared part of the set (RefSet); the file's own paths are
-    // the rest. The file itself is left out of the shared part (Go filters `file != decl file` there), but stays in
-    // its own part when a triple-slash reference names it.
-    let file_is_ambient = ambient_file_set.contains(&file);
-    let in_shared = |path: &Path| ambient_paths.has(path) && !(file_is_ambient && path == file.path());
     let mut own: Set<Path> = Set::default();
     own.m.reserve(import_files.len() + file_name_paths.len() + augmentation_files.len());
     own.m.extend(import_files.into_iter().chain(augmentation_files).filter_map(|f| if !in_shared(f.path()) { Some(f.path().clone()) } else { None }));
@@ -516,6 +575,45 @@ fn referenced_files_of(
     }
     let skip = if file_is_ambient { Some(file.path().clone()) } else { None };
     Some(std::sync::Arc::new(RefSet::split(own, Arc::clone(ambient_paths), skip)))
+}
+
+// Whether two shared parts of reference sets (the paths of a checker's ambient module files) have the same paths,
+// remembered per pair: the old sets share a few such parts, and each checker of the new program has one.
+#[derive(Default)]
+struct SharedAmbientPaths(std::sync::Mutex<rustc_hash::FxHashMap<(usize, usize), bool>>);
+
+impl SharedAmbientPaths {
+    fn same(&self, a: &Arc<Set<Path>>, b: &Arc<Set<Path>>) -> bool {
+        if Arc::ptr_eq(a, b) {
+            return true;
+        }
+        let key = (Arc::as_ptr(a) as usize, Arc::as_ptr(b) as usize);
+        if let Some(&same) = self.0.lock().unwrap().get(&key) {
+            return same;
+        }
+        let same = a.len() == b.len() && a.keys().iter().all(|path| b.has(path));
+        self.0.lock().unwrap().insert(key, same);
+        same
+    }
+}
+
+// The version of `file` in the old state, when the old compiler program has the same file object at its path (a
+// program made by `reuse_program` shares all of them but one): the same text, so the same hash. Hashing the text of
+// every file again took a quarter of a one-file watch cycle's CPU on a 9.4k-file project.
+// The watch frees the old compiler program only after the new program's snapshot is built (watcher.rs `install_program`).
+fn reused_version(old_program: Option<&CompilerProgram>, old_file_info: Option<&FileInfo>, file: P<SourceFile>) -> Option<String> {
+    let old_file = old_program?.get_source_file_by_path(file.path())?;
+    (old_file == file).then(|| old_file_info.map(|info| info.version.clone())).flatten()
+}
+
+// Whether `program` has the files of `old_program`, by path and in the same order, and the old state had one file
+// info per file: no file of the old state is missing from the new program. A program made by `reuse_program` does.
+fn same_file_paths(old_program: &CompilerProgram, program: &CompilerProgram, old_file_info_count: usize) -> bool {
+    let old_files = old_program.get_source_files();
+    let files = program.get_source_files();
+    old_files.len() == files.len()
+        && files.len() == old_file_info_count
+        && old_files.iter().zip(files).all(|(&old, &new)| old == new || old.path() == new.path())
 }
 
 // Whether `old` is exactly the set referenced_files_of would build: as large as the number of distinct paths, and

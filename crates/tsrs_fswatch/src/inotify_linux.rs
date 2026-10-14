@@ -126,7 +126,7 @@ impl inotifyBackend {
     fn watch_dir(&self, subs: &mut FxHashMap<i32, Vec<inotifySubscription>>, w: &Arc<dirWatch>, path: &str, watch_path: &str) -> Result<i32, Error> {
         let cpath = std::ffi::CString::new(watch_path).map_err(|_| Error::from_errno(libc::EINVAL))?;
         // SAFETY: `cpath` is NUL-terminated and outlives the call.
-        let wd = unsafe { libc::inotify_add_watch(self.inotify.load(Ordering::SeqCst), cpath.as_ptr(), inotifyMask) };
+        let wd = unsafe { libc::inotify_add_watch(self.inotify.load(Ordering::SeqCst), cpath.as_ptr(), watch_mask()) };
         if wd < 0 {
             return Err(Error::from_errno(last_errno()));
         }
@@ -215,8 +215,16 @@ impl inotifyBackend {
             watch_path = format!("{watch_path}/{name}");
         }
 
+        // tsrs-only (`set_write_settling`): a close has no event of its own; it releases the callbacks.
+        if ev.mask & libc::IN_CLOSE_WRITE != 0 {
+            w.write_finished(&path);
+            return false;
+        }
         if ev.mask & (libc::IN_CREATE | libc::IN_MOVED_TO) != 0 {
             w.events.create(&path);
+            if ev.mask & libc::IN_CREATE != 0 && !is_dir && crate::watcher::write_settling() && is_regular_file(&watch_path) {
+                w.write_started(&path);
+            }
             if is_dir && w.recursive {
                 let mut dirs = Vec::new();
                 let _ = walk_dir(&watch_path, true, &mut |p, p_is_dir| {
@@ -231,6 +239,9 @@ impl inotifyBackend {
             }
         } else if ev.mask & libc::IN_MODIFY != 0 {
             w.events.update(&path);
+            if crate::watcher::write_settling() {
+                w.write_started(&path);
+            }
         } else if ev.mask & (libc::IN_DELETE | libc::IN_DELETE_SELF | libc::IN_MOVED_FROM | libc::IN_MOVE_SELF) != 0 {
             let is_self_event = ev.mask & (libc::IN_DELETE_SELF | libc::IN_MOVE_SELF) != 0;
             if is_self_event && path != w.dir {
@@ -255,6 +266,18 @@ impl inotifyBackend {
         }
         true
     }
+}
+
+// tsrs-only: with write settling (`set_write_settling`), also the closes of files opened for writing.
+fn watch_mask() -> u32 {
+    if crate::watcher::write_settling() { inotifyMask | libc::IN_CLOSE_WRITE } else { inotifyMask }
+}
+
+// A created entry that a writer may still be writing: a regular file (not a directory, symlink or device, which get
+// no close event).
+#[expect(clippy::filetype_is_file, reason = "only a regular file is written and closed; the other types are what it excludes")]
+fn is_regular_file(path: &str) -> bool {
+    std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_file())
 }
 
 fn touch(touched: &mut Vec<Arc<dirWatch>>, w: &Arc<dirWatch>) {

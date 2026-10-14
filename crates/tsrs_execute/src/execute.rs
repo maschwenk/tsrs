@@ -1,5 +1,5 @@
-// Port of Go's execute/tsc.go (no watch mode, --init, --showConfig or --generateTrace; --help prints a short usage
-// instead of tsc's option list).
+// Port of Go's execute/tsc.go (no --init, --showConfig or --generateTrace; --help prints a short usage instead of
+// tsc's option list).
 
 use std::sync::Arc;
 
@@ -17,9 +17,14 @@ use crate::tsc::{
 };
 
 // The system doubles as the config-parsing host (Go's tsc.System satisfies tsoptions.ParseConfigHost).
-struct sysParseConfigHost {
+pub(crate) struct sysParseConfigHost {
     sys: &'static dyn System,
     fs: Arc<dyn FS>,
+}
+
+/// The config parse host for `sys` (leaked: tsoptions keeps it for the parsed command line's lifetime).
+pub(crate) fn parse_config_host(sys: &'static dyn System) -> &'static sysParseConfigHost {
+    Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }))
 }
 
 impl ParseConfigHost for sysParseConfigHost {
@@ -33,8 +38,9 @@ impl ParseConfigHost for sysParseConfigHost {
 }
 
 fn not_supported(sys: &dyn System, what: &str) -> CommandLineResult {
-    sys.write(&format!("error: {what} is not supported by tsrs.\n"));
-    CommandLineResult { status: ExitStatus::NotImplemented }
+    sys.write(&format!("error: {what} is not supported by tsrs.
+"));
+    CommandLineResult { watcher: None, status: ExitStatus::NotImplemented }
 }
 
 pub fn command_line(sys: &'static dyn System, command_line_args: Vec<String>) -> CommandLineResult {
@@ -50,7 +56,7 @@ pub fn command_line_with_testing(
     if let Some(first) = command_line_args.first() {
         match first.to_lowercase().as_str() {
             "-b" | "--b" | "-build" | "--build" => {
-                let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
+                let host = parse_config_host(sys);
                 let mut command = tsoptions::parse_build_command_line(&command_line_args, host);
                 if tsrs_core::NO_THREADS {
                     command.compiler_options.single_threaded = tsrs_core::Tristate::True;
@@ -75,7 +81,7 @@ pub fn command_line_with_testing(
         let name = args.get(pos + 1).cloned().unwrap_or_default();
         if !tsrs_compiler::set_checker_assignment_from_cli(&name) {
             sys.write(&format!("error: unknown --checkerAssignment {name:?} (expected locality, go, random:<seed> or file:<path>).\n"));
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+            return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         }
         args.drain(pos..(pos + 2).min(args.len()));
     }
@@ -84,11 +90,11 @@ pub fn command_line_with_testing(
     if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--checkerCostCache")) {
         let Some(path) = args.get(pos + 1).cloned().filter(|p| !p.starts_with('-')) else {
             sys.write("error: --checkerCostCache expects a file path.\n");
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+            return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         };
         if tsrs_core::NO_THREADS {
             sys.write("error: --checkerCostCache is not supported by the WebAssembly build.\n");
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+            return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         }
         tsrs_compiler::set_checker_cost_cache_from_cli(&path);
         args.drain(pos..pos + 2);
@@ -99,12 +105,12 @@ pub fn command_line_with_testing(
     if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--maxMemory")) {
         let Some(bytes) = args.get(pos + 1).and_then(|v| tsrs_compiler::parse_memory_size(v)) else {
             sys.write("error: --maxMemory expects a size such as 12G, 12000M or 12000 (MiB).\n");
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+            return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         };
         tsrs_compiler::set_max_memory_from_cli(bytes);
         args.drain(pos..pos + 2);
     }
-    let host: &'static sysParseConfigHost = Box::leak(Box::new(sysParseConfigHost { sys, fs: sys.fs() }));
+    let host = parse_config_host(sys);
     let mut command = tsoptions::parse_command_line(&args, host);
     if tsrs_core::NO_THREADS {
         force_single_threaded(&mut command);
@@ -136,7 +142,7 @@ fn tsc_compilation(
         for &e in &command_line.errors {
             report_diagnostic(e);
         }
-        return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
     }
 
     if command_line_options.init.is_true() {
@@ -145,25 +151,25 @@ fn tsc_compilation(
 
     if command_line_options.version.is_true() {
         print_version(sys);
-        return CommandLineResult { status: ExitStatus::Success };
+        return CommandLineResult { watcher: None, status: ExitStatus::Success };
     }
 
     if command_line_options.help.is_true() || command_line_options.all.is_true() {
         print_version(sys);
         sys.write("Usage: tsrs [-p <project>] [options] [files...]\n  Compiles like `tsc`. See `tsc --help` for options.\n");
-        return CommandLineResult { status: ExitStatus::Success };
+        return CommandLineResult { watcher: None, status: ExitStatus::Success };
     }
 
     if command_line_options.watch.is_true() && command_line_options.list_files_only.is_true() {
         report_diagnostic(new_compiler_diagnostic(&diagnostics::Options_0_and_1_cannot_be_combined, &[&"watch", &"listFilesOnly"]));
-        return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
     }
 
     let fs = sys.fs();
     if !command_line_options.project.is_empty() {
         if !command_line.file_names().is_empty() {
             report_diagnostic(new_compiler_diagnostic(&diagnostics::Option_project_cannot_be_mixed_with_source_files_on_a_command_line, &[]));
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+            return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         }
 
         let file_or_directory = tspath::normalize_path(&command_line_options.project);
@@ -174,13 +180,13 @@ fn tsc_compilation(
                     &diagnostics::Cannot_find_a_tsconfig_json_file_at_the_current_directory_Colon_0,
                     &[&config_file_name],
                 ));
-                return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+                return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
             }
         } else {
             config_file_name.clone_from(&file_or_directory);
             if !fs.file_exists(&config_file_name) {
                 report_diagnostic(new_compiler_diagnostic(&diagnostics::The_specified_path_does_not_exist_Colon_0, &[&file_or_directory]));
-                return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+                return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
             }
         }
     } else if !command_line_options.ignore_config.is_true() || command_line.file_names().is_empty() {
@@ -193,7 +199,7 @@ fn tsc_compilation(
                     &diagnostics::X_tsconfig_json_is_present_but_will_not_be_loaded_if_files_are_specified_on_commandline_Use_ignoreConfig_to_skip_this_error,
                     &[],
                 ));
-                return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+                return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
             }
         } else if config_file_name.is_empty() {
             if command_line_options.show_config.is_true() {
@@ -205,7 +211,7 @@ fn tsc_compilation(
                 print_version(sys);
                 sys.write("Usage: tsrs [-p <project>] [options] [files...]\n");
             }
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+            return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
         }
     }
 
@@ -215,17 +221,17 @@ fn tsc_compilation(
     let extended_config_cache: Arc<ExtendedConfigCache> = Arc::new(ExtendedConfigCache::default());
     let mut compile_times = CompileTimes::default();
     let mut report_diagnostic = report_diagnostic;
+    // Wrap command line options in a "compilerOptions" key to match tsconfig.json structure
+    let command_line_raw = match &command_line.raw {
+        CompilerOptionsValue::Object(_) => {
+            let mut wrapped = tsrs_core::collections::OrderedMap::default();
+            wrapped.insert("compilerOptions".to_string(), command_line.raw.clone());
+            Some(CompilerOptionsValue::Object(wrapped))
+        }
+        _ => None,
+    };
     if !config_file_name.is_empty() {
         let config_start = sys.now();
-        // Wrap command line options in a "compilerOptions" key to match tsconfig.json structure
-        let command_line_raw = match &command_line.raw {
-            CompilerOptionsValue::Object(_) => {
-                let mut wrapped = tsrs_core::collections::OrderedMap::default();
-                wrapped.insert("compilerOptions".to_string(), command_line.raw.clone());
-                Some(CompilerOptionsValue::Object(wrapped))
-            }
-            _ => None,
-        };
         // tsrs-only: parsed on the compiler's worker pool, so that the include glob's parallel listing prefetch runs on
         // the pool program construction uses next instead of starting rayon's global pool (one thread per vCPU, which
         // nothing else in a run needs).
@@ -244,7 +250,7 @@ fn tsc_compilation(
             for e in errors {
                 report_diagnostic(e);
             }
-            return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsGenerated };
+            return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsGenerated };
         }
         config_for_compilation = P::new(config_parse_result.unwrap());
         // Updater to reflect pretty
@@ -257,7 +263,21 @@ fn tsc_compilation(
         return not_supported(sys, "--showConfig");
     }
     if config_options.watch.is_true() {
-        return not_supported(sys, "watch mode (--watch)");
+        if testing.is_none() && !tsrs_fswatch::default().available() {
+            return not_supported(sys, "watch mode (--watch) on this platform");
+        }
+        let backend = testing.and_then(crate::tsc::CommandLineTesting::watch_backend);
+        let watcher = crate::watcher::run_watcher(
+            sys,
+            config_for_compilation,
+            compiler_options_from_command_line,
+            command_line_raw,
+            report_diagnostic,
+            report_error_summary,
+            testing,
+            backend,
+        );
+        return CommandLineResult { status: ExitStatus::Success, watcher: watcher.map(|w| w as Box<dyn tsc::Watcher>) };
     }
     // tsc.go:245
     if config_for_compilation.compiler_options().unwrap().is_incremental() {
@@ -385,7 +405,7 @@ fn perform_compilation(
         census(program, &[config.addr(), result.diagnostics.as_ptr() as usize]);
     }
 
-    CommandLineResult { status: result.status }
+    CommandLineResult { watcher: None, status: result.status }
 }
 
 // tsc.go:308
@@ -463,11 +483,11 @@ fn perform_incremental_compilation(
     if let Some(testing) = testing {
         testing.on_program(incremental_program);
     }
-    CommandLineResult { status: result.status }
+    CommandLineResult { watcher: None, status: result.status }
 }
 
 // tsc.go:394
-fn get_content_mapper_project(
+pub(crate) fn get_content_mapper_project(
     host: Option<&Arc<dyn tsrs_contentmapper::Host>>,
     config: P<ParsedCommandLine>,
 ) -> Option<Arc<dyn tsrs_contentmapper::Project>> {
@@ -493,7 +513,7 @@ fn tsc_build_compilation(
     // tsrs-only: build mode has its own reporters (task output buffers, build status), which a sink does not cover.
     if sys.diagnostic_sink().is_some() {
         sys.write("error: diagnostics as JSON are not supported with --build\n");
-        return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
     }
     let report_diagnostic = create_diagnostic_reporter(sys, Some(&build_command.compiler_options));
 
@@ -501,23 +521,23 @@ fn tsc_build_compilation(
         for &err in &build_command.errors {
             report_diagnostic(err);
         }
-        return CommandLineResult { status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
+        return CommandLineResult { watcher: None, status: ExitStatus::DiagnosticsPresent_OutputsSkipped };
     }
 
     if build_command.compiler_options.help.is_true() {
         print_version(sys);
         sys.write("Usage: tsrs -b [projects...] [options]\n  See `tsc -b --help` for options.\n");
-        return CommandLineResult { status: ExitStatus::Success };
+        return CommandLineResult { watcher: None, status: ExitStatus::Success };
     }
-    if build_command.compiler_options.watch.is_true() {
-        return not_supported(sys, "watch mode (--watch)");
+    // tsrs-only: no file watching backend on this platform (Windows; Go has ReadDirectoryChangesW).
+    if build_command.compiler_options.watch.is_true() && testing.is_none() && !tsrs_fswatch::default().available() {
+        return not_supported(sys, "watch mode (--watch) on this platform");
     }
-
     let orchestrator = crate::build::new_orchestrator(crate::build::Options { sys, command: build_command, testing });
     orchestrator.start()
 }
 
 // tsc.go getTraceFromSys / tsc.GetTraceWithWriterFromSys
-fn get_trace_from_sys(sys: &'static dyn System, testing: Option<&'static dyn tsc::CommandLineTesting>) -> Box<tsrs_compiler::TraceFn> {
+pub(crate) fn get_trace_from_sys(sys: &'static dyn System, testing: Option<&'static dyn tsc::CommandLineTesting>) -> Box<tsrs_compiler::TraceFn> {
     tsc::get_trace_with_writer_from_sys(std::sync::Arc::new(move |t: &str| sys.write(t)), true, testing)
 }

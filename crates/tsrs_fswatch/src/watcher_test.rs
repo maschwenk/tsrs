@@ -586,3 +586,58 @@ fn atomic_save() {
         Ok(())
     });
 }
+
+// tsrs-only (`eventIndex`): with several callbacks, each gets the events it gets when it is the only one (one
+// callback is delivered without the index).
+#[test]
+fn indexed_delivery_matches_single_callback_delivery() {
+    let dirs = ["/root", "/root/a", "/root/A", "/root/a/b", "/root/x", "/root/\u{017f}", "/root/s", "/root/\u{00df}"];
+    let paths = [
+        "/root", "/root/f.ts", "/root/F.ts", "/root/a", "/root/a/f.ts", "/root/A/G.ts", "/root/a/b/h.ts", "/root/a/b/c/i.ts", "/root/x/j.ts",
+        "/root/\u{017f}/k.ts", "/root/S/l.ts", "/root/s/m.ts", "/root/SS/n.ts", "/root/\u{00df}/o.ts", "/root/a/B", "/root/ab/p.ts", "/other/q.ts",
+    ];
+    for ignore_case in [false, true] {
+        for physical in ["/root", "/phys"] {
+            // (dir, physical dir, recursive, file)
+            let mut configs: Vec<(String, String, bool, String)> = Vec::new();
+            for dir in dirs {
+                for recursive in [false, true] {
+                    configs.push((dir.to_string(), rebase_path(dir, "/root", physical), recursive, String::new()));
+                }
+            }
+            configs.push(("/root/a".to_string(), rebase_path("/root/a", "/root", physical), false, "/root/a/f.ts".to_string()));
+            configs.push(("/root".to_string(), physical.to_string(), false, "/root/f.ts".to_string()));
+            // A callback under another name for the same physical directory (a symlink to it).
+            for (dir, sub) in [("/link/a", "/a"), ("/link", ""), ("/LINK/A/B", "/a/b")] {
+                configs.push((dir.to_string(), format!("{physical}{sub}"), false, String::new()));
+            }
+            let deliver = |configs: &[(String, String, bool, String)]| -> Vec<Vec<String>> {
+                let dw = dirWatch::new("/root".to_string(), physical.to_string(), &debounce::new(), pathComparer { ignore_case }, None, true);
+                let got: Vec<Arc<Mutex<Vec<String>>>> = configs.iter().map(|_| Arc::default()).collect();
+                for ((dir, physical_dir, recursive, file), sink) in configs.iter().zip(&got) {
+                    let sink = Arc::clone(sink);
+                    let cb: WatchCallback = Arc::new(move |events: Vec<Event>, _: Option<Error>| sink.lock().unwrap().extend(events.into_iter().map(|e| format!("{} {}", e.kind, e.path))));
+                    dw.add_callback(dir, physical_dir, *recursive, cb, None, file);
+                }
+                for path in paths {
+                    dw.events.update(path);
+                }
+                dw.events.remove("/root/a/b/gone.ts");
+                dw.trigger_callbacks_for_test();
+                dw.destroy_debounce_for_test();
+                got.iter()
+                    .map(|g| {
+                        let mut g = g.lock().unwrap().clone();
+                        g.sort();
+                        g
+                    })
+                    .collect()
+            };
+            let together = deliver(&configs);
+            for (i, config) in configs.iter().enumerate() {
+                let alone = deliver(std::slice::from_ref(config));
+                assert_eq!(together[i], alone[0], "ignore_case={ignore_case} physical={physical} callback {config:?}");
+            }
+        }
+    }
+}

@@ -1905,7 +1905,7 @@ fn parse_json_config_file_content_worker(
             file_names,
             project_references_is_nil: project_references.is_none(),
             project_references: project_references.unwrap_or_default(),
-            content_mappers,
+            content_mappers: content_mappers.into(),
             watch_options: None,
         },
         config_file: source_file,
@@ -2353,6 +2353,19 @@ fn has_file_with_higher_priority_extension(file: &str, extensions: &[Vec<&str>],
     false
 }
 
+// tsrs-only: a content-mapped file's declaration output (`<name>.d<ext>.ts`, written next to it without an outDir or
+// declarationDir) is not a wildcard input while the file is one, as `<name>.d.ts` is not next to `<name>.ts`
+// (`has_file_with_higher_priority_extension`). Go includes it once a build wrote it: the next build of the project
+// reports TS5055 for the output it would write, and a watch sees the file names of the project change every cycle.
+// These two return the mapped file of such an output, and the output of a mapped file.
+fn mapped_source_of_declaration_output(file: &str, mapped_extensions: &[&str]) -> Option<String> {
+    mapped_extensions.iter().find_map(|ext| file.strip_suffix(&format!(".d{ext}.ts")).map(|name| format!("{name}{ext}")))
+}
+
+fn declaration_output_of_mapped_file(file: &str, mapped_extensions: &[&str]) -> Option<String> {
+    mapped_extensions.iter().find_map(|ext| file.strip_suffix(ext).map(|name| format!("{name}.d{ext}.ts")))
+}
+
 // Removes files included via wildcard expansion with a lower extension priority that have already been included.
 // file is the path to the file.
 fn remove_wildcard_files_with_lower_priority_extension(
@@ -2427,6 +2440,11 @@ pub(crate) fn get_file_names_from_config_specs(
         let flat_extensions: Vec<String> = supported_extensions_with_json_if_resolve_json_module.iter().flatten().cloned().collect();
         let supported_extension_groups: Vec<Vec<&str>> =
             supported_extensions.iter().map(|group| group.iter().map(String::as_str).collect()).collect();
+        let mapped_extensions: Vec<&str> = extra_extensions
+            .iter()
+            .map(String::as_str)
+            .filter(|ext| !tspath::ALL_SUPPORTED_EXTENSIONS_WITH_JSON.iter().any(|group| group.contains(ext)))
+            .collect();
         let files = tsrs_core::phases::time("Config: include glob", || {
             vfsmatch::read_directory(
                 host,
@@ -2468,11 +2486,20 @@ pub(crate) fn get_file_names_from_config_specs(
             }) {
                 continue;
             }
+            if let Some(source) = mapped_source_of_declaration_output(&file, &mapped_extensions) {
+                let key = key_mappper(&source);
+                if literal_file_map.contains_key(&key) || wildcard_file_map.contains_key(&key) {
+                    continue;
+                }
+            }
             // We may have included a wildcard path with a lower priority
             // extension due to the user-defined order of entries in the
             // "include" array. If there is a lower priority extension in the
             // same directory, we should remove it.
             remove_wildcard_files_with_lower_priority_extension(&file, &mut wildcard_file_map, &supported_extension_groups, key_mappper);
+            if let Some(output) = declaration_output_of_mapped_file(&file, &mapped_extensions) {
+                wildcard_file_map.delete(&key_mappper(&output));
+            }
             let key = key_mappper(&file);
             if !literal_file_map.contains_key(&key) && !wildcard_file_map.contains_key(&key) {
                 wildcard_file_map.set(key, file.clone());

@@ -576,9 +576,33 @@ const CENSUS_GAP: usize = if cfg!(feature = "alloc-profile") { CHUNK_ALIGN } els
 
 thread_local! {
     /// The thread's current slab and its bump position (upwards).
-    static SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
+    static SLAB: CurrentSlab = const { CurrentSlab(Cell::new((std::ptr::null(), 0))) };
     /// The same for large slabs (`LARGE_SLAB_SIZE`).
-    static LARGE_SLAB: Cell<(*const Slab, usize)> = const { Cell::new((std::ptr::null(), 0)) };
+    static LARGE_SLAB: CurrentSlab = const { CurrentSlab(Cell::new((std::ptr::null(), 0))) };
+}
+
+/// A thread's current slab, which holds one of the slab's references until the thread exits. Without the release,
+/// every thread that ended kept its current slab: a watch session's checker and worker threads are made per build
+/// and end with it, and switching branches on vscode kept about 0.9 GB of the arena address range per round trip.
+struct CurrentSlab(Cell<(*const Slab, usize)>);
+
+impl CurrentSlab {
+    fn get(&self) -> (*const Slab, usize) {
+        self.0.get()
+    }
+
+    fn set(&self, v: (*const Slab, usize)) {
+        self.0.set(v);
+    }
+}
+
+impl Drop for CurrentSlab {
+    fn drop(&mut self) {
+        let (slab, _) = self.0.get();
+        if !slab.is_null() {
+            slab_release(slab);
+        }
+    }
 }
 
 /// Released standard-size slabs kept for reuse instead of going back to the system (compressed pointers: a
@@ -606,11 +630,12 @@ fn new_slab(size: usize, live: usize) -> *const Slab {
 fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
     let (current, slab_size) = if large { (&LARGE_SLAB, LARGE_SLAB_SIZE) } else { (&SLAB, SLAB_SIZE) };
     if size > slab_size / 4 {
-        let slab = new_slab(size, 1);
-        // SAFETY: just made.
-        return (unsafe { (*slab).base }, slab);
+        return own_slab(size);
     }
-    let (mut cur, mut bump) = current.with(std::cell::Cell::get);
+    // A thread-local destructor that allocates in a region after the thread's slab was released gets a slab of its own.
+    let Ok((mut cur, mut bump)) = current.try_with(CurrentSlab::get) else {
+        return own_slab(size);
+    };
     // SAFETY: the current slab is kept alive by the thread's reference.
     if cur.is_null() || bump + size + CENSUS_GAP > unsafe { (*cur).base.addr() + (*cur).size } {
         if !cur.is_null() {
@@ -627,18 +652,27 @@ fn slab_carve(size: usize, large: bool) -> (*mut u8, *const Slab) {
     (slab.base.with_addr(bump), cur)
 }
 
+/// A slab for one chunk.
+fn own_slab(size: usize) -> (*mut u8, *const Slab) {
+    let slab = new_slab(size, 1);
+    // SAFETY: just made.
+    (unsafe { (*slab).base }, slab)
+}
+
 /// Moves the thread's slab position back from `end` to `new_end` if the chunk ending at `end` was its last carve.
 fn slab_trim(slab: *const Slab, end: usize, new_end: usize) -> bool {
     [&SLAB, &LARGE_SLAB].into_iter().any(|current| {
-        current.with(|s| {
-            let (cur, bump) = s.get();
-            if cur == slab && bump == end + CENSUS_GAP {
-                s.set((cur, new_end + CENSUS_GAP));
-                true
-            } else {
-                false
-            }
-        })
+        current
+            .try_with(|s| {
+                let (cur, bump) = s.get();
+                if cur == slab && bump == end + CENSUS_GAP {
+                    s.set((cur, new_end + CENSUS_GAP));
+                    true
+                } else {
+                    false
+                }
+            })
+            .unwrap_or(false)
     })
 }
 
@@ -839,9 +873,11 @@ thread_local! {
     /// Scope tokens: a scope is `!Send`, so tokens only need to be unique on their thread (a global counter was a
     /// contended cache line once scratch regions push a scope per checker call).
     static NEXT_TOKEN: Cell<u64> = const { Cell::new(1) };
-    /// While a scratch region is entered on this thread (`Region::enter_scratch`): its arena, and the allocation
-    /// target that was current when it was entered (`escape_scratch`). Null when none is.
-    static SCRATCH: Cell<(*const Arena, *const Arena)> = const { Cell::new((std::ptr::null(), std::ptr::null())) };
+    /// While a scratch region is entered on this thread (`Region::enter_scratch`): its arena, the allocation target
+    /// that was current when it was entered (`escape_scratch_one_level`), and the one that was current when the
+    /// outermost entered scratch region was entered (`escape_scratch`). Null when none is.
+    static SCRATCH: Cell<(*const Arena, *const Arena, *const Arena)> =
+        const { Cell::new((std::ptr::null(), std::ptr::null(), std::ptr::null())) };
 }
 
 /// A lock that the thread holding it may take again (a region entered while it is already entered).
@@ -1109,6 +1145,11 @@ pub(crate) fn no_scope_open() -> bool {
     SCOPES.with(|s| s.borrow().is_empty()) && SCRATCH.with(|s| s.get().0.is_null())
 }
 
+/// `no_scope_open` while the thread exits: the scope stack may be gone already, and with it every scope.
+pub(crate) fn no_scope_open_at_exit() -> bool {
+    SCOPES.try_with(|s| s.borrow().is_empty()).unwrap_or(true) && SCRATCH.with(|s| s.get().0.is_null())
+}
+
 pub(crate) fn give_spare_arena(arena: &'static Arena) {
     CURRENT.with(|c| c.set(std::ptr::null()));
     SPARE_ARENAS.lock().unwrap().push(SpareArena(arena));
@@ -1166,6 +1207,9 @@ pub fn enter_owner(addr: usize) -> Option<RegionScope> {
     }
     Some(match Region::containing(addr) {
         Some(region) => region.enter(),
+        // Scratch regions are not registered: an object of the one entered on this thread (a checker's, a file's
+        // emit) keeps its data there, as when no region is registered, instead of leaking it into the thread arena.
+        None if scratch_contains(addr) => return None,
         None => enter_thread_arena(),
     })
 }
@@ -1183,6 +1227,8 @@ pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
     let current = CURRENT.with(std::cell::Cell::get);
     match Region::containing(addr) {
         Some(region) if std::ptr::eq(&raw const *region.0.arena, current) => None,
+        // As in `enter_owner`: a table in the scratch region entered on this thread, which is the current target.
+        None if std::ptr::eq(scratch_arena(), current) && scratch_contains(addr) => None,
         _ => Some(enter_thread_arena()),
     }
 }
@@ -1198,7 +1244,7 @@ pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
 /// printer and the node builder's per-call state allocate in it, the checker escapes (its types, symbols and caches
 /// outlive the file).
 pub struct ScratchScope {
-    saved: (*const Arena, *const Arena),
+    saved: (*const Arena, *const Arena, *const Arena),
     _scope: RegionScope,
 }
 
@@ -1209,7 +1255,11 @@ impl Region {
         let outer = CURRENT.with(std::cell::Cell::get);
         let outer = if outer.is_null() { std::ptr::from_ref::<Arena>(crate::ptr::own_arena()) } else { outer };
         let scope = self.enter();
-        let saved = SCRATCH.with(|s| s.replace((&raw const *self.0.arena, outer)));
+        let saved = SCRATCH.with(|s| {
+            let (enclosing, _, enclosing_root) = s.get();
+            let root = if enclosing.is_null() { outer } else { enclosing_root };
+            s.replace((&raw const *self.0.arena, outer, root))
+        });
         ScratchScope { saved, _scope: scope }
     }
 }
@@ -1220,17 +1270,83 @@ impl Drop for ScratchScope {
     }
 }
 
-/// Inside a scratch region, makes the allocation target that was current when it was entered (the thread's own arena,
-/// or an enclosing region) the target until the scope is dropped: for code whose allocations may outlive the scratch
-/// region (the checker called from emit, program caches, diagnostics). `None` (no cost beyond a thread-local read)
-/// outside scratch regions or when that target is already current.
+/// Inside scratch regions, makes the allocation target that was current when the outermost of them was entered (the
+/// thread's own arena, or an enclosing region that is not a scratch region) the target until the scope is dropped:
+/// for code whose allocations may outlive every scratch region (program caches, diagnostics, the lazily filled data
+/// of shared objects). Scratch regions nest when a checker that runs in a region of its own (checkerpool.rs
+/// `SlotChecker`) emits a file (program_emit.rs): what escapes the file's region must outlive the checker too, as an
+/// incremental snapshot keeps the diagnostics after their program's checkers are freed (watch mode). `None` (no cost
+/// beyond a thread-local read) outside scratch regions or when that target is already current.
 #[inline]
 pub fn escape_scratch() -> Option<RegionScope> {
-    let (scratch, outer) = SCRATCH.with(std::cell::Cell::get);
+    let (scratch, _, root) = SCRATCH.with(std::cell::Cell::get);
+    if scratch.is_null() || CURRENT.with(std::cell::Cell::get) == root {
+        return None;
+    }
+    Some(RegionScope::push(root, None))
+}
+
+/// `escape_scratch` to the target that was current when the innermost scratch region was entered: for the checker
+/// called from emit, whose types, symbols and caches outlive one file's emit region and belong to the checker's own
+/// region when it has one.
+#[inline]
+pub fn escape_scratch_one_level() -> Option<RegionScope> {
+    let (scratch, outer, _) = SCRATCH.with(std::cell::Cell::get);
     if scratch.is_null() || CURRENT.with(std::cell::Cell::get) == outer {
         return None;
     }
     Some(RegionScope::push(outer, None))
+}
+
+thread_local! {
+    /// `Region::route_diagnostics`: (the allocation target the route applies to, the arena the diagnostics go to);
+    /// null while no route is set.
+    static DIAGNOSTIC_ROUTE: Cell<(*const Arena, *const Arena)> = const { Cell::new((std::ptr::null(), std::ptr::null())) };
+}
+
+/// A route set by `Region::route_diagnostics`, until dropped.
+pub struct DiagnosticRoute {
+    saved: (*const Arena, *const Arena),
+    _region: Region,
+    _not_send: std::marker::PhantomData<*const ()>,
+}
+
+impl Region {
+    /// Until the route is dropped, diagnostics made on this thread while the allocation target is the current one
+    /// (`escape_for_diagnostic`) go to this region instead of escaping the thread's scratch regions: for a session
+    /// that frees what it no longer uses (watch mode), whose checkers would otherwise leave every diagnostic they
+    /// report in the thread arenas (a few thousand per cycle on vscode). Diagnostics made under another target (the
+    /// lazily filled data of a file, `enter_owner`; a program cache, `escape_scratch`) are not routed.
+    ///
+    /// The route allocates in the region without entering it: while the route is set, no other thread may allocate
+    /// in it.
+    pub fn route_diagnostics(&self) -> DiagnosticRoute {
+        let saved = DIAGNOSTIC_ROUTE.with(|r| r.replace((current_target(), &raw const *self.0.arena)));
+        DiagnosticRoute { saved, _region: self.clone(), _not_send: std::marker::PhantomData }
+    }
+}
+
+impl Drop for DiagnosticRoute {
+    fn drop(&mut self) {
+        DIAGNOSTIC_ROUTE.with(|r| r.set(self.saved));
+    }
+}
+
+/// For the allocations of a diagnostic: its route's region (`Region::route_diagnostics`) when the allocation target
+/// is the one the route applies to, else `escape_scratch`.
+#[inline]
+pub fn escape_for_diagnostic() -> Option<RegionScope> {
+    let (from, to) = DIAGNOSTIC_ROUTE.with(std::cell::Cell::get);
+    if !from.is_null() && current_target() == from {
+        return Some(RegionScope::push(to, None));
+    }
+    escape_scratch()
+}
+
+/// The allocation target: the current region's arena, or the thread's own.
+fn current_target() -> *const Arena {
+    let cur = CURRENT.with(std::cell::Cell::get);
+    if cur.is_null() { std::ptr::from_ref::<Arena>(crate::ptr::own_arena()) } else { cur }
 }
 
 /// `escape_scratch` unless the object at `addr` lives in the scratch region (`enter_owner` without registered regions).
@@ -1673,6 +1789,34 @@ mod tests {
         drop(region);
         // The rewound value lost its entry (not dropped, like a thread arena); `c` and `d` were dropped.
         assert_eq!(Rc::strong_count(&counter), 2);
+    }
+
+    #[test]
+    fn nested_scratch_regions_escape_past_all_of_them() {
+        use super::{escape_scratch, escape_scratch_one_level, Region};
+        // A checker in a scratch region of its own emits a file in a nested scratch region: the checker's data
+        // escapes the file's region into the checker's, diagnostics escape both.
+        let outer = Region::new(4096);
+        let checker = Region::new(4096);
+        let file = Region::new(4096);
+        let _o = outer.enter();
+        let _c = checker.enter_scratch();
+        {
+            let _f = file.enter_scratch();
+            assert!(Region::containing(P::new(1u64).addr()).unwrap().ptr_eq(&file));
+            {
+                let _e = escape_scratch_one_level().unwrap();
+                assert!(Region::containing(P::new(2u64).addr()).unwrap().ptr_eq(&checker));
+                let _d = escape_scratch().unwrap();
+                assert!(Region::containing(P::new(3u64).addr()).unwrap().ptr_eq(&outer));
+            }
+            let _d = escape_scratch().unwrap();
+            assert!(Region::containing(P::new(4u64).addr()).unwrap().ptr_eq(&outer));
+        }
+        // Back in the checker's region alone: both escapes lead to the same target.
+        let _e = escape_scratch().unwrap();
+        assert!(escape_scratch_one_level().is_none());
+        assert!(Region::containing(P::new(5u64).addr()).unwrap().ptr_eq(&outer));
     }
 
     #[test]

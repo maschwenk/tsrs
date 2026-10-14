@@ -1,10 +1,10 @@
 # Porting guide: TypeScript 7 (Go) -> Rust
 
 `tsrs` is a faithful port of the TypeScript 7 type checker (the Go implementation in
-`ts-ref/tsc/internal/`, a symlink to a checkout of microsoft/TypeScript at commit
-b85298b6a81f, = nightly 7.1.0-dev.20260929) to Rust. Scope: the `tsc` command line (type checking, JavaScript and
+`ts-ref/tsc/internal/`, from a checkout of microsoft/TypeScript at the commit pinned in
+`Cargo.toml`, `[workspace.metadata.typescript]`) to Rust. Scope: the `tsc` command line (type checking, JavaScript and
 declaration emit, source maps, incremental builds, `--build`), the language server (`--lsp`) and the API server
-(`--api`). Not ported: watch mode for the CLI, `--init`, `--showConfig`, tracing (`--generateTrace`), pprof, localized
+(`--api`), including watch mode (`--watch`, `-b --watch`). Not ported: `--init`, `--showConfig`, tracing (`--generateTrace`), pprof, localized
 messages (English only), and in the language server automatic type acquisition and telemetry; the
 [capability table](COMPATIBILITY.md#what-it-does-and-doesnt-do) has the full, current list.
 
@@ -13,9 +13,8 @@ same order of operations, same diagnostics (code, position, message, order). Beh
 that matches the Go code is correct; "improvements" are bugs. Every Rust function should
 be recognizable next to its Go original. Do not redesign.
 
-Many agents port different files at the same time. The conventions below exist so that
-independently written code fits together. Follow them exactly, even where you would
-personally choose differently.
+These conventions keep the Rust code comparable with its Go source and make upstream updates easier to review.
+Use them consistently across crates.
 
 ## Layout
 
@@ -64,8 +63,9 @@ contributing `impl` blocks to the same type.
 
 Go objects that are referenced by pointer, live long, reference each other cyclically and
 are compared by identity — AST nodes, symbols, types, signatures, links, flow nodes,
-mappers, inference contexts … — are allocated in a process-lifetime leak arena and
-referenced through `tsrs_core::P<T>`:
+mappers, inference contexts … — are allocated in arenas and referenced through `tsrs_core::P<T>`.
+Batch allocations usually live until process exit; the language server uses owned regions to release old
+programs and file versions ([LSP.md](LSP.md#memory-management)). The rules are:
 
 - `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by identity** (like Go pointers).
   Create with `P::new(value)`. `p.get()` returns `&'static T`. It is a 32-bit handle (an offset in 8-byte units into
@@ -76,8 +76,8 @@ referenced through `tsrs_core::P<T>`:
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.
   Decide from the Go code (nil checks, `return nil`). When unsure, use `Option`.
 - There are **no lifetime parameters** anywhere in this codebase. Arena data is `'static`.
-- Nothing is ever freed. That is intentional (batch compiler). The exceptions are a few recycling sites that
-  prove an object dead (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
+- Arena objects remain live until their arena is released, unless an explicit recycling site proves them dead
+  (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
   bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.
   Emit runs each file in a scratch region that is freed after the file is written (notes/mem-emit-regions.md): code
   that emit calls and that stores what it allocates beyond the file (the checker, program caches, diagnostics)
@@ -212,8 +212,8 @@ callback, even when the closure does not need it.
 
 ## What not to port
 
-Watch mode for the CLI, `--init`/`--showConfig`, tracing, pprof, message localization, and the language server's
-automatic type acquisition and telemetry are not ported
+`--init`/`--showConfig`, tracing, pprof, message localization, the fanotify and Windows file-watching backends, and
+the language server's automatic type acquisition and telemetry are not ported
 ([capability table](COMPATIBILITY.md#what-it-does-and-doesnt-do)). If a function only serves one of those, leave it
 out; if a needed function has a branch that only serves one, keep the branch structure and mark only the truly
 unreachable part.

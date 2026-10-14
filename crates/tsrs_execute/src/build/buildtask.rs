@@ -6,18 +6,23 @@ use std::time::SystemTime;
 
 use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
 use tsrs_compiler::{new_program, ProgramOptions, WriteFileData};
+use tsrs_core::arena::Region;
 use tsrs_core::collections::{new_set_from_items, Set};
 use tsrs_core::tspath::{self, Path};
 use tsrs_core::P;
 use tsrs_diagnostics::{self as diagnostics, Message};
 use tsrs_incremental::{is_build_info_file_name_default_library, BuildInfo, BuildInfoRootInfoReader};
 use tsrs_tsoptions::ParsedCommandLine;
+use tsrs_vfs::FS;
 
 use super::compilerhost::compilerHost;
 use super::host::incrementalHost;
 use super::orchestrator::{Orchestrator, OrchestratorResult};
 use super::uptodatestatus::*;
 use crate::tsc::{self, emit_and_report_statistics, CompileTimes, DiagnosticReporter, EmitInput, ExitStatus, Statistics};
+
+// tsrs-only (watch mode): the most changed paths a cycle can have and still reparse one file (`single_changed_file`).
+const MAX_ONE_FILE_CHANGES: usize = 256;
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub(crate) enum buildKind {
@@ -102,6 +107,7 @@ pub struct BuildTask {
     pub(crate) config: String,
     pub(crate) resolved: Mutex<Option<P<ParsedCommandLine>>>,
     pub(crate) up_stream: Mutex<Vec<upstreamTask>>,
+    pub(crate) down_stream: Mutex<Vec<P<BuildTask>>>, // Only set and used in watch mode
     pub(crate) status: Mutex<Option<upToDateStatus>>,
     pub(crate) done: closeSignal,
 
@@ -115,12 +121,37 @@ pub struct BuildTask {
     errors: Mutex<Vec<P<Diagnostic>>>,
     pub(crate) pending: AtomicBool,
     is_initial_cycle: AtomicBool,
-    // Go `dirty`: the config changed since the task was created (API rebuilds; watch mode is not ported).
+    // Go `dirty`: the config changed since the task was created (API rebuilds and watch mode).
     pub(crate) dirty: AtomicBool,
+    down_stream_update_mu: Mutex<()>,
 
     // Go's contentMapperProjectOnce and the contentMapperProject it sets.
     content_mapper_project: OnceLock<Option<Arc<dyn tsrs_contentmapper::Project>>>,
     content_mapper_project_err: Mutex<Option<tsrs_contentmapper::Error>>,
+
+    // tsrs-only, watch mode: the program of the task's last build, freed when the task builds again (Go's GC).
+    watch_program: Mutex<Option<&'static tsrs_compiler::Program>>,
+    // tsrs-only, watch mode: what the task's last full build allocated beside its program, which the programs
+    // `reuse_program` made since share (`replace_watch_program`).
+    watch_full_build: Mutex<Option<watchFullBuild>>,
+    // tsrs-only, watch mode: the incremental program of the task's last build, the old state of its next build
+    // (`old_watch_state`), and the region of the diagnostics its snapshot keeps (None under the test harness).
+    watch_incremental: Mutex<Option<(P<tsrs_incremental::Program>, Option<Region>)>>,
+    // tsrs-only, watch mode: the changed paths that made the task's inputs out of date this cycle, or None when
+    // something else did (`single_changed_file`).
+    watch_changes: Mutex<Option<Vec<(Path, tsrs_fswatch::EventKind)>>>,
+    // tsrs-only, watch mode: the task built a program this cycle (reset by the orchestrator each cycle).
+    pub(crate) built_program: AtomicBool,
+}
+
+// tsrs-only (watch mode): what a task's full build allocated beside its program, which the programs `reuse_program`
+// made from it share (`BuildTask::replace_watch_program`): its processed-file data, the regions of what its file loader
+// allocated (resolutions, include reasons, the processed-file data), and its files, which the processed-file data refers
+// to (`BuildTask::add_live_watch_files`).
+struct watchFullBuild {
+    shared: tsrs_compiler::SharedProgramData,
+    regions: Arc<tsrs_compiler::ProgramRegions>,
+    files: Vec<P<tsrs_ast::SourceFile>>,
 }
 
 fn diag(message: &'static Message, args: &[&dyn std::fmt::Display]) -> P<Diagnostic> {
@@ -133,6 +164,7 @@ impl BuildTask {
             config,
             resolved: Mutex::new(None),
             up_stream: Mutex::new(Vec::new()),
+            down_stream: Mutex::new(Vec::new()),
             status: Mutex::new(None),
             done: closeSignal::default(),
             result: Mutex::new(None),
@@ -143,8 +175,14 @@ impl BuildTask {
             pending: AtomicBool::new(false),
             is_initial_cycle: AtomicBool::new(is_initial_cycle),
             dirty: AtomicBool::new(false),
+            down_stream_update_mu: Mutex::new(()),
             content_mapper_project: OnceLock::new(),
             content_mapper_project_err: Mutex::new(None),
+            watch_program: Mutex::new(None),
+            watch_full_build: Mutex::new(None),
+            watch_incremental: Mutex::new(None),
+            watch_changes: Mutex::new(None),
+            built_program: AtomicBool::new(false),
         }
     }
 
@@ -171,9 +209,28 @@ impl BuildTask {
         (project, self.content_mapper_project_err.lock().unwrap().clone())
     }
 
+    // The task's content mapper project, if it was created.
+    pub(crate) fn content_mapper_project_opt(&self) -> Option<Arc<dyn tsrs_contentmapper::Project>> {
+        self.content_mapper_project.get().cloned().flatten()
+    }
+
+    pub(crate) fn set_content_mapper_project_err(&self, err: tsrs_contentmapper::Error) {
+        *self.content_mapper_project_err.lock().unwrap() = Some(err);
+    }
+
+    // The build info file name and its parsed contents, if the task read or wrote one.
+    pub(crate) fn build_info_snapshot(&self) -> Option<(Path, Arc<BuildInfo>)> {
+        let entry = self.build_info_entry.lock().unwrap();
+        let entry = entry.as_ref()?;
+        Some((entry.path.clone(), Arc::clone(entry.build_info.as_ref()?)))
+    }
+
+    pub(crate) fn package_jsons(&self) -> Vec<String> {
+        self.package_jsons.lock().unwrap().clone()
+    }
+
     // buildtask.go:96
-    #[expect(dead_code, reason = "its only Go caller, the build orchestrator's watch update (orchestrator.go:580), is not ported")]
-    fn refresh_content_mapper_project(&self, _orchestrator: &Orchestrator) {
+    pub(crate) fn refresh_content_mapper_project(&self, _orchestrator: &Orchestrator) {
         if let Some(Some(project)) = self.content_mapper_project.get() {
             *self.content_mapper_project_err.lock().unwrap() = project.refresh().err();
         }
@@ -323,14 +380,215 @@ impl BuildTask {
     }
 
     // buildtask.go:184
-    fn update_downstream(&self, orchestrator: &Orchestrator, _path: &Path) {
+    fn update_downstream(&self, orchestrator: &Orchestrator, path: &Path) {
         if self.is_initial_cycle.load(Ordering::SeqCst) {
             return;
         }
         if orchestrator.opts.command.build_options.stop_build_on_errors.is_true() && self.status().is_error() {
             return;
         }
-        // downStream is only set in watch mode, which is not ported.
+        let program = self.result.lock().unwrap().as_ref().and_then(|r| r.program);
+        let down_stream = self.down_stream.lock().unwrap().clone();
+        let Some(program) = program else {
+            for down_stream in down_stream {
+                let _guard = down_stream.down_stream_update_mu.lock().unwrap();
+                down_stream.reset_status();
+                down_stream.pending.store(true, Ordering::SeqCst);
+            }
+            return;
+        };
+        for down_stream in down_stream {
+            let _guard = down_stream.down_stream_update_mu.lock().unwrap();
+            let mut reset = false;
+            {
+                let mut status = down_stream.status.lock().unwrap();
+                if let Some(current) = status.as_ref() {
+                    let mut kind = current.kind;
+                    if kind == upToDateStatusType::UpToDate && !program.has_changed_dts_file() {
+                        *status = Some(upToDateStatus::with(upToDateStatusType::UpToDateWithUpstreamTypes, current.data.clone()));
+                    } else {
+                        if kind == upToDateStatusType::UpToDate {
+                            kind = upToDateStatusType::UpToDateWithUpstreamTypes; // Go: fallthrough
+                        }
+                        match kind {
+                            upToDateStatusType::UpToDateWithUpstreamTypes | upToDateStatusType::UpToDateWithInputFileText => {
+                                if program.has_changed_dts_file() {
+                                    let output = current.oldest_output_file_name();
+                                    *status = Some(upToDateStatus::with(
+                                        upToDateStatusType::InputFileNewer,
+                                        statusData::InputOutputName(inputOutputName { input: self.config.clone(), output }),
+                                    ));
+                                }
+                            }
+                            upToDateStatusType::UpstreamErrors => {
+                                let ref_config = tsrs_core::resolve_config_file_name_of_project_reference(&current.upstream_errors().ref_);
+                                if orchestrator.to_path(&ref_config) == *path {
+                                    reset = true;
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+            if reset {
+                down_stream.reset_status();
+            }
+            down_stream.pending.store(true, Ordering::SeqCst);
+        }
+    }
+
+    // tsrs-only: the program of the task's last build in watch mode.
+    pub(crate) fn watch_program(&self) -> Option<&'static tsrs_compiler::Program> {
+        *self.watch_program.lock().unwrap()
+    }
+
+    // The incremental program the task's next build starts from (`Orchestrator::start_signature_job`).
+    pub(crate) fn watch_incremental_program(&self) -> Option<P<tsrs_incremental::Program>> {
+        self.watch_incremental.lock().unwrap().as_ref().map(|&(program, _)| program)
+    }
+
+    // tsrs-only (watch mode): makes `program` and `incremental` the task's program and old state, and frees the
+    // program it built last, the diagnostics the old state kept (`old_snapshot_diagnostics`) and, after a full build
+    // (`full_build_regions`), what the last full build allocated beside its program. Nothing else holds them: the cycle
+    // that built the last program has reported, and `incremental` copied the diagnostics it keeps into
+    // `snapshot_diagnostics`. A program
+    // `reuse_program` made shares the processed-file data and the file loader's regions of the full build it comes
+    // from; they go when a full build replaces them, after the programs that shared them (the frees run in order).
+    fn replace_watch_program(
+        &self,
+        orchestrator: &Orchestrator,
+        program: &'static tsrs_compiler::Program,
+        incremental: P<tsrs_incremental::Program>,
+        snapshot_diagnostics: Option<Region>,
+        old_snapshot_diagnostics: Option<Region>,
+        full_build_regions: Option<Arc<tsrs_compiler::ProgramRegions>>,
+    ) {
+        *self.watch_incremental.lock().unwrap() = Some((incremental, snapshot_diagnostics));
+        let old_full_build = full_build_regions.and_then(|regions| {
+            let full_build = watchFullBuild { shared: tsrs_compiler::shared_program_data(program), regions, files: program.get_source_files().to_vec() };
+            self.watch_full_build.lock().unwrap().replace(full_build)
+        });
+        let previous = self.watch_program.lock().unwrap().replace(program);
+        orchestrator.freer.run(move || {
+            if let Some(previous) = previous {
+                // SAFETY: see above.
+                unsafe { tsrs_compiler::free_program(previous) };
+            }
+            drop(old_snapshot_diagnostics);
+            if let Some(old_full_build) = old_full_build {
+                // SAFETY: every program since that full build shared this data, and each was freed when the next one
+                // replaced it (above, for the last one, after the earlier ones); the new full build has its own.
+                unsafe { old_full_build.shared.free() };
+                // Last: the programs and the shared data above point into them.
+                drop(old_full_build.regions);
+            }
+        });
+    }
+
+    // tsrs-only (watch mode): adds the files the task's program, its last full build's processed-file data and the
+    // diagnostics its snapshot keeps refer to (`Orchestrator::free_unreachable_watch_files`).
+    pub(crate) fn add_live_watch_files(&self, live: &mut rustc_hash::FxHashSet<usize>) {
+        if let Some(program) = *self.watch_program.lock().unwrap() {
+            live.extend(program.get_source_files().iter().map(|f| f.addr()));
+        }
+        if let Some(full_build) = &*self.watch_full_build.lock().unwrap() {
+            live.extend(full_build.files.iter().map(|f| f.addr()));
+        }
+        let kept = self.watch_incremental.lock().unwrap().as_ref().map(|&(program, _)| program);
+        let program = kept.or_else(|| self.result.lock().unwrap().as_ref().and_then(|r| r.program));
+        if let Some(program) = program {
+            program.for_each_diagnostic_file(&mut |f| {
+                live.insert(f.addr());
+            });
+        }
+    }
+
+    // tsrs-only (watch mode): the program `kept` was made from, when `kept`, the incremental program of the task's last
+    // build, is the old state of this build in place of the one read back from the build info that build wrote. Go
+    // reads the build info again each cycle; the snapshot it gives is the one the last build left, as rebuilding it
+    // took 70 ms of a 380 ms one-file cycle on a 9.4k-file project. A task with content mappers still reads it: the
+    // build info read checks that their identities did not change.
+    fn old_watch_state(&self, orchestrator: &Orchestrator, kept: P<tsrs_incremental::Program>) -> Option<&'static tsrs_compiler::Program> {
+        if orchestrator.opts.command.build_options.force.is_true() || !self.resolved().content_mappers().is_empty() {
+            return None;
+        }
+        let previous = self.watch_program()?;
+        kept.compiler_program().is_some_and(|p| std::ptr::eq(p, previous)).then_some(previous)
+    }
+
+    // tsrs-only (watch mode): `previous` with the one file that changed reparsed (`reuse_program`), when the change
+    // allows it: building the program again resolved and bound every file (130 ms of the 380 ms cycle above).
+    fn reuse_watch_program(
+        &self,
+        orchestrator: &Orchestrator,
+        previous: &'static tsrs_compiler::Program,
+        compiler_host: &Arc<dyn tsrs_compiler::CompilerHost>,
+    ) -> Option<&'static tsrs_compiler::Program> {
+        let changed = self.single_changed_file(orchestrator, previous, compiler_host.fs())?;
+        match previous.reuse_program(&changed, Arc::clone(compiler_host), None, None) {
+            (Some(program), _, true) => Some(program),
+            _ => None,
+        }
+    }
+
+    // The one file of `previous` whose change made this task out of date, if nothing else could change the program:
+    // no upstream project built a program this cycle (its declaration outputs are files of this one), and no other
+    // changed path could change module resolution (a file module resolution could find, a package.json, or a
+    // directory). Paths under the task's output directories are its own outputs, and a directory that contains another
+    // changed path is reported for that change (the watch backends report the ancestors of a changed file).
+    //
+    // A directory that was moved away is not seen: its path no longer exists, and an editor's temporary files without
+    // an extension (vim's `4913`) look the same. A module it resolved to stays resolved until the next full build.
+    fn single_changed_file(&self, orchestrator: &Orchestrator, previous: &'static tsrs_compiler::Program, fs: &dyn FS) -> Option<Path> {
+        let changes = self.watch_changes.lock().unwrap().take()?;
+        // A one-file edit changes the file and its ancestors; more is a checkout or a generator, which a full build
+        // handles, and which would make the ancestor check below quadratic.
+        if changes.len() > MAX_ONE_FILE_CHANGES {
+            return None;
+        }
+        if self.up_stream.lock().unwrap().iter().any(|upstream| upstream.task.built_program.load(Ordering::SeqCst)) {
+            return None;
+        }
+        let options = previous.options();
+        let compare = &orchestrator.compare_paths_options;
+        let output_dirs: Vec<Path> = [&options.out_dir, &options.declaration_dir]
+            .into_iter()
+            .filter(|dir| !dir.is_empty())
+            .map(|dir| tspath::to_path(dir, &compare.current_directory, compare.use_case_sensitive_file_names))
+            .collect();
+        let mut changed = None;
+        for (path, kind) in &changes {
+            if previous.get_source_file_by_path(path).is_some() {
+                if *kind == tsrs_fswatch::EventKind::Delete || changed.replace(path.clone()).is_some() {
+                    return None;
+                }
+                continue;
+            }
+            if output_dirs.iter().any(|dir| tspath::contains_path(dir.as_str(), path.as_str(), compare))
+                || changes.iter().any(|(other, _)| other != path && tspath::contains_path(path.as_str(), other.as_str(), compare))
+            {
+                continue;
+            }
+            if could_change_resolution(path) || fs.directory_exists(path.as_str()) {
+                return None;
+            }
+        }
+        changed
+    }
+
+    // tsrs-only (watch mode): the changed paths that made the task's inputs out of date (`single_changed_file`).
+    pub(crate) fn set_watch_changes(&self, changes: Option<Vec<(Path, tsrs_fswatch::EventKind)>>) {
+        *self.watch_changes.lock().unwrap() = changes;
+    }
+
+    // buildtask.go:821
+    pub(crate) fn update_watch(&self, orchestrator: &Orchestrator, old_cache: &super::host::mTimeCache) {
+        if self.resolved_opt().is_some() && self.can_update_js_dts_output_timestamps() {
+            for output_file in self.resolved().get_output_file_names() {
+                orchestrator.host().store_m_time_from_old_cache(&output_file, old_cache);
+            }
+        }
     }
 
     // buildtask.go:225
@@ -361,26 +619,74 @@ impl BuildTask {
             trace: tsc::get_trace_with_writer_from_sys(Arc::new(move |t: &str| trace_builder.lock().unwrap().push_str(t)), false, orchestrator.opts.testing),
             content_mapper_project,
         });
+        let watch = orchestrator.opts.command.compiler_options.watch.is_true();
+        // The region of the diagnostics the kept snapshot keeps goes after the new snapshot copied those it keeps.
+        let (kept, kept_diagnostics) = match watch.then(|| self.watch_incremental.lock().unwrap().take()).flatten() {
+            Some((kept, region)) => (Some(kept), region),
+            None => (None, None),
+        };
+        let previous = kept.and_then(|kept| self.old_watch_state(orchestrator, kept));
         let mut old_program = None;
         if !build_options.force.is_true() {
-            old_program = tsrs_incremental::read_build_info_program(self.resolved(), host, &*compiler_host);
+            old_program = match previous {
+                Some(_) => kept,
+                None => tsrs_incremental::read_build_info_program(self.resolved(), host, &*compiler_host),
+            };
         }
         compile_times.build_info_read_time = sys.now() - build_info_read_start;
         let parse_start = sys.now();
-        let mut program_options = ProgramOptions::new(self.resolved(), compiler_host);
-        program_options.canonical_diagnostics = orchestrator.uses_canonical_diagnostics();
-        let program = new_program(program_options);
+        let reused = previous.and_then(|previous| self.reuse_watch_program(orchestrator, previous, &compiler_host));
+        let mut regions = None;
+        let program = reused.unwrap_or_else(|| {
+            let mut program_options = ProgramOptions::new(self.resolved(), compiler_host);
+            program_options.canonical_diagnostics = orchestrator.uses_canonical_diagnostics();
+            // Watch mode frees the program when the task builds again (`replace_watch_program`), with the diagnostics
+            // its checkers make: the task's errors are cleared first, and the snapshot that keeps some copies them.
+            program_options.checker_regions = watch;
+            // `watch_full_build` keeps the parents of the synthetic imports the reused programs keep.
+            program_options.reuse_synthetic_imports = watch;
+            program_options.checker_diagnostic_regions = watch && orchestrator.opts.testing.is_none();
+            regions = watch.then(|| Arc::new(tsrs_compiler::ProgramRegions::default()));
+            program_options.regions.clone_from(&regions);
+            new_program(program_options)
+        });
+        self.built_program.store(true, Ordering::SeqCst);
+        if watch {
+            // Bind before any checker exists: single-threaded, the first checker would bind the files in its region,
+            // and later cycles reuse the parsed files (host.rs `get_watch_source_file`).
+            program.bind_source_files();
+        }
         compile_times.parse_time = sys.now() - parse_start;
         let changes_compute_start = sys.now();
-        let incremental_program = tsrs_incremental::new_program(
-            program,
-            old_program,
-            Box::new(incrementalHost(host)),
-            Some(std::time::Instant::now),
-            orchestrator.opts.testing.is_some(),
-        );
+        // The harness reads the old snapshot's diagnostics, which the new one shares (`copy_diagnostics`).
+        let snapshot_diagnostics = (watch && orchestrator.opts.testing.is_none()).then(|| Region::new_scratch(64 << 10));
+        let incremental_program = {
+            // The diagnostics the snapshot recomputes for the new program (`repopulate_diagnostics_of_file`).
+            let _route = snapshot_diagnostics.as_ref().map(Region::route_diagnostics);
+            tsrs_incremental::new_program(program, old_program, Box::new(incrementalHost(host)), Some(std::time::Instant::now), orchestrator.opts.testing.is_some())
+        };
+        if let Some(region) = &snapshot_diagnostics {
+            let _scope = region.enter();
+            incremental_program.copy_diagnostics();
+            if let Some(old_program) = old_program {
+                // SAFETY: `incremental_program` was made from it, and nothing else holds it: it is the task's kept
+                // state (taken above) or was read from the build info for this build alone.
+                unsafe { tsrs_incremental::Program::drop_replaced(old_program) };
+            }
+            if let Some(kept) = kept
+                && old_program != Some(kept)
+            {
+                // SAFETY: the task's kept state, taken above, which nothing else holds, and which this build did not
+                // use.
+                unsafe { tsrs_incremental::Program::drop_replaced(kept) };
+            }
+        }
         self.result.lock().unwrap().as_mut().unwrap().program = Some(incremental_program);
         compile_times.changes_compute_time = sys.now() - changes_compute_start;
+        if watch {
+            // After the incremental program is made: its snapshot reads the program it replaces.
+            self.replace_watch_program(orchestrator, program, incremental_program, snapshot_diagnostics, kept_diagnostics, regions);
+        }
 
         let this: &'static BuildTask = self;
         let report_diagnostic: tsc::DiagnosticReporter = Box::new(move |d| this.report_diagnostic(d));
@@ -1122,6 +1428,13 @@ pub(crate) fn is_content_mapper_supplemental_build_info_path<'a>(input_path: &Pa
     false
 }
 
+// Whether a changed file that is not a file of a program could change its module resolution: a file module
+// resolution could find, or a package.json.
+fn could_change_resolution(path: &Path) -> bool {
+    tspath::get_base_file_name(path.as_str()) == "package.json"
+        || [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs", ".json"].iter().any(|ext| tspath::file_extension_is(path.as_str(), ext))
+}
+
 #[cfg(test)]
 mod buildtask_contentmapper_test {
     use tsrs_core::tspath::Path;
@@ -1141,5 +1454,22 @@ mod buildtask_contentmapper_test {
         assert!(!is_content_mapper_supplemental_build_info_path(&path("/src/app.vue.ts"), &roots));
         assert!(!is_content_mapper_supplemental_build_info_path(&path("/src/app.vue.0.txt"), &roots));
         assert!(!is_content_mapper_supplemental_build_info_path(&path("/src/other.vue.0.ts"), &roots));
+    }
+}
+
+#[cfg(test)]
+mod could_change_resolution_test {
+    use tsrs_core::tspath::Path;
+
+    use super::could_change_resolution;
+
+    #[test]
+    fn paths_module_resolution_could_find() {
+        for path in ["/a/b.ts", "/a/b.d.ts", "/a/b.tsx", "/a/b.mts", "/a/b.cjs", "/a/b.json", "/a/package.json"] {
+            assert!(could_change_resolution(&Path::new(path)), "{path}");
+        }
+        for path in ["/a/b.md", "/a/b.css", "/a/b.tsbuildinfo", "/a/b.js.map", "/a/4913"] {
+            assert!(!could_change_resolution(&Path::new(path)), "{path}");
+        }
     }
 }

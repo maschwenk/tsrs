@@ -39,6 +39,16 @@ impl RefSet {
         self.own.has(path) || self.shared.as_ref().is_some_and(|shared| shared.has(path) && self.skip.as_ref() != Some(path))
     }
 
+    /// The file's own paths (all of them for a flat set).
+    pub(crate) fn own(&self) -> &Set<Path> {
+        &self.own
+    }
+
+    /// The shared part and the path left out of it, for a split set.
+    pub(crate) fn shared(&self) -> Option<(&Arc<Set<Path>>, Option<&Path>)> {
+        self.shared.as_ref().map(|shared| (shared, self.skip.as_ref()))
+    }
+
     pub(crate) fn iter(&self) -> impl Iterator<Item = &Path> {
         let skip = self.skip.as_ref();
         self.own.keys().iter().chain(self.shared.iter().flat_map(|shared| shared.keys().iter()).filter(move |&path| Some(path) != skip))

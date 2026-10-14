@@ -92,6 +92,13 @@ inherits = "release"
 lto = "fat"
 codegen-units = 1
 
+# The native reference of the WebAssembly gate in CI (tools/wasm/gate.sh): release code without LTO, which builds in
+# about a third of the release build's time; the gate compares outputs, which LTO does not change.
+[profile.ci-native]
+inherits = "release"
+lto = false
+codegen-units = 16
+
 # The WebAssembly module (crates/tsrs_wasm, tools/wasm/build.sh; notes/wasm-build.md has the opt-level measurements).
 # panic = "abort": wasm cannot unwind (a panic prints and exits with status 5, as a panicked native driver thread).
 [profile.wasm]

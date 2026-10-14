@@ -1,4 +1,4 @@
-// Port of execute/build/orchestrator.go (the non-watch parts; watch mode is out of scope).
+// Port of execute/build/orchestrator.go, including watch mode (`tsc -b --watch`: `Watch` / `DoCycle`).
 //
 // Like Go, the build tasks run on `--builders` threads (default 4, 1 with --singleThreaded; `rangeTasks`) that take
 // projects from Order() by an atomic index and block on their upstream tasks' `done` signals, while the calling thread
@@ -11,8 +11,8 @@ use std::fmt::Write as _;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
 
-use rustc_hash::FxHashMap;
-use tsrs_ast::{new_compiler_diagnostic, Diagnostic};
+use rustc_hash::{FxHashMap, FxHashSet};
+use tsrs_ast::{new_compiler_diagnostic, Diagnostic, SourceFile};
 use tsrs_compiler::CompilerHost;
 use tsrs_core::collections::Set;
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
@@ -21,6 +21,7 @@ use tsrs_diagnostics as diagnostics;
 use tsrs_tsoptions::ParsedBuildCommandLine;
 
 use super::buildtask::{taskResult, BuildTask};
+use crate::watchmanager::{self, DirWatchSet, WatchManager};
 use super::host::host;
 use super::parsecache::parseCache;
 use crate::tsc::{
@@ -54,7 +55,17 @@ impl OrchestratorResult {
 
     // orchestrator.go:43
     fn report_with_files_to_delete(&mut self, o: &Orchestrator, report_files_to_delete: bool) {
-        (o.error_summary_reporter)(self.errors.as_deref().unwrap_or_default());
+        match &o.watch_status_reporter {
+            Some(watch_status_reporter) => {
+                let errors = self.errors.as_ref().map_or(0, Vec::len);
+                watch_status_reporter(if errors == 1 {
+                    new_compiler_diagnostic(&diagnostics::Found_1_error_Watching_for_file_changes, &[])
+                } else {
+                    new_compiler_diagnostic(&diagnostics::Found_0_errors_Watching_for_file_changes, &[&errors])
+                });
+            }
+            None => (o.error_summary_reporter)(self.errors.as_deref().unwrap_or_default()),
+        }
         if report_files_to_delete {
             if let Some(files_to_delete) = &self.files_to_delete {
                 let mut file_list = String::new();
@@ -105,9 +116,20 @@ pub struct Orchestrator {
     api_clean_exists: Mutex<FxHashMap<String, bool>>,
 
     error_summary_reporter: DiagnosticsReporter<'static>,
+    // Watch mode: the status lines ("Found N errors. Watching for file changes.") and the directory watches.
+    watch_status_reporter: Option<DiagnosticReporter<'static>>,
+    wm: Arc<WatchManager>,
+    // tsrs-only, watch mode: frees the programs the tasks replace and the files nothing refers to (watchmem.rs).
+    pub(crate) freer: crate::watchmem::Freer,
+    // tsrs-only, watch mode: the background computation of the tasks' placeholder signatures (`start_signature_job`).
+    signature_job: Mutex<Option<(tsrs_core::context::CancelFunc, std::thread::JoinHandle<()>)>>,
 
     // order sorted by dependency depth, to reduce how often builders block on upstream projects
     schedule_order: Mutex<Vec<String>>,
+    // tsrs-only (`directory_change_matters`).
+    wanted_watch_dirs: Mutex<FxHashSet<Path>>,
+    // tsrs-only (`cached_realpath`): the real paths of the build info's files, kept across cycles.
+    realpaths: Mutex<FxHashMap<String, String>>,
 }
 
 impl Orchestrator {
@@ -209,7 +231,7 @@ impl Orchestrator {
     fn setup_build_task(
         &self,
         config_name: &str,
-        _down_stream: Option<P<BuildTask>>,
+        down_stream: Option<P<BuildTask>>,
         in_circular_context: bool,
         completed: &mut Set<Path>,
         analyzing: &mut Set<Path>,
@@ -250,7 +272,11 @@ impl Orchestrator {
             task.done.reset();
             self.order.lock().unwrap().push(config_name.to_string());
         }
-        // Watch mode only: downStream links.
+        if self.opts.command.compiler_options.watch.is_true()
+            && let Some(down_stream) = down_stream
+        {
+            task.down_stream.lock().unwrap().push(down_stream);
+        }
         Some(task)
     }
 
@@ -321,7 +347,11 @@ impl Orchestrator {
     // tsc -b entrypoint
     // orchestrator.go:295
     pub fn start(&'static self) -> CommandLineResult {
-        CommandLineResult { status: self.start_worker("", false /*onlyReferences*/).status() }
+        let status = self.start_worker("", false /*onlyReferences*/).status();
+        // Under the test harness a watch session returns after the first build; the harness drives the cycles.
+        let watcher = (self.opts.command.compiler_options.watch.is_true() && self.opts.testing.is_some())
+            .then(|| Box::new(orchestratorWatcher(self)) as Box<dyn tsc::Watcher>);
+        CommandLineResult { status, watcher }
     }
 
     /// Makes this orchestrator allocate in collectable regions and retain per-file API diagnostics.
@@ -434,8 +464,15 @@ impl Orchestrator {
     fn start_worker(&'static self, project: &str, only_references: bool) -> OrchestratorResult {
         let content_mapper_host = tsc::new_content_mapper_host(self.opts.sys, &self.opts.command.compiler_options);
         self.content_mapper_host.lock().unwrap().clone_from(&content_mapper_host);
-        // Go defers the host's Close unless this is a watch session under test; watch mode is not ported.
-        let _close_content_mapper_host = tsc::contentMapperCloser { host: content_mapper_host, project: None };
+        // Go defers the host's Close unless this is a watch session under test. Outside tests a watch session runs its
+        // cycles in `watch` below, so the host closes when the session ends; the harness runs the cycles after this
+        // returns, so it keeps the host open.
+        let watch = self.opts.command.compiler_options.watch.is_true();
+        let close_host = if watch && self.opts.testing.is_some() { None } else { content_mapper_host };
+        let _close_content_mapper_host = tsc::contentMapperCloser { host: close_host, project: None };
+        if let Some(watch_status_reporter) = &self.watch_status_reporter {
+            watch_status_reporter(new_compiler_diagnostic(&diagnostics::Starting_compilation_in_watch_mode, &[]));
+        }
         {
             let _region = self.enter_api_region();
             if self.graph_generated.load(Ordering::SeqCst) {
@@ -453,7 +490,13 @@ impl Orchestrator {
             }
             order.pop();
         }
-        self.build_or_clean_order(&order)
+        // tsrs-only (`queue_files_changed_since`): when the first build started.
+        let build_started = std::time::SystemTime::now();
+        let result = self.build_or_clean_order(&order);
+        if watch {
+            self.watch(build_started);
+        }
+        result
     }
 
     // orchestrator.go:426
@@ -652,8 +695,542 @@ impl Orchestrator {
                 // SAFETY: see above; no checker handle of it is held.
                 unsafe { tsrs_compiler::free_unshared_program(program.get_program()) };
             }
+            // In watch mode the task keeps the program as the old state of its next build, which drops it
+            // (`BuildTask::compile_and_emit`).
         }
         task.built.close();
+    }
+
+    // orchestrator.go:101
+    fn resolve_build_info_file_name(&self, file_name: &str, build_info_dir: &str) -> String {
+        if tsrs_incremental::is_build_info_file_name_default_library(file_name) {
+            return tspath::combine_paths(CompilerHost::default_library_path(self.host()), &[file_name]);
+        }
+        tspath::get_normalized_absolute_path(file_name, build_info_dir)
+    }
+
+    // orchestrator.go:473 Watch
+    fn watch(&'static self, build_started: std::time::SystemTime) {
+        {
+            let mut state = self.wm.lock();
+            if self.opts.testing.is_none() {
+                if self.opts.sys.get_environment_variable("TS_WATCH_DEBUG").is_some_and(|v| !v.is_empty()) {
+                    let sys = self.opts.sys;
+                    self.wm.set_debug_log(Arc::new(move |t: &str| sys.write(t)));
+                }
+                self.wm.ensure_default_backend(&mut state);
+            }
+            self.update_watch();
+            self.reconcile(&mut state);
+            self.reset_caches();
+            self.free_unreachable_watch_files();
+        }
+        if self.opts.testing.is_none() {
+            self.queue_files_changed_since(build_started);
+            self.freer.after_cycle();
+        }
+        self.start_signature_job();
+        if self.opts.testing.is_none() {
+            self.wm.run_loop(|| {
+                self.do_cycle();
+                self.freer.after_cycle();
+            });
+        }
+    }
+
+    // tsrs-only: an update event for a parsed file whose modification time is still the one it was read at changes
+    // nothing (as in watcher.rs `drop_unchanged_file_events`): chmod, and the event of a save that the first cycle
+    // already took from `queue_files_changed_since` (a save just after the first report: the queued cycle read it,
+    // and its event, which arrives ~12 ms later, ran a second cycle). The cache is shared by every task, so its time
+    // only says that some task read the file then: the event is dropped only when every task that has the file has
+    // the version the cache holds (`read_by_every_task`).
+    fn drop_unchanged_file_events(&self, changed_paths: &mut FxHashMap<String, tsrs_fswatch::EventKind>) {
+        let Some(cache) = &self.host().watch_source_files else { return };
+        if changed_paths.is_empty() {
+            return;
+        }
+        // A rename in case only keeps the modification time, and the cache can hold both spellings: keep its events.
+        let paths: FxHashSet<Path> = changed_paths.keys().map(|p| self.to_path(p)).collect();
+        if paths.len() != changed_paths.len() {
+            return;
+        }
+        // The cache keys files by their parse options, so a file can have a version for each.
+        let versions: FxHashMap<String, Vec<(P<SourceFile>, Option<std::time::SystemTime>)>> = {
+            let cache = cache.lock().unwrap();
+            let mut versions: FxHashMap<String, Vec<_>> = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "builds a map; the order of each file's versions does not matter")]
+            for (opts, &(file, mod_time)) in cache.iter() {
+                if changed_paths.contains_key(&opts.file_name) {
+                    versions.entry(opts.file_name.clone()).or_default().push((file, mod_time));
+                }
+            }
+            versions
+        };
+        if versions.is_empty() {
+            return;
+        }
+        let order = self.order.lock().unwrap().clone();
+        let tasks: Vec<P<BuildTask>> = order.iter().map(|config| self.get_task(&self.to_path(config))).collect();
+        let before = changed_paths.len();
+        changed_paths.retain(|path, kind| {
+            *kind != tsrs_fswatch::EventKind::Update || versions.get(path).is_none_or(|versions| !self.read_by_every_task(path, versions, &tasks))
+        });
+        if changed_paths.len() != before {
+            self.wm.debug(|| format!("[watch] ignoring {} event(s) for files unchanged since they were read\n", before - changed_paths.len()));
+        }
+    }
+
+    // Whether every task that has `file_name` has one of `versions`, the cache's, all read at the file's current
+    // modification time. A task without a program in memory is up to date with what its build info lists: it must not
+    // list the file.
+    fn read_by_every_task(&self, file_name: &str, versions: &[(P<SourceFile>, Option<std::time::SystemTime>)], tasks: &[P<BuildTask>]) -> bool {
+        let mod_time = self.opts.sys.fs().stat(file_name).and_then(|s| s.mod_time());
+        if mod_time.is_none() || versions.iter().any(|&(_, read)| read != mod_time) {
+            return false;
+        }
+        let path = self.to_path(file_name);
+        tasks.iter().all(|task| match task.watch_program() {
+            Some(program) => program.get_source_file_by_path(&path).is_none_or(|file| versions.iter().any(|&(version, _)| version == file)),
+            None => !self.task_may_have_input(task, &path),
+        })
+    }
+
+    // Whether `path` is a root file of the task or a file its build info lists; true when the task has neither.
+    fn task_may_have_input(&self, task: &BuildTask, path: &Path) -> bool {
+        let Some(resolved) = task.resolved_opt() else { return true };
+        if resolved.file_names().iter().any(|file| self.to_path(file) == *path) {
+            return true;
+        }
+        let Some((build_info_path, build_info)) = task.build_info_snapshot() else { return true };
+        let build_info_dir = tspath::get_directory_path(build_info_path.as_str());
+        build_info.file_names.iter().any(|file_name| self.to_path(&self.resolve_build_info_file_name(file_name, &build_info_dir)) == *path)
+    }
+
+    // tsrs-only: the watches start after the first build, so a file saved while that build ran (after it was read)
+    // has no event; Go misses the edit until the next save (tsgo too). A program file modified since the build
+    // started is queued as a change, and the first cycle checks it again. One stat per source file, once.
+    fn queue_files_changed_since(&self, build_started: std::time::SystemTime) {
+        // Not the host's cached file system: the first cycle must not see these stats.
+        let fs = self.opts.sys.fs();
+        let order = self.order.lock().unwrap().clone();
+        let tasks: Vec<P<BuildTask>> = order.iter().map(|config| self.get_task(&self.to_path(config))).collect();
+        // The build wrote the outputs a downstream project reads (a reference's declarations): not edits.
+        let outputs: FxHashSet<Path> =
+            tasks.iter().filter_map(|task| task.resolved_opt()).flat_map(|resolved| resolved.get_output_file_names()).map(|f| self.to_path(&f)).collect();
+        let mut changed: Vec<String> = Vec::new();
+        for task in &tasks {
+            let Some(program) = task.watch_program() else { continue };
+            changed.extend(
+                program
+                    .get_source_files()
+                    .iter()
+                    .filter(|file| !outputs.contains(file.path()))
+                    .map(|file| file.file_name())
+                    .filter(|file_name| fs.stat(file_name).and_then(|s| s.mod_time()).is_some_and(|m| m > build_started))
+                    .map(str::to_string),
+            );
+        }
+        if !changed.is_empty() {
+            changed.sort();
+            changed.dedup();
+            self.wm.debug(|| format!("[watch] {} file(s) changed during the build: {}\n", changed.len(), changed.join(", ")));
+            self.wm.queue_changes(changed);
+        }
+    }
+
+    fn reconcile(&self, state: &mut watchmanager::WatchState) {
+        let desired_dirs = self.compute_desired_watches();
+        if let Err(err) = self.wm.reconcile_watches(state, &desired_dirs) {
+            self.opts.sys.write(&format!("{}\n", err.message()));
+            // Mark overflow so the next event triggers a full rebuild
+            self.wm.force_overflow();
+        }
+    }
+
+    // orchestrator.go:498
+    fn update_watch(&self) {
+        let old_cache = std::mem::replace(&mut *self.host().m_times.lock().unwrap(), Arc::new(Mutex::new(FxHashMap::default())));
+        let order = self.order.lock().unwrap().clone();
+        for config in order {
+            self.get_task(&self.to_path(&config)).update_watch(self, &old_cache);
+        }
+    }
+
+    // orchestrator.go:816 DoCycle
+    pub fn do_cycle(&'static self) {
+        let mut state = self.wm.lock();
+        let (mut changed_paths, overflow) = self.wm.drain_events();
+        // tsrs-only: whatever the cached file system holds predates the events (`get_watch_source_file` reuses a file
+        // whose modification time it finds unchanged).
+        self.host().cached_fs.clear_cache();
+        self.drop_unchanged_file_events(&mut changed_paths);
+        if changed_paths.is_empty() && !overflow {
+            self.wm.debug(|| "[watch] DoCycle: no events, skipping\n".to_string());
+            return;
+        }
+        self.stop_signature_job();
+        self.build_changes(&mut state, &changed_paths, overflow);
+        self.start_signature_job();
+    }
+
+    fn build_changes(&'static self, state: &mut watchmanager::WatchState, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>, overflow: bool) {
+        self.invalidate_realpaths(changed_paths, overflow);
+        let mut needs_config_update = false;
+        let mut needs_update = false;
+        if overflow {
+            // Overflow: reset all tasks to force a full rebuild.
+            let order = self.order.lock().unwrap().clone();
+        for config in order {
+                let path = self.to_path(&config);
+                let task = self.get_task(&path);
+                task.reset_config(self, &path);
+                task.set_watch_changes(None);
+                task.built.reset();
+                task.done.reset();
+            }
+            needs_config_update = true;
+            needs_update = true;
+        } else {
+            self.check_tasks_for_event_changes(state, changed_paths, &mut needs_config_update, &mut needs_update);
+        }
+        if !needs_update {
+            self.reset_caches();
+            return;
+        }
+        if let Some(watch_status_reporter) = &self.watch_status_reporter {
+            watch_status_reporter(new_compiler_diagnostic(&diagnostics::File_change_detected_Starting_incremental_compilation, &[]));
+        }
+        if needs_config_update {
+            self.generate_graph_reusing_old_tasks();
+        }
+        let order = self.order.lock().unwrap().clone();
+        self.build_or_clean_order(&order);
+        self.update_watch();
+        self.reconcile(state);
+        self.reset_caches();
+        self.free_unreachable_watch_files();
+    }
+
+    // tsrs-only: `--watch`'s signature job (watcher.rs `start_signature_job`) over each task's incremental program,
+    // which the task keeps for its next build. Without it, the first edit of a file rechecks everything in its project
+    // that imports it. The next cycle cancels the job and waits for the chunk in progress before any task builds, so
+    // the programs the job reads stay unchanged and alive while it runs.
+    fn start_signature_job(&'static self) {
+        let order = self.order.lock().unwrap().clone();
+        let programs: Vec<P<tsrs_incremental::Program>> =
+            order.iter().filter_map(|config| self.get_task(&self.to_path(config)).watch_incremental_program()).collect();
+        if let Some(testing) = self.opts.testing {
+            if testing.run_signature_job() {
+                for program in programs {
+                    program.compute_placeholder_signatures(&tsrs_compiler::Context::default(), crate::watcher::SIGNATURE_JOB_CHUNK);
+                }
+            }
+            return;
+        }
+        if programs.is_empty() {
+            return;
+        }
+        let (ctx, cancel) = tsrs_compiler::Context::default().with_cancel();
+        let job = std::thread::Builder::new()
+            .name("tsrs-signatures".to_string())
+            .spawn(move || {
+                let start = std::time::Instant::now();
+                let mut stored = 0;
+                for program in programs {
+                    stored += program.compute_placeholder_signatures(&ctx, crate::watcher::SIGNATURE_JOB_CHUNK);
+                }
+                let state = if ctx.err().is_some() { "canceled" } else { "done" };
+                self.wm.debug(|| format!("[watch] stored {stored} declaration signature(s) in {:?} ({state})\n", start.elapsed()));
+            })
+            .expect("failed to spawn a thread");
+        *self.signature_job.lock().unwrap() = Some((cancel, job));
+    }
+
+    fn stop_signature_job(&self) {
+        let job = self.signature_job.lock().unwrap().take();
+        if let Some((cancel, job)) = job {
+            cancel.call();
+            job.join().expect("the signature computation panicked");
+        }
+    }
+
+    // tsrs-only (watchmem.rs): after a cycle's builds, frees the regions of the parsed files that neither the host's
+    // cache nor a task's program refers to, once the programs the cycle replaced are freed (queued before this).
+    fn free_unreachable_watch_files(&self) {
+        let host = self.host();
+        let Some(cache) = &host.watch_source_files else { return };
+        let mut live: rustc_hash::FxHashSet<usize> = cache.lock().unwrap().values().map(|(f, _)| f.addr()).collect();
+        let tasks: Vec<P<BuildTask>> = self.tasks.lock().unwrap().values().copied().collect();
+        for task in tasks {
+            task.add_live_watch_files(&mut live);
+        }
+        let dead = host.watch_file_regions.take_unreachable(&live);
+        self.freer.run(move || drop(dead));
+    }
+
+    // orchestrator.go:515
+    fn check_tasks_for_event_changes(
+        &'static self,
+        state: &watchmanager::WatchState,
+        changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>,
+        needs_config_update: &mut bool,
+        needs_update: &mut bool,
+    ) {
+        let normalized_paths: FxHashMap<Path, tsrs_fswatch::EventKind> = changed_paths.iter().map(|(p, &k)| (self.to_path(p), k)).collect();
+        let order = self.order.lock().unwrap().clone();
+        for config in &order {
+            let path = self.to_path(config);
+            let task = self.get_task(&path);
+            task.built_program.store(false, std::sync::atomic::Ordering::SeqCst);
+            task.set_watch_changes(None);
+            if self.task_config_changed(&task, &normalized_paths) {
+                task.reset_config(self, &path);
+                *needs_config_update = true;
+                *needs_update = true;
+                continue;
+            }
+            let Some(resolved) = task.resolved_opt() else { continue };
+            if self.task_inputs_changed(&task, &resolved, &normalized_paths) {
+                task.reset_status();
+                task.set_watch_changes(Some(normalized_paths.iter().map(|(p, &k)| (p.clone(), k)).collect()));
+                *needs_update = true;
+            }
+            task.built.reset();
+            task.done.reset();
+
+            // tsrs-only: the wildcard file set changes only when a file it may match appears or goes, or a directory
+            // does; an edit of a file already in it cannot change it, so the reload (a walk of the project, 60 ms on
+            // vscode, before the cycle is even reported) is skipped. Go reloads every cycle.
+            if !self.file_names_may_change(&resolved, changed_paths) {
+                continue;
+            }
+            let new_config = P::new(resolved.reload_file_names_of_parsed_command_line(CompilerHost::fs(self.host())));
+            if resolved.file_names() != new_config.file_names() {
+                self.host().resolved_references.store(path.clone(), Some(new_config));
+                *task.resolved.lock().unwrap() = Some(new_config);
+                task.set_watch_changes(None);
+                task.reset_status();
+                *needs_update = true;
+            }
+        }
+        if *needs_update {
+            return;
+        }
+        // A new or removed directory under a watched one can change wildcard matches.
+        let fs = CompilerHost::fs(self.host());
+        let mut keys: Vec<&String> = changed_paths.keys().collect();
+        keys.sort();
+        if keys.into_iter().any(|p| fs.directory_exists(p) && WatchManager::is_path_under_watch(state, p, &self.compare_paths_options) && self.directory_change_matters(p)) {
+            for config in &order {
+                let task = self.get_task(&self.to_path(config));
+                task.reset_status();
+                task.built.reset();
+                task.done.reset();
+            }
+            *needs_update = true;
+        }
+    }
+
+    // tsrs-only (see `check_tasks_for_event_changes`).
+    fn file_names_may_change(&self, resolved: &tsrs_tsoptions::ParsedCommandLine, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>) -> bool {
+        if resolved.config_file.is_none() || resolved.wildcard_directories().is_none_or(tsrs_core::collections::OrderedMap::is_empty) {
+            return false;
+        }
+        let fs = CompilerHost::fs(self.host());
+        let names = resolved.file_names_by_path();
+        let cwd = self.opts.sys.get_current_directory();
+        changed_paths.keys().any(|p| {
+            let listed = names.get(&self.to_path(p));
+            let is_name = listed.is_some();
+            if fs.file_exists(p) {
+                // An edit of a listed file keeps the set (unless it was renamed in case only: the path is the same,
+                // the spelling is not); a new file changes it if the wildcards may match it.
+                match listed {
+                    Some(name) => tspath::get_normalized_absolute_path(name, cwd) != *p,
+                    None => resolved.possibly_matches_file_name(p),
+                }
+            } else {
+                // A listed file went, or a directory came or went (a directory exists, or it is gone like a file).
+                is_name || fs.directory_exists(p) || resolved.possibly_matches_directory_name(&self.to_path(p)) || resolved.possibly_matches_file_name(p)
+            }
+        })
+    }
+
+    // The tsconfig, an extended config, or a content mapper's package manifest changed.
+    fn task_config_changed(&self, task: &BuildTask, changed: &FxHashMap<Path, tsrs_fswatch::EventKind>) -> bool {
+        if changed.contains_key(&self.to_path(&task.config)) {
+            return true;
+        }
+        let Some(resolved) = task.resolved_opt() else { return false };
+        resolved.extended_source_files().iter().any(|file| changed.contains_key(&self.to_path(file)))
+            || resolved.content_mappers().iter().filter(|m| !m.package_directory.is_empty() && m.contribution_id.is_empty()).any(|m| {
+                changed.contains_key(&self.to_path(&tspath::combine_paths(&m.package_directory, &["package.json"])))
+            })
+    }
+
+    // A root file, content mapper input, buildinfo-recorded dependency, or package.json lookup changed.
+    fn task_inputs_changed(&'static self, task: &BuildTask, resolved: &tsrs_tsoptions::ParsedCommandLine, changed: &FxHashMap<Path, tsrs_fswatch::EventKind>) -> bool {
+        if let Some(project) = task.content_mapper_project_opt() {
+            match project.watched_files() {
+                Err(err) => {
+                    task.set_content_mapper_project_err(err);
+                    return true;
+                }
+                Ok(watched_files) => {
+                    if watched_files.iter().any(|f| changed.contains_key(&self.to_path(f))) {
+                        task.refresh_content_mapper_project(self);
+                        return true;
+                    }
+                }
+            }
+        }
+        let mut roots: Set<Path> = Set::default();
+        for file in resolved.file_names() {
+            let fp = self.to_path(file);
+            if changed.contains_key(&fp) {
+                return true;
+            }
+            roots.add(fp);
+        }
+        if let Some((bi_path, build_info)) = task.build_info_snapshot() {
+            let build_info_dir = tspath::get_directory_path(bi_path.as_str());
+            let dependency_changed = build_info.file_names.iter().any(|file_name| {
+                let fp = self.to_path(&self.resolve_build_info_file_name(file_name, &build_info_dir));
+                !roots.has(&fp) && changed.contains_key(&fp)
+            });
+            if dependency_changed
+                || build_info.get_package_jsons(&build_info_dir).iter().any(|p| self.package_json_lookup_changed(p, changed))
+                || build_info.get_missing_package_jsons(&build_info_dir).iter().any(|p| self.package_json_lookup_changed(p, changed))
+            {
+                return true;
+            }
+        }
+        task.package_jsons().iter().any(|p| self.package_json_lookup_changed(p, changed))
+    }
+
+    // orchestrator.go:673
+    fn package_json_lookup_changed(&self, package_json: &str, changed_paths: &FxHashMap<Path, tsrs_fswatch::EventKind>) -> bool {
+        let package_json_path = self.to_path(package_json);
+        if changed_paths.contains_key(&package_json_path) {
+            return true;
+        }
+        changed_paths.iter().any(|(changed, &kind)| {
+            kind == tsrs_fswatch::EventKind::Delete && tspath::contains_path(changed.as_str(), package_json_path.as_str(), &self.compare_paths_options)
+        })
+    }
+
+    // orchestrator.go:686
+    fn compute_desired_watches(&self) -> FxHashMap<String, bool> {
+        let mut desired_dirs = DirWatchSet::new(&self.compare_paths_options);
+        let fs = CompilerHost::fs(self.host());
+        let mut symlink_checked: FxHashSet<String> = FxHashSet::default();
+        let order = self.order.lock().unwrap().clone();
+        for config in order {
+            let task = self.get_task(&self.to_path(&config));
+            desired_dirs.set(&fs.realpath(&tspath::get_directory_path(&task.config)), false);
+            let Some(resolved) = task.resolved_opt() else { continue };
+            for cfg_path in resolved.extended_source_files() {
+                desired_dirs.set(&tspath::get_directory_path(&fs.realpath(cfg_path.as_str())), false);
+            }
+            if let Some(wildcards) = resolved.wildcard_directories() {
+                for (dir, &recursive) in wildcards.iter() {
+                    desired_dirs.set(&fs.realpath(dir), recursive);
+                }
+            }
+            for file_name in resolved.file_names() {
+                let abs_path = tspath::get_normalized_absolute_path(file_name, self.opts.sys.get_current_directory());
+                add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path), fs, &mut symlink_checked);
+                for mapper in resolved.content_mappers() {
+                    if mapper.package_directory.is_empty() || !mapper.contribution_id.is_empty() {
+                        continue;
+                    }
+                    let manifest_path = tspath::combine_paths(&mapper.package_directory, &["package.json"]);
+                    add_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&manifest_path));
+                }
+            }
+            if let Some(project) = task.content_mapper_project_opt() {
+                match project.watched_files() {
+                    Err(err) => task.set_content_mapper_project_err(err),
+                    Ok(watched_files) => {
+                        for file_name in watched_files {
+                            add_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&fs.realpath(&file_name)));
+                        }
+                    }
+                }
+            }
+            // Non-root dependency directories from the buildinfo (e.g. node_modules .d.ts files).
+            if let Some((bi_path, build_info)) = task.build_info_snapshot() {
+                let build_info_dir = tspath::get_directory_path(bi_path.as_str());
+                let roots: Set<Path> = tsrs_core::collections::new_set_from_items(resolved.file_names().iter().map(|f| self.to_path(f)));
+                for file_name in &build_info.file_names {
+                    let abs_path = self.cached_realpath(&self.resolve_build_info_file_name(file_name, &build_info_dir));
+                    if roots.has(&self.to_path(&abs_path)) {
+                        continue;
+                    }
+                    add_program_file_watch_dir(&mut desired_dirs, &tspath::get_directory_path(&abs_path), fs, &mut symlink_checked);
+                }
+                for package_json in build_info.get_package_jsons(&build_info_dir) {
+                    add_package_json_watch_dirs(&mut desired_dirs, &package_json);
+                }
+                for package_json in build_info.get_missing_package_jsons(&build_info_dir) {
+                    add_package_json_watch_dirs(&mut desired_dirs, &package_json);
+                }
+            }
+            for package_json in task.package_jsons() {
+                add_package_json_watch_dirs(&mut desired_dirs, &package_json);
+            }
+        }
+        let dirs = desired_dirs.dirs();
+        // tsrs-only (`directory_change_matters`): the wanted directories and their ancestors, before a missing one is
+        // replaced by its nearest existing ancestor.
+        let mut wanted: FxHashSet<Path> = FxHashSet::default();
+        #[expect(clippy::iter_over_hash_type, reason = "builds a set; the order does not matter")]
+        for dir in dirs.keys() {
+            let mut p = self.to_path(dir);
+            while wanted.insert(p.clone()) {
+                let parent = p.get_directory_path();
+                if parent == p {
+                    break;
+                }
+                p = parent;
+            }
+        }
+        *self.wanted_watch_dirs.lock().unwrap() = wanted;
+        self.wm.resolve_desired_dirs(&dirs)
+    }
+
+    // tsrs-only: computing the watches took one realpath per file the build info lists, every cycle (10k files, 290 ms
+    // of a 400 ms vscode cycle). A real path changes only when a symlink on it does, and such a change is an event
+    // for a symlink, a directory or a removed path, which clears the cache (`invalidate_realpaths`).
+    fn cached_realpath(&self, path: &str) -> String {
+        if let Some(real) = self.realpaths.lock().unwrap().get(path) {
+            return real.clone();
+        }
+        let real = CompilerHost::fs(self.host()).realpath(path);
+        self.realpaths.lock().unwrap().insert(path.to_string(), real.clone());
+        real
+    }
+
+    fn invalidate_realpaths(&self, changed_paths: &FxHashMap<String, tsrs_fswatch::EventKind>, overflow: bool) {
+        let fs = CompilerHost::fs(self.host());
+        let structural = overflow
+            || changed_paths.keys().any(|p| std::fs::symlink_metadata(p).map_or(true, |m| m.file_type().is_symlink()) || fs.directory_exists(p));
+        if structural {
+            self.realpaths.lock().unwrap().clear();
+        }
+    }
+
+    // tsrs-only: a directory that appeared or changed under a watched one matters when a project's wildcards may
+    // match it, when it is (an ancestor of) a directory the build wants watched, or when it is or lies in a
+    // node_modules (an installed package: the build info does not list the module lookups that found nothing). Go counts any directory under any watch and rebuilds every project, so a directory made beside the
+    // projects (whose parent is watched for a lookup) rebuilt them all.
+    fn directory_change_matters(&self, dir: &str) -> bool {
+        let p = self.to_path(dir);
+        if watchmanager::is_in_node_modules(&p) || self.wanted_watch_dirs.lock().unwrap().contains(&p) {
+            return true;
+        }
+        let order = self.order.lock().unwrap().clone();
+        order.iter().any(|config| self.get_task(&self.to_path(config)).resolved_opt().is_some_and(|resolved| resolved.possibly_matches_directory_name(&p)))
     }
 
     // orchestrator.go:906
@@ -679,6 +1256,59 @@ impl Orchestrator {
     // orchestrator.go:917
     pub(crate) fn create_diagnostic_reporter(&self, task: Option<P<BuildTask>>) -> DiagnosticReporter<'static> {
         create_diagnostic_reporter_with_writer(self.opts.sys, self.get_writer(task), Some(&self.opts.command.compiler_options))
+    }
+}
+
+// Go's `tsc.Watcher` for the test harness.
+struct orchestratorWatcher(&'static Orchestrator);
+
+impl tsc::Watcher for orchestratorWatcher {
+    fn do_cycle(&mut self) {
+        self.0.do_cycle();
+    }
+}
+
+// orchestrator.go:774
+fn add_watch_dir(desired_dirs: &mut DirWatchSet, dir: &str) {
+    if !desired_dirs.covered(dir) && watchmanager::can_watch_directory(dir) {
+        desired_dirs.set(dir, false);
+    }
+}
+
+// orchestrator.go:780: a program file's directory is watched at any depth; add_watch_dir's guard keeps lookup
+// locations from watching something as broad as / or /home.
+//
+// tsrs-only: a directory covered only by a recursive watch above it, but reached through a symlink, gets a watch of its
+// own (`symlink_checked` holds the directories already checked); see watcher.rs `compute_desired_watches`.
+fn add_program_file_watch_dir(desired_dirs: &mut DirWatchSet, dir: &str, fs: &dyn tsrs_vfs::FS, symlink_checked: &mut FxHashSet<String>) {
+    if !desired_dirs.covered(dir) || (!desired_dirs.has(dir) && symlink_checked.insert(dir.to_string()) && fs.realpath(dir) != dir) {
+        desired_dirs.set(dir, false);
+    }
+}
+
+// orchestrator.go:786: a package.json's directory, plus its ancestors up to the enclosing node_modules' parent.
+fn add_package_json_watch_dirs(desired_dirs: &mut DirWatchSet, package_json: &str) {
+    let dir = tspath::get_directory_path(package_json);
+    let mut dirs = vec![dir.clone()];
+    let mut current = dir.clone();
+    loop {
+        let parent = tspath::get_directory_path(&current);
+        if parent.is_empty() || parent == current {
+            add_watch_dir(desired_dirs, &dir);
+            return;
+        }
+        dirs.push(parent.clone());
+        if tspath::get_base_file_name(&parent) == "node_modules" {
+            let grandparent = tspath::get_directory_path(&parent);
+            if !grandparent.is_empty() && grandparent != parent {
+                dirs.push(grandparent);
+            }
+            break;
+        }
+        current = parent;
+    }
+    for dir in &dirs {
+        add_watch_dir(desired_dirs, dir);
     }
 }
 
@@ -712,6 +1342,17 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
     let compare_paths_options =
         ComparePathsOptions { current_directory: sys.get_current_directory().to_string(), use_case_sensitive_file_names: sys.fs().use_case_sensitive_file_names() };
     let error_summary_reporter = create_report_error_summary(sys, &opts.command.compiler_options);
+    let watch = opts.command.compiler_options.watch.is_true();
+    let watch_status_reporter = watch.then(|| tsc::create_watch_status_reporter(sys, &opts.command.compiler_options, opts.testing));
+    if watch {
+        tsrs_compiler::bind_in_file_regions();
+    }
+    let freer = crate::watchmem::Freer::new(opts.testing.is_some());
+    let fs = sys.fs();
+    let wm = WatchManager::new(Arc::new(move |t: &str| sys.write(t)), Box::new(move |d: &str| fs.directory_exists(d)));
+    if watch && let Some(backend) = opts.testing.and_then(tsc::CommandLineTesting::watch_backend) {
+        WatchManager::set_backend(&mut wm.lock(), backend);
+    }
     let orchestrator: &'static Orchestrator = Box::leak(Box::new(Orchestrator {
         opts,
         compare_paths_options,
@@ -722,7 +1363,13 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         graph_generated: AtomicBool::new(false),
         aborted: AtomicBool::new(false),
         error_summary_reporter,
+        watch_status_reporter,
+        wm,
+        freer,
+        signature_job: Mutex::new(None),
         schedule_order: Mutex::new(Vec::new()),
+        wanted_watch_dirs: Mutex::new(FxHashSet::default()),
+        realpaths: Mutex::new(FxHashMap::default()),
         regions: Mutex::new(Vec::new()),
         api_mode: AtomicBool::new(false),
         api_clean_exists: Mutex::new(FxHashMap::default()),
@@ -740,6 +1387,8 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         config_times: Mutex::new(FxHashMap::default()),
         resolved_references: parseCache::default(),
         m_times: Mutex::new(Arc::new(Mutex::new(FxHashMap::default()))),
+        watch_source_files: watch.then(|| Mutex::new(FxHashMap::default())),
+        watch_file_regions: Default::default(),
     }));
     let _ = h.orchestrator.set(orchestrator);
     let _ = orchestrator.host.set(h);

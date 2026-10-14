@@ -31,5 +31,5 @@ pub use canonicalize::path_comparer_for_path;
 pub use event::{Event, EventKind};
 pub use pathkey::{NativePathComparisonAvailable, PathComparer};
 pub use watcher::{
-    all_watchers, default, fanotify, fsevents, inotify, kqueue, windows, with_ignore, with_recursive, Error, ErrFilesystemUnsupported, ErrOverflow, ErrUnavailable, ErrWatchTerminated, IgnoreFunc, Sentinel, Watch, WatchCallback, WatchDirectoryRequest, WatchOption, Watcher,
+    all_watchers, default, set_write_settling, fanotify, fsevents, inotify, kqueue, windows, with_ignore, with_recursive, Error, ErrFilesystemUnsupported, ErrOverflow, ErrUnavailable, ErrWatchTerminated, IgnoreFunc, Sentinel, Watch, WatchCallback, WatchDirectoryRequest, WatchOption, Watcher,
 };

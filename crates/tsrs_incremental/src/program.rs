@@ -4,7 +4,7 @@ use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
 use rustc_hash::FxHashMap;
-use tsrs_ast::{new_compiler_diagnostic, Diagnostic, SourceFile};
+use tsrs_ast::{new_compiler_diagnostic, Diagnostic, DiagnosticExt, SourceFile};
 use tsrs_compiler::{filter_no_emit_semantic_diagnostics, Context, Program as CompilerProgram};
 use tsrs_core::tspath::{self, ComparePathsOptions, Path};
 use tsrs_core::{CompilerOptions, Tristate, P};
@@ -59,7 +59,8 @@ pub fn new_program(
     } else {
         None
     };
-    P::new(Program {
+    // Recycled: see `drop_replaced`.
+    P::new_recycled(Program {
         snapshot,
         program: Some(program),
         host: Some(host),
@@ -144,6 +145,152 @@ impl Program {
     }
 
     // program.go:119
+    /// The compiler program, `None` for one read from a build info.
+    pub fn compiler_program(&self) -> Option<&'static CompilerProgram> {
+        self.program
+    }
+
+    /// tsrs-only: replaces the signatures that stand in for a file's declaration shape with the signature of its
+    /// declaration output. The stand-in is the file's version: the initial build stores one for every file, and
+    /// `handle_dts_may_change_of` stores one for each file it invalidates without computing its declarations. The
+    /// next edit of such a file compares its new declaration signature with the version, which always differs, and
+    /// so invalidates every file importing it, transitively: about 5 s of rechecking on a 9.4k-file project after an
+    /// edit that changed no declaration. With the real signature only a changed declaration shape does that.
+    ///
+    /// Does nothing while a change is pending (a non-empty changed file set). Otherwise every file has been checked
+    /// against this program or is queued to be, so the files that depend on a file saw its current declaration
+    /// shape, which is what a builder that always computed the signatures would hold. Emits `chunk` files at a time
+    /// and returns between chunks once `ctx` is cancelled; the signatures stored until then stand. Must not run
+    /// concurrently with anything else that uses this program or its snapshot. Returns the number of signatures
+    /// stored.
+    pub fn compute_placeholder_signatures(&self, ctx: &Context, chunk: usize) -> usize {
+        let snapshot = self.snapshot;
+        if !snapshot.can_use_incremental_state() || snapshot.changed_files_set.size() != 0 || ctx.err().is_some() {
+            return 0;
+        }
+        let program = self.p();
+        let files: Vec<P<SourceFile>> = program
+            .get_source_files()
+            .iter()
+            .copied()
+            .filter(|&file| {
+                !file.is_declaration_file()
+                    && !tsrs_ast::is_json_source_file(file)
+                    && snapshot.file_infos.load(file.path()).is_some_and(|info| info.signature == info.version)
+            })
+            .collect();
+        let stored = std::sync::atomic::AtomicUsize::new(0);
+        let write_file = |file_name: &str, text: &str, data: &mut WriteFileData| -> Result<(), String> {
+            assert!(tspath::is_declaration_file_name(file_name), "File extension for signature expected to be dts, got : {file_name}");
+            let file = data.source_file.expect("declaration output of a source file");
+            let signature = snapshot.compute_signature_with_diagnostics(file, text, data);
+            if let Some(mut info) = snapshot.file_infos.load(file.path())
+                && !signature.is_empty()
+                && info.signature == info.version
+            {
+                info.signature = signature;
+                snapshot.file_infos.store(file.path().clone(), info);
+                // Relaxed: a count, read once the emit has joined the threads that run this.
+                stored.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            Ok(())
+        };
+        for files in files.chunks(chunk.max(1)) {
+            if ctx.err().is_some() {
+                break;
+            }
+            program.emit(
+                ctx,
+                &EmitOptions { target_source_files: Some(files.to_vec()), emit_only: EmitOnly::EmitOnlyBuilderSignature, write_file: Some(&write_file), ..Default::default() },
+            );
+        }
+        let stored = stored.into_inner();
+        if stored > 0 {
+            snapshot.build_info_emit_pending.set(true);
+        }
+        stored
+    }
+
+    /// tsrs-only (watch mode, Go's GC): runs the destructors of a program nothing reads any more and of its
+    /// snapshot, giving back the heap they own (the snapshot's maps, the host and its file system caches, about 13 MB
+    /// per full build on a 9.4k-file project). Their arena blocks stay (`free_replaced` gives them back too).
+    ///
+    /// # Safety
+    /// Nothing reads `program` or its snapshot afterwards: the program made from it (if any) has been created, and it
+    /// was not created for the test harness (whose next program keeps the snapshot, `TestingData`).
+    pub unsafe fn drop_replaced(program: P<Program>) {
+        let snapshot = program.snapshot;
+        // SAFETY: both are arena values the thread arenas never drop, and nothing uses them any more (this function's
+        // contract), so each is dropped once.
+        unsafe {
+            std::ptr::drop_in_place(std::ptr::from_ref::<Program>(program.get()).cast_mut());
+            std::ptr::drop_in_place(std::ptr::from_ref::<Snapshot>(snapshot.get()).cast_mut());
+        }
+    }
+
+    /// `drop_replaced`, and gives their arena blocks to the thread's free list, for the next ones (`new_program`).
+    ///
+    /// # Safety
+    /// As `drop_replaced`; both were allocated on this thread in its own arena.
+    pub unsafe fn free_replaced(program: P<Program>) {
+        let snapshot = program.snapshot;
+        // SAFETY: this function's contract; the blocks are dead once dropped.
+        unsafe {
+            Program::drop_replaced(program);
+            tsrs_core::free!(program);
+            tsrs_core::free!(snapshot);
+        }
+    }
+
+    /// tsrs-only (a watch session's file regions, tsrs_execute watchmem.rs): calls `f` with each source file that the
+    /// diagnostics the snapshot keeps refer to, related information and message chains included. Diagnostics copied
+    /// from an older snapshot refer to the file versions they were reported for, which need not be the program's.
+    pub fn for_each_diagnostic_file(&self, f: &mut dyn FnMut(P<SourceFile>)) {
+        fn visit(diagnostics: &[P<Diagnostic>], f: &mut dyn FnMut(P<SourceFile>)) {
+            for d in diagnostics {
+                if let Some(file) = d.file() {
+                    f(file);
+                }
+                visit(d.message_chain(), f);
+                visit(d.related_information(), f);
+            }
+        }
+        let mut snapshots = vec![self.snapshot];
+        // The test harness reads the previous snapshot's diagnostics too.
+        if let Some(testing_data) = &self.testing_data
+            && let Some(old) = testing_data.lock().unwrap().old_snapshot
+        {
+            snapshots.push(old);
+        }
+        for snapshot in snapshots {
+            for map in [&snapshot.semantic_diagnostics_per_file, &snapshot.emit_diagnostics_per_file] {
+                map.range(|_, cache| {
+                    if let Some(diagnostics) = cache.diagnostics() {
+                        visit(&diagnostics, f);
+                    }
+                    true
+                });
+            }
+        }
+    }
+
+    /// tsrs-only (watch mode): replaces every diagnostic the snapshot keeps with a copy in the current allocation
+    /// target (`DiagnosticExt::copy_deep`), so that the regions of the diagnostics it copied from the old snapshot
+    /// and of those the replaced program's checkers made (tsrs_compiler checkerpool.rs `SlotChecker`) can be freed.
+    /// Not for the test harness, which reads the old snapshot's diagnostics too: some are shared with this one.
+    pub fn copy_diagnostics(&self) {
+        for map in [&self.snapshot.semantic_diagnostics_per_file, &self.snapshot.emit_diagnostics_per_file] {
+            map.range(|_, cache| {
+                if let Some(diagnostics) = cache.diagnostics.lock().unwrap().as_mut() {
+                    for d in diagnostics.iter_mut() {
+                        *d = d.copy_deep();
+                    }
+                }
+                true
+            });
+        }
+    }
+
     pub fn get_program(&self) -> &'static CompilerProgram {
         self.panic_if_no_program("GetProgram");
         self.program.unwrap()

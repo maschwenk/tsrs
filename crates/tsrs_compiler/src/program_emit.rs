@@ -176,7 +176,13 @@ impl Program {
                 return result;
             }
         }
+        combine_emit_results(self.emit_each_file(ctx, options).into_iter().map(|(_, result)| Some(result)).collect())
+    }
 
+    /// The emit of `emit`, with each emitted file's result kept apart (in emit order), and without the `noEmit` /
+    /// `noEmitOnError` handling (`handle_no_emit_options`), which the caller applies. The files run on their checkers'
+    /// threads, so one call over many files is the parallel equivalent of a call per file (the incremental emit).
+    pub fn emit_each_file(&'static self, ctx: &Context, options: &EmitOptions) -> Vec<(P<SourceFile>, EmitResult)> {
         let new_line = self.options().new_line.get_new_line_character();
         let force_dts_emit = options.emit_only == EmitOnly::EmitOnlyBuilderSignature || options.force_emit && options.emit_only == EmitOnly::EmitOnlyDts;
         let force_js_emit = options.force_emit && options.emit_only == EmitOnly::EmitOnlyJs;
@@ -284,7 +290,7 @@ impl Program {
         }
 
         // collect results from emit, preserving input order
-        combine_emit_results(results.into_iter().map(|r| r.into_inner().unwrap()).collect())
+        source_files.into_iter().zip(results).map(|(file, r)| (file, r.into_inner().unwrap().unwrap())).collect()
     }
 }
 

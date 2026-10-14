@@ -13,15 +13,19 @@ pnpm add -D tsrs
 pnpm exec tsrs --noEmit
 ```
 
-[![TypeScript 7 versus tsrs: wall time and peak memory on VS Code, T3 Code and MUI docs](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
+You can try `tsrs` today and give us feedback on performance, memory usage, and conformance.
 
-## Compatibility
+## Conformance
 
-`tsrs` follows TypeScript 7.1-dev. It matches 13,458 of 13,462 error baselines and all 12,779 type and symbol
-baselines; the four remaining error-baseline differences are test-harness artifacts.
+`tsrs` currently targets the main branch of [microsoft/TypeScript](https://github.com/microsoft/typescript).
+We aim to release a stable version against TypeScript 7.1 with 100% conformance.
 
-`--watch`, `--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
+We take conformance really seriously and are fixing the remaining 0.01% of issues we discover in existing projects.
+
+`--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
 for supported features and known gaps.
+
+[![Performance](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
 
 ## Learn more
 
@@ -31,6 +35,7 @@ for supported features and known gaps.
 - [WebAssembly for Node and browsers](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md)
 - [Benchmarks and methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)
 - [Release notes](https://github.com/maschwenk/tsrs/blob/main/docs/STATUS.md)
+- [Engineering notes](https://github.com/maschwenk/tsrs/blob/main/notes/README.md)
 
 ## Contributing
 
@@ -42,7 +47,15 @@ for building from source and running the suites, the [Code of Conduct](https://g
 
 ## Acknowledgments
 
-Thanks to [@JiangWeixian](https://github.com/JiangWeixian) for transferring the `tsrs` npm package name.
+We thank the following organizations and contributors:
+
+- [Depot CI](https://depot.dev) for sponsoring our continuous integration.
+- [Owner.com](https://www.owner.com) for sponsoring the initial work.
+- [Max Schwenk](https://github.com/maschwenk) for the port.
+- [@walkerdb](https://github.com/walkerdb) for improvements to the project.
+- [@JiangWeixian](https://github.com/JiangWeixian) for transferring the `tsrs` npm package name.
+
+We extend special thanks to the [TypeScript team](https://www.typescriptlang.org/) for their support.
 
 ## License
 

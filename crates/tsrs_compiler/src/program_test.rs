@@ -73,7 +73,7 @@ fn program_hosts_and_factories() {
     let pools_c = std::sync::Arc::clone(&pools);
     opts.create_checker_pool = Some(Arc::new(move |p: &'static Program| -> Box<dyn CheckerPool> {
         pools_c.fetch_add(1, Ordering::Relaxed);
-        Box::new(checkerPool::new(p))
+        Box::new(checkerPool::new(p, None))
     }));
     let resolvers_c = std::sync::Arc::clone(&resolvers);
     opts.create_module_resolver = Some(Arc::new(move |options: tsrs_module::ResolverOptions| -> Box<dyn tsrs_module::Resolver> {
@@ -100,7 +100,7 @@ fn program_hosts_and_factories() {
         pools_c.fetch_add(1, Ordering::Relaxed);
         assert!(Arc::ptr_eq(p.host(), &new_host_c));
         assert_eq!(p.get_source_file("/src/index.ts").unwrap().text(), format!("\n{index}"));
-        Box::new(checkerPool::new(p))
+        Box::new(checkerPool::new(p, None))
     });
     let (cloned, changed, reused) = p.reuse_program(
         &Path::from("/src/index.ts"),
@@ -209,6 +209,34 @@ fn single_file_diagnostics_of_a_freed_leaf_panic() {
     let file = program.get_source_file("/src/a.test.ts").unwrap();
     assert!(file.is_check_leaf());
     let _ = program.get_semantic_diagnostics(&ctx, Some(file));
+}
+
+// tsrs-only: a program made by `reuse_program` takes over the file assignment of the pool of the program it reuses
+// (checkerpool.rs `inherited_associations`) instead of computing its own, once that pool has assigned its files.
+#[test]
+fn a_reused_program_keeps_the_checker_assignment() {
+    let files = [
+        ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true,"types":[],"checkers":2}}"#),
+        ("/src/a.ts", "export const a = 1;"),
+        ("/src/b.ts", "import { a } from './a'; export const b = a;"),
+        ("/src/c.ts", "export const c = 1;"),
+        ("/src/d.ts", "import { c } from './c'; export const d = c;"),
+    ];
+    let edited = [files[0], ("/src/a.ts", "// edited\nexport const a = 1;"), files[2], files[3], files[4]];
+    let a = Path::from("/src/a.ts");
+
+    let p = new_program(ProgramOptions::new(config_for(&files), host_for(&files)));
+    let (unassigned, _, reused) = p.reuse_program(&a, host_for(&edited), None, None);
+    assert!(reused);
+    assert!(unassigned.unwrap().pool().inherited_associations.is_none(), "the old pool had not assigned its files yet");
+
+    let associations = p.pool().state().associations.clone();
+    assert_eq!(associations.len(), 4);
+    let (cloned, _, reused) = p.reuse_program(&a, host_for(&edited), None, None);
+    assert!(reused);
+    let cloned = cloned.unwrap();
+    assert_eq!(cloned.pool().inherited_associations.as_deref(), Some(associations.as_slice()));
+    assert_eq!(cloned.pool().state().associations, associations);
 }
 
 // A spread lowered for ES2015 under a type assertion: the return's expression is a partially emitted expression

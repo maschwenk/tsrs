@@ -552,6 +552,7 @@ dependencies = [
  "tsrs_contentmappertest",
  "tsrs_core",
  "tsrs_diagnostics",
+ "tsrs_fswatch",
  "tsrs_incremental",
  "tsrs_ipc",
  "tsrs_tsoptions",

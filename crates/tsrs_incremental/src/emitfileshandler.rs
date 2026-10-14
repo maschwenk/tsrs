@@ -140,6 +140,7 @@ impl<'a> emitFilesHandler<'a> {
             true
         });
         pending.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut to_emit: Vec<(Path, FileEmitKind, FileEmitKind, P<SourceFile>, EmitOnly)> = Vec::new();
         for (path, emit_kind) in pending {
             let affected_file = program.get_source_file_by_path(&path);
             let Some(affected_file) = affected_file.filter(|&f| program.source_file_may_be_emitted(f, false)) else {
@@ -160,20 +161,17 @@ impl<'a> emitFilesHandler<'a> {
                         emit_only = EmitOnly::EmitOnlyDts;
                     }
                 }
-                let result = if !self.is_for_dts_errors {
-                    let file_options = EmitOptions { target_source_files: Some(vec![affected_file]), emit_only, write_file: options.write_file, ..Default::default() };
-                    let write_file = self.get_emit_write_file(&file_options);
-                    compiler_program_emit(program, self.ctx, &self.get_emit_options(&file_options, write_file.as_deref()))
-                } else {
-                    Some(EmitResult { emit_skipped: true, diagnostics: program.get_declaration_diagnostics(self.ctx, Some(affected_file)), ..Default::default() })
-                };
-                self.update_has_emit_diagnostics(result.as_ref());
-
-                // Update the pendingEmit for the file
-                self.emit_updates
-                    .lock().unwrap()
-                    .insert(path, emitUpdate { pending_kind: get_pending_emit_kind(emit_kind, pending_kind), result, dts_errors_from_cache: false });
+                to_emit.push((path, emit_kind, pending_kind, affected_file, emit_only));
             }
+        }
+        let mut results = self.emit_pending_files(&to_emit, options);
+        for (path, emit_kind, pending_kind, _, _) in to_emit {
+            let result = results.remove(&path);
+            self.update_has_emit_diagnostics(result.as_ref());
+            // Update the pendingEmit for the file
+            self.emit_updates
+                .lock().unwrap()
+                .insert(path, emitUpdate { pending_kind: get_pending_emit_kind(emit_kind, pending_kind), result, dts_errors_from_cache: false });
         }
         if self.ctx.err().is_some() {
             return Vec::new();
@@ -207,6 +205,54 @@ impl<'a> emitFilesHandler<'a> {
         }
 
         self.update_snapshot()
+    }
+
+    // Go emits each affected file as its own work group task. tsrs emits the files that share an `emit_only` with one
+    // `emit_each_file`, which runs them on their checkers' threads; a call per file would run them one at a time.
+    // With noEmit or noEmitOnError the per-file emit decides per file whether to emit (`handle_no_emit_options`), so
+    // those keep a call per file.
+    fn emit_pending_files(
+        &self,
+        to_emit: &[(Path, FileEmitKind, FileEmitKind, P<SourceFile>, EmitOnly)],
+        options: &EmitOptions<'a>,
+    ) -> FxHashMap<Path, EmitResult> {
+        let program = self.program.p();
+        let mut results = FxHashMap::default();
+        if self.is_for_dts_errors {
+            for (path, _, _, file, _) in to_emit {
+                let result = EmitResult { emit_skipped: true, diagnostics: program.get_declaration_diagnostics(self.ctx, Some(*file)), ..Default::default() };
+                results.insert(path.clone(), result);
+            }
+            return results;
+        }
+        let compiler_options = program.options();
+        if compiler_options.no_emit.is_true() || compiler_options.no_emit_on_error.is_true() {
+            for (path, _, _, file, emit_only) in to_emit {
+                let file_options = EmitOptions { target_source_files: Some(vec![*file]), emit_only: *emit_only, write_file: options.write_file, ..Default::default() };
+                let write_file = self.get_emit_write_file(&file_options);
+                if let Some(result) = compiler_program_emit(program, self.ctx, &self.get_emit_options(&file_options, write_file.as_deref())) {
+                    results.insert(path.clone(), result);
+                }
+            }
+            return results;
+        }
+        for emit_only in [EmitOnly::EmitAll, EmitOnly::EmitOnlyJs, EmitOnly::EmitOnlyDts] {
+            let files: Vec<P<SourceFile>> = to_emit.iter().filter(|e| e.4 == emit_only).map(|e| e.3).collect();
+            if files.is_empty() {
+                continue;
+            }
+            let file_options = EmitOptions { target_source_files: Some(files), emit_only, write_file: options.write_file, ..Default::default() };
+            let write_file = self.get_emit_write_file(&file_options);
+            for (file, result) in program.emit_each_file(self.ctx, &self.get_emit_options(&file_options, write_file.as_deref())) {
+                results.insert(file.path().clone(), result);
+            }
+        }
+        // A file the emit filtered out (`source_file_may_be_emitted` with forced emits off) gets the empty result of its
+        // own call.
+        for (path, ..) in to_emit {
+            results.entry(path.clone()).or_default();
+        }
+        results
     }
 
     // Go's getEmitOptions returns options whose WriteFile closes over the handler; Rust builds the closure

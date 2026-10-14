@@ -63,7 +63,6 @@ impl<K: Hash + Eq + Clone, V: Clone + IsZeroValue> parseCache<K, V> {
     }
 
     // parseCache.go:34
-    #[expect(dead_code, reason = "its only Go caller, Orchestrator.checkTasksForEventChanges (build --watch), is not ported")]
     pub(crate) fn store(&self, key: K, value: V) {
         self.entries.lock().unwrap().insert(key, Arc::new(parseCacheEntry { value: Mutex::new(Some(value)) }));
     }

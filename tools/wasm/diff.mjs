@@ -7,7 +7,12 @@
 //   node tools/wasm/diff.mjs --native <tsrs> --module <tsrs.wasm> --out <dir>
 //        (--cases <materialized dir> | --regressions <testdata/regressions> | --fixtures <tools/wasm/fixtures>
 //         | --project <name>=<cwd>:<args...> ...)
-//        [--fs node|memory] [--jobs 6] [--timeout 120] [--repeat N] [--stack-census] [--worker-stack MB]
+//        [--fs node|memory|node,memory] [--jobs N] [--timeout 120] [--repeat N] [--stack-census] [--worker-stack MB]
+//        [--shard I/N]
+//
+// With several file systems (`--fs node,memory`), native runs once per case and the module once per file system,
+// each compared with that native run; each file system's results go to <out>/<fs>/. `--shard I/N` takes every Nth
+// case from the I-th (0-based), for splitting a run over machines. --jobs defaults to the number of CPUs.
 //
 // Cases (`tsrs-test materialize`, fixtures) are `<case>/{root/, case.json}`; case.json has cwd (relative to root),
 // args, or steps [{args, write: {path: text}, remove: [path], chmod: {path: mode}}], optionally generate (see
@@ -27,7 +32,7 @@ import { isCaseInsensitive } from "../../npm/tsrs-wasm/node-fs.js";
 const repo = path.resolve(path.dirname(new URL(import.meta.url).pathname), "../..");
 
 function parseArgs(argv) {
-    const o = { projects: [], jobs: 6, timeout: 120, repeat: 1, fs: "node", workerStack: 256 };
+    const o = { projects: [], jobs: os.availableParallelism(), timeout: 120, repeat: 1, fs: ["node"], workerStack: 256, shard: [0, 1] };
     for (let i = 0; i < argv.length; i++) {
         const a = argv[i];
         const next = () => argv[++i];
@@ -39,7 +44,8 @@ function parseArgs(argv) {
             case "--regressions": o.regressions = path.resolve(next()); break;
             case "--fixtures": o.fixtures = path.resolve(next()); break;
             case "--project": o.projects.push(next()); break;
-            case "--fs": o.fs = next(); break;
+            case "--fs": o.fs = next().split(","); break;
+            case "--shard": o.shard = next().split("/").map(Number); break;
             case "--jobs": o.jobs = Number(next()); break;
             case "--timeout": o.timeout = Number(next()); break;
             case "--repeat": o.repeat = Number(next()); break;
@@ -49,6 +55,8 @@ function parseArgs(argv) {
         }
     }
     if (!o.native || !o.module || !o.out) throw new Error("--native, --module and --out are required");
+    if (!o.fs.every((f) => f === "node" || f === "memory")) throw new Error("--fs takes node, memory or both");
+    if (!(o.shard[1] >= 1 && o.shard[0] >= 0 && o.shard[0] < o.shard[1])) throw new Error("--shard is I/N with 0 <= I < N");
     return o;
 }
 
@@ -135,11 +143,27 @@ function changes(before, after) {
     return out.sort();
 }
 
+// The slot as a fresh copy of `src` (rsync -a --delete): modes, modification times and symlinks kept. In process:
+// spawning rsync twice per case cost more than the native run.
 function restore(src, slot) {
-    fs.mkdirSync(slot, { recursive: true });
-    spawnSync("chmod", ["-R", "u+w", slot]);
-    const r = spawnSync("rsync", ["-a", "--delete", src + "/", slot + "/"]);
-    if (r.status !== 0) throw new Error(`rsync failed: ${r.stderr}`);
+    makeWritable(slot);
+    fs.rmSync(slot, { recursive: true, force: true });
+    fs.cpSync(src, slot, { recursive: true, verbatimSymlinks: true, preserveTimestamps: true });
+}
+
+// A case can make its files or directories read-only (`chmod` steps): give the owner write access back before the
+// slot is removed.
+function makeWritable(dir) {
+    let entries;
+    try {
+        entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+        return;
+    }
+    fs.chmodSync(dir, fs.statSync(dir).mode | 0o700);
+    for (const e of entries) {
+        if (e.isDirectory()) makeWritable(path.join(dir, e.name));
+    }
 }
 
 // Build status times: `[hh:mm:ss AM]` (pretty) or `hh:mm:ss AM - ` at a line start (not pretty).
@@ -184,37 +208,55 @@ function memoryFiles(slot) {
     return files;
 }
 
-function runModule(o, moduleObj, spInit, cwd, args, files) {
-    return new Promise((resolve) => {
-        const worker = new Worker(new URL("./diff-worker.mjs", import.meta.url), {
-            workerData: { module: moduleObj, options: { args, cwd, env: {}, files, caseInsensitive: files ? isCaseInsensitive() : undefined }, census: o.census ? spInit : 0 },
+// One worker per slot, reused across runs (a run instantiates the module afresh; starting a worker with its large
+// stack cost ~25 ms a run). A timeout or a crash ends the worker; the slot starts a new one for its next run.
+const workers = new Map();
+
+function slotWorker(o, moduleObj, slot) {
+    let w = workers.get(slot);
+    if (!w) {
+        w = new Worker(new URL("./diff-worker.mjs", import.meta.url), {
+            workerData: { module: moduleObj },
             resourceLimits: { stackSizeMb: o.workerStack },
             stdout: true,
             stderr: true,
         });
+        // The worker's own output is not the run's (that comes back in the message); drain it.
+        w.stdout.resume();
+        w.stderr.resume();
+        workers.set(slot, w);
+    }
+    return w;
+}
+
+function dropWorker(slot) {
+    const w = workers.get(slot);
+    workers.delete(slot);
+    if (w) w.terminate();
+}
+
+function runModule(o, moduleObj, spInit, slot, cwd, args, files) {
+    return new Promise((resolve) => {
+        const worker = slotWorker(o, moduleObj, slot);
         let done = false;
-        const timer = setTimeout(() => {
-            done = true;
-            worker.terminate();
-            resolve({ timeout: true });
-        }, o.timeout * 1000);
-        worker.once("message", (r) => {
+        const finish = (r, drop) => {
+            if (done) return;
             done = true;
             clearTimeout(timer);
+            worker.off("message", onMessage);
+            worker.off("error", onError);
+            worker.off("exit", onExit);
+            if (drop) dropWorker(slot);
             resolve(r);
-        });
-        worker.once("error", (e) => {
-            if (done) return;
-            done = true;
-            clearTimeout(timer);
-            resolve({ crash: String(e?.stack ?? e) });
-        });
-        worker.once("exit", (code) => {
-            if (done) return;
-            done = true;
-            clearTimeout(timer);
-            resolve({ crash: `worker exited with ${code}` });
-        });
+        };
+        const onMessage = (r) => finish(r, false);
+        const onError = (e) => finish({ crash: String(e?.stack ?? e) }, true);
+        const onExit = (code) => finish({ crash: `worker exited with ${code}` }, true);
+        const timer = setTimeout(() => finish({ timeout: true }, true), o.timeout * 1000);
+        worker.on("message", onMessage);
+        worker.once("error", onError);
+        worker.once("exit", onExit);
+        worker.postMessage({ options: { args, cwd, env: {}, files, caseInsensitive: files ? isCaseInsensitive() : undefined }, census: o.census ? spInit : 0 });
     });
 }
 
@@ -222,43 +264,61 @@ function isPanic(r) {
     return r.exitCode === 5 && /panicked at/.test(r.stderr ?? "");
 }
 
-async function runCase(o, moduleObj, spInit, c, slot) {
-    const memory = o.fs === "memory";
-    if (memory && !c.project && hasSymlink(c.root)) return { id: c.id, status: "skipped", reason: "symlink (memory fs)" };
-    if (c.spec.skipped) return { id: c.id, status: "skipped", reason: c.spec.skipped };
-    const sides = {};
-    for (const side of ["native", "module"]) {
-        const base = c.project ?? slot;
-        if (!c.project) {
-            restore(c.root, slot);
-            generate(slot, c.spec);
-        }
-        const before = c.project ? null : walk(slot);
-        const results = [];
-        for (const step of steps(c.spec)) {
-            if (!c.project) applyEdits(slot, step);
-            const cwd = c.project ?? path.join(slot, c.spec.cwd ?? ".");
-            const args = subst(step.args, slot);
-            let r;
-            if (side === "native") {
-                r = runNative(o, c, slot, cwd, args);
-            } else {
-                r = await runModule(o, moduleObj, spInit, cwd, args, memory && !c.project ? memoryFiles(slot) : undefined);
-                if (memory && r.files) {
-                    for (const [p, text] of Object.entries(r.files)) {
-                        fs.mkdirSync(path.dirname(p), { recursive: true });
-                        fs.writeFileSync(p, text);
-                    }
+// One side of a case: native, or the module on one file system. Its results and the files it wrote.
+async function runSide(o, moduleObj, spInit, c, slot, side, memory) {
+    if (!c.project) {
+        restore(c.root, slot);
+        generate(slot, c.spec);
+    }
+    const before = c.project ? null : walk(slot);
+    const results = [];
+    for (const step of steps(c.spec)) {
+        if (!c.project) applyEdits(slot, step);
+        const cwd = c.project ?? path.join(slot, c.spec.cwd ?? ".");
+        const args = subst(step.args, slot);
+        let r;
+        if (side === "native") {
+            r = runNative(o, c, slot, cwd, args);
+        } else {
+            r = await runModule(o, moduleObj, spInit, slot, cwd, args, memory && !c.project ? memoryFiles(slot) : undefined);
+            if (memory && r.files) {
+                for (const [p, text] of Object.entries(r.files)) {
+                    fs.mkdirSync(path.dirname(p), { recursive: true });
+                    fs.writeFileSync(p, text);
                 }
             }
-            results.push(r);
-            if (r.timeout || r.crash) break;
         }
-        const written = c.project ? [] : changes(before, walk(slot)).filter((l) => !(c.spec.exclude ?? []).some((x) => l.startsWith(x + " ")));
-        sides[side] = { results, written, base };
+        results.push(r);
+        if (r.timeout || r.crash) break;
     }
-    const n = sides.native.results;
-    const m = sides.module.results;
+    const written = c.project ? [] : changes(before, walk(slot)).filter((l) => !(c.spec.exclude ?? []).some((x) => l.startsWith(x + " ")));
+    return { results, written };
+}
+
+// The case on every file system of `o.fs`: one result per file system.
+async function runCase(o, moduleObj, spInit, c, slot) {
+    const out = {};
+    if (c.spec.skipped) {
+        for (const f of o.fs) out[f] = { id: c.id, status: "skipped", reason: c.spec.skipped };
+        return out;
+    }
+    let native;
+    for (const f of o.fs) {
+        const memory = f === "memory";
+        if (memory && !c.project && hasSymlink(c.root)) {
+            out[f] = { id: c.id, status: "skipped", reason: "symlink (memory fs)" };
+            continue;
+        }
+        native ??= await runSide(o, moduleObj, spInit, c, slot, "native", false);
+        const module = await runSide(o, moduleObj, spInit, c, slot, "module", memory);
+        out[f] = compare(o, c, slot, native, module, f);
+    }
+    return out;
+}
+
+function compare(o, c, slot, native, module, f) {
+    const n = native.results;
+    const m = module.results;
     const last = (rs) => rs[rs.length - 1];
     let status = "same";
     let detail = "";
@@ -275,29 +335,34 @@ async function runCase(o, moduleObj, spInit, c, slot) {
             if (normalize(a.stdout) !== normalize(b.stdout)) { status = "differ"; detail = `step ${i}: stdout`; break; }
             if (a.exitCode === 0 && a.stderr !== b.stderr) { status = "differ"; detail = `step ${i}: stderr`; break; }
         }
-        if (status === "same" && sides.native.written.join("\n") !== sides.module.written.join("\n")) {
+        if (status === "same" && native.written.join("\n") !== module.written.join("\n")) {
             status = "differ";
             detail = "written files";
         }
     }
     const stack = m.map((r) => r.stackBytes ?? 0).reduce((a, b) => Math.max(a, b), 0);
-    const result = { id: c.id, status, detail, stackBytes: stack, memoryBytes: last(m)?.memoryBytes ?? 0, written: sides.native.written.length };
+    const result = { id: c.id, status, detail, stackBytes: stack, memoryBytes: last(m)?.memoryBytes ?? 0, written: native.written.length };
     if (status !== "same" && status !== "both-crash") {
-        const dir = path.join(o.out, "fail", c.id.replace(/[^A-Za-z0-9._-]/g, "_"));
+        const dir = path.join(outDir(o, f), "fail", c.id.replace(/[^A-Za-z0-9._-]/g, "_"));
         fs.mkdirSync(dir, { recursive: true });
         fs.writeFileSync(path.join(dir, "case.json"), JSON.stringify(c.spec, null, 2));
         n.forEach((r, i) => { fs.writeFileSync(path.join(dir, `native.${i}.stdout`), r.stdout ?? ""); fs.writeFileSync(path.join(dir, `native.${i}.stderr`), r.stderr ?? ""); });
         m.forEach((r, i) => { fs.writeFileSync(path.join(dir, `module.${i}.stdout`), r.stdout ?? ""); fs.writeFileSync(path.join(dir, `module.${i}.stderr`), (r.stderr ?? "") + (r.crash ?? "")); });
-        fs.writeFileSync(path.join(dir, "native.written"), sides.native.written.join("\n"));
-        fs.writeFileSync(path.join(dir, "module.written"), sides.module.written.join("\n"));
-        fs.writeFileSync(path.join(dir, "repro.sh"), `# ${c.id}: ${status} ${detail}\n# case root: ${c.root ?? c.project}\nmkdir -p ${slot}\nrsync -a --delete ${c.root ?? ""}/ ${slot}/ && cd ${path.join(slot, c.spec.cwd ?? ".")}\n${o.native} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")} --singleThreaded\nnode ${path.join(repo, "npm/tsrs-wasm/bin/tsrs-wasm.js")} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")}\n`);
+        fs.writeFileSync(path.join(dir, "native.written"), native.written.join("\n"));
+        fs.writeFileSync(path.join(dir, "module.written"), module.written.join("\n"));
+        fs.writeFileSync(path.join(dir, "repro.sh"), `# ${c.id}: ${status} ${detail}\n# case root: ${c.root ?? c.project}\nmkdir -p ${slot}\nrsync -a --delete ${c.root ?? ""}/ ${slot}/ && cd ${path.join(slot, c.spec.cwd ?? ".")}\n${o.native} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")} --singleThreaded\nnode ${path.join(repo, "npm/tsrs-wasm/bin/tsrs-wasm.js")} ${(c.spec.args ?? steps(c.spec)[0].args).join(" ")}${f === "memory" ? " (in-memory files)" : ""}\n`);
         if (c.project) cleanSlot(slot);
     }
     return result;
 }
 
+// Where a file system's results go: <out> for a single file system, <out>/<fs> for several.
+function outDir(o, f) {
+    return o.fs.length > 1 ? path.join(o.out, f) : o.out;
+}
+
 function cleanSlot(slot) {
-    spawnSync("chmod", ["-R", "u+w", slot]);
+    makeWritable(slot);
     fs.rmSync(slot, { recursive: true, force: true });
 }
 
@@ -306,45 +371,15 @@ function gitStatus(dir) {
     return r.status === 0 ? r.stdout.toString().split("\n").filter(Boolean).length : -1;
 }
 
-async function main() {
-    const o = parseArgs(process.argv.slice(2));
-    fs.rmSync(o.out, { recursive: true, force: true });
-    fs.mkdirSync(o.out, { recursive: true });
-    const bytes = fs.readFileSync(o.module);
-    const moduleObj = new WebAssembly.Module(bytes);
-    const spInit = stackPointerInit(bytes);
-    const cases = listCases(o);
-    const statusBefore = new Map(cases.filter((c) => c.project).map((c) => [c.project, gitStatus(c.project)]));
-    const results = [];
-    const fingerprints = new Map();
-    // The native compiler must not see the repo's package.json or node_modules: memoryFiles only copies the slot.
-    const slots = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "tsrs-wasm-diff-")));
-    try {
-        for (let rep = 0; rep < o.repeat; rep++) {
-            let next = 0;
-            const jobs = Math.max(1, Math.min(o.jobs, cases.length));
-            await Promise.all(Array.from({ length: jobs }, async (_, slotIndex) => {
-                const slot = path.join(slots, String(slotIndex).padStart(2, "0"));
-                while (next < cases.length) {
-                    const c = cases[next++];
-                    const r = await runCase(o, moduleObj, spInit, c, slot);
-                    if (rep === 0) results.push(r);
-                    else if (r.status !== results.find((x) => x.id === r.id)?.status) r.status !== "same" && results.push({ ...r, id: `${r.id} (repeat ${rep})` });
-                    process.stderr.write(r.status === "same" || r.status === "skipped" ? "." : `\n${r.status} ${r.id} ${r.detail ?? ""}\n`);
-                }
-            }));
-        }
-    } finally {
-        cleanSlot(slots);
-    }
-    process.stderr.write("\n");
+function summarize(o, f, results, spInit, statusBefore) {
     const counts = {};
     for (const r of results) counts[r.status] = (counts[r.status] ?? 0) + 1;
     const stacks = results.map((r) => r.stackBytes).filter((x) => x > 0).sort((a, b) => a - b);
     const summary = {
         total: results.length,
         counts,
-        fs: o.fs,
+        fs: f,
+        shard: o.shard[1] > 1 ? `${o.shard[0]}/${o.shard[1]}` : undefined,
         repeat: o.repeat,
         workerStackMb: o.workerStack,
         stackPointerInit: spInit,
@@ -355,11 +390,54 @@ async function main() {
         projects: Object.fromEntries([...statusBefore].map(([dir, before]) => [dir, { gitStatusBefore: before, gitStatusAfter: gitStatus(dir) }])),
         failures: results.filter((r) => !["same", "skipped", "both-crash"].includes(r.status)).map((r) => ({ id: r.id, status: r.status, detail: (r.detail ?? "").slice(0, 300) })),
     };
-    fs.writeFileSync(path.join(o.out, "summary.json"), JSON.stringify(summary, null, 2));
+    fs.mkdirSync(outDir(o, f), { recursive: true });
+    fs.writeFileSync(path.join(outDir(o, f), "summary.json"), JSON.stringify(summary, null, 2));
     const unchanged = Object.values(summary.projects).every((p) => p.gitStatusBefore === p.gitStatusAfter);
-    console.log(`${results.length} cases: ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(", ")}${summary.stack ? `; shadow stack max ${summary.stack.max} B, p99.9 ${summary.stack.p999} B` : ""}${Object.keys(summary.projects).length ? `; checkouts ${unchanged ? "unchanged" : "MODIFIED"}` : ""}`);
+    const label = o.fs.length > 1 ? `${f}: ` : "";
+    console.log(`${label}${results.length} cases: ${Object.entries(counts).map(([k, v]) => `${v} ${k}`).join(", ")}${summary.stack ? `; shadow stack max ${summary.stack.max} B, p99.9 ${summary.stack.p999} B` : ""}${Object.keys(summary.projects).length ? `; checkouts ${unchanged ? "unchanged" : "MODIFIED"}` : ""}`);
     const bad = (counts.differ ?? 0) + (counts["module-crash"] ?? 0) + (counts.timeout ?? 0);
-    process.exit(bad || !unchanged ? 1 : 0);
+    return bad === 0 && unchanged;
+}
+
+async function main() {
+    const o = parseArgs(process.argv.slice(2));
+    fs.rmSync(o.out, { recursive: true, force: true });
+    fs.mkdirSync(o.out, { recursive: true });
+    const bytes = fs.readFileSync(o.module);
+    const moduleObj = new WebAssembly.Module(bytes);
+    const spInit = stackPointerInit(bytes);
+    const cases = listCases(o).filter((_, i) => i % o.shard[1] === o.shard[0]);
+    const statusBefore = new Map(cases.filter((c) => c.project).map((c) => [c.project, gitStatus(c.project)]));
+    const results = Object.fromEntries(o.fs.map((f) => [f, []]));
+    // The native compiler must not see the repo's package.json or node_modules: memoryFiles only copies the slot.
+    const slots = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "tsrs-wasm-diff-")));
+    try {
+        for (let rep = 0; rep < o.repeat; rep++) {
+            let next = 0;
+            const jobs = Math.max(1, Math.min(o.jobs, cases.length));
+            await Promise.all(Array.from({ length: jobs }, async (_, slotIndex) => {
+                const slot = path.join(slots, String(slotIndex).padStart(2, "0"));
+                while (next < cases.length) {
+                    const c = cases[next++];
+                    const byFs = await runCase(o, moduleObj, spInit, c, slot);
+                    for (const f of o.fs) {
+                        const r = byFs[f];
+                        if (rep === 0) results[f].push(r);
+                        else if (r.status !== results[f].find((x) => x.id === r.id)?.status) r.status !== "same" && results[f].push({ ...r, id: `${r.id} (repeat ${rep})` });
+                        const tag = o.fs.length > 1 ? ` (${f})` : "";
+                        process.stderr.write(r.status === "same" || r.status === "skipped" ? "." : `\n${r.status} ${r.id}${tag} ${r.detail ?? ""}\n`);
+                    }
+                }
+            }));
+        }
+    } finally {
+        for (const slot of [...workers.keys()]) dropWorker(slot);
+        cleanSlot(slots);
+    }
+    process.stderr.write("\n");
+    let ok = true;
+    for (const f of o.fs) ok = summarize(o, f, results[f], spInit, statusBefore) && ok;
+    process.exit(ok ? 0 : 1);
 }
 
 await main();

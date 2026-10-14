@@ -61,6 +61,21 @@ pub struct ProgramOptions {
     /// tsrs-only: use virtual four-checker reporting sites and their incremental cache proof. API builds
     /// disable this to retain per-file diagnostics and Go-shaped build info; external pools opt out too.
     pub canonical_diagnostics: bool,
+    /// tsrs-only: each checker of the built-in pool allocates in a region of its own, which `free_program` gives
+    /// back (watch mode, which replaces its program every cycle; the CLI's single build leaks its checkers).
+    pub checker_regions: bool,
+    /// tsrs-only, with `checker_regions`: the diagnostics each checker makes go to a region of its own, which
+    /// `free_program` gives back too (checkerpool.rs `SlotChecker`): the caller copies those it keeps (watch mode's
+    /// snapshot, tsrs_incremental `Program::copy_diagnostics`).
+    pub checker_diagnostic_regions: bool,
+    /// tsrs-only: what the file loader allocates goes to these regions (programregions.rs), which the caller frees
+    /// once nothing uses the program's processed-file and resolution data (watch mode).
+    pub regions: Option<std::sync::Arc<crate::programregions::ProgramRegions>>,
+    /// tsrs-only: `reuse_program` may keep the file loader's synthetic imports (JSX runtime, import helpers) of the
+    /// edited file. Their parent is this program's version of the file, so the caller must keep it alive while any
+    /// program reused from this one lives (watch mode keeps the full build's files). The language server frees it
+    /// with this program, so it leaves this off and gets Go's full rebuild.
+    pub reuse_synthetic_imports: bool,
 }
 
 impl ProgramOptions {
@@ -78,6 +93,10 @@ impl ProgramOptions {
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
             canonical_diagnostics: true,
+            checker_regions: false,
+            checker_diagnostic_regions: false,
+            regions: None,
+            reuse_synthetic_imports: false,
         }
     }
 
@@ -101,6 +120,10 @@ impl ProgramOptions {
             leaf_files: crate::fileregions::LeafMode::Off,
             checker_recycling: false,
             canonical_diagnostics: true,
+            checker_regions: false,
+            checker_diagnostic_regions: false,
+            regions: None,
+            reuse_synthetic_imports: false,
         }
     }
 
@@ -112,6 +135,7 @@ impl ProgramOptions {
             typings_location: self.typings_location.clone(),
             project_name: self.project_name.clone(),
             skip_module_resolution: self.skip_module_resolution,
+            regions: self.regions.clone(),
         }
     }
 }
@@ -124,6 +148,7 @@ pub struct ProgramConfig {
     pub typings_location: String,
     pub project_name: String,
     pub skip_module_resolution: bool,
+    pub regions: Option<std::sync::Arc<crate::programregions::ProgramRegions>>,
 }
 
 impl ProgramConfig {
@@ -205,6 +230,19 @@ pub struct Program {
     // tsrs-only: `ProgramOptions::checker_recycling`.
     pub(crate) checker_recycling: bool,
     canonical_diagnostics: bool,
+    // tsrs-only: `ProgramOptions::checker_regions`.
+    pub(crate) checker_regions: bool,
+    // tsrs-only: `ProgramOptions::checker_diagnostic_regions`.
+    pub(crate) checker_diagnostic_regions: bool,
+    // tsrs-only: `ProgramOptions::reuse_synthetic_imports`.
+    reuse_synthetic_imports: bool,
+    // tsrs-only: the address of the program `reuse_program` made this one from, 0 for a program built in full
+    // (`is_reuse_of`). An address, not a reference: the watch frees that program once this one has replaced it.
+    reused_from: usize,
+    // tsrs-only: what `reuse_program` allocated for this program when its programs are freed (`checker_regions`):
+    // the file list and the resolution data with its copy of the package.json cache table, about 40 KB per edit on a
+    // 4k-file project. Last: the fields above point into it.
+    own_region: Option<tsrs_core::arena::Region>,
 }
 
 impl std::ops::Deref for Program {
@@ -444,6 +482,11 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         tsgo_check_slots: OnceLock::new(),
         checker_recycling: opts.checker_recycling,
         canonical_diagnostics: opts.canonical_diagnostics,
+        checker_regions: opts.checker_regions,
+        checker_diagnostic_regions: opts.checker_diagnostic_regions,
+        reuse_synthetic_imports: opts.reuse_synthetic_imports,
+        reused_from: 0,
+        own_region: None,
     };
     // Go initializes the checker pool before verifying options; the pool factory takes the program by
     // `&'static`, so here it runs after verification, once the program is leaked. Neither pool reads anything
@@ -453,7 +496,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     let p: &'static Program = Box::leak(Box::new(p));
     // Census builds: the pool enum is mostly uninitialized bytes when set; clear the stack they come from.
     tsrs_core::census_scrub_stack();
-    p.init_checker_pool(opts.create_checker_pool);
+    p.init_checker_pool(opts.create_checker_pool, None);
     p
 }
 
@@ -609,12 +652,7 @@ impl Program {
             return (None, new_file, false);
         }
         let new_file_some = new_file.unwrap();
-        // Cloning does not recompute synthetic helper or JSX-runtime import bookkeeping. Fall back to a full
-        // build whenever either version requires those imports.
-        if self.import_helpers_import_specifiers.contains_key(old_file.path()) || self.needs_import_helpers_import_specifier(new_file_some) {
-            return (None, new_file, false);
-        }
-        if self.jsx_runtime_import_specifiers.contains_key(old_file.path()) || !self.jsx_runtime_import_specifier(new_file_some).is_empty() {
+        if !self.can_keep_synthetic_imports(old_file, new_file_some) {
             return (None, new_file, false);
         }
         if old_supplemental_files.len() != new_supplemental_files.len() {
@@ -625,10 +663,7 @@ impl Program {
             if old_supplemental.path() != new_supplemental.path() || !self.can_replace_file_in_program(old_supplemental, Some(new_supplemental)) {
                 return Some((None, new_file, false));
             }
-            if self.import_helpers_import_specifiers.contains_key(old_supplemental.path()) || self.needs_import_helpers_import_specifier(new_supplemental) {
-                return Some((None, new_file, false));
-            }
-            if self.jsx_runtime_import_specifiers.contains_key(old_supplemental.path()) || !self.jsx_runtime_import_specifier(new_supplemental).is_empty() {
+            if !self.can_keep_synthetic_imports(old_supplemental, new_supplemental) {
                 return Some((None, new_file, false));
             }
 
@@ -637,11 +672,16 @@ impl Program {
             return result;
         }
         // TODO: reverify compiler options when config has changed?
+        let own_region = self.checker_regions.then(|| tsrs_core::arena::Region::new_scratch(64 << 10));
+        let resolution_data = {
+            let _scope = own_region.as_ref().map(tsrs_core::arena::Region::enter);
+            self.resolution_data.clone_data()
+        };
         let mut result = Program {
             opts: self.opts.clone(),
             resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&new_host)),
             host: new_host,
-            resolution_data: self.resolution_data.clone_data(),
+            resolution_data,
             checker_pool: OnceLock::new(),
             include_processor: includeProcessor::default(),
             module_resolution_error: None,
@@ -670,6 +710,11 @@ impl Program {
             tsgo_check_slots: OnceLock::new(),
             checker_recycling: false,
             canonical_diagnostics: self.canonical_diagnostics,
+            checker_regions: self.checker_regions,
+            checker_diagnostic_regions: self.checker_diagnostic_regions,
+            reuse_synthetic_imports: self.reuse_synthetic_imports,
+            reused_from: std::ptr::from_ref(self) as usize,
+            own_region,
         };
         try_reuse(&result.unresolved_imports, &self.unresolved_imports);
         try_reuse(&result.known_symlinks, &self.known_symlinks);
@@ -685,20 +730,31 @@ impl Program {
             files[supplemental_index] = new_supplemental;
             result.files_by_path.insert(new_supplemental.path().clone(), new_supplemental);
         }
-        result.files = tsrs_core::alloc_vec(files);
+        result.files = {
+            let _scope = result.own_region.as_ref().map(tsrs_core::arena::Region::enter);
+            tsrs_core::alloc_vec(files)
+        };
         let result: &'static Program = Box::leak(Box::new(result));
         tsrs_core::census_scrub_stack();
-        result.init_checker_pool(create_checker_pool);
+        result.init_checker_pool(create_checker_pool, self.compiler_checker_pool());
         (Some(result), new_file, true)
     }
 
+    /// tsrs-only: whether `reuse_program` made this program from `other`: the files of `other` but one (and its
+    /// supplemental files), reparsed with the same imports, references, module augmentation and ambient module names,
+    /// and the module resolution of `other`. Only meaningful while `other` is alive.
+    pub fn is_reuse_of(&self, other: &Program) -> bool {
+        self.reused_from == std::ptr::from_ref(other) as usize
+    }
+
     // program.go:443
-    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>) {
+    // `previous`: the pool of the program this one reuses (`reuse_program`), whose file assignment it may take over.
+    fn init_checker_pool(&'static self, create: Option<CreateCheckerPool>, previous: Option<&checkerPool>) {
         assert!(self.finished_processing, "Program must finish processing files before initializing checker pool");
 
         let pool = match create {
             Some(create) => programCheckerPool::External(create(self)),
-            None => programCheckerPool::Compiler(checkerPool::new(self)),
+            None => programCheckerPool::Compiler(checkerPool::new(self, previous)),
         };
         assert!(self.checker_pool.set(pool).is_ok(), "checker pool initialized twice");
     }
@@ -743,6 +799,26 @@ impl Program {
             && equal_func(file1.type_reference_directives.get(), file2.type_reference_directives.get(), equal_file_references)
             && equal_func(file1.lib_reference_directives.get(), file2.lib_reference_directives.get(), equal_file_references)
             && equal_check_js_directives(file1.check_js_directive.get(), file2.check_js_directive.get())
+    }
+
+    // Whether the program `reuse_program` makes may keep the synthetic imports the file loader made for `old_file`,
+    // the version of it in this program (the import helpers module and the JSX runtime module), with their module
+    // resolution (the clone keeps the file's), as it keeps the file's other imports. Go builds the program again
+    // whenever either version has one (program.go:389), so every edit of a file with JSX (`react-jsx`) or under
+    // `importHelpers` is a full build. tsrs-only, with `reuse_synthetic_imports`: they are kept when `new_file` needs
+    // the same ones. The synthetic nodes' parent stays the old version of the file, which only lends them its path,
+    // options and implied format, the same as the new version's (`can_replace_file_in_program` compares the parse
+    // options). The JSX runtime comes from the options and the file's pragmas; whether the file needs the helpers
+    // module, from the options and whether it is a module, which `can_replace_file_in_program` also compares.
+    fn can_keep_synthetic_imports(&self, old_file: P<SourceFile>, new_file: P<SourceFile>) -> bool {
+        let old_helpers = self.import_helpers_import_specifiers.contains_key(old_file.path());
+        let new_helpers = self.needs_import_helpers_import_specifier(new_file);
+        let old_jsx_runtime = self.jsx_runtime_import_specifiers.get(old_file.path()).map_or("", |jsx| jsx.module_reference.as_str());
+        let new_jsx_runtime = self.jsx_runtime_import_specifier(new_file);
+        if !self.reuse_synthetic_imports {
+            return !old_helpers && !new_helpers && old_jsx_runtime.is_empty() && new_jsx_runtime.is_empty();
+        }
+        old_helpers == new_helpers && old_jsx_runtime == new_jsx_runtime
     }
 
     // program.go:480

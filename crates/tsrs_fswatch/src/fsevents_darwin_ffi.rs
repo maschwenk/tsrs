@@ -70,6 +70,7 @@ unsafe extern "C" {
 // libSystem (always linked).
 unsafe extern "C" {
     fn dispatch_queue_create(label: *const c_char, attr: *const c_void) -> dispatch_queue_t;
+    fn dispatch_queue_attr_make_with_qos_class(attr: *const c_void, qos_class: u32, relative_priority: i32) -> *const c_void;
     fn dispatch_release(object: *mut c_void);
     fn dispatch_sync_f(queue: dispatch_queue_t, context: *mut c_void, work: extern "C" fn(*mut c_void));
 }
@@ -277,10 +278,20 @@ unsafe impl Sync for streamCallback {}
 // newStreamCallback allocates a streamCallback with its own per-stream serial dispatch queue. The per-stream
 // serial queue serializes this stream's callbacks and prevents cross-stream head-of-line blocking that a
 // process-wide serial queue would cause.
+//
+// tsrs-only: the queue has an explicit QoS class. Go passes a NULL attribute, which leaves the QoS unspecified; while
+// every core is busy (a watch cycle's checkers and emit) such a queue is starved, fseventsd's buffer for the client
+// fills, and it drops events (kFSEventStreamEventFlagUserDropped | MustScanSubDirs), which the watch turns into an
+// overflow and a full rebuild. Writing 10k files with all cores busy dropped events on every run with a NULL
+// attribute and on none with QOS_CLASS_DEFAULT or QOS_CLASS_USER_INITIATED. The callback is short (tens of
+// microseconds per batch), so running it ahead of the compiler's threads costs nothing measurable.
 pub(crate) fn new_stream_callback(watches: &[fseventsWatchSnapshot]) -> Option<Box<streamCallback>> {
     let label = b"typescript.fswatch.fsevents.stream\0";
-    // SAFETY: `label` is NUL-terminated; NULL attr = serial queue.
-    let queue = unsafe { dispatch_queue_create(label.as_ptr().cast::<c_char>(), std::ptr::null()) };
+    const QOS_CLASS_USER_INITIATED: u32 = 0x19;
+    // SAFETY: NULL = DISPATCH_QUEUE_SERIAL; the returned attribute is a static libdispatch object (not released).
+    let attr = unsafe { dispatch_queue_attr_make_with_qos_class(std::ptr::null(), QOS_CLASS_USER_INITIATED, 0) };
+    // SAFETY: `label` is NUL-terminated; `attr` is a serial queue attribute.
+    let queue = unsafe { dispatch_queue_create(label.as_ptr().cast::<c_char>(), attr) };
     if queue.is_null() {
         return None;
     }

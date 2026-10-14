@@ -13,7 +13,7 @@ pub struct PluginImport {
 // CompilerOptions contains the compiler options exposed by the API.
 //
 // Go `[]string` options are `Option<Vec<String>>` because the Go code distinguishes nil (unset) from empty.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct CompilerOptions {
     /// API only (`gojson`): `moduleDetection` and `newLine` numbers decoded from the wire with no Rust variant (Go
     /// keeps any int32), by JSON name. The typed field stays at its default (which behaves like Go's fallback) and

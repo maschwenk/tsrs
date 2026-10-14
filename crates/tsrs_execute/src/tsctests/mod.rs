@@ -12,8 +12,10 @@
 // Results: target/tsctests-results/{pass,fail,crash}.txt and the actual baselines of failures under
 // target/tsctests-results/local/. Content-mapper scenarios run with the in-process test mappers (tsrs_contentmappertest).
 
+mod mockwatch;
 mod readablebuildinfo;
 mod sys;
+mod watch_test;
 
 use std::fmt::Write as _;
 use std::path::{Path as FsPath, PathBuf};
@@ -62,6 +64,8 @@ struct scenario {
     files: Vec<scenarioFile>,
     default_libs: Vec<String>,
     edits: Vec<scenarioEdit>,
+    // tsrs-only: run the watch's signature job after each cycle (`CommandLineTesting::run_signature_job`).
+    signature_job: bool,
 }
 
 fn s(v: Option<&Value>) -> String {
@@ -138,6 +142,7 @@ fn load_scenario(path: &FsPath) -> scenario {
         files,
         default_libs: strings(o.get("defaultLibs")).unwrap_or_default(),
         edits,
+        signature_job: false,
     }
 }
 
@@ -162,22 +167,24 @@ fn new_test_sys(test: &scenario) -> &'static TestSys {
     }
     let lib_path = if test.windows_style_root.is_empty() { TSC_LIB_PATH.to_string() } else { format!("{}{}", test.windows_style_root, &TSC_LIB_PATH[1..]) };
     let cwd = if test.cwd.is_empty() { "/home/src/workspaces/project".to_string() } else { test.cwd.clone() };
-    Box::leak(Box::new(TestSys::new(
-        fs,
-        if libs.is_empty() { None } else { Some(libs) },
-        clock,
-        cwd,
-        lib_path,
-        test.env.clone(),
-        test.output_is_tty.unwrap_or(true),
-    )))
+    let mut sys = TestSys::new(fs, if libs.is_empty() { None } else { Some(libs) }, clock, cwd, lib_path, test.env.clone(), test.output_is_tty.unwrap_or(true));
+    sys.signature_job = test.signature_job;
+    let sys: &'static TestSys = Box::leak(Box::new(sys));
+    let watch_fs = Arc::clone(&sys.fs);
+    let backend = mockwatch::MockWatchBackend::new(Box::new(move |d: &str| watch_fs.directory_exists(d)), !test.ignore_case);
+    let _ = sys.mock_watch_backend.set(Arc::new(backend));
+    sys
 }
+
+/// tsrs-only: a write whose event the watch gets with the next edit's, as when a file is saved while a cycle runs,
+/// after the cycle took its events.
+pub(crate) const LATE_EVENT_WRITE: &str = "writeLateEvent";
 
 fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
     let fs = sys.fs_from_file_map();
     for op in ops {
         match op.op.as_str() {
-            "write" => fs.write_file(&op.path, &op.content).unwrap(),
+            "write" | LATE_EVENT_WRITE => fs.write_file(&op.path, &op.content).unwrap(),
             "delete" => fs.remove(&op.path).unwrap(),
             "symlink" => {
                 let dir = tspath::get_directory_path(&op.path);
@@ -194,7 +201,7 @@ fn apply_ops(sys: &TestSys, ops: &[scenarioOp]) {
 }
 
 // runner.go executeCommand
-fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]) -> ExitStatus {
+fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]) -> Option<Box<dyn crate::tsc::Watcher>> {
     writeln!(baseline, "tsgo {}", args.join(" ")).unwrap();
     let testing: &'static dyn CommandLineTesting = sys;
     let result = crate::execute::command_line_with_testing(sys, args.to_vec(), Some(testing));
@@ -206,7 +213,7 @@ fn execute_command(sys: &'static TestSys, baseline: &mut String, args: &[String]
         ExitStatus::ProjectReferenceCycle_OutputsSkipped => "ExitStatus:: ProjectReferenceCycle_OutputsSkipped",
         ExitStatus::NotImplemented => "ExitStatus:: NotImplemented",
     });
-    result.status
+    result.watcher
 }
 
 // runner.go getDiffForIncremental
@@ -246,12 +253,11 @@ fn get_diff_for_incremental(incremental: &TestSys, non_incremental: &TestSys) ->
 // baseline.go:31 DiffText (patience diff, 3 lines of context), as in tsrs_testrunner.
 fn diff_text(old_name: &str, new_name: &str, expected: &str, actual: &str) -> String {
     let diff = similar::TextDiff::configure().algorithm(similar::Algorithm::Patience).diff_lines(expected, actual);
-    let mut text = diff.unified_diff().context_radius(3).header(old_name, new_name).to_string();
-    // Go's patience.UnifiedDiffText does not end with a newline.
-    if text.ends_with('\n') {
-        text.pop();
-    }
-    text
+    let text = diff.unified_diff().context_radius(3).header(old_name, new_name).to_string();
+    // Go's patience.UnifiedDiffText writes an empty context line without its leading space, and does not end with a
+    // newline.
+    let text = text.strip_suffix('\n').unwrap_or(&text);
+    text.split('\n').map(|line| if line == " " { "" } else { line }).collect::<Vec<_>>().join("\n")
 }
 
 // runner.go run
@@ -262,18 +268,32 @@ fn run_scenario(test: &scenario) -> String {
         sys.cwd,
         sys.fs.use_case_sensitive_file_names()).unwrap();
     sys.baseline_fs_with_diff(&mut baseline);
-    execute_command(sys, &mut baseline, &test.args);
+    let mut watcher = execute_command(sys, &mut baseline, &test.args);
     sys.serialize_state(&mut baseline);
+    baseline_watch_state(sys, watcher.is_some(), &mut baseline);
     sys.baseline_programs(&mut baseline, "Initial build");
 
+    let mut late_changes: Vec<mockwatch::FileChange> = Vec::new();
     for (index, edit) in test.edits.iter().enumerate() {
         sys.clear_output();
         let args = edit.args.clone().unwrap_or_else(|| test.args.clone());
         write!(baseline, "\n\nEdit [{}]:: {}\n", index, edit.caption).unwrap();
         apply_ops(sys, &edit.ops);
+        let late: FxHashSet<&str> = edit.ops.iter().filter(|op| op.op == LATE_EVENT_WRITE).map(|op| op.path.as_str()).collect();
+        let (deferred, mut changed_paths): (Vec<_>, Vec<_>) = sys.changed_paths().into_iter().partition(|change| late.contains(change.path.as_str()));
+        changed_paths.extend(std::mem::replace(&mut late_changes, deferred));
         sys.baseline_fs_with_diff(&mut baseline);
-        execute_command(sys, &mut baseline, &args);
+        match &mut watcher {
+            None => {
+                execute_command(sys, &mut baseline, &args);
+            }
+            Some(watcher) => {
+                sys.mock_watch_backend.get().unwrap().send_changed_paths(&changed_paths);
+                watcher.do_cycle();
+            }
+        }
         sys.serialize_state(&mut baseline);
+        baseline_watch_state(sys, watcher.is_some(), &mut baseline);
         sys.baseline_programs(&mut baseline, &format!("Edit [{}]:: {}\n", index, edit.caption));
 
         // Compute build with all the edits
@@ -297,6 +317,14 @@ fn run_scenario(test: &scenario) -> String {
         }
     }
     baseline
+}
+
+// runner.go: the watch registrations after each build of a watch scenario.
+fn baseline_watch_state(sys: &TestSys, watching: bool, baseline: &mut String) {
+    let backend = sys.mock_watch_backend.get().unwrap();
+    if watching && backend.has_watches() {
+        baseline.push_str(&backend.watch_state());
+    }
 }
 
 fn repo_root() -> PathBuf {
@@ -325,6 +353,8 @@ fn tsctests() {
     let mut files = Vec::new();
     collect(&dump.join("tsc"), &mut files);
     collect(&dump.join("tsbuild"), &mut files);
+    collect(&dump.join("tscWatch"), &mut files);
+    collect(&dump.join("tsbuildWatch"), &mut files);
     files.sort();
     if files.is_empty() {
         eprintln!("tsctests: no scenarios under {} (run tools/oracle/tsctests/dump.sh)", dump.display());
@@ -391,11 +421,11 @@ fn tsctests() {
     for class in ["pass", "fail", "crash"] {
         let names: Vec<&str> = results.iter().filter(|r| r.1 == class).map(|r| r.0.as_str()).collect();
         std::fs::write(results_dir.join(format!("{class}.txt")), names.join("\n") + "\n").unwrap();
-        for suite in ["tsc/", "tsbuild/"] {
+        for suite in ["tsc/", "tsbuild/", "tscWatch/", "tsbuildWatch/"] {
             let total = results.iter().filter(|r| r.0.starts_with(suite)).count();
             let n = names.iter().filter(|n| n.starts_with(suite)).count();
-            writeln!(summary, "{suite:9}{class:6} {n:4} / {total}").unwrap();
+            writeln!(summary, "{suite:14}{class:6} {n:4} / {total}").unwrap();
         }
     }
-    eprintln!("tsctests (non-watch):\n{summary}results in {}", results_dir.display());
+    eprintln!("tsctests:\n{summary}results in {}", results_dir.display());
 }

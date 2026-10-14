@@ -168,12 +168,13 @@ pub trait DiagnosticExt {
     fn set_related_info(self, related_information: &[P<Diagnostic>]) -> P<Diagnostic>;
     fn add_related_info(self, related_information: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic>;
     fn clone_diagnostic(self) -> P<Diagnostic>;
+    fn copy_deep(self) -> P<Diagnostic>;
 }
 
 impl DiagnosticExt for P<Diagnostic> {
     fn set_external_data(self, source: &str, message_text: &str) -> P<Diagnostic> {
         // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-        let _outer = tsrs_core::arena::escape_scratch();
+        let _outer = tsrs_core::arena::escape_for_diagnostic();
         self.source.set(alloc_str(source));
         self.message_text.set(alloc_str(message_text));
         self
@@ -181,14 +182,14 @@ impl DiagnosticExt for P<Diagnostic> {
 
     fn set_message_chain(self, message_chain: &[P<Diagnostic>]) -> P<Diagnostic> {
         // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-        let _outer = tsrs_core::arena::escape_scratch();
+        let _outer = tsrs_core::arena::escape_for_diagnostic();
         self.message_chain.set(alloc_slice(message_chain));
         self
     }
 
     fn add_message_chain(self, message_chain: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic> {
         // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-        let _outer = tsrs_core::arena::escape_scratch();
+        let _outer = tsrs_core::arena::escape_for_diagnostic();
         if let Some(message_chain) = message_chain.into() {
             let mut chain = self.message_chain.get().to_vec();
             chain.push(message_chain);
@@ -199,14 +200,14 @@ impl DiagnosticExt for P<Diagnostic> {
 
     fn set_related_info(self, related_information: &[P<Diagnostic>]) -> P<Diagnostic> {
         // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-        let _outer = tsrs_core::arena::escape_scratch();
+        let _outer = tsrs_core::arena::escape_for_diagnostic();
         self.related_information.set(alloc_slice(related_information));
         self
     }
 
     fn add_related_info(self, related_information: impl Into<Option<P<Diagnostic>>>) -> P<Diagnostic> {
         // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-        let _outer = tsrs_core::arena::escape_scratch();
+        let _outer = tsrs_core::arena::escape_for_diagnostic();
         if let Some(related_information) = related_information.into() {
             let mut related = self.related_information.get().to_vec();
             related.push(related_information);
@@ -217,7 +218,7 @@ impl DiagnosticExt for P<Diagnostic> {
 
     fn clone_diagnostic(self) -> P<Diagnostic> {
         // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-        let _outer = tsrs_core::arena::escape_scratch();
+        let _outer = tsrs_core::arena::escape_for_diagnostic();
         P::new(Diagnostic {
             file: OwnedCell::new(self.file.get()),
             loc: OwnedCell::new(self.loc.get()),
@@ -234,6 +235,31 @@ impl DiagnosticExt for P<Diagnostic> {
             reports_deprecated: self.reports_deprecated,
             skipped_on_no_emit: OwnedCell::new(self.skipped_on_no_emit.get()),
             repopulate_info: OwnedCell::new(self.repopulate_info.get()),
+        })
+    }
+
+    /// tsrs-only (watch mode): a copy of the diagnostic, its message chain and related information that holds
+    /// nothing of the original but the file, in the current allocation target: what a session keeps of diagnostics
+    /// whose region it frees (tsrs_incremental `Program::copy_diagnostics`).
+    fn copy_deep(self) -> P<Diagnostic> {
+        let message_chain: Vec<P<Diagnostic>> = self.message_chain.get().iter().map(|d| d.copy_deep()).collect();
+        let related_information: Vec<P<Diagnostic>> = self.related_information.get().iter().map(|d| d.copy_deep()).collect();
+        P::new(Diagnostic {
+            file: OwnedCell::new(self.file.get()),
+            loc: OwnedCell::new(self.loc.get()),
+            code: self.code,
+            category: OwnedCell::new(self.category.get()),
+            source: OwnedCell::new(alloc_str(self.source.get())),
+            message: self.message,
+            message_text: OwnedCell::new(alloc_str(self.message_text.get())),
+            message_key: self.message_key,
+            message_args: self.message_args.clone(),
+            message_chain: OwnedCell::new(alloc_slice(&message_chain)),
+            related_information: OwnedCell::new(alloc_slice(&related_information)),
+            reports_unnecessary: self.reports_unnecessary,
+            reports_deprecated: self.reports_deprecated,
+            skipped_on_no_emit: OwnedCell::new(self.skipped_on_no_emit.get()),
+            repopulate_info: OwnedCell::new(self.repopulate_info.get().map(|info| tsrs_core::alloc(info.clone()))),
         })
     }
 }
@@ -310,7 +336,7 @@ pub fn new_diagnostic(
     args: &[&dyn fmt::Display],
 ) -> P<Diagnostic> {
     // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-    let _outer = tsrs_core::arena::escape_scratch();
+    let _outer = tsrs_core::arena::escape_for_diagnostic();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
         loc: OwnedCell::new(loc.into().filter(|loc| loc.is_valid())),
@@ -345,7 +371,7 @@ pub fn new_diagnostic_from_serialized(
     skipped_on_no_emit: bool,
 ) -> P<Diagnostic> {
     // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-    let _outer = tsrs_core::arena::escape_scratch();
+    let _outer = tsrs_core::arena::escape_for_diagnostic();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
         loc: OwnedCell::new(loc.is_valid().then_some(loc)),
@@ -394,7 +420,7 @@ pub fn new_external_diagnostic(
     message_text: &str,
 ) -> P<Diagnostic> {
     // Diagnostics outlive a scratch region (one file's emit) they are reported in.
-    let _outer = tsrs_core::arena::escape_scratch();
+    let _outer = tsrs_core::arena::escape_for_diagnostic();
     P::new(Diagnostic {
         file: OwnedCell::new(file),
         loc: OwnedCell::new(loc.is_valid().then_some(loc)),

@@ -204,5 +204,29 @@ fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     assert_eq!(sites(restored), expected);
     emit(restored);
     assert_eq!(writes.load(Ordering::Relaxed), go_writes + 1);
+
+    // An in-memory edit (a watch cycle) refreshes interface caches only when the changed file declares an interface,
+    // before or after the edit: only that can move a merged interface's report site.
+    let f = dir.join("f.ts");
+    let f_text = std::fs::read_to_string(&f).unwrap();
+    let mut previous = build(None);
+    sites(previous);
+    // The fixture's padding comment sets each file's size, which the virtual checker slots depend on: a comment
+    // edit that keeps the size changes neither the slots nor any interface.
+    let comment_edit = |from: &str| f_text.replacen("xx", from, 1);
+    for (text, refreshed, what) in [
+        (comment_edit("yy"), false, "a comment edit in a file without interfaces"),
+        (format!("{f_text}\ndeclare global {{ interface M {{ other?: string }} }}\n"), true, "adding a declaration of the merged interface"),
+        (comment_edit("yy"), true, "removing it again"),
+        (comment_edit("zz"), false, "another comment edit"),
+    ] {
+        std::fs::write(&f, &text).unwrap();
+        let edited = build(Some(previous));
+        let expected_state = if refreshed { SemanticDiagnosticsState::NotCached } else { SemanticDiagnosticsState::Reused };
+        assert_eq!(state(edited, "e.ts"), expected_state, "{what}");
+        assert_eq!(sites(edited), sites(build(None)), "{what}");
+        previous = edited;
+    }
+    std::fs::write(&f, f_text).unwrap();
     std::fs::remove_dir_all(dir).unwrap();
 }

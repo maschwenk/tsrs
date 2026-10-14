@@ -109,16 +109,14 @@ test("write error texts equal native", async () => {
 });
 
 // Regression: watch mode starts (and never exits) instead of being refused, in any spelling, or `--watch false`
-// is refused.
+// is refused. The module has no file watcher; native tsrs watches (so it is not run here: it would not exit).
 test("--watch is refused in every spelling; --watch false runs", async () => {
     const dir = project({ "a.ts": "export const a = 1;\n", "args.txt": "a.ts\n--watch\n" });
     try {
         for (const args of [["a.ts", "--watch"], ["a.ts", "-w"], ["a.ts", "--WATCH"], ["@args.txt"]]) {
             const r = await tsc([...args, "--noEmit"], { cwd: dir });
-            const n = runNative([...args, "--noEmit"], dir);
-            assert.equal(r.stdout, n.stdout, args.join(" "));
-            assert.equal(r.exitCode, n.exitCode);
-            assert.match(r.stdout, /not supported/);
+            assert.equal(r.stdout, "error: watch mode (--watch) on this platform is not supported by tsrs.\n", args.join(" "));
+            assert.equal(r.exitCode, 5); // ExitStatus::NotImplemented
         }
         const ok = await tsc(["a.ts", "--watch", "false", "--noEmit"], { cwd: dir });
         assert.equal(ok.exitCode, 0);

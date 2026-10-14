@@ -16,6 +16,12 @@ mod snapshottobuildinfo;
 #[cfg(test)]
 mod buildinfo_contentmapper_test;
 #[cfg(test)]
+mod emitfileshandler_test;
+#[cfg(test)]
+mod programtosnapshot_test;
+#[cfg(test)]
+mod signatures_test;
+#[cfg(test)]
 mod snapshot_test;
 
 pub use buildinfo::*;

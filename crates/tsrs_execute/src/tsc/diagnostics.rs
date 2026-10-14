@@ -82,6 +82,40 @@ pub fn create_builder_status_reporter<'a>(
     })
 }
 
+// diagnostics.go:168 CreateWatchStatusReporter: clears the screen before a compilation starts, then writes the status
+// with its time stamp and a blank line.
+pub fn create_watch_status_reporter<'a>(
+    sys: &'a dyn System,
+    options: &CompilerOptions,
+    testing: Option<&'a dyn super::CommandLineTesting>,
+) -> DiagnosticReporter<'a> {
+    let format_opts = get_format_opts_of_sys(sys);
+    let pretty = should_be_pretty(sys, Some(options));
+    let options = options.clone();
+    Box::new(move |diagnostic| {
+        if let Some(testing) = testing {
+            testing.on_watch_status_report_start(&|t: &str| sys.write(t));
+        }
+        let mut out = Vec::new();
+        diagnosticwriter::try_clear_screen(&mut out, diagnostic, &options);
+        let time = sys.format_time_now();
+        if pretty {
+            diagnosticwriter::format_diagnostics_status_with_color_and_time(&mut out, &time, diagnostic, &format_opts);
+        } else {
+            diagnosticwriter::format_diagnostics_status_and_time(&mut out, &time, diagnostic, &format_opts);
+        }
+        out.extend_from_slice(format_opts.new_line.as_bytes());
+        out.extend_from_slice(format_opts.new_line.as_bytes());
+        sys.write(&tsrs_core::utf8::from_utf8_lossy(&out));
+        // The CLI's stdout is block-buffered and a watch session never exits, so each status line (the start and end
+        // of every cycle) pushes the cycle's output out.
+        sys.flush();
+        if let Some(testing) = testing {
+            testing.on_watch_status_report_end(&|t: &str| sys.write(t));
+        }
+    })
+}
+
 // diagnostics.go:149
 pub fn quiet_diagnostics_reporter<'a>() -> DiagnosticsReporter<'a> {
     Box::new(|_| {})

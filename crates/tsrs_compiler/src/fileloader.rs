@@ -168,6 +168,7 @@ fn add_project_reference_tasks(opts: &ProgramConfig, host: &Arc<dyn CompilerHost
 }
 
 pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: bool) -> (processedFiles, P<module::ResolutionData>, Option<String>) {
+    let _regions = crate::programregions::enter(opts.regions.as_deref());
     let compiler_options = opts.config.compiler_options().unwrap();
     let root_files = opts.config.file_names();
     let content_mapper_extensions = opts.config.content_mapper_extensions();
@@ -239,6 +240,7 @@ pub(crate) fn process_all_program_files(opts: &ProgramOptions, single_threaded: 
         None => curr_dir.clone(),
     };
     let lookup = |root_file: &String| {
+        let _regions = crate::programregions::enter(opts.regions.as_deref());
         let abs_path = tspath::get_normalized_absolute_path(root_file, &curr_dir);
         // A root file reason is never a referenced-file reason, which is all the lookup asks of it.
         let looked_up = source_file_from_reference(
