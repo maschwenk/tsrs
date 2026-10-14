@@ -151,3 +151,37 @@ fn test_implementations_worklist_does_not_blow_up() {
     // Not in Go: guard against a vacuous pass (nothing found at all).
     assert!(small_refs >= K, "expected at least K implementations, got {small_refs}");
 }
+
+// tsrs-only: `index_from` finds what `str::find` finds from the next char boundary, on the fast path, after the
+// cutover to `str::find` (many first-byte candidates that fail), and with multi-byte text around the start.
+#[test]
+fn index_from_matches_str_find() {
+    use crate::findallreferences::index_from;
+
+    let expected = |text: &str, start: usize, needle: &str| {
+        let boundary = (start..=text.len()).find(|&i| text.is_char_boundary(i)).unwrap();
+        text[boundary..].find(needle).map(|i| i + boundary - start)
+    };
+    let many_fails = format!("{}ab", "a".repeat(500));
+    let multibyte = format!("{}éb", "éa".repeat(200));
+    let cases: Vec<(&str, &str)> = vec![
+        ("hello world", "world"),
+        ("hello world", "worlds"),
+        ("hello", "hello"),
+        ("hell", "hello"),
+        ("", "a"),
+        ("abcabc", "c"),
+        (&many_fails, "ab"),
+        (&many_fails, "aab"),
+        (&many_fails, "ac"),
+        (&multibyte, "éb"),
+        (&multibyte, "aé"),
+        (&multibyte, "ab"),
+        ("日本語のテキスト", "テキ"),
+    ];
+    for (text, needle) in cases {
+        for start in 0..=text.len() {
+            assert_eq!(index_from(text, start, needle), expected(text, start, needle), "{needle:?} in {text:?} from {start}");
+        }
+    }
+}

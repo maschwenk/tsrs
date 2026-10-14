@@ -674,6 +674,7 @@ version = "0.14.1"
 dependencies = [
  "bitflags",
  "indexmap",
+ "memchr",
  "rustc-hash",
  "tsrs_ast",
  "tsrs_astnav",

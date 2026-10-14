@@ -1957,10 +1957,35 @@ pub(crate) fn get_possible_symbol_reference_nodes(source_file: P<SourceFile>, sy
 
 // Go `strings.Index(text[start:], needle)`: `start` need not be a char boundary. A match never starts at a UTF-8
 // continuation byte (the needle is valid UTF-8), so searching from the next char boundary finds the same index.
-fn index_from(text: &str, start: usize, needle: &str) -> Option<usize> {
+//
+// Searches like Go, without a setup step: candidates by the needle's first byte, then a compare, switching to
+// `str::find` once too many candidates fail. `str::find` alone builds a searcher in time linear in the needle on every
+// call, so searching each file of a project for a long string literal took seconds.
+pub(crate) fn index_from(text: &str, start: usize, needle: &str) -> Option<usize> {
     let mut boundary = start;
     boundary += (boundary..text.len()).take_while(|&index| !text.is_char_boundary(index)).count();
-    text[boundary..].find(needle).map(|i| i + boundary - start)
+    let haystack = &text.as_bytes()[boundary..];
+    let needle_bytes = needle.as_bytes();
+    let (&first, _) = needle_bytes.split_first()?;
+    let last_start = haystack.len().checked_sub(needle_bytes.len())?;
+    let mut i = 0;
+    let mut fails = 0;
+    while let Some(offset) = memchr::memchr(first, &haystack[i..=last_start]) {
+        let candidate = i + offset;
+        if &haystack[candidate..candidate + needle_bytes.len()] == needle_bytes {
+            return Some(candidate + boundary - start);
+        }
+        fails += 1;
+        i = candidate + 1;
+        // Go's `strings.Index` cutover to Rabin-Karp.
+        if fails > 4 + (i >> 4) {
+            // `candidate + 1` follows a byte that starts a char (`first`), so it is a char boundary only if that char is
+            // ASCII; move to the next boundary otherwise (no match starts inside a char).
+            i += (i..haystack.len()).take_while(|&index| !text.is_char_boundary(boundary + index)).count();
+            return text[boundary + i..].find(needle).map(|found| found + i + boundary - start);
+        }
+    }
+    None
 }
 
 // findallreferences.go:1646
