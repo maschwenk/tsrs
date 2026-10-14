@@ -1942,6 +1942,7 @@ impl Checker {
     // checker.go:10301
     pub(crate) fn check_class_expression_deferred(&mut self, node: P<Node>) {
         self.check_source_elements(node.members());
+        self.check_constructor_declared_properties(node);
         self.register_for_unused_identifiers_check(node);
     }
 
