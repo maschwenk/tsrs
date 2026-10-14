@@ -598,6 +598,10 @@ impl NodeBuilderImpl {
 
     // nodebuilderimpl.go:2374
     pub(crate) fn should_use_placeholder_for_property(&self, c: &mut Checker, property_symbol: P<Symbol>) -> bool {
+        // Reverse mapped type placeholders are for display, not declaration emit.
+        if !self.ctx().flags.get().intersects(Flags::AllowAnonymousIdentifier) {
+            return false;
+        }
         // Use placeholders for reverse mapped types we've either
         // (1) already descended into, or
         // (2) are nested reverse mappings within a mapping over a non-anonymous type, or
@@ -960,9 +964,11 @@ impl NodeBuilderImpl {
             Some(self.signature_to_signature_declaration_helper(c, signature, Kind::ConstructSignature, None))
         }));
         type_elements.extend(structured_type.index_infos().iter().flat_map(|&info| {
-            // Go's core.IfElse evaluates both arms, so the placeholder (and its length accounting) is always created.
-            let placeholder = self.create_elided_information_placeholder(c);
-            let type_node = if resolved_type.object_flags().intersects(ObjectFlags::ReverseMapped) { Some(placeholder) } else { None };
+            let type_node = if resolved_type.object_flags().intersects(ObjectFlags::ReverseMapped) && self.ctx().flags.get().intersects(Flags::AllowAnonymousIdentifier) {
+                Some(self.create_elided_information_placeholder(c))
+            } else {
+                None
+            };
             self.index_info_to_object_computed_names_or_signature_declaration(c, info, type_node)
         }));
 
@@ -1239,8 +1245,13 @@ impl NodeBuilderImpl {
             } else {
                 self.visit_and_transform_type(c, t, |c, b, t| b.create_type_node_from_object_type(c, t))
             }
+        } else if t.object_flags().intersects(ObjectFlags::ReverseMapped) && !self.ctx().flags.get().intersects(Flags::AllowAnonymousIdentifier) {
+            if self.ctx().visited_types.borrow().has(&type_id) {
+                return Some(self.create_cyclic_structure_placeholder(c));
+            }
+            self.visit_and_transform_type(c, t, |c, b, t| b.create_type_node_from_object_type(c, t))
         } else {
-            // Anonymous types without a symbol are never circular.
+            // Reverse mapped types use property and index signature placeholders for display.
             self.create_type_node_from_object_type(c, t)
         }
     }
@@ -1573,10 +1584,32 @@ impl NodeBuilderImpl {
             }
         }
 
+        let reverse_mapped_depth = if t.object_flags().intersects(ObjectFlags::ReverseMapped) {
+            // Growing type arguments can prevent a reverse mapped type from repeating.
+            // Bound expansion by its mapped declaration as well as its type identity.
+            let origin = CompositeSymbolIdentity {
+                is_constructor_node: false,
+                symbol_id: SymbolId(0),
+                node_id: ast::get_node_id(t.as_reverse_mapped_type().mapped_type.get().unwrap().as_mapped_type().declaration.get().unwrap()),
+            };
+            let depth = self.ctx().symbol_depth.borrow().get(&origin).copied().unwrap_or(0);
+            if depth >= 100 {
+                self.ctx().truncating.set(true);
+                return Some(self.create_elided_information_placeholder(c));
+            }
+            self.ctx().symbol_depth.borrow_mut().insert(origin, depth + 1);
+            Some((origin, depth))
+        } else {
+            None
+        };
+
         let mut depth: usize = 0;
         if let Some(id) = id {
             depth = self.ctx().symbol_depth.borrow().get(&id).copied().unwrap_or(0);
             if depth > 10 {
+                if let Some((origin, depth)) = reverse_mapped_depth {
+                    self.ctx().symbol_depth.borrow_mut().insert(origin, depth);
+                }
                 self.ctx().truncating.set(true);
                 return Some(self.create_elided_information_placeholder(c));
             }
@@ -1599,6 +1632,9 @@ impl NodeBuilderImpl {
         self.ctx().visited_types.borrow_mut().delete(&type_id);
         if let Some(id) = id {
             self.ctx().symbol_depth.borrow_mut().insert(id, depth);
+        }
+        if let Some((origin, depth)) = reverse_mapped_depth {
+            self.ctx().symbol_depth.borrow_mut().insert(origin, depth);
         }
         *self.ctx().tracked_symbols.borrow_mut() = prev_tracked_symbols;
         result

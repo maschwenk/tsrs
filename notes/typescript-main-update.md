@@ -19,3 +19,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64555](https://github.com/microsoft/TypeScript/commit/5f5dee5b610526cf3c597457cca336fde65e5f11) | VSIX signing command; tsrs has no corresponding release artifact. |
 | [#64553](https://github.com/microsoft/TypeScript/commit/c8e9b7d259268e30605ed14910cb8d118929ed63) | Port invokeOnce for alias/reference arguments and its priority/variance key. |
 | [#64554](https://github.com/microsoft/TypeScript/commit/43521c80ec5ebe4bc2948f1df3747773e48d8312) | Port snapshot preferences/import preparation and require same-snapshot completion symbols; retain equivalent flat Rust preference storage. SDK refresh is included with the final pin. |
+| [#64558](https://github.com/microsoft/TypeScript/commit/edf7da4e93ab65e1f7766deae156c35132c0cde3) | Port reverse-mapped emit expansion, cycle diagnostics, and declaration-based depth limits. |
