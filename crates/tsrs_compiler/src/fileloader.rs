@@ -415,6 +415,7 @@ impl fileLoader {
     }
 
     pub(crate) fn sort_libs(&self, lib_files: &mut [P<SourceFile>]) {
+        // Rust sort_by_key is stable, matching upstream replacement-lib ordering.
         lib_files.sort_by_key(|f| self.get_default_lib_file_priority(*f));
     }
 

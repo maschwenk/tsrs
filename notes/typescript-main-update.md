@@ -75,3 +75,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64599](https://github.com/microsoft/TypeScript/commit/71956e9735e923befa06b9477a3eeadbf762cb1d) | Port node_modules reachability and global typings exclusions before package exports can return a bare specifier. |
 | [#64738](https://github.com/microsoft/TypeScript/commit/bdc93bd98765f15016f0e36632863b7d9fea8619) | Port the selected substitution visitor through property access expressions. |
 | [#64739](https://github.com/microsoft/TypeScript/commit/96fffa9f650a7e75bf1448cf641d97e563a086cd) | Go moves the checked-constructor bit into a separate set; Rust already uses 16-byte value link records with a cold tail and preserves once-per-symbol checking. |
+| [#64693](https://github.com/microsoft/TypeScript/commit/fd871fcc3c1f30e1d5f39ed4bae9ff49ad57ef50) | Rust already uses stable sort_by_key; document its equivalence with upstream SortStableFunc. |
