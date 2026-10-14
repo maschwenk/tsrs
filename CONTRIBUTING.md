@@ -25,8 +25,8 @@ Requirements: rustup (it installs the Rust version `rust-toolchain.toml` pins), 
 Run `pnpm install --frozen-lockfile` from the repository root to install the npm workspace tooling.
 
 ```sh
-cargo build --release -p tsrs_cli -p tsrs_testrunner
-./target/release/tsrs -p path/to/project          # like `tsc` (emits; add --noEmit to only type check)
+cargo build --profile fast -p tsrs_cli -p tsrs_testrunner
+./target/fast/tsrs -p path/to/project             # like `tsc` (emits; add --noEmit to only type check)
 cargo check --workspace                           # must be 0 errors, 0 warnings (CI sets build.warnings=deny)
 cargo check -p tsrs_wasm --target wasm32-wasip1   # the WebAssembly build still compiles (notes/wasm-build.md)
 cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
@@ -34,10 +34,15 @@ tools/lint/source.py                              # unsafe Send/Sync inventory, 
 tools/gen-check.sh                                # generated code matches its generator (change the generator, then --write)
 ```
 
+Use the `fast` profile (release optimization, no LTO, incremental) while editing and testing: a checker edit rebuilds
+`tsrs` and `tsrs-test` in about 5 s instead of about 3 minutes with `--release`, and the conformance suite gives the
+same results in the same time (notes/dev-loop-build.md). Build `--release` for performance measurements: its fat LTO
+and single codegen unit are what ships.
+
 The language-server test runner and WebAssembly module have separate builds:
 
 ```sh
-cargo build --release -p tsrs_fourslash
+cargo build --profile fast -p tsrs_fourslash
 tools/wasm/build.sh  # requires the wasm32-wasip1 target and wasm-opt
 ```
 
@@ -51,13 +56,13 @@ commit=$(node npm/build.mjs --print-typescript-commit)
 git clone --filter=blob:none --sparse https://github.com/microsoft/TypeScript ts-ref
 git -C ts-ref sparse-checkout set tsc/testdata && git -C ts-ref checkout "$commit"
 
-./target/release/tsrs-test run --suite all                       # summary table; lists in target/test-results/
-./target/release/tsrs-test run --filter <substring>              # one test or a cluster
-./target/release/tsrs-test show <suite/name>                     # expected vs actual
-./target/release/tsrs-test run --suite all --baselines types,symbols # type and symbol baselines
-./target/release/tsrs-fourslash run                             # language-server suite
-.github/scripts/conformance-gate.sh                              # what CI enforces: errors, .types, .symbols
-tools/regressions.sh                                             # testdata/regressions (CI runs it too)
+./target/fast/tsrs-test run --suite all                          # summary table; lists in target/test-results/
+./target/fast/tsrs-test run --filter <substring>                 # one test or a cluster
+./target/fast/tsrs-test show <suite/name>                        # expected vs actual
+./target/fast/tsrs-test run --suite all --baselines types,symbols # type and symbol baselines
+./target/fast/tsrs-fourslash run                                # language-server suite
+TSRS_TEST=target/fast/tsrs-test .github/scripts/conformance-gate.sh # what CI enforces: errors, .types, .symbols
+tools/regressions.sh target/fast/tsrs                            # testdata/regressions (CI runs it too)
 cargo test -p tsrs_core -p tsrs_scanner -p tsrs_cli              # unit and CLI tests (see .depot/workflows/ci.yml)
 ```
 

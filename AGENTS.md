@@ -3,6 +3,12 @@
 `CONTRIBUTING.md` and `docs/PORTING.md` have the porting rules and the test workflow; `docs/RUST.md` has the Rust
 practices. This file adds the rules below.
 
+## Build and test
+
+Build with `cargo build --profile fast -p tsrs_cli -p tsrs_testrunner` and run `target/fast/tsrs-test`, not
+`--release`: an edit rebuilds in seconds instead of minutes, with the same test results (notes/dev-loop-build.md).
+Use `--release` only for performance numbers.
+
 ## Lint
 
 Run `cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code` and

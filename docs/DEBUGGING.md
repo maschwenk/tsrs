@@ -13,8 +13,10 @@ this repository.
 - You get a private git worktree `$TSRS_WORK/wt/<agent-name>` on branch `fix/<agent-name>`,
   created from `origin/main`. Work only there (never in the main checkout `$TSRS_WORK/tsrs`
   or another agent's worktree). `ts-ref` inside it is a symlink to the Go reference checkout.
-- Build with your own target dir: `CARGO_TARGET_DIR=$PWD/target cargo build --release -p tsrs_testrunner -p tsrs_cli`
-  (release: the suite runs in ~25 s; a debug build is much slower to run).
+- Build with your own target dir: `CARGO_TARGET_DIR=$PWD/target cargo build --profile fast -p tsrs_testrunner -p tsrs_cli`
+  (`fast`: release optimization without LTO, incremental; a checker edit rebuilds in about 5 s, and the suite runs as
+  fast as on a `--release` build, notes/dev-loop-build.md. A debug build is much slower to run. Build `--release`
+  only to measure performance.)
 
 ## Landing changes (trunk-based, through GitHub)
 
@@ -34,7 +36,7 @@ understand, read both versions and the Go source; do not blindly take one side.
 
 ## Running tests
 
-- Full suite: `./target/release/tsrs-test run --suite all` -> summary table; per-class name lists in
+- Full suite: `./target/fast/tsrs-test run --suite all` -> summary table; per-class name lists in
   `target/test-results/{pass,codes,fail,crash,timeout}.txt`; `summary.json` has the first difference per test.
 - One test / a cluster: `tsrs-test run --filter <substring|regex>`, `tsrs-test show <suite/name>` (expected vs actual),
   `tsrs-test crashes --top 20` (panics grouped by location).

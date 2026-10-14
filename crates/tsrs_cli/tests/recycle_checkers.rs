@@ -8,6 +8,7 @@
 
 use std::path::Path;
 use std::process::Command;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 fn run(dir: &Path, checkers: &str, poison: bool, extended: bool) -> String {
     run_with(dir, checkers, poison, extended, None)
@@ -45,16 +46,31 @@ fn retired_checkers_report_what_one_checker_reports() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../testdata/regressions");
     let mut cases: Vec<_> = std::fs::read_dir(&root).unwrap().map(|e| e.unwrap().path()).filter(|p| p.join("expected.txt").is_file()).collect();
     cases.sort();
-    let mut retired = 0;
-    for dir in &cases {
-        let expected = std::fs::read_to_string(dir.join("expected.txt")).unwrap();
-        for (checkers, poison) in [("2", true), ("3", false)] {
-            assert_eq!(run(dir, checkers, poison, false), expected, "{} --checkers {checkers} poison={poison}", dir.display());
+    // The cases are independent processes; run them on all cores (serially this test was most of `cargo test`).
+    let next = AtomicUsize::new(0);
+    let retired = AtomicUsize::new(0);
+    let threads = std::thread::available_parallelism().map_or(4, std::num::NonZero::get).min(cases.len());
+    std::thread::scope(|s| {
+        for _ in 0..threads {
+            s.spawn(|| {
+                while let Some(dir) = cases.get(next.fetch_add(1, Ordering::Relaxed)) {
+                    retired.fetch_add(check_case(dir), Ordering::Relaxed);
+                }
+            });
         }
-        assert_eq!(run_with(dir, "2", false, false, Some("0")), expected, "{} relation caches emptied after every file", dir.display());
-        let stats = run(dir, "2", false, true);
-        retired += stats.lines().find_map(|l| l.strip_prefix("Checkers: retired:")).map_or(0, |n| n.trim().parse::<usize>().unwrap());
-    }
+    });
+    let retired = retired.into_inner();
     // Most cases are `--noEmit` checks that retire a checker at least once.
     assert!(retired >= cases.len(), "only {retired} checkers retired over {} cases", cases.len());
+}
+
+// Checks one case and returns how many checkers its `--extendedDiagnostics` run retired.
+fn check_case(dir: &Path) -> usize {
+    let expected = std::fs::read_to_string(dir.join("expected.txt")).unwrap();
+    for (checkers, poison) in [("2", true), ("3", false)] {
+        assert_eq!(run(dir, checkers, poison, false), expected, "{} --checkers {checkers} poison={poison}", dir.display());
+    }
+    assert_eq!(run_with(dir, "2", false, false, Some("0")), expected, "{} relation caches emptied after every file", dir.display());
+    let stats = run(dir, "2", false, true);
+    stats.lines().find_map(|l| l.strip_prefix("Checkers: retired:")).map_or(0, |n| n.trim().parse::<usize>().unwrap())
 }

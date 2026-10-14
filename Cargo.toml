@@ -69,6 +69,9 @@ opt-level = 1
 # Disabling debug info speeds up local and CI builds,
 # and we don't rely on it for debugging that much.
 debug = false
+# `lto = false` still runs ThinLTO across a crate's codegen units when opt-level > 0; "off" skips it. That pass was
+# most of an incremental rebuild of tsrs_checker (notes/dev-loop-build.md). `test` inherits this.
+lto = "off"
 
 [profile.test]
 # Disabling debug info speeds up local and CI builds,
@@ -98,6 +101,15 @@ codegen-units = 1
 inherits = "release"
 lto = false
 codegen-units = 16
+
+# The edit-build-test loop (CONTRIBUTING.md, docs/DEBUGGING.md): release optimization without any LTO, incrementally.
+# A checker edit rebuilds tsrs and tsrs-test in about 5 s instead of about 3 minutes, and the conformance suite gives
+# the same results in the same time (notes/dev-loop-build.md). Not for performance measurements: use `release`.
+[profile.fast]
+inherits = "release"
+lto = "off"
+codegen-units = 256
+incremental = true
 
 # The WebAssembly module (crates/tsrs_wasm, tools/wasm/build.sh; notes/wasm-build.md has the opt-level measurements).
 # panic = "abort": wasm cannot unwind (a panic prints and exits with status 5, as a panicked native driver thread).
