@@ -545,7 +545,8 @@ impl Checker {
     fn source_file_and_index_of_node(&mut self, n: P<Node>) -> (tsrs_core::ptr::PKey, usize) {
         const BITS: u32 = 12;
         let key = n.key();
-        let slot = (key.wrapping_mul(0x9E37_79B1) >> (32 - BITS)) as usize;
+        // The mask matters only with plain pointers, whose keys are 64-bit addresses.
+        let slot = (key.wrapping_mul(0x9E37_79B1) >> (32 - BITS)) as usize & ((1 << BITS) - 1);
         if self.node_file_cache.is_empty() {
             self.node_file_cache = vec![(0, 0, 0); 1 << BITS];
         }
