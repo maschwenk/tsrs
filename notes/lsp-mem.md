@@ -72,8 +72,9 @@ definition / typeDefinition / references / completion / documentSymbol / signatu
 
 ## Limitations noted at the time
 
-- Idle-disposed checkers (30 s) keep their regions until the next program version: a long idle session without edits
-  accumulates one region per idle cycle.
+- Idle-disposed checkers (30 s) kept their regions until the next program version: a long idle session without edits
+  accumulated one region per idle cycle, and every canceled request one more. Fixed later: see "Disposed checkers"
+  below.
 - SOURCE_TEXTS slots (2^20) are not reused; after a million parses compact identifiers fall back to stored text.
 - The census cannot see a freed heap `Program` referenced from live data (heap frees are not would-free); the pool
   guard and the fourslash/oracle runs are the evidence there.
@@ -81,3 +82,56 @@ definition / typeDefinition / references / completion / documentSymbol / signatu
   request sent while handling `initialized`. Not a divergence: Go blocks its dispatch loop on it the same way. With a
   client that answers, both exit with status 1 and "context canceled" (`tools/oracle/lsp/exit_check.py` compares the
   four combinations).
+
+## Disposed checkers (later fix)
+
+Before: a checker disposed by cancellation or the 30 s idle timeout was parked with its region until the program was
+freed, so an unchanged program grew without bound (xstate, 100 canceled `textDocument/diagnostic` pulls on
+`packages/core/test/types.test.ts`: 154 -> 871 MiB; a heavy generated file: +51 MB per idle cycle). Go drops the
+checker and its GC frees it.
+
+Freeing at disposal is not enough: Go's language service uses a checker's results after releasing it
+(`GetSemanticDiagnostics` returns the diagnostics, the ls converts them afterwards), and another request can take the
+idle checker, be canceled and dispose it meanwhile. So (checkerpool.rs):
+
+- **Leases.** The dispatch loop puts a `checkerDataLease` into each message's context and makes it the thread's lease
+  while the handler runs (call hierarchy and file rename take checkers with `context.Background()`, as in Go). Each
+  acquisition registers the lease with the checker; the lease ends when the last context clone and scope are gone,
+  after the handler returned. A disposed checker is freed when its last lease ends (at disposal if none is left).
+- **Pinned.** A checker held without a lease (callers outside the dispatch loop, the API checker) is parked as before.
+- **Escaped.** `arena::note_escape(addr)` / `Region::mark_escaped` mark a region whose data was stored in a pool- or
+  program-lifetime structure; such a checker is parked as before. Sites: the pool's accumulated global diagnostics
+  (every kept diagnostic's region, after each merge), the program's declaration diagnostics cache (when it stores
+  diagnostics), the include processor's lazily made diagnostics (the target current when it fills them, when there
+  are processing diagnostics). Audited and needing nothing: the program's other lazily filled fields (heap values,
+  file pointers, or routed to the full build's region: symlink cache; package.json entries: `enter_table_owner`),
+  snapshot and project lazily filled fields (heap values, filled without a checker held), source-file lazy data
+  (`enter_owner`), process-wide statics (thread arena). Not covered: the project reference file mapper's
+  `realpath_dts_to_source` (shared by program versions, filled lazily; pre-existing for checker regions freed with
+  a version, only with project references).
+
+`TSRS_REGION_LOG=1` also prints one line per disposed checker freed or parked (pinned / escaped).
+
+Results (`fast` profile, MiB):
+
+| repro | base | fix | tsgo-ref |
+| --- | --- | --- | --- |
+| xstate, 100 canceled diagnostic pulls, RSS every 20 cycles | 296, 439, 582, 727, 871 | 162, 163, 163, 162, 163 | 419, 421, 465, 466, 467 |
+| heavy file, 150 canceled pulls, RSS at 50 / 100 / 150 | 349, 620, 893 | 84, 84, 84 | 210, 211, 217 |
+| heavy file, diagnostics every 36 s (idle disposal each round), rounds 0-5 | 136, 188, 240, 294, 341, 394 | 137, 143, 143, 143, 141, 145 | 471, 849, 845, 756, 504, 623 |
+
+Census (alloc-profile + plain pointers, `TSRS_CENSUS=1 TSRS_CENSUS_VERIFY=1`; a session over xstate and a small
+`noLib` / `declaration` / `isolatedDeclarations` / missing `types` project: diagnostics with global, declaration and
+include-processor diagnostics, hover, definition, references, implementation, rename, completion, signature help,
+call hierarchy, inlay hints, semantic tokens, code actions, workspace symbols, 30+ canceled requests, two 36 s idle
+waits; 15 disposed checkers freed, 1 parked as escaped, 70 MB of checker regions freed while their program stayed
+current): precise walk 0; strong mark 8 violations, all of one class that the base build has too (39 in the same
+session): `TypeMapper` (mapper.rs:514) freed by a recycling site while an `IndexInfo` (checker_12.rs:2268) keeps it,
+inside a live chunk, i.e. a free-list free, not a region. Poison mode (`TSRS_ARENA_POISON=1`): the concurrency
+stress scripts (rapid edits with pipelined and canceled requests, slow requests on replaced snapshots, requests
+racing idle disposal), the canceled-pull repro (200 checkers freed) and the census session: no crash, no panic, no
+missing response.
+
+The census build could not run LSP diagnostics before this fix: `source_file_and_index_of_node` took the slot of its
+4096-entry cache as `key * C >> 20`, out of range for a 64-bit plain-pointer key (index out of bounds on the first
+union of declarations); the slot is masked now (compressed builds unchanged).

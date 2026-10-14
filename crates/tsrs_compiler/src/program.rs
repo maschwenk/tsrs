@@ -2158,7 +2158,14 @@ impl Program {
         };
         c.forget_scratch_keyed_caches();
         drop(region);
-        self.declaration_diagnostic_cache.lock().unwrap().entry(source_file).or_insert(diagnostics).clone()
+        let mut cache = self.declaration_diagnostic_cache.lock().unwrap();
+        if !cache.contains_key(&source_file) {
+            // The diagnostics live in the checker's region (the language server's pool keeps it while the cache does).
+            for d in &diagnostics {
+                tsrs_core::arena::note_escape(d.addr());
+            }
+        }
+        cache.entry(source_file).or_insert(diagnostics).clone()
     }
 
     // program.go:1488

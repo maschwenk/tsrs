@@ -31,9 +31,19 @@ impl includeProcessor {
     pub(crate) fn get_diagnostics(&self, p: &Program) -> &Mutex<DiagnosticsCollection> {
         self.computed_diagnostics.get_or_init(|| {
             let mut computed = DiagnosticsCollection::default();
-            for d in p.processing_diagnostics().iter() {
+            let processing_diagnostics = p.processing_diagnostics();
+            if !processing_diagnostics.is_empty() {
+                // What this makes (diagnostics, the include processor's caches) goes to the current allocation target,
+                // a checker's region when semantic diagnostics ask first: the language server's pool keeps it while
+                // the program lives.
+                if let Some(region) = tsrs_core::arena::current_region() {
+                    region.mark_escaped();
+                }
+            }
+            for d in processing_diagnostics.iter() {
                 computed.add(d.to_diagnostic(p));
             }
+            drop(processing_diagnostics);
             // Go ranges over both maps too. The collection drops a diagnostic equal to one it has (equal in
             // everything compare_diagnostics looks at) and sorts on read, and that comparator only ties on equal
             // diagnostics, so the order of the adds cannot be seen.

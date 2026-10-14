@@ -66,8 +66,8 @@ impl Drop for programOwner {
     }
 }
 
-// `TSRS_REGION_LOG=1`: one stderr line per program created / freed.
-fn log_region(msg: impl FnOnce() -> String) {
+// `TSRS_REGION_LOG=1`: one stderr line per program created / freed and per disposed checker freed / parked.
+pub(crate) fn log_region(msg: impl FnOnce() -> String) {
     static ON: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if *ON.get_or_init(|| std::env::var_os("TSRS_REGION_LOG").is_some_and(|v| v == "1")) {
         eprintln!("regions: {}", msg());

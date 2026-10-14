@@ -937,6 +937,8 @@ pub(crate) struct RegionInner {
     on_free: Mutex<Vec<Box<dyn FnOnce() + Send>>>,
     /// `retire_on_free`.
     retire: AtomicBool,
+    /// `note_escape`.
+    escaped: AtomicBool,
 }
 
 #[expect(clippy::non_send_fields_in_send_ty, reason = "the arena's cells: see the SAFETY comment")]
@@ -980,6 +982,7 @@ impl Region {
             owners: Mutex::new(Vec::new()),
             on_free: Mutex::new(Vec::new()),
             retire: AtomicBool::new(false),
+            escaped: AtomicBool::new(false),
         }))
     }
 
@@ -1079,6 +1082,16 @@ impl Region {
 
     pub fn ptr_eq(&self, other: &Region) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
+    }
+
+    /// Whether an object in the region was stored in a structure that may outlive it (`note_escape`).
+    pub fn escaped(&self) -> bool {
+        self.0.escaped.load(Ordering::Acquire)
+    }
+
+    /// `note_escape` for the whole region.
+    pub fn mark_escaped(&self) {
+        self.0.escaped.store(true, Ordering::Release);
     }
 }
 
@@ -1186,6 +1199,16 @@ pub fn current_region() -> Option<Region> {
     // SAFETY: a non-null `CURRENT` is the thread arena or the arena of a region kept alive by an entered scope.
     let arena = unsafe { &*p };
     arena.region.as_ref().and_then(std::sync::Weak::upgrade).map(Region)
+}
+
+/// Records that the object at `addr` was stored in a structure that may outlive the owner of its region (a
+/// program-lifetime cache filled while a checker is held, whose region is the allocation target): the owner must then
+/// keep the region until that structure goes (`Region::escaped`; tsrs_project checkerpool.rs). No-op for an object
+/// outside every region, and while no region exists (the CLI).
+pub fn note_escape(addr: usize) {
+    if let Some(region) = Region::containing(addr) {
+        region.mark_escaped();
+    }
 }
 
 /// Makes the current thread's own (never freed) arena the allocation target until the scope is dropped: for data

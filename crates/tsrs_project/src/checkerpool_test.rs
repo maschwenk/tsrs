@@ -553,3 +553,102 @@ fn checker_pool_non_cancelable_context_no_affinity() {
     drop(pool.get_checker(&ctx_with("never-canceled", CheckerLifetime::Diagnostics), None));
     assert!(pool.test_state(|st| st.request_associations.is_empty()));
 }
+
+fn cancel_checker(c: &mut CheckerHandle, source_file: tsrs_core::P<tsrs_ast::SourceFile>) {
+    let (canceled_ctx, cancel) = Context::background().with_cancel();
+    cancel.call();
+    c.get_diagnostics_exported(&canceled_ctx, source_file);
+    assert!(c.was_canceled());
+}
+
+// tsrs-only (memory regions): a disposed checker and its region are freed once no request that held it can use its
+// data any more, not with the program.
+#[test]
+fn checker_pool_disposed_checker_freed_after_last_lease() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
+    let program = program_of(&session);
+    let source_file = program.get_source_file("/src/index.ts").expect("source file");
+    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(30) });
+
+    // Request A holds the query checker and releases it, keeping its results.
+    let ctx_a = with_checker_data_lease(&ctx_with("lease-a", CheckerLifetime::Temporary));
+    drop(pool.get_checker(&ctx_a, None));
+    // Request B gets the same checker, is canceled, and the release disposes the checker.
+    let ctx_b = with_checker_data_lease(&ctx_with("lease-b", CheckerLifetime::Temporary));
+    let mut c = pool.get_checker(&ctx_b, None);
+    cancel_checker(&mut c, source_file);
+    drop(c);
+    assert!(!pool.test_state(|st| st.checkers[1]), "canceled checker should be disposed");
+    assert_eq!(pool.region_counts(), (1, 1, 0), "disposed checker kept while requests that held it are running");
+    drop(ctx_b);
+    assert_eq!(pool.region_counts(), (1, 1, 0), "request A can still use the checker's data");
+    drop(ctx_a);
+    assert_eq!(pool.region_counts(), (0, 0, 0), "disposed checker freed after its last request");
+
+    // Idle disposal of a checker no request holds frees it right away.
+    let idle_pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 2, idle_timeout: Duration::from_millis(100) });
+    let ctx = with_checker_data_lease(&ctx_with("lease-idle", CheckerLifetime::Temporary));
+    drop(idle_pool.get_checker(&ctx, None));
+    drop(ctx);
+    std::thread::sleep(Duration::from_millis(500));
+    assert!(!idle_pool.test_state(|st| st.checkers[1]), "idle checker should be disposed");
+    assert_eq!(idle_pool.region_counts(), (0, 0, 0), "idle-disposed checker freed");
+}
+
+// tsrs-only (memory regions): a disposed checker whose data may be referenced beyond its requests is kept until the
+// pool is freed.
+#[test]
+fn checker_pool_disposed_checker_parked_when_data_escaped() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
+    let program = program_of(&session);
+    let source_file = program.get_source_file("/src/index.ts").expect("source file");
+    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 4, idle_timeout: secs(30) });
+
+    // Held without a lease (a caller outside a request): pinned.
+    let mut c = pool.get_checker(&ctx_with("no-lease", CheckerLifetime::Temporary), None);
+    cancel_checker(&mut c, source_file);
+    drop(c);
+    assert_eq!(pool.region_counts(), (1, 0, 1), "checker held without a lease is parked");
+
+    // Something stored data of the checker's region in a longer-lived structure.
+    let ctx = with_checker_data_lease(&ctx_with("escaped", CheckerLifetime::Temporary));
+    let mut c = pool.get_checker(&ctx, None);
+    tsrs_core::arena::note_escape(tsrs_core::P::new(1u64).addr());
+    cancel_checker(&mut c, source_file);
+    drop(c);
+    drop(ctx);
+    assert_eq!(pool.region_counts(), (2, 0, 2), "checker whose data escaped is parked");
+
+    // The pool accumulates the diagnostics checker's global diagnostics (`noLib`: missing global types).
+    let ctx = with_checker_data_lease(&ctx_with("globals", CheckerLifetime::Diagnostics));
+    drop(pool.get_checker(&ctx, None));
+    assert!(!pool.get_global_diagnostics().is_empty());
+    let mut c = pool.get_checker(&ctx, None);
+    cancel_checker(&mut c, source_file);
+    drop(c);
+    drop(ctx);
+    assert_eq!(pool.region_counts(), (3, 0, 3), "diagnostics checker whose global diagnostics the pool keeps is parked");
+
+    pool.free_checkers();
+    assert_eq!(pool.region_counts(), (0, 0, 0));
+}
+
+// tsrs-only (memory regions): a checker taken with `context.Background()` inside a request handler (call hierarchy,
+// as in Go) gets the request's lease from the thread instead of being pinned.
+#[test]
+fn checker_pool_thread_lease_for_background_context() {
+    let (session, _) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(10) });
+    let program = program_of(&session);
+    let source_file = program.get_source_file("/src/index.ts").expect("source file");
+    let pool = new_test_checker_pool(program, CheckerPoolOptions { max_checkers: 2, idle_timeout: secs(30) });
+
+    let ctx = with_checker_data_lease(&ctx_with("request", CheckerLifetime::Temporary));
+    let scope = enter_checker_data_lease(&ctx);
+    let mut c = pool.get_checker(&Context::background(), None);
+    cancel_checker(&mut c, source_file);
+    drop(c);
+    assert_eq!(pool.region_counts(), (1, 1, 0), "kept for the request, not pinned");
+    drop(scope);
+    drop(ctx);
+    assert_eq!(pool.region_counts(), (0, 0, 0), "freed once the request is done");
+}

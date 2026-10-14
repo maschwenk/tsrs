@@ -1055,6 +1055,8 @@ impl Server {
 
             self.last_request_time_ms.store(unix_millis_now(), Ordering::SeqCst);
             let mut request_ctx = context::with_locale(&ctx, self.get_locale());
+            // tsrs-only: the checkers this message's handler holds keep their data until it is done (`checkerDataLease`).
+            request_ctx = project::with_checker_data_lease(&request_ctx);
             let mut cancel = None;
             if let Some(id) = &req.id {
                 let (c, cancel_func) = context::with_request_id(&request_ctx, &id.string()).with_cancel();
@@ -1063,7 +1065,10 @@ impl Server {
                 self.pending_client_requests.lock().unwrap().insert(id.clone(), pendingClientRequest { cancel: cancel_func });
             }
 
-            match self.handle_request_or_notification(&request_ctx, &req) {
+            let lease = project::enter_checker_data_lease(&request_ctx);
+            let result = self.handle_request_or_notification(&request_ctx, &req);
+            drop(lease);
+            match result {
                 Err(err) => {
                     self.handle_error(req.id.as_ref(), err, &lsp_exit);
                     self.remove_request(req.id.as_ref(), cancel.as_ref());
@@ -1071,8 +1076,13 @@ impl Server {
                 Ok(Some(do_async_work)) => {
                     let s = Arc::clone(self);
                     let lsp_exit = lsp_exit.clone();
+                    let request_ctx = request_ctx.clone();
                     workerpool::go(move || {
-                        if let Err(ls_error) = do_async_work() {
+                        let lease = project::enter_checker_data_lease(&request_ctx);
+                        let result = do_async_work();
+                        drop(lease);
+                        drop(request_ctx);
+                        if let Err(ls_error) = result {
                             s.handle_error(req.id.as_ref(), ls_error, &lsp_exit);
                         }
                         s.remove_request(req.id.as_ref(), cancel.as_ref());

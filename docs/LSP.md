@@ -151,7 +151,7 @@ for server data; see [the memory design](../notes/lsp-mem.md) and
 | object | Go lifetime | tsrs lifetime |
 | --- | --- | --- |
 | a parsed file version (text, AST, symbols, flow nodes, and its lazily filled data) | until neither the parse cache nor a live program refers to it | **file region**: the parse cache's parse function runs parse + bind in a fresh region; the cache entry owns it until its final `Deref`, and so does every program owner whose program contains the file |
-| types, signatures, links, transient symbols, synthetic nodes of a program's checkers | until the program's pool is unreachable | **checker region** per pooled checker: the holder's allocation target while it is created and while it is held; freed with the pool when the program is freed (a disposed checker is parked until then, see below) |
+| types, signatures, links, transient symbols, synthetic nodes of a program's checkers | until nothing refers to the checker or its data | **checker region** per pooled checker: the holder's allocation target while it is created and while it is held; a disposed checker (idle timeout, cancellation) is freed once the requests that held it are done, or with the pool when its data may outlive them (see below) |
 | `Program` (file lists, maps, resolution data; cloned per edit by `ReuseProgram`) | GC | **program owner** (`tsrs_project` memregions.rs), held by every `Project` value that refers to the program; what `CreateProgram` allocates is in the version's region, the full build's region is shared by its clones (they share its processed-file data); dropping the owner frees the checkers, the `Program` (`tsrs_compiler::free_program`) and the regions |
 | auto-import registry update scratch (module and alias resolvers, extraction checkers, resolution caches) | GC | **scratch region** per `Registry::clone_registry`, freed before it returns; files the update acquired are released at the end of the snapshot clone as in Go (and freed when nothing else holds them) |
 | auto-import registry versions (buckets, indexes, entrypoints: heap; directories' package.json entries: arena) | GC | heap values by Rust ownership; the package.json entries an update reads for `directories` go to a **package.json region** of that update, held by every registry version whose directories still refer into it (`Registry::regions`) |
@@ -178,9 +178,16 @@ Two ownership constraints matter when changing this code:
   language service from an older snapshot holds no snapshot reference in Go either and relies on the GC. The owner
   is therefore tied to Rust ownership of the `Project` values (snapshots and language services hold them), and file
   regions are owned by program owners as well as by the cache entry.
-- Checker regions are not freed when a checker is disposed (idle timeout, cancellation): its data can be referenced
-  from pool- and program-lifetime structures (global diagnostics, the declaration diagnostics cache). Disposed
-  checkers are parked with their regions until the pool is freed; holding a checker keeps the program owner alive.
+- A disposed checker (idle timeout, cancellation) is freed with its region once no request that held it can still
+  use its data: Go's language service keeps using results after releasing the checker (diagnostics are converted
+  after `GetSemanticDiagnostics` returned), so the dispatch loop gives every message a lease
+  (`tsrs_project::checkerDataLease`, in the request context and, while the handler runs, the thread's), each
+  acquisition registers it with the checker, and the free waits for the checker's last lease to end. A checker held
+  without a lease (outside the server's dispatch loop; the API checker, whose handles outlive requests) is pinned,
+  and a checker whose data was stored in a pool- or program-lifetime structure is marked escaped
+  (`arena::note_escape`: the pool's accumulated global diagnostics, the program's declaration diagnostics cache, the
+  include processor's diagnostics); both are parked until the pool is freed. Holding a checker keeps the program
+  owner alive.
 
 The census build is the gate (notes/mem-recycle.md; at server exit with `TSRS_CENSUS=1`, roots = server, session,
 snapshot): a freed region is recorded as would-free and kept, and nothing reachable may point into it. Kept `None`
