@@ -42,7 +42,10 @@ struct): `Token`, `OmittedExpression`, `KeywordTypeNode`, `ThisTypeNode`, `JsxOp
 `JsxClosingFragment`, `JSDocAllType`. Their nodes allocate only the 24-byte header; every other node is one
 arena allocation `NodeAlloc<T> { node: Node, data: T }` (`repr(C)`), and `as_x()` / the generated dispatchers
 check `data_tag()` and read the data struct at `offset_of!(NodeAlloc<T>, data)` from the header (Go has the
-same single allocation: the data struct embeds `NodeBase`).
+same single allocation: the data struct embeds `NodeBase`). The accessors that read one field of many data structs
+(`name()`, `modifiers()`, `expression()`, `type_node()`, `initializer()` and the `*_data()` base accessors) look the
+field's offset from the header up in a per-data-tag table (`slot_table!` in `ast.rs`, each entry type-checked) instead
+of matching on the tag: one table load and one field load, inlined (notes/perf-ast-accessors.md).
 
 Nodes are always handled as `P<Node>`. A Go function that takes a typed data pointer
 (`*ast.BinaryExpression`) takes `P<Node>` in Rust. `Node` can only be created by `NodeFactory`, so

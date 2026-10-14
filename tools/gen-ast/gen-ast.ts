@@ -817,23 +817,27 @@ function genNodeImpl() {
     // Name() / Modifiers()
     const withField = (fieldName: string) =>
         nodes.filter(n => n.name !== "SourceFile" && promoted(layouts.get(n.name)!).some(f => f.name === fieldName));
-    w(`    pub fn name(&self) -> Option<P<Node>> {`);
-    w(`        match self.data_tag() {`);
-    for (const n of withField("name")) {
-        const f = findFlat(layouts.get(n.name)!, "name");
-        w(arm(n.name, f.ty.startsWith("Option") ? `d.${f.rust}()` : `Some(d.${f.rust}())`));
-    }
-    w(`            _ => None,`);
-    w(`        }`);
-    w(`    }`);
-    w();
-    w(`    pub fn modifiers(&self) -> Option<P<ModifierList>> {`);
-    w(`        match self.data_tag() {`);
-    for (const n of withField("modifiers")) w(arm(n.name, `d.modifiers()`));
-    w(`            _ => None,`);
-    w(`        }`);
-    w(`    }`);
-    w();
+    // A node-valued field read through a slot table (ast.rs `slot_table!`): one table load at the data tag and one
+    // field load, where a match over the data tags compiled to a jump table with one arm per field offset.
+    const slotPaths = (fieldName: string, valueTy: string) =>
+        withField(fieldName).map(n => {
+            const f = findFlat(layouts.get(n.name)!, fieldName);
+            if (f.rare || (f.ty !== valueTy && f.ty !== `Option<${valueTy}>`)) throw new Error(`${n.name}.${f.rust}: ${f.ty} cannot be a ${valueTy} slot`);
+            return `${n.name}.${f.path}`;
+        });
+    const slotAccessor = (fn: string, valueTy: string, paths: string[]) => {
+        w(`    #[inline]`);
+        w(`    pub fn ${fn}(&self) -> Option<${valueTy}> {`);
+        w(`        static SLOTS: [u16; 256] = slot_table!(Option<${valueTy}>;`);
+        for (const p of paths) w(`            ${p},`);
+        w(`        );`);
+        w(`        // SAFETY: \`SLOTS\` is indexed by the data tag and holds offsets of \`Option<${valueTy}>\` slots.`);
+        w(`        unsafe { self.slot(SLOTS[self.data_tag() as usize]) }`);
+        w(`    }`);
+        w();
+    };
+    slotAccessor("name", "P<Node>", slotPaths("name", "P<Node>"));
+    slotAccessor("modifiers", "P<ModifierList>", slotPaths("modifiers", "P<ModifierList>"));
     w(`    pub(crate) fn set_modifiers_data(&self, modifiers: Option<P<ModifierList>>) {`);
     w(`        match self.data_tag() {`);
     for (const n of withField("modifiers")) w(arm(n.name, `d.set_modifiers(modifiers)`));
@@ -856,15 +860,17 @@ function genNodeImpl() {
         ["template_literal_like_data", "TemplateLiteralLikeNodeBase"],
     ];
     for (const [fn, base] of baseAccessors) {
+        w(`    #[inline]`);
         w(`    ${fn === "flow_node_base" ? "pub(crate)" : "pub"} fn ${fn}(&self) -> Option<&'static ${base}> {`);
-        w(`        match self.data_tag() {`);
+        w(`        static SLOTS: [u16; 256] = slot_table!(${base};`);
         for (const n of nodes) {
             if (HAND_WRITTEN_DATA.has(n.name)) continue;
             const p = basePath(layouts.get(n.name)!, base);
-            if (p) w(arm(n.name, `Some(&d.${p})`));
+            if (p) w(`            ${n.name}.${p},`);
         }
-        w(`            _ => None,`);
-        w(`        }`);
+        w(`        );`);
+        w(`        // SAFETY: \`SLOTS\` is indexed by the data tag and holds offsets of \`${base}\` fields.`);
+        w(`        unsafe { self.base_at(SLOTS[self.data_tag() as usize]) }`);
         w(`    }`);
         w();
     }
