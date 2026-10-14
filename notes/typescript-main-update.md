@@ -70,3 +70,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64664](https://github.com/microsoft/TypeScript/commit/fff11d8a7c18c6f3e23eef988406732a5a9294b2) | Localized Go diagnostics; tsrs documents English-only diagnostics. |
 | [#64095](https://github.com/microsoft/TypeScript/commit/2d8450f9b54a2a9688a1823a57102402d6862ef5) | Copy ESNext iterator declarations and references; port lib option filename and order. Schemas refresh with the SDK. |
 | [#64711](https://github.com/microsoft/TypeScript/commit/aa8149273b23401f0a79a5f0384c42de51888693) | Go adds block IDs and dense link-store pages; Rust already uses compressed handles, dense IdLinkStore pages and scratch-region link stores, so retain its measured layout. |
+| [#64505](https://github.com/microsoft/TypeScript/commit/95c9d99127230f898e8edc0c75079ce9d3ad1ea9) | Port static transform prediction for decorated classes and leave classes without pending transforms unwrapped. |
