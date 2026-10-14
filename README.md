@@ -27,6 +27,19 @@ for supported features and known gaps.
 
 [![Performance](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
 
+## Extra features
+
+### WebAssembly
+
+[`@ts-rs/wasm`](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md) runs the compiler in Node 22+ and
+browsers, with type checking, JavaScript and declaration emit, source maps, incremental builds and project references.
+It runs single-threaded, using real or in-memory files in Node and in-memory files in browsers. The package includes
+the TypeScript standard libraries and needs no platform-specific binary.
+
+```sh
+pnpm dlx @ts-rs/wasm -p . --noEmit
+```
+
 ## Learn more
 
 - [CLI usage and memory tuning](https://github.com/maschwenk/tsrs/blob/main/docs/USAGE.md)
