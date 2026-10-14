@@ -27,3 +27,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64556](https://github.com/microsoft/TypeScript/commit/15dee00a1c6549a4953ab17ccac4c56d252ba4cc) | Port canonical container cycle identities and inferred-parameter nodebuilder cache keys. |
 | [#64573](https://github.com/microsoft/TypeScript/commit/af36d532b0120413a8b6d2157a7f5be7f8d61f03) | Port cyclic alias-chain resolution for export-equals class visibility. |
 | [#64093](https://github.com/microsoft/TypeScript/commit/bf00f213ffd67ce4cc765c0db341e86c7057be44) | Copy upstream Promise.allKeyed/allSettledKeyed declarations, library references and load order. |
+| [#64577](https://github.com/microsoft/TypeScript/commit/82f054616325c1550b184f26a64f26b44ce6b99d) | Upstream security contact documentation; tsrs maintains its own policy. |
