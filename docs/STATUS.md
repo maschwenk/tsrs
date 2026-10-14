@@ -571,7 +571,7 @@ lost). 60 of the 62 fails are declaration-emit diagnostics (TS4xxx/TS9xxx/TS7056
 other 2 fails (`mutuallyRecursiveInference`, `recursiveMappedTypes`) and both codes tests are harness artifacts: the Go
 harness runs JS emit, whose const-enum inliner type-checks every property access, before collecting diagnostics, so
 errors are first reported from a different current node; the `tsgo` CLI reports what we report. Details and the
-clustering tool (`tools/cluster-diffs.py`): `notes/fix-nb-integrate.md`.
+clustering tool (`tools/cluster-diffs.py`).
 
 The private monorepo (release, 0 errors): counters now equal the reference exactly; peak memory unchanged versus main (19.5 vs
 19.4 GB single-threaded, measured back to back).
@@ -608,7 +608,7 @@ with Go's per-file cache, `emithost.rs`, `emitter::get_declaration_diagnostics`)
 called it at Go's points (harness: after semantic/global/suggestion diagnostics when `GetEmitDeclarations()`; CLI:
 `GetDiagnosticsOfAnyProgram` under `--noEmit`, only when no earlier diagnostics were found). Design notes:
 `crates/tsrs_declarations/src/lib.rs`, `crates/tsrs_transformers/src/resolver.rs` (the checker is lent to the transformer through a `CheckerSlot`;
-Go's `checkerMu`-locking resolver methods borrow it per call), `notes/fix-decl-diagnostics.md`.
+Go's `checkerMu`-locking resolver methods borrow it per call).
 
 Conformance: **13,458 pass / 2 codes / 2 fail / 0 timeout / 0 crash** (was 13,398 / 2 / 62; all 60 declaration-
 diagnostic fails pass, no previous pass lost; same with `TS_TEST_PROGRAM_SINGLE_THREADED=false`). `.types` now
@@ -640,7 +640,7 @@ the private monorepo depends on: types and symbols identical (1,526 files), coun
 The private monorepo's peak footprint is now below the Go reference: 15.35 GB `--singleThreaded` (was 19.5; tsgo 16.7) and
 23.35 GB with 4 checkers (was 28.3; tsgo 24.4), counters and conformance unchanged. The largest item was lazy JSDoc
 parsing copying the whole file text per node (3 GB). Opt-in arena/heap allocation profile:
-`--features alloc-profile` on `tsrs_cli` (+ `TSRS_HEAP_PROFILE=1`). Details: `notes/fix-perf-memory.md`.
+`--features alloc-profile` on `tsrs_cli` (+ `TSRS_HEAP_PROFILE=1`; docs/DEBUGGING.md).
 
 ## 2026-09-30 (later): lazy member resolution on by default
 
@@ -701,7 +701,7 @@ index only past 8 entries, rarely set `ValueSymbolLinks` and `Symbol` fields in 
 stores paged by id. The private monorepo, reference mode (isolates these changes; medians of 3, interleaved): single-threaded
 peak 13.94 -> 11.08 GB, check 21.2 -> 18.2 s; 4 checkers 21.21 -> 17.06 GB, check 10.07 -> 8.66 s. Default mode
 (with lazy tuples and locality assignment landed meanwhile): 10.80 -> 8.39 GB / 20.0 -> 17.1 s single, 16.09 ->
-11.33 GB / 9.1 -> 6.7 s on 4 checkers. Details and per-change numbers: `notes/mem-layout.md`.
+11.33 GB / 9.1 -> 6.7 s on 4 checkers.
 
 ## 2026-10-01: frontend wall time (program construction, config, statistics)
 

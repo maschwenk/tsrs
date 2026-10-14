@@ -10,10 +10,9 @@ citations refer to Bun's `src/sema` at the PR head and to this repository at 626
 
 Status (2026-10-10): the "tsrs" column describes 626da9d; several rows were followed up since. Leaf freeing landed for
 CLI `--noEmit` runs with at most 16 checkers (`TSRS_FREE_LEAVES`, docs/DEBUGGING.md; notes/mem-free-leaf-files.md).
-Bundled libs are parsed zero-copy from the binary's text (notes/mem-zero-copy-libs.md; crates/tsrs_compiler/src/host.rs).
+Bundled libs are parsed zero-copy from the binary's text (crates/tsrs_compiler/src/host.rs).
 Dense link tables: the 60-90 MB did not hold; the store layouts that paid landed (`InlineIdStore`, `KeyedLinkStore`,
-`SymbolReferenceLinkStore` in crates/tsrs_checker/src/links.rs; notes/mem-dense-link-tables.md,
-notes/mem-link-tables-landed.md). Flat symbol tables were not landed (PR 147
+`SymbolReferenceLinkStore` in crates/tsrs_checker/src/links.rs; notes/mem-dense-link-tables.md). Flat symbol tables were not landed (PR 147
 closed, notes/mem-flat-symbol-tables.md). Flow compaction was reverted (#191, notes/mem-flow-compaction.md). Read
 those notes before proposing any of these rows again.
 

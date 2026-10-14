@@ -1,6 +1,6 @@
 # mem-layout3: what is left in pure layout
 
-Follow-up to notes/mem-layout.md, mem-round2.md, mem-round3.md and mem-small.md. Representation only: no checker
+Follow-up to mem-round2.md, mem-round3.md and mem-small.md. Representation only: no checker
 semantics, no change in creation counts. Question: how much of the private monorepo's peak is still pure layout
 (padding, 16-byte slices, fields that are almost never set), and what is cheap to take.
 

@@ -218,9 +218,10 @@ up in the referrer's current layout (`offset_of!`) before believing it: the stro
 `tsrs_core::census_layout` (`tsrs_checker::types::census_layouts`, `tsrs_ast::census_layouts`). **A layout change
 must update those registrations** (they are computed with `offset_of!`, so reordering fields is covered, but a new
 packed word, flag bits above an address or a new enum payload is not). Stale registrations both invent violations
-(padding read as pointers) and hide real ones (pointer fields skipped); notes/census-regress.md is what happened
-when they were hard-coded offsets. A violation that survives that check is a real bug: fix the escape tracking or
-stop freeing that class.
+(padding read as pointers) and hide real ones (pointer fields skipped). A violation that survives that check is a
+real bug: fix the escape tracking or stop freeing that class. Several census processes run in parallel can report a
+non-zero line for a file that reports 0 alone (the conservative mark's roots include stack contents, which depend on
+scheduling): rerun such a file alone before treating it as a violation.
 
 ## What each checker holds on the heap: the heap census
 
@@ -476,7 +477,7 @@ Build the Go reference with a patched copy of one Go file, without editing `ts-r
 overlay JSON that maps *both* the symlinked and the real path of the file to the copy. Then, in `ts-ref/tsc`, run
 `GOTOOLCHAIN=auto go build -overlay <overlay.json> -o <bin> ./cmd/tsrs-oracle-testrunner` (the copy of
 `tools/oracle/testrunner/main.go`, placed as docs/PORTING.md "Reference tooling" describes) and `<bin> diags <regexp>`
-(one JSON line per variant of each test whose file name matches). notes/fix-compiler.md has an example.
+(one JSON line per variant of each test whose file name matches).
 
 ## How to fix
 

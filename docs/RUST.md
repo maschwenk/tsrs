@@ -101,7 +101,7 @@ stays on oxc's allowlist: changing eager `unwrap_or(f())` evaluation can change 
 
 1. **A performance claim comes with numbers.** Instructions retired and peak RSS, before and after, same machine,
    one checker and the default: `/usr/bin/time -l` on macOS, `perf stat` on Linux. Wall time on a shared machine is
-   noise. Write the result in `notes/`. (Bun: "Performance claims need numbers ... must not regress ANY measured case".)
+   noise. Put them in the pull request. (Bun: "Performance claims need numbers ... must not regress ANY measured case".)
 2. **Build settings are measurements, not defaults.** `[profile.dist]` (fat LTO, one codegen unit, PGO:
    `notes/perf-pgo.md`), mimalloc, transparent huge pages for the arena on Linux (`notes/linux-perf.md`,
    `notes/linux-x86-round.md`), 32-bit handles (`notes/mem-pointer-compression.md`). Change one only with a
@@ -117,7 +117,7 @@ stays on oxc's allowlist: changing eager `unwrap_or(f())` evaluation can change 
    at the boundary and are validated before entering these internal domains.
 4. **Return what is stored; allocate once.** Where Go returns a stored slice or string, Rust returns `&'static [T]`
    or `&'static str`, not a fresh `Vec` or `String` (`notes/cpu-checker.md` changes 6 to 8 found such copies by profiling:
-   304.9 G -> 296.3 G instructions; `notes/fix-perf-memory.md` found per-call copies of names and lists). When a hot path changes, check it with
+   304.9 G -> 296.3 G instructions; per-call copies of names and lists were found the same way). When a hot path changes, check it with
    `--features alloc-profile`. In a recursive collector, pass an accumulator instead of returning a collection per
    level (rust-analyzer style guide, "Premature Pessimization").
 5. **Comparators are total orders.** Rust's `sort_by` may panic on a comparator that is not one; Go's does not.
@@ -143,7 +143,7 @@ In place:
 | mimalloc as the global allocator | `notes/perf-build-level.md`: mimalloc v3 beats mimalloc v2, jemalloc and glibc by 3-14% wall; `notes/perf-mimalloc-safe.md` | oxc, Rolldown, Turborepo, Bun |
 | Leak arenas, one per thread; exact frees of provably dead objects | PORTING.md "Memory model", `notes/mem-recycle.md` | oxc and Bun (arenas with no `Drop`) |
 | 32-bit handles with a niche (`Option<P<T>>` is 4 bytes) | `notes/mem-pointer-compression.md`: -14 to -15% peak memory, +6.5% instructions | oxc and Ruff (`NonMax`/`NonZero` u32 ids), Bun (`StoreRef`) |
-| Packed layouts with size assertions | `notes/mem-layout.md`, `mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
+| Packed layouts with size assertions | `notes/mem-layout3.md`, `mem-round2.md`, `mem-round3.md`, `mem-small.md` | oxc, ty, rust-analyzer, Bun |
 | Fx hashing everywhere | `notes/perf-checker-cpu2.md` | oxc, Rolldown, Ruff, rust-analyzer |
 | Lazy members, line maps and rare-field tails | `notes/lazy-members.md`, `notes/mem-lazy.md` | |
 | `#[cold]` slow-path splits | `notes/perf-parse.md` changes 6 to 8: parse instructions 16.66 G -> 15.07 G | oxc, Bun |
@@ -176,7 +176,7 @@ THP off for the whole process (`MIMALLOC_ALLOW_THP=0`, which also drops the aren
 `opt-level = "s"` for the language-server, API and emit crates (`.text` -6%, speed unchanged); adding vscode at eight
 checkers to the PGO training (-3% instructions, cycles unchanged).
 
-Not tried. Each needs a measurement and a note before it is adopted; none is applied yet:
+Not tried. Each needs a measurement before it is adopted; none is applied yet:
 
 | Candidate | Who does it | What it would give | What it needs |
 | --- | --- | --- | --- |

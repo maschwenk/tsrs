@@ -49,7 +49,3 @@ are archived separately from those guides.
 Other useful entry points are [content mappers](contentmappers.md), [WebAssembly](wasm-build.md),
 [performance round 2](perf-round2.md), [performance round 3](perf-round3.md),
 [memory round 2](mem-round2.md) and [memory round 3](mem-round3.md).
-
-When recording new work, include the revision, configuration, measurements and outcome. Link the note here if
-it establishes a lasting decision, and add rejected approaches to the rejection list so the next investigation
-can build on them.

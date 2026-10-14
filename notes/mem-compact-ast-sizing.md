@@ -187,7 +187,7 @@ one element, 5-13% none.
   list field.
 - **D, from the counts.** *D1*: the node id out of the header (24 -> 20 B, 4-aligned data at offset 20) saves 8 B on
   nodes whose data struct is 4 mod 8 bytes; ids must stay dense because the id-keyed link stores page by consecutive
-  ids (notes/mem-layout.md "Id-keyed link stores paged by id", crates/tsrs_checker/src/links.rs:285) and the API
+  ids (crates/tsrs_checker/src/links.rs:285) and the API
   codec orders nodes by id (crates/tsrs_api_codec/src/encoder.rs:55-75), so the 7-27% of nodes that get an id keep it
   in a side table (~12 B each, estimate). *D2*: `TokenFlags` out of string, numeric, bigint and regexp literals (40 ->
   32 B). *D3*: every payload-less `Token` node (24 B) replaced by its kind in the parent. Measured and not pursued: a

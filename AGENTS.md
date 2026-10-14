@@ -19,10 +19,10 @@ docs/RUST.md`), read the "Measured and rejected (do not redo)" list in `notes/pe
 "Techniques" section of `docs/RUST.md`, and read the newest round's summary (the highest-numbered
 `notes/mem-round*.md` for memory against bun check). If a note rejected the idea, start only if something is
 different, and say what in the brief or the pull request: new evidence, a changed constraint, or the condition the
-note gave for revisiting it. Whatever the outcome, add it to that list.
+note gave for revisiting it.
 
-**Bring numbers.** A performance change needs instructions retired and peak RSS, before and after, and a note in
-`notes/`.
+**Bring numbers.** A performance change needs instructions retired and peak RSS, before and after, in the pull
+request.
 
 **Clear the bar.** A change lands only if it gains at least one of:
 
@@ -33,7 +33,7 @@ note gave for revisiting it. Whatever the outcome, add it to that list.
 
 A change that adds a thread, a cache, an overlap between phases or an invariant later code must keep needs a clear
 margin over that bar: a sub-percent gain never justifies it, whichever measure it is on (notes/perf-serial-steps.md
-has why). A finding below the bar is still worth keeping: land it as a note in `notes/` and leave the code alone.
+has why). A change below the bar does not land.
 
 ## Keep the capability table current
 

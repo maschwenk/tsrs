@@ -1,6 +1,7 @@
 # mem-dense-link-tables: dense id-indexed link tables (Bun's `ByNode` / `ById`), design and verified estimate
 
-Status (2026-10-10): changes A, B and C below landed (notes/mem-link-tables-landed.md): `symbol_node_links` is an
+Status (2026-10-10): changes A, B and C below landed (#136; in production vscode's peak footprint fell 2.7% at 1
+checker and 2.6% at 32 on an M5 Max, with output identical and instructions flat): `symbol_node_links` is an
 `InlineIdStore`, `signature_links` and `type_node_links` are `KeyedLinkStore`s, `symbol_reference_links` is a
 `SymbolReferenceLinkStore` (crates/tsrs_checker/src/links.rs). D and E were not built. This note keeps the density
 measurements, the rejected designs and the unbuilt candidates; the per-store inventory and the prototype step log

@@ -228,7 +228,7 @@ slice is nil, i.e. empty). Checker-internal callers: `let r = c.get_emit_resolve
 types.rs (`UserPreferences { import_module_specifier_preference: ImportModuleSpecifierPreference::ProjectRelative, .. }`,
 `ModuleSpecifierOptions { override_import_mode }`, `ModuleSpecifiersResult`, string enums with `as_str()`), function bodies
 in compare.rs/preferences.rs/specifiers.rs/util.rs (ported; differential test against Go in
-tsrs_compiler/src/modulespecifiers_oracle_test.rs, see notes/nb-6.md). Go `Host` = `trait ModuleSpecifierGenerationHost: OutputPathsHost`;
+tsrs_compiler/src/modulespecifiers_oracle_test.rs). Go `Host` = `trait ModuleSpecifierGenerationHost: OutputPathsHost`;
 `NodeBuilder.host`/`NodeBuilderContext.host` are `&'static dyn ModuleSpecifierGenerationHost`, obtained from the program
 by `Program::as_module_specifier_generation_host()` (Go's implicit interface conversion). `CheckerShape` is implemented
 by `Checker` (so pass `c` where Go passes `b.ch`). `SourceFileForSpecifierGeneration`/`ast.HasFileName` parameters are

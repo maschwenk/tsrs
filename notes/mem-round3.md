@@ -1,6 +1,6 @@
 # mem-round3: peak memory, third pass (representation and lazy creation)
 
-Follow-up to notes/mem-layout.md, notes/mem-lazy.md and notes/mem-round2.md. Track A changes only the
+Follow-up to notes/mem-lazy.md and notes/mem-round2.md. Track A changes only the
 representation (no checker semantics); track B prototypes Go-portable "created and never used" candidates on the
 type side behind `TSRS_LAZY_*` switches.
 

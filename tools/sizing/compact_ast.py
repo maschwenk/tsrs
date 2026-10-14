@@ -259,7 +259,7 @@ class Proj:
 
     def design_header20(self, phase="post", classes=None):
         """The node id leaves the header (24 -> 20 bytes, data at offset 20 when 4-aligned). Ids must stay dense
-        (the id-keyed link stores are paged by consecutive ids, notes/mem-layout.md), so the nodes that get one keep it
+        (the id-keyed link stores are paged by consecutive ids, crates/tsrs_checker/src/links.rs), so the nodes that get one keep it
         in a side table, ~12 B each (estimate). Returns (gross, side table)."""
         gross = self.alloc_total(phase, classes, False) - self.alloc_total(phase, classes, True)
         with_id = sum(v[2] for v in self.kinds(phase, classes).values())

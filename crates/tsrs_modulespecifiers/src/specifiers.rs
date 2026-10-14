@@ -780,6 +780,8 @@ pub(crate) fn try_get_module_name_as_node_module(
     if !package_name_only {
         let mut package_root_index = parts.package_root_index;
         let mut module_file_name = String::new();
+        // Go passes the unchanged `parts` to every try (Strada updated `parts.packageRootIndex` per level); kept, like
+        // the output of exports directory mappings (e.g. `dirs/d/dist/d/deep/file.js`).
         loop {
             // If the module could be imported by a directory name, use that directory's name
             let pkg_json_results =

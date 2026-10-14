@@ -259,8 +259,7 @@ impl toProgramSnapshot {
         // tsrs-only: a changed file moves a report site only by adding or removing a declaration of a merged
         // interface, so it counts when its new or old text declares an interface. Without the old text (a program
         // loaded from build info) every changed file counts. Counting every changed file made a comment edit in
-        // a watch recheck every checked file that declares an interface: 690 -> 70 ms per edit on vscode
-        // (notes/watch-interface-refresh.md).
+        // a watch recheck every checked file that declares an interface: 690 -> 70 ms per edit on vscode (#391).
         let declares_interface_before_or_after = |file: P<SourceFile>| {
             contains_interface_declaration(file.as_node())
                 || match old_compiler_program {

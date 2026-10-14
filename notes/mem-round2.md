@@ -1,6 +1,6 @@
 # mem-round2: representation changes for peak memory (after mem-layout and mem-lazy)
 
-Same rules as notes/mem-layout.md: only layout / representation changes, no checker semantics. Gates for every
+Same rules as the first layout round: only layout / representation changes, no checker semantics. Gates for every
 step: the suite (errors and `--baselines types,symbols`) byte-identical to the base commit in the default mode and
 with `TSRS_LAZY_MEMBERS=0`; the `--extendedDiagnostics` counters unchanged in both modes at 1 and 4 checkers; the
 private monorepo 0 errors.
