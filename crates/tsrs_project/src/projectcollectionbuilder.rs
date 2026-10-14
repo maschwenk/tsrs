@@ -853,6 +853,11 @@ impl ProjectCollectionBuilder {
             }
         }
 
+        self.cleanup_inferred_project(logger);
+        if self.inferred_project.value().is_some() {
+            self.update_program(&projectEntry::Inferred, logger);
+        }
+
         if !logger.is_nil() {
             logger.log(&format!("Completed project tree request for {:?} in {:?}", project_tree_request.projects(), start_time.elapsed()));
         }
