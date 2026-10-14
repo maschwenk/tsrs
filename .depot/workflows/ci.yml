@@ -209,6 +209,13 @@ jobs:
   wasm:
     runs-on: depot-ubuntu-24.04-32
     timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    # DEBUG (#516): every run step's output also goes to /tmp/wasm-ci.log, posted on the pull request on failure.
+    defaults:
+      run:
+        shell: bash --noprofile --norc -c "echo \"== step: $GITHUB_STEP_NAME $GITHUB_ACTION\" >> /tmp/wasm-ci.log; bash -eo pipefail {0} 2>&1 | tee -a /tmp/wasm-ci.log; exit ${PIPESTATUS[0]}"
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
@@ -307,6 +314,14 @@ jobs:
 
       - name: Differential gate
         run: TSRS_TEST=target/native/ci-native/tsrs-test tools/wasm/gate.sh target/native/ci-native/tsrs
+
+      - name: Post the log (debug)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          { echo '```'; tail -c 60000 /tmp/wasm-ci.log; echo '```'; } > /tmp/comment.md
+          gh pr comment ${{ github.event.pull_request.number }} --repo ${{ github.repository }} --body-file /tmp/comment.md
 
       - name: Upload the gate results
         if: always()
