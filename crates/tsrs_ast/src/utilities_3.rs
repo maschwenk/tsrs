@@ -800,6 +800,7 @@ pub fn has_inferred_type(node: P<Node>) -> bool {
         | Kind::PropertyAssignment
         | Kind::ShorthandPropertyAssignment
         | Kind::JSDocParameterTag
+        | Kind::JSDocParameterTag
         | Kind::JSDocPropertyTag => true,
         // assertType<never>(node); // !!!
         _ => false,

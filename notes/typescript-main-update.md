@@ -48,3 +48,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64584](https://github.com/microsoft/TypeScript/commit/fc636a691f1dbdbc9ba678911891a9e85ec283bf) | Port the async-disposable using diagnostic; the async client disposal Promise changes are included in the SDK refresh with the final pin. |
 | [#64604](https://github.com/microsoft/TypeScript/commit/de61e696214322f72d967bd17c58c50e44b2920d) | Copy the merged DOM library generator update verbatim from the upstream commit. |
 | [#64649](https://github.com/microsoft/TypeScript/commit/253bcd86231f2ceda21029eedf4c92c8b0d583f4) | Port checker emit-support layering, scoped resolvers and shared per-file/per-request contexts; retain Rust scratch regions and per-call nodebuilders rather than adding an unmeasured resolver cache. |
+| [#64617](https://github.com/microsoft/TypeScript/commit/afd02f14863971d7a1b424f7c5a7e6a4eb2f92a7) | Port JSDocParameterTag type annotation lookup. |
