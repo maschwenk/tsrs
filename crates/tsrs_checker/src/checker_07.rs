@@ -1683,6 +1683,18 @@ impl Checker {
         s
     }
 
+    // Go newSharedDataSymbol; Rust retains compact symbol storage and shares table/slice values.
+    pub(crate) fn new_shared_data_symbol(&mut self, symbol: P<Symbol>) -> P<Symbol> {
+        let result = self.new_symbol(symbol.flags(), symbol.name());
+        result.set_declarations_static(symbol.declarations());
+        result.set_parent(symbol.parent());
+        result.set_value_declaration(symbol.value_declaration());
+        result.set_members(symbol.members());
+        result.set_exports(symbol.exports());
+        result.set_export_symbol(symbol.export_symbol());
+        result
+    }
+
     // checker.go:14313
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn new_symbol_ex(&mut self, flags: SymbolFlags, name: &'static str, check_flags: CheckFlags) -> P<Symbol> {

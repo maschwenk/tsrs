@@ -1812,16 +1812,11 @@ impl Checker {
             symbol = links.target().unwrap();
             m = Some(self.combine_type_mappers(links.mapper(), m.unwrap()));
         }
-        // Keep the flags from the symbol we're instantiating.  Mark that is instantiated, and
-        // also transient so that we can just store data on it directly.
-        let result = self.new_symbol(symbol.flags(), symbol.name());
+        let result = self.new_shared_data_symbol(symbol);
         result.check_flags.set(
             CheckFlags::Instantiated
                 | symbol.check_flags() & (CheckFlags::Readonly | CheckFlags::Late | CheckFlags::OptionalParameter | CheckFlags::RestParameter),
         );
-        result.set_declarations_static(symbol.declarations());
-        result.set_parent(symbol.parent());
-        result.set_value_declaration(symbol.value_declaration());
         #[cfg(feature = "site-counts")]
         {
             self.inst_symbol_sites.insert(result, std::panic::Location::caller());
