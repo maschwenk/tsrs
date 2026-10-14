@@ -105,10 +105,13 @@ impl Queue {
     // Wait waits for all active tasks to complete.
     // It does not prevent new tasks from being enqueued while waiting.
     pub fn wait(&self) {
-        let mut count = self.pending.count.lock().unwrap();
-        while *count > 0 {
-            count = self.pending.zero.wait(count).unwrap();
-        }
+        // Waits for background workers, without holding a run slot (`tsrs_core::runslots`).
+        tsrs_core::runslots::blocking(|| {
+            let mut count = self.pending.count.lock().unwrap();
+            while *count > 0 {
+                count = self.pending.zero.wait(count).unwrap();
+            }
+        });
     }
 
     // queue.go:48

@@ -42,8 +42,16 @@ impl semaphore {
 
     fn acquire(&self) {
         let mut used = self.used.lock().unwrap();
-        while *used >= self.capacity {
-            used = self.freed.wait(used).unwrap();
+        if *used >= self.capacity {
+            // Waits for another request's checker without holding a run slot (`runslots`).
+            drop(used);
+            used = tsrs_core::runslots::blocking(|| {
+                let mut used = self.used.lock().unwrap();
+                while *used >= self.capacity {
+                    used = self.freed.wait(used).unwrap();
+                }
+                used
+            });
         }
         *used += 1;
     }

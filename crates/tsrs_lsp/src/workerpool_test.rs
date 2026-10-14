@@ -4,7 +4,8 @@ use std::time::{Duration, Instant};
 use crate::workerpool::{go, max_idle_threads, threads};
 
 // A job must not wait for a worker while every worker is blocked (Go starts a goroutine per request): requests that
-// wait for a busy checker would otherwise hold up requests that need none.
+// wait for a busy checker would otherwise hold up requests that need none. The jobs here wait the way those do, in
+// `runslots::blocking` (a wait that keeps its run slot keeps one of the jobs that can run at once).
 #[test]
 fn test_job_runs_while_every_worker_is_blocked() {
     let blocked = max_idle_threads();
@@ -16,7 +17,7 @@ fn test_job_runs_while_every_worker_is_blocked() {
         let started_tx = started_tx.clone();
         go(move || {
             started_tx.send(()).unwrap();
-            release_rx.lock().unwrap().recv().unwrap();
+            tsrs_core::runslots::blocking(|| release_rx.lock().unwrap().recv().unwrap());
         });
     }
     for _ in 0..blocked {

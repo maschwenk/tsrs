@@ -262,11 +262,14 @@ impl LazyNodeList {
                         spins += 1;
                     }
                     let (lock, cv) = wait_stripe(self);
-                    let mut g = lock.lock().unwrap();
-                    // Acquire: as above.
-                    while self.state.load(Ordering::Acquire) == FORCING {
-                        g = cv.wait(g).unwrap();
-                    }
+                    // Waits for the forcing thread without holding a run slot (`tsrs_core::runslots`).
+                    tsrs_core::runslots::blocking(|| {
+                        let mut g = lock.lock().unwrap();
+                        // Acquire: as above.
+                        while self.state.load(Ordering::Acquire) == FORCING {
+                            g = cv.wait(g).unwrap();
+                        }
+                    });
                     // Relaxed: a statistics counter, read at exit.
                     STATS[6].fetch_add(t.elapsed().as_nanos() as u64, Ordering::Relaxed);
                 }

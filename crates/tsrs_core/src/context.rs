@@ -269,6 +269,11 @@ impl Context {
     // Go `select { case <-ctx.Done(): ...; case <-time.After(timeout): ... }`: true if the context is canceled
     // within `timeout`.
     pub fn wait_timeout(&self, timeout: Duration) -> bool {
+        // Sleeps without holding a run slot (`runslots`).
+        crate::runslots::blocking(|| self.wait_timeout_unslotted(timeout))
+    }
+
+    fn wait_timeout_unslotted(&self, timeout: Duration) -> bool {
         let Some(state) = nearest_cancel(self) else {
             std::thread::sleep(timeout);
             return false;

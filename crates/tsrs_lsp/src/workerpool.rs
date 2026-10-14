@@ -66,7 +66,8 @@ fn worker_loop(pool: &'static workerPool) {
     loop {
         if let Some(job) = state.jobs.pop_front() {
             drop(state);
-            run_or_exit(job);
+            // Go's GOMAXPROCS: the thread starts at once, but runs once a slot is free (tsrs_core `runslots`).
+            run_or_exit(|| tsrs_core::runslots::run(job));
             state = pool.state.lock().unwrap();
             continue;
         }

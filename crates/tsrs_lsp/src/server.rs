@@ -303,10 +303,13 @@ impl responseChan {
     // closed, empty channel (Go: a nil response).
     fn recv(&self, ctx: &Context) -> Result<Option<ResponseMessage>, ContextError> {
         let inner = Arc::clone(&self.inner);
-        let guard = self.inner.0.lock().unwrap();
-        let mut state = wait_until(ctx, &self.inner.1, guard, |s| s.value.is_some() || s.closed, move || {
-            drop(inner.0.lock().unwrap());
-            inner.1.notify_all();
+        // Waits for the client, without holding a run slot (`runslots`).
+        let mut state = tsrs_core::runslots::blocking(|| {
+            let guard = self.inner.0.lock().unwrap();
+            wait_until(ctx, &self.inner.1, guard, |s| s.value.is_some() || s.closed, move || {
+                drop(inner.0.lock().unwrap());
+                inner.1.notify_all();
+            })
         })?;
         Ok(state.value.take())
     }

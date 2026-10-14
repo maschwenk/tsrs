@@ -28,6 +28,7 @@ pub mod json;
 pub mod lazymembers;
 pub mod memsplit;
 pub mod phases;
+pub mod runslots;
 pub mod festats;
 pub mod semver;
 pub mod sharedgraph;

@@ -106,7 +106,9 @@ structure with OS threads:
   with Go's goroutine per request, a job never waits for a thread: when every worker is busy (often blocked on a
   checker), another one starts. `max(4, available_parallelism)` workers stay and wait for jobs; one beyond that
   exits when it finds no job, handing back its thread arena and slab (`tsrs_core::ptr` `ReleaseAtExit`), so the
-  thread count follows the requests in flight (notes/lsp-server.md has the numbers).
+  thread count follows the requests in flight (notes/lsp-server.md has the numbers). As with Go's `GOMAXPROCS`, at
+  most `available_parallelism` of them run at once (`tsrs_core::runslots`); a job gives its slot back while it waits
+  for a checker, a client response, another thread forcing a lazy list, a context timeout or background tasks.
 - session-level background work (Go's `background.Queue`, scheduled diagnostics refreshes, snapshot updates on
   timers) runs on a separate fixed pool of 6 background threads with 512 MB stacks (`tsrs_project::background`);
   Go's `time.AfterFunc` -> one timer thread with a deadline heap that dispatches the callbacks onto those workers.

@@ -675,3 +675,26 @@ fn checker_pool_merged_global_diagnostic_keeps_the_checker_region() {
     assert_eq!(merged[0].related_information().len(), 2);
     assert!(region.escaped(), "the region of the merged diagnostics' related information is kept");
 }
+
+// Not a Go test. Requests waiting for a busy checker give back their run slot (`tsrs_core::runslots`), so as many of
+// them as there are slots do not keep a request that needs no checker from running.
+#[test]
+fn waiting_for_a_checker_gives_back_the_run_slot() {
+    let (_, pool) = setup_checker_pool_session(CheckerPoolOptions { max_checkers: 2, ..Default::default() });
+    let (ctx, cancel) = Context::background().with_cancel();
+    let held = pool.get_checker(&with_request_id(&ctx, "holder"), None);
+    let slots = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    std::thread::scope(|s| {
+        for i in 0..slots {
+            let (pool, ctx) = (&pool, with_request_id(&ctx, &format!("waiter-{i}")));
+            s.spawn(move || tsrs_core::runslots::run(|| drop(pool.get_checker(&ctx, None))));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let (tx, rx) = std::sync::mpsc::channel();
+        s.spawn(move || tsrs_core::runslots::run(|| tx.send(()).unwrap()));
+        let ran = rx.recv_timeout(Duration::from_secs(10));
+        drop(held);
+        ran.expect("a job without a checker waited behind jobs waiting for one");
+    });
+    cancel.call();
+}
