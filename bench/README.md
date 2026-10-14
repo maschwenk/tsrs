@@ -167,9 +167,9 @@ tsrs's errors (the table's errors paragraph names such projects).
   tables, an errors paragraph names only the projects where tsgo and tsrs disagree: a differing count is a
   **Mismatch** and a differing location set "Same count, different locations", both bold. This is a correctness
   signal, not a performance one.
-- tsrs ports a TypeScript 7.1-dev commit (`b85298b6`, `Cargo.toml`), not 7.0.2, so some differences are TypeScript
-  version differences. When the two disagree, the harness also runs `typescript@7.1.0-dev.20260930.4` (the nightly
-  built from `b85298b6` plus one CI-only commit; `reference` in `projects.json`) once: if it reports exactly tsrs's
+- tsrs ports a TypeScript 7.1-dev commit (`9eedcb0d`, `Cargo.toml`), not 7.0.2, so some differences are TypeScript
+  version differences. When the two disagree, the harness also runs `typescript@7.1.0-dev.20261014.1` (the nightly
+  built from that exact commit; `reference` in `projects.json`) once: if it reports exactly tsrs's
   errors the project is listed as a TypeScript version difference and not flagged. On 2026-10-01 that explains both
   differences (vscode 359 vs 371, webpack 848 vs 840: tsrs's lists equal the nightly's line for line). When the port moves to a
   newer TypeScript commit, update `reference` to the nightly built from it (the harness warns when they differ).
@@ -378,6 +378,11 @@ lands: does it still print exactly what main prints, and what did it do to time 
 relative comparisons only): the branch, and its merge base with `base` (default `main`), so commits that landed on
 main after the branch was cut are not counted as the branch's.
 
+When the branch changes the TypeScript commit in `Cargo.toml`, the workflow builds Go from the branch's exact
+TypeScript pin and uses it as the baseline. This checks the whole port against its specification, including upstream
+changes to diagnostic messages and error counts. The table labels that baseline `TypeScript@<commit>`; its time,
+memory and instruction comparisons are Go versus Rust. With an unchanged pin, the baseline remains the old tsrs.
+
 `tools/perf/verify.py` does the measuring (it also runs locally: `tools/perf/verify.py --base <tsrs> --new <tsrs>`).
 For every project in `bench/projects.json` and every checker count (default 1, 4, 16, 32), both binaries run
 `-p <project> --noEmit --incremental false --extendedDiagnostics --pretty false --checkers N` three times, interleaved.
@@ -419,7 +424,7 @@ compare on one wide machine, the way Bun's `bun check` announcement measured the
 mean of 20 runs). It runs four compilers on the same checkouts:
 
 - `tsgo`: `typescript@7.0.2` (as in `run.py`);
-- `tsgo-dev`: `typescript@7.1.0-dev.20260930.4` (`reference` in `projects.json`), built from the TypeScript commit
+- `tsgo-dev`: `typescript@7.1.0-dev.20261014.1` (`reference` in `projects.json`), built from the TypeScript commit
   tsrs ports, so it is both the like-for-like Go baseline and the error oracle;
 - `tsrs`: the binary given with `--tsrs`;
 - `bun`: `bun check` from the binary given with `--bun` (1.4.3 canary or later), run as
