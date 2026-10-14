@@ -27,6 +27,11 @@ for supported features and known gaps.
 
 [![Performance](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
 
+## Extra features
+
+[`@ts-rs/wasm`](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md) provides WebAssembly support
+targeting `wasm32-wasip1` (WASI Preview 1).
+
 ## Learn more
 
 - [CLI usage and memory tuning](https://github.com/maschwenk/tsrs/blob/main/docs/USAGE.md)

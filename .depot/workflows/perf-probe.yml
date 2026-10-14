@@ -58,12 +58,7 @@ jobs:
           mkdir -p probe-out
           { nproc; lscpu; free -g; } > probe-out/machine.txt
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
       - name: Install Bun canary and perf
         run: |

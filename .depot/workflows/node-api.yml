@@ -70,12 +70,19 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+      # setup-node saves its pnpm store after the repository install; cache this later upstream install separately.
+      - name: Restore Node API harness dependencies
+        id: harness-deps
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: node-api-harness-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.node-version', 'pnpm-lock.yaml') }}-${{ steps.ts.outputs.commit }}
 
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
@@ -89,6 +96,17 @@ jobs:
 
       - name: Harness setup (pnpm install in ts-ref, Go oracle from ts-ref/tsc)
         run: tools/node-api/setup.sh
+
+      - name: Save Node API harness dependencies
+        if: steps.harness-deps.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ts-ref/node_modules
+            ts-ref/packages/typescript/node_modules
+            ts-ref/pnpm-lock.yaml
+            ts-ref/pnpm-workspace.yaml
+          key: ${{ steps.harness-deps.outputs.cache-primary-key }}
 
       - name: Go oracle (must pass)
         run: node tools/node-api/run-upstream.mjs --binary tools/node-api/.work/oracle/tsc --label go-oracle
@@ -165,12 +183,7 @@ jobs:
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
       - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
         with:
@@ -181,9 +194,7 @@ jobs:
         run: cargo build --release --locked -p tsrs_cli
 
       - name: Pack (no publish)
-        run: |
-          pnpm install --frozen-lockfile
-          node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
+        run: node npm/build.mjs --binary ${{ matrix.target }}=target/release/tsrs --out "$RUNNER_TEMP/pack" --pack
 
       - name: Installed-package smoke (CLI, sync, async, declarations)
         run: node tools/node-api/consumer.mjs --dist "$RUNNER_TEMP/pack"
