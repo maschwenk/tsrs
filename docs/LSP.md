@@ -309,3 +309,14 @@ Checked in the code on 2026-10-10; collected from the porting waves' notes.
   (signaturehelp.rs `get_immediately_containing_argument_info`). Inside a JSX element that is itself in a call's
   argument (`wrap(() => <Comp href={…} />)`), tsrs shows the element's signature (none for an intrinsic element)
   where Go shows the enclosing call's; outside a call both show the element's signature.
+- A `file:` URI whose percent-escapes decode to invalid UTF-8 (`latin%FF1.ts`) names a file with U+FFFD in place of
+  each bad sequence (`DocumentUri::file_name`, lsp.rs `unescape`); Go keeps the raw bytes. Responses for such an open
+  document (definition, references, rename) then name `latin%EF%BF%BD1.ts`, a document the client never opened,
+  where Go answers with `latin%FF1.ts`; and two open URIs that differ only in such bytes (`%FF` and `%FE`) share one
+  overlay. Rust file names cannot hold the bytes; keeping the escape text would collide with a real file named
+  `latin%FF1.ts` (URI `latin%25FF1.ts`), and mapping the bytes to other characters with a file that contains those
+  characters, so only remembering each open document's URI would fix it. Go's handling is not lossless
+  either: the file name in completion item data reaches the client with U+FFFD (JSON encoding), so its
+  `completionItem/resolve` on that document fails with "no project found". On disk neither reads such a file: Go's
+  and tsrs's directory reads both yield the U+FFFD name, and a file matched by `include` is reported as not found
+  (TS6053).
