@@ -100,19 +100,6 @@ state, and linear memory never shrinks. Compiler state is not reused between cal
 - Deep recursion can overflow the stack. Safari's worker stack is smaller than Chrome's and Firefox's, so the
   deepest expressions overflow there first.
 
-## Performance and compatibility
-
-In the [recorded nine-project benchmark](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md#nine-projects-2026-10-08)
-from 2026-10-08, the module was 9.15 MB raw, 2.58 MB gzipped and 1.75 MB with Brotli. Warm calls took roughly
-1.5-2.0x the wall time of native single-threaded tsrs. The first call also includes compiling the WASM module;
-warm calls still use fresh compiler instances.
-
-The repository's differential gate compares the module with native `tsrs --singleThreaded`: exit codes, stdout
-and emitted file bytes, with build-status timestamps normalized. In the recorded 2,000-case conformance sample,
-all 1,998 runnable disk cases and all 1,993 runnable in-memory cases matched; the rest were skipped for external-code
-execution or symlinks. The gate also covers regressions, emit, incremental edits and project builds. See the
-[gate results and methodology](https://github.com/maschwenk/tsrs/blob/main/notes/wasm-build.md#the-differential-gate-toolswasmgatesh-ci-job-wasm).
-
 ## Build from source
 
 Install the `wasm32-wasip1` Rust target and Binaryen's `wasm-opt`, then run `tools/wasm/build.sh` from the repository
