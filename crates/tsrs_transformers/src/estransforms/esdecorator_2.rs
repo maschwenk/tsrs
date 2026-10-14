@@ -810,7 +810,7 @@ impl esDecoratorTransformer {
 
     // esdecorator.go:2200
     pub(crate) fn visit_array_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
-        assert!(ast::is_array_binding_or_assignment_element(node));
+        assert!(ast::is_expression(node));
         if ast::is_spread_element(node) {
             return Some(self.visit_assignment_rest_element(node));
         }
@@ -860,7 +860,7 @@ impl esDecoratorTransformer {
 
     // esdecorator.go:2263
     pub(crate) fn visit_object_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
-        assert!(ast::is_object_binding_or_assignment_element(node));
+        assert!(ast::is_object_literal_element(node));
         if ast::is_spread_assignment(node) {
             return Some(self.visit_assignment_rest_property(node));
         }

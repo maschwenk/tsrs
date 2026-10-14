@@ -54,3 +54,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64633](https://github.com/microsoft/TypeScript/commit/c3f14c2fe8971440d5a8bf1432d36bb26828c7c7) | Port object-literal parent tracking during decorator metadata emit. |
 | [#64637](https://github.com/microsoft/TypeScript/commit/09d4966578aec90fdec11784559218392602a029) | Rust already returns None for missing config files; update the reference comment to reflect the upstream guard. |
 | [#64638](https://github.com/microsoft/TypeScript/commit/d61a7d235906e78be9b111de0ba060e28e67ecfa) | Port the custom-resolution flag and disk-layout diagnostic guard. |
+| [#64651](https://github.com/microsoft/TypeScript/commit/54f05ae22afd5f0ec5ec3ae0333b03efa1156fe6) | Port expression and object-literal element assertions for malformed assignments. |

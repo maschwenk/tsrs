@@ -1463,7 +1463,7 @@ impl classFieldsTransformer {
 
     // classfields.go:3320
     pub(crate) fn visit_object_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
-        assert!(ast::is_object_binding_or_assignment_element(node));
+        assert!(ast::is_object_literal_element(node));
         if ast::is_spread_assignment(node) {
             return self.visit_assignment_rest_property(node);
         }
