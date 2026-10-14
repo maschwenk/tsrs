@@ -9,9 +9,9 @@
   },
   "reference": {
     "package": "typescript",
-    "version": "7.1.0-dev.20260930.4",
-    "commit": "b85298b6a81f772d080b0455de0ca9d744cd6fd6",
-    "note": "nightly built from b85298b6 + one CI-only commit (9adc871f); b85298b6 is the TypeScript commit tsrs ports (Cargo.toml [workspace.metadata.typescript]). Run only when tsgo and tsrs report different errors, to tell a TypeScript version difference from a tsrs bug."
+    "version": "7.1.0-dev.20261014.1",
+    "commit": "9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a",
+    "note": "nightly built from the exact TypeScript commit tsrs ports (Cargo.toml [workspace.metadata.typescript]). Run only when tsgo and tsrs report different errors, to tell a TypeScript version difference from a tsrs bug."
   },
   "projects": [
     {

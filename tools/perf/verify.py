@@ -19,6 +19,9 @@ reused), which must not crash and must print the base's diagnostics.
 
 Writes <out>/verify.json, <out>/verify.md and the compiler output under <out>/logs/. Exits 1 when any cell is not
 identical.
+
+For a TypeScript pin update, --base can be Go built from the new pin: the same comparisons then require the port's
+diagnostics to match its reference compiler, and the performance columns compare Go with Rust.
 """
 
 from __future__ import annotations
@@ -239,7 +242,7 @@ def markdown(result: dict) -> str:
               "in every run of both binaries.",
               "",
               f"Base `{b['commit'][:12]}`, new `{n['commit'][:12]}`{' + local changes' if n.get('dirty') else ''}; "
-              f"`cargo build --release` of each. Machine: {result['machine']['label']}. "
+              f"Compilers: `{b['version']}` → `{n['version']}`. Machine: {result['machine']['label']}. "
               f"Flags: `{' '.join(FLAGS)} --checkers N`. Took {result['duration_s']} s."]
     return "\n".join(lines) + "\n"
 
@@ -249,7 +252,7 @@ def markdown(result: dict) -> str:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--base", type=Path, required=True, help="the baseline tsrs binary")
+    ap.add_argument("--base", type=Path, required=True, help="the baseline compiler binary (tsrs, or pinned tsgo for a TypeScript update)")
     ap.add_argument("--new", type=Path, required=True, help="the tsrs binary under test")
     ap.add_argument("--base-label", help="name for the base in the table (default: its --version)")
     ap.add_argument("--new-label", help="name for the new binary in the table (default: its --version)")

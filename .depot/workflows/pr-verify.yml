@@ -1,6 +1,7 @@
 # Depot CI workflow: before/after check of a branch on a 32-vCPU machine by default (bench/README.md "Verifying a branch").
-# Builds the branch's tsrs and the tsrs of its merge base with `base` (`cargo build --release` of each: relative
-# comparisons only, as in perf-probe.yml), then runs tools/perf/verify.py on the bench projects: identical
+# Builds the branch's tsrs and the tsrs of its merge base with `base` (`cargo build --release` of each). If the
+# TypeScript pin changes, builds Go at the branch's exact pin instead of the old tsrs: upstream diagnostic changes
+# must match the new reference compiler. Then runs tools/perf/verify.py on the bench projects: identical
 # diagnostics and exit codes at each checker count, wall time, peak RSS and check time before/after, instructions of
 # one single-threaded run, and one run with poisoned arenas. The run fails when any diagnostic differs, so its status
 # answers "is this branch exact". The table is the `pr-verify` artifact (verify-out/) and the job summary.
@@ -111,9 +112,6 @@ jobs:
     if: needs.gate.outputs.run == 'true'
     runs-on: ${{ format('depot-ubuntu-24.04-{0}', inputs.cpus || '32') }}
     timeout-minutes: 120
-    permissions:
-      contents: read
-      pull-requests: read
     outputs:
       identical: ${{ steps.verify.outputs.identical }}
     steps:
@@ -273,20 +271,11 @@ jobs:
       - name: Set up the projects
         run: python3 bench/run.py --setup-only --projects "${{ steps.projects.outputs.list }}"
 
-      # The baseline: the merge base of this commit and origin/<base>, so that commits that landed on the base since
-      # the branch was cut are not counted as the branch's. A stack can change a PR's base after its opened event,
-      # so read its current parent immediately before selecting the baseline.
+      # Compare the whole branch with its merge base, including every port in a stack. When the TypeScript pin
+      # changes, the exact new Go compiler is the diagnostic baseline; the old compiler has different semantics.
       - name: Base commit
         id: commits
-        env:
-          GH_TOKEN: ${{ github.token }}
-          EVENT: ${{ github.event_name }}
-          PR: ${{ github.event.pull_request.number }}
         run: |
-          if [ "$EVENT" = pull_request ] && [ "$BASE" = main ]; then
-            BASE=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq .base.ref)
-          fi
-          echo "BASE=$BASE" >> "$GITHUB_ENV"
           git fetch -q --no-tags origin "+refs/heads/$BASE:refs/remotes/origin/$BASE"
           base=$(git merge-base HEAD "origin/$BASE")
           new=$(git rev-parse HEAD)
@@ -296,10 +285,36 @@ jobs:
           git log --oneline "$base..HEAD" | head -20
           git worktree add -q --detach /tmp/verify/base-src "$base"
           mkdir -p /tmp/verify/new /tmp/verify/base
+          old_pin=$(cd /tmp/verify/base-src && node npm/build.mjs --print-typescript-commit)
+          new_pin=$(node npm/build.mjs --print-typescript-commit)
+          if [ "$old_pin" != "$new_pin" ]; then
+            echo "reference=$new_pin" >> "$GITHUB_OUTPUT"
+            echo "TypeScript pin changed: $old_pin -> $new_pin; require exact Go conformance"
+          fi
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        if: steps.commits.outputs.reference != ''
+        with:
+          repository: microsoft/TypeScript
+          ref: ${{ steps.commits.outputs.reference }}
+          path: ts-ref
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        if: steps.commits.outputs.reference != ''
+        with:
+          go-version-file: ts-ref/tsc/go.mod
+          cache-dependency-path: ts-ref/tsc/go.sum
+
+      - name: Build the pinned TypeScript reference
+        if: steps.commits.outputs.reference != ''
+        working-directory: ts-ref/tsc
+        run: go build -o /tmp/verify/base/tsrs ./cmd/tsc
 
       # Both release builds at once (separate target dirs; one build does not use 64 cores for most of its time).
       - parallel:
           - name: Build tsrs at the base commit (release)
+            if: steps.commits.outputs.reference == ''
             working-directory: /tmp/verify/base-src
             env:
               CARGO_TARGET_DIR: /tmp/verify/base-target
@@ -311,7 +326,9 @@ jobs:
       - name: Stage and check both binaries
         run: |
           cp target/release/tsrs /tmp/verify/new/tsrs
-          cp /tmp/verify/base-target/release/tsrs /tmp/verify/base/tsrs
+          if [ -z "${{ steps.commits.outputs.reference }}" ]; then
+            cp /tmp/verify/base-target/release/tsrs /tmp/verify/base/tsrs
+          fi
           sha256sum /tmp/verify/*/tsrs
           /tmp/verify/new/tsrs --version; /tmp/verify/base/tsrs --version
 
@@ -319,6 +336,7 @@ jobs:
         id: verify
         env:
           BASE_SHA: ${{ steps.commits.outputs.base }}
+          REFERENCE: ${{ steps.commits.outputs.reference }}
           NEW_SHA: ${{ steps.commits.outputs.new }}
           DIRTY: ${{ steps.commits.outputs.dirty }}
           LABEL: ${{ github.event_name == 'pull_request' && format('#{0}', github.event.pull_request.number) || github.ref_name }}
@@ -326,9 +344,14 @@ jobs:
           extra=(--poison); [ "$POISON" = true ] || extra=(--no-poison)
           new_label="${LABEL:-HEAD}@${NEW_SHA::12}"
           if [ "$DIRTY" = true ]; then extra+=(--new-dirty); new_label+=" + local changes"; fi
+          base_label="$BASE@${BASE_SHA::12}"
+          if [ -n "$REFERENCE" ]; then
+            BASE_SHA="$REFERENCE"
+            base_label="TypeScript@${REFERENCE::12}"
+          fi
           set +e
           python3 tools/perf/verify.py --base /tmp/verify/base/tsrs --new /tmp/verify/new/tsrs \
-            --base-commit "$BASE_SHA" --new-commit "$NEW_SHA" --base-label "$BASE@${BASE_SHA::12}" --new-label "$new_label" \
+            --base-commit "$BASE_SHA" --new-commit "$NEW_SHA" --base-label "$base_label" --new-label "$new_label" \
             --projects "${{ steps.projects.outputs.list }}" --checkers "$CHECKERS" --reps "$REPS" "${extra[@]}" --out verify-out
           rc=$?
           [ -f verify-out/verify.md ] && cat verify-out/verify.md >> "$GITHUB_STEP_SUMMARY"
