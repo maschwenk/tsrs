@@ -74,3 +74,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64696](https://github.com/microsoft/TypeScript/commit/5b3a367c292a1a119384969b670279f991ec5962) | Port ensureModifierFlags before adding static to constructor-assigned properties. |
 | [#64599](https://github.com/microsoft/TypeScript/commit/71956e9735e923befa06b9477a3eeadbf762cb1d) | Port node_modules reachability and global typings exclusions before package exports can return a bare specifier. |
 | [#64738](https://github.com/microsoft/TypeScript/commit/bdc93bd98765f15016f0e36632863b7d9fea8619) | Port the selected substitution visitor through property access expressions. |
+| [#64739](https://github.com/microsoft/TypeScript/commit/96fffa9f650a7e75bf1448cf641d97e563a086cd) | Go moves the checked-constructor bit into a separate set; Rust already uses 16-byte value link records with a cold tail and preserves once-per-symbol checking. |
