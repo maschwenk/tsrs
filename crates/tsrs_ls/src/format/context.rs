@@ -139,7 +139,7 @@ impl FormattingContext {
             self.tokens_are_on_same_line
                 .set(self.range_is_on_one_line(TextRange::from_text_pos(
                     self.current_token_span.loc.pos(),
-                    self.next_token_span.loc.end(),
+                    self.next_token_span.loc.pos(),
                 )));
         }
         self.tokens_are_on_same_line.get() == Tristate::True
