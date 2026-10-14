@@ -1632,7 +1632,8 @@ impl Checker {
                 let instantiated_constraint = self.instantiate_type(constraint, n.non_fixing_mapper());
                 let compare_types = n.compare_types.get().unwrap();
                 if let Some(inferred) = inferred_type {
-                    if !n.flags.get().intersects(InferenceFlags::NoConstraintChecks) {
+                    // A pure return type inference is still filtered in recursive call resolution.
+                    if !n.flags.get().intersects(InferenceFlags::NoConstraintChecks) || inference.priority.get() == InferencePriority::ReturnType {
                         let constraint_with_this = self.get_type_with_this_argument(instantiated_constraint, Some(inferred), false);
                         if compare_types(self, inferred, constraint_with_this, false) == Ternary::False {
                             let mut filtered_by_constraint: Option<P<Type>> = None;
