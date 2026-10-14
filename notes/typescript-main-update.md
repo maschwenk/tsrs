@@ -84,3 +84,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64615](https://github.com/microsoft/TypeScript/commit/b82cd139dcdae5024a08e2aaf4f0847112d4a023) | Port dependency-depth scheduling of complete and selected build orders while preserving report order. |
 | [#64563](https://github.com/microsoft/TypeScript/commit/09e0de0ade21319a358d8dcea11240c0a322bbef) | Azure parallel release jobs; tsrs maintains its own release pipeline. |
 | [#64762](https://github.com/microsoft/TypeScript/commit/3789ddb12afb2ab5adc4f1148603bf3f38319f50) | Port the three-high-bit symbol table identity mask. |
+| [#64741](https://github.com/microsoft/TypeScript/commit/6656c1c12c9049974a9adcd4653a895f26ab16ce) | Upstream GitHub Actions dependency bumps; tsrs maintains its own workflow pins. |
