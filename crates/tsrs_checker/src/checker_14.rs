@@ -539,13 +539,7 @@ impl Checker {
                             return;
                         }
                     }
-                    // Computed property names on enum members are a grammar error and are never checked
-                    // (checkEnumMember only checks the member initializer, not the name), so resolving
-                    // identifiers in them here would report a spurious "Cannot find name" diagnostic.
                     if let Some(computed_name) = computed_name {
-                        if is_enum_member(computed_name.parent().unwrap()) {
-                            return;
-                        }
                         if is_invalid_computed_property_name(computed_name) {
                             return;
                         }

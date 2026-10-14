@@ -1088,6 +1088,9 @@ impl Checker {
         if is_private_identifier(node.name().unwrap()) {
             self.error(Some(node), &diagnostics::An_enum_member_cannot_be_named_with_a_private_identifier, &[]);
         }
+        if is_computed_property_name(node.name().unwrap()) {
+            self.check_expression(node.name().unwrap().expression().unwrap());
+        }
         if let Some(initializer) = node.initializer() {
             self.check_expression(initializer);
         }
