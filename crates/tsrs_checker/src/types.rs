@@ -1218,10 +1218,9 @@ impl ObjectFlagsCell {
         ObjectFlagsCell(Cell::new(f))
     }
     #[inline]
-    #[expect(clippy::cast_ptr_alignment, reason = "the field's address minus its offset is its Type, which is 8-aligned")]
     fn owner(&self) -> &Type {
-        // SAFETY: an `ObjectFlagsCell` exists only as the `object_flags` field of a `Type`.
-        unsafe { &*std::ptr::from_ref(self).cast::<u8>().sub(std::mem::offset_of!(Type, object_flags)).cast::<Type>() }
+        // SAFETY: an `ObjectFlagsCell` exists only as the `object_flags` field of a `Type`, which is an arena value.
+        unsafe { tsrs_core::ptr::arena_neighbor(self, -(std::mem::offset_of!(Type, object_flags) as isize)) }
     }
     /// The flags as created plus what this checker computed lazily, except on a frozen type, where the lazily
     /// computed families (members resolved, could contain type variables, is generic, unknown-like, uniform enum,
@@ -1555,7 +1554,7 @@ impl Type {
         debug_assert_eq!(self.data_tag, T::TAG);
         // SAFETY: a type tagged `T::TAG` was allocated by `Type::alloc::<T>` as a `TypeAlloc<T>` whose header is
         // `self`, so its data struct lives at this offset from the header, for the rest of the process.
-        unsafe { &*std::ptr::from_ref::<Type>(self).cast::<u8>().add(std::mem::offset_of!(TypeAlloc<T>, data)).cast::<T>() }
+        unsafe { tsrs_core::ptr::arena_neighbor(self, std::mem::offset_of!(TypeAlloc<T>, data) as isize) }
     }
 
     /// The type-specific data (Go `t.data`).
@@ -2767,13 +2766,13 @@ impl UnionType {
     fn union_rare(&self) -> Option<&'static UnionRare> {
         debug_assert!(!self.union_or_intersection_type.is_intersection_data());
         // SAFETY: a union's tail is a `UnionRare` (`rare_for_write` with the kind bit clear).
-        self.union_or_intersection_type.rare().map(|r| unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<UnionRare>() })
+        self.union_or_intersection_type.rare().map(|r| unsafe { tsrs_core::ptr::arena_neighbor::<_, UnionRare>(r, 0) })
     }
     #[inline]
     fn union_rare_for_write(&self) -> &'static UnionRare {
         let r = self.union_or_intersection_type.rare_for_write();
         // SAFETY: as in `union_rare`.
-        unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<UnionRare>() }
+        unsafe { tsrs_core::ptr::arena_neighbor::<_, UnionRare>(r, 0) }
     }
     #[inline]
     pub fn resolved_reduced_type(&self) -> Option<P<Type>> {
@@ -2854,13 +2853,13 @@ impl IntersectionType {
     fn intersection_rare(&self) -> Option<&'static IntersectionRare> {
         debug_assert!(self.union_or_intersection_type.is_intersection_data());
         // SAFETY: an intersection's tail is an `IntersectionRare` (`rare_for_write` with the kind bit set).
-        self.union_or_intersection_type.rare().map(|r| unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<IntersectionRare>() })
+        self.union_or_intersection_type.rare().map(|r| unsafe { tsrs_core::ptr::arena_neighbor::<_, IntersectionRare>(r, 0) })
     }
     #[inline]
     fn intersection_rare_for_write(&self) -> &'static IntersectionRare {
         let r = self.union_or_intersection_type.rare_for_write();
         // SAFETY: as in `intersection_rare`.
-        unsafe { &*std::ptr::from_ref::<UnionOrIntersectionRare>(r).cast::<IntersectionRare>() }
+        unsafe { tsrs_core::ptr::arena_neighbor::<_, IntersectionRare>(r, 0) }
     }
     #[inline]
     pub fn resolved_apparent_type(&self) -> Option<P<Type>> {

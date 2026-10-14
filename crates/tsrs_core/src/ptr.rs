@@ -148,6 +148,22 @@ pub(crate) const fn p_layout<T>() -> std::alloc::Layout {
     }
 }
 
+/// The arena value `offset` bytes from `r`, in the same arena allocation: a node's or a type's data struct after its
+/// header, the header before it, or (offset 0) the struct whose first field `r` is. A reference's provenance covers
+/// only its referent (`&Node` the 24-byte header),
+/// so a pointer stepped from it to a neighbour is out of bounds under Stacked Borrows; the address is rebuilt with
+/// the provenance the arena exposed for the whole chunk (`Arena::new_chunk_at`).
+///
+/// # Safety
+/// `r` must be an arena value, and a `U` must live at `offset` bytes from it in the same allocation for the rest of
+/// the process.
+#[inline]
+pub unsafe fn arena_neighbor<T: ?Sized, U>(r: &T, offset: isize) -> &'static U {
+    // SAFETY: the address is in an arena chunk, whose provenance was exposed, and holds a live `U` (this function's
+    // contract).
+    unsafe { &*std::ptr::with_exposed_provenance::<U>(std::ptr::from_ref(r).addr().wrapping_add_signed(offset)) }
+}
+
 /// Pointer to an arena value. Never null; use `Option<P<T>>` for Go's nil-able pointers
 /// (it is pointer-sized).
 #[cfg(not(compressed_ptrs))]

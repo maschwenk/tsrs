@@ -150,17 +150,15 @@ fn new_node_with_rare<T: NodeRareTail>(kind: Kind, data: T, rare: T::Rare, hooks
 #[inline]
 pub(crate) fn rare_tail<T: NodeRareTail>(data: &T) -> Option<&'static T::Rare> {
     let () = T::SAME_OFFSET;
-    let at = std::ptr::from_ref::<T>(data).cast::<u8>();
     // SAFETY: data structs are created only inside a `NodeAlloc<T>` or `NodeAllocRare<T, _>` (both `repr(C)`, header
     // first, data at the same offset: asserted in `NodeRareTail`), which is never moved or freed while reachable.
-    #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
-    let node = unsafe { &*at.sub(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<Node>() };
+    let node: &Node = unsafe { tsrs_core::ptr::arena_neighbor(data, -(std::mem::offset_of!(NodeAlloc<T>, data) as isize)) };
     if !node.header.get().has_rare_tail() {
         return None;
     }
     let off = std::mem::offset_of!(NodeAllocRare<T, T::Rare>, rare) - std::mem::offset_of!(NodeAllocRare<T, T::Rare>, data);
     // SAFETY: the rare bit is set only by `new_node_with_rare`, which allocated the tail at this offset.
-    Some(unsafe { &*at.add(off).cast::<T::Rare>() })
+    Some(unsafe { tsrs_core::ptr::arena_neighbor(data, off as isize) })
 }
 
 /// Creates a node whose data struct has no fields (`Token`, `KeywordTypeNode`, ...): just the header.
@@ -584,7 +582,7 @@ impl Node {
         debug_assert_eq!(self.data_tag(), T::TAG);
         // SAFETY: a node tagged `T::TAG` was allocated by `new_node::<T>` as a `NodeAlloc<T>` whose header is
         // `self`, so its data struct lives at this offset from the header, for the rest of the process.
-        unsafe { &*std::ptr::from_ref::<Node>(self).cast::<u8>().add(std::mem::offset_of!(NodeAlloc<T>, data)).cast::<T>() }
+        unsafe { tsrs_core::ptr::arena_neighbor(self, std::mem::offset_of!(NodeAlloc<T>, data) as isize) }
     }
 
     /// The arena pointer for this node. Every `Node` is created by `NodeFactory`/`new_node` in the leak

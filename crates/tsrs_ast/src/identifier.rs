@@ -154,11 +154,10 @@ fn slot_flow(word: u64) -> Option<P<FlowNode>> {
 
 impl Identifier {
     #[inline]
-    #[expect(clippy::cast_ptr_alignment, reason = "the header starts the `NodeAlloc`, so it has the allocation's alignment")]
     fn node(&self) -> &Node {
         // SAFETY: identifiers are created only by `new_node` inside a `NodeAlloc` (`repr(C)`, header first), so the
         // header lies at this offset before the data struct.
-        unsafe { &*std::ptr::from_ref::<Identifier>(self).cast::<u8>().sub(std::mem::offset_of!(NodeAlloc<Identifier>, data)).cast::<Node>() }
+        unsafe { tsrs_core::ptr::arena_neighbor(self, -(std::mem::offset_of!(NodeAlloc<Identifier>, data) as isize)) }
     }
 
     #[inline]
@@ -208,7 +207,7 @@ impl Identifier {
     #[cold]
     fn stored_text(&self) -> &'static str {
         // SAFETY: identifiers in `MODE_TEXT` were allocated as `IdentifierWithText` (`repr(C)`, identifier first).
-        unsafe { &*std::ptr::from_ref::<Identifier>(self).cast::<IdentifierWithText>() }.text.as_str()
+        unsafe { tsrs_core::ptr::arena_neighbor::<_, IdentifierWithText>(self, 0) }.text.as_str()
     }
 
     #[inline]

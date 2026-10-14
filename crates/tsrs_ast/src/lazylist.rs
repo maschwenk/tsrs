@@ -170,7 +170,7 @@ impl LazyNodeList {
     /// `head` is the `head` field of a live `LazyNodeList` (a lazy `NodeList`'s long-form slice).
     pub(crate) unsafe fn from_head(head: &'static &'static [P<Node>]) -> &'static LazyNodeList {
         // SAFETY: `head` is the first field of a `repr(C)` `LazyNodeList` (this function's contract).
-        unsafe { &*std::ptr::from_ref(head).cast::<LazyNodeList>() }
+        unsafe { tsrs_core::ptr::arena_neighbor(head, 0) }
     }
 
     /// Whether binding the list adds to the owner symbol's `exports` (static members of a class) as well as to its
