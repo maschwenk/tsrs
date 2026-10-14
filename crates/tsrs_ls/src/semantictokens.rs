@@ -172,14 +172,16 @@ fn go_cmp_compare<T: Ord + Copy>(a: T, b: T) -> std::cmp::Ordering {
 
 // semantictokens.go:193
 fn sort_semantic_tokens(tokens: &mut [SemanticToken], converters: &Converters) {
-    goslices::sort_func(tokens, |a, b| {
-        let (a_range, _) = semantic_token_lsp_range(a, converters);
-        let (b_range, _) = semantic_token_lsp_range(b, converters);
-        let result = go_cmp_compare(a_range.start.line, b_range.start.line);
+    // tsrs-only: each token's start is converted once, not in every comparison (Go converts two per comparison).
+    // The comparisons are the same, so the order is too; a conversion looks up the file's line map in the snapshot,
+    // and concurrent requests contended on those lookups.
+    let mut keyed: Vec<(lsproto::Position, SemanticToken)> = tokens.iter().map(|&token| (semantic_token_lsp_range(&token, converters).0.start, token)).collect();
+    goslices::sort_func(&mut keyed, |(a_start, a), (b_start, b)| {
+        let result = go_cmp_compare(a_start.line, b_start.line);
         if !result.is_eq() {
             return result;
         }
-        let result = go_cmp_compare(a_range.start.character, b_range.start.character);
+        let result = go_cmp_compare(a_start.character, b_start.character);
         if !result.is_eq() {
             return result;
         }
@@ -192,6 +194,9 @@ fn sort_semantic_tokens(tokens: &mut [SemanticToken], converters: &Converters) {
         }
         go_cmp_compare(a.node.pos(), b.node.pos())
     });
+    for (slot, (_, token)) in tokens.iter_mut().zip(keyed) {
+        *slot = token;
+    }
 }
 
 // semantictokens.go:210
