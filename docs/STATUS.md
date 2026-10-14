@@ -5,6 +5,23 @@ change are identified separately from measurements of the packaged release. For 
 see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
 [engineering notes](../notes/README.md). The early development log follows the release entries.
 
+## 2026-10-14: 0.15.0 release
+
+All seven packages use `0.15.0-ts7.1.0-dev.20260929`. The TypeScript pin is unchanged (`b85298b6`, 7.1.0-dev.20260929).
+
+**Watch mode.** `--watch` and `-b --watch` now work on Linux and macOS (#363). Windows reports "not supported". On
+vscode, a one-file edit is rechecked in about 50 ms, against 0.5–20 s for tsgo, and memory stays at 1.5–2.7 GB,
+against 10–15 GB for tsgo (#363, #391, #392).
+
+**Language server.** Fixed crashes on bad client input and unusual files (#400, #404, #513), a memory leak from
+canceled requests (#400), and wrong `willRenameFiles` and formatting edits (#513). Cheap requests no longer wait
+behind slow ones (#404). On macOS, file watching no longer floods the log with overflow warnings (#403).
+
+**Fixes.** An emit crash and build-info diagnostic output, both regressions in 0.14.0 (#362).
+
+**Memory safety.** Fixed a data race found by ThreadSanitizer (#510) and aliasing bugs Miri found in plain-pointer
+builds (#401, #405, #515). The default build was not affected by the aliasing bugs.
+
 ## 2026-10-13: 0.14.1 release
 
 Highlights:
