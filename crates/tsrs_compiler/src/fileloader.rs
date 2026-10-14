@@ -1055,6 +1055,11 @@ pub(crate) fn prefetch_resolutions(ctx: &prefetchContext, file: P<SourceFile>, m
                 continue;
             }
             let mode = get_mode_for_usage_location(file.file_name(), meta, entry, Some(&options_for_file));
+            if file.ambient_module_names().contains(&module_name) {
+                resolutions_in_file.insert(ModeAwareCacheKey { name: alloc_str(module_name), mode }, P::new(ResolvedModule::default()));
+                imports.push(None);
+                continue;
+            }
             let resolution = resolver.resolve_module_name(module_name, &file_name, mode, redirect);
             // As resolve_imports_and_module_augmentations inserts them, in the same order (a failed resolution gets a
             // default module).
