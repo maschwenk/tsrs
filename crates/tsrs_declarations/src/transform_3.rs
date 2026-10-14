@@ -494,7 +494,12 @@ impl DeclarationTransformer {
 
         let (_, mut cleanup_diagnostic_context) = self.setup_diagnostic_context(node);
 
+        let preexisting_expando_has_export = self.expando_members.borrow().get(&host_id).is_some_and(|members| members.iter().any(|&m| ast::is_export_declaration(m)));
+
         if ast::is_identifier(node.as_binary_expression().right()) {
+            if !preexisting_expando_has_export {
+                self.add_export_modifier_to_expando_members(host_id);
+            }
             // alias-like, emit an `export {name}` or `export {name as alias}`
             let result = self.transform_binary_expression_to_export_declaration(node, export_name);
             self.expando_members.borrow_mut().entry(host_id).or_default().push(result);
@@ -502,7 +507,6 @@ impl DeclarationTransformer {
             return;
         }
 
-        let preexisting_expando_has_export = self.expando_members.borrow().get(&host_id).is_some_and(|members| members.iter().any(|&m| ast::is_export_declaration(m)));
         let mut var_modifiers = None;
 
         if preexisting_expando_has_export {
@@ -532,20 +536,26 @@ impl DeclarationTransformer {
         if local_name.text() != export_name.text() {
             let named_exports = self.factory().new_named_exports(self.factory().new_node_list(vec![self.factory().new_export_specifier(false /*isTypeOnly*/, Some(local_name), export_name)]));
             statements.push(self.factory().new_export_declaration(None /*modifiers*/, false /*isTypeOnly*/, Some(named_exports), None /*moduleSpecifier*/, None /*attributes*/));
-        }
-
-        if statements.len() > 1 && !preexisting_expando_has_export {
-            // Add an `export` modifier to all existing expando members so they remain exported after the `export {}` is added
-            let members = self.expando_members.borrow().get(&host_id).cloned().unwrap_or_default();
-            for decl in members {
-                let modifier_flags = ModifierFlags::Export | ast::get_combined_modifier_flags(decl);
-                decl.as_mutable().set_modifiers(Some(self.factory().new_modifier_list(ast::create_modifiers_from_modifier_flags(modifier_flags, |k| self.factory().new_modifier(k)))));
+            if !preexisting_expando_has_export {
+                // Done before adding statements to expando members to keep the initial variable statement, before we rename anything, private
+                self.add_export_modifier_to_expando_members(host_id);
             }
         }
         self.expando_members.borrow_mut().entry(host_id).or_default().extend(statements);
 
         self.enclosing_declaration.set(old_enclosing);
         cleanup_diagnostic_context();
+    }
+
+    pub(crate) fn add_export_modifier_to_expando_members(&self, host_id: NodeId) {
+        // Add an `export` modifier to all existing expando members so they remain exported after the `export {}` is added
+        if let Some(members) = self.expando_members.borrow().get(&host_id) {
+            for &decl in members {
+                // Only invoked before expando_members contains an export declaration, so no need to skip one to prevent `export export {}`.
+                let modifier_flags = ModifierFlags::Export | ast::get_combined_modifier_flags(decl);
+                decl.as_mutable().set_modifiers(Some(self.factory().new_modifier_list(ast::create_modifiers_from_modifier_flags(modifier_flags, |k| self.factory().new_modifier(k)))));
+            }
+        }
     }
 
     // transform.go:2868
