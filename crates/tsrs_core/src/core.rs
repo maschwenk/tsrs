@@ -605,6 +605,32 @@ pub fn index_after(s: &str, pattern: &str, start_index: usize) -> Option<usize> 
         .map(|matched| matched + start_index)
 }
 
+/// Go `strings.Index(haystack, needle)` on bytes, searched the way Go does: candidates by the needle's first byte and
+/// a compare, then `memmem` once too many candidates fail. Building a searcher first (`str::find`, `memmem::find`)
+/// costs time linear in the needle on every call, which adds up when a caller searches every file of a program for
+/// one name; a naive scan costs a compare per byte.
+pub fn index_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    let Some((&first, _)) = needle.split_first() else {
+        return Some(0);
+    };
+    let last_start = haystack.len().checked_sub(needle.len())?;
+    let mut i = 0;
+    let mut fails = 0;
+    while let Some(offset) = memchr::memchr(first, &haystack[i..=last_start]) {
+        let candidate = i + offset;
+        if &haystack[candidate..candidate + needle.len()] == needle {
+            return Some(candidate);
+        }
+        fails += 1;
+        i = candidate + 1;
+        // Go's cutover to Rabin-Karp.
+        if fails > 4 + (i >> 4) {
+            return memchr::memmem::find(&haystack[i..], needle).map(|found| found + i);
+        }
+    }
+    None
+}
+
 pub fn should_rewrite_module_specifier(specifier: &str, compiler_options: &CompilerOptions) -> bool {
     compiler_options.rewrite_relative_import_extensions.is_true()
         && tspath::path_is_relative(specifier)
@@ -748,6 +774,34 @@ pub fn compare_booleans(a: bool, b: bool) -> Ordering {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn index_bytes_matches_memmem() {
+        let many_fails = format!("{}ab", "a".repeat(500));
+        let multibyte = format!("{}éb", "éa".repeat(200));
+        let cases: [(&str, &str); 14] = [
+            ("hello world", "world"),
+            ("hello world", "worlds"),
+            ("hello", "hello"),
+            ("hell", "hello"),
+            ("", "a"),
+            ("abc", ""),
+            ("abcabc", "c"),
+            (&many_fails, "ab"),
+            (&many_fails, "aab"),
+            (&many_fails, "ac"),
+            (&multibyte, "éb"),
+            (&multibyte, "aé"),
+            (&multibyte, "ab"),
+            ("日本語のテキスト", "テキ"),
+        ];
+        for (text, needle) in cases {
+            for start in 0..=text.len() {
+                let haystack = &text.as_bytes()[start..];
+                assert_eq!(index_bytes(haystack, needle.as_bytes()), memchr::memmem::find(haystack, needle.as_bytes()), "{needle:?} in {text:?} from {start}");
+            }
+        }
+    }
 
     #[test]
     fn helpers() {

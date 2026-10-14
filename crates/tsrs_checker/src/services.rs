@@ -739,7 +739,7 @@ pub(crate) fn get_possible_symbol_reference_positions(
         .pos()
         .expect_source("parsed containers have source positions")
         as usize;
-    let Some(mut position) = find_bytes(&bytes[container_start..], symbol_name.as_bytes()) else {
+    let Some(mut position) = tsrs_core::index_bytes(&bytes[container_start..], symbol_name.as_bytes()) else {
         return positions;
     };
     let end_pos = container
@@ -761,7 +761,7 @@ pub(crate) fn get_possible_symbol_reference_positions(
         if start_index > text.len() {
             break;
         }
-        if let Some(found_index) = find_bytes(&bytes[start_index..], symbol_name.as_bytes()) {
+        if let Some(found_index) = tsrs_core::index_bytes(&bytes[start_index..], symbol_name.as_bytes()) {
             position = start_index + found_index;
         } else {
             break;
@@ -772,10 +772,6 @@ pub(crate) fn get_possible_symbol_reference_positions(
 }
 
 // Go strings.Index; Go slices strings at byte offsets that need not be character boundaries.
-fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
-    haystack.windows(needle.len()).position(|w| w == needle)
-}
-
 impl Checker {
     // services.go:700
     pub fn get_type_argument_constraint_exported(&mut self, node: P<Node>) -> Option<P<Type>> {

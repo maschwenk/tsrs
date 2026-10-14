@@ -30,4 +30,3 @@ tsrs_lsproto.workspace = true
 rustc-hash.workspace = true
 indexmap.workspace = true
 bitflags.workspace = true
-memchr.workspace = true
