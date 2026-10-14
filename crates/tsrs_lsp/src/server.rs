@@ -1667,7 +1667,6 @@ impl Server {
     }
 
     // server.go:1809
-    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_open(self: &Arc<Self>, ctx: &Context, params: lsproto::DidOpenTextDocumentParams) -> Result<(), Error> {
         check_uri(&params.text_document.uri)?;
         let doc = params.text_document;
@@ -1676,7 +1675,6 @@ impl Server {
     }
 
     // server.go:1814
-    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_change(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeTextDocumentParams) -> Result<(), Error> {
         check_uri(&params.text_document.uri)?;
         self.session().did_change_file(ctx, params.text_document.uri, params.text_document.version, params.content_changes);
@@ -1684,7 +1682,6 @@ impl Server {
     }
 
     // server.go:1819
-    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_save(self: &Arc<Self>, ctx: &Context, params: lsproto::DidSaveTextDocumentParams) -> Result<(), Error> {
         check_uri(&params.text_document.uri)?;
         self.session().did_save_file(ctx, params.text_document.uri);
@@ -1692,7 +1689,6 @@ impl Server {
     }
 
     // server.go:1824
-    #[expect(clippy::unnecessary_wraps, reason = "Registered LSP handlers share a Result return type so dispatch propagates failures uniformly.")]
     fn handle_did_close(self: &Arc<Self>, ctx: &Context, params: lsproto::DidCloseTextDocumentParams) -> Result<(), Error> {
         check_uri(&params.text_document.uri)?;
         self.session().did_close_file(ctx, params.text_document.uri);
