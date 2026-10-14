@@ -63,3 +63,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64642](https://github.com/microsoft/TypeScript/commit/9055b588528600681abb8d95b3f1f39ef1707e4a) | Port inferred-project cleanup and program construction before workspace symbol queries. |
 | [#64469](https://github.com/microsoft/TypeScript/commit/a501b11f64592a18287664ecc478a09659ad3134) | Port resolved-target helper; retain the equivalent ordered external-module scan instead of adding an unmeasured container index/cache under the repository performance rules. |
 | [#64674](https://github.com/microsoft/TypeScript/commit/ec47d33c23e464a17cdf2475632cba629bee8763) | Port unconditional computed enum property checking and linked-reference handling. |
+| [#64686](https://github.com/microsoft/TypeScript/commit/fed0bf24149fb1ed36039212648bafdafc1ea10e) | Go compiler-option docstrings moved between generated and manual sources; Rust option declarations and descriptions remain equivalent. |
