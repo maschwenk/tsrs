@@ -12,3 +12,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64482](https://github.com/microsoft/TypeScript/commit/81d3f3f5e89786acc33d1881a0864bb0bd68068b) | Port expression-context classification for named functions and classes. |
 | [#64461](https://github.com/microsoft/TypeScript/commit/834e7862c031a3f5f24c53acf51056a4f558c3e4) | Port cyclic-structure placeholders and declaration truncation tracking. |
 | [#64525](https://github.com/microsoft/TypeScript/commit/619d485a639c83a2d82860b5797db4984cecfc91) | Port the guard against contextual typing by the owning class. |
+| [#64243](https://github.com/microsoft/TypeScript/commit/792ffccb90f548cd3bdd7fc0b44f0ca9e1b169a7) | Port string-literal-only module import attribute annotations. |
