@@ -10,7 +10,7 @@ fn scratch(name: &str) -> PathBuf {
     std::fs::create_dir_all(dir.join("project")).unwrap();
     std::fs::write(dir.join("project/tsconfig.json"), r#"{ "compilerOptions": { "target": "es2020", "lib": ["es2020"] }, "files": ["a.ts"] }"#).unwrap();
     std::fs::write(dir.join("project/a.ts"), "export const a = 1;\n").unwrap();
-    dir
+    std::fs::canonicalize(dir).unwrap()
 }
 
 // The test binary under `bin`, linked rather than copied where the file system allows it (it is large).

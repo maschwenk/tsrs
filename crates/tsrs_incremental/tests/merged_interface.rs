@@ -106,7 +106,8 @@ fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     assert_eq!(state(changed, "e.ts"), SemanticDiagnosticsState::NotCached, "changed report slots must invalidate cached absence");
     assert_eq!(state(changed, "f.ts"), SemanticDiagnosticsState::Reused, "non-interface diagnostics remain reusable");
     let fresh = sites(build(None));
-    assert_eq!(fresh.iter().filter(|diagnostic| diagnostic.0 == 2320).count(), 2, "{fresh:#?}");
+    // Upstream #64566 reports the merged-interface error only at its first declaration, at every checker slot.
+    assert_eq!(fresh.iter().filter(|diagnostic| diagnostic.0 == 2320).count(), 1, "{fresh:#?}");
     assert_eq!(sites(changed), fresh);
     package("a");
     let reversed = build(Some(changed));
@@ -114,7 +115,7 @@ fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     assert_eq!(sites(reversed), sites(build(None)));
 
     let api_expected = sites(create_with_policy(None, false, false));
-    assert_eq!(api_expected.iter().filter(|diagnostic| diagnostic.0 == 2320).count(), 2);
+    assert_eq!(api_expected.iter().filter(|diagnostic| diagnostic.0 == 2320).count(), 1);
     let api = create_with_policy(Some(unchanged), false, false);
     assert_eq!(state(api, "e.ts"), SemanticDiagnosticsState::NotCached, "API must invalidate canonical cached absence in memory");
     assert_eq!(state(api, "f.ts"), SemanticDiagnosticsState::Reused);

@@ -65,13 +65,13 @@ pub(crate) fn parse_number(value: &CompilerOptionsValue) -> Option<i32> {
 // (saturation). Rust casts saturate on both, so preserve Go's x64 result explicitly.
 pub fn go_float64_to_int32(value: f64) -> i32 {
     #[cfg(target_arch = "x86_64")]
-    if value.is_nan() || value >= 2147483648.0 { return i32::MIN; }
+    if value.is_nan() || value >= 2_147_483_648.0 { return i32::MIN; }
     value as i32
 }
 
 fn go_float64_to_int64(value: f64) -> i64 {
     #[cfg(target_arch = "x86_64")]
-    if value.is_nan() || value >= 9223372036854775808.0 { return i64::MIN; }
+    if value.is_nan() || value >= 9_223_372_036_854_775_808.0 { return i64::MIN; }
     value as i64
 }
 

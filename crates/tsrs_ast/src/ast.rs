@@ -2976,7 +2976,7 @@ mod tests {
     #[test]
     fn kinds_and_flags() {
         assert_eq!(Kind::FirstKeyword, Kind::BreakKeyword);
-        assert_eq!(Kind::LastToken, Kind::DeferKeyword);
+        assert_eq!(Kind::LastToken, Kind::SourceKeyword);
         assert_eq!(Kind::from_i16(Kind::Identifier as i16), Kind::Identifier);
         assert!(is_keyword_kind(Kind::ClassKeyword));
         assert!(is_assignment_operator(Kind::PlusEqualsToken));
