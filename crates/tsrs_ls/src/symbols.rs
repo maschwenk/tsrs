@@ -172,6 +172,9 @@ impl DocumentSymbolsVisitor<'_> {
                 }
             }
         }
+        if node.parent().is_some_and(|parent| parent.kind() == Kind::SourceFile) && ast::is_import_or_import_equals_declaration(node) {
+            return false;
+        }
         match node.kind() {
             Kind::ClassDeclaration | Kind::ClassExpression | Kind::InterfaceDeclaration | Kind::EnumDeclaration => {
                 if ast::is_class_like(node) && !ast::get_declaration_name(node).is_empty() {
