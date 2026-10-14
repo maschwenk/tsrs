@@ -33,3 +33,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#63915](https://github.com/microsoft/TypeScript/commit/2f9fd09a104ef14268944a0aeb9cdc4d80abb6a6) | Port source-phase syntax, checking, resolution, emit, API codec, language-service import handling and bundled module-source declarations; all 31 source-phase cases match. |
 | [#64536](https://github.com/microsoft/TypeScript/commit/a4b1410230c7299957ec3f8f8dee4cccc55a4798) | Copy the upstream Array.at documentation for arrays and typed arrays. |
 | [#64572](https://github.com/microsoft/TypeScript/commit/efbf3b5067547539c9cf8331d51943543c8bc91a) | VS Code content-mapped JSX insertion; the tsrs language server content-mapper capability remains unsupported. |
+| [#64562](https://github.com/microsoft/TypeScript/commit/dca8e236a227e37183dcf1dd4e51b22571f5b558) | Upstream brace-expansion dependency; tsrs does not use this package. |
