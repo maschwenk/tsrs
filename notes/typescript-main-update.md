@@ -81,3 +81,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64588](https://github.com/microsoft/TypeScript/commit/b5c34ba0c61a756c8abaf133236dddf982c27f45) | Port includeSymbolNameInDescription and preserve the diagnostic identifier text in auto-import fixes. |
 | [#64772](https://github.com/microsoft/TypeScript/commit/a0a0ff55cab4a1f81b7123ab219c97a2f1ed703d) | Port index-type simplification and standard indexed-access assignability checking. |
 | [#64770](https://github.com/microsoft/TypeScript/commit/0a660748471910ecac1ae6e1625529908dc228f2) | Port the fallback keyword type for an elided type-alias annotation. |
+| [#64615](https://github.com/microsoft/TypeScript/commit/b82cd139dcdae5024a08e2aaf4f0847112d4a023) | Port dependency-depth scheduling of complete and selected build orders while preserving report order. |

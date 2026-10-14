@@ -159,11 +159,10 @@ impl Orchestrator {
     }
 
     // orchestrator.go:131
-    fn compute_schedule_order(&self) -> Vec<String> {
-        let order = self.order.lock().unwrap().clone();
+    fn compute_schedule_order(&self, order: &[String]) -> Vec<String> {
         let mut entries: Vec<(String, usize)> = Vec::with_capacity(order.len());
         let mut depths: FxHashMap<P<BuildTask>, usize> = FxHashMap::default();
-        for config in &order {
+        for config in order {
             let task = self.get_task(&self.to_path(config));
             let mut depth = 0;
             depth = task.up_stream.lock().unwrap().iter().fold(depth, |mut depth, upstream| {
@@ -305,7 +304,7 @@ impl Orchestrator {
         for project in &projects {
             self.setup_build_task(project, None, false, &mut completed, &mut analyzing, &mut circularity_stack);
         }
-        *self.schedule_order.lock().unwrap() = self.compute_schedule_order();
+        *self.schedule_order.lock().unwrap() = self.compute_schedule_order(&self.order());
         if let Some(old_tasks) = old_tasks {
             // Each old task is closed on its own; the order does not matter.
             #[expect(clippy::iter_over_hash_type, reason = "closes each replaced task's content mapper project; no output depends on the order")]
@@ -571,11 +570,12 @@ impl Orchestrator {
             }
         } else if self.errors.lock().unwrap().is_empty() {
             build_result.statistics.projects = order.len();
-            // Builders pick up projects in Order() (see the header); results are reported in Order(), waiting for each project to finish
+            let schedule_order = if order.len() == self.order().len() { self.schedule_order() } else { self.compute_schedule_order(order) };
+            // Builders pick up selected projects by dependency depth; reporting preserves the selected order.
             // (Go: a reporter goroutine; here the calling thread, while rangeTasks runs the builders on their own threads).
             let mut aborted_report = false;
             std::thread::scope(|scope| {
-                let builders = scope.spawn(|| self.range_tasks(order, &|path, task| self.build_or_clean_project(task, path)));
+                let builders = scope.spawn(|| self.range_tasks(&schedule_order, &|path, task| self.build_or_clean_project(task, path)));
                 for config in order {
                     let path = self.to_path(config);
                     let task = self.get_task(&path);
