@@ -1454,9 +1454,10 @@ pub fn is_module_identifier(node: P<Node>) -> bool {
     is_identifier(node) && node.text() == "module"
 }
 
+#[inline]
 pub fn is_this_identifier(node: P<Node>) -> bool {
     // The length first: an identifier is rarely spelled `this` (the keyword is a `ThisKeyword` node).
-    is_identifier(node) && node.as_identifier().text_len() == 4 && node.text() == "this"
+    node.identifier_data().is_some_and(|identifier| identifier.text_len() == 4 && identifier.text() == "this")
 }
 
 pub fn is_this_parameter(node: P<Node>) -> bool {
