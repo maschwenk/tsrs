@@ -63,7 +63,7 @@ impl contentmapper::Project for fakeContentMapperProject {
 
 fn mapper(package: &str, name: &str, version: &str, dynamic_config: bool) -> Mapper {
     Mapper {
-        definition: Definition { package: package.to_string(), extensions: vec![".vue".to_string()], options: String::new() },
+        definition: Definition { package: package.to_string(), extensions: vec![".vue".to_string()], output_extensions: None, options: String::new() },
         manifest: Manifest { name: name.to_string(), version: version.to_string(), dynamic_config, ..Default::default() },
         ..Default::default()
     }

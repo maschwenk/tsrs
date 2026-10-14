@@ -90,7 +90,7 @@ fn new_content_mapper_program_with_options(
         Default::default(),
     );
     config.parsed_config.content_mappers = vec![Mapper {
-        definition: Definition { package: "vue".to_string(), extensions: vec![".vue".to_string()], options: String::new() },
+        definition: Definition { package: "vue".to_string(), extensions: vec![".vue".to_string()], output_extensions: None, options: String::new() },
         manifest: Manifest { name: "vue-mapper".to_string(), version: "1.0.0".to_string(), ..Default::default() },
         ..Default::default()
     }]

@@ -68,7 +68,7 @@ import fs from "node:fs";
 const out = {};
 const api = new API({ cwd: ${JSON.stringify(proj)} });
 try {
-    const snapshot = await api.createSnapshot({ openProject: ${JSON.stringify(proj + "/tsconfig.json")} });
+    const snapshot = await api.createSnapshot({ openProjects: [${JSON.stringify(proj + "/tsconfig.json")}] });
     const project = snapshot.getConfiguredProject(${JSON.stringify(proj + "/tsconfig.json")});
     out.files = (await project.program.getSourceFileNames()).filter(f => f.includes("/src/")).sort();
     out.diags = (await project.program.getSemanticDiagnostics(${JSON.stringify(proj + "/src/helper.ts")})).map(d => [d.code, d.startPosition?.line, d.startPosition?.character]);

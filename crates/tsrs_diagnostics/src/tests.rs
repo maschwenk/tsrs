@@ -7,7 +7,7 @@ use crate::{format, format_strings, key_to_message, localize, Category, Key};
 #[test]
 fn message_count_matches_go() {
     // `grep -c '= &Message{' diagnostics_generated.go` at the pinned commit.
-    assert_eq!(ALL_MESSAGES.len(), 2215);
+    assert_eq!(ALL_MESSAGES.len(), 2228);
     let keys: FxHashSet<&str> = ALL_MESSAGES.iter().map(|m| m.key().as_str()).collect();
     assert_eq!(keys.len(), ALL_MESSAGES.len());
     let codes: FxHashSet<i32> = ALL_MESSAGES.iter().map(|m| m.code()).collect();

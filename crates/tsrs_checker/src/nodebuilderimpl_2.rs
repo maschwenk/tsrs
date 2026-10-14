@@ -1448,6 +1448,7 @@ impl NodeBuilderImpl {
         }
     }
 
+    #[expect(clippy::unnecessary_unwrap, reason = "the guarded nil check and branch ordering follow upstream Go")]
     pub(crate) fn type_reference_to_type_node(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> {
         let type_arguments: Vec<P<Type>> = c.get_type_arguments(t).to_vec();
         let target = t.target().unwrap();

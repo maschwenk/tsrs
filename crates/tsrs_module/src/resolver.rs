@@ -2765,9 +2765,7 @@ impl ResolutionState<'_> {
                 entrypoints.extend(files.iter().filter_map(|file| {
                     let mut logical_file = tspath::get_relative_path_from_directory(package_json.package_directory, file, &ComparePathsOptions { use_case_sensitive_file_names: case_sensitive, ..Default::default() });
                     if dynamic_package { logical_file = tspath::decode_dynamic_uri_path(&logical_file); }
-                    let Some(mut matched_star) = self.get_matched_star_for_pattern_entrypoint(&logical_file, leading_slice, trailing_slice, case_sensitive) else {
-                        return None;
-                    };
+                    let mut matched_star = self.get_matched_star_for_pattern_entrypoint(&logical_file, leading_slice, trailing_slice, case_sensitive)?;
                     if dynamic_package { matched_star = tspath::encode_dynamic_logical_module_specifier(&matched_star); }
                     let resolved_subpath = subpath.replacen('*', &matched_star, 1);
                     let resolved_subpath = resolved_subpath.strip_prefix("./").unwrap_or(&resolved_subpath);

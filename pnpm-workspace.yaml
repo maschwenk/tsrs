@@ -1,2 +1,13 @@
 packages:
   - npm
+
+# The nightly is verified against the TypeScript commit pinned in Cargo.toml.
+minimumReleaseAgeExclude:
+  - typescript@7.1.0-dev.20261014.1
+  - '@typescript/typescript-darwin-arm64@7.1.0-dev.20261014.1'
+  - '@typescript/typescript-darwin-x64@7.1.0-dev.20261014.1'
+  - '@typescript/typescript-linux-arm64@7.1.0-dev.20261014.1'
+  - '@typescript/typescript-linux-arm@7.1.0-dev.20261014.1'
+  - '@typescript/typescript-linux-x64@7.1.0-dev.20261014.1'
+  - '@typescript/typescript-win32-arm64@7.1.0-dev.20261014.1'
+  - '@typescript/typescript-win32-x64@7.1.0-dev.20261014.1'
