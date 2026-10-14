@@ -1,15 +1,18 @@
 use crate::*;
 
 /// Go `printer.EmitResolver` as the declaration transformer sees it: the checker's `*EmitResolver` behind the
-/// interface. Rust methods on `tsrs_checker::EmitResolver` take the checker (`&self, c: &mut Checker`); this handle
-/// supplies it from a `CheckerSlot` that the caller of the transform lends the file's checker to
-/// (`slot.lend(c, || tx.transform_source_file(file))`, see tsrs_compiler `get_declaration_diagnostics`).
+/// interface.
 ///
-/// The Go exported methods that take `checkerMu` are the methods here without a checker argument: each borrows the
-/// checker with `slot.with` for the duration of the call, just as Go holds the lock. The Go methods that must be
-/// called with the lock already held (`...Unsafe`, `IsSymbolAccessible`, `GetPropertiesOfContainerFunction`, used
-/// by the symbol tracker from inside node-builder calls) take `c` explicitly. `lock(|c| ..)` is the same borrow for
-/// code that calls a non-locking method outside a node-builder call.
+/// Rust methods on `tsrs_checker::EmitResolver` take the checker (`&self, c: &mut Checker`); this handle
+/// supplies it from a `CheckerSlot` that the caller of the transform lends the file's checker to
+/// (`slot.lend(c, || tx.transform_source_file(file))`, see `tsrs_compiler` `get_declaration_diagnostics`).
+///
+/// The Go exported methods that take `checkerMu` are the methods here without a checker argument: each
+/// borrows the checker with `slot.with` for the duration of the call, just as Go holds the lock. The Go
+/// methods that must be called with the lock already held (`...Unsafe`, `IsSymbolAccessible`,
+/// `GetPropertiesOfContainerFunction`, used by the symbol tracker from inside node-builder calls) take `c`
+/// explicitly. `lock(|c| ..)` is the same borrow for code that calls a non-locking method outside a
+/// node-builder call.
 #[derive(Clone, Copy)]
 pub struct Resolver {
     pub r: P<EmitResolver>,

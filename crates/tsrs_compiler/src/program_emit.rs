@@ -212,7 +212,7 @@ impl Program {
                 let mut e = emitter {
                     host,
                     emit_only: options.emit_only,
-                    emitter_diagnostics: Default::default(),
+                    emitter_diagnostics: tsrs_ast::DiagnosticsCollection::default(),
                     paths,
                     source_file,
                     emit_result: EmitResult::default(),

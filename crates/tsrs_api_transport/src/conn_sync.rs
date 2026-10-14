@@ -19,7 +19,7 @@ struct SyncIo {
 
 #[derive(Clone, Debug)]
 pub struct ConnOptions {
-    /// SetCollectTiming: answer getServerTiming/resetServerTiming with collected data.
+    /// `SetCollectTiming`: answer getServerTiming/resetServerTiming with collected data.
     pub collect_timing: bool,
     /// Async connections only: how long a contended re-entrancy-aware acquisition waits while some
     /// request on the connection is blocked on the client before it fails (see `reentrancy`). Sync
@@ -136,7 +136,7 @@ impl SyncConn {
             _ => {}
         }
         let start = self.timing.as_ref().map(|_| Instant::now());
-        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: std::sync::Arc::default() };
         let outcome = catch_unwind(AssertUnwindSafe(|| {
             crate::reentrancy::with_request(&cx, || self.handler.handle_request(&cx, &msg.method, msg.params_bytes()))
         }));
@@ -152,7 +152,7 @@ impl SyncConn {
     }
 
     fn handle_notification(&self, msg: &Message, depth: u32) {
-        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: Default::default() };
+        let cx = RequestContext { cancel: self.cancel.clone(), depth, callbacks: Arc::clone(&self.callbacks), state: std::sync::Arc::default() };
         let _ = catch_unwind(AssertUnwindSafe(|| self.handler.handle_notification(&cx, &msg.method, msg.params_bytes())));
     }
 

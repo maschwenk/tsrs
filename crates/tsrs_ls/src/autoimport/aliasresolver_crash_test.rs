@@ -65,7 +65,7 @@ fn test_alias_resolver_get_diagnostics_does_not_panic() {
     tsrs_binder::bind_source_file(source_file);
 
     let resolver = Box::leak(Box::new(tsrs_module::new_resolver(ResolverOptions::new(host, tsrs_core::empty_compiler_options()))));
-    let r = new_alias_resolver(vec![source_file], Default::default(), host, resolver, Arc::new(|f: &str| Path::from(f)), Box::new(|_, _| {}));
+    let r = new_alias_resolver(vec![source_file], rustc_hash::FxHashMap::default(), host, resolver, Arc::new(|f: &str| Path::from(f)), Box::new(|_, _| {}));
     let r = Box::leak(Box::new(r));
 
     let mut ch = tsrs_checker::new_checker(r);

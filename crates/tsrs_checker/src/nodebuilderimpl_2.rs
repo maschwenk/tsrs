@@ -284,22 +284,21 @@ impl NodeBuilderImpl {
         }
         let mut return_type_node: Option<P<Node>> = None;
 
-        let return_type: P<Type>;
+
         let declaration = signature.declaration();
-        if declaration.is_some() && !ast::node_is_synthesized(declaration.unwrap()) {
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
+        let return_type: P<Type> = if declaration.is_some() && !ast::node_is_synthesized(declaration.unwrap()) {
             let symbol = c.get_symbol_of_declaration(declaration.unwrap());
             let enclosing_symbol_type = self.ctx().enclosing_symbol_types.borrow().get(&ast::get_symbol_id(symbol.unwrap())).copied();
-            return_type = match enclosing_symbol_type {
-                Some(t) => t,
-                None => {
-                    let t = c.get_return_type_of_signature(signature);
-                    c.instantiate_type(t, self.ctx().mapper.get())
-                }
-            };
+            if let Some(t) = enclosing_symbol_type { t } else {
+                let t = c.get_return_type_of_signature(signature);
+                c.instantiate_type(t, self.ctx().mapper.get())
+            }
         } else {
-            return_type = c.get_return_type_of_signature(signature);
-        }
+            c.get_return_type_of_signature(signature)
+        };
         if !(suppress_any && is_type_any(Some(return_type))) {
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if !self.is_actively_expanding(c) && try_reuse && self.ctx().enclosing_declaration.get().is_some() && declaration.is_some() && !ast::node_is_synthesized(declaration.unwrap()) {
                 let declaration = declaration.unwrap();
                 let declaration_symbol = c.get_symbol_of_declaration(declaration).unwrap();
@@ -312,7 +311,7 @@ impl NodeBuilderImpl {
                     // the checker infers e.g. `x is string`.
                     let type_predicate = c.get_type_predicate_of_signature(signature);
                     if let Some(type_predicate) = type_predicate {
-                        if !self.pseudo_return_type_matches_predicate(c, pt, type_predicate) {
+                        if !Self::pseudo_return_type_matches_predicate(c, pt, type_predicate) {
                             if !self.ctx().suppress_report_inference_fallback.get() {
                                 self.tracker().report_inference_fallback(c, declaration);
                             }
@@ -524,6 +523,7 @@ impl NodeBuilderImpl {
         let mut result: Option<P<Node>> = None;
         let mut reported_inference_fallback = false;
         // !!! expandable hover support
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if !self.is_actively_expanding(c)
             && try_reuse
             && self.ctx().enclosing_declaration.get().is_some()
@@ -536,6 +536,7 @@ impl NodeBuilderImpl {
                 remove = Some(self.add_symbol_type_to_context(c, symbol, t));
             }
             let mut pt = if ast::is_accessor(declaration) { self.pc.get_type_of_accessor(declaration) } else { self.pc.get_type_of_declaration(declaration) };
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if (pt.is_none() || pt.unwrap().kind == pseudochecker::PseudoTypeKind::NoResult) && ast::is_binary_expression(declaration) && symbol.is_some() {
                 let decl = symbol.unwrap().declarations().iter().copied().find(|&d| has_type_annotation(Some(d)));
                 if let Some(decl) = decl {
@@ -597,7 +598,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:2374
-    pub(crate) fn should_use_placeholder_for_property(&self, c: &mut Checker, property_symbol: P<Symbol>) -> bool {
+    pub(crate) fn should_use_placeholder_for_property(&self, c: &Checker, property_symbol: P<Symbol>) -> bool {
         // Use placeholders for reverse mapped types we've either
         // (1) already descended into, or
         // (2) are nested reverse mappings within a mapping over a non-anonymous type, or
@@ -699,7 +700,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:2477
-    pub(crate) fn is_string_named(&self, c: &mut Checker, d: P<Node>) -> bool {
+    pub(crate) fn is_string_named(c: &mut Checker, d: P<Node>) -> bool {
         let name = ast::get_name_of_declaration(d);
         let Some(name) = name else {
             return false;
@@ -716,7 +717,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:2493
-    pub(crate) fn is_single_quoted_string_named(&self, _c: &mut Checker, d: P<Node>) -> bool {
+    pub(crate) fn is_single_quoted_string_named(_c: &mut Checker, d: P<Node>) -> bool {
         let name = ast::get_name_of_declaration(d);
         name.is_some() && ast::is_string_literal(name.unwrap()) && name.unwrap().as_string_literal().token_flags().intersects(TokenFlags::SingleQuote)
     }
@@ -731,8 +732,8 @@ impl NodeBuilderImpl {
             }
         }
         let declarations: Vec<P<Node>> = symbol.declarations().to_vec();
-        let string_named = !declarations.is_empty() && declarations.iter().all(|&d| self.is_string_named(c, d));
-        let single_quote = !declarations.is_empty() && declarations.iter().all(|&d| self.is_single_quoted_string_named(c, d));
+        let string_named = !declarations.is_empty() && declarations.iter().all(|&d| Self::is_string_named(c, d));
+        let single_quote = !declarations.is_empty() && declarations.iter().all(|&d| Self::is_single_quoted_string_named(c, d));
         let is_method = symbol.flags().intersects(SymbolFlags::Method);
         let from_name_type = self.get_property_name_node_for_symbol_from_name_type(c, symbol, enclosing_declaration, single_quote, string_named, is_method);
         if from_name_type.is_some() {
@@ -821,6 +822,7 @@ impl NodeBuilderImpl {
                 if c.has_late_bindable_name(decl) {
                     if ast::is_binary_expression(decl) {
                         let name = ast::get_name_of_declaration(decl);
+                        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                         if name.is_some() && ast::is_element_access_expression(name.unwrap()) && ast::is_property_access_entity_name_expression(name.unwrap().as_element_access_expression().argument_expression, false /*allowJs*/) {
                             self.track_computed_name(c, name.unwrap().as_element_access_expression().argument_expression, save_enclosing_declaration);
                         }
@@ -1025,7 +1027,7 @@ impl NodeBuilderImpl {
             return Some(self.create_mapped_type_node_from_type(c, t));
         }
 
-        let resolved = c.resolve_structured_type_members(t).unwrap();
+        let resolved = c.resolve_structured_type_members(t);
         let call_sigs = resolved.call_signatures();
         let ctor_sigs = resolved.construct_signatures();
         if resolved.properties().is_empty() && resolved.index_infos().is_empty() {
@@ -1067,7 +1069,7 @@ impl NodeBuilderImpl {
             // and not `(abstract new () => {}) & {}`
             if type_element_count != 0 {
                 // create a copy of the object type without any abstract construct signatures.
-                types.push(self.get_resolved_type_without_abstract_construct_signatures(c, t));
+                types.push(Self::get_resolved_type_without_abstract_construct_signatures(c, t));
             }
             let intersection = c.get_intersection_type(&types);
             return self.type_to_type_node(c, Some(intersection));
@@ -1140,6 +1142,7 @@ impl NodeBuilderImpl {
         if is_static_method_symbol || is_non_local_function_symbol {
             let mut symbol = Some(symbol);
             let vd = symbol.unwrap().value_declaration();
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if is_function_expression_symbol && vd.is_some() && vd.unwrap().parent().is_some() && vd.unwrap().parent() != self.ctx().enclosing_declaration.get() {
                 // Go: `getMergedSymbol` of a nil parent symbol is nil
                 symbol = vd.unwrap().parent().unwrap().symbol().map(|s| c.get_merged_symbol(s));
@@ -1337,7 +1340,7 @@ impl NodeBuilderImpl {
 
     // Go takes `*TypeParameter`; the Rust port passes the type because `symbol` lives on the `Type` header.
     // nodebuilderimpl.go:3055
-    pub(crate) fn get_parent_symbol_of_type_parameter(&self, c: &mut Checker, type_parameter: P<Type>) -> Option<P<Symbol>> {
+    pub(crate) fn get_parent_symbol_of_type_parameter(c: &mut Checker, type_parameter: P<Type>) -> Option<P<Symbol>> {
         let tp = ast::get_declaration_of_kind(type_parameter.symbol().unwrap(), Kind::TypeParameter);
         // !!! JSDoc support
         // if ast.IsJSDocTemplateTag(tp.Parent) {
@@ -1350,6 +1353,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3070
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn type_reference_to_type_node(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> {
         let mut type_arguments: Vec<P<Type>> = c.get_type_arguments(t).to_vec();
         let target = t.target().unwrap();
@@ -1380,7 +1384,7 @@ impl NodeBuilderImpl {
                 })
                 .collect();
             if !type_arguments.is_empty() {
-                let arity = c.get_type_reference_arity(t);
+                let arity = checker::Checker::get_type_reference_arity(t);
                 let tuple_constituent_nodes =
                     self.map_to_type_nodes(c, &type_arguments[0..arity], false /*isBareList*/);
                 if let Some(tuple_constituent_nodes) = tuple_constituent_nodes {
@@ -1414,9 +1418,8 @@ impl NodeBuilderImpl {
                     self.e.set_emit_flags(tuple_type_node, EmitFlags::SingleLine);
                     if target.as_tuple_type().readonly.get() {
                         return Some(self.f.new_type_operator_node(Kind::ReadonlyKeyword, tuple_type_node));
-                    } else {
-                        return Some(tuple_type_node);
                     }
+                    return Some(tuple_type_node);
                 }
             }
             if self.ctx().encountered_error.get() || self.ctx().flags.get().intersects(Flags::AllowEmptyTuple) {
@@ -1424,9 +1427,8 @@ impl NodeBuilderImpl {
                 self.e.set_emit_flags(tuple_type_node, EmitFlags::SingleLine);
                 if target.as_tuple_type().readonly.get() {
                     return Some(self.f.new_type_operator_node(Kind::ReadonlyKeyword, tuple_type_node));
-                } else {
-                    return Some(tuple_type_node);
                 }
+                return Some(tuple_type_node);
             }
             self.ctx().encountered_error.set(true);
             None
@@ -1446,11 +1448,11 @@ impl NodeBuilderImpl {
                 while i < length {
                     // Find group of type arguments for type parameters with the same declaring container.
                     let start = i;
-                    let parent = self.get_parent_symbol_of_type_parameter(c, outer_type_parameters[i]);
+                    let parent = Self::get_parent_symbol_of_type_parameter(c, outer_type_parameters[i]);
                     loop {
                         // do-while loop
                         i += 1;
-                        if !(i < length && self.get_parent_symbol_of_type_parameter(c, outer_type_parameters[i]) == parent) {
+                        if !(i < length && Self::get_parent_symbol_of_type_parameter(c, outer_type_parameters[i]) == parent) {
                             break;
                         }
                     }
@@ -1466,7 +1468,7 @@ impl NodeBuilderImpl {
                         if result_type.is_none() {
                             result_type = ref_;
                         } else {
-                            result_type = self.append_reference_to_type(c, result_type.unwrap(), ref_.unwrap());
+                            result_type = Some(self.append_reference_to_type(c, result_type.unwrap(), ref_.unwrap()));
                         }
                     }
                 }
@@ -1484,18 +1486,18 @@ impl NodeBuilderImpl {
                     // `AsyncIterable`, and `AsyncIterableIterator` to provide backwards-compatible .d.ts emit due
                     // to each now having three type parameters instead of only one.
                     let global_iterable_type = c.get_global_iterable_type();
-                    let mut is_iterable_reference = c.is_reference_to_type(Some(t), global_iterable_type);
+                    let mut is_iterable_reference = checker::Checker::is_reference_to_type(Some(t), global_iterable_type);
                     if !is_iterable_reference {
                         let global_iterable_iterator_type = c.get_global_iterable_iterator_type();
-                        is_iterable_reference = c.is_reference_to_type(Some(t), global_iterable_iterator_type);
+                        is_iterable_reference = checker::Checker::is_reference_to_type(Some(t), global_iterable_iterator_type);
                     }
                     if !is_iterable_reference {
                         let global_async_iterable_type = c.get_global_async_iterable_type();
-                        is_iterable_reference = c.is_reference_to_type(Some(t), global_async_iterable_type);
+                        is_iterable_reference = checker::Checker::is_reference_to_type(Some(t), global_async_iterable_type);
                     }
                     if !is_iterable_reference {
                         let global_async_iterable_iterator_type = c.get_global_async_iterable_iterator_type();
-                        is_iterable_reference = c.is_reference_to_type(Some(t), global_async_iterable_iterator_type);
+                        is_iterable_reference = checker::Checker::is_reference_to_type(Some(t), global_async_iterable_iterator_type);
                     }
                     if is_iterable_reference {
                         let node = t.as_type_reference().node.get();
@@ -1522,7 +1524,7 @@ impl NodeBuilderImpl {
             if result_type.is_none() {
                 final_ref
             } else {
-                self.append_reference_to_type(c, result_type.unwrap(), final_ref.unwrap())
+                Some(self.append_reference_to_type(c, result_type.unwrap(), final_ref.unwrap()))
             }
         }
     }
@@ -1558,7 +1560,7 @@ impl NodeBuilderImpl {
             let cached_result = links.serialized_types.get(&key);
             if let Some(cached_result) = cached_result {
                 // TODO:: check if we instead store late painted statements associated with this?
-                for arg in cached_result.tracked_symbols.iter() {
+                for arg in &cached_result.tracked_symbols {
                     self.tracker().track_symbol(c, arg.symbol, arg.enclosing_declaration, arg.meaning);
                 }
                 if cached_result.truncating {
@@ -1688,7 +1690,7 @@ impl NodeBuilderImpl {
                 let parent_name = parent_name.unwrap();
                 let member_name = ast::symbol_name(t.symbol().unwrap());
                 if tsrs_scanner::is_identifier_text(member_name, LanguageVariant::Standard) {
-                    return self.append_reference_to_type(c, parent_name /* as TypeReference | ImportTypeNode */, self.f.new_type_reference_node(self.f.new_identifier(member_name), None /*typeArguments*/));
+                    return Some(self.append_reference_to_type(c, parent_name /* as TypeReference | ImportTypeNode */, self.f.new_type_reference_node(self.f.new_identifier(member_name), None /*typeArguments*/)));
                 }
                 if ast::is_import_type_node(parent_name) {
                     // Go sets `parentName.AsImportTypeNode().IsTypeOf = true` in place (the node is freshly
@@ -1701,9 +1703,8 @@ impl NodeBuilderImpl {
                 } else if ast::is_type_reference_node(parent_name) {
                     let lit = self.mark_symbol_name_literal(self.new_string_literal(c, member_name));
                     return Some(self.f.new_indexed_access_type_node(self.f.new_type_query_node(parent_name.as_type_reference_node().type_name, None), self.f.new_literal_type_node(lit)));
-                } else {
-                    panic!("Unhandled type node kind returned from `symbolToTypeNode`.");
                 }
+                panic!("Unhandled type node kind returned from `symbolToTypeNode`.");
             }
             if !t.flags().intersects(TypeFlags::Union) || !self.should_expand_type(c, t, false /*isAlias*/) {
                 return self.symbol_to_type_node(c, t.symbol().unwrap(), SymbolFlags::Type, None);
@@ -1727,9 +1728,8 @@ impl NodeBuilderImpl {
             add_approximate_length(self, value_text.len());
             if value.0 < 0.0 {
                 return Some(self.f.new_literal_type_node(self.f.new_prefix_unary_expression(Kind::MinusToken, self.f.new_numeric_literal(self.f.alloc_text(&value_text[1..]), TokenFlags::None))));
-            } else {
-                return Some(self.f.new_literal_type_node(self.f.new_numeric_literal(self.f.alloc_text(&value_text), TokenFlags::None)));
             }
+            return Some(self.f.new_literal_type_node(self.f.new_numeric_literal(self.f.alloc_text(&value_text), TokenFlags::None)));
         }
         if t.flags().intersects(TypeFlags::BigIntLiteral) {
             add_approximate_length(
@@ -1750,10 +1750,9 @@ impl NodeBuilderImpl {
             if value {
                 add_approximate_length(self, 4);
                 return Some(self.f.new_literal_type_node(self.f.new_keyword_expression(Kind::TrueKeyword)));
-            } else {
-                add_approximate_length(self, 5);
-                return Some(self.f.new_literal_type_node(self.f.new_keyword_expression(Kind::FalseKeyword)));
             }
+            add_approximate_length(self, 5);
+            return Some(self.f.new_literal_type_node(self.f.new_keyword_expression(Kind::FalseKeyword)));
         }
         if t.flags().intersects(TypeFlags::UniqueESSymbol) {
             if !self.ctx().flags.get().intersects(Flags::AllowUniqueESSymbolType) {
@@ -1809,6 +1808,7 @@ impl NodeBuilderImpl {
                 if is_reserved_member_name(sym.name()) && !sym.flags().intersects(SymbolFlags::Class) {
                     return Some(self.f.new_type_reference_node(self.f.new_identifier(""), type_argument_nodes));
                 }
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if type_argument_nodes.is_some() && type_argument_nodes.unwrap().nodes().len() == 1 && Some(sym) == c.global_array_type.symbol() {
                     return Some(self.f.new_array_type_node(type_argument_nodes.unwrap().nodes()[0]));
                 }
@@ -1837,9 +1837,8 @@ impl NodeBuilderImpl {
             }
             if t.as_type_reference().node.get().is_some() {
                 return self.visit_and_transform_type(c, t, |c, b, t| b.type_reference_to_type_node(c, t));
-            } else {
-                return self.type_reference_to_type_node(c, t);
             }
+            return self.type_reference_to_type_node(c, t);
         }
         if t.flags().intersects(TypeFlags::TypeParameter) || object_flags.intersects(ObjectFlags::ClassOrInterface) {
             // When expanding class or interface types, show their structural form
@@ -1880,6 +1879,7 @@ impl NodeBuilderImpl {
             if let Some(symbol) = t.symbol() {
                 return self.symbol_to_type_node(c, symbol, SymbolFlags::Type, None);
             }
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             let name: String = if (t == c.marker_super_type_for_check || t == c.marker_sub_type_for_check) && c.variance_type_parameter.is_some() && c.variance_type_parameter.unwrap().symbol().is_some() {
                 format!("{}{}", if t == c.marker_sub_type_for_check { "sub-" } else { "super-" }, ast::symbol_name(c.variance_type_parameter.unwrap().symbol().unwrap()))
             } else {
@@ -1900,19 +1900,18 @@ impl NodeBuilderImpl {
                 return self.type_to_type_node(c, Some(types[0]));
             }
             let type_nodes = self.map_to_type_nodes(c, &types, true /*isBareList*/);
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if type_nodes.is_some() && !type_nodes.unwrap().nodes().is_empty() {
                 if t.flags().intersects(TypeFlags::Union) {
                     return Some(self.f.new_union_type_node(type_nodes.unwrap()));
-                } else {
-                    return Some(self.f.new_intersection_type_node(type_nodes.unwrap()));
                 }
-            } else {
-                if !self.ctx().encountered_error.get() && !self.ctx().flags.get().intersects(Flags::AllowEmptyUnionOrIntersection) {
-                    self.ctx().encountered_error.set(true);
-                }
-                return None;
-                // TODO: GH#18217
+                return Some(self.f.new_intersection_type_node(type_nodes.unwrap()));
             }
+            if !self.ctx().encountered_error.get() && !self.ctx().flags.get().intersects(Flags::AllowEmptyUnionOrIntersection) {
+                self.ctx().encountered_error.set(true);
+            }
+            return None;
+            // TODO: GH#18217
         }
         if object_flags.intersects(ObjectFlags::Anonymous | ObjectFlags::Mapped) {
             assert!(t.flags().intersects(TypeFlags::Object));
@@ -1959,15 +1958,14 @@ impl NodeBuilderImpl {
         }
         if t.flags().intersects(TypeFlags::Substitution) {
             let type_node = self.type_to_type_node(c, t.as_substitution_type().base_type.get());
-            if !c.is_no_infer_type(t) {
+            if !checker::Checker::is_no_infer_type(t) {
                 return type_node;
             }
             let no_infer_symbol = c.get_global_type_alias_symbol("NoInfer", 1, false);
             if let Some(no_infer_symbol) = no_infer_symbol {
                 return self.symbol_to_type_node(c, no_infer_symbol, SymbolFlags::Type, Some(self.f.new_node_list(vec![type_node.unwrap()])));
-            } else {
-                return type_node;
             }
+            return type_node;
         }
 
         panic!("Should be unreachable.");
@@ -2021,10 +2019,10 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3651
-    pub(crate) fn create_access_expression(&self, c: &mut Checker, node: P<Node>) -> P<Node> {
+    pub(crate) fn create_access_expression(&self, node: P<Node>) -> P<Node> {
         if ast::is_qualified_name(node) {
             let qualified_name = node.as_qualified_name();
-            let left = self.create_access_expression(c, qualified_name.left);
+            let left = self.create_access_expression(qualified_name.left);
             self.f.new_property_access_expression(left, None /*questionDotToken*/, self.f.deep_clone_node(Some(qualified_name.right)).unwrap(), NodeFlags::None)
         } else if ast::is_identifier(node) || ast::is_property_access_expression(node) || ast::is_expression_with_type_arguments(node) {
             self.f.deep_clone_node(Some(node)).unwrap()
@@ -2062,15 +2060,15 @@ impl NodeBuilderImpl {
             }
 
             let mut target_symbol = symbol;
-            if symbol.flags().intersects(SymbolFlags::Alias) && !c.can_get_type_parameters_of_class_or_interface(symbol) {
+            if symbol.flags().intersects(SymbolFlags::Alias) && !checker::Checker::can_get_type_parameters_of_class_or_interface(symbol) {
                 target_symbol = c.resolve_alias(symbol);
             }
 
-            if !c.can_get_type_parameters_of_class_or_interface(target_symbol) {
+            if !checker::Checker::can_get_type_parameters_of_class_or_interface(target_symbol) {
                 return None;
             }
 
-            let mut params = self.get_type_parameters_of_class_or_interface(c, target_symbol);
+            let mut params = Self::get_type_parameters_of_class_or_interface(c, target_symbol);
             let target_mapper = c.value_symbol_links.get(next_symbol).mapper();
             if let Some(target_mapper) = target_mapper {
                 params = params.iter().map(|&p| target_mapper.map(c, p)).collect();

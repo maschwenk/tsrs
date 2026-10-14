@@ -24,6 +24,7 @@ impl LanguageService {
     }
 
     // definition.go:30
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub(crate) fn provide_definition_worker(
         &self,
         ctx: &Context,
@@ -131,6 +132,7 @@ impl LanguageService {
     }
 
     // definition.go:113
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_type_definition(&self, ctx: &Context, document_uri: &lsproto::DocumentUri, position: lsproto::Position) -> Result<lsproto::TypeDefinitionResponse, lsproto::Error> {
         let caps = lsproto::get_client_capabilities(ctx);
         let client_supports_link = caps.text_document.type_definition.link_support;

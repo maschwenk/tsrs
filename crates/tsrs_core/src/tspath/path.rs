@@ -76,6 +76,7 @@ pub enum EncodedRootLength {
 }
 
 impl EncodedRootLength {
+    #[expect(clippy::len_without_is_empty, reason = "This accessor reports a position or optional diagnostic length, not a container size.")]
     pub fn len(self) -> usize {
         match self {
             Self::Relative => 0,
@@ -301,6 +302,7 @@ pub fn get_directory_path(path: &str) -> String {
 }
 
 impl Path {
+    #[must_use]
     pub fn get_directory_path(&self) -> Path {
         Path::new(get_directory_path(&self.0))
     }
@@ -755,6 +757,7 @@ pub fn remove_trailing_directory_separator(path: &str) -> &str {
 }
 
 impl Path {
+    #[must_use]
     pub fn remove_trailing_directory_separator(&self) -> Path {
         Path::from(remove_trailing_directory_separator(&self.0))
     }
@@ -780,6 +783,7 @@ pub fn ensure_trailing_directory_separator(path: &str) -> String {
 }
 
 impl Path {
+    #[must_use]
     pub fn ensure_trailing_directory_separator(&self) -> Path {
         Path::new(ensure_trailing_directory_separator(&self.0))
     }

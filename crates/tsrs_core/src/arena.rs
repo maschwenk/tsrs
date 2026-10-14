@@ -44,8 +44,6 @@ const HUGE_THREAD_CHUNK: Option<usize> = None;
 /// Largest chunk a thread arena grows to in compressed mode (larger single allocations still get their own size).
 #[cfg(compressed_ptrs)]
 const MAX_CHUNK: usize = 64 << 20;
-#[cfg(all(not(compressed_ptrs), target_pointer_width = "64"))]
-const MAX_CHUNK: usize = usize::MAX;
 /// 32-bit targets (wasm32) cap the doubling too: a doubled 1 GiB chunk would waste half of a 4 GiB address space.
 #[cfg(all(not(compressed_ptrs), target_pointer_width = "32"))]
 const MAX_CHUNK: usize = 64 << 20;
@@ -251,10 +249,15 @@ impl Arena {
         // of the fixed reservation, touched or not.
         let next = if self.is_region() {
             (self.capacity.get() / 4).max(PAGE)
-        } else if cfg!(any(compressed_ptrs, target_pointer_width = "32")) {
-            (prev * 2).min(MAX_CHUNK)
         } else {
-            prev * 2
+            #[cfg(any(compressed_ptrs, target_pointer_width = "32"))]
+            {
+                (prev * 2).min(MAX_CHUNK)
+            }
+            #[cfg(not(any(compressed_ptrs, target_pointer_width = "32")))]
+            {
+                prev * 2
+            }
         };
         self.new_chunk(next.max(need));
         if self.up {
@@ -497,10 +500,10 @@ impl Arena {
     }
 }
 
-/// Profile builds map arena chunks far above the heap (from 0x7c00_0000_0000 up). The census decodes every word as a
-/// possible pointer; with the arena next to the malloc heap (around 0x200_0000_0000), any pair of 32-bit fields
-/// whose second half is 0x200 (a common flag value) "points" into it, which shows up as spurious would-free
-/// violations. Bytes 4-5 = 00 7c (NUL then `|`) are rare in numbers and text.
+/// Profile builds map arena chunks far above the heap (from `0x7c00_0000_0000` up). The census decodes every
+/// word as a possible pointer; with the arena next to the malloc heap (around `0x200_0000_0000`), any pair of
+/// 32-bit fields whose second half is 0x200 (a common flag value) "points" into it, which shows up as
+/// spurious would-free violations. Bytes 4-5 = 00 7c (NUL then `|`) are rare in numbers and text.
 #[cfg(all(feature = "alloc-profile", not(compressed_ptrs)))]
 fn census_chunk(size: usize) -> *mut u8 {
     use std::sync::atomic::AtomicUsize;
@@ -705,7 +708,7 @@ fn slab_release_ex(slab: *const Slab, retire: bool) {
     #[cfg(not(any(feature = "alloc-profile", compressed_ptrs)))]
     // SAFETY: allocated by `new_slab` with this layout; every chunk carved from it was released.
     unsafe {
-        std::alloc::dealloc(s.base, Layout::from_size_align(s.size, CHUNK_ALIGN).expect("arena slab layout"))
+        std::alloc::dealloc(s.base, Layout::from_size_align(s.size, CHUNK_ALIGN).expect("arena slab layout"));
     };
     #[cfg(compressed_ptrs)]
     {
@@ -1168,12 +1171,15 @@ pub(crate) fn give_spare_arena(arena: &'static Arena) {
     SPARE_ARENAS.lock().unwrap().push(SpareArena(arena));
 }
 
-/// Gives back the resident part of the calling thread's own arena that was never handed out: on Linux, when the
-/// current chunk is a huge-page chunk, the rest of the 2 MiB block the finger is in (the block was faulted in as one
-/// transparent huge page; one `madvise`, which splits that page's mapping). For a thread that is done allocating at
-/// the moment memory peaks (a checker whose type-check queue ran dry while others still check). A later allocation
-/// below the finger faults in fresh zero pages. Elsewhere, and for a 4 KiB-page chunk, the unused part is not
-/// resident and this does nothing.
+/// Reclaims unused resident pages at a thread arena's allocation tail.
+///
+/// Gives back the resident part of the calling thread's own arena that was never handed out: on Linux, when
+/// the current chunk is a huge-page chunk, the rest of the 2 MiB block the finger is in (the block was
+/// faulted in as one transparent huge page; one `madvise`, which splits that page's mapping).
+///
+/// For a thread that is done allocating at the moment memory peaks (a checker whose type-check queue ran dry
+/// while others still check). A later allocation below the finger faults in fresh zero pages. Elsewhere, and
+/// for a 4 KiB-page chunk, the unused part is not resident and this does nothing.
 pub fn trim_own_arena_tail() {
     #[cfg(all(compressed_ptrs, target_os = "linux"))]
     {
@@ -1201,10 +1207,13 @@ pub fn current_region() -> Option<Region> {
     arena.region.as_ref().and_then(std::sync::Weak::upgrade).map(Region)
 }
 
+/// Keeps a region alive when its objects escape to longer-lived storage.
+///
 /// Records that the object at `addr` was stored in a structure that may outlive the owner of its region (a
-/// program-lifetime cache filled while a checker is held, whose region is the allocation target): the owner must then
-/// keep the region until that structure goes (`Region::escaped`; tsrs_project checkerpool.rs). No-op for an object
-/// outside every region, and while no region exists (the CLI).
+/// program-lifetime cache filled while a checker is held, whose region is the allocation target): the owner
+/// must then keep the region until that structure goes (`Region::escaped`; `tsrs_project` checkerpool.rs).
+///
+/// No-op for an object outside every region, and while no region exists (the CLI).
 pub fn note_escape(addr: usize) {
     if let Some(region) = Region::containing(addr) {
         region.mark_escaped();
@@ -1218,10 +1227,14 @@ pub fn enter_thread_arena() -> RegionScope {
     RegionScope::push(own, None)
 }
 
-/// Routes allocations to the region that owns the object at `addr` (lazily initialized data of a shared object, such
-/// as a source file's JSDoc cache, must live and die with that object, not with the checker that happens to fill
-/// it). An object outside every region gets the thread's own arena. No scope (and no cost beyond one load) while no
-/// region exists, as in the CLI.
+/// Keeps lazily allocated data in its owning object's region.
+///
+/// Routes allocations to the region that owns the object at `addr` (lazily initialized data of a shared
+/// object, such as a source file's `JSDoc` cache, must live and die with that object, not with the checker
+/// that happens to fill it).
+///
+/// An object outside every region gets the thread's own arena. No scope (and no cost beyond one load) while
+/// no region exists, as in the CLI.
 #[inline]
 pub fn enter_owner(addr: usize) -> Option<RegionScope> {
     if !ANY_REGION.load(Ordering::Relaxed) {
@@ -1237,11 +1250,15 @@ pub fn enter_owner(addr: usize) -> Option<RegionScope> {
     })
 }
 
-/// Routes allocations for a value stored in a shared table that may outlive the current allocation target (a cache
-/// that later program versions copy, filled by whichever thread happens to look something up): they stay in the
-/// current target only if the table at `addr` lives in it, and go to the thread's own (never freed) arena otherwise.
-/// Unlike `enter_owner`, never waits for a region another thread has entered. No scope (and no cost beyond one load)
-/// while no region exists, as in the CLI.
+/// Keeps shared-table allocations alive across program versions.
+///
+/// Routes allocations for a value stored in a shared table that may outlive the current allocation target (a
+/// cache that later program versions copy, filled by whichever thread happens to look something up): they
+/// stay in the current target only if the table at `addr` lives in it, and go to the thread's own (never
+/// freed) arena otherwise.
+///
+/// Unlike `enter_owner`, never waits for a region another thread has entered. No scope (and no cost beyond
+/// one load) while no region exists, as in the CLI.
 #[inline]
 pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
     if !ANY_REGION.load(Ordering::Relaxed) {
@@ -1260,12 +1277,15 @@ pub fn enter_table_owner(addr: usize) -> Option<RegionScope> {
 // Scratch regions (per-file emit, notes/mem-emit-regions.md)
 // ---------------------------------------------------------------------------------------------------------------
 
-/// While alive, the region it was made from is the thread's allocation target as with `Region::enter`, and also the
-/// thread's **scratch region**: code that knows its allocations die with the scratch region allocates there even
-/// while escaped (`P::new_scratch`, `alloc_str_scratch`, ...), and code whose allocations must outlive it escapes
-/// to the target that was current before it (`escape_scratch`). Emit uses one per file: the transformers, the
-/// printer and the node builder's per-call state allocate in it, the checker escapes (its types, symbols and caches
-/// outlive the file).
+/// Reclaims temporary allocations together when a scratch scope ends.
+///
+/// While alive, the region it was made from is the thread's allocation target as with `Region::enter`, and
+/// also the thread's **scratch region**: code that knows its allocations die with the scratch region
+/// allocates there even while escaped (`P::new_scratch`, `alloc_str_scratch`, ...), and code whose
+/// allocations must outlive it escapes to the target that was current before it (`escape_scratch`).
+///
+/// Emit uses one per file: the transformers, the printer and the node builder's per-call state allocate in
+/// it, the checker escapes (its types, symbols and caches outlive the file).
 pub struct ScratchScope {
     saved: (*const Arena, *const Arena, *const Arena),
     _scope: RegionScope,
@@ -1293,12 +1313,16 @@ impl Drop for ScratchScope {
     }
 }
 
-/// Inside scratch regions, makes the allocation target that was current when the outermost of them was entered (the
-/// thread's own arena, or an enclosing region that is not a scratch region) the target until the scope is dropped:
-/// for code whose allocations may outlive every scratch region (program caches, diagnostics, the lazily filled data
-/// of shared objects). Scratch regions nest when a checker that runs in a region of its own (checkerpool.rs
-/// `SlotChecker`) emits a file (program_emit.rs): what escapes the file's region must outlive the checker too, as an
-/// incremental snapshot keeps the diagnostics after their program's checkers are freed (watch mode). `None` (no cost
+/// Moves escaping allocations outside all enclosing scratch regions.
+///
+/// Inside scratch regions, makes the allocation target that was current when the outermost of them was
+/// entered (the thread's own arena, or an enclosing region that is not a scratch region) the target until the
+/// scope is dropped: for code whose allocations may outlive every scratch region (program caches,
+/// diagnostics, the lazily filled data of shared objects).
+///
+/// Scratch regions nest when a checker that runs in a region of its own (checkerpool.rs `SlotChecker`) emits
+/// a file (`program_emit.rs`): what escapes the file's region must outlive the checker too, as an incremental
+/// snapshot keeps the diagnostics after their program's checkers are freed (watch mode). `None` (no cost
 /// beyond a thread-local read) outside scratch regions or when that target is already current.
 #[inline]
 pub fn escape_scratch() -> Option<RegionScope> {
@@ -1309,9 +1333,11 @@ pub fn escape_scratch() -> Option<RegionScope> {
     Some(RegionScope::push(root, None))
 }
 
-/// `escape_scratch` to the target that was current when the innermost scratch region was entered: for the checker
-/// called from emit, whose types, symbols and caches outlive one file's emit region and belong to the checker's own
-/// region when it has one.
+/// Keeps allocations alive beyond the innermost scratch region.
+///
+/// `escape_scratch` to the target that was current when the innermost scratch region was entered: for the
+/// checker called from emit, whose types, symbols and caches outlive one file's emit region and belong to the
+/// checker's own region when it has one.
 #[inline]
 pub fn escape_scratch_one_level() -> Option<RegionScope> {
     let (scratch, outer, _) = SCRATCH.with(std::cell::Cell::get);
@@ -1458,15 +1484,16 @@ impl Drop for RegionInner {
     }
 }
 
-/// Gives back the pages of retired regions (`Region::retire_on_free`) that nothing uses any more, without ever giving
-/// their ranges back (`reserve::discard`).
+/// Gives back the pages of retired regions (`Region::retire_on_free`) that nothing uses any more, without
+/// ever giving their ranges back (`reserve::discard`).
 ///
-/// Retired ranges (the chunks of retired regions, and retired slabs once their last chunk goes) are kept as coalesced
-/// spans, so the page that two neighbouring chunks share goes once both are retired: file regions are carved back to
-/// back, leaves are often neighbours (vscode: 4,691 leaf chunks form 924 runs), and with 16 KiB pages the shared pages
-/// are a tenth of what the leaves hold. They are given back in batches of `BATCH` bytes (`flush_retired` gives back the
-/// rest): each `madvise` / `mmap` call flushes the TLB of every core running a thread of the process, and one call per
-/// chunk cost the check pass 2-3% at 32 checkers on Linux, against one per run of neighbouring pages in a batch.
+/// Retired ranges (the chunks of retired regions, and retired slabs once their last chunk goes) are kept as
+/// coalesced spans, so the page that two neighbouring chunks share goes once both are retired: file regions
+/// are carved back to back, leaves are often neighbours (vscode: 4,691 leaf chunks form 924 runs), and with
+/// 16 KiB pages the shared pages are a tenth of what the leaves hold. They are given back in batches of
+/// `BATCH` bytes (`flush_retired` gives back the rest): each `madvise` / `mmap` call flushes the TLB of every
+/// core running a thread of the process, and one call per chunk cost the check pass 2-3% at 32 checkers on
+/// Linux, against one per run of neighbouring pages in a batch.
 #[cfg(all(compressed_ptrs, unix))]
 mod retired {
     use std::collections::BTreeMap;
@@ -1873,9 +1900,9 @@ mod tests {
         assert!(Region::containing(P::new_scratch(7u64).addr()).unwrap().ptr_eq(&outer));
     }
 
-    /// A retired region's range is never handed out again (fileregions.rs in tsrs_compiler frees a checked file's
-    /// tree while caches keyed by the address of a node in it may keep stale entries): no later chunk, of any
-    /// arena or region on any thread, overlaps it.
+    /// A retired region's range is never handed out again (fileregions.rs in `tsrs_compiler` frees a checked
+    /// file's tree while caches keyed by the address of a node in it may keep stale entries): no later chunk,
+    /// of any arena or region on any thread, overlaps it.
     #[cfg(compressed_ptrs)]
     #[test]
     fn retired_regions_are_never_reused() {

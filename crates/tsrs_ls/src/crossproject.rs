@@ -70,14 +70,11 @@ impl LanguageService {
         // Single project
         let Some(orchestrator) = orchestrator else {
             let computed;
-            let data = match default_project_data {
-                Some(data) => data,
-                None => {
-                    computed = default_ls
-                        .provide_symbols_and_entries(ctx, params.text_document_uri(), params.text_document_position(), is_rename, implementations)
-                        .unwrap_or_default();
-                    &computed
-                }
+            let data = if let Some(data) = default_project_data { data } else {
+                computed = default_ls
+                    .provide_symbols_and_entries(ctx, params.text_document_uri(), params.text_document_position(), is_rename, implementations)
+                    .unwrap_or_default();
+                &computed
             };
             return symbol_and_entries_to_resp(default_ls, ctx, params, data, options);
         };
@@ -143,13 +140,10 @@ impl LanguageService {
                 let outcome = catch_unwind(AssertUnwindSafe(|| -> Option<Result<Resp, lsproto::Error>> {
                     // Process the item
                     let fetched: Arc<LanguageService>;
-                    let ls: &LanguageService = match item.ls {
-                        Some(ls) => ls,
-                        None => {
-                            // Get it now
-                            fetched = orchestrator.get_language_service_for_project_with_file(ctx, &item.project, &item.uri)?;
-                            &fetched
-                        }
+                    let ls: &LanguageService = if let Some(ls) = item.ls { ls } else {
+                        // Get it now
+                        fetched = orchestrator.get_language_service_for_project_with_file(ctx, &item.project, &item.uri)?;
+                        &fetched
                     };
                     let (data, ok) = match item.symbol_data {
                         Some(data) => (data, true),

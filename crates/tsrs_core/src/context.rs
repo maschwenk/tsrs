@@ -168,6 +168,7 @@ impl Context {
 
     // Go `context.WithValue(ctx, key, value)` where the key is the value's type (callers use a newtype per key,
     // as Go code uses an unexported key type).
+    #[must_use]
     pub fn with_value<T: Any + Send + Sync>(&self, value: T) -> Context {
         self.push(ctxKind::Value(TypeId::of::<T>(), Arc::new(value)))
     }
@@ -196,20 +197,14 @@ impl Context {
         };
         let state = cancelState::new(deadline);
         if let Some(parent) = parent {
-            match parent.err() {
-                Some(err) => state.cancel(err, None),
-                None => {
-                    let mut inner = parent.inner.lock().unwrap();
-                    match inner.err {
-                        Some(err) => {
-                            drop(inner);
-                            state.cancel(err, None);
-                        }
-                        None => {
-                            inner.children.retain(|c| c.strong_count() > 0);
-                            inner.children.push(Arc::downgrade(&state));
-                        }
-                    }
+            if let Some(err) = parent.err() { state.cancel(err, None) } else {
+                let mut inner = parent.inner.lock().unwrap();
+                if let Some(err) = inner.err {
+                    drop(inner);
+                    state.cancel(err, None);
+                } else {
+                    inner.children.retain(|c| c.strong_count() > 0);
+                    inner.children.push(Arc::downgrade(&state));
                 }
             }
         }
@@ -357,6 +352,7 @@ pub enum CheckerLifetime {
     #[default]
     Temporary = 0,
     Diagnostics = 1,
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     API = 2,
 }
 

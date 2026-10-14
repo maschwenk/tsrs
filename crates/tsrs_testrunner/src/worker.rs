@@ -313,7 +313,8 @@ pub fn worker_main() {
     let _ = handle.join();
 }
 
-/// The message of the last panic caught on this thread (for panics caught inside a test, like Go's RecoverAndFail).
+/// The message of the last panic caught on this thread (for panics caught inside a test, like Go's
+/// `RecoverAndFail`).
 pub fn take_last_panic_message() -> String {
     take_panic_info().map_or_else(|| "<unknown panic>".to_string(), |p| format!("{} at {}", p.message, p.location))
 }

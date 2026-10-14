@@ -1,5 +1,5 @@
 // `cfg(compressed_ptrs)`: `P<T>` is a 32-bit handle (notes/mem-pointer-compression.md). On by default (feature
-// `compressed-ptrs`) on unix; the `plain-ptrs` feature, or a target without `mmap`, keeps `P<T>` a reference.
+// `compressed-ptrs`) on unix; the `plain-ptrs` feature, or a target without `mmap`, keeps `P<T>` a plain pointer.
 fn main() {
     println!("cargo:rustc-check-cfg=cfg(compressed_ptrs)");
     let on = std::env::var_os("CARGO_FEATURE_COMPRESSED_PTRS").is_some()

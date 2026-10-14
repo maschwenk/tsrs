@@ -311,6 +311,7 @@ impl crate::NodeFactory {
 
     // Splits a slice of statements into two parts: standard prologue statements and the rest of the statements
     // factory.go:462
+    #[expect(clippy::unused_self, reason = "The factory keeps the same instance API for node construction, hooks and arena lifecycle operations.")]
     pub fn split_standard_prologue<'a>(&self, source: &'a [P<Node>]) -> (&'a [P<Node>], &'a [P<Node>]) {
         if let Some(result) = source
             .iter()
@@ -857,6 +858,7 @@ impl crate::NodeFactory {
     }
 
     // factory.go:1122
+    #[expect(clippy::fn_params_excessive_bools, reason = "The boolean parameters preserve the upstream Go function signature.")]
     pub fn new_es_decorate_class_element_context_object(
         &self,
         kind: &str,

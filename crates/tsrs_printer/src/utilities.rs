@@ -550,9 +550,8 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
         Kind::HeritageClause => {
             if is_class_like(parent) {
                 return parent.class_like_data().unwrap().heritage_clauses();
-            } else {
-                return parent.as_interface_declaration().heritage_clauses;
             }
+            return parent.as_interface_declaration().heritage_clauses;
         }
         _ => {}
     }
@@ -613,11 +612,10 @@ pub(crate) fn get_containing_node_array(node: P<Node>) -> Option<P<NodeList>> {
                 return parent.member_list();
             }
         }
-        Kind::SourceFile => {
-            if is_statement(node) {
+        Kind::SourceFile
+            if is_statement(node) => {
                 return parent.statement_list();
             }
-        }
         _ => {}
     }
 
@@ -849,14 +847,14 @@ fn match_string(text: &str, pos: &mut usize, expected: &str) -> bool {
 
 fn match_quoted_string(text: &str, pos: &mut usize) -> bool {
     let mut text_pos = *pos;
-    let quote_char;
-    if match_rune(text, &mut text_pos, '\'' as stringutil::Rune) {
-        quote_char = '\'' as stringutil::Rune;
+
+    let quote_char = if match_rune(text, &mut text_pos, '\'' as stringutil::Rune) {
+        '\'' as stringutil::Rune
     } else if match_rune(text, &mut text_pos, '"' as stringutil::Rune) {
-        quote_char = '"' as stringutil::Rune;
+        '"' as stringutil::Rune
     } else {
         return false;
-    }
+    };
     while text_pos < text.len() {
         let (ch, size) = stringutil::decode_rune(&text.as_bytes()[text_pos..]);
         text_pos += size;

@@ -155,7 +155,7 @@ impl Json for ResponseError {
         let mut w = ObjectWriter::new(3);
         w.field("code", &self.code);
         w.field("message", &self.message);
-        w.opt("data", &self.data);
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -238,24 +238,19 @@ impl Message {
     }
 }
 
-// A raw (json.Value) field: present, even when null.
-fn raw(v: &Value) -> Option<Value> {
-    Some(v.clone())
-}
-
 impl Json for Message {
     const GO_TYPE: &'static str = "jsonrpc.Message";
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
         w.field("jsonrpc", &JSONRPCVersion);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         if !self.method.is_empty() {
             w.field("method", &self.method);
         }
-        w.opt("params", &self.params);
-        w.opt("result", &self.result);
-        w.opt("error", &self.error);
+        w.opt("params", self.params.as_ref());
+        w.opt("result", self.result.as_ref());
+        w.opt("error", self.error.as_ref());
         w.finish()
     }
 
@@ -271,8 +266,9 @@ impl Json for Message {
                 }
                 "id" => s.id = opt(k, v)?,
                 "method" => s.method = field(k, v)?,
-                "params" => s.params = raw(v),
-                "result" => s.result = raw(v),
+                // Raw fields are present even when their JSON value is null.
+                "params" => s.params = Some(v.clone()),
+                "result" => s.result = Some(v.clone()),
                 "error" => s.error = opt(k, v)?,
                 _ => {}
             }
@@ -296,9 +292,9 @@ impl Json for RequestMessage {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("jsonrpc", &JSONRPCVersion);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.field("method", &self.method);
-        w.opt("params", &self.params);
+        w.opt("params", self.params.as_ref());
         w.finish()
     }
 
@@ -337,9 +333,9 @@ impl Json for ResponseMessage {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("jsonrpc", &JSONRPCVersion);
-        w.opt("id", &self.id);
-        w.opt("result", &self.result);
-        w.opt("error", &self.error);
+        w.opt("id", self.id.as_ref());
+        w.opt("result", self.result.as_ref());
+        w.opt("error", self.error.as_ref());
         w.finish()
     }
 

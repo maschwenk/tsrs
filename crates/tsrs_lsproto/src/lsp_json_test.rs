@@ -298,7 +298,7 @@ impl Json for OptionalDiscriminatorArm {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("kind", &self.kind);
+        w.opt("kind", self.kind.as_ref());
         w.field("title", &self.title);
         w.finish()
     }

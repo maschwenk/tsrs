@@ -237,7 +237,7 @@ fn created_by_file(program: &'static Program, pool: &crate::checkerpool::checker
         index.get(&tsrs_ast::get_source_file_of_node(decl)?).copied()
     };
     let k = pool.checker_count();
-    let result: Vec<Mutex<Created>> = (0..k).map(|_| Mutex::new((Vec::new(), Vec::new(), 0, 0))).collect();
+    let result: Vec<Mutex<Created>> = std::iter::repeat_with(|| Mutex::new((Vec::new(), Vec::new(), 0, 0))).take(k).collect();
     pool.for_each_checker_parallel(|idx, c| {
         let mut types = vec![0u64; files.len()];
         let mut symbols = vec![0u64; files.len()];
@@ -289,17 +289,17 @@ fn report_created(out: &mut String, program: &'static Program, state: &crate::ch
         let get = |c: usize, i: usize| if which == 0 { created[c].0[i] } else { created[c].1[i] };
         let unattributed: Vec<u64> = (0..k).map(|c| if which == 0 { created[c].2 } else { created[c].3 }).collect();
         let _ = writeln!(out, "checker-created {label} by declaring file (M): per checker own-src / foreign-src / per category; unattributed");
-        for c in 0..k {
+        for (c, &unattributed_count) in unattributed.iter().enumerate() {
             let mut by_cat = vec![0u64; CATEGORIES.len()];
             let (mut own, mut foreign) = (0u64, 0u64);
-            for i in 0..files.len() {
+            for (i, &category) in categories[..files.len()].iter().enumerate() {
                 let v = get(c, i);
                 if v == 0 {
                     continue;
                 }
-                let ci = CATEGORIES.iter().position(|&(cat, _)| cat == categories[i]).unwrap();
+                let ci = CATEGORIES.iter().position(|&(cat, _)| cat == category).unwrap();
                 by_cat[ci] += v;
-                if categories[i] == Category::ProjectSource || categories[i] == Category::OtherSource {
+                if category == Category::ProjectSource || category == Category::OtherSource {
                     if state.owner_at(i) == c { own += v } else { foreign += v }
                 }
             }
@@ -310,7 +310,7 @@ fn report_created(out: &mut String, program: &'static Program, state: &crate::ch
                 own as f64 / 1e6,
                 foreign as f64 / 1e6,
                 cats.join(" "),
-                unattributed[c] as f64 / 1e6
+                unattributed_count as f64 / 1e6
             );
         }
         // Per package: sum over checkers vs max over checkers per file (a lower bound of what one checker needs).

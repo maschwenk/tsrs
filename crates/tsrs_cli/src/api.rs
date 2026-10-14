@@ -75,7 +75,7 @@ pub(crate) fn new_api_session(flags: &ApiFlags) -> Result<(Arc<Session>, Arc<Cal
     Ok((session, callback_fs))
 }
 
-/// Adapts the core session to the transport's handler (contract: crates/tsrs_api_transport/README.md).
+/// Adapts the core session to the transport's handler (contract: `crates/tsrs_api_transport/README.md`).
 struct SessionHandler(Arc<Session>);
 
 impl transport::Handler for SessionHandler {
@@ -279,13 +279,10 @@ impl BuildOrchestrator for CliOrchestrator {
         result
     }
     fn clean(&mut self, project: &str, only_references: bool) -> BuildOutcome {
-        let o = match self.orchestrator {
-            Some(o) => o,
-            None => {
-                let o = self.fresh();
-                self.replace(o);
-                o
-            }
+        let o = if let Some(o) = self.orchestrator { o } else {
+            let o = self.fresh();
+            self.replace(o);
+            o
         };
         outcome(o.clean_for_api(project, only_references))
     }

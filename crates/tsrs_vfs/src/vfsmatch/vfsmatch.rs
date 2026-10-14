@@ -40,9 +40,8 @@ fn get_include_base_path(absolute: &str) -> String {
         // No "*" or "?" in the path
         if !tspath::has_extension(absolute) {
             return absolute.to_string();
-        } else {
-            return tspath::remove_trailing_directory_separator(&tspath::get_directory_path(absolute)).to_string();
         }
+        return tspath::remove_trailing_directory_separator(&tspath::get_directory_path(absolute)).to_string();
     };
     let end = absolute[..wildcard_offset].rfind(tspath::DIRECTORY_SEPARATOR as char).unwrap_or(0);
     absolute[..end].to_string()

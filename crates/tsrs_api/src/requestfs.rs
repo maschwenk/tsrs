@@ -487,7 +487,7 @@ impl RequestFileSystem {
                 return Err(format!("duplicate request filesystem symlink path {existing:?} and {abs:?}"));
             }
             seen_links.insert(path.clone(), abs.clone());
-            let abs_target = r.to_absolute_path_from(target, &tspath::get_directory_path(&abs));
+            let abs_target = RequestFileSystem::to_absolute_path_from(target, &tspath::get_directory_path(&abs));
             let node = root.ensure(&path);
             if node.entry.is_none() {
                 node.entry = Some(Arc::new(Entry::Symlink(Symlink { link_name: abs, target: abs_target, host: *host })));
@@ -509,10 +509,10 @@ impl RequestFileSystem {
     }
 
     fn to_absolute_path(&self, path: &str) -> String {
-        self.to_absolute_path_from(path, &self.current_directory)
+        Self::to_absolute_path_from(path, &self.current_directory)
     }
 
-    fn to_absolute_path_from(&self, path: &str, cwd: &str) -> String {
+    fn to_absolute_path_from(path: &str, cwd: &str) -> String {
         let abs = tspath::get_normalized_absolute_path(path, cwd);
         if tspath::is_disk_path_root(&abs) {
             abs
@@ -625,6 +625,7 @@ impl RequestFileSystem {
         let resolved = self.resolve_path(path)?;
         let mut result = Lookup { path: resolved.path.clone(), info: None, entry: None, use_base: false, followed_symlink: resolved.followed_symlink };
         let (rentry, rfb) = self.local(&resolved.path);
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if !resolved.host && rentry.is_some() {
             let e = rentry.unwrap();
             result.info = e.info();
@@ -900,7 +901,7 @@ impl LayeredFileSystem for RequestFileSystem {
         let mut result = rustc_hash::FxHashMap::default();
         // builds a map keyed by path; Go ranges the overlay map too
         result.extend(base.overlays().iter().filter_map(|(path, overlay)| {
-            let Some(l) = self.lookup_path(overlay.file_name()) else { return None };
+            let l = self.lookup_path(overlay.file_name())?;
             if !l.use_base || self.to_path(&l.path) != *path {
                 return None;
             }

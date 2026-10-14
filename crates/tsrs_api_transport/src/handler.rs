@@ -6,9 +6,11 @@ use std::sync::Arc;
 
 use crate::message::{ApiError, Response, TransportError};
 
-/// Cancellation shared by every request on one connection. It is set when the connection's Run
-/// loop exits (EOF, protocol error, or a fatal write error), mirroring the cancelled handler
-/// context in ipc.AsyncConn.Run. Long-running handlers should poll it between units of work.
+/// Cancellation shared by every request on one connection.
+///
+/// It is set when the connection's Run loop exits (EOF, protocol error, or a fatal write error), mirroring
+/// the cancelled handler context in ipc.AsyncConn.Run. Long-running handlers should poll it between units of
+/// work.
 #[derive(Clone, Debug, Default)]
 pub struct CancellationToken {
     cancelled: Arc<AtomicBool>,
@@ -22,6 +24,7 @@ impl CancellationToken {
     }
 
     /// context.WithCancel(parent).
+    #[must_use]
     pub fn child(self) -> Self {
         CancellationToken { cancelled: Arc::default(), parent: Some(Arc::new(self)) }
     }
@@ -39,11 +42,11 @@ impl CancellationToken {
 #[derive(Clone, Debug)]
 pub struct RequestContext {
     pub cancel: CancellationToken,
-    /// 0 for a request read by the main loop. In sync (MessagePack) mode a client may issue an API
-    /// request from inside a filesystem callback; that nested request is handled on the thread that
-    /// is blocked in `Caller::call`, with depth >= 1. A handler that holds a non-reentrant resource
-    /// (e.g. an exclusive checker lease) across a callback must reject nested requests that need the
-    /// same resource instead of blocking on it.
+    /// 0 for a request read by the main loop. In sync (`MessagePack`) mode a client may issue an API request
+    /// from inside a filesystem callback; that nested request is handled on the thread that is blocked in
+    /// `Caller::call`, with depth >= 1. A handler that holds a non-reentrant resource (e.g. an exclusive
+    /// checker lease) across a callback must reject nested requests that need the same resource instead of
+    /// blocking on it.
     pub depth: u32,
     /// Connection-wide callback state (how many requests are blocked on the client).
     pub callbacks: std::sync::Arc<crate::reentrancy::CallbackState>,
@@ -54,9 +57,9 @@ pub struct RequestContext {
 /// The API session. Implementations must be thread-safe: the async connection runs each request on
 /// its own thread (ipc.AsyncConn spawns a goroutine per request).
 pub trait Handler: Send + Sync + 'static {
-    /// `params` is the raw request payload: JSON text, or empty when the client sent no params
-    /// (JSON-RPC `params` omitted / MessagePack empty bin). Return `Response::Binary` only for raw
-    /// binary results (source-file responses when binary responses are enabled, and `echo`).
+    /// `params` is the raw request payload: JSON text, or empty when the client sent no params (JSON-RPC
+    /// `params` omitted / `MessagePack` empty bin). Return `Response::Binary` only for raw binary results
+    /// (source-file responses when binary responses are enabled, and `echo`).
     fn handle_request(&self, cx: &RequestContext, method: &str, params: &[u8]) -> Result<Response, ApiError>;
 
     /// Notifications are accepted and ignored by the pinned session (Session.HandleNotification).
@@ -73,9 +76,11 @@ impl<T: Handler + ?Sized> Handler for Arc<T> {
     }
 }
 
-/// Server-to-client calls (ipc.Conn.Call / Notify). Obtained from a connection before it runs and
-/// safe to use from any thread while a request is in flight. Calls never hold a lock that the
-/// connection's handler dispatch needs, so a client callback may issue nested API requests.
+/// Server-to-client calls (ipc.Conn.Call / Notify).
+///
+/// Obtained from a connection before it runs and safe to use from any thread while a request is in flight.
+/// Calls never hold a lock that the connection's handler dispatch needs, so a client callback may issue
+/// nested API requests.
 pub trait Caller: Send + Sync {
     /// Sends `method` with JSON `params` (None = Go nil, marshalled as `null` / omitted) and blocks
     /// until the client answers. Returns the raw result payload (JSON text).

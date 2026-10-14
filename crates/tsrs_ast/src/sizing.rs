@@ -585,11 +585,7 @@ pub fn run(phase: &str, files: &[P<SourceFile>], skip_freed_leaves: bool) {
     for &file in files {
         let class = if file.is_check_leaf() {
             2
-        } else if file.is_declaration_file() {
-            1
-        } else {
-            0
-        };
+        } else { usize::from(file.is_declaration_file()) };
         if skip_freed_leaves && file.is_check_leaf() {
             skipped += 1;
             continue;

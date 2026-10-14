@@ -11,6 +11,7 @@ use crate::ErrorCode;
 pub enum ErrorTag {
     Code(ErrorCode),
     // io.EOF / io.ErrUnexpectedEOF
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     EOF,
     UnexpectedEOF,
     // jsonrpc.ErrInvalidHeader / ErrInvalidContentLength / ErrNoContentLength / ErrInvalidJSONRPCVersion

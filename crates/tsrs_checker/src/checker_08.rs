@@ -55,7 +55,7 @@ impl Checker {
     }
 
     // checker.go:15273
-    pub(crate) fn get_module_specifier_for_import_or_export(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_module_specifier_for_import_or_export(node: P<Node>) -> Option<P<Node>> {
         match node.kind() {
             Kind::ImportClause => get_module_specifier_from_node(node.parent().unwrap()),
             Kind::ImportEqualsDeclaration => {
@@ -126,7 +126,7 @@ impl Checker {
     }
 
     // checker.go:15353
-    pub(crate) fn get_cannot_resolve_module_name_error_for_specific_module(&mut self, module_name: P<Node>) -> Option<&'static Message> {
+    pub(crate) fn get_cannot_resolve_module_name_error_for_specific_module(&self, module_name: P<Node>) -> Option<&'static Message> {
         if ast::is_string_literal(module_name) {
             if node_core_modules().contains(module_name.text()) {
                 if self.compiler_options.uses_wildcard_types() {
@@ -193,7 +193,7 @@ impl Checker {
         let location = location.unwrap();
         let importing_source_file = ast::get_source_file_of_node(location).unwrap();
         let mut context_specifier: Option<P<Node>> = None;
-        let mode: ResolutionMode;
+
 
         if ast::is_string_literal_like(location) || location.parent().is_some() && ast::is_module_declaration(location.parent().unwrap()) && location.parent().unwrap().as_module_declaration().name() == location {
             context_specifier = Some(location);
@@ -232,14 +232,14 @@ impl Checker {
             }
         }
 
-        match context_specifier {
+        let mode: ResolutionMode = match context_specifier {
             Some(cs) if ast::is_string_literal_like(cs) => {
-                mode = self.program.get_mode_for_usage_location(importing_source_file, cs);
+                self.program.get_mode_for_usage_location(importing_source_file, cs)
             }
             _ => {
-                mode = self.program.get_default_resolution_mode_for_file(importing_source_file);
+                self.program.get_default_resolution_mode_for_file(importing_source_file)
             }
-        }
+        };
 
         let resolved_module = self.program.get_resolved_module(importing_source_file, module_reference, mode);
         let is_resolved = resolved_module.is_some_and(|r| r.is_resolved());
@@ -358,14 +358,14 @@ impl Checker {
                                     diagnostic_details = Some(self.create_mode_mismatch_details(importing_source_file, error_node));
                                 }
 
-                                let message: &'static Message;
-                                if override_host.is_some_and(|h| h.kind() == Kind::ImportDeclaration && h.import_clause().is_some() && h.import_clause().unwrap().is_type_only()) {
-                                    message = &diagnostics::Type_only_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute;
+
+                                let message: &'static Message = if override_host.is_some_and(|h| h.kind() == Kind::ImportDeclaration && h.import_clause().is_some() && h.import_clause().unwrap().is_type_only()) {
+                                    &diagnostics::Type_only_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute
                                 } else if override_host.is_some_and(|h| h.kind() == Kind::ImportType) {
-                                    message = &diagnostics::Type_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute;
+                                    &diagnostics::Type_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute
                                 } else {
-                                    message = &diagnostics::The_current_file_is_a_CommonJS_module_whose_imports_will_produce_require_calls_however_the_referenced_file_is_an_ECMAScript_module_and_cannot_be_imported_with_require_Consider_writing_a_dynamic_import_0_call_instead;
-                                }
+                                    &diagnostics::The_current_file_is_a_CommonJS_module_whose_imports_will_produce_require_calls_however_the_referenced_file_is_an_ECMAScript_module_and_cannot_be_imported_with_require_Consider_writing_a_dynamic_import_0_call_instead
+                                };
 
                                 self.add_diagnostic(new_diagnostic_chain_for_node(diagnostic_details, error_node, Some(message), &[&module_reference]));
                             }
@@ -471,6 +471,7 @@ impl Checker {
 
                 if candidates.len() == 1 {
                     let merged_candidate = self.get_merged_symbol(candidates[0].symbol);
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                         return Some(self.get_merged_symbol(augmentation.unwrap()));
                     }
@@ -488,6 +489,7 @@ impl Checker {
                 }));
                 if best_type_candidates.len() == 1 {
                     let merged_candidate = self.get_merged_symbol(best_type_candidates[0].symbol);
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                         return Some(self.get_merged_symbol(augmentation.unwrap()));
                     }
@@ -495,6 +497,7 @@ impl Checker {
                 }
                 let pattern = find_best_pattern_match(&best_type_candidates, |v| &v.pattern, module_reference).unwrap();
                 let merged_candidate = self.get_merged_symbol(pattern.symbol);
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                     return Some(self.get_merged_symbol(augmentation.unwrap()));
                 }
@@ -512,7 +515,7 @@ pub(crate) fn resolution_extension_is_ts_or_json(ext: &str) -> bool {
 
 impl Checker {
     // checker.go:15752
-    pub(crate) fn get_suggested_import_source(&mut self, module_reference: &str, ts_extension: &str, mode: ModuleKind) -> String {
+    pub(crate) fn get_suggested_import_source(&self, module_reference: &str, ts_extension: &str, mode: ModuleKind) -> String {
         let import_source_without_extension = tspath::remove_extension(module_reference, ts_extension);
 
         // Direct users to import source with .js extension if outputting an ES module.
@@ -536,7 +539,7 @@ impl Checker {
     }
 
     // checker.go:15775
-    pub(crate) fn get_suggested_import_extension(&mut self, extensionless_import_path: &str) -> String {
+    pub(crate) fn get_suggested_import_extension(&self, extensionless_import_path: &str) -> String {
         let exists = |c: &Checker, ext: &str| c.program.file_exists(&format!("{extensionless_import_path}{ext}"));
         let result = if exists(self, ".mts") {
             ".mjs"
@@ -584,7 +587,7 @@ impl Checker {
     }
 
     // checker.go:15820
-    pub(crate) fn create_module_not_found_chain(&mut self, resolved_module: P<ResolvedModule>, error_node: P<Node>, module_reference: &str, mode: ModuleKind, package_name: &str) -> P<Diagnostic> {
+    pub(crate) fn create_module_not_found_chain(&self, resolved_module: P<ResolvedModule>, error_node: P<Node>, module_reference: &str, mode: ModuleKind, package_name: &str) -> P<Diagnostic> {
         let _ = resolved_module;
         // Store the original packageName for repopulateInfo before any modifications
         let mut stored_package_name = package_name;
@@ -605,7 +608,7 @@ impl Checker {
     }
 
     // checker.go:15838
-    pub(crate) fn create_mode_mismatch_details(&mut self, source_file: P<SourceFile>, error_node: P<Node>) -> P<Diagnostic> {
+    pub(crate) fn create_mode_mismatch_details(&self, source_file: P<SourceFile>, error_node: P<Node>) -> P<Diagnostic> {
         let details = crate::create_mode_mismatch_details(self.program, source_file);
         let args: Vec<&dyn Display> = details.args.iter().map(|a| a as &dyn Display).collect();
         let result = new_diagnostic_for_node(Some(error_node), Some(details.message), &args);
@@ -698,6 +701,7 @@ impl Checker {
                 let target_file = module_symbol.declarations().iter().copied().find(|d| ast::is_source_file(*d));
                 let usage_mode = self.get_emit_syntax_for_module_specifier_expression(reference);
                 let mut export_module_dot_exports_symbol: Option<P<Symbol>> = None;
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if namespace_import.is_some()
                     && target_file.is_some()
                     && ModuleKind::Node20 <= self.module_kind
@@ -853,7 +857,7 @@ impl Checker {
         let links = self.export_type_links.get(result);
         links.target.set(Some(symbol));
         links.originating_import.set(Some(reference_parent));
-        let resolved_module_type = self.resolve_structured_type_members(module_type).unwrap();
+        let resolved_module_type = self.resolve_structured_type_members(module_type);
         let t = self.new_anonymous_type(Some(result), resolved_module_type.members(), &[], &[], resolved_module_type.index_infos());
         self.value_symbol_links.get(result).resolved_type.set(Some(t));
         result
@@ -991,7 +995,7 @@ impl Checker {
                 }
                 let mut containing_qualified_name: Option<P<Node>> = None;
                 if ast::is_qualified_name(name) {
-                    containing_qualified_name = get_containing_qualified_name_node(name);
+                    containing_qualified_name = Some(get_containing_qualified_name_node(name));
                 }
                 let can_suggest_typeof = self.global_object_type != self.unassigned_type
                     && meaning.intersects(SymbolFlags::Type)
@@ -1153,13 +1157,10 @@ impl Checker {
                 let member_name = get_property_name_from_type(t);
                 let symbol_flags = decl_symbol.flags();
                 // Get or add a late-bound symbol for the member. This allows us to merge late-bound accessor declarations.
-                let mut late_symbol = match late_symbols.lookup(&member_name) {
-                    Some(s) => s,
-                    None => {
-                        let s = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
-                        late_symbols.set(s.name(), s);
-                        s
-                    }
+                let mut late_symbol = if let Some(s) = late_symbols.lookup(&member_name) { s } else {
+                    let s = self.new_symbol_ex(SymbolFlags::None, alloc_str(&member_name), CheckFlags::Late);
+                    late_symbols.set(s.name(), s);
+                    s
                 };
                 // Report an error if there's a symbol declaration with the same name and conflicting flags.
                 let early_symbol = early_symbols.and_then(|e| e.lookup(&member_name));
@@ -1201,21 +1202,18 @@ impl Checker {
     pub(crate) fn late_bind_index_signature(&mut self, parent: P<Symbol>, early_symbols: Option<P<SymbolTable>>, late_symbols: P<SymbolTable>, decl: P<Node>) {
         let _ = parent;
         // First, late bind the index symbol itself, if needed
-        let index_symbol = match late_symbols.lookup(InternalSymbolNameIndex) {
-            Some(s) => s,
-            None => {
-                let early = early_symbols.and_then(|e| e.lookup(InternalSymbolNameIndex));
-                let index_symbol = match early {
-                    None => self.new_symbol_ex(SymbolFlags::None, InternalSymbolNameIndex, CheckFlags::Late),
-                    Some(early) => {
-                        let s = self.clone_symbol(early);
-                        s.check_flags.set(s.check_flags.get() | CheckFlags::Late);
-                        s
-                    }
-                };
-                late_symbols.set(InternalSymbolNameIndex, index_symbol);
-                index_symbol
-            }
+        let index_symbol = if let Some(s) = late_symbols.lookup(InternalSymbolNameIndex) { s } else {
+            let early = early_symbols.and_then(|e| e.lookup(InternalSymbolNameIndex));
+            let index_symbol = match early {
+                None => self.new_symbol_ex(SymbolFlags::None, InternalSymbolNameIndex, CheckFlags::Late),
+                Some(early) => {
+                    let s = self.clone_symbol(early);
+                    s.check_flags.set(s.check_flags.get() | CheckFlags::Late);
+                    s
+                }
+            };
+            late_symbols.set(InternalSymbolNameIndex, index_symbol);
+            index_symbol
         };
         // Then just add the computed name as a late bound declaration
         // (note: unlike `addDeclarationToLateBoundSymbol` we do not set up a `.lateSymbol` on `decl`'s links,
@@ -1264,7 +1262,7 @@ impl Checker {
     }
 
     /**
-     * Gets a SymbolTable containing both the early- and late-bound members of a symbol.
+     * Gets a `SymbolTable` containing both the early- and late-bound members of a symbol.
      *
      * For a description of late-binding, see `lateBindMember`.
      */
@@ -1333,7 +1331,7 @@ impl Checker {
                     clippy::iter_over_hash_type,
                     reason = "Go ranges over the map too; the loop only adds diagnostics (each names its own export), which the collection sorts on read"
                 )]
-                for (id, s) in lookup_table.iter() {
+                for (id, s) in &lookup_table {
                     // It's not an error if the file with multiple `export *`s with duplicate names exports a member with that name itself
                     if id == InternalSymbolNameExportEquals || s.exports_with_duplicate.is_empty() || symbols.lookup(id).is_some() {
                         continue;
@@ -1418,6 +1416,7 @@ impl Checker {
                     }
                 }
                 Some(target_symbol) => {
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if lookup_table.is_some() && export_node.is_some() && self.resolve_symbol(target_symbol) != self.resolve_symbol(source_symbol) {
                         let s = lookup_table.as_deref_mut().unwrap().get_mut(id).unwrap();
                         s.exports_with_duplicate.push(export_node.unwrap());
@@ -1450,7 +1449,7 @@ impl Checker {
                 self.alias_cache_blockers -= 1;
                 return self.unknown_symbol;
             }
-            let Some(node) = self.get_declaration_of_alias_symbol(symbol) else {
+            let Some(node) = Self::get_declaration_of_alias_symbol(symbol) else {
                 panic!("Unexpected nil in resolveAlias for symbol: {}", self.symbol_to_string(symbol));
             };
             let mut target = self.get_target_of_alias_declaration(Some(node));
@@ -1501,7 +1500,7 @@ impl Checker {
 
     // checker.go:16634
     pub(crate) fn resolve_alias_with_deprecation_check(&mut self, symbol: P<Symbol>, location: P<Node>) -> P<Symbol> {
-        if !symbol.flags().intersects(SymbolFlags::Alias) || self.is_deprecated_symbol(symbol) || self.get_declaration_of_alias_symbol(symbol).is_none() {
+        if !symbol.flags().intersects(SymbolFlags::Alias) || self.is_deprecated_symbol(symbol) || Self::get_declaration_of_alias_symbol(symbol).is_none() {
             return symbol;
         }
         let mut symbol = symbol;
@@ -1520,12 +1519,11 @@ impl Checker {
                         let declarations = target.declarations();
                         self.add_deprecated_suggestion(location, declarations, target.name());
                         break;
-                    } else {
-                        if symbol == target_symbol {
-                            break;
-                        }
-                        symbol = target;
                     }
+                    if symbol == target_symbol {
+                        break;
+                    }
+                    symbol = target;
                 }
             } else {
                 break;
@@ -1581,7 +1579,7 @@ impl Checker {
                 if target == symbol || seen_symbols.has(&target) {
                     break;
                 }
-                if seen_symbols.len() == 0 {
+                if seen_symbols.is_empty() {
                     seen_symbols.add(symbol);
                 }
                 seen_symbols.add(target);
@@ -1593,7 +1591,7 @@ impl Checker {
     }
 
     // checker.go:16720
-    pub fn get_declaration_of_alias_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Node>> {
+    pub fn get_declaration_of_alias_symbol(symbol: P<Symbol>) -> Option<P<Node>> {
         symbol.declarations().iter().rev().copied().find(|d| ast::is_alias_symbol_declaration(*d))
     }
 
@@ -1683,7 +1681,7 @@ impl Checker {
                     }
                 }
             }
-            if ast::is_declaration_name(location) && ast::is_set_accessor_declaration(location.parent().unwrap()) && self.get_annotated_accessor_type_node(location.parent()).is_some() {
+            if ast::is_declaration_name(location) && ast::is_set_accessor_declaration(location.parent().unwrap()) && Self::get_annotated_accessor_type_node(location.parent()).is_some() {
                 return Some(self.get_write_type_of_accessors(location.parent().unwrap().symbol().unwrap()));
             }
             // The location isn't a reference to the given symbol, meaning we're being asked
@@ -1955,9 +1953,8 @@ impl Checker {
             // annotated with unknown or any, depending on useUnknownInCatchVariables.
             if self.use_unknown_in_catch_variables {
                 return Some(self.unknown_type);
-            } else {
-                return Some(self.any_type);
             }
+            return Some(self.any_type);
         }
         if let Some(declared_type) = declared_type {
             return Some(self.add_optionality_ex(declared_type, is_property, is_optional));
@@ -1993,7 +1990,8 @@ impl Checker {
                 let getter = ast::get_declaration_of_kind(parent_symbol, Kind::GetAccessor);
                 if let Some(getter) = getter {
                     let getter_signature = self.get_signature_from_declaration(getter);
-                    let this_parameter = self.get_accessor_this_parameter(fn_);
+                    let this_parameter = Self::get_accessor_this_parameter(fn_);
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if this_parameter.is_some() && Some(declaration) == this_parameter {
                         // Use the type from the *getter*
                         assert!(this_parameter.unwrap().type_node().is_none());
@@ -2036,18 +2034,17 @@ impl Checker {
                 };
                 let t = t?;
                 return Some(self.add_optionality_ex(t, true /*isProperty*/, is_optional));
-            } else {
-                let static_blocks: Vec<P<Node>> = declaration.parent().unwrap().members().iter().copied().filter(|m| ast::is_class_static_block_declaration(*m)).collect();
-                let t = if !static_blocks.is_empty() {
-                    self.get_flow_type_in_static_blocks(declaration.symbol().unwrap(), &static_blocks)
-                } else if declaration.modifier_flags().intersects(ModifierFlags::Ambient) {
-                    self.get_type_of_property_in_base_class(declaration.symbol().unwrap())
-                } else {
-                    None
-                };
-                let t = t?;
-                return Some(self.add_optionality_ex(t, true /*isProperty*/, is_optional));
             }
+            let static_blocks: Vec<P<Node>> = declaration.parent().unwrap().members().iter().copied().filter(|m| ast::is_class_static_block_declaration(*m)).collect();
+            let t = if !static_blocks.is_empty() {
+                self.get_flow_type_in_static_blocks(declaration.symbol().unwrap(), &static_blocks)
+            } else if declaration.modifier_flags().intersects(ModifierFlags::Ambient) {
+                self.get_type_of_property_in_base_class(declaration.symbol().unwrap())
+            } else {
+                None
+            };
+            let t = t?;
+            return Some(self.add_optionality_ex(t, true /*isProperty*/, is_optional));
         }
         if ast::is_jsx_attribute(declaration) {
             // if JSX attribute doesn't have initializer, by default the attribute will have boolean value of true.
@@ -2090,11 +2087,10 @@ impl Checker {
                         return self.pad_object_literal_type(t, name);
                     }
                 }
-                Kind::ArrayBindingPattern => {
-                    if is_tuple_type(t) {
+                Kind::ArrayBindingPattern
+                    if is_tuple_type(t) => {
                         return self.pad_tuple_type(t, name);
                     }
-                }
                 _ => {}
             }
         }
@@ -2143,12 +2139,12 @@ impl Checker {
     // checker.go:17182
     pub(crate) fn pad_tuple_type(&mut self, t: P<Type>, pattern: P<Node>) -> P<Type> {
         let pattern_elements = pattern.elements();
-        if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || self.get_type_reference_arity(t) >= pattern_elements.len() {
+        if t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable) || Self::get_type_reference_arity(t) >= pattern_elements.len() {
             return t;
         }
         let mut element_types = self.get_element_types(t).to_vec();
         let mut element_infos: Vec<TupleElementInfo> = t.target_tuple_type().element_infos.get().to_vec();
-        let mut i = self.get_type_reference_arity(t);
+        let mut i = Self::get_type_reference_arity(t);
         while i < pattern_elements.len() {
             let e = pattern_elements[i];
             if i < pattern_elements.len() - 1 || !(ast::is_binding_element(e) && has_dot_dot_dot_token(e)) {
@@ -2396,7 +2392,7 @@ impl Checker {
                 let target_constraint = self.get_constraint_of_type_parameter(target);
                 constraint = target_constraint.map(|tc| self.instantiate_type(tc, tp.mapper.get()));
             } else {
-                let constraint_declaration = self.get_constraint_declaration(t);
+                let constraint_declaration = Self::get_constraint_declaration(t);
                 if let Some(constraint_declaration) = constraint_declaration {
                     let mut c = self.get_type_from_type_node(constraint_declaration);
                     if c.flags().intersects(TypeFlags::Any) && !self.is_error_type(c) {

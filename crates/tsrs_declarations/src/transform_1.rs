@@ -177,14 +177,13 @@ impl DeclarationTransformer {
             return false;
         }
 
-        self
-            .get_leading_comment_ranges_of_node(parse_tree_node, source_file)
+        Self::get_leading_comment_ranges_of_node(parse_tree_node, source_file)
             .into_iter()
             .any(|comment_range| has_internal_annotation(comment_range, source_file))
     }
 
     // transform.go:203
-    pub(crate) fn get_leading_comment_ranges_of_node(&self, node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> {
+    pub(crate) fn get_leading_comment_ranges_of_node(node: P<Node>, source_file: P<SourceFile>) -> Vec<CommentRange> {
         if node.kind() == Kind::JsxText {
             return Vec::new();
         }
@@ -343,7 +342,7 @@ impl DeclarationTransformer {
                 if let Some(export_equals) = export_equals {
                     let declarations = export_equals.declarations().to_vec();
                     if declarations.len() > 1 {
-                        for &node in declarations.iter() {
+                        for &node in &declarations {
                             self.state.add_diagnostic(create_diagnostic_for_node(node, &diagnostics::Multiple_module_exports_assignments_cannot_be_serialized_for_declaration_emit, &[]));
                         }
                     }
@@ -471,13 +470,11 @@ impl DeclarationTransformer {
                 return None;
             }
 
-            let Some(file) = self.host.get_source_file_from_reference(source_file, ref_) else {
-                return None;
-            };
+            let file = self.host.get_source_file_from_reference(source_file, ref_)?;
 
-            let decl_file_name: String;
-            if file.is_declaration_file() {
-                decl_file_name = file.file_name().to_string();
+
+            let decl_file_name: String = if file.is_declaration_file() {
+                file.file_name().to_string()
             } else {
                 let paths = self.host.get_output_paths_for(file, true);
                 // Try to use output path for referenced file, or output js path if that doesn't exist, or the input path if all else fails
@@ -488,8 +485,8 @@ impl DeclarationTransformer {
                 if name.is_empty() {
                     name = file.file_name().to_string();
                 }
-                decl_file_name = name;
-            }
+                name
+            };
             // Should only be missing if the source file is missing a fileName (at which point we can't name a reference to it anyway)
             // TODO: Shouldn't this be a crash or assert instead of a silent continue?
             if decl_file_name.is_empty() {
@@ -1052,16 +1049,13 @@ impl DeclarationTransformer {
                     value_param = Some(self.ensure_parameter(parameters[0]));
                 }
             }
-            let value_param = match value_param {
-                Some(value_param) => value_param,
-                None => {
-                    // When synthesizing a missing value parameter, emit `value: any` for non-private accessors to match TypeScript's declaration emit behavior.
-                    let mut t: Option<P<Node>> = None;
-                    if !is_private {
-                        t = Some(self.factory().new_keyword_type_node(Kind::AnyKeyword));
-                    }
-                    self.factory().new_parameter_declaration(None, None, self.factory().new_identifier("value"), None, t, None)
+            let value_param = if let Some(value_param) = value_param { value_param } else {
+                // When synthesizing a missing value parameter, emit `value: any` for non-private accessors to match TypeScript's declaration emit behavior.
+                let mut t: Option<P<Node>> = None;
+                if !is_private {
+                    t = Some(self.factory().new_keyword_type_node(Kind::AnyKeyword));
                 }
+                self.factory().new_parameter_declaration(None, None, self.factory().new_identifier("value"), None, t, None)
             };
             new_params.push(value_param);
         }
@@ -1286,7 +1280,7 @@ impl DeclarationTransformer {
         self.cjs_export_assignment_name.set(Some(new_id));
         let mut type_: Option<P<Node>> = None;
         let mut initializer: Option<P<Node>> = None;
-        if ast::is_primitive_literal_value(unwrap_parenthesized_expression(expression).unwrap(), true) {
+        if ast::is_primitive_literal_value(unwrap_parenthesized_expression(expression), true) {
             initializer = self.resolver.create_literal_const_value(self.emit_context(), self.emit_context().parse_node(Some(assignment)).unwrap(), self.tracker.get());
         }
         if initializer.is_none() {

@@ -1307,6 +1307,7 @@ fn type_node_to_expression(type_node: P<Node>, target: tsrs_core::ScriptTarget, 
 }
 
 // completions.go:6768
+#[expect(clippy::only_used_in_recursion, reason = "The pinned Go function also carries these parameters through recursion without otherwise reading them.")]
 fn entity_name_to_expression(entity_name: P<Node>, target: tsrs_core::ScriptTarget, quote_preference: QuotePreference, factory: &NodeFactory) -> P<Node> {
     if ast::is_identifier(entity_name) {
         return entity_name;

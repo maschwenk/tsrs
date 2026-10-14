@@ -44,7 +44,7 @@ pub fn run(args: &DumpArgs) {
     if fs.directory_exists(&config_path) {
         config_path = tspath::combine_paths(&config_path, &["tsconfig.json"]);
     }
-    let (config, errs) = tsoptions::get_parsed_command_line_of_config_file(&config_path, Some(&Default::default()), None, host, None);
+    let (config, errs) = tsoptions::get_parsed_command_line_of_config_file(&config_path, Some(&tsrs_core::CompilerOptions::default()), None, host, None);
     if !errs.is_empty() || config.is_none() {
         eprintln!("config errors: {}", errs.len());
         std::process::exit(1);

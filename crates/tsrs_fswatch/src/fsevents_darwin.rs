@@ -150,8 +150,8 @@ impl fsEventsState {
 
 impl fsEventsBackend {
     // fsevents_darwin.go:226
-    fn start_streams(&self, watches: &[fseventsWatchSnapshot]) -> Result<Vec<Arc<fseventsStream>>, Error> {
-        start_fs_events_streams(watches, &|paths, watches| self.start_stream(paths, watches))
+    fn start_streams(watches: &[fseventsWatchSnapshot]) -> Result<Vec<Arc<fseventsStream>>, Error> {
+        start_fs_events_streams(watches, &|paths, watches| Self::start_stream(paths, watches))
     }
 
     // tsrs-only (Go restarts one set of streams for every root; see `fseventsMaxRootStreams`): restarts the streams
@@ -199,7 +199,7 @@ impl fsEventsBackend {
             } else {
                 root_stream_count += 1;
             }
-            match self.start_stream(std::slice::from_ref(root), &root_watches) {
+            match Self::start_stream(std::slice::from_ref(root), &root_watches) {
                 Ok(stream) => started.push((root.clone(), stream)),
                 Err(err) => {
                     stop_started(&started);
@@ -209,7 +209,7 @@ impl fsEventsBackend {
         }
         let shared_streams = if shared_changed {
             let shared_watches: Vec<fseventsWatchSnapshot> = watches.iter().filter(|watch| shared_roots.contains(&watch.w.physical_dir)).cloned().collect();
-            match self.start_streams(&shared_watches) {
+            match Self::start_streams(&shared_watches) {
                 Ok(streams) => Some(streams),
                 Err(err) => {
                     stop_started(&started);
@@ -239,7 +239,7 @@ impl fsEventsBackend {
 
     // fsevents_darwin.go:278
     // startStream creates and starts one FSEventStream watching all supplied paths.
-    fn start_stream(&self, paths: &[String], watches: &[fseventsWatchSnapshot]) -> Result<Option<Arc<fseventsStream>>, Error> {
+    fn start_stream(paths: &[String], watches: &[fseventsWatchSnapshot]) -> Result<Option<Arc<fseventsStream>>, Error> {
         if paths.is_empty() {
             return Ok(None);
         }
@@ -259,7 +259,7 @@ fn start_fs_events_streams(
     if watches.is_empty() {
         return Ok(Vec::new());
     }
-    let mut seen = FxHashSet::with_capacity_and_hasher(watches.len(), Default::default());
+    let mut seen = FxHashSet::with_capacity_and_hasher(watches.len(), rustc_hash::FxBuildHasher);
     let mut paths = Vec::with_capacity(watches.len());
     paths.extend(watches.iter().filter_map(|watch| {
         let path = watch.w.physical_dir.clone();

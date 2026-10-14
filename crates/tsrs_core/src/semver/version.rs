@@ -257,21 +257,16 @@ pub(crate) fn compare_pre_release_identifier(left: &str, right: &str) -> Orderin
         // > identifiers consisting of only digits are compared numerically
         let left_as_number = get_uint_component(left);
         let right_as_number = get_uint_component(right);
-        match (left_as_number, right_as_number) {
-            (Ok(l), Ok(r)) => return cmp_compare(l, r),
-            _ => {
-                // This should only happen in the event of an overflow.
-                // If so, use the lengths or fall back to string comparison.
-                let left_len = left.len();
-                let right_len = right.len();
-                let len_compare = cmp_compare(left_len, right_len);
-                if len_compare == Ordering::Equal {
-                    return compare_result;
-                } else {
-                    return len_compare;
-                }
-            }
+        if let (Ok(l), Ok(r)) = (left_as_number, right_as_number) { return cmp_compare(l, r) }
+        // This should only happen in the event of an overflow.
+        // If so, use the lengths or fall back to string comparison.
+        let left_len = left.len();
+        let right_len = right.len();
+        let len_compare = cmp_compare(left_len, right_len);
+        if len_compare == Ordering::Equal {
+            return compare_result;
         }
+        return len_compare;
     }
 
     // https://semver.org/#spec-item-11

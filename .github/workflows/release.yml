@@ -106,9 +106,6 @@ jobs:
           persist-credentials: false
       # The bench projects of the training workload install with their pinned package managers via pnpm (bench/run.py --setup-only).
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
-        with:
-          # Public bench dependencies need no auth; Yarn 1 rejects an unset NODE_AUTH_TOKEN in .npmrc.
-          registry-url: ""
       - name: Read the pinned Rust toolchain (rust-toolchain.toml)
         id: rust
         shell: bash

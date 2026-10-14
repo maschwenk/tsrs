@@ -65,6 +65,7 @@ impl CodeLensVisitor<'_> {
 
 impl LanguageService {
     // codelens.go:18
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_code_lenses(&self, ctx: &Context, document_uri: &lsproto::DocumentUri) -> Result<lsproto::CodeLensResponse, lsproto::Error> {
         let (_, file) = self.get_program_and_file(document_uri);
 

@@ -212,7 +212,7 @@ fn dump_unit(out: &mut String, name: &str, text: &str) {
         out.push_str("skipped\n");
         return;
     }
-    let opts = SourceFileParseOptions { file_name: file_name.clone(), path: Path::new(file_name.clone()), external_module_indicator_options: Default::default() };
+    let opts = SourceFileParseOptions { file_name: file_name.clone(), path: Path::new(file_name.clone()), external_module_indicator_options: tsrs_ast::parseoptions::ExternalModuleIndicatorOptions::default() };
     let file = tsrs_parser::parse_source_file(opts, text, script_kind);
     tsrs_binder::bind_source_file(file);
     let mut d = Dumper::default();

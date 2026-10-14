@@ -22,7 +22,7 @@ use std::rc::Rc;
 //   type sortedSymbolNamePair (nodebuilderimpl.go:1081)
 
 // nodebuilderimpl.go:125
-pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilderImpl> {
+pub(crate) fn new_node_builder_impl(ch: &Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilderImpl> {
     // A builder whose emit context is a per-file scratch one (emit's requests) dies with that file, and so do its
     // state and caches (notes/mem-emit-regions.md).
     let scratch = e.factory.is_scratch();
@@ -46,7 +46,7 @@ pub(crate) fn new_node_builder_impl(ch: &mut Checker, e: P<EmitContext>, id_to_s
     let _ = b.this.set(b);
     // Go: b.cloneBindingNameVisitor = ast.NewNodeVisitor(b.cloneBindingName, b.f, ast.NodeVisitorHooks{})
     let slot = b.checker_slot;
-    let visit: VisitFn = Rc::new(move |_v: &mut NodeVisitor, node: P<Node>| slot.with(|c| b.clone_binding_name(c, node)));
+    let visit: VisitFn = Rc::new(move |_v: &mut NodeVisitor, node: P<Node>| Some(slot.with(|c| b.clone_binding_name(c, node))));
     let _ = b.clone_binding_name_visitor.set(visit);
     b
 }
@@ -103,7 +103,7 @@ impl NodeBuilderImpl {
     // as its structural form during hover expansion. Filters out lib types.
     // When isAlias is true, checks whether t's alias symbol is from user code (not lib).
     // nodebuilderimpl.go:175
-    pub(crate) fn is_expandable_type(&self, c: &mut Checker, t: P<Type>, is_alias: bool) -> bool {
+    pub(crate) fn is_expandable_type(c: &Checker, t: P<Type>, is_alias: bool) -> bool {
         if is_alias {
             return !c.is_lib_symbol_for_hover_verbosity(t.alias().symbol());
         }
@@ -144,7 +144,7 @@ impl NodeBuilderImpl {
         let Some(max_expansion_depth) = self.ctx().max_expansion_depth.get() else {
             return false;
         };
-        if !self.is_expandable_type(c, t, is_alias) {
+        if !Self::is_expandable_type(c, t, is_alias) {
             return false;
         }
         if self.is_type_on_stack(c, t) {
@@ -217,7 +217,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:272
-    pub(crate) fn append_reference_to_type(&self, c: &mut Checker, root: P<Node>, ref_: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn append_reference_to_type(&self, c: &mut Checker, root: P<Node>, ref_: P<Node>) -> P<Node> {
         if is_import_type_node(root) {
             // first shift type arguments
 
@@ -247,19 +247,19 @@ impl NodeBuilderImpl {
                     qualifier = Some(id);
                 }
             }
-            return Some(self.f.update_import_type_node(root, imprt.is_type_of, imprt.argument, imprt.attributes, qualifier, ref_.type_argument_list()));
+            return self.f.update_import_type_node(root, imprt.is_type_of, imprt.argument, imprt.attributes, qualifier, ref_.type_argument_list());
         } else if is_type_reference_node(root) {
             let type_ref = root.as_type_reference_node();
             let type_arguments = root.type_argument_list();
             if self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) && type_arguments.is_some() && !type_arguments.unwrap().nodes().is_empty() {
-                let access = self.create_access_expression(c, type_ref.type_name);
+                let access = self.create_access_expression(type_ref.type_name);
                 let mut expr = self.create_expression_with_type_arguments(c, access, type_arguments);
                 expr = get_access_stack(ref_).into_iter().fold(expr, |mut expr, id| {
                     expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
 
                     expr
                 });
-                return Some(expr);
+                return expr;
             }
             let mut type_name: P<Node> = type_ref.type_name;
             type_name = get_access_stack(ref_).into_iter().fold(type_name, |mut type_name, id| {
@@ -267,15 +267,15 @@ impl NodeBuilderImpl {
 
                 type_name
             });
-            return Some(self.f.update_type_reference_node(root, type_name, ref_.type_argument_list()));
+            return self.f.update_type_reference_node(root, type_name, ref_.type_argument_list());
         }
-        let mut expr = self.create_access_expression(c, root);
+        let mut expr = self.create_access_expression(root);
         expr = get_access_stack(ref_).into_iter().fold(expr, |mut expr, id| {
             expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
 
             expr
         });
-        Some(expr)
+        expr
     }
 }
 
@@ -471,7 +471,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:492
-    pub(crate) fn type_node_is_equivalent_to_type(&self, c: &mut Checker, annotated_declaration: Option<P<Node>>, t: P<Type>, type_from_type_node: P<Type>) -> bool {
+    pub(crate) fn type_node_is_equivalent_to_type(c: &mut Checker, annotated_declaration: Option<P<Node>>, t: P<Type>, type_from_type_node: P<Type>) -> bool {
         if type_from_type_node == t {
             return true;
         }
@@ -487,15 +487,13 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:507
-    pub(crate) fn can_reuse_existing_js_type_node(&self, c: &mut Checker, existing: P<Node>, t: P<Type>) -> bool {
-        c.get_intended_type_from_jsdoc_type_reference(existing).is_none() && self.existing_type_node_is_not_reference_or_is_reference_with_compatible_type_argument_count(c, existing, t)
+    pub(crate) fn can_reuse_existing_js_type_node(c: &mut Checker, existing: P<Node>, t: P<Type>) -> bool {
+        c.get_intended_type_from_jsdoc_type_reference(existing).is_none() && Self::existing_type_node_is_not_reference_or_is_reference_with_compatible_type_argument_count(c, existing, t)
     }
 
     // nodebuilderimpl.go:511
-    pub(crate) fn try_get_resolved_symbol_from_type_node(&self, c: &mut Checker, node: P<Node>) -> Option<P<Symbol>> {
-        if node.parent().is_none() {
-            return None;
-        }
+    pub(crate) fn try_get_resolved_symbol_from_type_node(c: &mut Checker, node: P<Node>) -> Option<P<Symbol>> {
+        node.parent()?;
         c.get_type_from_type_node(node);
         // call to ensure symbol is resolved
         let links = c.symbol_node_links.try_get(node)?;
@@ -503,7 +501,7 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:524
-    pub(crate) fn existing_type_node_is_not_reference_or_is_reference_with_compatible_type_argument_count(&self, c: &mut Checker, existing: P<Node>, t: P<Type>) -> bool {
+    pub(crate) fn existing_type_node_is_not_reference_or_is_reference_with_compatible_type_argument_count(c: &mut Checker, existing: P<Node>, t: P<Type>) -> bool {
         // In JS, you can say something like `Foo` and get a `Foo<any>` implicitly - we don't want to preserve that original `Foo` in these cases, though.
         if !t.object_flags().intersects(ObjectFlags::Reference) {
             return true;
@@ -512,7 +510,7 @@ impl NodeBuilderImpl {
             return true;
         }
 
-        let Some(symbol) = self.try_get_resolved_symbol_from_type_node(c, existing) else {
+        let Some(symbol) = Self::try_get_resolved_symbol_from_type_node(c, existing) else {
             return true;
         };
 
@@ -525,7 +523,7 @@ impl NodeBuilderImpl {
             return true;
         }
         let type_parameters = target.unwrap().as_interface_type().type_parameters();
-        existing.type_arguments().len() >= c.get_min_type_argument_count(type_parameters)
+        existing.type_arguments().len() >= checker::Checker::get_min_type_argument_count(type_parameters)
     }
 
     // nodebuilderimpl.go:548
@@ -539,7 +537,7 @@ impl NodeBuilderImpl {
             annotation_type = self.get_type_from_type_node(c, existing, true);
         }
         if let Some(annotation_type) = annotation_type {
-            if self.type_node_is_equivalent_to_type(c, host, t, annotation_type) && self.can_reuse_existing_js_type_node(c, existing, t) {
+            if Self::type_node_is_equivalent_to_type(c, host, t, annotation_type) && Self::can_reuse_existing_js_type_node(c, existing, t) {
                 let result = self.try_reuse_existing_node_helper(c, existing);
                 if result.is_some() {
                     return result;
@@ -552,7 +550,7 @@ impl NodeBuilderImpl {
     // Go passes the resolved `*StructuredType`; Rust passes the type itself (a payload has no back pointer to its
     // `Type` header, which carries `symbol` and is what Go's `t.AsType()` returns).
     // nodebuilderimpl.go:564
-    pub(crate) fn get_resolved_type_without_abstract_construct_signatures(&self, c: &mut Checker, t: P<Type>) -> P<Type> {
+    pub(crate) fn get_resolved_type_without_abstract_construct_signatures(c: &mut Checker, t: P<Type>) -> P<Type> {
         let st = t.as_structured_type();
         if st.construct_signatures().is_empty() {
             return t;
@@ -889,7 +887,7 @@ impl NodeBuilderImpl {
             if !self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) || is_entity_name(lhs) && (type_parameter_nodes.is_none() || type_parameter_nodes.unwrap().nodes().is_empty()) {
                 return self.f.new_qualified_name(lhs, identifier);
             }
-            let access = self.create_access_expression(c, lhs);
+            let access = self.create_access_expression(lhs);
             return self.create_expression_with_type_arguments(c, self.f.new_property_access_expression(access, None, identifier, NodeFlags::None), type_parameter_nodes);
         }
         identifier
@@ -1032,7 +1030,7 @@ impl NodeBuilderImpl {
                     _ => String::new(),
                 };
                 if !tsrs_scanner::is_identifier_text(&name, LanguageVariant::Standard) && !is_numeric_literal_name(&name) {
-                    return c.value_to_string(value.unwrap());
+                    return checker::Checker::value_to_string(value.unwrap());
                 }
                 if is_numeric_literal_name(&name) && name.starts_with('-') {
                     return format!("[{name}]");
@@ -1122,7 +1120,7 @@ impl NodeBuilderImpl {
     // The full set of type parameters for a generic class or interface type consists of its outer type parameters plus
     // its locally declared type parameters.
     // nodebuilderimpl.go:1029
-    pub(crate) fn get_type_parameters_of_class_or_interface(&self, c: &mut Checker, symbol: P<Symbol>) -> Vec<P<Type>> {
+    pub(crate) fn get_type_parameters_of_class_or_interface(c: &mut Checker, symbol: P<Symbol>) -> Vec<P<Type>> {
         let mut result: Vec<P<Type>> = Vec::new();
         result.extend(c.get_outer_type_parameters_of_class_or_interface(symbol));
         result.extend(c.get_local_type_parameters_of_class_or_interface_or_type_alias(symbol));
@@ -1158,13 +1156,12 @@ impl NodeBuilderImpl {
                 self.lookup_instantiated_type_argument_nodes(c, chain, index)
             {
                 return Some(type_argument_nodes);
-            } else {
-                let type_parameter_nodes = self.type_parameters_to_type_parameter_declarations(c, symbol);
-                if !type_parameter_nodes.is_empty() {
-                    return Some(self.f.new_node_list(type_parameter_nodes));
-                }
-                return None;
             }
+            let type_parameter_nodes = self.type_parameters_to_type_parameter_declarations(c, symbol);
+            if !type_parameter_nodes.is_empty() {
+                return Some(self.f.new_node_list(type_parameter_nodes));
+            }
+            return None;
         }
 
         None
@@ -1222,7 +1219,7 @@ impl NodeBuilderImpl {
                         sortedSymbolNamePair { sym: symbol, name: String::new() }
                     })
                     .collect();
-                parent_specifiers.sort_by(|a, b| self.sort_by_best_name(c, a, b));
+                parent_specifiers.sort_by(|a, b| Self::sort_by_best_name(c, a, b));
                 for pair in &parent_specifiers {
                     let parent = pair.sym;
                     let parent_chain = self.get_symbol_chain(c, parent, get_qualified_left_meaning(meaning), false, yield_module_symbol);
@@ -1274,7 +1271,6 @@ impl NodeBuilderImpl {
 
     // nodebuilderimpl.go:1153
     pub(crate) fn sort_by_best_name(
-        &self,
         c: &mut Checker,
         a: &sortedSymbolNamePair,
         b: &sortedSymbolNamePair,
@@ -1405,6 +1401,7 @@ impl NodeBuilderImpl {
 
         let context_file = self.ctx().enclosing_file.get().unwrap();
         let mut resolution_mode = override_import_mode;
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if resolution_mode == RESOLUTION_MODE_NONE && original_module_specifier.is_some() {
             resolution_mode = c.program.get_mode_for_usage_location(context_file, original_module_specifier.unwrap());
         } else if resolution_mode == RESOLUTION_MODE_NONE {
@@ -1536,7 +1533,7 @@ impl NodeBuilderImpl {
         let mut restore_flags = self.save_restore_flags(c);
         let ctx = self.ctx();
         ctx.flags.set(ctx.flags.get() & !Flags::WriteTypeParametersInQualifiedName); // Avoids potential infinite loop when building for a claimspace with a generic
-        let modifier_flags = c.get_type_parameter_modifiers(type_parameter);
+        let modifier_flags = checker::Checker::get_type_parameter_modifiers(type_parameter);
         let modifiers = create_modifiers_from_modifier_flags(modifier_flags, |k| self.f.new_modifier(k));
         let mut modifiers_list: Option<P<ModifierList>> = None;
         if !modifiers.is_empty() {
@@ -1568,7 +1565,7 @@ impl NodeBuilderImpl {
      * It also calls `setOriginalNode` to setup a `.original` pointer, since you basically *always* want these in the node builder.
      */
     // nodebuilderimpl.go:1434
-    pub(crate) fn set_text_range(&self, _c: &mut Checker, range_: P<Node>, location: Option<P<Node>>) -> Option<P<Node>> {
+    pub(crate) fn set_text_range(&self, _c: &mut Checker, range_: P<Node>, location: Option<P<Node>>) -> P<Node> {
         let mut range_ = range_;
         let enclosing_file = self.ctx().enclosing_file.get();
         if !node_is_synthesized(range_)
@@ -1585,10 +1582,10 @@ impl NodeBuilderImpl {
             }
         }
         let Some(location) = location else {
-            return Some(range_);
+            return range_;
         };
         if range_ == location {
-            return Some(range_);
+            return range_;
         }
         // Don't overwrite the original node if `range` has an `original` node that points either directly or indirectly to `location`
         let mut original = self.e.original(range_);
@@ -1603,11 +1600,10 @@ impl NodeBuilderImpl {
         let enclosing_file = self.ctx().enclosing_file.get();
         if enclosing_file.is_some() && enclosing_file == get_source_file_of_node(self.e.most_original(Some(location))) {
             range_.set_loc(location.loc());
-            return Some(range_);
-        } else {
-            range_.set_loc(TextRange::synthetic());
+            return range_;
         }
-        Some(range_)
+        range_.set_loc(TextRange::synthetic());
+        range_
     }
 
     // nodebuilderimpl.go:1468
@@ -1637,7 +1633,7 @@ impl NodeBuilderImpl {
             let decl = symbol.declarations().first().copied();
             if let Some(decl) = decl {
                 if is_type_parameter_declaration(decl) {
-                    result = self.set_text_range(c, result, decl.name()).unwrap();
+                    result = self.set_text_range(c, result, decl.name());
                 }
             }
         }
@@ -1673,15 +1669,15 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1522
-    pub(crate) fn is_mapped_type_homomorphic(&self, c: &mut Checker, mapped: P<Type>) -> bool {
+    pub(crate) fn is_mapped_type_homomorphic(c: &mut Checker, mapped: P<Type>) -> bool {
         c.get_homomorphic_type_variable(mapped).is_some()
     }
 
     // Go passes the `*MappedType`; Rust passes the type itself (the payload has no back pointer for `mapped.AsType()`).
     // nodebuilderimpl.go:1526
-    pub(crate) fn is_homomorphic_mapped_type_with_non_homomorphic_instantiation(&self, c: &mut Checker, mapped: P<Type>) -> bool {
+    pub(crate) fn is_homomorphic_mapped_type_with_non_homomorphic_instantiation(c: &mut Checker, mapped: P<Type>) -> bool {
         let target = mapped.as_mapped_type().target.get();
-        target.is_some() && !self.is_mapped_type_homomorphic(c, mapped) && self.is_mapped_type_homomorphic(c, target.unwrap())
+        target.is_some() && !Self::is_mapped_type_homomorphic(c, mapped) && Self::is_mapped_type_homomorphic(c, target.unwrap())
     }
 
     // nodebuilderimpl.go:1530
@@ -1698,21 +1694,21 @@ impl NodeBuilderImpl {
         if let Some(token) = decl.question_token {
             question_token = Some(self.f.new_token(token.kind()));
         }
-        let appropriate_constraint_type_node: Option<P<Node>>;
+
         let mut new_type_variable: Option<P<Node>> = None;
         let mut template_type = c.get_template_type_from_mapped_type(t);
         let type_parameter = c.get_type_parameter_from_mapped_type(t);
 
         // If the mapped type isn't `keyof` constraint-declared, _but_ still has modifiers preserved, and its naive instantiation won't preserve modifiers because its constraint isn't `keyof` constrained, we have work to do
-        let needs_modifier_preserving_wrapper = !(c.is_mapped_type_with_keyof_constraint_declaration(t) || c.get_modifiers_type_from_mapped_type(t).flags().intersects(TypeFlags::Unknown) || !self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) || c.get_constraint_type_from_mapped_type(t).flags().intersects(TypeFlags::TypeParameter) && {
+        let needs_modifier_preserving_wrapper = !(checker::Checker::is_mapped_type_with_keyof_constraint_declaration(t) || c.get_modifiers_type_from_mapped_type(t).flags().intersects(TypeFlags::Unknown) || !self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) || c.get_constraint_type_from_mapped_type(t).flags().intersects(TypeFlags::TypeParameter) && {
                 let constraint_type = c.get_constraint_type_from_mapped_type(t);
                 c.get_constraint_of_type_parameter(constraint_type).unwrap().flags().intersects(TypeFlags::Index)
             });
 
-        if c.is_mapped_type_with_keyof_constraint_declaration(t) {
+        let appropriate_constraint_type_node: Option<P<Node>> = if checker::Checker::is_mapped_type_with_keyof_constraint_declaration(t) {
             // We have a { [P in keyof T]: X }
             // We do this to ensure we retain the toplevel keyof-ness of the type which may be lost due to keyof distribution during `getConstraintTypeFromMappedType`
-            if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) && self.is_homomorphic_mapped_type_with_non_homomorphic_instantiation(c, t) {
+            if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) && Self::is_homomorphic_mapped_type_with_non_homomorphic_instantiation(c, t) {
                 let new_symbol = c.new_symbol(SymbolFlags::TypeParameter, "T");
                 let new_constraint_param = c.new_type_parameter(Some(new_symbol));
                 let name = self.type_parameter_to_name(c, new_constraint_param);
@@ -1728,7 +1724,7 @@ impl NodeBuilderImpl {
                 let modifiers_type = c.get_modifiers_type_from_mapped_type(t);
                 index_target = self.type_to_type_node(c, Some(modifiers_type));
             }
-            appropriate_constraint_type_node = Some(self.f.new_type_operator_node(Kind::KeyOfKeyword, index_target.unwrap()));
+            Some(self.f.new_type_operator_node(Kind::KeyOfKeyword, index_target.unwrap()))
         } else if needs_modifier_preserving_wrapper {
             // So, step 1: new type variable
             let new_symbol = c.new_symbol(SymbolFlags::TypeParameter, "T");
@@ -1736,11 +1732,11 @@ impl NodeBuilderImpl {
             let name = self.type_parameter_to_name(c, new_param);
             new_type_variable = Some(self.f.new_type_reference_node(name, None));
             // step 2: make that new type variable itself the constraint node, making the mapped type `{[K in T_1]: Template}`
-            appropriate_constraint_type_node = new_type_variable;
+            new_type_variable
         } else {
             let constraint_type = c.get_constraint_type_from_mapped_type(t);
-            appropriate_constraint_type_node = self.type_to_type_node(c, Some(constraint_type));
-        }
+            self.type_to_type_node(c, Some(constraint_type))
+        };
 
         // nameType and templateType nodes have to be in the new scope
         let scope_type_parameter = c.get_type_parameter_from_mapped_type(t);
@@ -1759,7 +1755,7 @@ impl NodeBuilderImpl {
         ctx.approximate_length.set(ctx.approximate_length.get() + 10);
         self.e.add_emit_flags(result, EmitFlags::SingleLine);
 
-        if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) && self.is_homomorphic_mapped_type_with_non_homomorphic_instantiation(c, t) {
+        if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) && Self::is_homomorphic_mapped_type_with_non_homomorphic_instantiation(c, t) {
             // homomorphic mapped type with a non-homomorphic naive inlining
             // wrap it with a conditional like `SomeModifiersType extends infer U ? {..the mapped type...} : never` to ensure the resulting
             // type stays homomorphic
@@ -1834,6 +1830,7 @@ impl NodeBuilderImpl {
         let Some(t) = t else {
             return Some(self.f.new_keyword_type_node(Kind::AnyKeyword));
         };
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if !self.is_actively_expanding(c) && type_node.is_some() && self.get_type_from_type_node(c, type_node.unwrap(), false) == Some(t) {
             let reused = self.try_reuse_existing_node_helper(c, type_node.unwrap());
             if reused.is_some() {
@@ -1849,7 +1846,7 @@ impl NodeBuilderImpl {
         let constraint = c.get_constraint_of_type_parameter(parameter);
         let mut constraint_node: Option<P<Node>> = None;
         if let Some(constraint) = constraint {
-            let constraint_declaration = c.get_constraint_declaration(parameter);
+            let constraint_declaration = checker::Checker::get_constraint_declaration(parameter);
             constraint_node = self.type_to_type_node_helper_with_possible_reusable_type_node(c, Some(constraint), constraint_declaration);
         }
         self.type_parameter_to_declaration_with_constraint(c, parameter, constraint_node)
@@ -1901,6 +1898,7 @@ impl NodeBuilderImpl {
         let parameter_type = c.get_type_of_symbol(parameter_symbol);
         let parameter_type_node = self.serialize_type_for_declaration(c, parameter_declaration, Some(parameter_type), Some(parameter_symbol), true);
         let mut modifiers: Option<P<ModifierList>> = None;
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if !self.ctx().flags.get().intersects(Flags::OmitParameterModifiers) && preserve_modifier_flags && parameter_declaration.is_some() && can_have_modifiers(parameter_declaration.unwrap()) {
             let originals: Vec<P<Node>> = parameter_declaration.unwrap().modifier_nodes().iter().copied().filter(|&n| is_modifier(n)).collect();
             let clones: Vec<P<Node>> = originals.iter().map(|node| node.clone_node(&self.f)).collect();
@@ -1920,7 +1918,7 @@ impl NodeBuilderImpl {
             question_token = Some(self.f.new_token(Kind::QuestionToken));
         }
 
-        let parameter_node = self.f.new_parameter_declaration(modifiers, dot_dot_dot_token, name.unwrap(), question_token, Some(parameter_type_node), None /*initializer*/);
+        let parameter_node = self.f.new_parameter_declaration(modifiers, dot_dot_dot_token, name, question_token, Some(parameter_type_node), None /*initializer*/);
         let ctx = self.ctx();
         ctx.approximate_length
             .set(ctx.approximate_length.get() + parameter_symbol.name().len() + 3);
@@ -1928,9 +1926,9 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:1763
-    pub(crate) fn parameter_to_parameter_declaration_name(&self, c: &mut Checker, parameter_symbol: P<Symbol>, parameter_declaration: Option<P<Node>>) -> Option<P<Node>> {
+    pub(crate) fn parameter_to_parameter_declaration_name(&self, c: &mut Checker, parameter_symbol: P<Symbol>, parameter_declaration: Option<P<Node>>) -> P<Node> {
         if parameter_declaration.is_none() || parameter_declaration.unwrap().name().is_none() {
-            return Some(self.new_identifier(c, parameter_symbol.name(), Some(parameter_symbol)));
+            return self.new_identifier(c, parameter_symbol.name(), Some(parameter_symbol));
         }
 
         let name = parameter_declaration.unwrap().name().unwrap();
@@ -1939,20 +1937,20 @@ impl NodeBuilderImpl {
                 let cloned = self.f.deep_clone_node(Some(name)).unwrap();
                 self.e.set_emit_flags(cloned, EmitFlags::NoAsciiEscaping);
                 self.id_to_symbol.borrow_mut().insert(cloned, parameter_symbol);
-                Some(cloned)
+                cloned
             }
             Kind::QualifiedName => {
                 let cloned = self.f.deep_clone_node(Some(name.as_qualified_name().right)).unwrap();
                 self.e.set_emit_flags(cloned, EmitFlags::NoAsciiEscaping);
                 self.id_to_symbol.borrow_mut().insert(cloned, parameter_symbol);
-                Some(cloned)
+                cloned
             }
             _ => self.clone_binding_name(c, name),
         }
     }
 
     // nodebuilderimpl.go:1785
-    pub(crate) fn clone_binding_name(&self, c: &mut Checker, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn clone_binding_name(&self, c: &mut Checker, node: P<Node>) -> P<Node> {
         if is_computed_property_name(node) && c.is_late_bindable_name(node) {
             self.track_computed_name(c, node.expression().unwrap(), self.ctx().enclosing_declaration.get());
         }
@@ -1976,7 +1974,7 @@ impl NodeBuilderImpl {
         }
 
         self.e.set_emit_flags(visited, EmitFlags::SingleLine | EmitFlags::NoAsciiEscaping);
-        Some(visited)
+        visited
     }
 
     // nodebuilderimpl.go:1811

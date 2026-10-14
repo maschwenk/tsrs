@@ -83,6 +83,7 @@ impl logicalAssignmentTransformer {
 }
 
 // logicalassignment.go:110
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_logical_assignment_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(logicalAssignmentTransformer { base: Transformer::default() });
     Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opt.context)))

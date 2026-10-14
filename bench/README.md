@@ -11,7 +11,8 @@ inputs. It measures every project on the fixed-spec 8-vCPU machine in three mode
 
 The [README chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using those
 `wide` measurements and the PGO-optimized `dist` build. The results commit step runs `bench/publish.py` to generate
-the tables and SVG together; README.md links to stable paths and is not rewritten by CI. The cards share the same
+the tables and a light and a dark SVG together ([`large-projects-dark.svg`](large-projects-dark.svg)); README.md
+shows the one matching the reader's GitHub theme, links to stable paths and is not rewritten by CI. The cards share the same
 time and memory scales; shorter bars are better. Error comparisons, all modes and raw measurements are in the report.
 
 ```sh
@@ -25,7 +26,7 @@ To regenerate the tables and chart from a recorded run without benchmarking:
 
 ```sh
 python3 bench/publish.py bench/results/<date>-<commit>.json
-python3 bench/chart.py bench/results/<date>-<commit>.json --output /tmp/benchmark.svg # chart only
+python3 bench/chart.py bench/results/<date>-<commit>.json --output /tmp/benchmark.svg # chart only; add --theme dark for the dark chart
 ```
 
 Publishing preserves a newer commit's tables and chart when an older backfill finishes later.

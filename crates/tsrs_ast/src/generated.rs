@@ -12691,6 +12691,7 @@ impl NodeFactory {
 }
 
 impl Token {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_token(node.kind()), node, &f.hooks)
     }
@@ -12762,6 +12763,7 @@ impl Decorator {
 }
 
 impl EmptyStatement {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_empty_statement(), node, &f.hooks)
     }
@@ -13085,6 +13087,7 @@ impl CatchClause {
 }
 
 impl DebuggerStatement {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_debugger_statement(), node, &f.hooks)
     }
@@ -13533,12 +13536,14 @@ impl ModuleBlock {
 }
 
 impl NotEmittedStatement {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_not_emitted_statement(), node, &f.hooks)
     }
 }
 
 impl NotEmittedTypeElement {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_not_emitted_type_element(), node, &f.hooks)
     }
@@ -14013,6 +14018,7 @@ impl PropertyDeclaration {
 }
 
 impl SemicolonClassElement {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_semicolon_class_element(), node, &f.hooks)
     }
@@ -14040,12 +14046,14 @@ impl ClassStaticBlockDeclaration {
 }
 
 impl OmittedExpression {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_omitted_expression(), node, &f.hooks)
     }
 }
 
 impl KeywordExpression {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_keyword_expression(node.kind()), node, &f.hooks)
     }
@@ -14748,6 +14756,7 @@ impl TypeAssertion {
 }
 
 impl KeywordTypeNode {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_keyword_type_node(node.kind()), node, &f.hooks)
     }
@@ -14956,6 +14965,7 @@ impl LiteralTypeNode {
 }
 
 impl ThisTypeNode {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_this_type_node(), node, &f.hooks)
     }
@@ -15473,12 +15483,14 @@ impl JsxFragment {
 }
 
 impl JsxOpeningFragment {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_opening_fragment(), node, &f.hooks)
     }
 }
 
 impl JsxClosingFragment {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsx_closing_fragment(), node, &f.hooks)
     }
@@ -15668,6 +15680,7 @@ impl JSDocNullableType {
 }
 
 impl JSDocAllType {
+    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]
     pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {
         clone_node(f.new_jsdoc_all_type(), node, &f.hooks)
     }

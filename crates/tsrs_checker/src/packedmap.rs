@@ -171,15 +171,21 @@ impl<K: PackedKey + 'static, V: Copy + 'static> GoPackedMap<K, V> {
         self.0.get().map_or(0, |m| tsrs_core::sharedgraph::with_ref(&m, PackedMap::len))
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.0.get().is_none_or(|m| tsrs_core::sharedgraph::with_ref(&m, PackedMap::is_empty))
+    }
+
     #[cfg(feature = "assignment-stats")]
     pub(crate) fn heap_stat(&self) -> Option<crate::heapcensus::HeapStat> {
         self.0.get().map(|m| m.borrow().heap_stat())
     }
 }
 
-/// Go `c.stringLiteralTypes` (`map[string]*Type`): the literal types by their value. The key was a heap `String`
-/// copy of the text the literal type already holds in the arena; the table now stores only the type and compares
-/// its value (one 4-byte slot instead of a 32-byte `(String, P<Type>)` slot plus the copied text).
+/// Go `c.stringLiteralTypes` (`map[string]*Type`): the literal types by their value.
+///
+/// The key was a heap `String` copy of the text the literal type already holds in the arena; the table now
+/// stores only the type and compares its value (one 4-byte slot instead of a 32-byte `(String, P<Type>)` slot
+/// plus the copied text).
 #[derive(Default, Clone)]
 pub struct StringLiteralTypes {
     table: hashbrown::HashTable<P<Type>>,
@@ -212,6 +218,7 @@ impl StringLiteralTypes {
     }
 
     /// Shared graph: an empty table that reads through to `self` (frozen).
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         StringLiteralTypes { table: hashbrown::HashTable::new(), base: Some(self) }
     }

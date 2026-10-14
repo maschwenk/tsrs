@@ -140,7 +140,7 @@ impl esDecoratorTransformer {
                 let es_decorate_expr = f.new_es_decorate_helper(f.new_this_expression(), descriptor_arg, member_decorators_name, context_obj, f.new_token(Kind::NullKeyword), method_extra_initializers_name.unwrap());
                 let es_decorate_statement = f.new_expression_statement(es_decorate_expr);
                 ec.set_source_map_range(es_decorate_statement, move_range_past_decorators(member));
-                self.append_decoration_statement(ci, member, es_decorate_statement);
+                Self::append_decoration_statement(ci, member, es_decorate_statement);
             } else if ast::is_property_declaration(member) {
                 let initializers_name = self.create_helper_variable(member, "initializers");
                 let extra_initializers_name = self.create_helper_variable(member, "extraInitializers");
@@ -169,7 +169,7 @@ impl esDecoratorTransformer {
                 let es_decorate_expr = f.new_es_decorate_helper(ctor_arg, descriptor_arg, member_decorators_name, context_obj, initializers_name, extra_initializers_name);
                 let es_decorate_statement = f.new_expression_statement(es_decorate_expr);
                 ec.set_source_map_range(es_decorate_statement, move_range_past_decorators(member));
-                self.append_decoration_statement(ci, member, es_decorate_statement);
+                Self::append_decoration_statement(ci, member, es_decorate_statement);
             }
         }
 
@@ -191,7 +191,7 @@ impl esDecoratorTransformer {
     // esdecorator.go:1447
     // appendDecorationStatement appends an __esDecorate statement to the appropriate
     // decoration statement list on classInfo based on the member's kind and static-ness.
-    pub(crate) fn append_decoration_statement(&self, ci: P<classInfo>, member: P<Node>, stmt: P<Node>) {
+    pub(crate) fn append_decoration_statement(ci: P<classInfo>, member: P<Node>, stmt: P<Node>) {
         if ast::is_method_or_accessor(member) || ast::is_auto_accessor_property_declaration(member) {
             if ast::is_static(member) {
                 ci.static_non_field_decoration_statements.borrow_mut().push(stmt);
@@ -212,6 +212,7 @@ impl esDecoratorTransformer {
 
 impl esDecoratorTransformer {
     // esdecorator.go:1465
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_method_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         self.enter_class_element(node);
         let result = self.partial_transform_class_element(node, self.class_info_stack.get(), Some(esDecoratorTransformer::create_method_descriptor_object));
@@ -227,6 +228,7 @@ impl esDecoratorTransformer {
     }
 
     // esdecorator.go:1482
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_get_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         self.enter_class_element(node);
         let result = self.partial_transform_class_element(node, self.class_info_stack.get(), Some(esDecoratorTransformer::create_get_accessor_descriptor_object));
@@ -241,6 +243,7 @@ impl esDecoratorTransformer {
     }
 
     // esdecorator.go:1499
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_set_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         self.enter_class_element(node);
         let result = self.partial_transform_class_element(node, self.class_info_stack.get(), Some(esDecoratorTransformer::create_set_accessor_descriptor_object));
@@ -997,7 +1000,7 @@ impl esDecoratorTransformer {
         }
         if ast::is_property_access_expression(callee) {
             let pa = callee.as_property_access_expression();
-            if self.should_be_captured_in_temp_variable(pa.expression) {
+            if Self::should_be_captured_in_temp_variable(pa.expression) {
                 let this_arg = f.new_temp_variable();
                 ec.add_variable_declaration(this_arg);
                 let assign = f.new_assignment_expression(this_arg, pa.expression);
@@ -1010,7 +1013,7 @@ impl esDecoratorTransformer {
         }
         if ast::is_element_access_expression(callee) {
             let ea = callee.as_element_access_expression();
-            if self.should_be_captured_in_temp_variable(ea.expression) {
+            if Self::should_be_captured_in_temp_variable(ea.expression) {
                 let this_arg = f.new_temp_variable();
                 ec.add_variable_declaration(this_arg);
                 let assign = f.new_assignment_expression(this_arg, ea.expression);
@@ -1025,7 +1028,7 @@ impl esDecoratorTransformer {
     }
 
     // esdecorator.go:2441
-    pub(crate) fn should_be_captured_in_temp_variable(&self, node: P<Node>) -> bool {
+    pub(crate) fn should_be_captured_in_temp_variable(node: P<Node>) -> bool {
         // This is a simplified version of the general shouldBeCapturedInTempVariable from
         // nodeFactory with cacheIdentifiers=true, since createCallBinding in this transform
         // always caches identifiers.

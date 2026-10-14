@@ -218,11 +218,7 @@ fn classification_for_symbol(symbol: Option<P<Symbol>>) -> lsproto::Classificati
             return lsproto::ClassificationTypeName::ParameterName;
         }
         lsproto::ClassificationTypeName::LocalName
-    } else if flags.intersects(SymbolFlags::Property) {
-        lsproto::ClassificationTypeName::PropertyName
-    } else if flags.intersects(SymbolFlags::GetAccessor) {
-        lsproto::ClassificationTypeName::PropertyName
-    } else if flags.intersects(SymbolFlags::SetAccessor) {
+    } else if (flags.intersects(SymbolFlags::Property)) || (flags.intersects(SymbolFlags::GetAccessor)) || (flags.intersects(SymbolFlags::SetAccessor)) {
         lsproto::ClassificationTypeName::PropertyName
     } else if flags.intersects(SymbolFlags::EnumMember) {
         lsproto::ClassificationTypeName::FieldName
@@ -240,9 +236,7 @@ fn classification_for_symbol(symbol: Option<P<Symbol>>) -> lsproto::Classificati
         lsproto::ClassificationTypeName::MethodName
     } else if flags.intersects(SymbolFlags::TypeParameter) {
         lsproto::ClassificationTypeName::TypeParameterName
-    } else if flags.intersects(SymbolFlags::TypeAlias) {
-        lsproto::ClassificationTypeName::Identifier
-    } else if flags.intersects(SymbolFlags::Alias) {
+    } else if (flags.intersects(SymbolFlags::TypeAlias)) || (flags.intersects(SymbolFlags::Alias)) {
         lsproto::ClassificationTypeName::Identifier
     } else {
         lsproto::ClassificationTypeName::Text

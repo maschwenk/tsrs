@@ -70,7 +70,7 @@ impl Checker {
             return Vec::new();
         }
         let args = node.arguments();
-        let spread_index = self.get_spread_argument_index(args);
+        let spread_index = Self::get_spread_argument_index(args);
         if let Some(spread_index) = spread_index {
             // Create synthetic arguments from spreads of tuple types.
             let mut effective_args = args[..spread_index].to_vec();
@@ -111,7 +111,7 @@ impl Checker {
     }
 
     // checker.go:30597
-    pub(crate) fn get_spread_argument_index(&mut self, args: &[P<Node>]) -> Option<usize> {
+    pub(crate) fn get_spread_argument_index(args: &[P<Node>]) -> Option<usize> {
         find_index(args, |&arg| is_spread_argument(arg))
     }
 }
@@ -129,7 +129,7 @@ pub(crate) fn synthetic_expression_type(node: P<Node>) -> P<Type> {
 
 impl Checker {
     // checker.go:30605
-    pub(crate) fn create_synthetic_expression(&mut self, parent: P<Node>, t: P<Type>, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
+    pub(crate) fn create_synthetic_expression(&self, parent: P<Node>, t: P<Type>, is_spread: bool, tuple_name_source: Option<P<Node>>) -> P<Node> {
         let result = self.factory.new_synthetic_expression(alloc(t), is_spread, tuple_name_source);
         result.set_loc(parent.loc());
         result.set_parent(Some(parent));
@@ -215,16 +215,14 @@ impl Checker {
                         - usize::from(ast::get_this_parameter(parent).is_some());
                     // A parameter declaration decorator will have three arguments (see `ParameterDecorator` in
                     // core.d.ts).
-                    let target_type;
-                    let key_type;
-                    if ast::is_constructor_declaration(parent) {
+
+
+                    let (target_type, key_type) = if ast::is_constructor_declaration(parent) {
                         let sym = self.get_symbol_of_declaration(parent.parent().unwrap()).unwrap();
-                        target_type = self.get_type_of_symbol(sym);
-                        key_type = self.undefined_type;
+                        (self.get_type_of_symbol(sym), self.undefined_type)
                     } else {
-                        target_type = self.get_parent_type_of_class_element(parent);
-                        key_type = self.get_class_element_property_key_type(parent);
-                    }
+                        (self.get_parent_type_of_class_element(parent), self.get_class_element_property_key_type(parent))
+                    };
                     let index_type = self.get_number_literal_type(jsnum::Number(index as f64));
                     let target_param = self.new_parameter("target", target_type);
                     let key_param = self.new_parameter("propertyKey", key_type);
@@ -384,20 +382,20 @@ impl Checker {
                     //
                     // In all three cases, the `This` type argument is the "final type" of either the class or
                     // instance, depending on whether the member was `static`.
-                    let value_type;
-                    if ast::is_method_declaration(node) {
+
+                    let value_type = if ast::is_method_declaration(node) {
                         let sig = self.get_signature_from_declaration(node);
-                        value_type = self.get_or_create_type_from_signature(sig);
+                        self.get_or_create_type_from_signature(sig)
                     } else {
-                        value_type = self.get_type_of_node(node);
-                    }
-                    let this_type;
+                        self.get_type_of_node(node)
+                    };
+
                     let class_symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
-                    if ast::has_static_modifier(node) {
-                        this_type = self.get_type_of_symbol(class_symbol);
+                    let this_type = if ast::has_static_modifier(node) {
+                        self.get_type_of_symbol(class_symbol)
                     } else {
-                        this_type = self.get_declared_type_of_class_or_interface(class_symbol);
-                    }
+                        self.get_declared_type_of_class_or_interface(class_symbol)
+                    };
                     // We wrap the "input type", if necessary, to match the decoration target. For getters this is
                     // something like `() => inputType`, for setters it's `(value: inputType) => void` and for
                     // methods it is just the input type.
@@ -422,13 +420,13 @@ impl Checker {
                     // depending on whether the member was `static`, and the `Value` type argument corresponds to
                     // the "final type" of the value stored in the field.
                     let value_type = self.get_type_of_node(node);
-                    let this_type;
+
                     let class_symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
-                    if ast::has_static_modifier(node) {
-                        this_type = self.get_type_of_symbol(class_symbol);
+                    let this_type = if ast::has_static_modifier(node) {
+                        self.get_type_of_symbol(class_symbol)
                     } else {
-                        this_type = self.get_declared_type_of_class_or_interface(class_symbol);
-                    }
+                        self.get_declared_type_of_class_or_interface(class_symbol)
+                    };
                     // The `target` of an auto-accessor decorator is a `{ get, set }` object, representing the
                     // runtime-generated getter and setter that are added to the class/prototype. The `target` of a
                     // regular field decorator is always `undefined` as it isn't installed until it is initialized.
@@ -733,6 +731,7 @@ impl Checker {
     /// with no member resolution in progress and dropped when any type's members are reset. The visited
     /// constituents are mapped in the same order and combined as `map_type_ex` does (a skipped one maps to None,
     /// so the result is never the union itself).
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn contextual_property_type_of_large_union(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<Option<P<Type>>> {
         let u = t.as_union_type();
         let types = match u.origin() {
@@ -827,9 +826,7 @@ impl Checker {
     // checker.go:31127
     pub(crate) fn get_type_of_concrete_property_of_contextual_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
         let prop = self.get_property_of_type(t, name);
-        let Some(prop) = prop else {
-            return None;
-        };
+        let prop = prop?;
         if self.is_circular_mapped_property(prop) {
             return None;
         }
@@ -854,9 +851,7 @@ impl Checker {
             None => self.get_string_literal_type(name),
         };
         let index_info = self.find_applicable_index_info(index_infos, name_type);
-        let Some(index_info) = index_info else {
-            return None;
-        };
+        let index_info = index_info?;
         index_info.value_type.get()
     }
 
@@ -877,7 +872,7 @@ impl Checker {
 
     // checker.go:31160
     /// tsrs: appends to `types` in place (Go returns the appended slice).
-    pub(crate) fn append_contextual_property_type_constituent(&mut self, types: &mut Vec<P<Type>>, t: Option<P<Type>>) {
+    pub(crate) fn append_contextual_property_type_constituent(&self, types: &mut Vec<P<Type>>, t: Option<P<Type>>) {
         // any doesn't provide any contextual information but could spoil the overall result by nullifying contextual information
         // provided by other intersection constituents so it gets replaced with `unknown` as `T & unknown` is just `T` and all
         // types computed based on the contextual information provided by other constituens are still assignable to any
@@ -915,9 +910,8 @@ impl Checker {
                     return Some(self.discriminate_contextual_type_by_object_members(node, apparent_type));
                 } else if apparent_type.flags().intersects(TypeFlags::Union) && ast::is_jsx_attributes(node) {
                     return Some(self.discriminate_contextual_type_by_jsx_attributes(node, apparent_type));
-                } else {
-                    return Some(apparent_type);
                 }
+                return Some(apparent_type);
             }
         }
         None
@@ -926,12 +920,12 @@ impl Checker {
 
 impl ObjectLiteralDiscriminator {
     // checker.go:31208
-    pub(crate) fn len(&mut self, _c: &mut Checker) -> usize {
+    pub(crate) fn len(&self, _c: &mut Checker) -> usize {
         self.props.len() + self.members.len()
     }
 
     // checker.go:31212
-    pub(crate) fn name(&mut self, _c: &mut Checker, index: usize) -> &'static str {
+    pub(crate) fn name(&self, _c: &mut Checker, index: usize) -> &'static str {
         if index < self.props.len() {
             return self.props[index].symbol().unwrap().name();
         }
@@ -939,7 +933,7 @@ impl ObjectLiteralDiscriminator {
     }
 
     // checker.go:31219
-    pub(crate) fn matches(&mut self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
+    pub(crate) fn matches(&self, c: &mut Checker, index: usize, t: P<Type>) -> bool {
         let prop_type;
         if index < self.props.len() {
             let prop = self.props[index];
@@ -968,35 +962,32 @@ impl Checker {
             return discriminated;
         }
         let discriminated = self.get_matching_union_constituent_for_object_literal(contextual_type, node);
-        let discriminated = match discriminated {
-            Some(discriminated) => discriminated,
-            None => {
-                let mut discriminant_properties = Vec::new();
-                discriminant_properties.extend(node.properties().iter().filter_map(|&p| {
-                    let keep = 'keep: {
-                        let Some(symbol) = p.symbol() else {
-                            break 'keep false;
-                        };
-                        if ast::is_property_assignment(p) {
-                            break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap())
-                                && self.is_discriminant_property(Some(contextual_type), symbol.name());
-                        }
-                        if ast::is_shorthand_property_assignment(p) {
-                            break 'keep self.is_discriminant_property(Some(contextual_type), symbol.name());
-                        }
-                        false
+        let discriminated = if let Some(discriminated) = discriminated { discriminated } else {
+            let mut discriminant_properties = Vec::new();
+            discriminant_properties.extend(node.properties().iter().filter_map(|&p| {
+                let keep = 'keep: {
+                    let Some(symbol) = p.symbol() else {
+                        break 'keep false;
                     };
-                    if keep { Some(p) } else { None }
-                }));
-                let mut discriminant_members = Vec::new();
-                discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter(|&s| {
-                    let node_members = node.symbol().unwrap().members();
-                    s.flags().intersects(SymbolFlags::Optional)
-                        && node_members.is_none_or(|m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name())
-                }));
-                let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
-                self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator)
-            }
+                    if ast::is_property_assignment(p) {
+                        break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap())
+                            && self.is_discriminant_property(Some(contextual_type), symbol.name());
+                    }
+                    if ast::is_shorthand_property_assignment(p) {
+                        break 'keep self.is_discriminant_property(Some(contextual_type), symbol.name());
+                    }
+                    false
+                };
+                if keep { Some(p) } else { None }
+            }));
+            let mut discriminant_members = Vec::new();
+            discriminant_members.extend(self.get_properties_of_type(contextual_type).iter().copied().filter(|&s| {
+                let node_members = node.symbol().unwrap().members();
+                s.flags().intersects(SymbolFlags::Optional)
+                    && node_members.is_none_or(|m| m.lookup(s.name()).is_none()) && self.is_discriminant_property(Some(contextual_type), s.name())
+            }));
+            let mut discriminator = ObjectLiteralDiscriminator { props: discriminant_properties, members: discriminant_members };
+            self.discriminate_type_by_discriminable_items(contextual_type, &mut discriminator)
         };
         self.discriminated_contextual_types.insert(key, discriminated);
         discriminated
@@ -1032,6 +1023,7 @@ impl Checker {
     // expressions we check to those that don't depend on their contextual type in order not to cause
     // recursive (and possibly infinite) invocations of getContextualType.
     // checker.go:31291
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_possibly_discriminant_value(&mut self, node: P<Node>) -> bool {
         match node.kind() {
             Kind::StringLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateExpression
@@ -1125,7 +1117,7 @@ impl Checker {
 
     // checker.go:31375
     pub(crate) fn find_contextual_node(
-        &mut self,
+        &self,
         node: P<Node>,
         include_caches: bool,
     ) -> Option<usize> {
@@ -1224,7 +1216,7 @@ impl Checker {
     }
 
     // checker.go:31454
-    pub(crate) fn get_inference_context(&mut self, node: P<Node>) -> Option<P<InferenceContext>> {
+    pub(crate) fn get_inference_context(&self, node: P<Node>) -> Option<P<InferenceContext>> {
         if let Some(result) = self
             .inference_context_infos
             .iter()
@@ -1359,15 +1351,13 @@ impl Checker {
         } else if flags.intersects(TypeFlags::ESSymbolLike) {
             if self.strict_null_checks {
                 return TypeFacts::SymbolStrictFacts;
-            } else {
-                return TypeFacts::SymbolFacts;
             }
+            return TypeFacts::SymbolFacts;
         } else if flags.intersects(TypeFlags::NonPrimitive) {
             if self.strict_null_checks {
                 return TypeFacts::ObjectStrictFacts;
-            } else {
-                return TypeFacts::ObjectFacts;
             }
+            return TypeFacts::ObjectFacts;
         } else if flags.intersects(TypeFlags::Never) {
             return TypeFacts::None;
         } else if flags.intersects(TypeFlags::Union) {
@@ -1484,7 +1474,7 @@ impl Checker {
     }
 
     // checker.go:31690
-    pub(crate) fn recombine_unknown_type(&mut self, t: P<Type>) -> P<Type> {
+    pub(crate) fn recombine_unknown_type(&self, t: P<Type>) -> P<Type> {
         if t == self.unknown_union_type {
             return self.unknown_type;
         }
@@ -1502,7 +1492,7 @@ impl Checker {
     }
 
     // checker.go:31705
-    pub(crate) fn convert_auto_to_any(&mut self, t: P<Type>) -> P<Type> {
+    pub(crate) fn convert_auto_to_any(&self, t: P<Type>) -> P<Type> {
         if t == self.auto_type {
             return self.any_type;
         } else if t == self.auto_array_type {
@@ -1646,9 +1636,7 @@ impl Checker {
             self.awaited_type_stack.push(t);
             let awaited_type = self.get_awaited_type_no_alias_ex(promised_type, error_node, diagnostic_message, args);
             self.awaited_type_stack.pop();
-            let Some(awaited_type) = awaited_type else {
-                return None;
-            };
+            let awaited_type = awaited_type?;
             self.cached_types.insert(key, awaited_type);
             return Some(awaited_type);
         }
@@ -1798,7 +1786,7 @@ impl Checker {
     }
 
     // checker.go:31973
-    pub(crate) fn get_target_type(&mut self, t: P<Type>) -> Option<P<Type>> {
+    pub(crate) fn get_target_type(t: P<Type>) -> Option<P<Type>> {
         if t.object_flags().intersects(ObjectFlags::Reference) {
             return t.as_type_reference().target.get();
         }
@@ -1808,7 +1796,7 @@ impl Checker {
     // checker.go:31980
     pub(crate) fn get_narrowable_type_for_reference(&mut self, t: P<Type>, reference: P<Node>, check_mode: CheckMode) -> P<Type> {
         let mut t = t;
-        if self.is_no_infer_type(t) {
+        if Self::is_no_infer_type(t) {
             t = t.as_substitution_type().base_type.get().unwrap();
         }
         // When the type of a reference is or contains an instantiable type with a union type constraint, and
@@ -1831,7 +1819,7 @@ impl Checker {
     /// answer read the reference's position, which the flow memo's key does not have.
     pub(crate) fn get_narrowable_type_for_flow_reference(&mut self, t: P<Type>, reference: P<Node>) -> (P<Type>, bool) {
         let mut t = t;
-        if self.is_no_infer_type(t) {
+        if Self::is_no_infer_type(t) {
             t = t.as_substitution_type().base_type.get().unwrap();
         }
         let position_read = some_type(self, t, super::checker::Checker::is_generic_type_with_union_constraint);
@@ -2031,7 +2019,7 @@ impl Checker {
                 }
                 // fallthrough (case ast.KindThisKeyword)
                 if node.kind() != Kind::ThisType {
-                    let container = self.get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
+                    let container = Self::get_this_container(node, false /*includeArrowFunctions*/, false /*includeClassComputedPropertyName*/);
                     if ast::is_function_like(container) {
                         let sig = self.get_signature_from_declaration(container.unwrap());
                         if sig.this_parameter().is_some() {

@@ -38,6 +38,7 @@ fn new_verbosity_context(level: usize, max_truncation_length: usize) -> P<Verbos
 
 impl LanguageService {
     // hover.go:27
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_hover(&self, ctx: &Context, params: &lsproto::HoverParams) -> Result<lsproto::HoverResponse, lsproto::Error> {
         let caps = lsproto::get_client_capabilities(ctx);
         let content_format = lsproto::preferred_markup_kind(&caps.text_document.hover.content_format);
@@ -310,9 +311,7 @@ fn documentation_from_alias(
 
     if let Some(result) = candidates.into_iter().find_map(|candidate| {
         let aliased_declaration = candidate.value_declaration().or_else(|| candidate.declarations().first().copied());
-        if aliased_declaration.is_none() {
-            return None;
-        }
+        aliased_declaration?;
 
         let documentation =
             get_documentation_from_declaration(get_mapped_location, c, Some(candidate), aliased_declaration, Some(node), content_format, comment_only);
@@ -686,7 +685,7 @@ impl QuickInfoWriter {
     }
 
     // hover.go:609
-    fn can_expand_symbol(&mut self, c: &mut Checker, symbol: P<Symbol>) -> bool {
+    fn can_expand_symbol(&self, c: &mut Checker, symbol: P<Symbol>) -> bool {
         // (Go returns false for a nil vc; hover always passes one, and a nil vc was replaced above.)
         // Only offer symbol-level expansion for types that tryExpandSymbol handles:
         // class, interface, enum, namespace/module. For functions/variables/properties,

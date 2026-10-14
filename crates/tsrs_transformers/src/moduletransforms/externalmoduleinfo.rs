@@ -136,8 +136,8 @@ impl externalModuleInfoCollector {
                     }
                 }
 
-                Kind::ClassDeclaration => {
-                    if ast::has_syntactic_modifier(node, ModifierFlags::Export) {
+                Kind::ClassDeclaration
+                    if ast::has_syntactic_modifier(node, ModifierFlags::Export) => {
                         if ast::has_syntactic_modifier(node, ModifierFlags::Default) {
                             // export default class { }
                             if !self.has_export_default {
@@ -155,7 +155,6 @@ impl externalModuleInfoCollector {
                             }
                         }
                     }
-                }
                 _ => {}
             }
         }

@@ -132,6 +132,7 @@ impl CommonJSModuleTransformer {
         let mut statements: Vec<P<Node>> = Vec::new();
         let mut variables: Vec<P<Node>> = Vec::new();
         let namespace_declaration = ast::get_namespace_declaration_node(node);
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if namespace_declaration.is_some() && !ast::is_default_import(node) {
             // import * as n from "mod";
             variables.push(f.new_variable_declaration(
@@ -214,11 +215,7 @@ impl CommonJSModuleTransformer {
     // commonjsmodule.go:829
     pub(crate) fn visit_top_level_export_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let n = node.as_export_declaration();
-        if n.module_specifier.is_none() {
-            // Elide export declarations with no module specifier as they are handled
-            // elsewhere.
-            return None;
-        }
+        n.module_specifier?;
 
         let f = self.factory();
         let emit_context = self.emit_context();

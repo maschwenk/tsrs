@@ -141,11 +141,11 @@ impl FS for OsFS {
     }
 
     fn write_file(&self, path: &str, content: &str) -> Result<(), String> {
-        self.write_file_ensuring_dir(path, content, false)
+        Self::write_file_ensuring_dir(path, content, false)
     }
 
     fn append_file(&self, path: &str, content: &str) -> Result<(), String> {
-        self.write_file_ensuring_dir(path, content, true)
+        Self::write_file_ensuring_dir(path, content, true)
     }
 
     fn remove(&self, path: &str) -> Result<(), String> {
@@ -418,7 +418,7 @@ fn remove_all(path: &str) -> io::Result<()> {
 }
 
 impl OsFS {
-    fn write_file_with_flag(&self, path: &str, content: &str, append: bool) -> io::Result<()> {
+    fn write_file_with_flag(path: &str, content: &str, append: bool) -> io::Result<()> {
         use std::io::Write;
         let mut options = fs::File::options();
         options.write(true).create(true);
@@ -431,17 +431,17 @@ impl OsFS {
         file.write_all(content.as_bytes())
     }
 
-    fn ensure_directory_exists(&self, directory_path: &str) -> io::Result<()> {
+    fn ensure_directory_exists(directory_path: &str) -> io::Result<()> {
         fs::create_dir_all(directory_path)
     }
 
-    fn write_file_ensuring_dir(&self, path: &str, content: &str, append: bool) -> Result<(), String> {
+    fn write_file_ensuring_dir(path: &str, content: &str, append: bool) -> Result<(), String> {
         let _ = internal::root_length(path); // Assert path is rooted
-        if self.write_file_with_flag(path, content, append).is_ok() {
+        if Self::write_file_with_flag(path, content, append).is_ok() {
             return Ok(());
         }
-        self.ensure_directory_exists(&tspath::get_directory_path(&tspath::normalize_path(path))).map_err(|e| e.to_string())?;
-        self.write_file_with_flag(path, content, append).map_err(|e| e.to_string())
+        Self::ensure_directory_exists(&tspath::get_directory_path(&tspath::normalize_path(path))).map_err(|e| e.to_string())?;
+        Self::write_file_with_flag(path, content, append).map_err(|e| e.to_string())
     }
 }
 

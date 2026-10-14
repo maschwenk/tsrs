@@ -12,6 +12,7 @@ pub struct usingDeclarationTransformer {
 }
 
 // using.go:21
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_using_declaration_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(usingDeclarationTransformer {
         base: Transformer::default(),
@@ -68,9 +69,9 @@ impl usingDeclarationTransformer {
 
         let f = self.factory();
         let emit_context = self.emit_context();
-        let visited: P<Node>;
+
         let using_kind = get_using_kind_of_statements(node.statements.nodes());
-        if using_kind != usingKind::None {
+        let visited: P<Node> = if using_kind != usingKind::None {
             // Imports and exports must stay at the top level. This means we must hoist all imports, exports, and
             // top-level function declarations and bindings out of the `try` statements we generate (see using.go for
             // the worked example). We hoist bindings, functions, imports and exports to a new outer statement list
@@ -143,10 +144,10 @@ impl usingDeclarationTransformer {
                 top_level_statements.push(f.new_export_assignment(None /*modifiers*/, true /*isExportEquals*/, None /*typeNode*/, export_equals_binding));
             }
 
-            visited = f.update_source_file(node.as_node(), f.new_node_list(top_level_statements), node.end_of_file_token);
+            f.update_source_file(node.as_node(), f.new_node_list(top_level_statements), node.end_of_file_token)
         } else {
-            visited = self.visitor().visit_each_child(Some(node.as_node())).unwrap();
-        }
+            self.visitor().visit_each_child(Some(node.as_node())).unwrap()
+        };
         emit_context.add_emit_helper(visited, &emit_context.read_emit_helpers());
         self.export_vars.borrow_mut().clear();
         *self.export_bindings.borrow_mut() = None;
@@ -270,7 +271,7 @@ impl usingDeclarationTransformer {
 
         match node.kind() {
             Kind::ImportDeclaration | Kind::ImportEqualsDeclaration | Kind::ExportDeclaration | Kind::FunctionDeclaration => {
-                self.hoist_import_or_export_or_hoisted_declaration(node, top_level_statements);
+                Self::hoist_import_or_export_or_hoisted_declaration(node, top_level_statements);
                 None
             }
             Kind::ExportAssignment => Some(self.hoist_export_assignment(node)),
@@ -344,7 +345,7 @@ impl usingDeclarationTransformer {
     }
 
     // using.go:397
-    fn hoist_import_or_export_or_hoisted_declaration(&self, node: P<Node>, top_level_statements: &mut Vec<P<Node>>) {
+    fn hoist_import_or_export_or_hoisted_declaration(node: P<Node>, top_level_statements: &mut Vec<P<Node>>) {
         // NOTE: `node` has already been visited
         top_level_statements.push(node);
     }

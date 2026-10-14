@@ -1,7 +1,7 @@
 //! Port of `internal/transformers/declarations` (TypeScript 7). The transformer base it builds on
-//! (`internal/transformers`) lives in tsrs_transformers and is re-exported.
+//! (`internal/transformers`) lives in `tsrs_transformers` and is re-exported.
 //!
-//! Used both for declaration emit (tsrs_compiler `run_declaration_transformers` in emitter.rs) and for declaration
+//! Used both for declaration emit (`tsrs_compiler` `run_declaration_transformers` in emitter.rs) and for declaration
 //! diagnostics (`tsc` reports them whenever `declaration`/`composite` is on). The transform is ported faithfully:
 //! which nodes are visited, in what order and with which node-builder flags decides which diagnostics fire.
 //! Diagnostics entry point: `get_declaration_diagnostics` (Go `compiler.getDeclarationDiagnostics`) is in
@@ -10,7 +10,7 @@
 //!
 //! Layout (one Rust file per Go file; transform.go is split by line range):
 //! - types.rs: the hand-ported data model of all Go files (structs, host trait, constants).
-//! - `Resolver` and `Transformer` come from tsrs_transformers (re-exported).
+//! - `Resolver` and `Transformer` come from `tsrs_transformers` (re-exported).
 //! - transform_{1,2,3}.rs (transform.go 1–1339, 1340–2327, 2328–end), diagnostics_.rs, tracker.rs, util.rs,
 //!   supplementalreferences.rs: hand-ported function bodies (scaffolded as stubs by tools/gosig, declarations.json).
 

@@ -346,7 +346,7 @@ impl Watcher {
         if self.config.config_file.is_some()
             && let Some(wildcards) = self.config.wildcard_directories()
         {
-            for (dir, &recursive) in wildcards.iter() {
+            for (dir, &recursive) in wildcards {
                 desired_dirs.insert(fs.realpath(dir), recursive);
             }
         }

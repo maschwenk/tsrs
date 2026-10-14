@@ -127,16 +127,18 @@ impl<W: Write> Writer<W> {
 
 // bytes.TrimSpace: Unicode white space at both ends.
 fn trim_space(b: &[u8]) -> &[u8] {
-    match tsrs_core::utf8::basic::from_utf8(b) {
-        Ok(s) => s.trim().as_bytes(),
-        // Invalid UTF-8 fails strconv.ParseInt below anyway; trim the ASCII white space Go would.
-        Err(_) => {
+    if let Ok(s) = tsrs_core::utf8::basic::from_utf8(b) {
+
+s.trim().as_bytes()
+} else {
+// Invalid UTF-8 fails strconv.ParseInt below anyway; trim the ASCII white space Go would.
+
             let is_space = |c: &u8| matches!(c, b' ' | b'\t' | b'\n' | b'\x0b' | b'\x0c' | b'\r');
             let start = b.iter().position(|c| !is_space(c)).unwrap_or(b.len());
             let end = b.iter().rposition(|c| !is_space(c)).map_or(start, |i| i + 1);
             &b[start..end]
-        }
-    }
+
+}
 }
 
 // strconv.ParseInt(string(s), 10, 64), with its error text.

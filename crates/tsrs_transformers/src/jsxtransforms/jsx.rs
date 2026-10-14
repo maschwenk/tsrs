@@ -19,6 +19,7 @@ pub struct JSXTransformer {
 }
 
 // jsx.go:32
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_jsx_transformer(opts: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opts.compiler_options;
     let emit_context = opts.context;
@@ -129,9 +130,7 @@ impl JSXTransformer {
 
     // jsx.go:106
     fn visit(&self, node: Option<P<Node>>) -> Option<P<Node>> {
-        let Some(node) = node else {
-            return None;
-        };
+        let node = node?;
         if !node.subtree_facts().intersects(SubtreeFacts::ContainsJsx) {
             return Some(node);
         }
@@ -407,9 +406,7 @@ impl JSXTransformer {
         // on child elements — the array literal is single-line.
         let mut results: Vec<P<Node>> = Vec::with_capacity(non_whitespce_children.len());
         results.extend(non_whitespce_children.into_iter().filter_map(|child| {
-            let Some(res) = self.transform_jsx_child_to_expression(child) else {
-                return None;
-            };
+            let res = self.transform_jsx_child_to_expression(child)?;
             self.emit_context().set_emit_flags(res, self.emit_context().emit_flags(res) & !EmitFlags::StartOnNewLine);
             Some(res)
         }));

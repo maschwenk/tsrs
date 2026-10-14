@@ -7,6 +7,7 @@ version = "0.14.1"
 edition = "2024"
 rust-version = "1.99"
 license = "Apache-2.0"
+publish = false
 
 # The microsoft/TypeScript commit this port follows. Read by crates/tsrs_execute/build.rs (`tsrs --version`), by
 # npm/build.mjs (npm version = "<workspace version>-ts<version>") and by CI (conformance testdata checkout).
@@ -91,6 +92,15 @@ strip = "symbols" # set to `false` for debug information
 debug = false # set to `true` for debug information
 panic = "unwind"
 
+# The fourslash harness and its ~750k lines of generated tests need no -O3: at opt-level 3 in one codegen unit they
+# took 79 s to compile and the tsrs-fourslash link 106 s, the longest serial path of CI's release build (212 s on
+# 14 cores, against 137 s with this). The language server it runs comes from the other crates, still at opt-level 3
+# and through the same fat LTO, so the suite's results and run time (4.2 s) are unchanged. opt-level 0 also slows the
+# server's code in the binary (the suite took 6.7 s) and saves no wall time.
+[profile.release.package.tsrs_fourslash]
+opt-level = 1
+codegen-units = 16
+
 # Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
 # training run, -Cprofile-use (notes/perf-pgo.md). `release` has the same LTO and codegen units; the release
 # workflow's `dist` builds add only the PGO profile (and, on Linux, BOLT through .github/scripts/bolt.sh).
@@ -107,6 +117,13 @@ inherits = "release"
 lto = false
 codegen-units = 16
 
+# Undoes `profile.release.package.tsrs_fourslash`, which only pays under fat LTO: there the crate stops at bitcode, and
+# opt-level 1 saves its optimization. Without LTO the crate goes through code generation, where opt-level 1 took
+# 60-65 s against 35 s at opt-level 3.
+[profile.ci-native.package.tsrs_fourslash]
+opt-level = 3
+codegen-units = 16
+
 # The edit-build-test loop (CONTRIBUTING.md, docs/DEBUGGING.md): release optimization without any LTO, incrementally.
 # A checker edit rebuilds tsrs and tsrs-test in about 5 s instead of about 3 minutes, and the conformance suite gives
 # the same results in the same time (notes/dev-loop-build.md). Not for performance measurements: use `release`.
@@ -115,6 +132,12 @@ inherits = "release"
 lto = "off"
 codegen-units = 256
 incremental = true
+
+# As for ci-native: no LTO, so the release override for tsrs_fourslash only slows its build (an edit rebuilt it in
+# 5 s against 3 s).
+[profile.fast.package.tsrs_fourslash]
+opt-level = 3
+codegen-units = 256
 
 # The WebAssembly module (crates/tsrs_wasm, tools/wasm/build.sh; notes/wasm-build.md has the opt-level measurements).
 # panic = "abort": wasm cannot unwind (a panic prints and exits with status 5, as a panicked native driver thread).
@@ -150,29 +173,18 @@ struct_excessive_bools = "allow"
 too_many_lines = "allow"
 must_use_candidate = "allow"
 wildcard_imports = "allow"
-doc_markdown = "allow"
 similar_names = "allow"
-fn_params_excessive_bools = "allow"
 too_many_arguments = "allow"
-non_std_lazy_statics = "allow"
-result_large_err = "allow"
 missing_const_for_fn = "allow"
 option_if_let_else = "allow"
 or_fun_call = "allow"
-cognitive_complexity = "allow"
 use_self = "allow"
 significant_drop_tightening = "allow"
 branches_sharing_code = "allow"
-fallible_impl_from = "allow"
 useless_let_if_seq = "allow"
-impl_trait_in_params = "allow"
-byte_char_slices = "allow"
-question_mark = "allow"
-multiple_crate_versions = "allow"
 
 # Tsrs-specific exceptions to Oxc's policy. This workspace is an unpublished, mechanical Go port: visibility,
 # signatures, numeric conversions, declaration placement and control-flow decomposition follow the Go source.
-cargo_common_metadata = "allow"
 redundant_pub_crate = "allow"
 missing_panics_doc = "allow"
 missing_errors_doc = "allow"
@@ -182,48 +194,16 @@ cast_precision_loss = "allow"
 cast_sign_loss = "allow"
 cast_possible_wrap = "allow"
 collapsible_if = "allow"
-unused_self = "allow"
 if_not_else = "allow"
-needless_pass_by_ref_mut = "allow"
-unnecessary_wraps = "allow"
-needless_return = "allow"
-identity_op = "allow"
-single_match = "allow"
 type_complexity = "allow"
-too_long_first_doc_paragraph = "allow"
 match_same_arms = "allow"
 items_after_statements = "allow"
-single_match_else = "allow"
-redundant_else = "allow"
-needless_late_init = "allow"
-unnecessary_unwrap = "allow"
-collapsible_match = "allow"
-if_same_then_else = "allow"
-wrong_self_convention = "allow"
-upper_case_acronyms = "allow"
-module_inception = "allow"
-enum_variant_names = "allow"
-only_used_in_recursion = "allow"
-self_only_used_in_recursion = "allow"
 struct_field_names = "allow"
-explicit_iter_loop = "allow"
-option_option = "allow"
 many_single_char_names = "allow"
-float_cmp = "allow"
-ref_option = "allow"
-implicit_hasher = "allow"
-return_self_not_must_use = "allow"
-len_without_is_empty = "allow"
-default_trait_access = "allow"
 
 # Oxc restriction and nursery additions.
-print_stdout = "allow" # Compiler and test-runner output is their interface.
-print_stderr = "allow"
-self_named_module_files = "allow" # One Rust file/module per Go file.
 empty_drop = "warn"
-empty_structs_with_brackets = "allow" # Mirrors Go's `struct{}` protocol types.
 empty_enum_variants_with_brackets = "warn"
-exit = "allow" # CLI entry points must preserve process exit statuses.
 fn_to_numeric_cast_any = "warn"
 unnecessary_self_imports = "warn"
 try_err = "warn"

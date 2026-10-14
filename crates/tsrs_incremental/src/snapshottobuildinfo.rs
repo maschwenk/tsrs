@@ -84,6 +84,7 @@ impl toBuildInfo<'_> {
     }
 
     // snapshottobuildinfo.go:77
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn to_file_id(&mut self, path: &Path) -> BuildInfoFileId {
         let mut file_id = self.file_name_to_file_id.get(path.as_str()).copied().unwrap_or(0);
         if file_id == 0 {
@@ -101,6 +102,7 @@ impl toBuildInfo<'_> {
     }
 
     // snapshottobuildinfo.go:91
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn to_file_id_list_id(&mut self, set: &RefSet) -> BuildInfoFileIdListId {
         // Go maps the set's keys in random order, so a path seen here for the first time gets an id that depends on
         // that order; the port gives new ids in sorted path order. Only paths without an id need sorting.
@@ -118,6 +120,7 @@ impl toBuildInfo<'_> {
         self.to_file_id_list_id_of_sorted_ids(file_ids)
     }
 
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn to_file_id_list_id_of_sorted_ids(&mut self, file_ids: Vec<BuildInfoFileId>) -> BuildInfoFileIdListId {
         // Go keys the map by the ids joined with ","; the id list itself is the same key.
         let mut file_id_list_id = self.file_names_to_file_id_list_id.get(file_ids.as_slice()).copied().unwrap_or(0);
@@ -148,6 +151,7 @@ impl toBuildInfo<'_> {
     }
 
     // snapshottobuildinfo.go:123
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn to_build_info_diagnostics_from_file_name_diagnostics(&mut self, diagnostics: &[buildInfoDiagnosticWithFileName]) -> Vec<BuildInfoDiagnostic> {
         diagnostics
             .iter()
@@ -176,6 +180,7 @@ impl toBuildInfo<'_> {
     }
 
     // snapshottobuildinfo.go:150
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn to_build_info_diagnostics_from_diagnostics(&mut self, file_path: &Path, diagnostics: &[P<Diagnostic>]) -> Vec<BuildInfoDiagnostic> {
         diagnostics
             .iter()
@@ -210,6 +215,7 @@ impl toBuildInfo<'_> {
     }
 
     // snapshottobuildinfo.go:195
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn to_build_info_diagnostics_of_file(&mut self, file_path: &Path, diags: &DiagnosticsOrBuildInfoDiagnosticsWithFileName) -> Option<BuildInfoDiagnosticsOfFile> {
         let diagnostics = diags.diagnostics().unwrap_or_default();
         if !diagnostics.is_empty() {

@@ -49,7 +49,7 @@ pub(crate) fn write_format_diagnostics(diagnostics: &[P<Diagnostic>], new_line: 
                 d.pos().expect("file diagnostics have source positions"),
             );
             let relative_file_name =
-                tspath::convert_to_relative_path(file.file_name(), &ComparePathsOptions::default());
+                tspath::convert_to_relative_path(file.file_name(), &tsrs_core::tspath::ComparePathsOptions::default());
             let _ = write!(
                 out,
                 "{}({},{}): ",

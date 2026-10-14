@@ -5,6 +5,7 @@ use super::jsnum::*;
 
 impl Number {
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-tostring
+    #[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
     pub fn string(self) -> String {
         if self.is_nan() {
             return "NaN".to_string();

@@ -19,7 +19,7 @@ pub(crate) fn run(program: &'static Program, roots: &[usize]) {
     // their unset slots would keep its words (as in `run_lsp`).
     tsrs_core::census_scrub_stack();
     tsrs_ast::census_layouts();
-    let mut all = vec![program as *const Program as usize];
+    let mut all = vec![std::ptr::from_ref::<Program>(program) as usize];
     all.extend_from_slice(roots);
     census::run(&all);
     if std::env::var_os("TSRS_CENSUS_VERIFY").is_some_and(|v| v == "1") {

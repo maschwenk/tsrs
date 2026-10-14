@@ -1,7 +1,10 @@
-//! tsrs-only, env-gated (`TSRS_FRONTEND_STATS=1`): per-thread time accumulators for program construction's
-//! parallel parse + resolve phase, printed after `--extendedDiagnostics` by the loader (filesparser.rs). Off, each
-//! probe is one atomic load and a branch; on, two `Instant::now()` calls per probe on the calling thread's own
-//! counters (no shared writes), summed over the pool once per round.
+//! Attributes parallel program-construction time to frontend phases.
+//!
+//! tsrs-only, env-gated (`TSRS_FRONTEND_STATS=1`): per-thread time accumulators for program construction's parallel parse + resolve phase, printed after `--extendedDiagnostics` by the loader (filesparser.rs).
+//!
+//!
+//! Off, each probe is one atomic load and a branch; on, two `Instant::now()` calls per probe on the
+//! calling thread's own counters (no shared writes), summed over the pool once per round.
 
 use std::cell::Cell;
 use std::sync::OnceLock;

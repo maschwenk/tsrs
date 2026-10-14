@@ -52,6 +52,7 @@ pub(crate) fn doc_sym_to_lsp(symbol: &DocSym) -> lsproto::DocumentSymbol {
 
 impl LanguageService {
     // symbols.go:25
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_document_symbols(&self, ctx: &Context, document_uri: &lsproto::DocumentUri) -> Result<lsproto::DocumentSymbolResponse, lsproto::Error> {
         let (_, file) = self.get_program_and_file(document_uri);
         let mut projections = vec![file];
@@ -545,11 +546,10 @@ fn get_text_of_name(node: P<Node>) -> String {
         Kind::Identifier | Kind::PrivateIdentifier | Kind::NumericLiteral => return node.text().to_string(),
         Kind::StringLiteral => return format!("\"{}\"", printer::escape_string(node.text(), printer::QuoteChar::DoubleQuote)),
         Kind::NoSubstitutionTemplateLiteral => return format!("`{}`", printer::escape_string(node.text(), printer::QuoteChar::Backtick)),
-        Kind::ComputedPropertyName => {
-            if ast::is_string_or_numeric_literal_like(node.expression().unwrap()) {
+        Kind::ComputedPropertyName
+            if ast::is_string_or_numeric_literal_like(node.expression().unwrap()) => {
                 return get_text_of_name(node.expression().unwrap());
             }
-        }
         _ => {}
     }
     scanner::get_text_of_node(node)
@@ -664,6 +664,7 @@ struct DeclarationInfo {
 }
 
 // symbols.go:546
+#[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
 pub fn provide_workspace_symbols(
     ctx: &Context,
     programs: &[&'static Program],
@@ -785,9 +786,7 @@ fn get_match_score(s: &str, pattern: &str) -> Option<usize> {
     for p in pattern.chars() {
         let exact = go_is_upper(p);
         loop {
-            let Some(c) = s.next() else {
-                return None;
-            };
+            let c = s.next()?;
             if exact && c == p || !exact && go_to_lower(c) == go_to_lower(p) {
                 break;
             }

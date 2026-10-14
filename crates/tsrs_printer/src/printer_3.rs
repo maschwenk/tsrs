@@ -289,6 +289,7 @@ impl Printer {
         let skip_trailing_comments = self.comments_disabled || previous_sibling.is_some_and(|p| !self.should_emit_trailing_comments(p));
         let emit_trailing_comma = has_trailing_comma && format.intersects(ListFormat::AllowTrailingComma) && format.intersects(ListFormat::CommaDelimited);
         if emit_trailing_comma {
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if previous_sibling.is_some() && !skip_trailing_comments {
                 let previous = previous_sibling.unwrap();
                 self.emit_token(Kind::CommaToken, previous.end(), WriteKind::Punctuation, previous);
@@ -613,7 +614,7 @@ impl Printer {
                 } else if is_punctuation_kind(node.kind()) {
                     self.emit_punctuation_node(Some(node));
                 } else if is_jsdoc_kind(node.kind()) {
-                    self.emit_jsdoc_node(node);
+                    Self::emit_jsdoc_node(node);
                 } else {
                     panic!("unhandled Node: {:?}", node.kind());
                 }
@@ -758,7 +759,7 @@ impl Printer {
     }
 
     pub(crate) fn emit_detached_comments_before_statement_list(&mut self, node: P<Node>, detached_range: TextRange) -> Option<commentState> {
-        if !self.should_emit_detached_comments(node) {
+        if !Self::should_emit_detached_comments(node) {
             return None;
         }
 

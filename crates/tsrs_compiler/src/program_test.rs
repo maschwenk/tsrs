@@ -183,7 +183,7 @@ fn external_checker_pool_diagnostics() {
     assert_eq!(single, vec![2322, 2578]);
     assert_eq!(external.get_global_diagnostics(&ctx), [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     {
-        let mut c = external.get_type_checker_for_file(&ctx, file);
+        let c = external.get_type_checker_for_file(&ctx, file);
         assert!(!c.was_canceled());
     }
     assert_eq!(acquired.load(Ordering::Relaxed), 6);

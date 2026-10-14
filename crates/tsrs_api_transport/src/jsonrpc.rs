@@ -13,8 +13,8 @@ pub const ERR_INVALID_HEADER: &str = "jsonrpc: invalid header";
 pub const ERR_INVALID_CONTENT_LENGTH: &str = "jsonrpc: invalid content length";
 pub const ERR_NO_CONTENT_LENGTH: &str = "jsonrpc: no content length";
 
-/// Upper bound on one header line. Go's bufio ReadBytes is unbounded; a header line is never
-/// legitimately this long, so longer lines are rejected instead of buffered forever.
+/// Upper bound on one header line. Go's bufio `ReadBytes` is unbounded; a header line is never legitimately
+/// this long, so longer lines are rejected instead of buffered forever.
 pub const MAX_HEADER_LINE_BYTES: usize = 8 * 1024;
 
 /// baseproto.go Reader.
@@ -158,7 +158,7 @@ impl<R: Read + Send> ProtocolReader for FrameReader<R> {
     }
 }
 
-/// baseproto.go Writer + protocol_jsonrpc.go Write*.
+/// baseproto.go Writer + `protocol_jsonrpc.go` Write*.
 pub struct FrameWriter<W: Write> {
     w: BufWriter<W>,
 }

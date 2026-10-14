@@ -65,6 +65,7 @@ fn iterate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker, 
 
 // The body of iterateBaseline's per-file loop; `None` is Go's early `return baselines` (a symbol result without
 // a symbol, which the walker never produces).
+#[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
 fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], is_symbol_baseline: bool) -> Option<String> {
     let mut type_lines = String::new();
     type_lines.push_str("=== ");
@@ -163,7 +164,7 @@ impl TypeWriterWalker {
         self.visit_node(source_file.as_node(), true /*isSymbolWalk*/)
     }
 
-    fn visit_node(&mut self, node: P<Node>, is_symbol_walk: bool) -> Vec<TypeWriterResult> {
+    fn visit_node(&self, node: P<Node>, is_symbol_walk: bool) -> Vec<TypeWriterResult> {
         let nodes = for_each_ast_node(node);
         let mut results = Vec::new();
         results.extend(nodes.into_iter().filter_map(|n| {
@@ -180,7 +181,7 @@ impl TypeWriterWalker {
         results
     }
 
-    fn write_type_or_symbol(&mut self, node: P<Node>, is_symbol_walk: bool) -> Option<TypeWriterResult> {
+    fn write_type_or_symbol(&self, node: P<Node>, is_symbol_walk: bool) -> Option<TypeWriterResult> {
         let sf = self.current_source_file.unwrap();
         let actual_pos = scanner::skip_trivia(
             sf.text(),
@@ -220,8 +221,8 @@ impl TypeWriterWalker {
                 t = Some(c.get_type_at_location(node));
             }
             let t = t.unwrap();
-            let type_string;
-            if !self.had_error_baseline
+
+            let type_string = if !self.had_error_baseline
                 && checker::is_type_any(Some(t))
                 && !ast::is_binding_element(parent)
                 && !ast::is_property_access_or_qualified_name(parent)
@@ -232,7 +233,7 @@ impl TypeWriterWalker {
                 && !is_export_statement_name(node)
                 && !is_intrinsic_jsx_tag(node, sf)
             {
-                type_string = t.as_intrinsic_type().intrinsic_name().to_string();
+                t.as_intrinsic_type().intrinsic_name().to_string()
             } else {
                 let ctx = self.emit_context;
                 ctx.reset();
@@ -269,8 +270,8 @@ impl TypeWriterWalker {
                 let mut writer = checker::new_text_writer("", 0);
                 let mut printer = checker::new_printer(PrinterOptions { remove_comments: true, ..Default::default() }, PrintHandlers::default(), Some(ctx));
                 printer.write(type_node.unwrap(), Some(sf), &mut *writer, None);
-                type_string = writer.string();
-            }
+                writer.string()
+            };
             return Some(TypeWriterResult {
                 line,
                 source_text,

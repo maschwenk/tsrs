@@ -144,15 +144,15 @@ impl bucketBuildPreferences {
 }
 
 // Go `*collections.Set` nil semantics (a nil set is empty; `Clone` keeps nil; `Equals` distinguishes nil).
-fn set_len(s: &Option<Set<String>>) -> usize {
-    s.as_ref().map_or(0, tsrs_core::collections::Set::len)
+fn set_len(s: Option<&Set<String>>) -> usize {
+    s.map_or(0, tsrs_core::collections::Set::len)
 }
 
-fn set_has(s: &Option<Set<String>>, key: &str) -> bool {
-    s.as_ref().is_some_and(|s| s.m.contains(key))
+fn set_has(s: Option<&Set<String>>, key: &str) -> bool {
+    s.is_some_and(|s| s.m.contains(key))
 }
 
-fn set_equals(a: &Option<Set<String>>, b: &Option<Set<String>>) -> bool {
+fn set_equals(a: Option<&Set<String>>, b: Option<&Set<String>>) -> bool {
     match (a, b) {
         (None, None) => true,
         (Some(a), Some(b)) => a.equals(b),
@@ -160,7 +160,7 @@ fn set_equals(a: &Option<Set<String>>, b: &Option<Set<String>>) -> bool {
     }
 }
 
-fn set_is_subset_of(a: &Option<Set<String>>, b: &Option<Set<String>>) -> bool {
+fn set_is_subset_of(a: Option<&Set<String>>, b: Option<&Set<String>>) -> bool {
     let Some(a) = a else {
         return true;
     };
@@ -208,7 +208,7 @@ pub struct BucketState {
 impl BucketState {
     // registry.go:173
     pub fn dirty(&self) -> bool {
-        self.multiple_files_dirty || !self.dirty_file.is_empty() || self.new_program_structure > newProgramStructure::False || set_len(&self.dirty_packages) > 0
+        self.multiple_files_dirty || !self.dirty_file.is_empty() || self.new_program_structure > newProgramStructure::False || set_len(self.dirty_packages.as_ref()) > 0
     }
 
     // registry.go:177
@@ -237,7 +237,7 @@ impl BucketState {
         self.new_program_structure > newProgramStructure::False
             || self.has_dirty_file_besides(file)
             || !self.build_preferences.equal(&bucket_build_preferences_from_user_preferences(preferences))
-            || set_len(&self.dirty_packages) > 0
+            || set_len(self.dirty_packages.as_ref()) > 0
     }
 
     // registry.go:202
@@ -251,7 +251,7 @@ impl BucketState {
 // nil represents "all packages" — a superset of every concrete set.
 // Returns true if the current set already covers everything the target needs,
 // meaning no rebuild is required for recursive search purposes.
-fn recursive_search_subset(target: &Option<Set<String>>, current: &Option<Set<String>>) -> bool {
+fn recursive_search_subset(target: Option<&Set<String>>, current: Option<&Set<String>>) -> bool {
     let Some(_) = target else {
         // Target wants all packages searched — only satisfied if current is also all.
         return current.is_none();
@@ -490,7 +490,7 @@ impl Registry {
     // the arena (module and alias resolvers, the extraction checkers' types and symbols, resolution caches) goes
     // to a scratch region freed before this returns; the finished registry holds no reference into it. The
     // package.json entries the new version keeps in `directories` go to a region of their own (`regions`).
-    pub fn clone_registry(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    pub fn clone_registry(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Arc<Registry> {
         let scratch = Region::new(SCRATCH_REGION_FIRST_CHUNK);
         let scratch_scope = scratch.enter();
         let registry = self.clone_registry_in_scratch(ctx, change, host, logger);
@@ -499,7 +499,7 @@ impl Registry {
         registry
     }
 
-    fn clone_registry_in_scratch(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Result<Arc<Registry>, String> {
+    fn clone_registry_in_scratch(&self, ctx: &Context, change: &RegistryChange, host: &dyn RegistryCloneHost, logger: LogTree) -> Arc<Registry> {
         let start = Instant::now();
         let mut logger = logger;
         if !logger.is_nil() {
@@ -524,7 +524,7 @@ impl Registry {
             logger.logf(format_args!("Built autoimport registry in {:?}", start.elapsed()));
         }
         let registry = builder.build();
-        Ok(Arc::new(registry))
+        Arc::new(registry)
     }
 
     // registry.go:452
@@ -807,25 +807,22 @@ impl registryBuilder<'_> {
         let update_directory = |b: &mut registryBuilder, dir_path: &Path, dir_name: &str, package_json_changed: bool| {
             let package_json_file_name = tspath::combine_paths(dir_name, &["package.json"]);
             let has_node_modules = host.fs().directory_exists(&tspath::combine_paths(dir_name, &["node_modules"]));
-            match b.directories.get(dir_path) {
-                Some(entry) => {
-                    // (Go reads the package.json inside the apply function; it is read first here so that the entry is
-                    // allocated in this update's package.json region.)
-                    if entry.value().is_some_and(|dir| package_json_changed || dir.has_node_modules != has_node_modules) {
-                        let package_json = b.get_directory_package_json(&package_json_file_name);
-                        entry.change_if(
-                            |dir| package_json_changed || dir.has_node_modules != has_node_modules,
-                            |dir| {
-                                dir.package_json = package_json;
-                                dir.has_node_modules = has_node_modules;
-                            },
-                        );
-                    }
-                }
-                _ => {
+            if let Some(entry) = b.directories.get(dir_path) {
+                // (Go reads the package.json inside the apply function; it is read first here so that the entry is
+                // allocated in this update's package.json region.)
+                if entry.value().is_some_and(|dir| package_json_changed || dir.has_node_modules != has_node_modules) {
                     let package_json = b.get_directory_package_json(&package_json_file_name);
-                    b.directories.add(dir_path.clone(), Shared::new(directory { name: dir_name.to_string(), package_json, has_node_modules }));
+                    entry.change_if(
+                        |dir| package_json_changed || dir.has_node_modules != has_node_modules,
+                        |dir| {
+                            dir.package_json = package_json;
+                            dir.has_node_modules = has_node_modules;
+                        },
+                    );
                 }
+            } else {
+                let package_json = b.get_directory_package_json(&package_json_file_name);
+                b.directories.add(dir_path.clone(), Shared::new(directory { name: dir_name.to_string(), package_json, has_node_modules }));
             }
 
             if has_node_modules {
@@ -1038,11 +1035,11 @@ impl registryBuilder<'_> {
                 let bucket_state = &bucket_value.state;
                 // !!! Optimization: handle different dependency set via granular updates
                 let needs_full_rebuild = bucket_state.multiple_files_dirty
-                    || !set_equals(&bucket_value.dependency_names, &dependencies)
+                    || !set_equals(bucket_value.dependency_names.as_ref(), dependencies.as_ref())
                     || !bucket_state.build_preferences.equal(&bucket_build_preferences_from_user_preferences(&self.user_preferences))
-                    || !recursive_search_subset(&target_recursive_packages, &bucket_state.recursive_search_packages);
+                    || !recursive_search_subset(target_recursive_packages.as_ref(), bucket_state.recursive_search_packages.as_ref());
                 let dirty_packages = bucket_state.dirty_packages();
-                let can_do_granular_update = !needs_full_rebuild && set_len(&dirty_packages) > 0;
+                let can_do_granular_update = !needs_full_rebuild && set_len(dirty_packages.as_ref()) > 0;
 
                 if needs_full_rebuild {
                     node_modules_tasks.push(nodeModulesBucketTask {
@@ -1114,7 +1111,7 @@ impl registryBuilder<'_> {
                     if !seen.get(&pkg.realpath).copied().unwrap_or(false) {
                         seen.insert(pkg.realpath.clone(), true);
                         let enable_dir_search = target_recursive_packages.is_none()
-                            || set_has(&target_recursive_packages, &pkg.package_name)
+                            || set_has(target_recursive_packages.as_ref(), &pkg.package_name)
                             || known_recursive_search_packages().has(&pkg.package_name);
                         // Record actual directory-searched packages so the stored set
                         // reflects reality for rebuild detection and stats.
@@ -1207,7 +1204,7 @@ impl registryBuilder<'_> {
                     task.dirty_packages.as_ref().unwrap(),
                     &task.discovered,
                     &extraction_cache,
-                    &target_recursive_packages,
+                    target_recursive_packages.as_ref(),
                     &node_modules_logger.fork(&task.dir_name),
                 );
             } else {
@@ -1219,7 +1216,7 @@ impl registryBuilder<'_> {
                     &task.discovered,
                     task.directory_package_names.as_ref(),
                     &extraction_cache,
-                    &target_recursive_packages,
+                    target_recursive_packages.as_ref(),
                     &node_modules_logger.fork(&task.dir_name),
                 );
             }
@@ -1234,7 +1231,7 @@ impl registryBuilder<'_> {
             let mut should_rebuild = project_value.state.has_dirty_file_besides(&change.requested_file)
                 || !project_value.state.build_preferences.equal(&bucket_build_preferences_from_user_preferences(&self.user_preferences));
             if !should_rebuild && project_value.state.new_program_structure > newProgramStructure::False {
-                if !set_equals(&project_value.resolved_package_names, &resolved_package_names) || has_new_non_node_modules_files(program, &project_value) {
+                if !set_equals(project_value.resolved_package_names.as_ref(), resolved_package_names.as_ref()) || has_new_non_node_modules_files(program, &project_value) {
                     should_rebuild = true;
                 } else {
                     project.change(|b| b.state.new_program_structure = newProgramStructure::False);
@@ -1481,7 +1478,7 @@ impl bucketBuildResult {
 impl registryBuilder<'_> {
     // registry.go:1229
     fn build_project_bucket(
-        &mut self,
+        &self,
         ctx: &Context,
         result: &mut bucketBuildResult,
         project_id: &ProjectID,
@@ -1536,7 +1533,7 @@ impl registryBuilder<'_> {
 
         let index_start = Instant::now();
         let mut idx: Index<Arc<Export>> = Index::default();
-        let mut paths: FxHashMap<Path, String> = FxHashMap::with_capacity_and_hasher(exports.len(), Default::default());
+        let mut paths: FxHashMap<Path, String> = FxHashMap::with_capacity_and_hasher(exports.len(), rustc_hash::FxBuildHasher);
         #[expect(clippy::iter_over_hash_type, reason = "order-independent: fills the paths map and the export index, whose searches are sorted by fix preference; Go ranges the map too")]
         for (path, file_exports) in exports {
             paths.insert(path, String::new()); // Empty string for project buckets
@@ -1902,7 +1899,7 @@ impl registryBuilder<'_> {
         discovered: &[Arc<discoveredPackage>],
         directory_package_names: Option<&Set<String>>,
         extraction_cache: &FxHashMap<String, Arc<perPackageExtractionResult>>,
-        recursive_search_packages: &Option<Set<String>>,
+        recursive_search_packages: Option<&Set<String>>,
         logger: &LogTree,
     ) {
         if let Some(err) = ctx.err() {
@@ -1950,11 +1947,11 @@ impl registryBuilder<'_> {
             resolved_package_names: None,
             state: BucketState {
                 build_preferences: bucket_build_preferences_from_user_preferences(&self.user_preferences),
-                recursive_search_packages: recursive_search_packages.clone(),
+                recursive_search_packages: recursive_search_packages.cloned(),
                 ..Default::default()
             },
         });
-        result.entrypoints = FxHashMap::with_capacity_and_hasher(extraction.exports.len(), Default::default());
+        result.entrypoints = FxHashMap::with_capacity_and_hasher(extraction.exports.len(), rustc_hash::FxBuildHasher);
         result.possible_failed_ambient_module_lookup_sources = extraction.possible_failed_ambient_module_lookup_sources;
         result.possible_failed_ambient_module_lookup_targets = Some(extraction.possible_failed_ambient_module_lookup_targets);
         for entrypoint_set in &extraction.entrypoints {
@@ -2000,7 +1997,7 @@ impl registryBuilder<'_> {
         dirty_packages: &Set<String>,
         discovered: &[Arc<discoveredPackage>],
         extraction_cache: &FxHashMap<String, Arc<perPackageExtractionResult>>,
-        recursive_search_packages: &Option<Set<String>>,
+        recursive_search_packages: Option<&Set<String>>,
         logger: &LogTree,
     ) {
         if let Some(err) = ctx.err() {
@@ -2027,7 +2024,7 @@ impl registryBuilder<'_> {
         new_package_files.extend(extraction.package_files.iter().map(|(k, v)| (k.clone(), Some(Arc::new(v.clone())))));
 
         // Clone Paths, removing dirty package paths
-        let mut new_paths: FxHashMap<Path, String> = FxHashMap::with_capacity_and_hasher(existing_bucket.paths.len(), Default::default());
+        let mut new_paths: FxHashMap<Path, String> = FxHashMap::with_capacity_and_hasher(existing_bucket.paths.len(), rustc_hash::FxBuildHasher);
         // filtered copy of distinct keys into a new map; Go ranges the map too
         new_paths.extend(existing_bucket.paths.iter().filter_map(|(path, pkg_name)| {
             if dirty_packages.has(pkg_name) {
@@ -2046,7 +2043,7 @@ impl registryBuilder<'_> {
 
         // Clone AmbientModuleNames, removing dirty package entries
         let mut new_ambient_module_names: FxHashMap<String, Vec<String>> =
-            FxHashMap::with_capacity_and_hasher(existing_bucket.ambient_module_names.len(), Default::default());
+            FxHashMap::with_capacity_and_hasher(existing_bucket.ambient_module_names.len(), rustc_hash::FxBuildHasher);
         // filtered copy of distinct keys into a new map; Go ranges the map too
         new_ambient_module_names.extend(existing_bucket.ambient_module_names.iter().filter_map(|(module_name, file_names)| {
             // Filter out files from dirty packages
@@ -2104,7 +2101,7 @@ impl registryBuilder<'_> {
             resolved_package_names: None,
             state: BucketState {
                 build_preferences: bucket_build_preferences_from_user_preferences(&self.user_preferences),
-                recursive_search_packages: recursive_search_packages.clone(),
+                recursive_search_packages: recursive_search_packages.cloned(),
                 ..Default::default()
             },
         });

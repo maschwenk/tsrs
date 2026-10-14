@@ -171,6 +171,7 @@ pub(crate) fn ldexp(frac: f64, exp: i64) -> f64 {
     m * f64::from_bits(x)
 }
 
+#[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
 pub(crate) fn log2(x: f64) -> f64 {
     let (frac, exp) = frexp(x);
     // Make sure exact powers of two give an exact answer.
@@ -194,6 +195,7 @@ fn is_odd_int(x: f64) -> bool {
     xf == 0.0 && (xi as i64) & 1 == 1
 }
 
+#[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
 pub(crate) fn pow(x: f64, y: f64) -> f64 {
     if y == 0.0 || x == 1.0 {
         return 1.0;
@@ -218,9 +220,8 @@ pub(crate) fn pow(x: f64, y: f64) -> f64 {
             return 1.0;
         } else if (x.abs() < 1.0) == (y == f64::INFINITY) {
             return 0.0;
-        } else {
-            return f64::INFINITY;
         }
+        return f64::INFINITY;
     } else if x.is_infinite() {
         if x == f64::NEG_INFINITY {
             return pow(1.0 / x, -y); // Pow(-0, -y)
@@ -247,9 +248,8 @@ pub(crate) fn pow(x: f64, y: f64) -> f64 {
             return 1.0;
         } else if (x.abs() < 1.0) == (y > 0.0) {
             return 0.0;
-        } else {
-            return f64::INFINITY;
         }
+        return f64::INFINITY;
     }
 
     // ans = a1 * 2**ae (= 1 for now).

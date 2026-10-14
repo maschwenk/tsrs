@@ -61,8 +61,8 @@ pub type ApiResult<T> = Result<T, ApiError>;
 pub enum Response {
     /// Serialized JSON text (`null` for Go `nil`).
     Json(String),
-    /// Go `RawBinary`: written as a msgpack `bin` payload. Only produced when the session was created
-    /// with `binary_responses` (sync MessagePack protocol). An empty vec is Go `RawBinary(nil)`.
+    /// Go `RawBinary`: written as a msgpack `bin` payload. Only produced when the session was created with
+    /// `binary_responses` (sync `MessagePack` protocol). An empty vec is Go `RawBinary(nil)`.
     Binary(Vec<u8>),
 }
 
@@ -77,10 +77,10 @@ impl Response {
 pub trait Handler: Send + Sync {
     fn handle_request(&self, method: &str, params: &[u8]) -> ApiResult<Response>;
     /// A request that arrives while the server is blocked in a server->client call on the same connection
-    /// (sync MessagePack mode: the client re-enters the API from a filesystem / resolver callback).
-    /// `depth >= 1`. Nested requests are served like top-level ones (Go does the same); resources that are
-    /// not reentrant are acquired with the transport's `lock_for_request`, which fails boundedly instead of
-    /// deadlocking when the holder is waiting on the client (crates/tsrs_api_transport/src/reentrancy.rs).
+    /// (sync `MessagePack` mode: the client re-enters the API from a filesystem / resolver callback).
+    /// `depth >= 1`. Nested requests are served like top-level ones (Go does the same); resources that are not
+    /// reentrant are acquired with the transport's `lock_for_request`, which fails boundedly instead of
+    /// deadlocking when the holder is waiting on the client (`crates/tsrs_api_transport/src/reentrancy.rs`).
     fn handle_nested_request(&self, method: &str, params: &[u8], depth: u32) -> ApiResult<Response> {
         let _ = depth;
         self.handle_request(method, params)

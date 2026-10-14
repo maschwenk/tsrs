@@ -256,14 +256,11 @@ impl Generator {
     // generator.go:113
     // Declares a name in the source map, returning the index of the name
     pub fn add_name(&mut self, name: &str) -> NameIndex {
-        match self.name_to_name_index_map.get(name) {
-            Some(&name_index) => name_index,
-            None => {
-                let name_index = NameIndex::Index(self.names.len() as u32);
-                self.names.push(name.to_string());
-                self.name_to_name_index_map.insert(name.to_string(), name_index);
-                name_index
-            }
+        if let Some(&name_index) = self.name_to_name_index_map.get(name) { name_index } else {
+            let name_index = NameIndex::Index(self.names.len() as u32);
+            self.names.push(name.to_string());
+            self.name_to_name_index_map.insert(name.to_string(), name_index);
+            name_index
         }
     }
 

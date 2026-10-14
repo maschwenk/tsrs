@@ -645,6 +645,9 @@ function genClone(node: NodeType) {
     const params = factoryParams(node);
     const args = params.map(p => memberValue(l, p.m, "self", "node")).join(", ");
     w(`impl ${node.name} {`);
+    if (!args.includes("self.")) {
+        w(`    #[expect(clippy::unused_self, reason = "Empty node data uses the same cloning interface as nodes with stored fields.")]`);
+    }
     w(`    pub fn clone_node(&self, node: P<Node>, f: &NodeFactory) -> P<Node> {`);
     if (node.kindAliases.length > 0) {
         w(`        let updated = match node.kind() {`);

@@ -38,12 +38,13 @@ mod imp {
         let guard = COUNTS.lock().unwrap();
         let Some(counts) = guard.as_ref() else { return };
         let mut kinds: FxHashMap<&str, Vec<(String, u64)>> = FxHashMap::default();
+        #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
         for (&(kind, label, loc), &n) in counts {
             let file = loc.file().rsplit('/').next().unwrap_or(loc.file());
             kinds.entry(kind).or_default().push((format!("{:<24} {}:{}", label, file, loc.line()), n));
         }
         let mut names: Vec<_> = kinds.keys().copied().collect();
-        names.sort();
+        names.sort_unstable();
         for kind in names {
             let rows = kinds.get_mut(kind).unwrap();
             rows.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
@@ -51,13 +52,14 @@ mod imp {
             eprintln!("== site counts: {kind} (total {total}, {} sites)", rows.len());
             // Per-label totals.
             let mut labels: FxHashMap<&str, u64> = FxHashMap::default();
+            #[expect(clippy::iter_over_hash_type, reason = "Aggregates independent integer counters; the report sorts the collected rows.")]
             for (&(k, label, _), &n) in counts {
                 if k == kind {
                     *labels.entry(label).or_insert(0) += n;
                 }
             }
             let mut labels: Vec<_> = labels.into_iter().collect();
-            labels.sort_by(|a, b| b.1.cmp(&a.1));
+            labels.sort_by_key(|a| std::cmp::Reverse(a.1));
             if labels.len() > 1 {
                 for (label, n) in labels.iter().take(top) {
                     eprintln!("   label {:>12} {:5.1}%  {}", n, 100.0 * *n as f64 / total as f64, label);

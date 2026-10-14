@@ -59,15 +59,14 @@ pub fn get_assignment_declaration_kind(node: P<Node>) -> JSDeclarationKind {
                 }
             }
         }
-        Kind::CallExpression => {
-            if is_in_js_file(node) && is_bindable_object_define_property_call(node) {
+        Kind::CallExpression
+            if is_in_js_file(node) && is_bindable_object_define_property_call(node) => {
                 let entity_name = node.arguments()[0];
                 if is_exports_identifier(entity_name) || is_module_exports_access_expression(entity_name) {
                     return JSDeclarationKind::ObjectDefinePropertyExports;
                 }
                 return JSDeclarationKind::ObjectDefinePropertyValue;
             }
-        }
         _ => {}
     }
     JSDeclarationKind::None
@@ -93,10 +92,10 @@ pub fn is_bindable_object_define_property_call(node: P<Node>) -> bool {
 /**
  * A declaration has a dynamic name if all of the following are true:
  *   1. The declaration has a computed property name.
- *   2. The computed name is *not* expressed as a StringLiteral.
- *   3. The computed name is *not* expressed as a NumericLiteral.
- *   4. The computed name is *not* expressed as a PlusToken or MinusToken
- *      immediately followed by a NumericLiteral.
+ *   2. The computed name is *not* expressed as a `StringLiteral`.
+ *   3. The computed name is *not* expressed as a `NumericLiteral`.
+ *   4. The computed name is *not* expressed as a `PlusToken` or `MinusToken`
+ *      immediately followed by a `NumericLiteral`.
  */
 pub fn has_dynamic_name(declaration: P<Node>) -> bool {
     get_name_of_declaration(declaration).is_some_and(is_dynamic_name)
@@ -803,9 +802,7 @@ pub fn get_meaning_from_declaration(node: P<Node>) -> SemanticMeaning {
         }
         Kind::EnumMember | Kind::ClassDeclaration => SemanticMeaning::Value | SemanticMeaning::Type,
         Kind::ModuleDeclaration => {
-            if is_ambient_module(node) {
-                SemanticMeaning::Namespace | SemanticMeaning::Value
-            } else if get_module_instance_state(node) == ModuleInstanceState::Instantiated {
+            if (is_ambient_module(node)) || (get_module_instance_state(node) == ModuleInstanceState::Instantiated) {
                 SemanticMeaning::Namespace | SemanticMeaning::Value
             } else {
                 SemanticMeaning::Namespace
@@ -1314,14 +1311,9 @@ pub fn for_each_dynamic_import_or_require_call(
             last_index,
             is_java_script_file && include_type_space_imports,
         );
-        if is_java_script_file && is_require_call(node, require_string_literal_like_argument) {
-            if cb(node, node.arguments()[0]) {
-                return true;
-            }
-        } else if is_import_call(node)
+        if (is_java_script_file && is_require_call(node, require_string_literal_like_argument)) || (is_import_call(node)
             && !node.arguments().is_empty()
-            && (!require_string_literal_like_argument || is_string_literal_like(node.arguments()[0]))
-        {
+            && (!require_string_literal_like_argument || is_string_literal_like(node.arguments()[0]))) {
             if cb(node, node.arguments()[0]) {
                 return true;
             }

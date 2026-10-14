@@ -1,6 +1,7 @@
 // Port of Go's execute/tsctests/mock_watch_backend.go: records every directory watch, and routes events only through
 // the watches whose paths match, so a scenario fails when the watcher does not register the watches it needs.
 
+use std::fmt::Write;
 use std::sync::{Arc, Mutex};
 
 use rustc_hash::FxHashMap;
@@ -125,9 +126,9 @@ impl MockWatchBackend {
         }
         for w in open {
             if w.recursive {
-                b.push_str(&format!("  {} (recursive)\n", w.path));
+                writeln!(b, "  {} (recursive)", w.path).unwrap();
             } else {
-                b.push_str(&format!("  {}\n", w.path));
+                writeln!(b, "  {}", w.path).unwrap();
             }
         }
         b

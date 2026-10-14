@@ -209,26 +209,25 @@ pub(crate) fn get_literal_text_of_node_worker(g: &mut NameGenerator, s: &printer
     let mut flags = flags;
     if is_string_literal(node) {
         if let Some(text_source_node) = s.emit_context.text_source(node) {
-            let text;
-            match text_source_node.kind() {
+
+            let text = match text_source_node.kind() {
                 Kind::NumericLiteral => {
-                    text = text_source_node.text().to_string();
+                    text_source_node.text().to_string()
                 }
                 Kind::Identifier | Kind::PrivateIdentifier | Kind::JsxNamespacedName => {
-                    text = get_text_of_node_worker(g, s, text_source_node, false);
+                    get_text_of_node_worker(g, s, text_source_node, false)
                 }
                 _ => {
                     return get_literal_text_of_node_worker(g, s, text_source_node, get_source_file_of_node(text_source_node), flags);
                 }
-            }
+            };
 
             if flags.intersects(getLiteralTextFlags::JsxAttributeEscape) {
                 return format!("\"{}\"", escape_jsx_attribute_string(&text, QuoteChar::DoubleQuote));
             } else if flags.intersects(getLiteralTextFlags::NeverAsciiEscape) || s.emit_context.emit_flags(node).intersects(EmitFlags::NoAsciiEscaping) {
                 return format!("\"{}\"", escape_string(&text, QuoteChar::DoubleQuote));
-            } else {
-                return format!("\"{}\"", escape_non_ascii_string(&text, QuoteChar::DoubleQuote));
             }
+            return format!("\"{}\"", escape_non_ascii_string(&text, QuoteChar::DoubleQuote));
         }
     }
     // !!! Printer option to control whether to terminate unterminated literals
@@ -289,7 +288,7 @@ impl Printer {
         self.text_state.current_source_file.get()
     }
 
-    pub(crate) fn set_current_source_file(&mut self, source_file: Option<P<SourceFile>>) {
+    pub(crate) fn set_current_source_file(&self, source_file: Option<P<SourceFile>>) {
         self.text_state.current_source_file.set(source_file);
     }
 
@@ -488,7 +487,7 @@ impl Printer {
     }
 
     pub(crate) fn get_lines_between_nodes(
-        &mut self,
+        &self,
         parent: P<Node>,
         node1: P<Node>,
         node2: P<Node>,
@@ -546,7 +545,7 @@ impl Printer {
     }
 
     pub(crate) fn get_leading_line_terminator_count(
-        &mut self,
+        &self,
         parent_node: Option<P<Node>>,
         first_child: Option<P<Node>>,
         format: ListFormat,
@@ -604,7 +603,7 @@ impl Printer {
     }
 
     pub(crate) fn get_separating_line_terminator_count(
-        &mut self,
+        &self,
         previous_node: Option<P<Node>>,
         next_node: Option<P<Node>>,
         format: ListFormat,
@@ -641,7 +640,7 @@ impl Printer {
     }
 
     pub(crate) fn get_closing_line_terminator_count(
-        &mut self,
+        &self,
         parent_node: Option<P<Node>>,
         last_child: Option<P<Node>>,
         format: ListFormat,
@@ -704,12 +703,12 @@ impl Printer {
             let mut pos = loc_pos;
             let mut current_line = first_line;
             while pos < loc_end {
-                let next_line_start;
-                if current_line + 1 == line_count {
-                    next_line_start = text.len() as u32 + 1;
+
+                let next_line_start = if current_line + 1 == line_count {
+                    text.len() as u32 + 1
                 } else {
-                    next_line_start = line_map[current_line + 1];
-                }
+                    line_map[current_line + 1]
+                };
 
                 if pos != loc_pos {
                     // If we are not emitting first line, we need to write the spaces to adjust the alignment
@@ -835,7 +834,7 @@ impl Printer {
         self.emit_context.emit_flags(node).intersects(EmitFlags::MultiLine)
     }
 
-    pub(crate) fn should_emit_block_function_body_on_single_line(&mut self, body: P<Node>) -> bool {
+    pub(crate) fn should_emit_block_function_body_on_single_line(&self, body: P<Node>) -> bool {
         // We must emit a function body as a single-line body in the following case:
         // * The body has NodeEmitFlags.SingleLine specified.
 
@@ -914,7 +913,7 @@ impl Printer {
         !self.emit_context.emit_flags(node).intersects(EmitFlags::NoTrailingComments)
     }
 
-    pub(crate) fn should_emit_detached_comments(&self, node: P<Node>) -> bool {
+    pub(crate) fn should_emit_detached_comments(node: P<Node>) -> bool {
         if !is_source_file(node) {
             return true;
         }
@@ -1436,6 +1435,7 @@ impl Printer {
 //
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[expect(clippy::enum_variant_names, reason = "The variant names preserve the upstream Go enum names.")]
 enum Mode {
     ModeNone,
     ModeModifiers,

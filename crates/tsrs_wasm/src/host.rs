@@ -285,6 +285,7 @@ impl HostFs {
         }
     }
 
+    #[expect(clippy::unused_self, reason = "Host filesystem writes use the same instance interface on native and WebAssembly targets.")]
     fn write(&self, op: u32, path: &str, content: &str) -> Result<(), String> {
         let _ = internal::root_length(path); // Assert path is rooted
         call(op, &path_and_data(path, content.as_bytes())).map(|_| ()).map_err(error_text)

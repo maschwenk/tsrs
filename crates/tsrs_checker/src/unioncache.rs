@@ -55,8 +55,9 @@ fn env_mode() -> Option<UnionCacheMode> {
     })
 }
 
-/// The mode of the indexed-access memo (`TSRS_IA_MEMO`, checker_13.rs `get_indexed_access_type_by_union_memoized`):
-/// on unless turned off or under Go-compatible history, like the union front cache.
+/// The mode of the indexed-access memo (`TSRS_IA_MEMO`, `checker_13.rs`
+/// `get_indexed_access_type_by_union_memoized`): on unless turned off or under Go-compatible history, like
+/// the union front cache.
 pub(crate) fn indexed_access_memo_mode() -> UnionCacheMode {
     static MODE: OnceLock<UnionCacheMode> = OnceLock::new();
     *MODE.get_or_init(|| match std::env::var("TSRS_IA_MEMO").as_deref() {

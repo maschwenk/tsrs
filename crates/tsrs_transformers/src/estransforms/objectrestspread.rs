@@ -93,7 +93,7 @@ impl objectRestSpreadTransformer {
     }
 
     // objectrestspread.go:111
-    fn collect_parameters_with_preceding_object_rest_or_spread(&self, node: P<Node>) -> Option<FxHashSet<P<Node>>> {
+    fn collect_parameters_with_preceding_object_rest_or_spread(node: P<Node>) -> Option<FxHashSet<P<Node>>> {
         let mut result: Option<FxHashSet<P<Node>>> = None;
         for &parameter in node.parameters() {
             if let Some(result) = result.as_mut() {
@@ -107,7 +107,7 @@ impl objectRestSpreadTransformer {
 
     // objectrestspread.go:125 (Go `oldParamScope` is the saved map)
     fn enter_parameter_list_context(&self, node: P<Node>) -> Option<FxHashSet<P<Node>>> {
-        let collected = self.collect_parameters_with_preceding_object_rest_or_spread(node);
+        let collected = Self::collect_parameters_with_preceding_object_rest_or_spread(node);
         self.parameters_with_preceding_object_rest_or_spread.replace(collected)
     }
 
@@ -568,6 +568,7 @@ impl objectRestSpreadTransformer {
 }
 
 // objectrestspread.go:590
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_object_rest_spread_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(objectRestSpreadTransformer {
         base: Transformer::default(),

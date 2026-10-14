@@ -8,6 +8,7 @@ pub struct ImportElisionTransformer {
 }
 
 // importelision.go:17
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_import_elision_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opt.compiler_options;
     let emit_context = opt.context;
@@ -97,10 +98,7 @@ impl ImportElisionTransformer {
                 let mut export_clause: Option<P<Node>> = None;
                 if let Some(c) = n.export_clause {
                     export_clause = v.visit_node(Some(c));
-                    if export_clause.is_none() {
-                        // all export bindings were elided
-                        return None;
-                    }
+                    export_clause?;
                 }
                 Some(f.update_export_declaration(node, None /*modifiers*/, false /*isTypeOnly*/, export_clause, v.visit_node(n.module_specifier), v.visit_node(n.attributes())))
             }

@@ -35,40 +35,56 @@ pub fn lazy_tuples() -> bool {
     env_flag(&F, "TSRS_LAZY_TUPLES", true)
 }
 
-/// Candidate L5 (notes/mem-lazy.md): instantiating a conditional type applies `t.mapper` and `m` to the outer type
-/// parameters the way the composite mapper would, instead of first allocating `combineTypeMappers(t.mapper, m)`,
-/// which is only needed for that. `TSRS_LAZY_COND_MAPPER=0|1`.
+/// Defers creating a composite mapper for conditional-type instantiation.
+///
+/// Candidate L5 (notes/mem-lazy.md): instantiating a conditional type applies `t.mapper` and `m` to the outer
+/// type parameters the way the composite mapper would, instead of first allocating
+/// `combineTypeMappers(t.mapper, m)`, which is only needed for that.
+///
+/// `TSRS_LAZY_COND_MAPPER=0|1`.
 pub fn lazy_cond_mapper() -> bool {
     static F: OnceLock<bool> = OnceLock::new();
     env_flag(&F, "TSRS_LAZY_COND_MAPPER", true)
 }
 
+/// Allocates property caches only when a value is stored.
+///
 /// Candidate L6 (notes/mem-lazy.md): union/intersection property caches are allocated on first store, and a
 /// non-partial property found without the function-property augment is not copied into the augmented cache;
-/// augmented lookups read it from the other cache instead. `TSRS_LAZY_PROP_CACHE=0|1`.
+/// augmented lookups read it from the other cache instead.
+///
+/// `TSRS_LAZY_PROP_CACHE=0|1`.
 pub fn lazy_prop_cache() -> bool {
     static F: OnceLock<bool> = OnceLock::new();
     env_flag(&F, "TSRS_LAZY_PROP_CACHE", true)
 }
 
-/// Candidate L9 (notes/mem-lazy.md): `getUnmatchedProperties` without discriminant matching only needs to know
-/// whether the source has each property, so it asks without instantiating lazy members. `TSRS_LAZY_HAS_PROP=0|1`.
+/// Candidate L9 (notes/mem-lazy.md): `getUnmatchedProperties` without discriminant matching only needs to
+/// know whether the source has each property, so it asks without instantiating lazy members.
+///
+/// `TSRS_LAZY_HAS_PROP=0|1`.
 pub fn lazy_has_prop() -> bool {
     static F: OnceLock<bool> = OnceLock::new();
     env_flag(&F, "TSRS_LAZY_HAS_PROP", false)
 }
 
+/// Checks unmatched properties while preserving lazy member order.
+///
 /// Candidate L10 (notes/mem-lazy.md): `getUnmatchedProperties` on a target with a lazy member table walks its
-/// properties in `getPropertiesOfType` order with declared members standing in for uninstantiated ones, asks the
-/// source only whether it has each property, and looks up the real target property only to return it or to compare
-/// discriminant types. `TSRS_LAZY_UNMATCHED=0|1`.
+/// properties in `getPropertiesOfType` order with declared members standing in for uninstantiated ones, asks
+/// the source only whether it has each property, and looks up the real target property only to return it or
+/// to compare discriminant types.
+///
+/// `TSRS_LAZY_UNMATCHED=0|1`.
 pub fn lazy_unmatched() -> bool {
     static F: OnceLock<bool> = OnceLock::new();
     env_flag(&F, "TSRS_LAZY_UNMATCHED", true)
 }
 
-/// Candidate L11 (notes/mem-lazy.md): "is this an empty object type" (`isEmptyObjectType`, the empty-object test in
-/// `removeSubtypes`) answers from a lazy member table instead of resolving it. `TSRS_LAZY_EMPTY=0|1`.
+/// Candidate L11 (notes/mem-lazy.md): "is this an empty object type" (`isEmptyObjectType`, the empty-object
+/// test in `removeSubtypes`) answers from a lazy member table instead of resolving it.
+///
+/// `TSRS_LAZY_EMPTY=0|1`.
 pub fn lazy_empty() -> bool {
     static F: OnceLock<bool> = OnceLock::new();
     env_flag(&F, "TSRS_LAZY_EMPTY", true)

@@ -225,6 +225,7 @@ impl InfoCache {
         std::ptr::from_ref::<InfoCache>(self) as usize
     }
 
+    #[must_use]
     pub fn clone_cache(&self) -> InfoCache {
         let mut clone = new_info_cache(&self.current_directory, self.use_case_sensitive_file_names);
         clone.origin = self.owner_addr();

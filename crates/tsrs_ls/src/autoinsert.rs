@@ -11,6 +11,7 @@ use crate::spanmap::Feature;
 
 impl LanguageService {
     // autoinsert.go:13
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_on_auto_insert(&self, _ctx: &Context, params: &lsproto::VSOnAutoInsertParams) -> Result<lsproto::VSOnAutoInsertResponse, lsproto::Error> {
         if self.user_preferences().enable_auto_closing_tags.is_false() {
             return Ok(lsproto::VSOnAutoInsertResponse::default());
@@ -39,6 +40,7 @@ impl LanguageService {
             element = token.parent();
         }
 
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if element.is_some() && is_unclosed_tag(element.unwrap()) {
             let tag_name_node = element.unwrap().as_jsx_element().opening_element.tag_name();
             // Slight divergence from Strada - we don't use the verbatim text from the opening tag.

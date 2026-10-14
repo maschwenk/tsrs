@@ -112,11 +112,10 @@ pub fn evaluate<H>(host: &mut H, evaluate_entity: Evaluator<H>, outer_expression
         Kind::Identifier => {
             return evaluate_entity(host, expr, location);
         }
-        Kind::ElementAccessExpression | Kind::PropertyAccessExpression => {
-            if ast::is_entity_name_expression(expr.expression().unwrap()) {
+        Kind::ElementAccessExpression | Kind::PropertyAccessExpression
+            if ast::is_entity_name_expression(expr.expression().unwrap()) => {
                 return evaluate_entity(host, expr, location);
             }
-        }
         _ => {}
     }
     Result { value: None, is_syntactically_string, resolved_other_files, has_external_references }
@@ -128,7 +127,7 @@ fn evaluate_template_expression<H>(host: &mut H, evaluate_entity: Evaluator<H>, 
     sb.push_str(template.head().text());
     let mut resolved_other_files = false;
     let mut has_external_references = false;
-    for span in template.template_spans().nodes().iter() {
+    for span in template.template_spans().nodes() {
         let span_result = evaluate(host, evaluate_entity, outer_expressions_to_skip, span.as_template_span().expression(), location);
         if span_result.value.is_none() {
             return Result { value: None, is_syntactically_string: true, resolved_other_files: false, has_external_references: false };

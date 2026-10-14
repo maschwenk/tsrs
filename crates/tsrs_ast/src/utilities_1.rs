@@ -21,11 +21,13 @@ thread_local! {
     static SYMBOL_ID_BLOCK: Cell<(u64, u64)> = const { Cell::new((0, 0)) };
 }
 
-/// Makes the current thread take node and symbol ids from the process-wide counters in blocks of `ID_BLOCK`. For the
-/// threads of a parallel checker group: their ids interleave in an order that depends on timing anyway (as Go's
-/// do), and one counter that every checker increments is a contended cache line. Each thread's ids still increase in
-/// the order it assigns them, and blocks are taken only after the group started, so ids assigned before, during and
-/// after the group keep that order; other threads take ids one at a time, exactly as before.
+/// Makes the current thread take node and symbol ids from the process-wide counters in blocks of `ID_BLOCK`.
+///
+/// For the threads of a parallel checker group: their ids interleave in an order that depends on timing
+/// anyway (as Go's do), and one counter that every checker increments is a contended cache line. Each
+/// thread's ids still increase in the order it assigns them, and blocks are taken only after the group
+/// started, so ids assigned before, during and after the group keep that order; other threads take ids one at
+/// a time, exactly as before.
 pub fn use_id_blocks() {
     ID_BLOCK_MODE.set(true);
 }
@@ -847,6 +849,7 @@ bitflags::bitflags! {
 }
 
 // Go names these `OEK*`; aliases keep call sites recognizable.
+#[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
 pub type OEK = OuterExpressionKinds;
 
 // Determines whether node is an "outer expression" of the provided kinds

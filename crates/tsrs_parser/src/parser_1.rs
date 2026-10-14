@@ -200,15 +200,16 @@ pub fn parse_source_file(opts: SourceFileParseOptions, source_text: &str, script
     parse_source_file_static(opts, alloc_str(source_text), script_kind)
 }
 
-/// `parse_source_file` for text the caller hands over (a file just read): outside a region it becomes the file's
-/// text without a copy (Go shares the string) and, like the thread arena, is never freed. Inside a freeable region
-/// (native API transpile and builds) the text is copied into the region and unregistered when the region is freed,
-/// so the file's memory is reclaimed with it.
+/// `parse_source_file` for text the caller hands over (a file just read): outside a region it becomes the
+/// file's text without a copy (Go shares the string) and, like the thread arena, is never freed.
 ///
-/// Lifetime footgun: the returned file now lives exactly as long as the region that was current at the call. A
-/// caller that parses inside a region must not keep the file (or anything derived from it) past that region.
-/// Unregistering frees the text but not its source-text slot: slots are never reused (`register_source_text` has a
-/// fixed capacity, after which lookups take the slower fallback path).
+/// Inside a freeable region (native API transpile and builds) the text is copied into the region and
+/// unregistered when the region is freed, so the file's memory is reclaimed with it.
+///
+/// Lifetime footgun: the returned file now lives exactly as long as the region that was current at the call.
+/// A caller that parses inside a region must not keep the file (or anything derived from it) past that
+/// region. Unregistering frees the text but not its source-text slot: slots are never reused
+/// (`register_source_text` has a fixed capacity, after which lookups take the slower fallback path).
 pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String, script_kind: ScriptKind) -> P<SourceFile> {
     match tsrs_core::arena::current_region() {
         None => parse_source_file_static(opts, source_text.leak(), script_kind),
@@ -221,15 +222,19 @@ pub fn parse_source_file_owned(opts: SourceFileParseOptions, source_text: String
     }
 }
 
-/// `parse_source_file_owned` that keeps the text (leaked, as outside a region) even inside a region: for the CLI's
-/// per-file regions (`tsrs_compiler` fileregions.rs), which may free a checked file's tree but keep its text, its
-/// `SourceFile` and its diagnostics for the report.
+/// Keeps source text alive after a per-file arena region is released.
+///
+/// `parse_source_file_owned` that keeps the text (leaked, as outside a region) even inside a region: for the
+/// CLI's per-file regions (`tsrs_compiler` fileregions.rs), which may free a checked file's tree but keep its
+/// text, its `SourceFile` and its diagnostics for the report.
 pub fn parse_source_file_keep_text(opts: SourceFileParseOptions, source_text: String, script_kind: ScriptKind) -> P<SourceFile> {
     parse_source_file_static(opts, source_text.leak(), script_kind)
 }
 
-/// Parses text that lives for the whole process (the bundled libs, `include_str!` in the binary): outside a region
-/// the file reads the text in place, with no copy and nothing to leak; inside a region it behaves like
+/// Reuses embedded text when its lifetime permits it.
+///
+/// Parses text that lives for the whole process (the bundled libs, `include_str!` in the binary): outside a
+/// region the file reads the text in place, with no copy and nothing to leak; inside a region it behaves like
 /// `parse_source_file_owned` (the region holds the text the file reads, and forgets it when it is freed).
 pub fn parse_source_file_embedded(opts: SourceFileParseOptions, source_text: &'static str, script_kind: ScriptKind) -> P<SourceFile> {
     match tsrs_core::arena::current_region() {
@@ -545,7 +550,7 @@ pub struct ParserState {
 }
 
 impl Parser {
-    pub(crate) fn mark(&mut self) -> ParserState {
+    pub(crate) fn mark(&self) -> ParserState {
         ParserState {
             arena: tsrs_core::arena_checkpoint(),
             scanner_state: self.scanner.mark(),
@@ -723,7 +728,7 @@ impl Parser {
         if self.jsdoc_infos.is_empty() {
             return FxHashMap::default();
         }
-        let mut result = FxHashMap::with_capacity_and_hasher(self.jsdoc_infos.len(), Default::default());
+        let mut result = FxHashMap::with_capacity_and_hasher(self.jsdoc_infos.len(), rustc_hash::FxBuildHasher);
         result.extend(self.jsdoc_infos.iter().map(|info| (info.parent, info.js_docs)));
         result
     }
@@ -915,10 +920,11 @@ impl Parser {
         self.parse_list(kind, parse_element)
     }
 
-    /// tsrs-only (notes/mem-lazy-dts-members.md): parses the member list of an interface, class or type literal of a
-    /// declaration file, and if it is plain (`lazy_list_blocked`: no diagnostic, no eager JSDoc, no comment directive,
-    /// nothing whose binding reaches outside the list, and the arena can discard it), discards its nodes and returns a
-    /// lazy list (tsrs_ast `lazylist`) that `reparse_lazy_list` parses again from the same position on first use.
+    /// tsrs-only (notes/mem-lazy-dts-members.md): parses the member list of an interface, class or type
+    /// literal of a declaration file, and if it is plain (`lazy_list_blocked`: no diagnostic, no eager
+    /// `JSDoc`, no comment directive, nothing whose binding reaches outside the list, and the arena can
+    /// discard it), discards its nodes and returns a lazy list (`tsrs_ast` `lazylist`) that
+    /// `reparse_lazy_list` parses again from the same position on first use.
     fn parse_member_list_lazily(&mut self, kind: ParsingContext, parse_element: fn(&mut Parser) -> P<Node>) -> P<NodeList> {
         let pos = self.node_pos();
         let context_flags = self.context_flags;
@@ -956,9 +962,9 @@ impl Parser {
         self.factory.new_lazy_node_list(loc, record.get())
     }
 
-    /// What a lazy list must not change (`parse_member_list_lazily`): diagnostics, eager JSDoc, reparsed clones,
-    /// comment directives (each reallocates an arena slice the parser or scanner keeps), and the lazy records so far
-    /// (index 4: nested records are dropped with the list).
+    /// What a lazy list must not change (`parse_member_list_lazily`): diagnostics, eager `JSDoc`, reparsed
+    /// clones, comment directives (each reallocates an arena slice the parser or scanner keeps), and the lazy
+    /// records so far (index 4: nested records are dropped with the list).
     fn lazy_watch(&self) -> (usize, usize, usize, usize, usize, usize) {
         (
             self.diagnostics.len() + self.js_diagnostics.len() + self.jsdoc_diagnostics.len(),
@@ -971,7 +977,7 @@ impl Parser {
     }
 
     /// The owner node of a member list that may be lazy, right after it is created.
-    pub(crate) fn set_lazy_owner(&self, members: P<NodeList>, owner: P<Node>) {
+    pub(crate) fn set_lazy_owner(members: P<NodeList>, owner: P<Node>) {
         if let Some(record) = members.lazy_record() {
             record.set_owner(owner);
         }
@@ -1075,12 +1081,12 @@ impl Parser {
         Some(self.create_missing_list())
     }
 
-    pub(crate) fn parse_empty_node_list(&mut self) -> P<NodeList> {
+    pub(crate) fn parse_empty_node_list(&self) -> P<NodeList> {
         let pos = self.node_pos();
         self.new_node_list(new_text_range(pos, pos), &[])
     }
 
-    pub(crate) fn create_missing_list(&mut self) -> P<NodeList> {
+    pub(crate) fn create_missing_list(&self) -> P<NodeList> {
         let pos = self.node_pos();
         let result = self.factory.new_node_list_from_static(missing_list_nodes());
         result.loc.set(new_text_range(pos, pos));
@@ -1445,15 +1451,18 @@ impl Parser {
     }
 
     pub(crate) fn parse_expected_token(&mut self, kind: Kind) -> P<Node> {
-        match self.parse_optional_token(kind) {
-            Some(token) => token,
-            None => {
+        if let Some(token) = self.parse_optional_token(kind) {
+
+token
+} else {
+
+
                 self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(kind)]);
                 let token = self.factory.new_token(kind);
                 let pos = self.node_pos();
                 self.finish_node(token, pos)
-            }
-        }
+
+}
     }
 
     pub(crate) fn parse_optional_token(&mut self, kind: Kind) -> Option<P<Node>> {
@@ -1464,16 +1473,19 @@ impl Parser {
     }
 
     pub(crate) fn parse_expected_token_jsdoc(&mut self, kind: Kind) -> P<Node> {
-        match self.parse_optional_token_jsdoc(kind) {
-            Some(optional) => optional,
-            None => {
+        if let Some(optional) = self.parse_optional_token_jsdoc(kind) {
+
+optional
+} else {
+
+
                 assert!(is_keyword_or_punctuation(kind), "expected keyword or punctuation");
                 self.parse_error_at_current_token(&diagnostics::X_0_expected, &[&scanner::token_to_string(kind)]);
                 let token = self.factory.new_token(kind);
                 let pos = self.node_pos();
                 self.finish_node(token, pos)
-            }
-        }
+
+}
     }
 
     pub(crate) fn parse_optional_token_jsdoc(&mut self, kind: Kind) -> Option<P<Node>> {
@@ -1484,7 +1496,8 @@ impl Parser {
     }
 
     pub(crate) fn parse_statement(&mut self) -> P<Node> {
-        match self.token {
+        let token = self.token;
+        match token {
             Kind::SemicolonToken => return self.parse_empty_statement(),
             Kind::OpenBraceToken => return self.parse_block(false /*ignoreMissingOpenBrace*/, None),
             Kind::VarKeyword => {
@@ -1553,11 +1566,10 @@ impl Parser {
             | Kind::AccessorKeyword
             | Kind::StaticKeyword
             | Kind::ReadonlyKeyword
-            | Kind::GlobalKeyword => {
-                if self.is_start_of_declaration() {
+            | Kind::GlobalKeyword
+                if self.is_start_of_declaration() => {
                     return self.parse_declaration();
                 }
-            }
             _ => {}
         }
         self.parse_expression_or_labeled_statement()
@@ -1765,17 +1777,17 @@ impl Parser {
                 initializer = Some(self.do_in_context(NodeFlags::DisallowInContext, true, Parser::parse_expression));
             }
         }
-        let result: P<Node>;
-        if await_token.is_some() && self.parse_expected(Kind::OfKeyword) || await_token.is_none() && self.parse_optional(Kind::OfKeyword) {
+
+        let result: P<Node> = if await_token.is_some() && self.parse_expected(Kind::OfKeyword) || await_token.is_none() && self.parse_optional(Kind::OfKeyword) {
             let expression = self.do_in_context(NodeFlags::DisallowInContext, false, Parser::parse_assignment_expression_or_higher);
             self.parse_expected(Kind::CloseParenToken);
             let statement = self.parse_statement();
-            result = self.factory.new_for_in_or_of_statement(Kind::ForOfStatement, await_token, initializer.unwrap(), expression, statement);
+            self.factory.new_for_in_or_of_statement(Kind::ForOfStatement, await_token, initializer.unwrap(), expression, statement)
         } else if self.parse_optional(Kind::InKeyword) {
             let expression = self.parse_expression_allow_in();
             self.parse_expected(Kind::CloseParenToken);
             let statement = self.parse_statement();
-            result = self.factory.new_for_in_or_of_statement(Kind::ForInStatement, None /*awaitToken*/, initializer.unwrap(), expression, statement);
+            self.factory.new_for_in_or_of_statement(Kind::ForInStatement, None /*awaitToken*/, initializer.unwrap(), expression, statement)
         } else {
             self.parse_expected(Kind::SemicolonToken);
             let mut condition = None;
@@ -1789,8 +1801,8 @@ impl Parser {
             }
             self.parse_expected(Kind::CloseParenToken);
             let statement = self.parse_statement();
-            result = self.factory.new_for_statement(initializer, condition, incrementor, statement);
-        }
+            self.factory.new_for_statement(initializer, condition, incrementor, statement)
+        };
         self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         result
@@ -2294,7 +2306,7 @@ impl Parser {
         } else {
             self.factory.new_class_expression(modifiers, name, type_parameters, heritage_clauses, members)
         };
-        self.set_lazy_owner(members, result);
+        Self::set_lazy_owner(members, result);
         self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         if result.flags().intersects(NodeFlags::JavaScriptFile) {
@@ -2473,9 +2485,8 @@ impl Parser {
                 let result = self.parse_property_or_method_declaration(pos, jsdoc, modifiers);
                 self.context_flags = save_context_flags;
                 return result;
-            } else {
-                return self.parse_property_or_method_declaration(pos, jsdoc, modifiers);
             }
+            return self.parse_property_or_method_declaration(pos, jsdoc, modifiers);
         }
         if modifiers.is_some() {
             // treat this as a property declaration with a missing name.
@@ -2765,7 +2776,7 @@ impl Parser {
         let heritage_clauses = self.parse_heritage_clauses(true /*isInterface*/);
         let members = self.parse_object_type_members();
         let result = self.factory.new_interface_declaration(modifiers, name, type_parameters, heritage_clauses, members);
-        self.set_lazy_owner(members, result);
+        Self::set_lazy_owner(members, result);
         let result = self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
         self.check_js_syntax(result);
@@ -2922,18 +2933,18 @@ impl Parser {
     ) -> P<Node> {
         let save_has_await_identifier = self.statement_has_await_identifier;
         let name = if nested { self.parse_identifier_name() } else { self.parse_identifier() };
-        let body: P<Node>;
-        if self.parse_optional(Kind::DotToken) {
+
+        let body: P<Node> = if self.parse_optional(Kind::DotToken) {
             let implicit_export = self.factory.new_modifier(Kind::ExportKeyword);
             let node_pos = self.node_pos();
             implicit_export.set_loc(new_text_range(node_pos, node_pos));
             implicit_export.set_flags(NodeFlags::Reparsed);
             let implicit_modifiers = self.new_modifier_list(implicit_export.loc(), &[implicit_export]);
             let node_pos = self.node_pos();
-            body = self.parse_module_or_namespace_declaration(node_pos, JsdocScannerInfo::empty() /*jsdoc*/, Some(implicit_modifiers), true /*nested*/, keyword);
+            self.parse_module_or_namespace_declaration(node_pos, JsdocScannerInfo::empty() /*jsdoc*/, Some(implicit_modifiers), true /*nested*/, keyword)
         } else {
-            body = self.parse_module_block();
-        }
+            self.parse_module_block()
+        };
         let result = self.factory.new_module_declaration(modifiers, keyword, name, None, Some(body));
         let result = self.finish_node(result, pos);
         self.with_jsdoc(result, jsdoc);
@@ -3005,11 +3016,11 @@ impl Parser {
         self.token == Kind::FromKeyword || self.token == Kind::EqualsToken
     }
 
-    pub(crate) fn token_after_import_definitely_produces_import_declaration(&mut self) -> bool {
+    pub(crate) fn token_after_import_definitely_produces_import_declaration(&self) -> bool {
         self.token == Kind::AsteriskToken || self.token == Kind::OpenBraceToken
     }
 
-    pub(crate) fn token_after_imported_identifier_definitely_produces_import_declaration(&mut self) -> bool {
+    pub(crate) fn token_after_imported_identifier_definitely_produces_import_declaration(&self) -> bool {
         // In `import id ___`, the current token decides whether to produce
         // an ImportDeclaration or ImportEqualsDeclaration.
         self.token == Kind::CommaToken || self.token == Kind::FromKeyword
@@ -3119,16 +3130,18 @@ impl Parser {
 
 const _: () = assert!(ParsingContext::ClassMembers as u8 == tsrs_ast::lazylist::CLASS_MEMBERS);
 
-/// A member list longer than this (in text) stays eager: parsing and binding it again takes a millisecond or more,
-/// while every checker that needs it waits (the generated OpenAPI `operations` / `components` interfaces of
-/// supabase-studio, 65-437 KB each, are needed by most checkers). Keeping them eager costs at most 0.5% of peak on the
-/// bench projects (notes/mem-lazy-dts-members.md).
+/// A member list longer than this (in text) stays eager: parsing and binding it again takes a millisecond or
+/// more, while every checker that needs it waits (the generated `OpenAPI` `operations` / `components`
+/// interfaces of supabase-studio, 65-437 KB each, are needed by most checkers). Keeping them eager costs at
+/// most 0.5% of peak on the bench projects (notes/mem-lazy-dts-members.md).
 const LAZY_LIST_MAX_TEXT: u32 = 64 << 10;
 
 static LAZY_DTS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// tsrs-only: parse the member lists of declaration files lazily from now on (the CLI with `skipLibCheck`; tsrs_ast
-/// `lazylist`, notes/mem-lazy-dts-members.md). Process-wide; the binder must be enabled too (`tsrs_binder`).
+/// tsrs-only: parse the member lists of declaration files lazily from now on (the CLI with `skipLibCheck`;
+/// `tsrs_ast` `lazylist`, notes/mem-lazy-dts-members.md).
+///
+/// Process-wide; the binder must be enabled too (`tsrs_binder`).
 pub fn enable_lazy_dts() {
     tsrs_ast::lazylist::set_parse_hook(reparse_lazy_list);
     // Relaxed: the CLI enables it before creating the program; parser threads start after that.
@@ -3169,11 +3182,11 @@ fn reparse_lazy_list(record: &tsrs_ast::lazylist::LazyNodeList, file: P<SourceFi
     nodes
 }
 
-/// Whether binding a member list could reach outside it, which a lazy list must not (the binder binds it later with
-/// the state it had at the list, tsrs_binder `bind_lazy_list`): `this` (sets `ContainsThis` on the enclosing
-/// containers), `infer` (declares its type parameter in the enclosing conditional type), bodies, initializers,
-/// decorators, `async`, and expressions that make flow nodes or flow effects; import types and calls (the file's
-/// imports are collected from the tree when the file is parsed).
+/// Whether binding a member list could reach outside it, which a lazy list must not (the binder binds it
+/// later with the state it had at the list, `tsrs_binder` `bind_lazy_list`): `this` (sets `ContainsThis` on
+/// the enclosing containers), `infer` (declares its type parameter in the enclosing conditional type),
+/// bodies, initializers, decorators, `async`, and expressions that make flow nodes or flow effects; import
+/// types and calls (the file's imports are collected from the tree when the file is parsed).
 fn lazy_list_blocked(nodes: &[P<Node>]) -> bool {
     fn blocked(n: P<Node>) -> bool {
         let hit = match n.kind() {

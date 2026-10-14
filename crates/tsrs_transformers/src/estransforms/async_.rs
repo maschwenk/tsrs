@@ -32,6 +32,7 @@ pub struct asyncTransformer {
 }
 
 // async.go:37
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_async_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(asyncTransformer {
         base: Transformer::default(),
@@ -238,7 +239,7 @@ impl asyncTransformer {
         // names declared in a catch variable are block scoped
         let mut catch_clause_unshadowed_names: Option<FxHashSet<String>> = None;
         #[expect(clippy::iter_over_hash_type, reason = "removes names from a set; the set it ends with does not depend on the order")]
-        for escaped_name in catch_clause_names.iter() {
+        for escaped_name in &catch_clause_names {
             let enclosing = self.enclosing_function_parameter_names.borrow();
             if let Some(enclosing) = enclosing.as_ref() {
                 if enclosing.contains(escaped_name) {
@@ -311,6 +312,7 @@ impl asyncTransformer {
     fn visit_for_statement_in_async_body(&self, node: P<Node>) -> P<Node> {
         let n = node.as_for_statement();
         let initializer = n.initializer;
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         let visited_initializer = if initializer.is_some() && self.is_variable_declaration_list_with_colliding_name(initializer) {
             self.visit_variable_declaration_list_with_colliding_names(initializer.unwrap(), false)
         } else {
@@ -342,6 +344,7 @@ impl asyncTransformer {
     }
 
     // async.go:304
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_constructor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
         let modifiers = self.visitor().visit_modifiers(node.modifiers());
@@ -365,6 +368,7 @@ impl asyncTransformer {
     // This function will be called when one of the following conditions are met:
     // - The node is marked as async
     // async.go:325
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_method_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
@@ -397,6 +401,7 @@ impl asyncTransformer {
     }
 
     // async.go:358
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_get_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
         let modifiers = self.visitor().visit_modifiers(node.modifiers());
@@ -417,6 +422,7 @@ impl asyncTransformer {
     }
 
     // async.go:376
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_set_accessor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
         let modifiers = self.visitor().visit_modifiers(node.modifiers());
@@ -441,6 +447,7 @@ impl asyncTransformer {
     // This function will be called when one of the following conditions are met:
     // - The node is marked async
     // async.go:398
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_function_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
@@ -477,6 +484,7 @@ impl asyncTransformer {
     // This function will be called when one of the following conditions are met:
     // - The node is marked async
     // async.go:435
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_function_expression(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
         let saved_lexical_arguments = self.lexical_arguments.replace(lexicalArgumentsInfo::default());
@@ -529,6 +537,7 @@ impl asyncTransformer {
     }
 
     // async.go:472 (body of visitArrowFunction after the deferred restore is set up)
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_arrow_function_worker(&self, node: P<Node>) -> Option<P<Node>> {
         let function_flags = ast::get_function_flags(Some(node));
 
@@ -556,6 +565,7 @@ impl asyncTransformer {
     }
 
     // async.go:508
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     fn record_declaration_name(&self, node: P<Node>, names: &mut FxHashSet<String>) {
         let Some(name) = node.name() else {
             return;
@@ -843,8 +853,8 @@ impl asyncTransformer {
             async_body = s.substitute_super_accesses_in_body(async_body);
         }
 
-        let result;
-        if !is_arrow {
+
+        let result = if !is_arrow {
             self.emit_context().start_variable_environment();
 
             // Minor optimization, emit `_super` helper to capture `super` access in an arrow.
@@ -869,7 +879,7 @@ impl asyncTransformer {
                 }
             }
 
-            result = block;
+            block
         } else {
             let mut r = f.new_awaiter_helper(has_lexical_this, arguments_expression, inner_parameters, async_body);
 
@@ -884,8 +894,8 @@ impl asyncTransformer {
                     block.as_block().multi_line,
                 );
             }
-            result = r;
-        }
+            r
+        };
 
         *self.enclosing_function_parameter_names.borrow_mut() = saved_enclosing_function_parameter_names;
         if !is_arrow {
@@ -960,11 +970,10 @@ pub(crate) fn assignment_target_contains_super_property(node: P<Node>) -> bool {
                             return true;
                         }
                     }
-                    Kind::SpreadAssignment => {
-                        if assignment_target_contains_super_property(prop.as_spread_assignment().expression) {
+                    Kind::SpreadAssignment
+                        if assignment_target_contains_super_property(prop.as_spread_assignment().expression) => {
                             return true;
                         }
-                    }
                     _ => {}
                 }
 

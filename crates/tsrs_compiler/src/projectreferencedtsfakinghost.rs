@@ -269,7 +269,7 @@ mod region_tests {
             true,
         ));
         let host = resolution_host_for(crate::new_compiler_host("/", fs, "", None, None, None));
-        let config = P::new(tsrs_tsoptions::new_parsed_command_line(P::new(CompilerOptions::default()), Vec::new(), Vec::new(), Default::default()));
+        let config = P::new(tsrs_tsoptions::new_parsed_command_line(P::new(CompilerOptions::default()), Vec::new(), Vec::new(), tsrs_core::tspath::ComparePathsOptions::default()));
         let mapper: &'static projectReferenceFileMapper = Box::leak(Box::new(projectReferenceFileMapper::new(config, true)));
         let vfs = projectReferenceDtsFakingVfs { host, project_reference_file_mapper: mapper, known_symlinks: KnownSymlinks::default() };
         let region = Region::new(1 << 20);

@@ -571,15 +571,14 @@ pub fn find_preceding_token_ex(
                             .expect_source("parsed nodes have source positions");
                         if !exclude_jsdoc && position < jsdoc_end {
                             return find(source_file, position, exclude_jsdoc, js_doc);
-                        } else {
-                            return find_rightmost_valid_token(
-                                jsdoc_end,
-                                source_file,
-                                n,
-                                Some(position),
-                                exclude_jsdoc,
-                            );
                         }
+                        return find_rightmost_valid_token(
+                            jsdoc_end,
+                            source_file,
+                            n,
+                            Some(position),
+                            exclude_jsdoc,
+                        );
                     }
                     return find_rightmost_valid_token(
                         found_child
@@ -590,22 +589,20 @@ pub fn find_preceding_token_ex(
                         None,
                         exclude_jsdoc,
                     );
-                } else {
-                    // Answer is in tokens between two visited children.
-                    return find_rightmost_valid_token(
-                        found_child
-                            .pos()
-                            .expect_source("parsed nodes have source positions"),
-                        source_file,
-                        n,
-                        Some(position),
-                        exclude_jsdoc,
-                    );
                 }
-            } else {
-                // position is in [foundChild.getStart(), foundChild.End): recur.
-                return find(source_file, position, exclude_jsdoc, found_child);
+                // Answer is in tokens between two visited children.
+                return find_rightmost_valid_token(
+                    found_child
+                        .pos()
+                        .expect_source("parsed nodes have source positions"),
+                    source_file,
+                    n,
+                    Some(position),
+                    exclude_jsdoc,
+                );
             }
+            // position is in [foundChild.getStart(), foundChild.End): recur.
+            return find(source_file, position, exclude_jsdoc, found_child);
         }
 
         // We have two cases here: either the position is at the end of the file,

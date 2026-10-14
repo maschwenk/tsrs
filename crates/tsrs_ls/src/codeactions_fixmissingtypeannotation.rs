@@ -101,6 +101,7 @@ enum typePrintMode {
 }
 
 // codeactions_fixmissingtypeannotation.go:88
+#[expect(clippy::unnecessary_wraps, reason = "CodeFixRegistration callbacks share a fallible result so the dispatcher propagates errors from other fixes.")]
 fn get_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> Result<Vec<CodeAction>, lsproto::Error> {
     let mut ch = fix_context.program.get_type_checker_for_file(ctx, fix_context.source_file);
 
@@ -140,6 +141,7 @@ fn get_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeFixCo
 }
 
 // codeactions_fixmissingtypeannotation.go:128
+#[expect(clippy::unnecessary_wraps, reason = "CodeFixRegistration callbacks share a fallible result so the dispatcher propagates errors from other fixes.")]
 fn get_all_isolated_declarations_code_actions(ctx: &Context, fix_context: &CodeFixContext) -> Result<Option<CombinedCodeActions>, lsproto::Error> {
     let all_diags = get_all_diagnostics(ctx, fix_context.program, fix_context.source_file);
 
@@ -292,9 +294,7 @@ impl isolatedDeclarationsFixer<'_> {
             }
 
             let sym_type = self.checker.get_type_of_symbol_exported(symbol);
-            let Some(type_node) = self.type_to_minimized_reference_type(sym_type, expando_func, declaration_emit_node_builder_flags()) else {
-                return None;
-            };
+            let type_node = self.type_to_minimized_reference_type(sym_type, expando_func, declaration_emit_node_builder_flags())?;
 
             let var_decl = factory.new_variable_declaration(factory.new_identifier(symbol.name()), None, Some(type_node), None);
             let export_token = factory.new_token(Kind::ExportKeyword);
@@ -801,14 +801,12 @@ impl isolatedDeclarationsFixer<'_> {
             return self.relative_type(node);
         }
 
-        let t: Option<P<Type>>;
 
-        if is_value_signature_declaration(Some(node)) {
+
+        let t: Option<P<Type>> = if is_value_signature_declaration(Some(node)) {
             let signature = self.checker.get_signature_from_declaration_exported(node);
             if let Some(type_predicate) = self.checker.get_type_predicate_of_signature_exported(signature) {
-                let Some(predicate_type) = type_predicate.type_() else {
-                    return None;
-                };
+                let predicate_type = type_predicate.type_()?;
                 let enclosing_decl = ast::find_ancestor(node, ast::is_declaration).unwrap_or(self.source_file.as_node());
                 let mut flags = declaration_emit_node_builder_flags();
                 if predicate_type.flags().intersects(TypeFlags::UniqueESSymbol) {
@@ -816,10 +814,10 @@ impl isolatedDeclarationsFixer<'_> {
                 }
                 return self.checker.type_predicate_to_type_predicate_node(type_predicate, Some(enclosing_decl), flags, None);
             }
-            t = Some(self.checker.get_return_type_of_signature_exported(signature));
+            Some(self.checker.get_return_type_of_signature_exported(signature))
         } else {
-            t = Some(self.checker.get_type_at_location(node));
-        }
+            Some(self.checker.get_type_at_location(node))
+        };
 
         let mut t = t?;
 
@@ -837,7 +835,7 @@ impl isolatedDeclarationsFixer<'_> {
 
         let enclosing_decl = ast::find_ancestor(node, ast::is_declaration).unwrap_or(self.source_file.as_node());
 
-        let flags = declaration_emit_node_builder_flags() | self.get_extra_flags(node, t);
+        let flags = declaration_emit_node_builder_flags() | Self::get_extra_flags(node, t);
 
         // For parameters that require adding implicit undefined, add it to the type
         if ast::is_parameter_declaration(node) && self.checker.requires_adding_implicit_undefined(node) {
@@ -849,7 +847,7 @@ impl isolatedDeclarationsFixer<'_> {
     }
 
     // codeactions_fixmissingtypeannotation.go:922
-    fn get_extra_flags(&self, node: P<Node>, t: P<Type>) -> Flags {
+    fn get_extra_flags(node: P<Node>, t: P<Type>) -> Flags {
         if (ast::is_variable_declaration(node) || (ast::is_property_declaration(node) && ast::has_syntactic_modifier(node, ModifierFlags::Static | ModifierFlags::Readonly)))
             && t.flags().intersects(TypeFlags::UniqueESSymbol)
         {

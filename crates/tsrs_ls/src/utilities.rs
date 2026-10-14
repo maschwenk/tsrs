@@ -187,7 +187,7 @@ pub(crate) fn get_possible_type_arguments_info(token_in: Option<P<Node>>, source
                         );
                     }
                 }
-                let Some(ident) = tok else { return None };
+                let ident = tok?;
                 if !ast::is_identifier(ident) {
                     return None;
                 }
@@ -1040,9 +1040,7 @@ pub(crate) fn get_meaning_from_declaration(node: P<Node>) -> SemanticMeaning {
         Kind::EnumMember | Kind::ClassDeclaration => SemanticMeaning::Value | SemanticMeaning::Type,
 
         Kind::ModuleDeclaration => {
-            if ast::is_ambient_module(node) {
-                SemanticMeaning::Namespace | SemanticMeaning::Value
-            } else if ast::get_module_instance_state(node) == ast::ModuleInstanceState::Instantiated {
+            if (ast::is_ambient_module(node)) || (ast::get_module_instance_state(node) == ast::ModuleInstanceState::Instantiated) {
                 SemanticMeaning::Namespace | SemanticMeaning::Value
             } else {
                 SemanticMeaning::Namespace
@@ -1259,6 +1257,7 @@ pub(crate) trait CaseClauseTracker {
 
 impl CaseClauseTracker for CaseClauseTrackerState {
     // utilities.go:1048
+    #[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
     fn add_value(&mut self, value: TrackerValue) {
         match value {
             TrackerValue::String(v) => {
@@ -1274,6 +1273,7 @@ impl CaseClauseTracker for CaseClauseTrackerState {
     }
 
     // utilities.go:1059
+    #[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
     fn has_value(&self, value: &TrackerValue) -> bool {
         match value {
             TrackerValue::String(v) => self.existing_strings.contains(v),
@@ -1447,7 +1447,7 @@ pub(crate) fn find_preceding_matching_token(token: P<Node>, matching_token_kind:
 pub(crate) fn find_containing_list(node: P<Node>, file: P<SourceFile>) -> Option<P<NodeList>> {
     // The node might be a list element (nonsynthetic) or a comma (synthetic). Either way, it will
     // be parented by the container of the SyntaxList, not the SyntaxList itself.
-    let list: std::rc::Rc<std::cell::Cell<Option<P<NodeList>>>> = Default::default();
+    let list: std::rc::Rc<std::cell::Cell<Option<P<NodeList>>>> = std::rc::Rc::default();
     let visit_node: astnav::VisitNodeFn = std::rc::Rc::new(|n: Option<P<Node>>, _visitor: &mut ast::NodeVisitor| n);
     let list_ref = Rc::clone(&list);
     let node_loc = node.loc();

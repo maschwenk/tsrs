@@ -625,7 +625,7 @@ pub fn is_declaration_binding_element(binding_element: P<Node>) -> bool {
 }
 
 /**
- * Gets the name of an BindingOrAssignmentElement.
+ * Gets the name of an `BindingOrAssignmentElement`.
  */
 pub fn get_target_of_binding_or_assignment_element(binding_element: P<Node>) -> Option<P<Node>> {
     if is_declaration_binding_element(binding_element) {
@@ -747,11 +747,10 @@ pub fn get_next_jsdoc_comment_location(node: P<Node>) -> Option<P<Node>> {
             | Kind::ReturnStatement
             | Kind::VariableStatement
             | Kind::ExpressionStatement => return Some(parent),
-            Kind::VariableDeclarationList => {
-                if parent.as_variable_declaration_list().declarations.nodes()[0] == node {
+            Kind::VariableDeclarationList
+                if parent.as_variable_declaration_list().declarations.nodes()[0] == node => {
                     return Some(parent);
                 }
-            }
             _ => {}
         }
     }
@@ -1059,7 +1058,7 @@ pub fn is_async_function(node: P<Node>) -> bool {
 }
 
 /**
- * Gets the most likely element type for a TypeNode. This is not an exhaustive test
+ * Gets the most likely element type for a `TypeNode`. This is not an exhaustive test
  * as it assumes a rest argument can only be an array type (either T[], or Array<T>).
  *
  * @param node The type node.

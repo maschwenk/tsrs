@@ -382,13 +382,13 @@ pub fn type_to_auto_importable_type_node(
 ) -> Option<P<Node>> {
     let id_to_symbol: IdToSymbol = P::new(RefCell::new(FxHashMap::default()));
     let type_node = c.type_to_type_node(t, Some(context_node), Flags::None, Some(id_to_symbol))?;
-    type_node_to_auto_importable_type_node(type_node, import_adder, id_to_symbol)
+    Some(type_node_to_auto_importable_type_node(type_node, import_adder, id_to_symbol))
 }
 
 // import_adder.go:398
 // TypeNodeToAutoImportableTypeNode converts import type references in a type node to
 // simple type references and registers needed imports with the import adder.
-pub fn type_node_to_auto_importable_type_node(mut type_node: P<Node>, import_adder: Option<&mut (dyn ImportAdder + 'static)>, id_to_symbol: IdToSymbol) -> Option<P<Node>> {
+pub fn type_node_to_auto_importable_type_node(mut type_node: P<Node>, import_adder: Option<&mut (dyn ImportAdder + 'static)>, id_to_symbol: IdToSymbol) -> P<Node> {
     let (reference_type_node, importable_symbols) = try_get_auto_importable_reference_from_type_node(Some(type_node), id_to_symbol);
     if let Some(reference_type_node) = reference_type_node {
         if let Some(import_adder) = import_adder {
@@ -398,7 +398,7 @@ pub fn type_node_to_auto_importable_type_node(mut type_node: P<Node>, import_add
     }
 
     // !!! handle type node reuse: nodes needs to be fresh here but also preserve symbols
-    Some(type_node)
+    type_node
 }
 
 // import_adder.go:415

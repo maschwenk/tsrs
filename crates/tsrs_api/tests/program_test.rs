@@ -239,9 +239,9 @@ fn no_emit_on_error_reports_diagnostics_without_output() {
     assert_eq!(get(&out, "emitSkipped"), &Value::Bool(true));
 }
 
-/// Inferred project rebuilt while opening several node_modules files (a program is replaced, and its
-/// shared data freed, inside one snapshot build). Freeing the project-reference mapper there was a
-/// use-after-free; repeat to make the race likely to show.
+/// Inferred project rebuilt while opening several `node_modules` files (a program is replaced, and its shared
+/// data freed, inside one snapshot build). Freeing the project-reference mapper there was a use-after-free;
+/// repeat to make the race likely to show.
 #[test]
 fn inferred_project_rebuild_frees_safely() {
     let dir = TempDir::new("inferred");

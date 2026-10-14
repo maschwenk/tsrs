@@ -1,11 +1,14 @@
-//! Heap census of one checker (`TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics`; notes/mem-checker-heap.md): every
-//! hash table and vector the checker owns directly, with its entry count, capacity, bytes per slot, load factor and
-//! allocated bytes, printed per checker on stderr after the statistics. The lazy member and lazy mapped tables'
-//! contents are always reported (`lazy_member_tables_heap`). In `--features assignment-stats` builds, the containers
-//! owned by the checker's created types (resolved member tables, union and intersection property caches, reference
-//! instantiation tables, conditional-root instantiation maps) are reported too (`heap_census_objects`). Other
-//! arena-owned containers (e.g. symbols' tables) are not reported; the alloc profile's heap sampler attributes them by
-//! call site (`TSRS_HEAP_PROFILE=1`, `TSRS_HEAP_PROFILE_TSV`). Reporting only: nothing runs unless the variable is set.
+//! Measures heap allocations owned by an individual checker.
+//!
+//! Heap census of one checker (`TSRS_HEAP_CENSUS=1` with `--extendedDiagnostics`; notes/mem-checker-heap.md): every hash table and vector the checker owns directly, with its entry count, capacity, bytes per slot, load factor and allocated bytes, printed per checker on stderr after the statistics.
+//!
+//! The lazy member and lazy mapped tables' contents are always reported (`lazy_member_tables_heap`). In
+//! `--features assignment-stats` builds, the containers owned by the checker's created types (resolved
+//! member tables, union and intersection property caches, reference instantiation tables,
+//! conditional-root instantiation maps) are reported too (`heap_census_objects`). Other arena-owned
+//! containers (e.g. symbols' tables) are not reported; the alloc profile's heap sampler attributes them
+//! by call site (`TSRS_HEAP_PROFILE=1`, `TSRS_HEAP_PROFILE_TSV`). Reporting only: nothing runs unless the
+//! variable is set.
 
 use crate::*;
 

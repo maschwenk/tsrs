@@ -271,12 +271,8 @@ fn get_actual_indentation_for_list_item_before_comma(
     options: &FormatCodeSettings,
 ) -> Option<i32> {
     // previous token is comma that separates items in list - find the previous item and try to derive indentation from it
-    if comma_token.parent().is_none() {
-        return None;
-    }
-    let Some(containing_list) = get_containing_list(comma_token, source_file) else {
-        return None;
-    };
+    comma_token.parent()?;
+    let containing_list = get_containing_list(comma_token, source_file)?;
     let comma_index = containing_list
         .nodes()
         .iter()
@@ -968,12 +964,14 @@ pub fn node_will_indent_child(
         | Kind::DefaultClause => return true,
         Kind::CaseBlock => return settings.indent_switch_case.is_true_or_unknown(),
         Kind::VariableDeclaration | Kind::PropertyAssignment | Kind::BinaryExpression => {
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if settings.indent_multi_line_object_literal_beginning_on_blank_line.is_false_or_unknown()
                 && source_file.is_some()
                 && child_kind == Kind::ObjectLiteralExpression
             {
                 return range_is_on_one_line(child.unwrap().loc(), source_file.unwrap());
             }
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if parent.kind() == Kind::BinaryExpression && source_file.is_some() && child_kind == Kind::JsxElement {
                 let source_file = source_file.unwrap();
                 let parent_start_line = scanner::get_ecma_line_of_position(
@@ -1015,6 +1013,7 @@ pub fn node_will_indent_child(
         | Kind::GetAccessor
         | Kind::SetAccessor => return child_kind != Kind::Block,
         Kind::ArrowFunction => {
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if source_file.is_some() && child_kind == Kind::ParenthesizedExpression {
                 return range_is_on_one_line(child.unwrap().loc(), source_file.unwrap());
             }
@@ -1091,26 +1090,25 @@ pub(crate) fn child_is_unindented_branch_of_conditional_expression(
         );
         if child == parent.as_conditional_expression().when_true {
             return child_start_line == condition_end_line;
-        } else {
-            // On the whenFalse side, we have to look at the whenTrue side, because if that one was
-            // indented, whenFalse must also be indented:
-            //
-            // const y = true
-            //   ? 1 : (          L1: whenTrue indented because it's on a new line
-            //     0              L2: indented two stops, one because whenTrue was indented
-            //   );                   and one because of the parentheses spanning multiple lines
-            let true_start_line =
-                get_start_line_for_node(parent.as_conditional_expression().when_true, source_file);
-            let true_end_line = scanner::get_ecma_line_of_position(
-                source_file.get(),
-                parent
-                    .as_conditional_expression()
-                    .when_true
-                    .end()
-                    .expect_source("parsed expressions have source positions"),
-            );
-            return condition_end_line == true_start_line && true_end_line == child_start_line;
         }
+        // On the whenFalse side, we have to look at the whenTrue side, because if that one was
+        // indented, whenFalse must also be indented:
+        //
+        // const y = true
+        //   ? 1 : (          L1: whenTrue indented because it's on a new line
+        //     0              L2: indented two stops, one because whenTrue was indented
+        //   );                   and one because of the parentheses spanning multiple lines
+        let true_start_line =
+            get_start_line_for_node(parent.as_conditional_expression().when_true, source_file);
+        let true_end_line = scanner::get_ecma_line_of_position(
+            source_file.get(),
+            parent
+                .as_conditional_expression()
+                .when_true
+                .end()
+                .expect_source("parsed expressions have source positions"),
+        );
+        return condition_end_line == true_start_line && true_end_line == child_start_line;
     }
     false
 }

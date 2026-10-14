@@ -48,8 +48,8 @@ impl Json for ImplementationParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.finish()
     }
 
@@ -148,8 +148,8 @@ impl Json for ImplementationRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("id", &self.id);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -211,8 +211,8 @@ impl Json for TypeDefinitionParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.finish()
     }
 
@@ -262,8 +262,8 @@ impl Json for TypeDefinitionRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("id", &self.id);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -359,12 +359,9 @@ impl Json for DidChangeWorkspaceFoldersParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "event" => {
-                    seen |= 1 << 0;
-                    s.event = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "event" {
+                seen |= 1 << 0;
+                s.event = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["event"], Self::GO_TYPE)?;
@@ -395,12 +392,9 @@ impl Json for ConfigurationParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "items" => {
-                    seen |= 1 << 0;
-                    s.items = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "items" {
+                seen |= 1 << 0;
+                s.items = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["items"], Self::GO_TYPE)?;
@@ -434,8 +428,8 @@ impl Json for DocumentColorParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.finish()
     }
@@ -527,8 +521,8 @@ impl Json for DocumentColorRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("id", &self.id);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -586,8 +580,8 @@ impl Json for ColorPresentationParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("color", &self.color);
         w.field("range", &self.range);
@@ -648,8 +642,8 @@ impl Json for ColorPresentation {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("label", &self.label);
-        w.opt("textEdit", &self.text_edit);
-        w.opt("additionalTextEdits", &self.additional_text_edits);
+        w.opt("textEdit", self.text_edit.as_ref());
+        w.opt("additionalTextEdits", self.additional_text_edits.as_ref());
         w.finish()
     }
 
@@ -701,8 +695,8 @@ impl Json for FoldingRangeParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.finish()
     }
@@ -767,11 +761,11 @@ impl Json for FoldingRange {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
         w.field("startLine", &self.start_line);
-        w.opt("startCharacter", &self.start_character);
+        w.opt("startCharacter", self.start_character.as_ref());
         w.field("endLine", &self.end_line);
-        w.opt("endCharacter", &self.end_character);
-        w.opt("kind", &self.kind);
-        w.opt("collapsedText", &self.collapsed_text);
+        w.opt("endCharacter", self.end_character.as_ref());
+        w.opt("kind", self.kind.as_ref());
+        w.opt("collapsedText", self.collapsed_text.as_ref());
         w.finish()
     }
 
@@ -823,8 +817,8 @@ impl Json for FoldingRangeRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("id", &self.id);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -886,8 +880,8 @@ impl Json for DeclarationParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.finish()
     }
 
@@ -936,9 +930,9 @@ impl Json for DeclarationRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("documentSelector", &self.document_selector);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -993,8 +987,8 @@ impl Json for SelectionRangeParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("positions", &self.positions);
         w.finish()
@@ -1044,7 +1038,7 @@ impl Json for SelectionRange {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("range", &self.range);
-        w.opt("parent", &self.parent);
+        w.opt("parent", self.parent.as_ref());
         w.finish()
     }
 
@@ -1088,9 +1082,9 @@ impl Json for SelectionRangeRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("documentSelector", &self.document_selector);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -1139,12 +1133,9 @@ impl Json for WorkDoneProgressCreateParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "token" => {
-                    seen |= 1 << 0;
-                    s.token = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "token" {
+                seen |= 1 << 0;
+                s.token = field(k, v)?;
             }
         }
         check_required(seen, &["token"], Self::GO_TYPE)?;
@@ -1175,12 +1166,9 @@ impl Json for WorkDoneProgressCancelParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "token" => {
-                    seen |= 1 << 0;
-                    s.token = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "token" {
+                seen |= 1 << 0;
+                s.token = field(k, v)?;
             }
         }
         check_required(seen, &["token"], Self::GO_TYPE)?;
@@ -1223,7 +1211,7 @@ impl Json for CallHierarchyPrepareParams {
         let mut w = ObjectWriter::new(3);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.finish()
     }
 
@@ -1302,12 +1290,12 @@ impl Json for CallHierarchyItem {
         let mut w = ObjectWriter::new(8);
         w.field("name", &self.name);
         w.field("kind", &self.kind);
-        w.opt("tags", &self.tags);
-        w.opt("detail", &self.detail);
+        w.opt("tags", self.tags.as_ref());
+        w.opt("detail", self.detail.as_ref());
         w.field("uri", &self.uri);
         w.field("range", &self.range);
         w.field("selectionRange", &self.selection_range);
-        w.opt("data", &self.data);
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -1373,8 +1361,8 @@ impl Json for CallHierarchyRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("id", &self.id);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -1421,8 +1409,8 @@ impl Json for CallHierarchyIncomingCallsParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("item", &self.item);
         w.finish()
     }
@@ -1518,8 +1506,8 @@ impl Json for CallHierarchyOutgoingCallsParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("item", &self.item);
         w.finish()
     }
@@ -1621,8 +1609,8 @@ impl Json for SemanticTokensParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.finish()
     }
@@ -1668,7 +1656,7 @@ impl Json for SemanticTokens {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("resultId", &self.result_id);
+        w.opt("resultId", self.result_id.as_ref());
         w.field("data", &self.data);
         w.finish()
     }
@@ -1717,12 +1705,9 @@ impl Json for SemanticTokensPartialResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "data" => {
-                    seen |= 1 << 0;
-                    s.data = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "data" {
+                seen |= 1 << 0;
+                s.data = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["data"], Self::GO_TYPE)?;
@@ -1761,11 +1746,11 @@ impl Json for SemanticTokensRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("legend", &self.legend);
-        w.opt("range", &self.range);
-        w.opt("full", &self.full);
-        w.opt("id", &self.id);
+        w.opt("range", self.range.as_ref());
+        w.opt("full", self.full.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -1827,8 +1812,8 @@ impl Json for SemanticTokensDeltaParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("previousResultId", &self.previous_result_id);
         w.finish()
@@ -1875,7 +1860,7 @@ impl Json for SemanticTokensDelta {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("resultId", &self.result_id);
+        w.opt("resultId", self.result_id.as_ref());
         w.field("edits", &self.edits);
         w.finish()
     }
@@ -1924,12 +1909,9 @@ impl Json for SemanticTokensDeltaPartialResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "edits" => {
-                    seen |= 1 << 0;
-                    s.edits = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "edits" {
+                seen |= 1 << 0;
+                s.edits = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["edits"], Self::GO_TYPE)?;
@@ -1966,8 +1948,8 @@ impl Json for SemanticTokensRangeParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("range", &self.range);
         w.finish()
@@ -2032,9 +2014,9 @@ impl Json for ShowDocumentParams {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("uri", &self.uri);
-        w.opt("external", &self.external);
-        w.opt("takeFocus", &self.take_focus);
-        w.opt("selection", &self.selection);
+        w.opt("external", self.external.as_ref());
+        w.opt("takeFocus", self.take_focus.as_ref());
+        w.opt("selection", self.selection.as_ref());
         w.finish()
     }
 
@@ -2087,12 +2069,9 @@ impl Json for ShowDocumentResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "success" => {
-                    seen |= 1 << 0;
-                    s.success = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "success" {
+                seen |= 1 << 0;
+                s.success = field(k, v)?;
             }
         }
         check_required(seen, &["success"], Self::GO_TYPE)?;
@@ -2132,7 +2111,7 @@ impl Json for LinkedEditingRangeParams {
         let mut w = ObjectWriter::new(3);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.finish()
     }
 
@@ -2183,7 +2162,7 @@ impl Json for LinkedEditingRanges {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("ranges", &self.ranges);
-        w.opt("wordPattern", &self.word_pattern);
+        w.opt("wordPattern", self.word_pattern.as_ref());
         w.finish()
     }
 
@@ -2228,8 +2207,8 @@ impl Json for LinkedEditingRangeRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("id", &self.id);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -2282,12 +2261,9 @@ impl Json for CreateFilesParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "files" => {
-                    seen |= 1 << 0;
-                    s.files = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "files" {
+                seen |= 1 << 0;
+                s.files = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["files"], Self::GO_TYPE)?;
@@ -2339,9 +2315,9 @@ impl Json for WorkspaceEdit {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("changes", &self.changes);
-        w.opt("documentChanges", &self.document_changes);
-        w.opt("changeAnnotations", &self.change_annotations);
+        w.opt("changes", self.changes.as_ref());
+        w.opt("documentChanges", self.document_changes.as_ref());
+        w.opt("changeAnnotations", self.change_annotations.as_ref());
         w.finish()
     }
 
@@ -2388,12 +2364,9 @@ impl Json for FileOperationRegistrationOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "filters" => {
-                    seen |= 1 << 0;
-                    s.filters = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "filters" {
+                seen |= 1 << 0;
+                s.filters = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["filters"], Self::GO_TYPE)?;
@@ -2429,12 +2402,9 @@ impl Json for RenameFilesParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "files" => {
-                    seen |= 1 << 0;
-                    s.files = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "files" {
+                seen |= 1 << 0;
+                s.files = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["files"], Self::GO_TYPE)?;
@@ -2469,12 +2439,9 @@ impl Json for DeleteFilesParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "files" => {
-                    seen |= 1 << 0;
-                    s.files = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "files" {
+                seen |= 1 << 0;
+                s.files = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["files"], Self::GO_TYPE)?;
@@ -2518,8 +2485,8 @@ impl Json for MonikerParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.finish()
     }
 
@@ -2577,7 +2544,7 @@ impl Json for Moniker {
         w.field("scheme", &self.scheme);
         w.field("identifier", &self.identifier);
         w.field("unique", &self.unique);
-        w.opt("kind", &self.kind);
+        w.opt("kind", self.kind.as_ref());
         w.finish()
     }
 
@@ -2626,7 +2593,7 @@ impl Json for MonikerRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -2686,7 +2653,7 @@ impl Json for TypeHierarchyPrepareParams {
         let mut w = ObjectWriter::new(3);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.finish()
     }
 
@@ -2766,12 +2733,12 @@ impl Json for TypeHierarchyItem {
         let mut w = ObjectWriter::new(8);
         w.field("name", &self.name);
         w.field("kind", &self.kind);
-        w.opt("tags", &self.tags);
-        w.opt("detail", &self.detail);
+        w.opt("tags", self.tags.as_ref());
+        w.opt("detail", self.detail.as_ref());
         w.field("uri", &self.uri);
         w.field("range", &self.range);
         w.field("selectionRange", &self.selection_range);
-        w.opt("data", &self.data);
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -2837,8 +2804,8 @@ impl Json for TypeHierarchyRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("id", &self.id);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -2885,8 +2852,8 @@ impl Json for TypeHierarchySupertypesParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("item", &self.item);
         w.finish()
     }
@@ -2934,8 +2901,8 @@ impl Json for TypeHierarchySubtypesParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("item", &self.item);
         w.finish()
     }
@@ -2993,7 +2960,7 @@ impl Json for InlineValueParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("range", &self.range);
         w.field("context", &self.context);
@@ -3051,9 +3018,9 @@ impl Json for InlineValueRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("documentSelector", &self.document_selector);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -3106,7 +3073,7 @@ impl Json for InlayHintParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("range", &self.range);
         w.finish()
@@ -3195,12 +3162,12 @@ impl Json for InlayHint {
         let mut w = ObjectWriter::new(8);
         w.field("position", &self.position);
         w.field("label", &self.label);
-        w.opt("kind", &self.kind);
-        w.opt("textEdits", &self.text_edits);
-        w.opt("tooltip", &self.tooltip);
-        w.opt("paddingLeft", &self.padding_left);
-        w.opt("paddingRight", &self.padding_right);
-        w.opt("data", &self.data);
+        w.opt("kind", self.kind.as_ref());
+        w.opt("textEdits", self.text_edits.as_ref());
+        w.opt("tooltip", self.tooltip.as_ref());
+        w.opt("paddingLeft", self.padding_left.as_ref());
+        w.opt("paddingRight", self.padding_right.as_ref());
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -3260,10 +3227,10 @@ impl Json for InlayHintRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.field("documentSelector", &self.document_selector);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -3324,11 +3291,11 @@ impl Json for DocumentDiagnosticParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
-        w.opt("identifier", &self.identifier);
-        w.opt("previousResultId", &self.previous_result_id);
+        w.opt("identifier", self.identifier.as_ref());
+        w.opt("previousResultId", self.previous_result_id.as_ref());
         w.finish()
     }
 
@@ -3381,12 +3348,9 @@ impl Json for DiagnosticServerCancellationData {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "retriggerRequest" => {
-                    seen |= 1 << 0;
-                    s.retrigger_request = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "retriggerRequest" {
+                seen |= 1 << 0;
+                s.retrigger_request = field(k, v)?;
             }
         }
         check_required(seen, &["retriggerRequest"], Self::GO_TYPE)?;
@@ -3430,11 +3394,11 @@ impl Json for DiagnosticRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("identifier", &self.identifier);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("identifier", self.identifier.as_ref());
         w.field("interFileDependencies", &self.inter_file_dependencies);
         w.field("workspaceDiagnostics", &self.workspace_diagnostics);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -3495,9 +3459,9 @@ impl Json for WorkspaceDiagnosticParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
-        w.opt("identifier", &self.identifier);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
+        w.opt("identifier", self.identifier.as_ref());
         w.field("previousResultIds", &self.previous_result_ids);
         w.finish()
     }
@@ -3550,12 +3514,9 @@ impl Json for WorkspaceDiagnosticReport {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "items" => {
-                    seen |= 1 << 0;
-                    s.items = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "items" {
+                seen |= 1 << 0;
+                s.items = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["items"], Self::GO_TYPE)?;
@@ -3588,12 +3549,9 @@ impl Json for WorkspaceDiagnosticReportPartialResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "items" => {
-                    seen |= 1 << 0;
-                    s.items = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "items" {
+                seen |= 1 << 0;
+                s.items = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["items"], Self::GO_TYPE)?;
@@ -3640,7 +3598,7 @@ impl Json for InlineCompletionParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("context", &self.context);
         w.finish()
     }
@@ -3700,12 +3658,9 @@ impl Json for InlineCompletionList {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "items" => {
-                    seen |= 1 << 0;
-                    s.items = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "items" {
+                seen |= 1 << 0;
+                s.items = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["items"], Self::GO_TYPE)?;
@@ -3738,9 +3693,9 @@ impl Json for InlineCompletionItem {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("insertText", &self.insert_text);
-        w.opt("filterText", &self.filter_text);
-        w.opt("range", &self.range);
-        w.opt("command", &self.command);
+        w.opt("filterText", self.filter_text.as_ref());
+        w.opt("range", self.range.as_ref());
+        w.opt("command", self.command.as_ref());
         w.finish()
     }
 
@@ -3789,9 +3744,9 @@ impl Json for InlineCompletionRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("documentSelector", &self.document_selector);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -3843,12 +3798,9 @@ impl Json for TextDocumentContentParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "uri" => {
-                    seen |= 1 << 0;
-                    s.uri = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "uri" {
+                seen |= 1 << 0;
+                s.uri = field(k, v)?;
             }
         }
         check_required(seen, &["uri"], Self::GO_TYPE)?;
@@ -3885,12 +3837,9 @@ impl Json for TextDocumentContentResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "text" => {
-                    seen |= 1 << 0;
-                    s.text = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "text" {
+                seen |= 1 << 0;
+                s.text = field(k, v)?;
             }
         }
         check_required(seen, &["text"], Self::GO_TYPE)?;
@@ -3918,7 +3867,7 @@ impl Json for TextDocumentContentRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("schemes", &self.schemes);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -3969,12 +3918,9 @@ impl Json for TextDocumentContentRefreshParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "uri" => {
-                    seen |= 1 << 0;
-                    s.uri = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "uri" {
+                seen |= 1 << 0;
+                s.uri = field(k, v)?;
             }
         }
         check_required(seen, &["uri"], Self::GO_TYPE)?;
@@ -4004,12 +3950,9 @@ impl Json for RegistrationParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "registrations" => {
-                    seen |= 1 << 0;
-                    s.registrations = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "registrations" {
+                seen |= 1 << 0;
+                s.registrations = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["registrations"], Self::GO_TYPE)?;
@@ -4039,12 +3982,9 @@ impl Json for UnregistrationParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "unregisterations" => {
-                    seen |= 1 << 0;
-                    s.unregisterations = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "unregisterations" {
+                seen |= 1 << 0;
+                s.unregisterations = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["unregisterations"], Self::GO_TYPE)?;
@@ -4117,16 +4057,16 @@ impl Json for InitializeParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(10);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("processId", &self.process_id);
-        w.opt("clientInfo", &self.client_info);
-        w.opt("locale", &self.locale);
-        w.opt("rootPath", &self.root_path);
+        w.opt("clientInfo", self.client_info.as_ref());
+        w.opt("locale", self.locale.as_ref());
+        w.opt("rootPath", self.root_path.as_ref());
         w.field("rootUri", &self.root_uri);
         w.field("capabilities", &self.capabilities);
-        w.opt("initializationOptions", &self.initialization_options);
-        w.opt("trace", &self.trace);
-        w.opt("workspaceFolders", &self.workspace_folders);
+        w.opt("initializationOptions", self.initialization_options.as_ref());
+        w.opt("trace", self.trace.as_ref());
+        w.opt("workspaceFolders", self.workspace_folders.as_ref());
         w.finish()
     }
 
@@ -4184,7 +4124,7 @@ impl Json for InitializeResult {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("capabilities", &self.capabilities);
-        w.opt("serverInfo", &self.server_info);
+        w.opt("serverInfo", self.server_info.as_ref());
         w.finish()
     }
 
@@ -4237,12 +4177,9 @@ impl Json for InitializeError {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "retry" => {
-                    seen |= 1 << 0;
-                    s.retry = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "retry" {
+                seen |= 1 << 0;
+                s.retry = field(k, v)?;
             }
         }
         check_required(seen, &["retry"], Self::GO_TYPE)?;
@@ -4293,12 +4230,9 @@ impl Json for DidChangeConfigurationParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "settings" => {
-                    seen |= 1 << 0;
-                    s.settings = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "settings" {
+                seen |= 1 << 0;
+                s.settings = field(k, v)?;
             }
         }
         check_required(seen, &["settings"], Self::GO_TYPE)?;
@@ -4317,7 +4251,7 @@ impl Json for DidChangeConfigurationRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("section", &self.section);
+        w.opt("section", self.section.as_ref());
         w.finish()
     }
 
@@ -4327,9 +4261,8 @@ impl Json for DidChangeConfigurationRegistrationOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "section" => s.section = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "section" {
+                s.section = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -4401,7 +4334,7 @@ impl Json for ShowMessageRequestParams {
         let mut w = ObjectWriter::new(3);
         w.field("type", &self.type_);
         w.field("message", &self.message);
-        w.opt("actions", &self.actions);
+        w.opt("actions", self.actions.as_ref());
         w.finish()
     }
 
@@ -4453,12 +4386,9 @@ impl Json for MessageActionItem {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "title" => {
-                    seen |= 1 << 0;
-                    s.title = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "title" {
+                seen |= 1 << 0;
+                s.title = field(k, v)?;
             }
         }
         check_required(seen, &["title"], Self::GO_TYPE)?;
@@ -4535,12 +4465,9 @@ impl Json for DidOpenTextDocumentParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "textDocument" => {
-                    seen |= 1 << 0;
-                    s.text_document = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "textDocument" {
+                seen |= 1 << 0;
+                s.text_document = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["textDocument"], Self::GO_TYPE)?;
@@ -4573,12 +4500,9 @@ impl Json for TextDocumentRegistrationOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "documentSelector" => {
-                    seen |= 1 << 0;
-                    s.document_selector = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "documentSelector" {
+                seen |= 1 << 0;
+                s.document_selector = field(k, v)?;
             }
         }
         check_required(seen, &["documentSelector"], Self::GO_TYPE)?;
@@ -4719,12 +4643,9 @@ impl Json for DidCloseTextDocumentParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "textDocument" => {
-                    seen |= 1 << 0;
-                    s.text_document = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "textDocument" {
+                seen |= 1 << 0;
+                s.text_document = field(k, v)?;
             }
         }
         check_required(seen, &["textDocument"], Self::GO_TYPE)?;
@@ -4756,7 +4677,7 @@ impl Json for DidSaveTextDocumentParams {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("textDocument", &self.text_document);
-        w.opt("text", &self.text);
+        w.opt("text", self.text.as_ref());
         w.finish()
     }
 
@@ -4799,7 +4720,7 @@ impl Json for TextDocumentSaveRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("documentSelector", &self.document_selector);
-        w.opt("includeText", &self.include_text);
+        w.opt("includeText", self.include_text.as_ref());
         w.finish()
     }
 
@@ -4956,12 +4877,9 @@ impl Json for DidChangeWatchedFilesParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "changes" => {
-                    seen |= 1 << 0;
-                    s.changes = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "changes" {
+                seen |= 1 << 0;
+                s.changes = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["changes"], Self::GO_TYPE)?;
@@ -4993,12 +4911,9 @@ impl Json for DidChangeWatchedFilesRegistrationOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "watchers" => {
-                    seen |= 1 << 0;
-                    s.watchers = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "watchers" {
+                seen |= 1 << 0;
+                s.watchers = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["watchers"], Self::GO_TYPE)?;
@@ -5028,7 +4943,7 @@ impl Json for PublishDiagnosticsParams {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("uri", &self.uri);
-        w.opt("version", &self.version);
+        w.opt("version", self.version.as_ref());
         w.field("diagnostics", &self.diagnostics);
         w.finish()
     }
@@ -5099,9 +5014,9 @@ impl Json for CompletionParams {
         let mut w = ObjectWriter::new(5);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
-        w.opt("context", &self.context);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
+        w.opt("context", self.context.as_ref());
         w.finish()
     }
 
@@ -5281,24 +5196,24 @@ impl Json for CompletionItem {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(19);
         w.field("label", &self.label);
-        w.opt("labelDetails", &self.label_details);
-        w.opt("kind", &self.kind);
-        w.opt("tags", &self.tags);
-        w.opt("detail", &self.detail);
-        w.opt("documentation", &self.documentation);
-        w.opt("deprecated", &self.deprecated);
-        w.opt("preselect", &self.preselect);
-        w.opt("sortText", &self.sort_text);
-        w.opt("filterText", &self.filter_text);
-        w.opt("insertText", &self.insert_text);
-        w.opt("insertTextFormat", &self.insert_text_format);
-        w.opt("insertTextMode", &self.insert_text_mode);
-        w.opt("textEdit", &self.text_edit);
-        w.opt("textEditText", &self.text_edit_text);
-        w.opt("additionalTextEdits", &self.additional_text_edits);
-        w.opt("commitCharacters", &self.commit_characters);
-        w.opt("command", &self.command);
-        w.opt("data", &self.data);
+        w.opt("labelDetails", self.label_details.as_ref());
+        w.opt("kind", self.kind.as_ref());
+        w.opt("tags", self.tags.as_ref());
+        w.opt("detail", self.detail.as_ref());
+        w.opt("documentation", self.documentation.as_ref());
+        w.opt("deprecated", self.deprecated.as_ref());
+        w.opt("preselect", self.preselect.as_ref());
+        w.opt("sortText", self.sort_text.as_ref());
+        w.opt("filterText", self.filter_text.as_ref());
+        w.opt("insertText", self.insert_text.as_ref());
+        w.opt("insertTextFormat", self.insert_text_format.as_ref());
+        w.opt("insertTextMode", self.insert_text_mode.as_ref());
+        w.opt("textEdit", self.text_edit.as_ref());
+        w.opt("textEditText", self.text_edit_text.as_ref());
+        w.opt("additionalTextEdits", self.additional_text_edits.as_ref());
+        w.opt("commitCharacters", self.commit_characters.as_ref());
+        w.opt("command", self.command.as_ref());
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -5397,8 +5312,8 @@ impl Json for CompletionList {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("isIncomplete", &self.is_incomplete);
-        w.opt("itemDefaults", &self.item_defaults);
-        w.opt("applyKind", &self.apply_kind);
+        w.opt("itemDefaults", self.item_defaults.as_ref());
+        w.opt("applyKind", self.apply_kind.as_ref());
         w.field("items", &self.items);
         w.finish()
     }
@@ -5476,11 +5391,11 @@ impl Json for CompletionRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("triggerCharacters", &self.trigger_characters);
-        w.opt("allCommitCharacters", &self.all_commit_characters);
-        w.opt("resolveProvider", &self.resolve_provider);
-        w.opt("completionItem", &self.completion_item);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("triggerCharacters", self.trigger_characters.as_ref());
+        w.opt("allCommitCharacters", self.all_commit_characters.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
+        w.opt("completionItem", self.completion_item.as_ref());
         w.finish()
     }
 
@@ -5545,8 +5460,8 @@ impl Json for HoverParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("verbosityLevel", &self.verbosity_level);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("verbosityLevel", self.verbosity_level.as_ref());
         w.finish()
     }
 
@@ -5600,9 +5515,9 @@ impl Json for Hover {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("contents", &self.contents);
-        w.opt("range", &self.range);
+        w.opt("range", self.range.as_ref());
         w.value("canIncreaseVerbosity", &self.can_increase_verbosity);
-        w.opt("_vs_rawContent", &self.vs_raw_content);
+        w.opt("_vs_rawContent", self.vs_raw_content.as_ref());
         w.finish()
     }
 
@@ -5646,7 +5561,7 @@ impl Json for HoverRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -5710,8 +5625,8 @@ impl Json for SignatureHelpParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("context", &self.context);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("context", self.context.as_ref());
         w.finish()
     }
 
@@ -5789,8 +5704,8 @@ impl Json for SignatureHelp {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("signatures", &self.signatures);
-        w.opt("activeSignature", &self.active_signature);
-        w.opt("activeParameter", &self.active_parameter);
+        w.opt("activeSignature", self.active_signature.as_ref());
+        w.opt("activeParameter", self.active_parameter.as_ref());
         w.finish()
     }
 
@@ -5844,9 +5759,9 @@ impl Json for SignatureHelpRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("triggerCharacters", &self.trigger_characters);
-        w.opt("retriggerCharacters", &self.retrigger_characters);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("triggerCharacters", self.trigger_characters.as_ref());
+        w.opt("retriggerCharacters", self.retrigger_characters.as_ref());
         w.finish()
     }
 
@@ -5910,8 +5825,8 @@ impl Json for DefinitionParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.finish()
     }
 
@@ -5958,7 +5873,7 @@ impl Json for DefinitionRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -6022,8 +5937,8 @@ impl Json for ReferenceParams {
         let mut w = ObjectWriter::new(5);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("context", &self.context);
         w.finish()
     }
@@ -6075,7 +5990,7 @@ impl Json for ReferenceRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -6137,8 +6052,8 @@ impl Json for DocumentHighlightParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.finish()
     }
 
@@ -6187,7 +6102,7 @@ impl Json for DocumentHighlight {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("range", &self.range);
-        w.opt("kind", &self.kind);
+        w.opt("kind", self.kind.as_ref());
         w.finish()
     }
 
@@ -6229,7 +6144,7 @@ impl Json for DocumentHighlightRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -6280,8 +6195,8 @@ impl Json for DocumentSymbolParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.finish()
     }
@@ -6354,9 +6269,9 @@ impl Json for SymbolInformation {
         let mut w = ObjectWriter::new(6);
         w.field("name", &self.name);
         w.field("kind", &self.kind);
-        w.opt("tags", &self.tags);
-        w.opt("containerName", &self.container_name);
-        w.opt("deprecated", &self.deprecated);
+        w.opt("tags", self.tags.as_ref());
+        w.opt("containerName", self.container_name.as_ref());
+        w.opt("deprecated", self.deprecated.as_ref());
         w.field("location", &self.location);
         w.finish()
     }
@@ -6438,13 +6353,13 @@ impl Json for DocumentSymbol {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(8);
         w.field("name", &self.name);
-        w.opt("detail", &self.detail);
+        w.opt("detail", self.detail.as_ref());
         w.field("kind", &self.kind);
-        w.opt("tags", &self.tags);
-        w.opt("deprecated", &self.deprecated);
+        w.opt("tags", self.tags.as_ref());
+        w.opt("deprecated", self.deprecated.as_ref());
         w.field("range", &self.range);
         w.field("selectionRange", &self.selection_range);
-        w.opt("children", &self.children);
+        w.opt("children", self.children.as_ref());
         w.finish()
     }
 
@@ -6507,8 +6422,8 @@ impl Json for DocumentSymbolRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("label", &self.label);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("label", self.label.as_ref());
         w.finish()
     }
 
@@ -6566,8 +6481,8 @@ impl Json for CodeActionParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("range", &self.range);
         w.field("context", &self.context);
@@ -6633,9 +6548,9 @@ impl Json for Command {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("title", &self.title);
-        w.opt("tooltip", &self.tooltip);
+        w.opt("tooltip", self.tooltip.as_ref());
         w.field("command", &self.command);
-        w.opt("arguments", &self.arguments);
+        w.opt("arguments", self.arguments.as_ref());
         w.finish()
     }
 
@@ -6735,14 +6650,14 @@ impl Json for CodeAction {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
         w.field("title", &self.title);
-        w.opt("kind", &self.kind);
-        w.opt("diagnostics", &self.diagnostics);
-        w.opt("isPreferred", &self.is_preferred);
-        w.opt("disabled", &self.disabled);
-        w.opt("edit", &self.edit);
-        w.opt("command", &self.command);
-        w.opt("data", &self.data);
-        w.opt("tags", &self.tags);
+        w.opt("kind", self.kind.as_ref());
+        w.opt("diagnostics", self.diagnostics.as_ref());
+        w.opt("isPreferred", self.is_preferred.as_ref());
+        w.opt("disabled", self.disabled.as_ref());
+        w.opt("edit", self.edit.as_ref());
+        w.opt("command", self.command.as_ref());
+        w.opt("data", self.data.as_ref());
+        w.opt("tags", self.tags.as_ref());
         w.finish()
     }
 
@@ -6819,10 +6734,10 @@ impl Json for CodeActionRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("codeActionKinds", &self.code_action_kinds);
-        w.opt("documentation", &self.documentation);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("codeActionKinds", self.code_action_kinds.as_ref());
+        w.opt("documentation", self.documentation.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -6880,10 +6795,10 @@ impl Json for WorkspaceSymbolParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("query", &self.query);
-        w.opt("textDocument", &self.text_document);
+        w.opt("textDocument", self.text_document.as_ref());
         w.finish()
     }
 
@@ -6954,10 +6869,10 @@ impl Json for WorkspaceSymbol {
         let mut w = ObjectWriter::new(6);
         w.field("name", &self.name);
         w.field("kind", &self.kind);
-        w.opt("tags", &self.tags);
-        w.opt("containerName", &self.container_name);
+        w.opt("tags", self.tags.as_ref());
+        w.opt("containerName", self.container_name.as_ref());
         w.field("location", &self.location);
-        w.opt("data", &self.data);
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -7010,8 +6925,8 @@ impl Json for WorkspaceSymbolRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -7057,8 +6972,8 @@ impl Json for CodeLensParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.finish()
     }
@@ -7110,8 +7025,8 @@ impl Json for CodeLens {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("range", &self.range);
-        w.opt("command", &self.command);
-        w.opt("data", &self.data);
+        w.opt("command", self.command.as_ref());
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -7157,8 +7072,8 @@ impl Json for CodeLensRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -7210,8 +7125,8 @@ impl Json for DocumentLinkParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.finish()
     }
@@ -7269,9 +7184,9 @@ impl Json for DocumentLink {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("range", &self.range);
-        w.opt("target", &self.target);
-        w.opt("tooltip", &self.tooltip);
-        w.opt("data", &self.data);
+        w.opt("target", self.target.as_ref());
+        w.opt("tooltip", self.tooltip.as_ref());
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -7318,8 +7233,8 @@ impl Json for DocumentLinkRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -7370,7 +7285,7 @@ impl Json for DocumentFormattingParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("options", &self.options);
         w.finish()
@@ -7418,7 +7333,7 @@ impl Json for DocumentFormattingRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -7471,7 +7386,7 @@ impl Json for DocumentRangeFormattingParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("range", &self.range);
         w.field("options", &self.options);
@@ -7529,8 +7444,8 @@ impl Json for DocumentRangeFormattingRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("rangesSupport", &self.ranges_support);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("rangesSupport", self.ranges_support.as_ref());
         w.finish()
     }
 
@@ -7586,7 +7501,7 @@ impl Json for DocumentRangesFormattingParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("textDocument", &self.text_document);
         w.field("ranges", &self.ranges);
         w.field("options", &self.options);
@@ -7722,7 +7637,7 @@ impl Json for DocumentOnTypeFormattingRegistrationOptions {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
         w.field("firstTriggerCharacter", &self.first_trigger_character);
-        w.opt("moreTriggerCharacter", &self.more_trigger_character);
+        w.opt("moreTriggerCharacter", self.more_trigger_character.as_ref());
         w.finish()
     }
 
@@ -7789,7 +7704,7 @@ impl Json for RenameParams {
         let mut w = ObjectWriter::new(4);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("newName", &self.new_name);
         w.finish()
     }
@@ -7845,8 +7760,8 @@ impl Json for RenameRegistrationOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("documentSelector", &self.document_selector);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("prepareProvider", &self.prepare_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("prepareProvider", self.prepare_provider.as_ref());
         w.finish()
     }
 
@@ -7904,7 +7819,7 @@ impl Json for PrepareRenameParams {
         let mut w = ObjectWriter::new(3);
         w.field("textDocument", &self.text_document);
         w.field("position", &self.position);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.finish()
     }
 
@@ -7952,9 +7867,9 @@ impl Json for ExecuteCommandParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.field("command", &self.command);
-        w.opt("arguments", &self.arguments);
+        w.opt("arguments", self.arguments.as_ref());
         w.finish()
     }
 
@@ -7995,7 +7910,7 @@ impl Json for ExecuteCommandRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("commands", &self.commands);
         w.finish()
     }
@@ -8044,9 +7959,9 @@ impl Json for ApplyWorkspaceEditParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("label", &self.label);
+        w.opt("label", self.label.as_ref());
         w.field("edit", &self.edit);
-        w.opt("metadata", &self.metadata);
+        w.opt("metadata", self.metadata.as_ref());
         w.finish()
     }
 
@@ -8098,8 +8013,8 @@ impl Json for ApplyWorkspaceEditResult {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("applied", &self.applied);
-        w.opt("failureReason", &self.failure_reason);
-        w.opt("failedChange", &self.failed_change);
+        w.opt("failureReason", self.failure_reason.as_ref());
+        w.opt("failedChange", self.failed_change.as_ref());
         w.finish()
     }
 
@@ -8164,9 +8079,9 @@ impl Json for WorkDoneProgressBegin {
         let mut w = ObjectWriter::new(5);
         w.field("kind", &self.kind);
         w.field("title", &self.title);
-        w.opt("cancellable", &self.cancellable);
-        w.opt("message", &self.message);
-        w.opt("percentage", &self.percentage);
+        w.opt("cancellable", self.cancellable.as_ref());
+        w.opt("message", self.message.as_ref());
+        w.opt("percentage", self.percentage.as_ref());
         w.finish()
     }
 
@@ -8230,9 +8145,9 @@ impl Json for WorkDoneProgressReport {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("kind", &self.kind);
-        w.opt("cancellable", &self.cancellable);
-        w.opt("message", &self.message);
-        w.opt("percentage", &self.percentage);
+        w.opt("cancellable", self.cancellable.as_ref());
+        w.opt("message", self.message.as_ref());
+        w.opt("percentage", self.percentage.as_ref());
         w.finish()
     }
 
@@ -8275,7 +8190,7 @@ impl Json for WorkDoneProgressEnd {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("kind", &self.kind);
-        w.opt("message", &self.message);
+        w.opt("message", self.message.as_ref());
         w.finish()
     }
 
@@ -8322,12 +8237,9 @@ impl Json for SetTraceParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "value" => {
-                    seen |= 1 << 0;
-                    s.value = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "value" {
+                seen |= 1 << 0;
+                s.value = field(k, v)?;
             }
         }
         check_required(seen, &["value"], Self::GO_TYPE)?;
@@ -8349,7 +8261,7 @@ impl Json for LogTraceParams {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("message", &self.message);
-        w.opt("verbose", &self.verbose);
+        w.opt("verbose", self.verbose.as_ref());
         w.finish()
     }
 
@@ -8397,12 +8309,9 @@ impl Json for CancelParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "id" => {
-                    seen |= 1 << 0;
-                    s.id = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "id" {
+                seen |= 1 << 0;
+                s.id = field(k, v)?;
             }
         }
         check_required(seen, &["id"], Self::GO_TYPE)?;
@@ -8524,7 +8433,7 @@ impl Json for WorkDoneProgressParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneToken", &self.work_done_token);
+        w.opt("workDoneToken", self.work_done_token.as_ref());
         w.finish()
     }
 
@@ -8534,9 +8443,8 @@ impl Json for WorkDoneProgressParams {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneToken" => s.work_done_token = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneToken" {
+                s.work_done_token = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -8556,7 +8464,7 @@ impl Json for PartialResultParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("partialResultToken", &self.partial_result_token);
+        w.opt("partialResultToken", self.partial_result_token.as_ref());
         w.finish()
     }
 
@@ -8566,9 +8474,8 @@ impl Json for PartialResultParams {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "partialResultToken" => s.partial_result_token = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "partialResultToken" {
+                s.partial_result_token = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -8613,7 +8520,7 @@ impl Json for LocationLink {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("originSelectionRange", &self.origin_selection_range);
+        w.opt("originSelectionRange", self.origin_selection_range.as_ref());
         w.field("targetUri", &self.target_uri);
         w.field("targetRange", &self.target_range);
         w.field("targetSelectionRange", &self.target_selection_range);
@@ -8724,7 +8631,7 @@ impl Json for ImplementationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -8734,9 +8641,8 @@ impl Json for ImplementationOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -8758,7 +8664,7 @@ impl Json for StaticRegistrationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.finish()
     }
 
@@ -8768,9 +8674,8 @@ impl Json for StaticRegistrationOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "id" => s.id = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "id" {
+                s.id = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -8788,7 +8693,7 @@ impl Json for TypeDefinitionOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -8798,9 +8703,8 @@ impl Json for TypeDefinitionOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -8867,8 +8771,8 @@ impl Json for ConfigurationItem {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("scopeUri", &self.scope_uri);
-        w.opt("section", &self.section);
+        w.opt("scopeUri", self.scope_uri.as_ref());
+        w.opt("section", self.section.as_ref());
         w.finish()
     }
 
@@ -8911,12 +8815,9 @@ impl Json for TextDocumentIdentifier {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "uri" => {
-                    seen |= 1 << 0;
-                    s.uri = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "uri" {
+                seen |= 1 << 0;
+                s.uri = field(k, v)?;
             }
         }
         check_required(seen, &["uri"], Self::GO_TYPE)?;
@@ -8995,7 +8896,7 @@ impl Json for DocumentColorOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9005,9 +8906,8 @@ impl Json for DocumentColorOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9025,7 +8925,7 @@ impl Json for FoldingRangeOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9035,9 +8935,8 @@ impl Json for FoldingRangeOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9055,7 +8954,7 @@ impl Json for DeclarationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9065,9 +8964,8 @@ impl Json for DeclarationOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9168,7 +9066,7 @@ impl Json for SelectionRangeOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9178,9 +9076,8 @@ impl Json for SelectionRangeOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9201,7 +9098,7 @@ impl Json for CallHierarchyOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9211,9 +9108,8 @@ impl Json for CallHierarchyOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9242,10 +9138,10 @@ impl Json for SemanticTokensOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("legend", &self.legend);
-        w.opt("range", &self.range);
-        w.opt("full", &self.full);
+        w.opt("range", self.range.as_ref());
+        w.opt("full", self.full.as_ref());
         w.finish()
     }
 
@@ -9293,7 +9189,7 @@ impl Json for SemanticTokensEdit {
         let mut w = ObjectWriter::new(3);
         w.field("start", &self.start);
         w.field("deleteCount", &self.delete_count);
-        w.opt("data", &self.data);
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -9333,7 +9229,7 @@ impl Json for LinkedEditingRangeOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9343,9 +9239,8 @@ impl Json for LinkedEditingRangeOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9378,12 +9273,9 @@ impl Json for FileCreate {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "uri" => {
-                    seen |= 1 << 0;
-                    s.uri = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "uri" {
+                seen |= 1 << 0;
+                s.uri = field(k, v)?;
             }
         }
         check_required(seen, &["uri"], Self::GO_TYPE)?;
@@ -9470,9 +9362,9 @@ impl Json for CreateFile {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("kind", &self.kind);
-        w.opt("annotationId", &self.annotation_id);
+        w.opt("annotationId", self.annotation_id.as_ref());
         w.field("uri", &self.uri);
-        w.opt("options", &self.options);
+        w.opt("options", self.options.as_ref());
         w.finish()
     }
 
@@ -9530,10 +9422,10 @@ impl Json for RenameFile {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
         w.field("kind", &self.kind);
-        w.opt("annotationId", &self.annotation_id);
+        w.opt("annotationId", self.annotation_id.as_ref());
         w.field("oldUri", &self.old_uri);
         w.field("newUri", &self.new_uri);
-        w.opt("options", &self.options);
+        w.opt("options", self.options.as_ref());
         w.finish()
     }
 
@@ -9592,9 +9484,9 @@ impl Json for DeleteFile {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("kind", &self.kind);
-        w.opt("annotationId", &self.annotation_id);
+        w.opt("annotationId", self.annotation_id.as_ref());
         w.field("uri", &self.uri);
-        w.opt("options", &self.options);
+        w.opt("options", self.options.as_ref());
         w.finish()
     }
 
@@ -9649,8 +9541,8 @@ impl Json for ChangeAnnotation {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("label", &self.label);
-        w.opt("needsConfirmation", &self.needs_confirmation);
-        w.opt("description", &self.description);
+        w.opt("needsConfirmation", self.needs_confirmation.as_ref());
+        w.opt("description", self.description.as_ref());
         w.finish()
     }
 
@@ -9695,7 +9587,7 @@ impl Json for FileOperationFilter {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("scheme", &self.scheme);
+        w.opt("scheme", self.scheme.as_ref());
         w.field("pattern", &self.pattern);
         w.finish()
     }
@@ -9794,12 +9686,9 @@ impl Json for FileDelete {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "uri" => {
-                    seen |= 1 << 0;
-                    s.uri = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "uri" {
+                seen |= 1 << 0;
+                s.uri = field(k, v)?;
             }
         }
         check_required(seen, &["uri"], Self::GO_TYPE)?;
@@ -9818,7 +9707,7 @@ impl Json for MonikerOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9828,9 +9717,8 @@ impl Json for MonikerOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9851,7 +9739,7 @@ impl Json for TypeHierarchyOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -9861,9 +9749,8 @@ impl Json for TypeHierarchyOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -9994,7 +9881,7 @@ impl Json for InlineValueVariableLookup {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("range", &self.range);
-        w.opt("variableName", &self.variable_name);
+        w.opt("variableName", self.variable_name.as_ref());
         w.field("caseSensitiveLookup", &self.case_sensitive_lookup);
         w.finish()
     }
@@ -10052,7 +9939,7 @@ impl Json for InlineValueEvaluatableExpression {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("range", &self.range);
-        w.opt("expression", &self.expression);
+        w.opt("expression", self.expression.as_ref());
         w.finish()
     }
 
@@ -10091,7 +9978,7 @@ impl Json for InlineValueOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -10101,9 +9988,8 @@ impl Json for InlineValueOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -10151,9 +10037,9 @@ impl Json for InlayHintLabelPart {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("value", &self.value);
-        w.opt("tooltip", &self.tooltip);
-        w.opt("location", &self.location);
-        w.opt("command", &self.command);
+        w.opt("tooltip", self.tooltip.as_ref());
+        w.opt("location", self.location.as_ref());
+        w.opt("command", self.command.as_ref());
         w.finish()
     }
 
@@ -10264,8 +10150,8 @@ impl Json for InlayHintOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -10318,9 +10204,9 @@ impl Json for RelatedFullDocumentDiagnosticReport {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("kind", &self.kind);
-        w.opt("resultId", &self.result_id);
+        w.opt("resultId", self.result_id.as_ref());
         w.field("items", &self.items);
-        w.opt("relatedDocuments", &self.related_documents);
+        w.opt("relatedDocuments", self.related_documents.as_ref());
         w.finish()
     }
 
@@ -10383,7 +10269,7 @@ impl Json for RelatedUnchangedDocumentDiagnosticReport {
         let mut w = ObjectWriter::new(3);
         w.field("kind", &self.kind);
         w.field("resultId", &self.result_id);
-        w.opt("relatedDocuments", &self.related_documents);
+        w.opt("relatedDocuments", self.related_documents.as_ref());
         w.finish()
     }
 
@@ -10437,12 +10323,9 @@ impl Json for DocumentDiagnosticReportPartialResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "relatedDocuments" => {
-                    seen |= 1 << 0;
-                    s.related_documents = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "relatedDocuments" {
+                seen |= 1 << 0;
+                s.related_documents = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["relatedDocuments"], Self::GO_TYPE)?;
@@ -10477,8 +10360,8 @@ impl Json for DiagnosticOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("identifier", &self.identifier);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("identifier", self.identifier.as_ref());
         w.field("interFileDependencies", &self.inter_file_dependencies);
         w.field("workspaceDiagnostics", &self.workspace_diagnostics);
         w.finish()
@@ -10639,7 +10522,7 @@ impl Json for InlineCompletionContext {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("triggerKind", &self.trigger_kind);
-        w.opt("selectedCompletionInfo", &self.selected_completion_info);
+        w.opt("selectedCompletionInfo", self.selected_completion_info.as_ref());
         w.finish()
     }
 
@@ -10731,7 +10614,7 @@ impl Json for InlineCompletionOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -10741,9 +10624,8 @@ impl Json for InlineCompletionOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -10776,12 +10658,9 @@ impl Json for TextDocumentContentOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "schemes" => {
-                    seen |= 1 << 0;
-                    s.schemes = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "schemes" {
+                seen |= 1 << 0;
+                s.schemes = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["schemes"], Self::GO_TYPE)?;
@@ -11290,7 +11169,7 @@ impl Json for WorkspaceFoldersInitializeParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workspaceFolders", &self.workspace_folders);
+        w.opt("workspaceFolders", self.workspace_folders.as_ref());
         w.finish()
     }
 
@@ -11300,9 +11179,8 @@ impl Json for WorkspaceFoldersInitializeParams {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workspaceFolders" => s.workspace_folders = opt(k, v)?,
-                _ => {}
+            if k.as_str() == "workspaceFolders" {
+                s.workspace_folders = opt(k, v)?;
             }
         }
         Ok(s)
@@ -11463,43 +11341,43 @@ impl Json for ServerCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(37);
-        w.opt("positionEncoding", &self.position_encoding);
-        w.opt("textDocumentSync", &self.text_document_sync);
-        w.opt("completionProvider", &self.completion_provider);
-        w.opt("hoverProvider", &self.hover_provider);
-        w.opt("signatureHelpProvider", &self.signature_help_provider);
-        w.opt("declarationProvider", &self.declaration_provider);
-        w.opt("definitionProvider", &self.definition_provider);
-        w.opt("typeDefinitionProvider", &self.type_definition_provider);
-        w.opt("implementationProvider", &self.implementation_provider);
-        w.opt("referencesProvider", &self.references_provider);
-        w.opt("documentHighlightProvider", &self.document_highlight_provider);
-        w.opt("documentSymbolProvider", &self.document_symbol_provider);
-        w.opt("codeActionProvider", &self.code_action_provider);
-        w.opt("codeLensProvider", &self.code_lens_provider);
-        w.opt("documentLinkProvider", &self.document_link_provider);
-        w.opt("colorProvider", &self.color_provider);
-        w.opt("workspaceSymbolProvider", &self.workspace_symbol_provider);
-        w.opt("documentFormattingProvider", &self.document_formatting_provider);
-        w.opt("documentRangeFormattingProvider", &self.document_range_formatting_provider);
-        w.opt("documentOnTypeFormattingProvider", &self.document_on_type_formatting_provider);
-        w.opt("renameProvider", &self.rename_provider);
-        w.opt("foldingRangeProvider", &self.folding_range_provider);
-        w.opt("selectionRangeProvider", &self.selection_range_provider);
-        w.opt("executeCommandProvider", &self.execute_command_provider);
-        w.opt("callHierarchyProvider", &self.call_hierarchy_provider);
-        w.opt("linkedEditingRangeProvider", &self.linked_editing_range_provider);
-        w.opt("semanticTokensProvider", &self.semantic_tokens_provider);
-        w.opt("monikerProvider", &self.moniker_provider);
-        w.opt("typeHierarchyProvider", &self.type_hierarchy_provider);
-        w.opt("inlineValueProvider", &self.inline_value_provider);
-        w.opt("inlayHintProvider", &self.inlay_hint_provider);
-        w.opt("diagnosticProvider", &self.diagnostic_provider);
-        w.opt("inlineCompletionProvider", &self.inline_completion_provider);
-        w.opt("workspace", &self.workspace);
-        w.opt("experimental", &self.experimental);
-        w.opt("_vs_onAutoInsertProvider", &self.vs_on_auto_insert_provider);
-        w.opt("_vs_referencesProvider", &self.vs_references_provider);
+        w.opt("positionEncoding", self.position_encoding.as_ref());
+        w.opt("textDocumentSync", self.text_document_sync.as_ref());
+        w.opt("completionProvider", self.completion_provider.as_ref());
+        w.opt("hoverProvider", self.hover_provider.as_ref());
+        w.opt("signatureHelpProvider", self.signature_help_provider.as_ref());
+        w.opt("declarationProvider", self.declaration_provider.as_ref());
+        w.opt("definitionProvider", self.definition_provider.as_ref());
+        w.opt("typeDefinitionProvider", self.type_definition_provider.as_ref());
+        w.opt("implementationProvider", self.implementation_provider.as_ref());
+        w.opt("referencesProvider", self.references_provider.as_ref());
+        w.opt("documentHighlightProvider", self.document_highlight_provider.as_ref());
+        w.opt("documentSymbolProvider", self.document_symbol_provider.as_ref());
+        w.opt("codeActionProvider", self.code_action_provider.as_ref());
+        w.opt("codeLensProvider", self.code_lens_provider.as_ref());
+        w.opt("documentLinkProvider", self.document_link_provider.as_ref());
+        w.opt("colorProvider", self.color_provider.as_ref());
+        w.opt("workspaceSymbolProvider", self.workspace_symbol_provider.as_ref());
+        w.opt("documentFormattingProvider", self.document_formatting_provider.as_ref());
+        w.opt("documentRangeFormattingProvider", self.document_range_formatting_provider.as_ref());
+        w.opt("documentOnTypeFormattingProvider", self.document_on_type_formatting_provider.as_ref());
+        w.opt("renameProvider", self.rename_provider.as_ref());
+        w.opt("foldingRangeProvider", self.folding_range_provider.as_ref());
+        w.opt("selectionRangeProvider", self.selection_range_provider.as_ref());
+        w.opt("executeCommandProvider", self.execute_command_provider.as_ref());
+        w.opt("callHierarchyProvider", self.call_hierarchy_provider.as_ref());
+        w.opt("linkedEditingRangeProvider", self.linked_editing_range_provider.as_ref());
+        w.opt("semanticTokensProvider", self.semantic_tokens_provider.as_ref());
+        w.opt("monikerProvider", self.moniker_provider.as_ref());
+        w.opt("typeHierarchyProvider", self.type_hierarchy_provider.as_ref());
+        w.opt("inlineValueProvider", self.inline_value_provider.as_ref());
+        w.opt("inlayHintProvider", self.inlay_hint_provider.as_ref());
+        w.opt("diagnosticProvider", self.diagnostic_provider.as_ref());
+        w.opt("inlineCompletionProvider", self.inline_completion_provider.as_ref());
+        w.opt("workspace", self.workspace.as_ref());
+        w.opt("experimental", self.experimental.as_ref());
+        w.opt("_vs_onAutoInsertProvider", self.vs_on_auto_insert_provider.as_ref());
+        w.opt("_vs_referencesProvider", self.vs_references_provider.as_ref());
         w.finish()
     }
 
@@ -11575,7 +11453,7 @@ impl Json for ServerInfo {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("name", &self.name);
-        w.opt("version", &self.version);
+        w.opt("version", self.version.as_ref());
         w.finish()
     }
 
@@ -11657,7 +11535,7 @@ impl Json for SaveOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("includeText", &self.include_text);
+        w.opt("includeText", self.include_text.as_ref());
         w.finish()
     }
 
@@ -11667,9 +11545,8 @@ impl Json for SaveOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "includeText" => s.include_text = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "includeText" {
+                s.include_text = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -11741,7 +11618,7 @@ impl Json for FileSystemWatcher {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("globPattern", &self.glob_pattern);
-        w.opt("kind", &self.kind);
+        w.opt("kind", self.kind.as_ref());
         w.finish()
     }
 
@@ -11821,14 +11698,14 @@ impl Json for Diagnostic {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
         w.field("range", &self.range);
-        w.opt("severity", &self.severity);
-        w.opt("code", &self.code);
-        w.opt("codeDescription", &self.code_description);
-        w.opt("source", &self.source);
+        w.opt("severity", self.severity.as_ref());
+        w.opt("code", self.code.as_ref());
+        w.opt("codeDescription", self.code_description.as_ref());
+        w.opt("source", self.source.as_ref());
         w.field("message", &self.message);
-        w.opt("tags", &self.tags);
-        w.opt("relatedInformation", &self.related_information);
-        w.opt("data", &self.data);
+        w.opt("tags", self.tags.as_ref());
+        w.opt("relatedInformation", self.related_information.as_ref());
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -11881,7 +11758,7 @@ impl Json for CompletionContext {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("triggerKind", &self.trigger_kind);
-        w.opt("triggerCharacter", &self.trigger_character);
+        w.opt("triggerCharacter", self.trigger_character.as_ref());
         w.finish()
     }
 
@@ -11926,8 +11803,8 @@ impl Json for CompletionItemLabelDetails {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("detail", &self.detail);
-        w.opt("description", &self.description);
+        w.opt("detail", self.detail.as_ref());
+        w.opt("description", self.description.as_ref());
         w.finish()
     }
 
@@ -12051,11 +11928,11 @@ impl Json for CompletionItemDefaults {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("commitCharacters", &self.commit_characters);
-        w.opt("editRange", &self.edit_range);
-        w.opt("insertTextFormat", &self.insert_text_format);
-        w.opt("insertTextMode", &self.insert_text_mode);
-        w.opt("data", &self.data);
+        w.opt("commitCharacters", self.commit_characters.as_ref());
+        w.opt("editRange", self.edit_range.as_ref());
+        w.opt("insertTextFormat", self.insert_text_format.as_ref());
+        w.opt("insertTextMode", self.insert_text_mode.as_ref());
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -12145,8 +12022,8 @@ impl Json for CompletionItemApplyKinds {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("commitCharacters", &self.commit_characters);
-        w.opt("data", &self.data);
+        w.opt("commitCharacters", self.commit_characters.as_ref());
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -12208,11 +12085,11 @@ impl Json for CompletionOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("triggerCharacters", &self.trigger_characters);
-        w.opt("allCommitCharacters", &self.all_commit_characters);
-        w.opt("resolveProvider", &self.resolve_provider);
-        w.opt("completionItem", &self.completion_item);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("triggerCharacters", self.trigger_characters.as_ref());
+        w.opt("allCommitCharacters", self.all_commit_characters.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
+        w.opt("completionItem", self.completion_item.as_ref());
         w.finish()
     }
 
@@ -12247,7 +12124,7 @@ impl Json for HoverOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -12257,9 +12134,8 @@ impl Json for HoverOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -12299,9 +12175,9 @@ impl Json for SignatureHelpContext {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("triggerKind", &self.trigger_kind);
-        w.opt("triggerCharacter", &self.trigger_character);
+        w.opt("triggerCharacter", self.trigger_character.as_ref());
         w.field("isRetrigger", &self.is_retrigger);
-        w.opt("activeSignatureHelp", &self.active_signature_help);
+        w.opt("activeSignatureHelp", self.active_signature_help.as_ref());
         w.finish()
     }
 
@@ -12371,10 +12247,10 @@ impl Json for SignatureInformation {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
         w.field("label", &self.label);
-        w.opt("documentation", &self.documentation);
-        w.opt("parameters", &self.parameters);
-        w.opt("activeParameter", &self.active_parameter);
-        w.opt("_vs_colorizedLabel", &self.vs_colorized_label);
+        w.opt("documentation", self.documentation.as_ref());
+        w.opt("parameters", self.parameters.as_ref());
+        w.opt("activeParameter", self.active_parameter.as_ref());
+        w.opt("_vs_colorizedLabel", self.vs_colorized_label.as_ref());
         w.finish()
     }
 
@@ -12425,9 +12301,9 @@ impl Json for SignatureHelpOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("triggerCharacters", &self.trigger_characters);
-        w.opt("retriggerCharacters", &self.retrigger_characters);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("triggerCharacters", self.trigger_characters.as_ref());
+        w.opt("retriggerCharacters", self.retrigger_characters.as_ref());
         w.finish()
     }
 
@@ -12460,7 +12336,7 @@ impl Json for DefinitionOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -12470,9 +12346,8 @@ impl Json for DefinitionOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -12504,12 +12379,9 @@ impl Json for ReferenceContext {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "includeDeclaration" => {
-                    seen |= 1 << 0;
-                    s.include_declaration = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "includeDeclaration" {
+                seen |= 1 << 0;
+                s.include_declaration = field(k, v)?;
             }
         }
         check_required(seen, &["includeDeclaration"], Self::GO_TYPE)?;
@@ -12529,7 +12401,7 @@ impl Json for ReferenceOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -12539,9 +12411,8 @@ impl Json for ReferenceOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -12560,7 +12431,7 @@ impl Json for DocumentHighlightOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -12570,9 +12441,8 @@ impl Json for DocumentHighlightOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -12608,8 +12478,8 @@ impl Json for BaseSymbolInformation {
         let mut w = ObjectWriter::new(4);
         w.field("name", &self.name);
         w.field("kind", &self.kind);
-        w.opt("tags", &self.tags);
-        w.opt("containerName", &self.container_name);
+        w.opt("tags", self.tags.as_ref());
+        w.opt("containerName", self.container_name.as_ref());
         w.finish()
     }
 
@@ -12657,8 +12527,8 @@ impl Json for DocumentSymbolOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("label", &self.label);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("label", self.label.as_ref());
         w.finish()
     }
 
@@ -12708,8 +12578,8 @@ impl Json for CodeActionContext {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("diagnostics", &self.diagnostics);
-        w.opt("only", &self.only);
-        w.opt("triggerKind", &self.trigger_kind);
+        w.opt("only", self.only.as_ref());
+        w.opt("triggerKind", self.trigger_kind.as_ref());
         w.finish()
     }
 
@@ -12763,12 +12633,9 @@ impl Json for CodeActionDisabled {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "reason" => {
-                    seen |= 1 << 0;
-                    s.reason = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "reason" {
+                seen |= 1 << 0;
+                s.reason = field(k, v)?;
             }
         }
         check_required(seen, &["reason"], Self::GO_TYPE)?;
@@ -12816,10 +12683,10 @@ impl Json for CodeActionOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("codeActionKinds", &self.code_action_kinds);
-        w.opt("documentation", &self.documentation);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("codeActionKinds", self.code_action_kinds.as_ref());
+        w.opt("documentation", self.documentation.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -12866,12 +12733,9 @@ impl Json for LocationUriOnly {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "uri" => {
-                    seen |= 1 << 0;
-                    s.uri = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "uri" {
+                seen |= 1 << 0;
+                s.uri = field(k, v)?;
             }
         }
         check_required(seen, &["uri"], Self::GO_TYPE)?;
@@ -12897,8 +12761,8 @@ impl Json for WorkspaceSymbolOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -12933,8 +12797,8 @@ impl Json for CodeLensOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -12969,8 +12833,8 @@ impl Json for DocumentLinkOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("resolveProvider", &self.resolve_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("resolveProvider", self.resolve_provider.as_ref());
         w.finish()
     }
 
@@ -13023,9 +12887,9 @@ impl Json for FormattingOptions {
         let mut w = ObjectWriter::new(5);
         w.field("tabSize", &self.tab_size);
         w.field("insertSpaces", &self.insert_spaces);
-        w.opt("trimTrailingWhitespace", &self.trim_trailing_whitespace);
-        w.opt("insertFinalNewline", &self.insert_final_newline);
-        w.opt("trimFinalNewlines", &self.trim_final_newlines);
+        w.opt("trimTrailingWhitespace", self.trim_trailing_whitespace.as_ref());
+        w.opt("insertFinalNewline", self.insert_final_newline.as_ref());
+        w.opt("trimFinalNewlines", self.trim_final_newlines.as_ref());
         w.finish()
     }
 
@@ -13068,7 +12932,7 @@ impl Json for DocumentFormattingOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -13078,9 +12942,8 @@ impl Json for DocumentFormattingOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -13104,8 +12967,8 @@ impl Json for DocumentRangeFormattingOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("rangesSupport", &self.ranges_support);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("rangesSupport", self.ranges_support.as_ref());
         w.finish()
     }
 
@@ -13142,7 +13005,7 @@ impl Json for DocumentOnTypeFormattingOptions {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("firstTriggerCharacter", &self.first_trigger_character);
-        w.opt("moreTriggerCharacter", &self.more_trigger_character);
+        w.opt("moreTriggerCharacter", self.more_trigger_character.as_ref());
         w.finish()
     }
 
@@ -13184,8 +13047,8 @@ impl Json for RenameOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("prepareProvider", &self.prepare_provider);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("prepareProvider", self.prepare_provider.as_ref());
         w.finish()
     }
 
@@ -13271,12 +13134,9 @@ impl Json for PrepareRenameDefaultBehavior {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "defaultBehavior" => {
-                    seen |= 1 << 0;
-                    s.default_behavior = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "defaultBehavior" {
+                seen |= 1 << 0;
+                s.default_behavior = field(k, v)?;
             }
         }
         check_required(seen, &["defaultBehavior"], Self::GO_TYPE)?;
@@ -13299,7 +13159,7 @@ impl Json for ExecuteCommandOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.field("commands", &self.commands);
         w.finish()
     }
@@ -13340,7 +13200,7 @@ impl Json for WorkspaceEditMetadata {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("isRefactoring", &self.is_refactoring);
+        w.opt("isRefactoring", self.is_refactoring.as_ref());
         w.finish()
     }
 
@@ -13350,9 +13210,8 @@ impl Json for WorkspaceEditMetadata {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "isRefactoring" => s.is_refactoring = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "isRefactoring" {
+                s.is_refactoring = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -13370,7 +13229,7 @@ impl Json for WorkDoneProgressOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("workDoneProgress", &self.work_done_progress);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
         w.finish()
     }
 
@@ -13380,9 +13239,8 @@ impl Json for WorkDoneProgressOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "workDoneProgress" => s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "workDoneProgress" {
+                s.work_done_progress = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -13449,7 +13307,7 @@ impl Json for SemanticTokensFullDelta {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("delta", &self.delta);
+        w.opt("delta", self.delta.as_ref());
         w.finish()
     }
 
@@ -13459,9 +13317,8 @@ impl Json for SemanticTokensFullDelta {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "delta" => s.delta = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "delta" {
+                s.delta = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -13596,7 +13453,7 @@ impl Json for SnippetTextEdit {
         let mut w = ObjectWriter::new(3);
         w.field("range", &self.range);
         w.field("snippet", &self.snippet);
-        w.opt("annotationId", &self.annotation_id);
+        w.opt("annotationId", self.annotation_id.as_ref());
         w.finish()
     }
 
@@ -13644,7 +13501,7 @@ impl Json for ResourceOperation {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("kind", &self.kind);
-        w.opt("annotationId", &self.annotation_id);
+        w.opt("annotationId", self.annotation_id.as_ref());
         w.finish()
     }
 
@@ -13685,8 +13542,8 @@ impl Json for CreateFileOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("overwrite", &self.overwrite);
-        w.opt("ignoreIfExists", &self.ignore_if_exists);
+        w.opt("overwrite", self.overwrite.as_ref());
+        w.opt("ignoreIfExists", self.ignore_if_exists.as_ref());
         w.finish()
     }
 
@@ -13722,8 +13579,8 @@ impl Json for RenameFileOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("overwrite", &self.overwrite);
-        w.opt("ignoreIfExists", &self.ignore_if_exists);
+        w.opt("overwrite", self.overwrite.as_ref());
+        w.opt("ignoreIfExists", self.ignore_if_exists.as_ref());
         w.finish()
     }
 
@@ -13759,8 +13616,8 @@ impl Json for DeleteFileOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("recursive", &self.recursive);
-        w.opt("ignoreIfNotExists", &self.ignore_if_not_exists);
+        w.opt("recursive", self.recursive.as_ref());
+        w.opt("ignoreIfNotExists", self.ignore_if_not_exists.as_ref());
         w.finish()
     }
 
@@ -13811,8 +13668,8 @@ impl Json for FileOperationPattern {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("glob", &self.glob);
-        w.opt("matches", &self.matches);
-        w.opt("options", &self.options);
+        w.opt("matches", self.matches.as_ref());
+        w.opt("options", self.options.as_ref());
         w.finish()
     }
 
@@ -13862,7 +13719,7 @@ impl Json for FullDocumentDiagnosticReport {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("kind", &self.kind);
-        w.opt("resultId", &self.result_id);
+        w.opt("resultId", self.result_id.as_ref());
         w.field("items", &self.items);
         w.finish()
     }
@@ -13975,7 +13832,7 @@ impl Json for WorkspaceFullDocumentDiagnosticReport {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
         w.field("kind", &self.kind);
-        w.opt("resultId", &self.result_id);
+        w.opt("resultId", self.result_id.as_ref());
         w.field("items", &self.items);
         w.field("uri", &self.uri);
         w.field("version", &self.version);
@@ -14151,7 +14008,7 @@ impl Json for ClientInfo {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("name", &self.name);
-        w.opt("version", &self.version);
+        w.opt("version", self.version.as_ref());
         w.finish()
     }
 
@@ -14218,16 +14075,16 @@ impl Json for ClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(10);
-        w.opt("workspace", &self.workspace);
-        w.opt("textDocument", &self.text_document);
-        w.opt("window", &self.window);
-        w.opt("general", &self.general);
-        w.opt("experimental", &self.experimental);
-        w.opt("_vs_supportsVisualStudioExtensions", &self.vs_supports_visual_studio_extensions);
-        w.opt("_vs_supportedSnippetVersion", &self.vs_supported_snippet_version);
-        w.opt("_vs_supportsNotIncludingTextInTextDocumentDidOpen", &self.vs_supports_not_including_text_in_text_document_did_open);
-        w.opt("_vs_supportsIconExtensions", &self.vs_supports_icon_extensions);
-        w.opt("_vs_supportsDiagnosticRequests", &self.vs_supports_diagnostic_requests);
+        w.opt("workspace", self.workspace.as_ref());
+        w.opt("textDocument", self.text_document.as_ref());
+        w.opt("window", self.window.as_ref());
+        w.opt("general", self.general.as_ref());
+        w.opt("experimental", self.experimental.as_ref());
+        w.opt("_vs_supportsVisualStudioExtensions", self.vs_supports_visual_studio_extensions.as_ref());
+        w.opt("_vs_supportedSnippetVersion", self.vs_supported_snippet_version.as_ref());
+        w.opt("_vs_supportsNotIncludingTextInTextDocumentDidOpen", self.vs_supports_not_including_text_in_text_document_did_open.as_ref());
+        w.opt("_vs_supportsIconExtensions", self.vs_supports_icon_extensions.as_ref());
+        w.opt("_vs_supportsDiagnosticRequests", self.vs_supports_diagnostic_requests.as_ref());
         w.finish()
     }
 
@@ -14284,11 +14141,11 @@ impl Json for TextDocumentSyncOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("openClose", &self.open_close);
-        w.opt("change", &self.change);
-        w.opt("willSave", &self.will_save);
-        w.opt("willSaveWaitUntil", &self.will_save_wait_until);
-        w.opt("save", &self.save);
+        w.opt("openClose", self.open_close.as_ref());
+        w.opt("change", self.change.as_ref());
+        w.opt("willSave", self.will_save.as_ref());
+        w.opt("willSaveWaitUntil", self.will_save_wait_until.as_ref());
+        w.opt("save", self.save.as_ref());
         w.finish()
     }
 
@@ -14338,9 +14195,9 @@ impl Json for WorkspaceOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workspaceFolders", &self.workspace_folders);
-        w.opt("fileOperations", &self.file_operations);
-        w.opt("textDocumentContent", &self.text_document_content);
+        w.opt("workspaceFolders", self.workspace_folders.as_ref());
+        w.opt("fileOperations", self.file_operations.as_ref());
+        w.opt("textDocumentContent", self.text_document_content.as_ref());
         w.finish()
     }
 
@@ -14383,7 +14240,7 @@ impl Json for TextDocumentContentChangePartial {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("range", &self.range);
-        w.opt("rangeLength", &self.range_length);
+        w.opt("rangeLength", self.range_length.as_ref());
         w.field("text", &self.text);
         w.finish()
     }
@@ -14437,12 +14294,9 @@ impl Json for TextDocumentContentChangeWholeDocument {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "text" => {
-                    seen |= 1 << 0;
-                    s.text = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "text" {
+                seen |= 1 << 0;
+                s.text = field(k, v)?;
             }
         }
         check_required(seen, &["text"], Self::GO_TYPE)?;
@@ -14476,12 +14330,9 @@ impl Json for CodeDescription {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "href" => {
-                    seen |= 1 << 0;
-                    s.href = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "href" {
+                seen |= 1 << 0;
+                s.href = field(k, v)?;
             }
         }
         check_required(seen, &["href"], Self::GO_TYPE)?;
@@ -14598,7 +14449,7 @@ impl Json for ServerCompletionItemOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("labelDetailsSupport", &self.label_details_support);
+        w.opt("labelDetailsSupport", self.label_details_support.as_ref());
         w.finish()
     }
 
@@ -14608,9 +14459,8 @@ impl Json for ServerCompletionItemOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "labelDetailsSupport" => s.label_details_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "labelDetailsSupport" {
+                s.label_details_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -14692,7 +14542,7 @@ impl Json for ParameterInformation {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("label", &self.label);
-        w.opt("documentation", &self.documentation);
+        w.opt("documentation", self.documentation.as_ref());
         w.finish()
     }
 
@@ -14785,7 +14635,7 @@ impl Json for FileOperationPatternOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("ignoreCase", &self.ignore_case);
+        w.opt("ignoreCase", self.ignore_case.as_ref());
         w.finish()
     }
 
@@ -14795,9 +14645,8 @@ impl Json for FileOperationPatternOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "ignoreCase" => s.ignore_case = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "ignoreCase" {
+                s.ignore_case = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -14889,22 +14738,22 @@ impl Json for WorkspaceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(16);
-        w.opt("applyEdit", &self.apply_edit);
-        w.opt("workspaceEdit", &self.workspace_edit);
-        w.opt("didChangeConfiguration", &self.did_change_configuration);
-        w.opt("didChangeWatchedFiles", &self.did_change_watched_files);
-        w.opt("symbol", &self.symbol);
-        w.opt("executeCommand", &self.execute_command);
-        w.opt("workspaceFolders", &self.workspace_folders);
-        w.opt("configuration", &self.configuration);
-        w.opt("semanticTokens", &self.semantic_tokens);
-        w.opt("codeLens", &self.code_lens);
-        w.opt("fileOperations", &self.file_operations);
-        w.opt("inlineValue", &self.inline_value);
-        w.opt("inlayHint", &self.inlay_hint);
-        w.opt("diagnostics", &self.diagnostics);
-        w.opt("foldingRange", &self.folding_range);
-        w.opt("textDocumentContent", &self.text_document_content);
+        w.opt("applyEdit", self.apply_edit.as_ref());
+        w.opt("workspaceEdit", self.workspace_edit.as_ref());
+        w.opt("didChangeConfiguration", self.did_change_configuration.as_ref());
+        w.opt("didChangeWatchedFiles", self.did_change_watched_files.as_ref());
+        w.opt("symbol", self.symbol.as_ref());
+        w.opt("executeCommand", self.execute_command.as_ref());
+        w.opt("workspaceFolders", self.workspace_folders.as_ref());
+        w.opt("configuration", self.configuration.as_ref());
+        w.opt("semanticTokens", self.semantic_tokens.as_ref());
+        w.opt("codeLens", self.code_lens.as_ref());
+        w.opt("fileOperations", self.file_operations.as_ref());
+        w.opt("inlineValue", self.inline_value.as_ref());
+        w.opt("inlayHint", self.inlay_hint.as_ref());
+        w.opt("diagnostics", self.diagnostics.as_ref());
+        w.opt("foldingRange", self.folding_range.as_ref());
+        w.opt("textDocumentContent", self.text_document_content.as_ref());
         w.finish()
     }
 
@@ -15077,38 +14926,38 @@ impl Json for TextDocumentClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(32);
-        w.opt("synchronization", &self.synchronization);
-        w.opt("filters", &self.filters);
-        w.opt("completion", &self.completion);
-        w.opt("hover", &self.hover);
-        w.opt("signatureHelp", &self.signature_help);
-        w.opt("declaration", &self.declaration);
-        w.opt("definition", &self.definition);
-        w.opt("typeDefinition", &self.type_definition);
-        w.opt("implementation", &self.implementation);
-        w.opt("references", &self.references);
-        w.opt("documentHighlight", &self.document_highlight);
-        w.opt("documentSymbol", &self.document_symbol);
-        w.opt("codeAction", &self.code_action);
-        w.opt("codeLens", &self.code_lens);
-        w.opt("documentLink", &self.document_link);
-        w.opt("colorProvider", &self.color_provider);
-        w.opt("formatting", &self.formatting);
-        w.opt("rangeFormatting", &self.range_formatting);
-        w.opt("onTypeFormatting", &self.on_type_formatting);
-        w.opt("rename", &self.rename);
-        w.opt("foldingRange", &self.folding_range);
-        w.opt("selectionRange", &self.selection_range);
-        w.opt("publishDiagnostics", &self.publish_diagnostics);
-        w.opt("callHierarchy", &self.call_hierarchy);
-        w.opt("semanticTokens", &self.semantic_tokens);
-        w.opt("linkedEditingRange", &self.linked_editing_range);
-        w.opt("moniker", &self.moniker);
-        w.opt("typeHierarchy", &self.type_hierarchy);
-        w.opt("inlineValue", &self.inline_value);
-        w.opt("inlayHint", &self.inlay_hint);
-        w.opt("diagnostic", &self.diagnostic);
-        w.opt("inlineCompletion", &self.inline_completion);
+        w.opt("synchronization", self.synchronization.as_ref());
+        w.opt("filters", self.filters.as_ref());
+        w.opt("completion", self.completion.as_ref());
+        w.opt("hover", self.hover.as_ref());
+        w.opt("signatureHelp", self.signature_help.as_ref());
+        w.opt("declaration", self.declaration.as_ref());
+        w.opt("definition", self.definition.as_ref());
+        w.opt("typeDefinition", self.type_definition.as_ref());
+        w.opt("implementation", self.implementation.as_ref());
+        w.opt("references", self.references.as_ref());
+        w.opt("documentHighlight", self.document_highlight.as_ref());
+        w.opt("documentSymbol", self.document_symbol.as_ref());
+        w.opt("codeAction", self.code_action.as_ref());
+        w.opt("codeLens", self.code_lens.as_ref());
+        w.opt("documentLink", self.document_link.as_ref());
+        w.opt("colorProvider", self.color_provider.as_ref());
+        w.opt("formatting", self.formatting.as_ref());
+        w.opt("rangeFormatting", self.range_formatting.as_ref());
+        w.opt("onTypeFormatting", self.on_type_formatting.as_ref());
+        w.opt("rename", self.rename.as_ref());
+        w.opt("foldingRange", self.folding_range.as_ref());
+        w.opt("selectionRange", self.selection_range.as_ref());
+        w.opt("publishDiagnostics", self.publish_diagnostics.as_ref());
+        w.opt("callHierarchy", self.call_hierarchy.as_ref());
+        w.opt("semanticTokens", self.semantic_tokens.as_ref());
+        w.opt("linkedEditingRange", self.linked_editing_range.as_ref());
+        w.opt("moniker", self.moniker.as_ref());
+        w.opt("typeHierarchy", self.type_hierarchy.as_ref());
+        w.opt("inlineValue", self.inline_value.as_ref());
+        w.opt("inlayHint", self.inlay_hint.as_ref());
+        w.opt("diagnostic", self.diagnostic.as_ref());
+        w.opt("inlineCompletion", self.inline_completion.as_ref());
         w.finish()
     }
 
@@ -15188,9 +15037,9 @@ impl Json for WindowClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("workDoneProgress", &self.work_done_progress);
-        w.opt("showMessage", &self.show_message);
-        w.opt("showDocument", &self.show_document);
+        w.opt("workDoneProgress", self.work_done_progress.as_ref());
+        w.opt("showMessage", self.show_message.as_ref());
+        w.opt("showDocument", self.show_document.as_ref());
         w.finish()
     }
 
@@ -15261,10 +15110,10 @@ impl Json for GeneralClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("staleRequestSupport", &self.stale_request_support);
-        w.opt("regularExpressions", &self.regular_expressions);
-        w.opt("markdown", &self.markdown);
-        w.opt("positionEncodings", &self.position_encodings);
+        w.opt("staleRequestSupport", self.stale_request_support.as_ref());
+        w.opt("regularExpressions", self.regular_expressions.as_ref());
+        w.opt("markdown", self.markdown.as_ref());
+        w.opt("positionEncodings", self.position_encodings.as_ref());
         w.finish()
     }
 
@@ -15307,8 +15156,8 @@ impl Json for WorkspaceFoldersServerCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("supported", &self.supported);
-        w.opt("changeNotifications", &self.change_notifications);
+        w.opt("supported", self.supported.as_ref());
+        w.opt("changeNotifications", self.change_notifications.as_ref());
         w.finish()
     }
 
@@ -15358,12 +15207,12 @@ impl Json for FileOperationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
-        w.opt("didCreate", &self.did_create);
-        w.opt("willCreate", &self.will_create);
-        w.opt("didRename", &self.did_rename);
-        w.opt("willRename", &self.will_rename);
-        w.opt("didDelete", &self.did_delete);
-        w.opt("willDelete", &self.will_delete);
+        w.opt("didCreate", self.did_create.as_ref());
+        w.opt("willCreate", self.will_create.as_ref());
+        w.opt("didRename", self.did_rename.as_ref());
+        w.opt("willRename", self.will_rename.as_ref());
+        w.opt("didDelete", self.did_delete.as_ref());
+        w.opt("willDelete", self.will_delete.as_ref());
         w.finish()
     }
 
@@ -15486,13 +15335,13 @@ impl Json for WorkspaceEditClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
-        w.opt("documentChanges", &self.document_changes);
-        w.opt("resourceOperations", &self.resource_operations);
-        w.opt("failureHandling", &self.failure_handling);
-        w.opt("normalizesLineEndings", &self.normalizes_line_endings);
-        w.opt("changeAnnotationSupport", &self.change_annotation_support);
-        w.opt("metadataSupport", &self.metadata_support);
-        w.opt("snippetEditSupport", &self.snippet_edit_support);
+        w.opt("documentChanges", self.document_changes.as_ref());
+        w.opt("resourceOperations", self.resource_operations.as_ref());
+        w.opt("failureHandling", self.failure_handling.as_ref());
+        w.opt("normalizesLineEndings", self.normalizes_line_endings.as_ref());
+        w.opt("changeAnnotationSupport", self.change_annotation_support.as_ref());
+        w.opt("metadataSupport", self.metadata_support.as_ref());
+        w.opt("snippetEditSupport", self.snippet_edit_support.as_ref());
         w.finish()
     }
 
@@ -15529,7 +15378,7 @@ impl Json for DidChangeConfigurationClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -15539,9 +15388,8 @@ impl Json for DidChangeConfigurationClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15568,8 +15416,8 @@ impl Json for DidChangeWatchedFilesClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("relativePatternSupport", &self.relative_pattern_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("relativePatternSupport", self.relative_pattern_support.as_ref());
         w.finish()
     }
 
@@ -15618,10 +15466,10 @@ impl Json for WorkspaceSymbolClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("symbolKind", &self.symbol_kind);
-        w.opt("tagSupport", &self.tag_support);
-        w.opt("resolveSupport", &self.resolve_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("symbolKind", self.symbol_kind.as_ref());
+        w.opt("tagSupport", self.tag_support.as_ref());
+        w.opt("resolveSupport", self.resolve_support.as_ref());
         w.finish()
     }
 
@@ -15656,7 +15504,7 @@ impl Json for ExecuteCommandClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -15666,9 +15514,8 @@ impl Json for ExecuteCommandClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15694,7 +15541,7 @@ impl Json for SemanticTokensWorkspaceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("refreshSupport", &self.refresh_support);
+        w.opt("refreshSupport", self.refresh_support.as_ref());
         w.finish()
     }
 
@@ -15704,9 +15551,8 @@ impl Json for SemanticTokensWorkspaceClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "refreshSupport" => s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "refreshSupport" {
+                s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15732,7 +15578,7 @@ impl Json for CodeLensWorkspaceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("refreshSupport", &self.refresh_support);
+        w.opt("refreshSupport", self.refresh_support.as_ref());
         w.finish()
     }
 
@@ -15742,9 +15588,8 @@ impl Json for CodeLensWorkspaceClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "refreshSupport" => s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "refreshSupport" {
+                s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15787,13 +15632,13 @@ impl Json for FileOperationClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("didCreate", &self.did_create);
-        w.opt("willCreate", &self.will_create);
-        w.opt("didRename", &self.did_rename);
-        w.opt("willRename", &self.will_rename);
-        w.opt("didDelete", &self.did_delete);
-        w.opt("willDelete", &self.will_delete);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("didCreate", self.did_create.as_ref());
+        w.opt("willCreate", self.will_create.as_ref());
+        w.opt("didRename", self.did_rename.as_ref());
+        w.opt("willRename", self.will_rename.as_ref());
+        w.opt("didDelete", self.did_delete.as_ref());
+        w.opt("willDelete", self.will_delete.as_ref());
         w.finish()
     }
 
@@ -15839,7 +15684,7 @@ impl Json for InlineValueWorkspaceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("refreshSupport", &self.refresh_support);
+        w.opt("refreshSupport", self.refresh_support.as_ref());
         w.finish()
     }
 
@@ -15849,9 +15694,8 @@ impl Json for InlineValueWorkspaceClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "refreshSupport" => s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "refreshSupport" {
+                s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15879,7 +15723,7 @@ impl Json for InlayHintWorkspaceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("refreshSupport", &self.refresh_support);
+        w.opt("refreshSupport", self.refresh_support.as_ref());
         w.finish()
     }
 
@@ -15889,9 +15733,8 @@ impl Json for InlayHintWorkspaceClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "refreshSupport" => s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "refreshSupport" {
+                s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15919,7 +15762,7 @@ impl Json for DiagnosticWorkspaceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("refreshSupport", &self.refresh_support);
+        w.opt("refreshSupport", self.refresh_support.as_ref());
         w.finish()
     }
 
@@ -15929,9 +15772,8 @@ impl Json for DiagnosticWorkspaceClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "refreshSupport" => s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "refreshSupport" {
+                s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15961,7 +15803,7 @@ impl Json for FoldingRangeWorkspaceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("refreshSupport", &self.refresh_support);
+        w.opt("refreshSupport", self.refresh_support.as_ref());
         w.finish()
     }
 
@@ -15971,9 +15813,8 @@ impl Json for FoldingRangeWorkspaceClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "refreshSupport" => s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "refreshSupport" {
+                s.refresh_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -15995,7 +15836,7 @@ impl Json for TextDocumentContentClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -16005,9 +15846,8 @@ impl Json for TextDocumentContentClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -16037,10 +15877,10 @@ impl Json for TextDocumentSyncClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("willSave", &self.will_save);
-        w.opt("willSaveWaitUntil", &self.will_save_wait_until);
-        w.opt("didSave", &self.did_save);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("willSave", self.will_save.as_ref());
+        w.opt("willSaveWaitUntil", self.will_save_wait_until.as_ref());
+        w.opt("didSave", self.did_save.as_ref());
         w.finish()
     }
 
@@ -16076,7 +15916,7 @@ impl Json for TextDocumentFilterClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("relativePatternSupport", &self.relative_pattern_support);
+        w.opt("relativePatternSupport", self.relative_pattern_support.as_ref());
         w.finish()
     }
 
@@ -16086,9 +15926,8 @@ impl Json for TextDocumentFilterClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "relativePatternSupport" => s.relative_pattern_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "relativePatternSupport" {
+                s.relative_pattern_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -16132,12 +15971,12 @@ impl Json for CompletionClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("completionItem", &self.completion_item);
-        w.opt("completionItemKind", &self.completion_item_kind);
-        w.opt("insertTextMode", &self.insert_text_mode);
-        w.opt("contextSupport", &self.context_support);
-        w.opt("completionList", &self.completion_list);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("completionItem", self.completion_item.as_ref());
+        w.opt("completionItemKind", self.completion_item_kind.as_ref());
+        w.opt("insertTextMode", self.insert_text_mode.as_ref());
+        w.opt("contextSupport", self.context_support.as_ref());
+        w.opt("completionList", self.completion_list.as_ref());
         w.finish()
     }
 
@@ -16177,8 +16016,8 @@ impl Json for HoverClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("contentFormat", &self.content_format);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("contentFormat", self.content_format.as_ref());
         w.finish()
     }
 
@@ -16223,9 +16062,9 @@ impl Json for SignatureHelpClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("signatureInformation", &self.signature_information);
-        w.opt("contextSupport", &self.context_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("signatureInformation", self.signature_information.as_ref());
+        w.opt("contextSupport", self.context_support.as_ref());
         w.finish()
     }
 
@@ -16264,8 +16103,8 @@ impl Json for DeclarationClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("linkSupport", &self.link_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("linkSupport", self.link_support.as_ref());
         w.finish()
     }
 
@@ -16303,8 +16142,8 @@ impl Json for DefinitionClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("linkSupport", &self.link_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("linkSupport", self.link_support.as_ref());
         w.finish()
     }
 
@@ -16344,8 +16183,8 @@ impl Json for TypeDefinitionClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("linkSupport", &self.link_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("linkSupport", self.link_support.as_ref());
         w.finish()
     }
 
@@ -16385,8 +16224,8 @@ impl Json for ImplementationClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("linkSupport", &self.link_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("linkSupport", self.link_support.as_ref());
         w.finish()
     }
 
@@ -16419,7 +16258,7 @@ impl Json for ReferenceClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -16429,9 +16268,8 @@ impl Json for ReferenceClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -16451,7 +16289,7 @@ impl Json for DocumentHighlightClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -16461,9 +16299,8 @@ impl Json for DocumentHighlightClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -16503,11 +16340,11 @@ impl Json for DocumentSymbolClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("symbolKind", &self.symbol_kind);
-        w.opt("hierarchicalDocumentSymbolSupport", &self.hierarchical_document_symbol_support);
-        w.opt("tagSupport", &self.tag_support);
-        w.opt("labelSupport", &self.label_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("symbolKind", self.symbol_kind.as_ref());
+        w.opt("hierarchicalDocumentSymbolSupport", self.hierarchical_document_symbol_support.as_ref());
+        w.opt("tagSupport", self.tag_support.as_ref());
+        w.opt("labelSupport", self.label_support.as_ref());
         w.finish()
     }
 
@@ -16594,15 +16431,15 @@ impl Json for CodeActionClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("codeActionLiteralSupport", &self.code_action_literal_support);
-        w.opt("isPreferredSupport", &self.is_preferred_support);
-        w.opt("disabledSupport", &self.disabled_support);
-        w.opt("dataSupport", &self.data_support);
-        w.opt("resolveSupport", &self.resolve_support);
-        w.opt("honorsChangeAnnotations", &self.honors_change_annotations);
-        w.opt("documentationSupport", &self.documentation_support);
-        w.opt("tagSupport", &self.tag_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("codeActionLiteralSupport", self.code_action_literal_support.as_ref());
+        w.opt("isPreferredSupport", self.is_preferred_support.as_ref());
+        w.opt("disabledSupport", self.disabled_support.as_ref());
+        w.opt("dataSupport", self.data_support.as_ref());
+        w.opt("resolveSupport", self.resolve_support.as_ref());
+        w.opt("honorsChangeAnnotations", self.honors_change_annotations.as_ref());
+        w.opt("documentationSupport", self.documentation_support.as_ref());
+        w.opt("tagSupport", self.tag_support.as_ref());
         w.finish()
     }
 
@@ -16648,8 +16485,8 @@ impl Json for CodeLensClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("resolveSupport", &self.resolve_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("resolveSupport", self.resolve_support.as_ref());
         w.finish()
     }
 
@@ -16687,8 +16524,8 @@ impl Json for DocumentLinkClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("tooltipSupport", &self.tooltip_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("tooltipSupport", self.tooltip_support.as_ref());
         w.finish()
     }
 
@@ -16722,7 +16559,7 @@ impl Json for DocumentColorClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -16732,9 +16569,8 @@ impl Json for DocumentColorClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -16754,7 +16590,7 @@ impl Json for DocumentFormattingClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -16764,9 +16600,8 @@ impl Json for DocumentFormattingClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -16791,8 +16626,8 @@ impl Json for DocumentRangeFormattingClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("rangesSupport", &self.ranges_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("rangesSupport", self.ranges_support.as_ref());
         w.finish()
     }
 
@@ -16825,7 +16660,7 @@ impl Json for DocumentOnTypeFormattingClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -16835,9 +16670,8 @@ impl Json for DocumentOnTypeFormattingClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -16879,10 +16713,10 @@ impl Json for RenameClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("prepareSupport", &self.prepare_support);
-        w.opt("prepareSupportDefaultBehavior", &self.prepare_support_default_behavior);
-        w.opt("honorsChangeAnnotations", &self.honors_change_annotations);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("prepareSupport", self.prepare_support.as_ref());
+        w.opt("prepareSupportDefaultBehavior", self.prepare_support_default_behavior.as_ref());
+        w.opt("honorsChangeAnnotations", self.honors_change_annotations.as_ref());
         w.finish()
     }
 
@@ -16939,11 +16773,11 @@ impl Json for FoldingRangeClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("rangeLimit", &self.range_limit);
-        w.opt("lineFoldingOnly", &self.line_folding_only);
-        w.opt("foldingRangeKind", &self.folding_range_kind);
-        w.opt("foldingRange", &self.folding_range);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("rangeLimit", self.range_limit.as_ref());
+        w.opt("lineFoldingOnly", self.line_folding_only.as_ref());
+        w.opt("foldingRangeKind", self.folding_range_kind.as_ref());
+        w.opt("foldingRange", self.folding_range.as_ref());
         w.finish()
     }
 
@@ -16980,7 +16814,7 @@ impl Json for SelectionRangeClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -16990,9 +16824,8 @@ impl Json for SelectionRangeClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17036,11 +16869,11 @@ impl Json for PublishDiagnosticsClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(5);
-        w.opt("relatedInformation", &self.related_information);
-        w.opt("tagSupport", &self.tag_support);
-        w.opt("codeDescriptionSupport", &self.code_description_support);
-        w.opt("dataSupport", &self.data_support);
-        w.opt("versionSupport", &self.version_support);
+        w.opt("relatedInformation", self.related_information.as_ref());
+        w.opt("tagSupport", self.tag_support.as_ref());
+        w.opt("codeDescriptionSupport", self.code_description_support.as_ref());
+        w.opt("dataSupport", self.data_support.as_ref());
+        w.opt("versionSupport", self.version_support.as_ref());
         w.finish()
     }
 
@@ -17078,7 +16911,7 @@ impl Json for CallHierarchyClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -17088,9 +16921,8 @@ impl Json for CallHierarchyClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17157,15 +16989,15 @@ impl Json for SemanticTokensClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(9);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.field("requests", &self.requests);
         w.field("tokenTypes", &self.token_types);
         w.field("tokenModifiers", &self.token_modifiers);
         w.field("formats", &self.formats);
-        w.opt("overlappingTokenSupport", &self.overlapping_token_support);
-        w.opt("multilineTokenSupport", &self.multiline_token_support);
-        w.opt("serverCancelSupport", &self.server_cancel_support);
-        w.opt("augmentsSyntaxTokens", &self.augments_syntax_tokens);
+        w.opt("overlappingTokenSupport", self.overlapping_token_support.as_ref());
+        w.opt("multilineTokenSupport", self.multiline_token_support.as_ref());
+        w.opt("serverCancelSupport", self.server_cancel_support.as_ref());
+        w.opt("augmentsSyntaxTokens", self.augments_syntax_tokens.as_ref());
         w.finish()
     }
 
@@ -17223,7 +17055,7 @@ impl Json for LinkedEditingRangeClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -17233,9 +17065,8 @@ impl Json for LinkedEditingRangeClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17259,7 +17090,7 @@ impl Json for MonikerClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -17269,9 +17100,8 @@ impl Json for MonikerClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17293,7 +17123,7 @@ impl Json for TypeHierarchyClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -17303,9 +17133,8 @@ impl Json for TypeHierarchyClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17327,7 +17156,7 @@ impl Json for InlineValueClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -17337,9 +17166,8 @@ impl Json for InlineValueClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17365,8 +17193,8 @@ impl Json for InlayHintClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("resolveSupport", &self.resolve_support);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("resolveSupport", self.resolve_support.as_ref());
         w.finish()
     }
 
@@ -17432,13 +17260,13 @@ impl Json for DiagnosticClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
-        w.opt("relatedInformation", &self.related_information);
-        w.opt("tagSupport", &self.tag_support);
-        w.opt("codeDescriptionSupport", &self.code_description_support);
-        w.opt("dataSupport", &self.data_support);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
-        w.opt("relatedDocumentSupport", &self.related_document_support);
-        w.opt("markupMessageSupport", &self.markup_message_support);
+        w.opt("relatedInformation", self.related_information.as_ref());
+        w.opt("tagSupport", self.tag_support.as_ref());
+        w.opt("codeDescriptionSupport", self.code_description_support.as_ref());
+        w.opt("dataSupport", self.data_support.as_ref());
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
+        w.opt("relatedDocumentSupport", self.related_document_support.as_ref());
+        w.opt("markupMessageSupport", self.markup_message_support.as_ref());
         w.finish()
     }
 
@@ -17478,7 +17306,7 @@ impl Json for InlineCompletionClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("dynamicRegistration", &self.dynamic_registration);
+        w.opt("dynamicRegistration", self.dynamic_registration.as_ref());
         w.finish()
     }
 
@@ -17488,9 +17316,8 @@ impl Json for InlineCompletionClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "dynamicRegistration" => s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "dynamicRegistration" {
+                s.dynamic_registration = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17510,7 +17337,7 @@ impl Json for ShowMessageRequestClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("messageActionItem", &self.message_action_item);
+        w.opt("messageActionItem", self.message_action_item.as_ref());
         w.finish()
     }
 
@@ -17520,9 +17347,8 @@ impl Json for ShowMessageRequestClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "messageActionItem" => s.message_action_item = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "messageActionItem" {
+                s.message_action_item = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17556,12 +17382,9 @@ impl Json for ShowDocumentClientCapabilities {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "support" => {
-                    seen |= 1 << 0;
-                    s.support = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "support" {
+                seen |= 1 << 0;
+                s.support = field(k, v)?;
             }
         }
         check_required(seen, &["support"], Self::GO_TYPE)?;
@@ -17635,7 +17458,7 @@ impl Json for RegularExpressionsClientCapabilities {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
         w.field("engine", &self.engine);
-        w.opt("version", &self.version);
+        w.opt("version", self.version.as_ref());
         w.finish()
     }
 
@@ -17685,8 +17508,8 @@ impl Json for MarkdownClientCapabilities {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("parser", &self.parser);
-        w.opt("version", &self.version);
-        w.opt("allowedTags", &self.allowed_tags);
+        w.opt("version", self.version.as_ref());
+        w.opt("allowedTags", self.allowed_tags.as_ref());
         w.finish()
     }
 
@@ -17738,8 +17561,8 @@ impl Json for TextDocumentFilterLanguage {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
         w.field("language", &self.language);
-        w.opt("scheme", &self.scheme);
-        w.opt("pattern", &self.pattern);
+        w.opt("scheme", self.scheme.as_ref());
+        w.opt("pattern", self.pattern.as_ref());
         w.finish()
     }
 
@@ -17790,9 +17613,9 @@ impl Json for TextDocumentFilterScheme {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("language", &self.language);
+        w.opt("language", self.language.as_ref());
         w.field("scheme", &self.scheme);
-        w.opt("pattern", &self.pattern);
+        w.opt("pattern", self.pattern.as_ref());
         w.finish()
     }
 
@@ -17843,8 +17666,8 @@ impl Json for TextDocumentFilterPattern {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(3);
-        w.opt("language", &self.language);
-        w.opt("scheme", &self.scheme);
+        w.opt("language", self.language.as_ref());
+        w.opt("scheme", self.scheme.as_ref());
         w.field("pattern", &self.pattern);
         w.finish()
     }
@@ -17886,7 +17709,7 @@ impl Json for ChangeAnnotationsSupportOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("groupsOnLabel", &self.groups_on_label);
+        w.opt("groupsOnLabel", self.groups_on_label.as_ref());
         w.finish()
     }
 
@@ -17896,9 +17719,8 @@ impl Json for ChangeAnnotationsSupportOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "groupsOnLabel" => s.groups_on_label = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "groupsOnLabel" {
+                s.groups_on_label = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17925,7 +17747,7 @@ impl Json for ClientSymbolKindOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("valueSet", &self.value_set);
+        w.opt("valueSet", self.value_set.as_ref());
         w.finish()
     }
 
@@ -17935,9 +17757,8 @@ impl Json for ClientSymbolKindOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => s.value_set = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "valueSet" {
+                s.value_set = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -17968,12 +17789,9 @@ impl Json for ClientSymbolTagOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => {
-                    seen |= 1 << 0;
-                    s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "valueSet" {
+                seen |= 1 << 0;
+                s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["valueSet"], Self::GO_TYPE)?;
@@ -18006,12 +17824,9 @@ impl Json for ClientSymbolResolveOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "properties" => {
-                    seen |= 1 << 0;
-                    s.properties = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "properties" {
+                seen |= 1 << 0;
+                s.properties = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["properties"], Self::GO_TYPE)?;
@@ -18084,16 +17899,16 @@ impl Json for ClientCompletionItemOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(10);
-        w.opt("snippetSupport", &self.snippet_support);
-        w.opt("commitCharactersSupport", &self.commit_characters_support);
-        w.opt("documentationFormat", &self.documentation_format);
-        w.opt("deprecatedSupport", &self.deprecated_support);
-        w.opt("preselectSupport", &self.preselect_support);
-        w.opt("tagSupport", &self.tag_support);
-        w.opt("insertReplaceSupport", &self.insert_replace_support);
-        w.opt("resolveSupport", &self.resolve_support);
-        w.opt("insertTextModeSupport", &self.insert_text_mode_support);
-        w.opt("labelDetailsSupport", &self.label_details_support);
+        w.opt("snippetSupport", self.snippet_support.as_ref());
+        w.opt("commitCharactersSupport", self.commit_characters_support.as_ref());
+        w.opt("documentationFormat", self.documentation_format.as_ref());
+        w.opt("deprecatedSupport", self.deprecated_support.as_ref());
+        w.opt("preselectSupport", self.preselect_support.as_ref());
+        w.opt("tagSupport", self.tag_support.as_ref());
+        w.opt("insertReplaceSupport", self.insert_replace_support.as_ref());
+        w.opt("resolveSupport", self.resolve_support.as_ref());
+        w.opt("insertTextModeSupport", self.insert_text_mode_support.as_ref());
+        w.opt("labelDetailsSupport", self.label_details_support.as_ref());
         w.finish()
     }
 
@@ -18141,7 +17956,7 @@ impl Json for ClientCompletionItemOptionsKind {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("valueSet", &self.value_set);
+        w.opt("valueSet", self.value_set.as_ref());
         w.finish()
     }
 
@@ -18151,9 +17966,8 @@ impl Json for ClientCompletionItemOptionsKind {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => s.value_set = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "valueSet" {
+                s.value_set = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -18196,8 +18010,8 @@ impl Json for CompletionListCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("itemDefaults", &self.item_defaults);
-        w.opt("applyKindSupport", &self.apply_kind_support);
+        w.opt("itemDefaults", self.item_defaults.as_ref());
+        w.opt("applyKindSupport", self.apply_kind_support.as_ref());
         w.finish()
     }
 
@@ -18247,10 +18061,10 @@ impl Json for ClientSignatureInformationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("documentationFormat", &self.documentation_format);
-        w.opt("parameterInformation", &self.parameter_information);
-        w.opt("activeParameterSupport", &self.active_parameter_support);
-        w.opt("noActiveParameterSupport", &self.no_active_parameter_support);
+        w.opt("documentationFormat", self.documentation_format.as_ref());
+        w.opt("parameterInformation", self.parameter_information.as_ref());
+        w.opt("activeParameterSupport", self.active_parameter_support.as_ref());
+        w.opt("noActiveParameterSupport", self.no_active_parameter_support.as_ref());
         w.finish()
     }
 
@@ -18297,12 +18111,9 @@ impl Json for ClientCodeActionLiteralOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "codeActionKind" => {
-                    seen |= 1 << 0;
-                    s.code_action_kind = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "codeActionKind" {
+                seen |= 1 << 0;
+                s.code_action_kind = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["codeActionKind"], Self::GO_TYPE)?;
@@ -18334,12 +18145,9 @@ impl Json for ClientCodeActionResolveOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "properties" => {
-                    seen |= 1 << 0;
-                    s.properties = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "properties" {
+                seen |= 1 << 0;
+                s.properties = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["properties"], Self::GO_TYPE)?;
@@ -18371,12 +18179,9 @@ impl Json for CodeActionTagOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => {
-                    seen |= 1 << 0;
-                    s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "valueSet" {
+                seen |= 1 << 0;
+                s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["valueSet"], Self::GO_TYPE)?;
@@ -18408,12 +18213,9 @@ impl Json for ClientCodeLensResolveOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "properties" => {
-                    seen |= 1 << 0;
-                    s.properties = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "properties" {
+                seen |= 1 << 0;
+                s.properties = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["properties"], Self::GO_TYPE)?;
@@ -18437,7 +18239,7 @@ impl Json for ClientFoldingRangeKindOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("valueSet", &self.value_set);
+        w.opt("valueSet", self.value_set.as_ref());
         w.finish()
     }
 
@@ -18447,9 +18249,8 @@ impl Json for ClientFoldingRangeKindOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => s.value_set = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "valueSet" {
+                s.value_set = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -18472,7 +18273,7 @@ impl Json for ClientFoldingRangeOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("collapsedText", &self.collapsed_text);
+        w.opt("collapsedText", self.collapsed_text.as_ref());
         w.finish()
     }
 
@@ -18482,9 +18283,8 @@ impl Json for ClientFoldingRangeOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "collapsedText" => s.collapsed_text = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "collapsedText" {
+                s.collapsed_text = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -18522,10 +18322,10 @@ impl Json for DiagnosticsCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
-        w.opt("relatedInformation", &self.related_information);
-        w.opt("tagSupport", &self.tag_support);
-        w.opt("codeDescriptionSupport", &self.code_description_support);
-        w.opt("dataSupport", &self.data_support);
+        w.opt("relatedInformation", self.related_information.as_ref());
+        w.opt("tagSupport", self.tag_support.as_ref());
+        w.opt("codeDescriptionSupport", self.code_description_support.as_ref());
+        w.opt("dataSupport", self.data_support.as_ref());
         w.finish()
     }
 
@@ -18565,8 +18365,8 @@ impl Json for ClientSemanticTokensRequestOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("range", &self.range);
-        w.opt("full", &self.full);
+        w.opt("range", self.range.as_ref());
+        w.opt("full", self.full.as_ref());
         w.finish()
     }
 
@@ -18610,12 +18410,9 @@ impl Json for ClientInlayHintResolveOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "properties" => {
-                    seen |= 1 << 0;
-                    s.properties = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "properties" {
+                seen |= 1 << 0;
+                s.properties = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["properties"], Self::GO_TYPE)?;
@@ -18638,7 +18435,7 @@ impl Json for ClientShowMessageActionItemOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("additionalPropertiesSupport", &self.additional_properties_support);
+        w.opt("additionalPropertiesSupport", self.additional_properties_support.as_ref());
         w.finish()
     }
 
@@ -18648,9 +18445,8 @@ impl Json for ClientShowMessageActionItemOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "additionalPropertiesSupport" => s.additional_properties_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "additionalPropertiesSupport" {
+                s.additional_properties_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -18681,12 +18477,9 @@ impl Json for CompletionItemTagOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => {
-                    seen |= 1 << 0;
-                    s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "valueSet" {
+                seen |= 1 << 0;
+                s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["valueSet"], Self::GO_TYPE)?;
@@ -18718,12 +18511,9 @@ impl Json for ClientCompletionItemResolveOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "properties" => {
-                    seen |= 1 << 0;
-                    s.properties = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "properties" {
+                seen |= 1 << 0;
+                s.properties = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["properties"], Self::GO_TYPE)?;
@@ -18754,12 +18544,9 @@ impl Json for ClientCompletionItemInsertTextModeOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => {
-                    seen |= 1 << 0;
-                    s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "valueSet" {
+                seen |= 1 << 0;
+                s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["valueSet"], Self::GO_TYPE)?;
@@ -18783,7 +18570,7 @@ impl Json for ClientSignatureParameterInformationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("labelOffsetSupport", &self.label_offset_support);
+        w.opt("labelOffsetSupport", self.label_offset_support.as_ref());
         w.finish()
     }
 
@@ -18793,9 +18580,8 @@ impl Json for ClientSignatureParameterInformationOptions {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "labelOffsetSupport" => s.label_offset_support = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "labelOffsetSupport" {
+                s.label_offset_support = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -18829,12 +18615,9 @@ impl Json for ClientCodeActionKindOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => {
-                    seen |= 1 << 0;
-                    s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "valueSet" {
+                seen |= 1 << 0;
+                s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["valueSet"], Self::GO_TYPE)?;
@@ -18866,12 +18649,9 @@ impl Json for ClientDiagnosticsTagOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "valueSet" => {
-                    seen |= 1 << 0;
-                    s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "valueSet" {
+                seen |= 1 << 0;
+                s.value_set = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["valueSet"], Self::GO_TYPE)?;
@@ -18893,7 +18673,7 @@ impl Json for ClientSemanticTokensRequestFullDelta {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("delta", &self.delta);
+        w.opt("delta", self.delta.as_ref());
         w.finish()
     }
 
@@ -18903,9 +18683,8 @@ impl Json for ClientSemanticTokensRequestFullDelta {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "delta" => s.delta = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "delta" {
+                s.delta = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -18943,13 +18722,13 @@ impl Json for InitializationOptions {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
-        w.opt("disablePushDiagnostics", &self.disable_push_diagnostics);
-        w.opt("codeLensShowLocationsCommandName", &self.code_lens_show_locations_command_name);
-        w.opt("userPreferences", &self.user_preferences);
-        w.opt("enableTelemetry", &self.enable_telemetry);
-        w.opt("logVerbosity", &self.log_verbosity);
-        w.opt("runExternalCode", &self.run_external_code);
-        w.opt("trackFlakyDiagnostics", &self.track_flaky_diagnostics);
+        w.opt("disablePushDiagnostics", self.disable_push_diagnostics.as_ref());
+        w.opt("codeLensShowLocationsCommandName", self.code_lens_show_locations_command_name.as_ref());
+        w.opt("userPreferences", self.user_preferences.as_ref());
+        w.opt("enableTelemetry", self.enable_telemetry.as_ref());
+        w.opt("logVerbosity", self.log_verbosity.as_ref());
+        w.opt("runExternalCode", self.run_external_code.as_ref());
+        w.opt("trackFlakyDiagnostics", self.track_flaky_diagnostics.as_ref());
         w.finish()
     }
 
@@ -19011,7 +18790,7 @@ impl Json for AutoImportFix {
         w.field("addAsTypeOnly", &self.add_as_type_only);
         w.value("moduleSpecifier", &self.module_specifier);
         w.field("importIndex", &self.import_index);
-        w.opt("usagePosition", &self.usage_position);
+        w.opt("usagePosition", self.usage_position.as_ref());
         w.value("namespacePrefix", &self.namespace_prefix);
         w.finish()
     }
@@ -19082,10 +18861,10 @@ impl Json for CompletionItemData {
         let mut w = ObjectWriter::new(7);
         w.value("fileName", &self.file_name);
         w.value("position", &self.position);
-        w.opt("supplementalFileIndex", &self.supplemental_file_index);
+        w.opt("supplementalFileIndex", self.supplemental_file_index.as_ref());
         w.value("source", &self.source);
         w.value("name", &self.name);
-        w.opt("autoImport", &self.auto_import);
+        w.opt("autoImport", self.auto_import.as_ref());
         w.value("isImportStatementCompletion", &self.is_import_statement_completion);
         w.finish()
     }
@@ -19135,7 +18914,7 @@ impl Json for CodeLensData {
         w.field("kind", &self.kind);
         w.field("uri", &self.uri);
         w.field("position", &self.position);
-        w.opt("supplementalFileIndex", &self.supplemental_file_index);
+        w.opt("supplementalFileIndex", self.supplemental_file_index.as_ref());
         w.finish()
     }
 
@@ -19184,8 +18963,8 @@ impl Json for ExperimentalServerCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("customSourceDefinitionProvider", &self.custom_source_definition_provider);
-        w.opt("customMultiDocumentHighlightProvider", &self.custom_multi_document_highlight_provider);
+        w.opt("customSourceDefinitionProvider", self.custom_source_definition_provider.as_ref());
+        w.opt("customMultiDocumentHighlightProvider", self.custom_multi_document_highlight_provider.as_ref());
         w.finish()
     }
 
@@ -19218,7 +18997,7 @@ impl Json for ExperimentalClientCapabilities {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("hoverVerbosityLevel", &self.hover_verbosity_level);
+        w.opt("hoverVerbosityLevel", self.hover_verbosity_level.as_ref());
         w.finish()
     }
 
@@ -19228,9 +19007,8 @@ impl Json for ExperimentalClientCapabilities {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "hoverVerbosityLevel" => s.hover_verbosity_level = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "hoverVerbosityLevel" {
+                s.hover_verbosity_level = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -19261,12 +19039,9 @@ impl Json for VSOnAutoInsertOptions {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "_vs_triggerCharacters" => {
-                    seen |= 1 << 0;
-                    s.vs_trigger_characters = field_non_null(k, v, Self::GO_TYPE)?;
-                }
-                _ => {}
+            if k.as_str() == "_vs_triggerCharacters" {
+                seen |= 1 << 0;
+                s.vs_trigger_characters = field_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         check_required(seen, &["_vs_triggerCharacters"], Self::GO_TYPE)?;
@@ -19306,12 +19081,12 @@ impl Json for VSReferenceItem {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(7);
         w.field("_vs_id", &self.vs_id);
-        w.opt("_vs_definitionId", &self.vs_definition_id);
-        w.opt("_vs_kind", &self.vs_kind);
+        w.opt("_vs_definitionId", self.vs_definition_id.as_ref());
+        w.opt("_vs_kind", self.vs_kind.as_ref());
         w.field("_vs_location", &self.vs_location);
-        w.opt("_vs_definitionText", &self.vs_definition_text);
-        w.opt("_vs_projectName", &self.vs_project_name);
-        w.opt("_vs_containingType", &self.vs_containing_type);
+        w.opt("_vs_definitionText", self.vs_definition_text.as_ref());
+        w.opt("_vs_projectName", self.vs_project_name.as_ref());
+        w.opt("_vs_containingType", self.vs_containing_type.as_ref());
         w.finish()
     }
 
@@ -19584,12 +19359,9 @@ impl Json for ProfileParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "dir" => {
-                    seen |= 1 << 0;
-                    s.dir = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "dir" {
+                seen |= 1 << 0;
+                s.dir = field(k, v)?;
             }
         }
         check_required(seen, &["dir"], Self::GO_TYPE)?;
@@ -19621,12 +19393,9 @@ impl Json for ProfileResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "file" => {
-                    seen |= 1 << 0;
-                    s.file = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "file" {
+                seen |= 1 << 0;
+                s.file = field(k, v)?;
             }
         }
         check_required(seen, &["file"], Self::GO_TYPE)?;
@@ -19647,7 +19416,7 @@ impl Json for InitializeAPISessionParams {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(1);
-        w.opt("pipe", &self.pipe);
+        w.opt("pipe", self.pipe.as_ref());
         w.finish()
     }
 
@@ -19657,9 +19426,8 @@ impl Json for InitializeAPISessionParams {
             return Ok(s);
         };
         for (k, v) in members {
-            match k.as_str() {
-                "pipe" => s.pipe = opt_non_null(k, v, Self::GO_TYPE)?,
-                _ => {}
+            if k.as_str() == "pipe" {
+                s.pipe = opt_non_null(k, v, Self::GO_TYPE)?;
             }
         }
         Ok(s)
@@ -19741,12 +19509,9 @@ impl Json for ProjectInfoParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "textDocument" => {
-                    seen |= 1 << 0;
-                    s.text_document = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "textDocument" {
+                seen |= 1 << 0;
+                s.text_document = field(k, v)?;
             }
         }
         check_required(seen, &["textDocument"], Self::GO_TYPE)?;
@@ -19778,12 +19543,9 @@ impl Json for ProjectInfoResult {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "configFilePath" => {
-                    seen |= 1 << 0;
-                    s.config_file_path = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "configFilePath" {
+                seen |= 1 << 0;
+                s.config_file_path = field(k, v)?;
             }
         }
         check_required(seen, &["configFilePath"], Self::GO_TYPE)?;
@@ -19820,11 +19582,11 @@ impl Json for ContentMapperManifest {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
         w.field("name", &self.name);
-        w.opt("version", &self.version);
+        w.opt("version", self.version.as_ref());
         w.field("exec", &self.exec);
-        w.opt("cwd", &self.cwd);
-        w.opt("compilerOptions", &self.compiler_options);
-        w.opt("dynamicConfig", &self.dynamic_config);
+        w.opt("cwd", self.cwd.as_ref());
+        w.opt("compilerOptions", self.compiler_options.as_ref());
+        w.opt("dynamicConfig", self.dynamic_config.as_ref());
         w.finish()
     }
 
@@ -19872,7 +19634,7 @@ impl Json for InferredProjectContentMapperContribution {
 
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(2);
-        w.opt("options", &self.options);
+        w.opt("options", self.options.as_ref());
         w.field("manifest", &self.manifest);
         w.finish()
     }
@@ -19919,7 +19681,7 @@ impl Json for ContentMapperContribution {
         let mut w = ObjectWriter::new(3);
         w.field("contributorId", &self.contributor_id);
         w.field("extensions", &self.extensions);
-        w.opt("inferredProjectContribution", &self.inferred_project_contribution);
+        w.opt("inferredProjectContribution", self.inferred_project_contribution.as_ref());
         w.finish()
     }
 
@@ -20017,12 +19779,9 @@ impl Json for SetLogVerbosityParams {
         };
         let mut seen = 0u64;
         for (k, v) in members {
-            match k.as_str() {
-                "verbosity" => {
-                    seen |= 1 << 0;
-                    s.verbosity = field(k, v)?;
-                }
-                _ => {}
+            if k.as_str() == "verbosity" {
+                seen |= 1 << 0;
+                s.verbosity = field(k, v)?;
             }
         }
         check_required(seen, &["verbosity"], Self::GO_TYPE)?;
@@ -20525,7 +20284,7 @@ impl Json for VSClassifiedTextRun {
         let mut w = ObjectWriter::new(5);
         w.field("ClassificationTypeName", &self.classification_type_name);
         w.field("Text", &self.text);
-        w.opt("MarkerTagType", &self.marker_tag_type);
+        w.opt("MarkerTagType", self.marker_tag_type.as_ref());
         w.value("Style", &self.style);
         w.field("_vs_type", &self.vs_type);
         w.finish()
@@ -24381,11 +24140,11 @@ impl Json for IntegerOrString {
         match k {
             b'0' => {
                 o.integer = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("IntegerOrString", k))),
         }
@@ -24416,7 +24175,7 @@ impl Json for DocumentSelectorOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.document_selector = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("DocumentSelectorOrNull", k))),
         }
@@ -24450,11 +24209,11 @@ impl Json for BooleanOrEmptyObject {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.empty_object = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrEmptyObject", k))),
         }
@@ -24488,11 +24247,11 @@ impl Json for BooleanOrSemanticTokensFullDelta {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.semantic_tokens_full_delta = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrSemanticTokensFullDelta", k))),
         }
@@ -24534,19 +24293,19 @@ impl Json for TextDocumentEditOrCreateFileOrRenameFileOrDeleteFile {
         match state.discriminator_str() {
             Some("rename") => {
                 o.rename_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("create") => {
                 o.create_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("delete") => {
                 o.delete_file = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             _ => {
                 o.text_document_edit = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
         }
     }
@@ -24579,11 +24338,11 @@ impl Json for StringOrInlayHintLabelParts {
         match k {
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'[' => {
                 o.inlay_hint_label_parts = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrInlayHintLabelParts", k))),
         }
@@ -24617,11 +24376,11 @@ impl Json for StringOrMarkupContent {
         match k {
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.markup_content = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrMarkupContent", k))),
         }
@@ -24655,13 +24414,13 @@ impl Json for WorkspaceFullDocumentDiagnosticReportOrUnchangedDocumentDiagnostic
         match state.discriminator_str() {
             Some("full") => {
                 o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("unchanged") => {
                 o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
-            _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
+            _ => Err(state.invalid_discriminator(Self::GO_TYPE)),
         }
     }
 }
@@ -24693,11 +24452,11 @@ impl Json for StringOrStringValue {
         match k {
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.string_value = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrStringValue", k))),
         }
@@ -24728,7 +24487,7 @@ impl Json for IntegerOrNull {
             b'n' => Ok(o),
             b'0' => {
                 o.integer = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("IntegerOrNull", k))),
         }
@@ -24759,7 +24518,7 @@ impl Json for StringOrNull {
             b'n' => Ok(o),
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrNull", k))),
         }
@@ -24790,7 +24549,7 @@ impl Json for DocumentUriOrNull {
             b'n' => Ok(o),
             b'"' => {
                 o.document_uri = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("DocumentUriOrNull", k))),
         }
@@ -24821,7 +24580,7 @@ impl Json for InitializationOptionsOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.initialization_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("InitializationOptionsOrNull", k))),
         }
@@ -24852,7 +24611,7 @@ impl Json for WorkspaceFoldersOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.workspace_folders = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("WorkspaceFoldersOrNull", k))),
         }
@@ -24886,11 +24645,11 @@ impl Json for StringOrStrings {
         match k {
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'[' => {
                 o.strings = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrStrings", k))),
         }
@@ -24920,16 +24679,12 @@ impl Json for TextDocumentContentChangePartialOrWholeDocument {
 
     fn from_json(v: &Value) -> Result<Self, JsonError> {
         let mut o = Self::default();
-        match json_object_has_key(v, &["range"]) {
-            // range
-            Some(0) => {
-                o.partial = arm_buffered(v)?;
-                return Ok(o);
-            }
-            _ => {
-                o.whole_document = arm_buffered(v)?;
-                return Ok(o);
-            }
+        if json_object_has_key(v, &["range"]) == Some(0) {
+            o.partial = arm_buffered(v)?;
+            Ok(o)
+        } else {
+            o.whole_document = arm_buffered(v)?;
+            Ok(o)
         }
     }
 }
@@ -25025,11 +24780,11 @@ impl Json for MarkupContentOrStringOrMarkedStringWithLanguageOrMarkedStrings {
             }
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'[' => {
                 o.marked_strings = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("MarkupContentOrStringOrMarkedStringWithLanguageOrMarkedStrings", k))),
         }
@@ -25060,7 +24815,7 @@ impl Json for UintegerOrNull {
             b'n' => Ok(o),
             b'0' => {
                 o.uinteger = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("UintegerOrNull", k))),
         }
@@ -25090,16 +24845,12 @@ impl Json for LocationOrLocationUriOnly {
 
     fn from_json(v: &Value) -> Result<Self, JsonError> {
         let mut o = Self::default();
-        match json_object_has_key(v, &["range"]) {
-            // range
-            Some(0) => {
-                o.location = arm_buffered(v)?;
-                return Ok(o);
-            }
-            _ => {
-                o.location_uri_only = arm_buffered(v)?;
-                return Ok(o);
-            }
+        if json_object_has_key(v, &["range"]) == Some(0) {
+            o.location = arm_buffered(v)?;
+            Ok(o)
+        } else {
+            o.location_uri_only = arm_buffered(v)?;
+            Ok(o)
         }
     }
 }
@@ -25135,17 +24886,17 @@ impl Json for WorkDoneProgressBeginOrReportOrEnd {
         match state.discriminator_str() {
             Some("begin") => {
                 o.begin = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("report") => {
                 o.report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("end") => {
                 o.end = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
-            _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
+            _ => Err(state.invalid_discriminator(Self::GO_TYPE)),
         }
     }
 }
@@ -25181,16 +24932,16 @@ impl Json for TextEditOrAnnotatedTextEditOrSnippetTextEdit {
             // snippet
             Some(0) => {
                 o.snippet_text_edit = arm_buffered(v)?;
-                return Ok(o);
+                Ok(o)
             }
             // annotationId
             Some(1) => {
                 o.annotated_text_edit = arm_buffered(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => {
                 o.text_edit = arm_buffered(v)?;
-                return Ok(o);
+                Ok(o)
             }
         }
     }
@@ -25223,13 +24974,13 @@ impl Json for FullDocumentDiagnosticReportOrUnchangedDocumentDiagnosticReport {
         match state.discriminator_str() {
             Some("full") => {
                 o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("unchanged") => {
                 o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
-            _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
+            _ => Err(state.invalid_discriminator(Self::GO_TYPE)),
         }
     }
 }
@@ -25261,11 +25012,11 @@ impl Json for TextDocumentSyncOptionsOrKind {
         match k {
             b'{' => {
                 o.options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'0' => {
                 o.kind = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("TextDocumentSyncOptionsOrKind", k))),
         }
@@ -25299,11 +25050,11 @@ impl Json for BooleanOrHoverOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.hover_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrHoverOptions", k))),
         }
@@ -25341,19 +25092,15 @@ impl Json for BooleanOrDeclarationOptionsOrDeclarationRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.declaration_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.declaration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.declaration_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.declaration_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrDeclarationOptionsOrDeclarationRegistrationOptions", k))),
@@ -25388,11 +25135,11 @@ impl Json for BooleanOrDefinitionOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.definition_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrDefinitionOptions", k))),
         }
@@ -25430,19 +25177,15 @@ impl Json for BooleanOrTypeDefinitionOptionsOrTypeDefinitionRegistrationOptions 
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.type_definition_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.type_definition_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.type_definition_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.type_definition_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrTypeDefinitionOptionsOrTypeDefinitionRegistrationOptions", k))),
@@ -25481,19 +25224,15 @@ impl Json for BooleanOrImplementationOptionsOrImplementationRegistrationOptions 
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.implementation_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.implementation_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.implementation_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.implementation_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrImplementationOptionsOrImplementationRegistrationOptions", k))),
@@ -25528,11 +25267,11 @@ impl Json for BooleanOrReferenceOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.reference_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrReferenceOptions", k))),
         }
@@ -25566,11 +25305,11 @@ impl Json for BooleanOrDocumentHighlightOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.document_highlight_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrDocumentHighlightOptions", k))),
         }
@@ -25604,11 +25343,11 @@ impl Json for BooleanOrDocumentSymbolOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.document_symbol_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrDocumentSymbolOptions", k))),
         }
@@ -25642,11 +25381,11 @@ impl Json for BooleanOrCodeActionOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.code_action_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrCodeActionOptions", k))),
         }
@@ -25684,19 +25423,15 @@ impl Json for BooleanOrDocumentColorOptionsOrDocumentColorRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.document_color_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.document_color_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.document_color_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.document_color_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrDocumentColorOptionsOrDocumentColorRegistrationOptions", k))),
@@ -25731,11 +25466,11 @@ impl Json for BooleanOrWorkspaceSymbolOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.workspace_symbol_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrWorkspaceSymbolOptions", k))),
         }
@@ -25769,11 +25504,11 @@ impl Json for BooleanOrDocumentFormattingOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.document_formatting_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrDocumentFormattingOptions", k))),
         }
@@ -25807,11 +25542,11 @@ impl Json for BooleanOrDocumentRangeFormattingOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.document_range_formatting_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrDocumentRangeFormattingOptions", k))),
         }
@@ -25845,11 +25580,11 @@ impl Json for BooleanOrRenameOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.rename_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrRenameOptions", k))),
         }
@@ -25887,19 +25622,15 @@ impl Json for BooleanOrFoldingRangeOptionsOrFoldingRangeRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.folding_range_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.folding_range_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.folding_range_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.folding_range_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrFoldingRangeOptionsOrFoldingRangeRegistrationOptions", k))),
@@ -25938,19 +25669,15 @@ impl Json for BooleanOrSelectionRangeOptionsOrSelectionRangeRegistrationOptions 
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.selection_range_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.selection_range_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.selection_range_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.selection_range_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrSelectionRangeOptionsOrSelectionRangeRegistrationOptions", k))),
@@ -25989,19 +25716,15 @@ impl Json for BooleanOrCallHierarchyOptionsOrCallHierarchyRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.call_hierarchy_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.call_hierarchy_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.call_hierarchy_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.call_hierarchy_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrCallHierarchyOptionsOrCallHierarchyRegistrationOptions", k))),
@@ -26040,19 +25763,15 @@ impl Json for BooleanOrLinkedEditingRangeOptionsOrLinkedEditingRangeRegistration
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.linked_editing_range_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.linked_editing_range_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.linked_editing_range_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.linked_editing_range_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrLinkedEditingRangeOptionsOrLinkedEditingRangeRegistrationOptions", k))),
@@ -26083,16 +25802,12 @@ impl Json for SemanticTokensOptionsOrRegistrationOptions {
 
     fn from_json(v: &Value) -> Result<Self, JsonError> {
         let mut o = Self::default();
-        match json_object_has_key(v, &["documentSelector"]) {
-            // documentSelector
-            Some(0) => {
-                o.registration_options = arm_buffered(v)?;
-                return Ok(o);
-            }
-            _ => {
-                o.options = arm_buffered(v)?;
-                return Ok(o);
-            }
+        if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+            o.registration_options = arm_buffered(v)?;
+            Ok(o)
+        } else {
+            o.options = arm_buffered(v)?;
+            Ok(o)
         }
     }
 }
@@ -26128,19 +25843,15 @@ impl Json for BooleanOrMonikerOptionsOrMonikerRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.moniker_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.moniker_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.moniker_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.moniker_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrMonikerOptionsOrMonikerRegistrationOptions", k))),
@@ -26179,19 +25890,15 @@ impl Json for BooleanOrTypeHierarchyOptionsOrTypeHierarchyRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.type_hierarchy_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.type_hierarchy_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.type_hierarchy_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.type_hierarchy_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrTypeHierarchyOptionsOrTypeHierarchyRegistrationOptions", k))),
@@ -26230,19 +25937,15 @@ impl Json for BooleanOrInlineValueOptionsOrInlineValueRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.inline_value_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.inline_value_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.inline_value_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.inline_value_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrInlineValueOptionsOrInlineValueRegistrationOptions", k))),
@@ -26281,19 +25984,15 @@ impl Json for BooleanOrInlayHintOptionsOrInlayHintRegistrationOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
-                match json_object_has_key(v, &["documentSelector"]) {
-                    // documentSelector
-                    Some(0) => {
-                        o.inlay_hint_registration_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
-                    _ => {
-                        o.inlay_hint_options = arm_buffered(v)?;
-                        return Ok(o);
-                    }
+                if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+                    o.inlay_hint_registration_options = arm_buffered(v)?;
+                    Ok(o)
+                } else {
+                    o.inlay_hint_options = arm_buffered(v)?;
+                    Ok(o)
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrInlayHintOptionsOrInlayHintRegistrationOptions", k))),
@@ -26324,16 +26023,12 @@ impl Json for DiagnosticOptionsOrRegistrationOptions {
 
     fn from_json(v: &Value) -> Result<Self, JsonError> {
         let mut o = Self::default();
-        match json_object_has_key(v, &["documentSelector"]) {
-            // documentSelector
-            Some(0) => {
-                o.registration_options = arm_buffered(v)?;
-                return Ok(o);
-            }
-            _ => {
-                o.options = arm_buffered(v)?;
-                return Ok(o);
-            }
+        if json_object_has_key(v, &["documentSelector"]) == Some(0) {
+            o.registration_options = arm_buffered(v)?;
+            Ok(o)
+        } else {
+            o.options = arm_buffered(v)?;
+            Ok(o)
         }
     }
 }
@@ -26365,11 +26060,11 @@ impl Json for BooleanOrInlineCompletionOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.inline_completion_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrInlineCompletionOptions", k))),
         }
@@ -26403,11 +26098,11 @@ impl Json for PatternOrRelativePattern {
         match k {
             b'"' => {
                 o.pattern = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.relative_pattern = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("PatternOrRelativePattern", k))),
         }
@@ -26481,11 +26176,11 @@ impl Json for BooleanOrSaveOptions {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.save_options = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrSaveOptions", k))),
         }
@@ -26554,11 +26249,11 @@ impl Json for StringOrTuple {
         match k {
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'[' => {
                 o.tuple = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrTuple", k))),
         }
@@ -26592,11 +26287,11 @@ impl Json for StringOrBoolean {
         match k {
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrBoolean", k))),
         }
@@ -26630,11 +26325,11 @@ impl Json for WorkspaceFolderOrURI {
         match k {
             b'{' => {
                 o.workspace_folder = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'"' => {
                 o.uri = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("WorkspaceFolderOrURI", k))),
         }
@@ -26668,11 +26363,11 @@ impl Json for BooleanOrClientSemanticTokensRequestFullDelta {
         match k {
             b't' | b'f' => {
                 o.boolean = Some(k == b't');
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.client_semantic_tokens_request_full_delta = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("BooleanOrClientSemanticTokensRequestFullDelta", k))),
         }
@@ -26710,17 +26405,17 @@ impl Json for VSImageElementOrClassifiedTextElementOrContainerElement {
         match state.discriminator_str() {
             Some("ContainerElement") => {
                 o.container_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "_vs_type")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("ImageElement") => {
                 o.image_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "_vs_type")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("ClassifiedTextElement") => {
                 o.classified_text_element = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "_vs_type")?);
-                return Ok(o);
+                Ok(o)
             }
-            _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
+            _ => Err(state.invalid_discriminator(Self::GO_TYPE)),
         }
     }
 }
@@ -26757,7 +26452,7 @@ impl Json for LocationOrLocationsOrDefinitionLinksOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.location = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'[' => {
                 if let Ok(x) = Json::from_json(v) {
@@ -26805,7 +26500,7 @@ impl Json for FoldingRangesOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.folding_ranges = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("FoldingRangesOrNull", k))),
         }
@@ -26844,7 +26539,7 @@ impl Json for LocationOrLocationsOrDeclarationLinksOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.location = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'[' => {
                 if let Ok(x) = Json::from_json(v) {
@@ -26892,7 +26587,7 @@ impl Json for SelectionRangesOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.selection_ranges = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("SelectionRangesOrNull", k))),
         }
@@ -26923,7 +26618,7 @@ impl Json for CallHierarchyItemsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.call_hierarchy_items = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("CallHierarchyItemsOrNull", k))),
         }
@@ -26954,7 +26649,7 @@ impl Json for CallHierarchyIncomingCallsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.call_hierarchy_incoming_calls = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("CallHierarchyIncomingCallsOrNull", k))),
         }
@@ -26985,7 +26680,7 @@ impl Json for CallHierarchyOutgoingCallsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.call_hierarchy_outgoing_calls = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("CallHierarchyOutgoingCallsOrNull", k))),
         }
@@ -27016,7 +26711,7 @@ impl Json for SemanticTokensOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.semantic_tokens = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("SemanticTokensOrNull", k))),
         }
@@ -27094,7 +26789,7 @@ impl Json for LinkedEditingRangesOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.linked_editing_ranges = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("LinkedEditingRangesOrNull", k))),
         }
@@ -27125,7 +26820,7 @@ impl Json for WorkspaceEditOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.workspace_edit = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("WorkspaceEditOrNull", k))),
         }
@@ -27156,7 +26851,7 @@ impl Json for MonikersOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.monikers = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("MonikersOrNull", k))),
         }
@@ -27187,7 +26882,7 @@ impl Json for TypeHierarchyItemsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.type_hierarchy_items = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("TypeHierarchyItemsOrNull", k))),
         }
@@ -27218,7 +26913,7 @@ impl Json for InlineValuesOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.inline_values = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("InlineValuesOrNull", k))),
         }
@@ -27249,7 +26944,7 @@ impl Json for InlayHintsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.inlay_hints = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("InlayHintsOrNull", k))),
         }
@@ -27283,13 +26978,13 @@ impl Json for RelatedFullDocumentDiagnosticReportOrUnchangedDocumentDiagnosticRe
         match state.discriminator_str() {
             Some("full") => {
                 o.full_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
             Some("unchanged") => {
                 o.unchanged_document_diagnostic_report = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "kind")?);
-                return Ok(o);
+                Ok(o)
             }
-            _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
+            _ => Err(state.invalid_discriminator(Self::GO_TYPE)),
         }
     }
 }
@@ -27322,11 +27017,11 @@ impl Json for InlineCompletionListOrItemsOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.list = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'[' => {
                 o.items = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("InlineCompletionListOrItemsOrNull", k))),
         }
@@ -27357,7 +27052,7 @@ impl Json for MessageActionItemOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.message_action_item = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("MessageActionItemOrNull", k))),
         }
@@ -27388,7 +27083,7 @@ impl Json for TextEditsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.text_edits = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("TextEditsOrNull", k))),
         }
@@ -27423,11 +27118,11 @@ impl Json for CompletionItemsOrListOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.items = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.list = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("CompletionItemsOrListOrNull", k))),
         }
@@ -27458,7 +27153,7 @@ impl Json for HoverOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.hover = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("HoverOrNull", k))),
         }
@@ -27489,7 +27184,7 @@ impl Json for SignatureHelpOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.signature_help = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("SignatureHelpOrNull", k))),
         }
@@ -27520,7 +27215,7 @@ impl Json for LocationsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.locations = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("LocationsOrNull", k))),
         }
@@ -27557,7 +27252,7 @@ impl Json for DocumentHighlightsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.document_highlights = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("DocumentHighlightsOrNull", k))),
         }
@@ -27665,7 +27360,7 @@ impl Json for CommandOrCodeActionArrayOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.command_or_code_action_array = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("CommandOrCodeActionArrayOrNull", k))),
         }
@@ -27738,7 +27433,7 @@ impl Json for CodeLensesOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.code_lenses = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("CodeLensesOrNull", k))),
         }
@@ -27769,7 +27464,7 @@ impl Json for DocumentLinksOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.document_links = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("DocumentLinksOrNull", k))),
         }
@@ -27886,7 +27581,7 @@ impl Json for MultiDocumentHighlightsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.multi_document_highlights = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("MultiDocumentHighlightsOrNull", k))),
         }
@@ -27917,7 +27612,7 @@ impl Json for VSOnAutoInsertResponseItemOrNull {
             b'n' => Ok(o),
             b'{' => {
                 o.vs_on_auto_insert_response_item = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("VSOnAutoInsertResponseItemOrNull", k))),
         }
@@ -27948,7 +27643,7 @@ impl Json for VSReferenceItemsOrNull {
             b'n' => Ok(o),
             b'[' => {
                 o.vs_reference_items = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("VSReferenceItemsOrNull", k))),
         }
@@ -27990,17 +27685,17 @@ impl Json for RequestFailureTelemetryEventOrPerformanceStatsTelemetryEventOrProj
                 match state.discriminator_str() {
                     Some("languageServer.projectInfo") => {
                         o.project_info_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "eventName")?);
-                        return Ok(o);
+                        Ok(o)
                     }
                     Some("languageServer.errorResponse") => {
                         o.request_failure_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "eventName")?);
-                        return Ok(o);
+                        Ok(o)
                     }
                     Some("languageServer.performanceStats") => {
                         o.performance_stats_telemetry_event = Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, "eventName")?);
-                        return Ok(o);
+                        Ok(o)
                     }
-                    _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),
+                    _ => Err(state.invalid_discriminator(Self::GO_TYPE)),
                 }
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("RequestFailureTelemetryEventOrPerformanceStatsTelemetryEventOrProjectInfoTelemetryEventOrNull", k))),
@@ -28078,11 +27773,11 @@ impl Json for StringOrMarkedStringWithLanguage {
         match k {
             b'"' => {
                 o.string = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             b'{' => {
                 o.marked_string_with_language = arm(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => Err(JsonError::method(Self::GO_TYPE, err_invalid_kind("StringOrMarkedStringWithLanguage", k))),
         }
@@ -28120,16 +27815,16 @@ impl Json for InlineValueTextOrVariableLookupOrEvaluatableExpression {
             // text
             Some(0) => {
                 o.text = arm_buffered(v)?;
-                return Ok(o);
+                Ok(o)
             }
             // caseSensitiveLookup
             Some(1) => {
                 o.variable_lookup = arm_buffered(v)?;
-                return Ok(o);
+                Ok(o)
             }
             _ => {
                 o.evaluatable_expression = arm_buffered(v)?;
-                return Ok(o);
+                Ok(o)
             }
         }
     }

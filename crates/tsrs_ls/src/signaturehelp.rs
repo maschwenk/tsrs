@@ -428,7 +428,7 @@ impl LanguageService {
 
             // If client supports per-signature activeParameter, set it on each SignatureInformation
             if supports_per_signature_active_param {
-                sig_info.active_parameter = self.compute_active_parameter(item, argument_info.argument_index, supports_null_active_param);
+                sig_info.active_parameter = Self::compute_active_parameter(item, argument_info.argument_index, supports_null_active_param);
             }
 
             signature_information.push(sig_info);
@@ -439,7 +439,7 @@ impl LanguageService {
         // If client doesn't support per-signature activeParameter, set it on the top-level SignatureHelp
         if !supports_per_signature_active_param {
             let active_signature = &flattened_signatures[selected_item_index];
-            help.active_parameter = self.compute_active_parameter(active_signature, argument_info.argument_index, supports_null_active_param);
+            help.active_parameter = Self::compute_active_parameter(active_signature, argument_info.argument_index, supports_null_active_param);
         }
 
         Some(help)
@@ -449,7 +449,6 @@ impl LanguageService {
     // handling variadic signatures and null support appropriately.
     // signaturehelp.go:419
     fn compute_active_parameter(
-        &self,
         sig: &signatureInformation,
         argument_index: usize,
         supports_null: bool,
@@ -499,7 +498,7 @@ impl LanguageService {
         vs_capability: bool,
     ) -> Vec<signatureInformation> {
         let infos = if is_type_parameter_list {
-            self.item_info_for_type_parameters(candidate, c, enclosing_declaration, source_file, doc_format, vs_capability)
+            Self::item_info_for_type_parameters(candidate, c, enclosing_declaration, source_file, doc_format, vs_capability)
         } else {
             self.item_info_for_parameters(candidate, c, enclosing_declaration, source_file, doc_format, vs_capability)
         };
@@ -566,7 +565,6 @@ fn return_type_to_display_parts(candidate_signature: P<Signature>, c: &mut Check
 impl LanguageService {
     // signaturehelp.go:513
     fn item_info_for_type_parameters(
-        &self,
         candidate_signature: P<Signature>,
         c: &mut Checker,
         enclosing_declaration: P<Node>,
@@ -1102,21 +1100,20 @@ pub(crate) fn get_immediately_containing_argument_info(
             argument_index: 0,
             argument_count: 1,
         });
-    } else {
-        let type_arg_info = get_possible_type_arguments_info(Some(node), source_file);
-        if let Some(type_arg_info) = type_arg_info {
-            let called = type_arg_info.called;
-            let n_type_arguments = type_arg_info.n_type_arguments;
-            let invoc = typeArgsInvocation { called };
-            let argument_range = TextRange::from_text_pos(called.loc().pos(), node.end());
-            return Some(argumentListInfo {
-                is_type_parameter_list: true,
-                invocation: invocation { type_args_invocation: Some(invoc), ..Default::default() },
-                arguments_span: argument_range,
-                argument_index: n_type_arguments,
-                argument_count: n_type_arguments + 1,
-            });
-        }
+    }
+    let type_arg_info = get_possible_type_arguments_info(Some(node), source_file);
+    if let Some(type_arg_info) = type_arg_info {
+        let called = type_arg_info.called;
+        let n_type_arguments = type_arg_info.n_type_arguments;
+        let invoc = typeArgsInvocation { called };
+        let argument_range = TextRange::from_text_pos(called.loc().pos(), node.end());
+        return Some(argumentListInfo {
+            is_type_parameter_list: true,
+            invocation: invocation { type_args_invocation: Some(invoc), ..Default::default() },
+            arguments_span: argument_range,
+            argument_index: n_type_arguments,
+            argument_count: n_type_arguments + 1,
+        });
     }
     None
 }
@@ -1382,12 +1379,7 @@ fn get_argument_or_parameter_list_and_index(node: P<Node>, source_file: P<Source
 
 // signaturehelp.go:1244
 fn get_child_list_that_starts_with_opener_token(parent: P<Node>, opener_token: P<Node>) -> Option<P<NodeList>> {
-    if ast::is_call_expression(parent) {
-        if opener_token.kind() == Kind::LessThanToken {
-            return parent.type_argument_list();
-        }
-        return parent.argument_list();
-    } else if ast::is_new_expression(parent) {
+    if (ast::is_call_expression(parent)) || (ast::is_new_expression(parent)) {
         if opener_token.kind() == Kind::LessThanToken {
             return parent.type_argument_list();
         }

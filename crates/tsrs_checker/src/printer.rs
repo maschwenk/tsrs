@@ -270,7 +270,7 @@ impl Checker {
     }
 
     // printer.go:249
-    pub(crate) fn value_to_string(&mut self, value: LiteralValue) -> String {
+    pub(crate) fn value_to_string(value: LiteralValue) -> String {
         crate::value_to_string(value)
     }
 
@@ -593,13 +593,9 @@ impl Checker {
                 }
                 let import_attributes_type = self.get_import_attributes_type_for_module_specifier(import_ref);
                 let resolved_module = self.resolve_external_module_name(enclosing_declaration, import_ref /*ignoreErrors*/, true, import_attributes_type);
-                let Some(resolved_module) = resolved_module else {
-                    return None;
-                };
+                let resolved_module = resolved_module?;
                 let ref_ = self.get_alias_for_symbol_in_container(resolved_module, symbol);
-                if ref_.is_none() {
-                    return None;
-                }
+                ref_?;
                 Some(resolved_module)
             }));
             if !results.is_empty() {
@@ -612,29 +608,24 @@ impl Checker {
             return extended_containers.to_vec();
         }
         // No results from files already being imported by this file - expand search (expensive, but not location-specific, so cached)
-        match self.modules_exporting(symbol) {
-            Some(found) => results = found,
-            None => {
-                let other_files = self.program.source_files();
-                results.extend(other_files.iter().filter_map(|&file| {
-                    if !ast::is_external_module(file) {
-                        return None;
-                    }
-                    // tsrs-only: a check leaf another checker may have freed; its answer is nil for any symbol this
-                    // checker can name here. Its export table holds only symbols declared in it (no alias, `export *`
-                    // or `export =`) and nothing outside it refers to it, so `symbol`, declared elsewhere, is neither
-                    // its export nor re-exported by it (`is_unreadable_check_leaf`).
-                    if self.is_unreadable_check_leaf(file) {
-                        return None;
-                    }
-                    let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
-                    let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
-                    if ref_.is_none() {
-                        return None;
-                    }
-                    Some(sym)
-                }));
-            }
+        if let Some(found) = self.modules_exporting(symbol) { results = found } else {
+            let other_files = self.program.source_files();
+            results.extend(other_files.iter().filter_map(|&file| {
+                if !ast::is_external_module(file) {
+                    return None;
+                }
+                // tsrs-only: a check leaf another checker may have freed; its answer is nil for any symbol this
+                // checker can name here. Its export table holds only symbols declared in it (no alias, `export *`
+                // or `export =`) and nothing outside it refers to it, so `symbol`, declared elsewhere, is neither
+                // its export nor re-exported by it (`is_unreadable_check_leaf`).
+                if self.is_unreadable_check_leaf(file) {
+                    return None;
+                }
+                let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
+                let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
+                ref_?;
+                Some(sym)
+            }));
         }
         links.extended_containers.set(Some(alloc_slice(&results)));
         results
@@ -655,9 +646,7 @@ impl Checker {
             }
             declarations[0]
         };
-        let Some(parent) = first_decl.parent() else {
-            return None;
-        };
+        let parent = first_decl.parent()?;
         if !ast::is_variable_declaration(parent) {
             return None;
         }
@@ -987,7 +976,7 @@ impl Checker {
             enclosing_declaration,
             meaning,
             use_only_external_aliasing,
-            visited_symbol_tables_map: Default::default(),
+            visited_symbol_tables_map: std::rc::Rc::default(),
         })
     }
 
@@ -1452,7 +1441,7 @@ impl Checker {
      *
      * @param symbol a Symbol to check if accessible
      * @param enclosingDeclaration a Node containing reference to the symbol
-     * @param meaning a SymbolFlags to check if such meaning of the symbol is accessible
+     * @param meaning a `SymbolFlags` to check if such meaning of the symbol is accessible
      * @param shouldComputeAliasToMakeVisible a boolean value to indicate whether to return aliases to be mark visible in case the symbol is accessible
      */
     // symbolaccessibility.go:839

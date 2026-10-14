@@ -87,7 +87,7 @@ fn new_content_mapper_program_with_options(
         P::new(options),
         root_files.iter().map(std::string::ToString::to_string).collect(),
         Vec::new(),
-        Default::default(),
+        tsrs_core::tspath::ComparePathsOptions::default(),
     );
     config.parsed_config.content_mappers = vec![Mapper {
         definition: Definition { package: "vue".to_string(), extensions: vec![".vue".to_string()], options: String::new() },

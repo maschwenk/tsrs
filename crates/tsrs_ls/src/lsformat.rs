@@ -33,6 +33,7 @@ impl LanguageService {
     }
 
     // format.go:34
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_format_document(
         &self,
         ctx: &Context,
@@ -45,7 +46,7 @@ impl LanguageService {
         let (_, file) = self.get_program_and_file(document_uri);
         let format_opts = lsutil::from_ls_format_options(&self.format_options(), options);
         let edits = if file.content_mapper().is_empty() {
-            self.to_ls_proto_text_edits(file, &self.get_formatting_edits_for_document(ctx, file, &format_opts))
+            self.to_ls_proto_text_edits(file, &Self::get_formatting_edits_for_document(ctx, file, &format_opts))
         } else {
             self.get_formatting_edits_for_mapped_range(
                 ctx,
@@ -114,7 +115,7 @@ impl LanguageService {
                         .expect_source("formatting ranges have source positions")
                     - candidate.segment.original_start,
             );
-            edits.extend(self.get_formatting_edits_for_range(ctx, candidate.projection, options, virtual_range, ).into_iter().filter_map(|change| {
+            edits.extend(Self::get_formatting_edits_for_range(ctx, candidate.projection, options, virtual_range, ).into_iter().filter_map(|change| {
                 if change.pos() < virtual_range.pos() .expect_source("formatting ranges have source positions") || change.end() > virtual_range.end() .expect_source("formatting ranges have source positions") {
                     return None;
                 }
@@ -181,6 +182,7 @@ fn non_overlapping_formatting_ranges(candidates: &[MappedFormattingRange]) -> Ve
 
 impl LanguageService {
     // format.go:157
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_format_document_range(
         &self,
         ctx: &Context,
@@ -203,11 +205,12 @@ impl LanguageService {
             return Ok(lsproto::TextEditsOrNull::default());
         }
         let file = ranges[0].script;
-        let edits = self.to_ls_proto_text_edits(file, &self.get_formatting_edits_for_range(ctx, file, &format_opts, ranges[0].span));
+        let edits = self.to_ls_proto_text_edits(file, &Self::get_formatting_edits_for_range(ctx, file, &format_opts, ranges[0].span));
         Ok(lsproto::TextEditsOrNull { text_edits: Some(edits) })
     }
 
     // format.go:184
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_format_document_on_type(
         &self,
         ctx: &Context,
@@ -226,13 +229,12 @@ impl LanguageService {
             return Ok(lsproto::TextEditsOrNull::default());
         }
         let file = positions[0].script;
-        let edits = self.to_ls_proto_text_edits(file, &self.get_formatting_edits_after_keystroke(ctx, file, &format_opts, positions[0].position, character));
+        let edits = self.to_ls_proto_text_edits(file, &Self::get_formatting_edits_after_keystroke(ctx, file, &format_opts, positions[0].position, character));
         Ok(lsproto::TextEditsOrNull { text_edits: Some(edits) })
     }
 
     // format.go:210 (Go's ctx carries the settings: format::FormatContext)
     fn get_formatting_edits_for_range(
-        &self,
         _ctx: &Context,
         file: P<SourceFile>,
         options: &FormatCodeSettings,
@@ -254,14 +256,13 @@ impl LanguageService {
     }
 
     // format.go:220
-    fn get_formatting_edits_for_document(&self, _ctx: &Context, file: P<SourceFile>, options: &FormatCodeSettings) -> Vec<TextChange> {
+    fn get_formatting_edits_for_document(_ctx: &Context, file: P<SourceFile>, options: &FormatCodeSettings) -> Vec<TextChange> {
         let ctx = format::with_format_code_settings(&format::FormatContext::default(), options.clone(), &options.new_line_character);
         format::format_document(&ctx, file)
     }
 
     // format.go:229
     fn get_formatting_edits_after_keystroke(
-        &self,
         _ctx: &Context,
         file: P<SourceFile>,
         options: &FormatCodeSettings,

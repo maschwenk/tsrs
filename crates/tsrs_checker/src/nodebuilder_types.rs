@@ -12,9 +12,11 @@ use crate::*;
 // nodebuilder.go
 
 /// Go `NodeBuilder`: the public entry points (`TypeToTypeNode`, `SymbolToEntityName`, …) that push/pop a
-/// `NodeBuilderContext` around a `NodeBuilderImpl` call. An arena handle (`P<NodeBuilder>`, `&self` methods), because
-/// the checker caches one (`Checker::type_to_string_nodebuilder`) and serialization re-enters it (a diagnostic
-/// reported during lazy resolution formats a type with the same builder, pushing a new context).
+/// `NodeBuilderContext` around a `NodeBuilderImpl` call.
+///
+/// An arena handle (`P<NodeBuilder>`, `&self` methods), because the checker caches one
+/// (`Checker::type_to_string_nodebuilder`) and serialization re-enters it (a diagnostic reported during lazy
+/// resolution formats a type with the same builder, pushing a new context).
 pub struct NodeBuilder {
     /// Go pushes `b.impl.ctx`, which is nil for the outermost call.
     pub ctx_stack: RefCell<Vec<Option<P<NodeBuilderContext>>>>,
@@ -74,9 +76,11 @@ pub struct moduleSpecifierResult {
     pub import_attributes_type: Option<P<Type>>,
 }
 
-/// Go `NodeBuilderContext`: the per-call state of a node builder invocation. Handled as `P<NodeBuilderContext>`
-/// (Go swaps `b.impl.ctx` pointers, `SymbolTrackerImpl` and the `cloneNodeBuilderContext` restore closure hold it);
-/// every field Go assigns is a `Cell`/`RefCell`. Build with `NodeBuilderContext { …, ..NodeBuilderContext::new(host) }`.
+/// Go `NodeBuilderContext`: the per-call state of a node builder invocation.
+///
+/// Handled as `P<NodeBuilderContext>` (Go swaps `b.impl.ctx` pointers, `SymbolTrackerImpl` and the
+/// `cloneNodeBuilderContext` restore closure hold it); every field Go assigns is a `Cell`/`RefCell`. Build
+/// with `NodeBuilderContext { …, ..NodeBuilderContext::new(host) }`.
 pub struct NodeBuilderContext {
     pub host: &'static dyn ModuleSpecifierGenerationHost, // Go `Host`
     pub tracker: Cell<Option<&'static dyn SymbolTracker>>, // never None after NodeBuilder::enter_context
@@ -199,13 +203,15 @@ impl NodeBuilderImpl {
     }
 }
 
-/// Rust only: gives `ast::NodeVisitor` callbacks access to the checker. Go's visitor callbacks are closures over
-/// `b.ch`; a Rust `VisitFn` is a `'static` `Rc<dyn Fn(&mut NodeVisitor, P<Node>)>` and cannot capture `&mut Checker`.
-/// The code that starts a visit lends its checker for the duration (`slot.lend(c, || v.visit_node(n))`); a callback
-/// borrows it back with `slot.with(|c| ..)`, and must `lend` its own `c` again before re-entering the visitor
-/// (`slot.with(|c| { ..; slot.lend(c, || v.visit_each_child(Some(n))) })`), so every checker reference is derived from
-/// the one live above it. Like a `RefCell`, a second `with` without an intervening `lend` panics, and so does `with`
-/// outside any `lend`.
+/// Rust only: gives `ast::NodeVisitor` callbacks access to the checker.
+///
+/// Go's visitor callbacks are closures over `b.ch`; a Rust `VisitFn` is a `'static` `Rc<dyn Fn(&mut
+/// NodeVisitor, P<Node>)>` and cannot capture `&mut Checker`. The code that starts a visit lends its checker
+/// for the duration (`slot.lend(c, || v.visit_node(n))`); a callback borrows it back with `slot.with(|c|
+/// ..)`, and must `lend` its own `c` again before re-entering the visitor (`slot.with(|c| { ..; slot.lend(c,
+/// || v.visit_each_child(Some(n))) })`), so every checker reference is derived from the one live above it.
+/// Like a `RefCell`, a second `with` without an intervening `lend` panics, and so does `with` outside any
+/// `lend`.
 #[derive(Default)]
 pub struct CheckerSlot {
     ptr: Cell<Option<std::ptr::NonNull<Checker>>>,
@@ -307,9 +313,11 @@ pub struct originalRecoveryScopeState {
     pub had_error: bool,
 }
 
-/// Go `wrappingTracker`, handled as `P<wrappingTracker>` and used as `&'static dyn SymbolTracker`; the inherent
-/// methods are in nodecopy.rs. `markError(w.wrapped.ReportX)` passes `Some(Box::new(move || wrapped.report_x()))`
-/// with `let wrapped = self.wrapped;`.
+/// Go `wrappingTracker`, handled as `P<wrappingTracker>` and used as `&'static dyn SymbolTracker`; the
+/// inherent methods are in nodecopy.rs.
+///
+/// `markError(w.wrapped.ReportX)` passes `Some(Box::new(move || wrapped.report_x()))` with `let wrapped =
+/// self.wrapped;`.
 pub struct wrappingTracker {
     pub wrapped: &'static dyn SymbolTracker,
     pub bound: P<recoveryBoundary>,
@@ -374,11 +382,13 @@ pub struct DeclarationFileLinks {
     pub aliases_marked: Cell<bool>, // if file has had alias visibility marked
 }
 
-/// Go `EmitResolver`, handled as `P<EmitResolver>`, a checker holder (`&self, c: &mut Checker`). Go's `checker`
-/// field is dropped and so is `checkerMu`: the exported methods that lock it in Go (`IsDeclarationVisible`, ...) are
-/// the `_exported`/unsuffixed `pub` methods, and the declaration transformer serializes access to the checker itself
-/// (tsrs_declarations `Resolver::lock`). `isValueAliasDeclaration` / `aliasMarkingVisitor` are Go method values of
-/// `isValueAliasDeclarationWorker` / `aliasMarkingVisitorWorker`; Rust calls those methods directly.
+/// Go `EmitResolver`, handled as `P<EmitResolver>`, a checker holder (`&self, c: &mut Checker`).
+///
+/// Go's `checker` field is dropped and so is `checkerMu`: the exported methods that lock it in Go
+/// (`IsDeclarationVisible`, ...) are the `_exported`/unsuffixed `pub` methods, and the declaration
+/// transformer serializes access to the checker itself (`tsrs_declarations` `Resolver::lock`).
+/// `isValueAliasDeclaration` / `aliasMarkingVisitor` are Go method values of `isValueAliasDeclarationWorker`
+/// / `aliasMarkingVisitorWorker`; Rust calls those methods directly.
 #[derive(Default)]
 pub struct EmitResolver {
     pub reference_resolver: std::cell::OnceCell<P<tsrs_binder::ReferenceResolver<Checker>>>,

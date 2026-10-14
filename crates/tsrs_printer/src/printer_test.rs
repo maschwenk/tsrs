@@ -11,7 +11,7 @@ use tsrs_ast::NodeFactory;
 fn parse_type_script(text: &str, jsx: bool) -> P<SourceFile> {
     let file_name = if jsx { "/main.tsx" } else { "/main.ts" };
     tsrs_parser::parse_source_file(
-        SourceFileParseOptions { file_name: file_name.to_string(), path: Path::new(file_name.to_string()), external_module_indicator_options: Default::default() },
+        SourceFileParseOptions { file_name: file_name.to_string(), path: Path::new(file_name.to_string()), external_module_indicator_options: tsrs_ast::parseoptions::ExternalModuleIndicatorOptions::default() },
         text,
         get_script_kind_from_file_name(file_name),
     )
@@ -36,7 +36,7 @@ fn check_emit(emit_context: Option<P<EmitContext>>, file: P<SourceFile>, expecte
 fn synthetic_source_file(f: &NodeFactory, statements: Vec<P<Node>>) -> P<SourceFile> {
     let statements = f.new_node_list(statements);
     let eof = f.new_token(Kind::EndOfFile);
-    f.new_source_file(SourceFileParseOptions { file_name: "/file.ts".to_string(), path: Path::new("/file.ts".to_string()), external_module_indicator_options: Default::default() }, "", statements, eof)
+    f.new_source_file(SourceFileParseOptions { file_name: "/file.ts".to_string(), path: Path::new("/file.ts".to_string()), external_module_indicator_options: tsrs_ast::parseoptions::ExternalModuleIndicatorOptions::default() }, "", statements, eof)
         .as_source_file_p()
 }
 

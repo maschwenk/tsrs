@@ -34,16 +34,15 @@ fn a_burst_under_load_drops_no_events() {
 
     // Twice the cores, so that the busy threads cover the efficiency cores too.
     let stop = Arc::new(AtomicBool::new(false));
-    let spinners: Vec<_> = (0..2 * std::thread::available_parallelism().map_or(8, |n| n.get()))
-        .map(|_| {
+    let spinners: Vec<_> = std::iter::repeat_with(|| {
             let stop = Arc::clone(&stop);
             std::thread::spawn(move || {
                 let mut x = 0u64;
                 while !stop.load(Ordering::Relaxed) {
-                    x = std::hint::black_box(x.wrapping_mul(6364136223846793005).wrapping_add(1));
+                    x = std::hint::black_box(x.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1));
                 }
             })
-        })
+        }).take(2 * std::thread::available_parallelism().map_or(8, std::num::NonZero::get))
         .collect();
 
     const FILES: usize = 10_000;

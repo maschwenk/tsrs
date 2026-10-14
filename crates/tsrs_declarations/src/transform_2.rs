@@ -35,7 +35,7 @@ impl DeclarationTransformer {
 
         // Check if the RHS is a class expression - emit as a class declaration instead of a typed variable
         if ast::is_binary_expression(input) {
-            let rhs = unwrap_parenthesized_expression(input.as_binary_expression().right()).unwrap();
+            let rhs = unwrap_parenthesized_expression(input.as_binary_expression().right());
             if ast::is_class_expression(rhs) {
                 let class_expr_name = rhs.name();
                 let has_expr_name = class_expr_name.is_some_and(|n| !n.text().is_empty());
@@ -340,19 +340,19 @@ impl DeclarationTransformer {
                 *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = create_get_symbol_accessibility_diagnostic_for_node(node);
             }
         }
-        let type_node;
+
 
         let mut flags = declarationEmitNodeBuilderFlags;
         if self.in_class_expression_declaration.get() {
             flags &= !nodebuilder::Flags::WriteClassExpressionAsTypeLiteral;
         }
-        if ast::has_inferred_type(node) {
-            type_node = self.resolver.create_type_of_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+        let type_node = if ast::has_inferred_type(node) {
+            self.resolver.create_type_of_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get())
         } else if ast::is_function_like(node) {
-            type_node = self.resolver.create_return_type_of_signature_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+            self.resolver.create_return_type_of_signature_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get())
         } else {
             panic!("Unhandled node kind in ensureType: {:?}", node.kind());
-        }
+        };
 
         self.state.error_name_node.set(old_error_name_node);
         if let Some(old_diag) = old_diag {

@@ -114,7 +114,7 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
     }
 
     pub fn to_map(&self) -> FxHashMap<K, V> {
-        let mut out = FxHashMap::with_capacity_and_hasher(self.size(), Default::default());
+        let mut out = FxHashMap::with_capacity_and_hasher(self.size(), rustc_hash::FxBuildHasher);
         for shard in &self.shards {
             out.extend(shard.read().unwrap().iter().cloned());
         }
@@ -125,6 +125,7 @@ impl<K: Hash + Eq + Clone, V: Clone> SyncMap<K, V> {
         self.shards.iter().flat_map(|s| s.read().unwrap().iter().map(|(k, _)| k.clone()).collect::<Vec<_>>()).collect()
     }
 
+    #[must_use]
     pub fn clone_map(&self) -> SyncMap<K, V> {
         let clone = SyncMap::default();
         for (i, shard) in self.shards.iter().enumerate() {

@@ -403,7 +403,7 @@ pub(crate) fn get_contextual_type_for_argument(host: &dyn CheckerHost, p: &Param
     let t = s
         .c()
         .get_contextual_type_for_argument_at_index_exported(node, index);
-    s.opt_type_response(t)
+    s.opt_type_response(Some(t))
 }
 
 pub(crate) fn is_context_sensitive(host: &dyn CheckerHost, p: &Params) -> CheckerResult<Value> {
@@ -495,8 +495,8 @@ pub(crate) enum SignatureTypeOp {
     RestType,
 }
 
-/// `field`: "objectId" for getReturnTypeOfSignature (GetSignaturePropertyParams), "signature" for
-/// getRestTypeOfSignature (CheckerSignatureParams).
+/// `field`: "objectId" for getReturnTypeOfSignature (`GetSignaturePropertyParams`), "signature" for
+/// getRestTypeOfSignature (`CheckerSignatureParams`).
 pub(crate) fn signature_type_op(host: &dyn CheckerHost, p: &Params, field: &str, op: SignatureTypeOp) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let sig = s.resolve_signature(p.u64(field)?)?;

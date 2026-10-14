@@ -3,67 +3,67 @@ use tsrs_ast as ast;
 
 impl Checker {
     // exports.go:8
-    pub fn get_string_type(&mut self) -> P<Type> {
+    pub fn get_string_type(&self) -> P<Type> {
         self.string_type
     }
 
     // exports.go:12
-    pub fn get_number_type(&mut self) -> P<Type> {
+    pub fn get_number_type(&self) -> P<Type> {
         self.number_type
     }
 
     // exports.go:16
-    pub fn get_boolean_type(&mut self) -> P<Type> {
+    pub fn get_boolean_type(&self) -> P<Type> {
         self.boolean_type
     }
 
     // exports.go:20
-    pub fn get_void_type(&mut self) -> P<Type> {
+    pub fn get_void_type(&self) -> P<Type> {
         self.void_type
     }
 
     // exports.go:24
-    pub fn get_undefined_type(&mut self) -> P<Type> {
+    pub fn get_undefined_type(&self) -> P<Type> {
         self.undefined_type
     }
 
     // exports.go:28
-    pub fn get_null_type(&mut self) -> P<Type> {
+    pub fn get_null_type(&self) -> P<Type> {
         self.null_type
     }
 
     // exports.go:32
-    pub fn get_any_type(&mut self) -> P<Type> {
+    pub fn get_any_type(&self) -> P<Type> {
         self.any_type
     }
 
     // exports.go:36
-    pub fn get_error_type(&mut self) -> P<Type> {
+    pub fn get_error_type(&self) -> P<Type> {
         self.error_type
     }
 
     // exports.go:40
-    pub fn get_never_type(&mut self) -> P<Type> {
+    pub fn get_never_type(&self) -> P<Type> {
         self.never_type
     }
 
     // exports.go:44
-    pub fn get_unknown_type(&mut self) -> P<Type> {
+    pub fn get_unknown_type(&self) -> P<Type> {
         self.unknown_type
     }
 
     // exports.go:48
-    pub fn get_big_int_type(&mut self) -> P<Type> {
+    pub fn get_big_int_type(&self) -> P<Type> {
         self.bigint_type
     }
 
     // exports.go:52
-    pub fn get_es_symbol_type(&mut self) -> P<Type> {
+    pub fn get_es_symbol_type(&self) -> P<Type> {
         self.es_symbol_type
     }
 
     // exports.go:56
-    pub fn get_non_primitive_type(&mut self) -> P<Type> {
+    pub fn get_non_primitive_type(&self) -> P<Type> {
         self.non_primitive_type
     }
 
@@ -73,22 +73,22 @@ impl Checker {
     }
 
     // exports.go:64
-    pub fn get_unknown_symbol(&mut self) -> P<Symbol> {
+    pub fn get_unknown_symbol(&self) -> P<Symbol> {
         self.unknown_symbol
     }
 
     // exports.go:68
-    pub fn get_undefined_symbol(&mut self) -> P<Symbol> {
+    pub fn get_undefined_symbol(&self) -> P<Symbol> {
         self.undefined_symbol
     }
 
     // exports.go:72
-    pub fn get_arguments_symbol(&mut self) -> P<Symbol> {
+    pub fn get_arguments_symbol(&self) -> P<Symbol> {
         self.arguments_symbol
     }
 
     // exports.go:76
-    pub fn get_unknown_signature(&mut self) -> P<Signature> {
+    pub fn get_unknown_signature(&self) -> P<Signature> {
         self.unknown_signature
     }
 
@@ -98,7 +98,7 @@ impl Checker {
     }
 
     // exports.go:84
-    pub fn get_name_type_of_symbol(&mut self, symbol: P<Symbol>) -> Option<P<Type>> {
+    pub fn get_name_type_of_symbol(&self, symbol: P<Symbol>) -> Option<P<Type>> {
         if let Some(links) = self.value_symbol_links.try_get(symbol) {
             return links.name_type();
         }
@@ -210,7 +210,7 @@ pub fn get_declaration_modifier_flags_from_symbol_exported(s: P<Symbol>) -> Modi
 
 impl Checker {
     // exports.go:171
-    pub fn was_canceled(&mut self) -> bool {
+    pub fn was_canceled(&self) -> bool {
         self.was_canceled
     }
 
@@ -283,7 +283,7 @@ pub fn is_tuple_type_target(t: P<Type>) -> bool {
 
 impl Checker {
     // exports.go:227
-    pub fn is_array_type_exported(&mut self, t: P<Type>) -> bool {
+    pub fn is_array_type_exported(&self, t: P<Type>) -> bool {
         self.is_array_type(t)
     }
 
@@ -338,7 +338,7 @@ impl Checker {
         &mut self,
         node: P<Node>,
         arg_index: usize,
-    ) -> Option<P<Type>> {
+    ) -> P<Type> {
         self.get_contextual_type_for_argument_at_index(node, arg_index)
     }
 
@@ -461,8 +461,8 @@ impl Checker {
     }
 
     // exports.go:358
-    pub fn get_min_type_argument_count_exported(&mut self, type_parameters: &[P<Type>]) -> usize {
-        self.get_min_type_argument_count(type_parameters)
+    pub fn get_min_type_argument_count_exported(type_parameters: &[P<Type>]) -> usize {
+        Self::get_min_type_argument_count(type_parameters)
     }
 
     // exports.go:362

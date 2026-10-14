@@ -182,6 +182,7 @@ impl Overlay {
     // SpanMap and OriginalText satisfy lsconv.Script. An overlay holds the editor's raw text (for a
     // content-mapped file, that is the original foreign text, not the transformed output), so it never
     // carries a span map and its original text is its own text.
+    #[expect(clippy::unused_self, reason = "Span mapping is an optional property of the overlay instance, matching the host interface.")]
     pub fn span_map(&self) -> Option<&SpanMap> {
         None
     }
@@ -590,15 +591,12 @@ impl overlayFS {
 
         for change in changes {
             let uri = change.uri.clone();
-            let events = match file_event_map.get_mut(&uri) {
-                Some(events) => {
-                    assert!(events.open_change.is_none(), "should see no changes after open");
-                    events
-                }
-                None => {
-                    order.push(uri.clone());
-                    file_event_map.entry(uri.clone()).or_default()
-                }
+            let events = if let Some(events) = file_event_map.get_mut(&uri) {
+                assert!(events.open_change.is_none(), "should see no changes after open");
+                events
+            } else {
+                order.push(uri.clone());
+                file_event_map.entry(uri.clone()).or_default()
             };
 
             if !result.includes_watch_change_outside_node_modules && change.kind.is_watch_kind() && !uri.0.contains("/node_modules/") {

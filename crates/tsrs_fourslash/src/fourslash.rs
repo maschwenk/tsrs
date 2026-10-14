@@ -404,7 +404,7 @@ fn handle_server_request(user_preferences: &Mutex<lsutil::UserPreferences>, req:
             // Return current user preferences for each requested section.
             // The server requests multiple sections (js/ts, typescript, javascript, editor);
             // we return user preferences for "js/ts" and nil for others.
-            let prefs = || user_preferences.lock().unwrap().marshal_json_to().unwrap_or_default();
+            let prefs = || user_preferences.lock().unwrap().marshal_json_to();
             let params = req.unmarshal_params::<lsproto::ConfigurationParams>();
             let Ok(params) = params else {
                 return ResponseMessage { id: req.id.clone(), result: Some(Value::Array(vec![prefs()])), ..Default::default() };
@@ -1033,7 +1033,7 @@ impl FourslashTest {
         self.user_preferences = config.clone();
         *self.shared_user_preferences.lock().unwrap() = config.clone();
         let mut settings = OrderedMap::default();
-        settings.insert("js/ts".to_string(), config.marshal_json_to().unwrap_or_default());
+        settings.insert("js/ts".to_string(), config.marshal_json_to());
         self.send_notification(t, lsproto::WORKSPACE_DID_CHANGE_CONFIGURATION_INFO, lsproto::DidChangeConfigurationParams { settings: Value::Object(settings) });
     }
 

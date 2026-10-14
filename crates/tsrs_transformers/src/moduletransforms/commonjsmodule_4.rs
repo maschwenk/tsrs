@@ -271,6 +271,7 @@ impl CommonJSModuleTransformer {
     }
 
     // commonjsmodule.go:1622
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     pub(crate) fn visit_assignment_element(&self, node: P<Node>) -> Option<P<Node>> {
         if ast::is_binary_expression(node) {
             let n = node.as_binary_expression();

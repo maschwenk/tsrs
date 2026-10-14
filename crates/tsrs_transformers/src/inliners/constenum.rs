@@ -8,6 +8,7 @@ pub struct ConstEnumInliningTransformer {
 }
 
 // constenum.go:22
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_const_enum_inlining_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let compiler_options = opt.compiler_options;
     let emit_context = opt.context;

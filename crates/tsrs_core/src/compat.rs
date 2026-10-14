@@ -36,9 +36,12 @@ pub fn set_go_compatible_history(on: bool) {
     MODE.store(if on { GO } else { CANONICAL }, Ordering::Relaxed);
 }
 
-/// For harnesses whose baselines are tsgo's output: Go's behaviour unless `TSRS_CHECKER_ASSIGNMENT` names another
-/// assignment or `TSRS_HISTORY=canonical` (then the canonical behaviour, to measure how the baselines differ from it;
-/// the latter without naming an assignment, so the default scheduling, stealing included, is used).
+/// Selects the checker history required by tsgo reference baselines.
+///
+/// For harnesses whose baselines are tsgo's output: Go's behaviour unless `TSRS_CHECKER_ASSIGNMENT` names
+/// another assignment or `TSRS_HISTORY=canonical` (then the canonical behaviour, to measure how the baselines
+/// differ from it; the latter without naming an assignment, so the default scheduling, stealing included, is
+/// used).
 pub fn use_go_history_for_tsgo_baselines() {
     let other = std::env::var("TSRS_CHECKER_ASSIGNMENT").is_ok_and(|v| !v.is_empty() && v != "go")
         || std::env::var("TSRS_HISTORY").is_ok_and(|v| v == "canonical");

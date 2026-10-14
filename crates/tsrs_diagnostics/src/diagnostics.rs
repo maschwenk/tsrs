@@ -114,7 +114,7 @@ static MESSAGES_BY_KEY: OnceLock<FxHashMap<&'static str, &'static Message>> = On
 
 fn messages_by_key() -> &'static FxHashMap<&'static str, &'static Message> {
     MESSAGES_BY_KEY.get_or_init(|| {
-        let mut messages = FxHashMap::with_capacity_and_hasher(ALL_MESSAGES.len(), Default::default());
+        let mut messages = FxHashMap::with_capacity_and_hasher(ALL_MESSAGES.len(), rustc_hash::FxBuildHasher);
         messages.extend(ALL_MESSAGES.iter().map(|&message| (message.key.0, message)));
         messages
     })

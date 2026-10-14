@@ -30,6 +30,7 @@ pub(crate) fn get_all_diagnostics(ctx: &Context, program: &'static Program, file
 
 impl LanguageService {
     // diagnostics.go:32
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub fn provide_diagnostics(&self, ctx: &Context, uri: &lsproto::DocumentUri) -> Result<lsproto::DocumentDiagnosticResponse, lsproto::Error> {
         let (program, file) = self.get_program_and_file(uri);
 
@@ -68,7 +69,7 @@ impl LanguageService {
         // them at position 0.
         let mut synthesized_by_file: OrderedMap<P<SourceFile>, Vec<P<Diagnostic>>> = OrderedMap::default();
         for diag_slice in diagnostics {
-            for &diag in diag_slice.iter() {
+            for &diag in *diag_slice {
                 if is_synthesized_content_mapped_diagnostic(diag) {
                     synthesized_by_file.entry(diag.file().unwrap()).or_default().push(diag);
                     continue;

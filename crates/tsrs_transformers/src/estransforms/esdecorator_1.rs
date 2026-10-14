@@ -333,6 +333,7 @@ impl esDecoratorTransformer {
     }
 
     // esdecorator.go:369
+    #[expect(clippy::unused_self, reason = "Node visitor callbacks share the transformer receiver used by the visitor factory.")]
     pub(crate) fn modifier_visitor_visit(&self, node: P<Node>) -> Option<P<Node>> {
         if node.kind() == Kind::Decorator {
             return None;
@@ -1071,6 +1072,7 @@ impl esDecoratorTransformer {
     }
 
     // esdecorator.go:1184
+    #[expect(clippy::unnecessary_wraps, reason = "Visitor branches share an optional node result so sibling branches can remove a node.")]
     fn visit_constructor_declaration(&self, node: P<Node>) -> Option<P<Node>> {
         let f = self.base.factory();
         self.enter_class_element(node);

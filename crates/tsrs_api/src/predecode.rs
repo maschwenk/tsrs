@@ -65,8 +65,8 @@ enum IntRange {
     U64,
 }
 
-/// A JSON number decoded into a Go integer: plain integer syntax (no fraction or exponent) within range, checked on
-/// the exact literal (f64 would round i64::MAX / u64::MAX up to 2^63 / 2^64).
+/// A JSON number decoded into a Go integer: plain integer syntax (no fraction or exponent) within range,
+/// checked on the exact literal (f64 would round `i64::MAX` / `u64::MAX` up to 2^63 / 2^64).
 fn int_ok(v: &Value, lexeme: Option<&str>, range: IntRange) -> bool {
     let Value::Number(n) = v else { return false };
     let exact: Option<i128> = match lexeme {
@@ -159,7 +159,7 @@ fn check_external_integers(go_type: &str, o: &tsrs_core::collections::OrderedMap
         }
         let p = format!("{pointer}/{}", token(name));
         let go_int = if bits == 64 { "int" } else { "int32" };
-        let Some(lexeme) = lexemes.get(&p) else { return None };
+        let lexeme = lexemes.get(&p)?;
         if lexeme.contains(['.', 'e', 'E']) {
             return Some(Err(format!("cannot unmarshal JSON number {lexeme} into Go {go_int} within \"{p}\": invalid syntax")));
         }
@@ -215,7 +215,7 @@ fn check_request_file_system(go_type: &str, o: &tsrs_core::collections::OrderedM
         match o.get(name) {
             None | Some(Value::Null) => Ok(()),
             Some(Value::Object(m)) => {
-                for (k, v) in m.iter() {
+                for (k, v) in m {
                     if !matches!(v, Value::Null) {
                         check(v, &format!("{p}/{}", token(k)))?;
                     }
@@ -527,7 +527,7 @@ fn index_objects(v: &Value, pointer: &mut String, out: &mut FxHashMap<usize, Str
     match v {
         Value::Object(o) => {
             out.insert(std::ptr::from_ref::<Value>(v) as usize, pointer.clone());
-            for (k, item) in o.iter() {
+            for (k, item) in o {
                 let len = pointer.len();
                 pointer.push('/');
                 pointer.push_str(&token(k));

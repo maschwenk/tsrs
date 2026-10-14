@@ -220,7 +220,7 @@ impl LanguageService {
 
     // findallreferences.go:181
     pub(crate) fn get_location_of_entry_for_feature(&self, entry: &ReferenceEntry, feature: Feature) -> Option<lsproto::Location> {
-        self.resolve_entry_source(entry);
+        Self::resolve_entry_source(entry);
         let (location, fidelity) = self.source_file_range_to_lsp_location_for_feature(entry.source_file.get().unwrap(), entry.text_range.get().unwrap(), feature);
         if fidelity.is_single_segment() {
             Some(location)
@@ -230,7 +230,7 @@ impl LanguageService {
     }
 
     // findallreferences.go:187
-    pub(crate) fn resolve_entry_source(&self, entry: &ReferenceEntry) {
+    pub(crate) fn resolve_entry_source(entry: &ReferenceEntry) {
         if entry.source_file.get().is_none() {
             assert!(entry.node.is_some(), "reference entry must have a node or source file");
             entry.source_file.set(ast::get_source_file_of_node(entry.node.unwrap()));
@@ -243,7 +243,7 @@ impl LanguageService {
 
     // findallreferences.go:198
     pub(crate) fn resolve_entry<'e>(&self, entry: &'e ReferenceEntry) -> &'e ReferenceEntry {
-        self.resolve_entry_source(entry);
+        Self::resolve_entry_source(entry);
         if entry.lsp_range.borrow().is_none() {
             let (location, fidelity) = self.source_file_range_to_lsp_location(entry.source_file.get().unwrap(), entry.text_range.get().unwrap());
             *entry.lsp_range.borrow_mut() = Some(location);
@@ -968,6 +968,7 @@ impl LanguageService {
     }
 
     // findallreferences.go:789
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub(crate) fn symbol_and_entries_to_references(
         &self,
         _ctx: &Context,
@@ -986,6 +987,7 @@ impl LanguageService {
     }
 
     // findallreferences.go:800
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub(crate) fn symbol_and_entries_to_vs_references(
         &self,
         ctx: &Context,
@@ -1213,6 +1215,7 @@ impl LanguageService {
     }
 
     // findallreferences.go:1048
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     pub(crate) fn symbol_and_entries_to_implementations(
         &self,
         ctx: &Context,
@@ -1275,9 +1278,7 @@ pub(crate) fn is_declaration_of_symbol(node: Option<P<Node>>, target: Option<P<S
         source = Some(decl);
     } else if node.kind() == Kind::DefaultKeyword {
         source = node.parent();
-    } else if ast::is_literal_computed_property_declaration_name(node) {
-        source = node.parent().unwrap().parent();
-    } else if node.kind() == Kind::ConstructorKeyword && ast::is_constructor_declaration(node.parent().unwrap()) {
+    } else if (ast::is_literal_computed_property_declaration_name(node)) || (node.kind() == Kind::ConstructorKeyword && ast::is_constructor_declaration(node.parent().unwrap())) {
         source = node.parent().unwrap().parent();
     }
 
@@ -1302,9 +1303,7 @@ impl LanguageService {
         let mut links: Vec<lsproto::LocationLink> = Vec::with_capacity(entries.len());
         links.extend(entries.iter().filter_map(|entry| {
             // Get the selection range (the actual reference)
-            let Some(loc) = self.get_location_of_entry_for_feature(entry, feature) else {
-                return None;
-            };
+            let loc = self.get_location_of_entry_for_feature(entry, feature)?;
             let target_selection_range = loc.range;
             let mut target_range = target_selection_range;
 
@@ -1336,7 +1335,7 @@ impl LanguageService {
     pub(crate) fn merge_references(&self, program: &'static Program, references_to_merge: Vec<Vec<SymbolAndEntries>>) -> Vec<SymbolAndEntries> {
         let mut result: Vec<SymbolAndEntries> = Vec::new();
         let get_source_file_index_of_entry = |entry: &ReferenceEntry| -> Option<usize> {
-            self.resolve_entry_source(entry);
+            Self::resolve_entry_source(entry);
             program
                 .source_files()
                 .iter()
@@ -1458,9 +1457,7 @@ impl LanguageService {
                 if !r.is_node_entry() {
                     return None;
                 }
-                let Some(node) = r.node() else {
-                    return None;
-                };
+                let node = r.node()?;
                 if decl_names.contains(&node) {
                     return None;
                 }
@@ -1514,7 +1511,7 @@ impl LanguageService {
             };
 
             if let Some(module_symbol) = resolved_file.as_node().symbol().map(|s| checker.get_merged_symbol_exported(s)) {
-                return self.get_referenced_symbols_for_module(checker, program, module_symbol, false /*excludeImportTypeOfExportEquals*/, source_files, &source_files_set);
+                return Self::get_referenced_symbols_for_module(checker, program, module_symbol, false /*excludeImportTypeOfExportEquals*/, source_files, &source_files_set);
             }
 
             // !!! not implemented
@@ -1560,7 +1557,7 @@ impl LanguageService {
                     // anything useful, but I guess it's better than nothing, and there's an existing
                     // test that expects this to happen (fourslash/cases/untypedModuleImport.ts).
                 }
-                return self.get_references_for_string_literal(ctx, node, source_files, checker);
+                return Self::get_references_for_string_literal(ctx, node, source_files, checker);
             }
             return Vec::new();
         };
@@ -1569,7 +1566,7 @@ impl LanguageService {
             let Some(parent) = symbol.parent() else {
                 return Vec::new();
             };
-            return self.get_referenced_symbols_for_module(checker, program, parent, false /*excludeImportTypeOfExportEquals*/, source_files, &source_files_set);
+            return Self::get_referenced_symbols_for_module(checker, program, parent, false /*excludeImportTypeOfExportEquals*/, source_files, &source_files_set);
         }
 
         let module_references =
@@ -1593,7 +1590,6 @@ impl LanguageService {
 
     // findallreferences.go:1354
     pub(crate) fn get_references_for_string_literal(
-        &self,
         ctx: &Context,
         node: P<Node>, /*StringLiteralLike*/
         source_files: &[P<SourceFile>],
@@ -1662,14 +1658,13 @@ impl LanguageService {
         if !symbol.flags().intersects(SymbolFlags::Module) || symbol.declarations().is_empty() {
             return None;
         }
-        if let Some(module_source_file) = symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d)) {
+        {
+            let module_source_file = symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d))?;
             module_source_file_name = module_source_file.as_source_file().file_name();
-        } else {
-            return None;
         }
         let export_equals = symbol.exports().and_then(|exports| exports.lookup(ast::InternalSymbolNameExportEquals));
         // If exportEquals != nil, we're about to add references to `import("mod")` anyway, so don't double-count them.
-        let module_references = self.get_referenced_symbols_for_module(checker, program, symbol, export_equals.is_some(), source_files, source_files_set);
+        let module_references = Self::get_referenced_symbols_for_module(checker, program, symbol, export_equals.is_some(), source_files, source_files_set);
         let Some(export_equals) = export_equals else {
             return Some(module_references);
         };
@@ -2072,7 +2067,6 @@ pub(crate) fn get_merged_aliased_symbol_of_namespace_export_declaration(node: P<
 impl LanguageService {
     // findallreferences.go:1735
     pub(crate) fn get_referenced_symbols_for_module(
-        &self,
         checker: &mut Checker,
         program: &'static Program,
         symbol: P<Symbol>,
@@ -2164,18 +2158,18 @@ impl LanguageService {
             references.extend(exported.declarations().iter().filter_map(|&decl| {
                 let source_file = ast::get_source_file_of_node(decl).unwrap();
                 if source_files_set.has(&source_file.file_name().to_string()) {
-                    let node: P<Node>;
+
                     // At `module.exports = ...`, reference node is `module`
-                    if ast::is_binary_expression(decl) && ast::is_property_access_expression(decl.as_binary_expression().left) {
-                        node = decl.as_binary_expression().left.expression().unwrap();
+                    let node: P<Node> = if ast::is_binary_expression(decl) && ast::is_property_access_expression(decl.as_binary_expression().left) {
+                        decl.as_binary_expression().left.expression().unwrap()
                     } else if ast::is_export_assignment(decl) {
                         // Find the export keyword
                         let n = astnav::find_child_of_kind(decl, Kind::ExportKeyword, source_file);
                         assert!(n.is_some(), "Expected to find export keyword");
-                        node = n.unwrap();
+                        n.unwrap()
                     } else {
-                        node = ast::get_name_of_declaration(Some(decl)).unwrap_or(decl);
-                    }
+                        ast::get_name_of_declaration(Some(decl)).unwrap_or(decl)
+                    };
                     Some(new_node_entry(node))
                 } else {
                     None
@@ -3077,6 +3071,7 @@ impl RefState<'_> {
 
     // Go's `fromRoot` closure; it receives the state and the callbacks first (PORTING.md callback rule).
     // findallreferences.go:2600
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn from_root(
         &mut self,
         cb_symbol: &mut dyn FnMut(P<Symbol>, Option<P<Symbol>>, Option<P<Symbol>>) -> Option<P<Symbol>>,
@@ -3210,15 +3205,15 @@ impl RefState<'_> {
         // symbolAtLocation for a binding element is the local symbol. See if the search symbol is the property.
         // Don't do this when populating search set for a rename when prefix and suffix text will be provided -- just rename the local.
         if !is_for_rename_populate_search_symbol_set {
-            let binding_element_property_symbol: Option<P<Symbol>>;
-            if only_include_binding_element_at_reference_location {
+
+            let binding_element_property_symbol: Option<P<Symbol>> = if only_include_binding_element_at_reference_location {
                 if !is_object_binding_element_without_property_name(location.parent().unwrap()) {
                     return (None, EntryKind::None);
                 }
-                binding_element_property_symbol = get_property_symbol_from_binding_element(self.checker, location.parent().unwrap());
+                get_property_symbol_from_binding_element(self.checker, location.parent().unwrap())
             } else {
-                binding_element_property_symbol = get_property_symbol_of_object_binding_pattern_without_property_name(symbol, self.checker);
-            }
+                get_property_symbol_of_object_binding_pattern_without_property_name(symbol, self.checker)
+            };
             let Some(binding_element_property_symbol) = binding_element_property_symbol else {
                 return (None, EntryKind::None);
             };

@@ -549,9 +549,9 @@ fn watch_root(file_system_watcher: &lsproto::FileSystemWatcher) -> Option<String
         return Some(root_from_glob(pattern));
     }
     if let Some(relative_pattern) = &file_system_watcher.glob_pattern.relative_pattern {
-        let base = match &relative_pattern.base_uri.uri {
-            Some(uri) => lsproto::DocumentUri(uri.0.clone()).file_name(),
-            None => return None,
+        let base = {
+            let uri = relative_pattern.base_uri.uri.as_ref()?;
+            lsproto::DocumentUri(uri.0.clone()).file_name()
         };
         let pattern = tspath::combine_paths(&base, &[&relative_pattern.pattern]);
         return Some(root_from_glob(&pattern));

@@ -51,13 +51,14 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:46
-    fn create_node_builder(&mut self) -> (P<NodeBuilder>, IdToSymbol) {
+    fn create_node_builder(&self) -> (P<NodeBuilder>, IdToSymbol) {
         let id_to_symbol: IdToSymbol = P::new(RefCell::new(FxHashMap::default()));
         let node_builder = checker::new_node_builder_ex(self.type_checker, self.change_tracker.emit_context, Some(id_to_symbol));
         (node_builder, id_to_symbol)
     }
 
     // codeactions_missingmemberfixer.go:52
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn create_member_from_symbol(
         &mut self,
         symbol: P<Symbol>,
@@ -289,6 +290,7 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:208
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn create_signature_declaration_from_signature(
         &mut self,
         signature: P<Signature>,
@@ -451,6 +453,7 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:305
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn create_signature_declaration_from_signatures(
         &mut self,
         signatures: &[P<Signature>],
@@ -686,7 +689,7 @@ pub(crate) fn create_dummy_parameters(
 }
 
 // codeactions_missingmemberfixer.go:489
-pub(crate) fn create_declaration_name(factory: &NodeFactory, type_checker: &mut Checker, symbol: Option<P<Symbol>>, declaration: Option<P<Node>>) -> Option<P<Node>> {
+pub(crate) fn create_declaration_name(factory: &NodeFactory, type_checker: &Checker, symbol: Option<P<Symbol>>, declaration: Option<P<Node>>) -> Option<P<Node>> {
     if let Some(symbol) = symbol {
         if symbol.check_flags().intersects(CheckFlags::Mapped) {
             let name_type = type_checker.get_name_type_of_symbol(symbol);

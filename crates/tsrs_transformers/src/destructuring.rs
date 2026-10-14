@@ -134,6 +134,7 @@ impl flattener<'_> {
     }
 
     // destructuring.go:114
+    #[expect(clippy::unused_self, reason = "The binding and assignment element callbacks share a mutable flattener receiver.")]
     fn create_array_assignment_element(&mut self, expr: P<Node>) -> P<Node> {
         expr
     }

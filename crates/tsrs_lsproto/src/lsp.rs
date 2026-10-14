@@ -358,6 +358,7 @@ pub trait HasLocation {
 
 // lsp.go:83
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
 pub struct URI(pub String); // !!!
 
 impl Deref for URI {
@@ -525,6 +526,7 @@ impl<Params, Resp> RequestInfo<Params, Resp> {
 
 impl<Params: Json, Resp: Json> RequestInfo<Params, Resp> {
     // lsp.go:194. `result` is a response's raw result (None when the response had none).
+    #[expect(clippy::unused_self, reason = "RequestInfo exposes typed request and response codecs through the same instance API.")]
     pub fn unmarshal_result(&self, result: Option<&Value>) -> Result<Resp, JsonError> {
         let Some(raw) = result else {
             return Err(JsonError::plain("unexpected EOF"));
@@ -632,7 +634,7 @@ impl Json for NoParams {
     const IS_NO_PARAMS: bool = true;
 
     fn to_json(&self) -> Value {
-        Value::Object(Default::default())
+        Value::Object(tsrs_core::collections::OrderedMap::default())
     }
 
     fn from_json(v: &Value) -> Result<Self, JsonError> {
@@ -671,7 +673,7 @@ impl Json for EmptyObject {
     const GO_TYPE: &'static str = "struct {}";
 
     fn to_json(&self) -> Value {
-        Value::Object(Default::default())
+        Value::Object(tsrs_core::collections::OrderedMap::default())
     }
 
     fn from_json(v: &Value) -> Result<Self, JsonError> {

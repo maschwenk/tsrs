@@ -3,7 +3,7 @@
 // Run: TS_REF=<ts-ref> SERVER=<transport_test_server> node --conditions=@typescript/source --test <this file>
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { after, describe, test } from "node:test";
@@ -15,7 +15,7 @@ const { Client: AsyncClient } = await import(`${api}/async/client.ts`);
 const { serverFS } = await import(`${api}/fs.ts`);
 
 const ASTRAL = "const \u{1F600} = '\u{1D7D8}\u00e9';\n";
-const tmp = mkdtempSync(join(tmpdir(), "tsrs-api-transport-"));
+const tmp = realpathSync(mkdtempSync(join(tmpdir(), "tsrs-api-transport-")));
 after(() => rmSync(tmp, { recursive: true, force: true }));
 writeFileSync(join(tmp, "real.ts"), ASTRAL);
 mkdirSync(join(tmp, "dir"));
@@ -85,7 +85,7 @@ describe("sync client (MessagePack, pinned SyncRpcChannel)", () => {
 
     test("filesystem callbacks: value, missing, useOS, sentinels, writes", () => {
         const log = [];
-        const c = syncClient({ fs: virtualFS(log) });
+        const c = syncClient({ fs: virtualFS(log), useCaseSensitiveFileNames: true });
         try {
             const fs = (op, path, data) => c.apiRequest("test/fs", { op, path, data });
             assert.equal(fs("readFile", "/v/main.ts"), ASTRAL);

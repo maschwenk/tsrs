@@ -146,11 +146,10 @@ pub(crate) fn for_each_import(program: &'static Program, source_file: P<SourceFi
                         }
                     }
                 }
-                Kind::ImportEqualsDeclaration => {
-                    if is_external_module_import_equals(node) {
+                Kind::ImportEqualsDeclaration
+                    if is_external_module_import_equals(node) => {
                         action(node, node.as_import_equals_declaration().module_reference.expression().unwrap());
                     }
-                }
                 _ => {}
             }
             false
@@ -507,12 +506,11 @@ impl searchesFromDirectImports {
             if let Some(named_bindings) = import_clause.as_import_clause().named_bindings {
                 match named_bindings.kind() {
                     Kind::NamespaceImport => self.handle_namespace_import_like(checker, named_bindings.name().unwrap()),
-                    Kind::NamedImports => {
+                    Kind::NamedImports
                         // 'default' might be accessed as a named import `{ default as foo }`.
-                        if self.export_kind == ExportKind::Named || self.export_kind == ExportKind::Default {
+                        if (self.export_kind == ExportKind::Named || self.export_kind == ExportKind::Default) => {
                             self.search_for_named_import(checker, Some(named_bindings));
                         }
-                    }
                     _ => {}
                 }
             }
@@ -601,33 +599,32 @@ pub(crate) fn get_import_or_export_symbol(node: P<Node>, symbol: P<Symbol>, chec
                 return None;
             }
             return export_info(export_symbol, get_export_kind_for_declaration(parent), checker);
-        } else {
-            let export_node = get_export_node(parent, node);
-            if let Some(export_node) = export_node.filter(|&export_node| {
-                ast::has_syntactic_modifier(export_node, ModifierFlags::Export) || ast::is_implicitly_exported_jsdoc_declaration(export_node)
-            }) {
-                if ast::is_import_equals_declaration(export_node) && export_node.as_import_equals_declaration().module_reference == node {
-                    // We're at `Y` in `export import X = Y`. This is not the exported symbol, the left-hand-side is. So treat this as an import statement.
-                    if coming_from_export {
-                        return None;
-                    }
-                    let lhs_symbol = checker.get_symbol_at_location_exported(export_node.name().unwrap());
-                    return Some(ImportExportSymbol { kind: ImpExpKind::Import, symbol: lhs_symbol, export_info: None });
+        }
+        let export_node = get_export_node(parent, node);
+        if let Some(export_node) = export_node.filter(|&export_node| {
+            ast::has_syntactic_modifier(export_node, ModifierFlags::Export) || ast::is_implicitly_exported_jsdoc_declaration(export_node)
+        }) {
+            if ast::is_import_equals_declaration(export_node) && export_node.as_import_equals_declaration().module_reference == node {
+                // We're at `Y` in `export import X = Y`. This is not the exported symbol, the left-hand-side is. So treat this as an import statement.
+                if coming_from_export {
+                    return None;
                 }
-                return export_info(symbol, get_export_kind_for_declaration(export_node), checker);
-            } else if ast::is_namespace_export(parent) {
-                return export_info(symbol, ExportKind::Named, checker);
-            } else if ast::is_export_assignment(parent) {
-                return get_export_assignment_export(parent);
-            } else if grandparent.is_some_and(ast::is_export_assignment) {
-                return get_export_assignment_export(grandparent.unwrap());
-            } else if ast::is_binary_expression(parent) {
-                return get_special_property_export(checker, parent, true /*useLhsSymbol*/);
-            } else if grandparent.is_some_and(ast::is_binary_expression) {
-                return get_special_property_export(checker, grandparent.unwrap(), true /*useLhsSymbol*/);
-            } else if ast::is_jsdoc_typedef_tag(parent) || ast::is_jsdoc_callback_tag(parent) {
-                return export_info(symbol, ExportKind::Named, checker);
+                let lhs_symbol = checker.get_symbol_at_location_exported(export_node.name().unwrap());
+                return Some(ImportExportSymbol { kind: ImpExpKind::Import, symbol: lhs_symbol, export_info: None });
             }
+            return export_info(symbol, get_export_kind_for_declaration(export_node), checker);
+        } else if ast::is_namespace_export(parent) {
+            return export_info(symbol, ExportKind::Named, checker);
+        } else if ast::is_export_assignment(parent) {
+            return get_export_assignment_export(parent);
+        } else if grandparent.is_some_and(ast::is_export_assignment) {
+            return get_export_assignment_export(grandparent.unwrap());
+        } else if ast::is_binary_expression(parent) {
+            return get_special_property_export(checker, parent, true /*useLhsSymbol*/);
+        } else if grandparent.is_some_and(ast::is_binary_expression) {
+            return get_special_property_export(checker, grandparent.unwrap(), true /*useLhsSymbol*/);
+        } else if ast::is_jsdoc_typedef_tag(parent) || ast::is_jsdoc_callback_tag(parent) {
+            return export_info(symbol, ExportKind::Named, checker);
         }
         None
     };

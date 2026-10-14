@@ -47,7 +47,7 @@ impl<T: FS> WrappedFS<T> {
     }
 
     // ReadFile without copying the embedded contents.
-    pub fn read_embedded_file(&self, path: &str) -> Option<&'static str> {
+    pub fn read_embedded_file(path: &str) -> Option<&'static str> {
         embedded_file(path)
     }
 }

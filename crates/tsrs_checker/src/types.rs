@@ -109,12 +109,9 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
     /// Go `m[k] = v`. Creates the map if it is nil (Go would panic; faithful code always `make`s first).
     #[inline]
     pub fn set(&self, key: K, value: V) {
-        let m = match self.for_write() {
-            Some(m) => m,
-            None => {
-                self.make();
-                self.0.get().unwrap()
-            }
+        let m = if let Some(m) = self.for_write() { m } else {
+            self.make();
+            self.0.get().unwrap()
         };
         m.borrow_mut().insert(key, value);
     }
@@ -127,6 +124,10 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
     #[inline]
     pub fn len(&self) -> usize {
         self.0.get().map_or(0, |m| tsrs_core::sharedgraph::with_ref(&m, FxHashMap::len))
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.0.get().is_none_or(|m| tsrs_core::sharedgraph::with_ref(&m, FxHashMap::is_empty))
     }
     #[inline]
     pub fn clear(&self) {
@@ -143,7 +144,7 @@ impl<K: Eq + Hash + Clone + 'static, V: Clone + 'static> GoMap<K, V> {
             let mut m = m.borrow_mut();
             let len = m.len();
             if m.capacity() > 64 && m.capacity() > 4 * len {
-                *m = FxHashMap::with_capacity_and_hasher(len, Default::default());
+                *m = FxHashMap::with_capacity_and_hasher(len, rustc_hash::FxBuildHasher);
             } else {
                 m.clear();
             }
@@ -976,7 +977,7 @@ static typeFlagNames: [(TypeFlags, &str); 29] = [
     (TypeFlags::Intersection, "Intersection"),
 ];
 
-/// FormatTypeFlags returns the individual flag names as a slice of strings.
+/// `FormatTypeFlags` returns the individual flag names as a slice of strings.
 pub fn format_type_flags(flags: TypeFlags) -> Vec<&'static str> {
     let mut result = Vec::with_capacity(flags.bits().count_ones() as usize);
     result.extend(typeFlagNames.iter().filter_map(|(flag, name)| if flags.intersects(*flag) { Some(*name) } else { None }));
@@ -1110,11 +1111,12 @@ impl TypeAlias {
 }
 
 /// The alias argument of the type constructors that look up a cache before they create a type (union,
-/// intersection, indexed access, object type instantiation; Go passes a `*TypeAlias`). `Pending` is an instantiated
-/// alias (Go's `instantiateTypeAlias` result) that is allocated only when a type is created with it: the cache key
-/// needs only its symbol and type arguments, and most calls return a cached type (on the private monorepo 1.79M of the 2.34M
-/// instantiated aliases were dropped that way). A pending alias is allocated at most once, so every type created
-/// with it shares one `TypeAlias`, as before.
+/// intersection, indexed access, object type instantiation; Go passes a `*TypeAlias`).
+///
+/// `Pending` is an instantiated alias (Go's `instantiateTypeAlias` result) that is allocated only when a type
+/// is created with it: the cache key needs only its symbol and type arguments, and most calls return a cached
+/// type (on the private monorepo 1.79M of the 2.34M instantiated aliases were dropped that way). A pending
+/// alias is allocated at most once, so every type created with it shares one `TypeAlias`, as before.
 #[derive(Clone, Copy, Default)]
 pub enum AliasArg<'a> {
     #[default]
@@ -1146,7 +1148,7 @@ impl From<Option<P<TypeAlias>>> for AliasArg<'_> {
 impl<'a> AliasArg<'a> {
     /// `alias` if given, else the pending one (Go: `if alias == nil { alias = c.instantiateTypeAlias(...) }`).
     #[inline]
-    pub fn given_or_pending(alias: Option<P<TypeAlias>>, pending: &'a Option<PendingTypeAlias>) -> AliasArg<'a> {
+    pub fn given_or_pending(alias: Option<P<TypeAlias>>, pending: Option<&'a PendingTypeAlias>) -> AliasArg<'a> {
         match (alias, pending) {
             (Some(alias), _) => AliasArg::Some(alias),
             (None, Some(pending)) => AliasArg::Pending(pending),
@@ -1975,8 +1977,9 @@ impl TypeExt for P<Type> {
 
 // TypeData
 
-/// Go's `TypeData` interface: a view of the data struct stored in the same allocation, right after the `Type` header
-/// (`TypeAlloc`, `Type::alloc`).
+/// Go's `TypeData` interface: a view of the data struct stored in the same allocation, right after the `Type`
+/// header (`TypeAlloc`, `Type::alloc`).
+///
 /// Go's `TypeBase` (which embeds the `Type` header) has no Rust counterpart: header fields live on `Type`.
 #[derive(Clone, Copy)]
 pub enum TypeData {
@@ -2260,13 +2263,10 @@ impl CountOrIndexInfos {
 impl StructuredType {
     #[inline]
     fn resolved_for_write(&self) -> P<StructuredMembers> {
-        match self.resolved.get() {
-            Some(resolved) => resolved,
-            None => {
-                let resolved = P::new(StructuredMembers::default());
-                self.resolved.set(Some(resolved));
-                resolved
-            }
+        if let Some(resolved) = self.resolved.get() { resolved } else {
+            let resolved = P::new(StructuredMembers::default());
+            self.resolved.set(Some(resolved));
+            resolved
         }
     }
 
@@ -2358,10 +2358,12 @@ impl StructuredType {
 // EvolvingArrayType:
 // ObjectFlagsEvolvingArray: Evolving array type
 
-/// `repr(C)` here and on the other object, union and intersection data structs (each embedding its parent as its
-/// first field) puts the `ObjectType` / `StructuredType` of every such type at one offset from the header, so
-/// `TypeData::as_object_type` and `as_structured_type` compile to one range test of the data tag instead of a
-/// switch over per-struct field offsets.
+/// Keeps embedded object-type headers at the allocation's start.
+///
+/// `repr(C)` here and on the other object, union and intersection data structs (each embedding its parent as
+/// its first field) puts the `ObjectType` / `StructuredType` of every such type at one offset from the
+/// header, so `TypeData::as_object_type` and `as_structured_type` compile to one range test of the data tag
+/// instead of a switch over per-struct field offsets.
 #[derive(Default)]
 #[repr(C)]
 pub struct ObjectType {
@@ -2388,12 +2390,14 @@ embeds!(TypeReference, object_type, ObjectType);
 
 // InterfaceType (when generic, serves as reference to instantiation of itself)
 
-/// Go's `instantiations` map of a generic class, interface or tuple target (`map[CacheHashKey]*Type`, keyed by
-/// `getTypeListKey(typeArguments)`). Every value is a non-deferred reference whose `resolved_type_arguments` are
-/// exactly the list its key was made from (the target itself for its type parameters), and they never change, so
-/// the table stores only the references and compares type-argument lists: one word per slot instead of the 128-bit
-/// key plus the value, and a lookup hashes the type ids instead of xxh3 over the key bytes. Exact list equality maps
-/// lists to references like Go's collision-free 128-bit key does. Nil until `make()`, like the Go map.
+/// Go's `instantiations` map of a generic class, interface or tuple target (`map[CacheHashKey]*Type`, keyed
+/// by `getTypeListKey(typeArguments)`).
+///
+/// Every value is a non-deferred reference whose `resolved_type_arguments` are exactly the list its key was
+/// made from (the target itself for its type parameters), and they never change, so the table stores only the
+/// references and compares type-argument lists: one word per slot instead of the 128-bit key plus the value,
+/// and a lookup hashes the type ids instead of xxh3 over the key bytes. Exact list equality maps lists to
+/// references like Go's collision-free 128-bit key does. Nil until `make()`, like the Go map.
 #[derive(Default)]
 pub struct ReferenceInstantiations(OvExact<Option<P<RefCell<hashbrown::HashTable<P<Type>>>>>>);
 
@@ -2616,7 +2620,7 @@ impl MappedType {
         self.template_type.get()
     }
     #[inline]
-    pub fn resolve_components(&self, c: &mut Checker, typ: P<Type>) {
+    pub fn resolve_components(c: &mut Checker, typ: P<Type>) {
         c.get_type_parameter_from_mapped_type(typ);
         c.get_constraint_type_from_mapped_type(typ);
         c.get_name_type_from_mapped_type(typ);
@@ -2649,13 +2653,17 @@ embeds!(EvolvingArrayType, object_type, ObjectType);
 
 // UnionOrIntersectionTypeData
 
-/// Go's `UnionOrIntersectionType` / `UnionType` / `IntersectionType` fields other than `types` are set on few types
-/// (on the private monorepo single: of 1.07M unions 12% get an origin, 9.5% a key property name, ~6% each a
-/// property cache, resolved properties, a reduced or a regular type; of 1.17M intersections 21% a non-augmented
-/// property cache, 14% an apparent type, 4.4% resolved properties), so they live in a tail allocated on the first
-/// non-nil write: a `UnionRare` or an `IntersectionRare`, both starting with the shared `UnionOrIntersectionRare`.
-/// Reads of an absent tail return the zero value, like the unset Go field. The tail word keeps the kind in bit 0
-/// (set at construction) so the shared accessors allocate the right tail.
+/// Keeps uncommon union and intersection metadata out of the common fields.
+///
+/// Go's `UnionOrIntersectionType` / `UnionType` / `IntersectionType` fields other than `types` are set on few
+/// types (on the private monorepo single: of 1.07M unions 12% get an origin, 9.5% a key property name, ~6%
+/// each a property cache, resolved properties, a reduced or a regular type; of 1.17M intersections 21% a
+/// non-augmented property cache, 14% an apparent type, 4.4% resolved properties), so they live in a tail
+/// allocated on the first non-nil write: a `UnionRare` or an `IntersectionRare`, both starting with the
+/// shared `UnionOrIntersectionRare`.
+///
+/// Reads of an absent tail return the zero value, like the unset Go field. The tail word keeps the kind in
+/// bit 0 (set at construction) so the shared accessors allocate the right tail.
 #[derive(Default)]
 #[repr(C)]
 pub struct UnionOrIntersectionType {
@@ -3176,13 +3184,10 @@ impl Signature {
     }
     #[inline]
     fn rare_for_write(&self) -> P<SignatureRare> {
-        match self.rare.tail() {
-            Some(rare) => rare,
-            None => {
-                let rare = P::new(SignatureRare::default());
-                self.rare.set_tail(rare);
-                rare
-            }
+        if let Some(rare) = self.rare.tail() { rare } else {
+            let rare = P::new(SignatureRare::default());
+            self.rare.set_tail(rare);
+            rare
         }
     }
     /// Go `sig.resolvedTypePredicate`; `no_type_predicate` is the checker's `noTypePredicate`.
@@ -3321,12 +3326,12 @@ impl IndexInfo {
     }
 }
 
-/// Ternary values are defined such that
-/// x & y picks the lesser in the order False < Unknown < Maybe < True, and
-/// x | y picks the greater in the order False < Unknown < Maybe < True.
-/// Generally, Ternary.Maybe is used as the result of a relation that depends on itself, and
-/// Ternary.Unknown is used as the result of a variance check that depends on itself. We make
-/// a distinction because we don't want to cache circular variance check results.
+/// Ternary values are defined such that x & y picks the lesser in the order False < Unknown < Maybe < True,
+/// and x | y picks the greater in the order False < Unknown < Maybe < True.
+///
+/// Generally, Ternary.Maybe is used as the result of a relation that depends on itself, and Ternary.Unknown
+/// is used as the result of a variance check that depends on itself. We make a distinction because we don't
+/// want to cache circular variance check results.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Debug, Default)]
 pub struct Ternary(pub i8);
 

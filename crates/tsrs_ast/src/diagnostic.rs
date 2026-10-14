@@ -97,6 +97,7 @@ impl Diagnostic {
     pub fn end(&self) -> Option<u32> {
         self.loc.get()?.source_end()
     }
+    #[expect(clippy::len_without_is_empty, reason = "This accessor reports a position or optional diagnostic length, not a container size.")]
     pub fn len(&self) -> Option<u32> {
         self.loc.get()?.len()
     }
@@ -239,8 +240,8 @@ impl DiagnosticExt for P<Diagnostic> {
     }
 
     /// tsrs-only (watch mode): a copy of the diagnostic, its message chain and related information that holds
-    /// nothing of the original but the file, in the current allocation target: what a session keeps of diagnostics
-    /// whose region it frees (tsrs_incremental `Program::copy_diagnostics`).
+    /// nothing of the original but the file, in the current allocation target: what a session keeps of
+    /// diagnostics whose region it frees (`tsrs_incremental` `Program::copy_diagnostics`).
     fn copy_deep(self) -> P<Diagnostic> {
         let message_chain: Vec<P<Diagnostic>> = self.message_chain.get().iter().map(|d| d.copy_deep()).collect();
         let related_information: Vec<P<Diagnostic>> = self.related_information.get().iter().map(|d| d.copy_deep()).collect();
@@ -589,10 +590,12 @@ fn get_diagnostic_path(d: P<Diagnostic>) -> &'static str {
     }
 }
 
-/// tsrs-only (memory regions): `tsrs_core::arena::note_escape` for the diagnostic and everything it refers to (its
-/// text, message chain and related information, recursively). A diagnostic can share those with one made elsewhere:
-/// `clone_diagnostic` copies the references, so a merged copy in another region (or the thread arena) still points
-/// into the region of the diagnostic it was cloned from.
+/// tsrs-only (memory regions): `tsrs_core::arena::note_escape` for the diagnostic and everything it refers to
+/// (its text, message chain and related information, recursively).
+///
+/// A diagnostic can share those with one made elsewhere: `clone_diagnostic` copies the references, so a
+/// merged copy in another region (or the thread arena) still points into the region of the diagnostic it was
+/// cloned from.
 pub fn note_diagnostic_escape(d: P<Diagnostic>) {
     use tsrs_core::arena::note_escape;
     note_escape(d.addr());

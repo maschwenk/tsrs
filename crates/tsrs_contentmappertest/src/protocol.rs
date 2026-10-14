@@ -11,6 +11,7 @@ use tsrs_ipc::{self as ipc, Handler};
 use tsrs_spanmap::{Feature, Kind, Segment};
 
 // protocol.go:14 noNotifications, which every handler of the package embeds for its HandleNotification.
+#[expect(clippy::unnecessary_wraps, reason = "This no-op implementation supplies the Result-returning Handler::handle_notification contract.")]
 pub(crate) fn no_notifications() -> Result<(), ipc::Error> {
     Ok(())
 }

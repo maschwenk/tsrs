@@ -13,3 +13,12 @@ node_modules/
 npm/tsrs/dist/
 npm/tsrs/tsconfig.tsbuildinfo
 npm/tsrs-wasm/tsrs.wasm
+playground/dist/
+playground/public/js/
+playground/public/css/
+playground/public/_playground-handbook/
+playground/public/licenses/
+playground/public/require.js
+playground/src/generated/
+playground/test-results/
+playground/playwright-report/

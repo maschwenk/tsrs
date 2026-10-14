@@ -25,6 +25,7 @@ fn decode(encoded: &str) -> ApiResult<DecodedNode> {
 }
 
 impl Session {
+    #[expect(clippy::unused_self, reason = "API request handlers share the Session receiver used by the request dispatcher.")]
     pub(crate) fn handle_print_node(&self, p: Params) -> ApiResult<Value> {
         let decoded = decode(p.str("data")?)?;
         let options = PrinterOptions {
@@ -59,7 +60,7 @@ impl Session {
         let text = {
             let _scope = decoded.region().enter();
             let node = decoded.root();
-            let factory = tsrs_ast::new_node_factory(Default::default());
+            let factory = tsrs_ast::new_node_factory(tsrs_ast::NodeFactoryHooks::default());
             let (text, node_with_pos) = tsrs_printer::print_and_position_node(
                 &factory,
                 node,
@@ -90,7 +91,7 @@ impl Session {
             } else {
                 0
             };
-            let ctx = tsrs_ls::format::with_format_code_settings(&Default::default(), format_options, &new_line);
+            let ctx = tsrs_ls::format::with_format_code_settings(&tsrs_ls::format::FormatContext::default(), format_options, &new_line);
             let changes = tsrs_ls::format::format_node_given_indentation(&ctx, node_with_pos, synthetic, target.language_variant(), initial, delta);
             tsrs_core::apply_bulk_edits(&text, &changes)
         };

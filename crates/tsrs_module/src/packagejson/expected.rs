@@ -82,6 +82,7 @@ impl ExpectedValue for Vec<String> {
     }
 }
 
+#[expect(clippy::implicit_hasher, reason = "The API deliberately accepts only FxHashMap, as required by the workspace hashing policy.")]
 impl ExpectedValue for FxHashMap<String, String> {
     fn unmarshal_from(&mut self, value: &Json) -> bool {
         match value {
@@ -176,7 +177,7 @@ impl<T: ExpectedValue> Expected<T> {
         self.valid
     }
 
-    pub fn expected_json_type(&self) -> &'static str {
+    pub fn expected_json_type() -> &'static str {
         T::expected_json_type()
     }
 
@@ -193,7 +194,7 @@ impl<T: ExpectedValue> TypeValidatedField for Expected<T> {
         Expected::is_valid(self)
     }
     fn expected_json_type(&self) -> &'static str {
-        Expected::expected_json_type(self)
+        Expected::<T>::expected_json_type()
     }
     fn actual_json_type(&self) -> &'static str {
         Expected::actual_json_type(self)

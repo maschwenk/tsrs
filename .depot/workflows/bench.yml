@@ -83,12 +83,7 @@ jobs:
             echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
           fi
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
       # The conformance suite (part of the PGO training workload) reads its tests from ts-ref/tsc/testdata.
       - name: Read TypeScript reference commit
@@ -292,12 +287,7 @@ jobs:
             echo "::error::expected 8 vCPU / 32 GB / x86_64, got $(nproc) vCPU / ${mem_gb} GB / $(uname -m)"; exit 1
           fi
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
       # `shared` is the suite + compilers cache; `project` is this project's (none for the two suite-only projects,
       # Compiler and Compiler-Unions, which live in the suite checkout).
@@ -395,12 +385,7 @@ jobs:
             echo "::error::expected 16 vCPU x86_64, got $(nproc) vCPU $(uname -m)"; exit 1
           fi
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
       - name: Cache keys
         id: keys
@@ -604,12 +589,7 @@ jobs:
           sudo sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=1024 || true
           sysctl fs.inotify.max_user_watches fs.inotify.max_user_instances
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
-        with:
-          node-version-file: .node-version
-
-      - name: Set up pnpm
-        run: bash .github/scripts/setup-pnpm.sh
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
       - name: Cache keys
         id: keys
@@ -670,7 +650,7 @@ jobs:
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the summary table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
   # bench/RESULTS.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
-  # every mode. The results commit also draws bench/large-projects.svg. If the wide job failed or was cancelled,
+  # every mode. The results commit also draws bench/large-projects.svg and its dark-theme twin. If the wide job failed or was cancelled,
   # the results file has no 16-vCPU sections and the summary tables and chart are left as they were.
   merge:
     needs: [build, measure, measure-wide, measure-watch]
@@ -747,7 +727,7 @@ jobs:
             # Render both the tables and SVG after fetching main on every retry. Older runs and missing wide
             # results preserve the latest report and chart together.
             python3 bench/publish.py /tmp/bench-merged/*.json
-            git add bench/RESULTS.md bench/large-projects.svg bench/results
+            git add bench/RESULTS.md bench/large-projects.svg bench/large-projects-dark.svg bench/results
             git commit -q -m "bench: results for ${measured::12} [skip ci]"
             git push -q origin HEAD:main && exit 0
             sleep $((attempt * 5))

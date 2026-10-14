@@ -246,6 +246,7 @@ fn parse_options(v: &Value) -> ApiResult<ParsedTranspileOptions> {
 }
 
 impl Session {
+    #[expect(clippy::unused_self, reason = "API request handlers share the Session receiver used by the request dispatcher.")]
     pub(crate) fn handle_transpile(&self, p: Params, declaration: bool) -> ApiResult<Value> {
         let o = parse_options(p.get("options"))?;
         let out = transpile(p.str("input")?, o.compiler_options.as_ref(), &o.file_name, o.report_diagnostics, declaration)?;

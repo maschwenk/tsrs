@@ -79,11 +79,11 @@ impl pathComparer {
         if !unicode {
             return suffix;
         }
-        self.suffix_unicode(root, path)
+        Self::suffix_unicode(root, path)
     }
 
     // pathcompare.go:75
-    pub(crate) fn suffix_unicode(self, root: &comparisonPath, path: &mut comparisonPath) -> Option<String> {
+    pub(crate) fn suffix_unicode(root: &comparisonPath, path: &mut comparisonPath) -> Option<String> {
         if !nativePathFolding {
             return path_suffix_fold_unicode(&root.path, &path.path);
         }
@@ -142,7 +142,7 @@ impl pathComparer {
         }
         let (mut suffix, unicode) = path_suffix_ascii(&from.path, &path.path);
         if unicode {
-            suffix = self.suffix_unicode(from, path);
+            suffix = Self::suffix_unicode(from, path);
         }
         let suffix = suffix?;
         Some(join_path_suffix(to, &suffix))

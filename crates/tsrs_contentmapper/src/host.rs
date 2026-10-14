@@ -299,9 +299,10 @@ pub struct Timings {
 impl Timings {
     // Since returns the non-negative operation delta since previous.
     // host.go:245
+    #[must_use]
     pub fn since(&self, previous: &Timings) -> Timings {
         let mut result = Timings {
-            mappers: OrderedMap::with_capacity_and_hasher(self.mappers.len(), Default::default()),
+            mappers: OrderedMap::with_capacity_and_hasher(self.mappers.len(), rustc_hash::FxBuildHasher),
             request_wait: self.request_wait.saturating_sub(previous.request_wait),
         };
         result.mappers.extend(self.mappers.iter().map(|(identity, current)| {

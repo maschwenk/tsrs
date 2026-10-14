@@ -38,6 +38,7 @@ impl optionalCatchTransformer {
 }
 
 // optionalcatch.go:34
+#[expect(clippy::unnecessary_wraps, reason = "Transformer factories share an optional result so disabled transforms can return None.")]
 pub fn new_optional_catch_transformer(opt: &TransformOptions) -> Option<P<Transformer>> {
     let tx = P::new(optionalCatchTransformer { base: Transformer::default() });
     Some(tx.get().base.new_transformer(Rc::new(move |_: &mut NodeVisitor, n: P<Node>| tx.visit(n)), Some(opt.context)))

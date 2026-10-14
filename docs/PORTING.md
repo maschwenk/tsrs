@@ -51,6 +51,8 @@ contributing `impl` blocks to the same type.
   Names are the snake_case of the Go name, always. Acronym runs are one word:
   `getJSXElementType` -> `get_jsx_element_type`, `isESSymbol` -> `is_es_symbol`,
   `getTypeOfJSDoc` -> `get_type_of_jsdoc`, `URL` -> `url`, `ID`/`Id` -> `id`.
+- Use `&self` for helpers that only read the receiver, and associated functions for helpers that do not use it.
+  Callback and interface methods keep their required signatures with a local, reasoned `#[expect]` when necessary.
 - Exported (capitalized) Go identifiers -> `pub`. Unexported -> `pub(crate)`.
 - Go package-level functions -> free functions in the corresponding module.
 - If snake_casing produces a Rust keyword, append `_`: `type_`, `in_`, `as_`, `ref_`, `mod_`, `match_`, `loop_`.
@@ -69,8 +71,8 @@ programs and file versions ([LSP.md](LSP.md#memory-management)). The rules are:
 
 - `P<T>`: `Copy`, `Deref<Target = T>`, equality/hash/order **by identity** (like Go pointers).
   Create with `P::new(value)`. `p.get()` returns `&'static T`. It is a 32-bit handle (an offset in 8-byte units into
-  one reserved address range; `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain reference with
-  `--features tsrs_core/plain-ptrs`. So: `P::from_static(r)` only for references to arena objects (an object made
+  one reserved address range; `tsrs_core::reserve`, notes/mem-pointer-compression.md), or a plain pointer (a raw pointer, so a `P` argument is not a protected
+  reference) with `--features tsrs_core/plain-ptrs` and on targets without `mmap`. So: `P::from_static(r)` only for references to arena objects (an object made
   with `P::new` / `alloc`, or a view that starts 8-aligned inside one); a Go package-level `*T` variable that is a
   Rust `static` is an `SP<T>`. Packed words store `p.to_bits()` / `p.key()`, never addresses.
 - Go `*T` that can be nil -> `Option<P<T>>`. Go `*T` that is never nil -> `P<T>`.

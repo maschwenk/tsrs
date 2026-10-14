@@ -123,12 +123,14 @@ pub struct Relation {
 /// `RelationComparisonResult` uses bits 0-5.
 pub(crate) const RELATION_RESULT_BITS: u32 = 6;
 
-/// A relation cache key. Go hashes the key bytes of `getRelationKey` to a 128-bit `CacheHashKey`. Almost every key
-/// (99.7% on the private monorepo) is the simple form `'s', source id, target id, intersection state`, which is a triple of
+/// A relation cache key.
+///
+/// Go hashes the key bytes of `getRelationKey` to a 128-bit `CacheHashKey`. Almost every key (99.7% on the
+/// private monorepo) is the simple form `'s', source id, target id, intersection state`, which is a triple of
 /// small numbers: when the ids are below 2^28 and the state below 2^2 it is packed into 58 bits as `Pair` (an
 /// injective mapping, no hashing). Every other key (the `'g'` form of generic references, larger ids) is
-/// `Hashed`, the same 128-bit hash Go uses. The two forms never denote the same Go key, since the simple form only
-/// ever produces `Pair` keys when it fits and Go's `'s'` and `'g'` byte strings differ.
+/// `Hashed`, the same 128-bit hash Go uses. The two forms never denote the same Go key, since the simple form
+/// only ever produces `Pair` keys when it fits and Go's `'s'` and `'g'` byte strings differ.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum RelationKey {
     Pair(u64),

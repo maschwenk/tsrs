@@ -523,13 +523,10 @@ impl keyBuilder {
             for &t in ref_.as_type_reference().resolved_type_arguments.get().unwrap_or(&[]) {
                 if t.flags().intersects(TypeFlags::TypeParameter) {
                     if ignore_constraints || c.get_constraint_of_type_parameter(t).is_none() {
-                        let index = match type_parameters.iter().position(|&tp| tp == t) {
-                            Some(index) => index,
-                            None => {
-                                let index = type_parameters.len();
-                                type_parameters.push(t);
-                                index
-                            }
+                        let index = if let Some(index) = type_parameters.iter().position(|&tp| tp == t) { index } else {
+                            let index = type_parameters.len();
+                            type_parameters.push(t);
+                            index
                         };
                         b.write_byte(b'=');
                         b.write_usize(index);
@@ -757,10 +754,10 @@ pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>
 #[inline(never)]
 fn get_relation_key_worker(c: &mut Checker, source: P<Type>, target: P<Type>, intersection_state: IntersectionState, ignore_constraints: bool) -> (RelationKey, bool) {
     let mut b = keyBuilder::default();
-    let constrained;
-    if is_type_reference_with_generic_arguments(c, source) && is_type_reference_with_generic_arguments(c, target) {
+
+    let constrained = if is_type_reference_with_generic_arguments(c, source) && is_type_reference_with_generic_arguments(c, target) {
         b.write_byte(b'g');
-        constrained = b.write_generic_type_references(c, source, target, ignore_constraints);
+        b.write_generic_type_references(c, source, target, ignore_constraints)
     } else {
         // The simple key `'s', source id, target id, intersection state`, packed when it fits (`RelationKey`).
         if let Some(key) = RelationKey::pair(source.id, target.id, intersection_state) {
@@ -769,8 +766,8 @@ fn get_relation_key_worker(c: &mut Checker, source: P<Type>, target: P<Type>, in
         b.write_byte(b's');
         b.write_type(source);
         b.write_type(target);
-        constrained = false;
-    }
+        false
+    };
     b.write_uint32(intersection_state.bits());
     (RelationKey::Hashed(b.hash()), constrained)
 }
@@ -962,7 +959,7 @@ impl Checker {
             let literal_type_from_property = self.get_literal_type_from_property(prop, TypeFlags::StringOrNumberLiteralOrUnique, false);
             if !self.is_type_assignable_to(literal_type_from_property, omit_key_type)
                 && !get_declaration_modifier_flags_from_symbol(prop).intersects(ModifierFlags::Private | ModifierFlags::Protected)
-                && self.is_spreadable_property(prop)
+                && Self::is_spreadable_property(prop)
             {
                 spreadable_properties.push(prop);
             } else {
@@ -1092,7 +1089,7 @@ impl Checker {
         for &e in pattern.elements() {
             let name = e.property_name_or_name();
             if has_dot_dot_dot_token(e) {
-                string_index_info = Some(self.new_index_info(self.string_type, self.any_type, false /*isReadonly*/, None, &[]));
+                string_index_info = Some(Self::new_index_info(self.string_type, self.any_type, false /*isReadonly*/, None, &[]));
                 continue;
             }
             let expr_type = self.get_literal_type_from_property_name(name.unwrap());
@@ -1192,7 +1189,7 @@ impl Checker {
         if is_binding_pattern(element.name().unwrap()) {
             return self.get_type_from_binding_pattern(element.name().unwrap(), include_pattern_in_type, report_errors);
         }
-        if report_errors && !self.declaration_belongs_to_private_ambient_member(element) {
+        if report_errors && !Self::declaration_belongs_to_private_ambient_member(element) {
             self.report_implicit_any(element, self.any_type, WideningKind::Normal);
         }
         // When we're including the pattern in the type (an indication we're obtaining a contextual type), we
@@ -1206,7 +1203,7 @@ impl Checker {
     }
 
     // checker.go:18373
-    pub(crate) fn declaration_belongs_to_private_ambient_member(&mut self, declaration: P<Node>) -> bool {
+    pub(crate) fn declaration_belongs_to_private_ambient_member(declaration: P<Node>) -> bool {
         let mut member_declaration = get_root_declaration(declaration);
         if is_parameter_declaration(member_declaration) {
             member_declaration = member_declaration.parent().unwrap();
@@ -1298,11 +1295,11 @@ impl Checker {
     // checker.go:18456
     pub(crate) fn get_assignment_declaration_initializer_type(&mut self, node: P<Node>) -> Option<P<Type>> {
         if is_binary_expression(node) {
-            let t: P<Type>;
-            match get_assignment_declaration_kind(node) {
+
+            let t: P<Type> = match get_assignment_declaration_kind(node) {
                 JSDeclarationKind::ModuleExports | JSDeclarationKind::ExportsProperty => {
                     let e = self.check_expression_cached(get_right_most_assigned_expression(node));
-                    t = self.get_regular_type_of_literal_type(e);
+                    self.get_regular_type_of_literal_type(e)
                 }
                 kind => {
                     if kind == JSDeclarationKind::ThisProperty {
@@ -1312,9 +1309,9 @@ impl Checker {
                         }
                     }
                     // fallthrough
-                    t = self.check_expression_for_mutable_location(node.as_binary_expression().right(), CheckMode::Normal);
+                    self.check_expression_for_mutable_location(node.as_binary_expression().right(), CheckMode::Normal)
                 }
-            }
+            };
             if self.is_empty_array_literal_type(t) && !self.has_parent_with_type_annotation(node.symbol().unwrap()) {
                 self.report_implicit_any(node, self.any_array_type, WideningKind::Normal);
                 return Some(self.any_array_type);
@@ -1424,7 +1421,7 @@ impl Checker {
                 location = type_annotation;
                 kind = thisAssignmentDeclarationKind::Typed;
             } else {
-                location = self.get_declaring_constructor(symbol);
+                location = Self::get_declaring_constructor(symbol);
                 kind = if location.is_none() { thisAssignmentDeclarationKind::Method } else { thisAssignmentDeclarationKind::Constructor };
             }
         }
@@ -1689,7 +1686,7 @@ impl Checker {
             .iter()
             .map(|info| {
                 let value_type = self.get_widened_type(info.value_type());
-                self.new_index_info(info.key_type(), value_type, info.is_readonly(), info.declaration(), info.components.get())
+                Self::new_index_info(info.key_type(), value_type, info.is_readonly(), info.declaration(), info.components.get())
             })
             .collect();
         let result = self.new_anonymous_type(t.symbol(), Some(members), &[], &[], &index_infos);
@@ -1878,13 +1875,10 @@ impl Checker {
                 t = Some(self.any_type);
             }
             if !self.pop_type_resolution() {
-                if self.get_annotated_accessor_type_node(getter).is_some() {
+                if Self::get_annotated_accessor_type_node(getter).is_some() {
                     let s = self.symbol_to_string(symbol);
                     self.error(getter, &diagnostics::X_0_is_referenced_directly_or_indirectly_in_its_own_type_annotation, &[&s]);
-                } else if self.get_annotated_accessor_type_node(setter).is_some() {
-                    let s = self.symbol_to_string(symbol);
-                    self.error(setter, &diagnostics::X_0_is_referenced_directly_or_indirectly_in_its_own_type_annotation, &[&s]);
-                } else if self.get_annotated_accessor_type_node(accessor).is_some() {
+                } else if (Self::get_annotated_accessor_type_node(setter).is_some()) || (Self::get_annotated_accessor_type_node(accessor).is_some()) {
                     let s = self.symbol_to_string(symbol);
                     self.error(setter, &diagnostics::X_0_is_referenced_directly_or_indirectly_in_its_own_type_annotation, &[&s]);
                 } else if getter.is_some() && self.no_implicit_any {
@@ -1922,7 +1916,7 @@ impl Checker {
             }
             let mut write_type = self.get_annotated_accessor_type(setter);
             if !self.pop_type_resolution() {
-                if self.get_annotated_accessor_type_node(setter).is_some() {
+                if Self::get_annotated_accessor_type_node(setter).is_some() {
                     let s = self.symbol_to_string(symbol);
                     self.error(setter, &diagnostics::X_0_is_referenced_directly_or_indirectly_in_its_own_type_annotation, &[&s]);
                 }
@@ -1949,7 +1943,7 @@ impl Checker {
                 return self.error_type;
             }
             let target_symbol = self.resolve_alias(symbol);
-            let alias_declaration = self.get_declaration_of_alias_symbol(symbol);
+            let alias_declaration = Self::get_declaration_of_alias_symbol(symbol);
             let export_symbol = self.get_target_of_alias_declaration(alias_declaration);
             // It only makes sense to get the type of a value symbol. If the result of resolving
             // the alias is not a value, then it has no type. To get the type associated with a
@@ -2072,7 +2066,7 @@ impl Checker {
                 return (links.name.get().to_string(), has_name);
             }
             let expr_type = self.get_type_of_expression(node.expression().unwrap());
-            let (name, exists) = self.try_get_name_from_type(expr_type);
+            let (name, exists) = Self::try_get_name_from_type(expr_type);
             links.name.set(alloc_str(&name));
             links.has_name.set(Some(exists));
             return (name, exists);
@@ -2081,7 +2075,7 @@ impl Checker {
     }
 
     // checker.go:19066
-    pub(crate) fn try_get_name_from_type(&mut self, t: P<Type>) -> (String, bool) {
+    pub(crate) fn try_get_name_from_type(t: P<Type>) -> (String, bool) {
         if t.flags().intersects(TypeFlags::UniqueESSymbol) {
             (t.as_unique_es_symbol_type().name.get().to_string(), true)
         } else if t.flags().intersects(TypeFlags::StringLiteral) {
@@ -2215,7 +2209,7 @@ impl Checker {
                 );
             }
         } else if symbol.flags().intersects(SymbolFlags::Alias) {
-            let node = self.get_declaration_of_alias_symbol(symbol);
+            let node = Self::get_declaration_of_alias_symbol(symbol);
             if node.is_some() {
                 let s = self.symbol_to_string(symbol);
                 self.error(node, &diagnostics::Circular_definition_of_import_alias_0, &[&s]);
@@ -2241,7 +2235,7 @@ impl Checker {
     #[cfg_attr(feature = "site-counts", track_caller)]
     pub(crate) fn get_properties_of_object_type(&mut self, t: P<Type>) -> &'static [P<Symbol>] {
         if t.flags().intersects(TypeFlags::Object) {
-            return self.resolve_structured_type_members(t).unwrap().properties();
+            return self.resolve_structured_type_members(t).properties();
         }
         &[]
     }
@@ -2368,7 +2362,7 @@ impl Checker {
     /// `t`'s resolved member table, for a loop that looks up many names in `t` with `get_resolved_property` (the
     /// relater's walks over a target's properties): `t` must be a plain object type (its own reduced apparent type)
     /// with resolved members and no module symbol, so that `get_property_of_type` answers from the table alone.
-    pub(crate) fn resolved_property_source(&mut self, t: P<Type>) -> Option<ResolvedPropertySource> {
+    pub(crate) fn resolved_property_source(&self, t: P<Type>) -> Option<ResolvedPropertySource> {
         if t.flags() != TypeFlags::Object
             || t.object_flags().intersects(ObjectFlags::Mapped)
             || !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved)
@@ -2399,6 +2393,7 @@ impl Checker {
     /// object type with resolved members and the member table alone answers it (as in `get_resolved_property`);
     /// `None` when the full path must decide. For a loop that looks up one name in many types.
     #[inline]
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub(crate) fn try_resolved_property(&mut self, t: P<Type>, key: HashedName<'_>, skip_object_function_property_augment: bool) -> Option<Option<P<Symbol>>> {
         if t.flags() != TypeFlags::Object
             || t.object_flags().intersects(ObjectFlags::Mapped)
@@ -2454,7 +2449,7 @@ impl Checker {
             if !t.flags().intersects(TypeFlags::Object) {
                 continue; // get_property_of_object_type finds nothing in it
             }
-            if let Some(members) = self.resolve_structured_type_members(t).unwrap().members() {
+            if let Some(members) = self.resolve_structured_type_members(t).members() {
                 filter.add_keys(&members);
             }
         }
@@ -2521,7 +2516,7 @@ impl Checker {
             // Mapped types have no signatures.
             return &[];
         }
-        let resolved = self.resolve_structured_type_members(t).unwrap();
+        let resolved = self.resolve_structured_type_members(t);
         if kind == SignatureKind::Call {
             return resolved.call_signatures();
         }
@@ -2558,7 +2553,7 @@ impl Checker {
             if let Some(lazy) = self.get_lazy_mapped_table(t) {
                 return self.get_lazy_mapped_type_index_infos(t, &lazy);
             }
-            return self.resolve_structured_type_members(t).unwrap().index_infos();
+            return self.resolve_structured_type_members(t).index_infos();
         }
         &[]
     }
@@ -2643,7 +2638,7 @@ impl Checker {
                     value_type
                 }));
                 let value_type = self.get_intersection_type(&types);
-                Some(self.new_index_info(self.unknown_type, value_type, is_readonly, None, &[]))
+                Some(Self::new_index_info(self.unknown_type, value_type, is_readonly, None, &[]))
             }
         }
     }
@@ -2662,7 +2657,7 @@ impl Checker {
     // checker.go:19406
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline]
-    pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
+    pub(crate) fn resolve_structured_type_members(&mut self, t: P<Type>) -> &'static StructuredType {
         #[cfg(feature = "site-counts")]
         if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             // Exclusive symbol/signature counts created by this resolution, attributed to the code that asked for it.
@@ -2672,7 +2667,7 @@ impl Checker {
             } else if t.object_flags().intersects(ObjectFlags::Reference) && self.lazy_member_tables.contains_key(&t) {
                 "reference:lazy"
             } else if t.object_flags().intersects(ObjectFlags::Mapped) {
-                if self.is_mapped_type_with_keyof_constraint_declaration(t) {
+                if Self::is_mapped_type_with_keyof_constraint_declaration(t) {
                     if self.lazy_mapped_tables.contains_key(&t) {
                         "mapped:keyof-lazy"
                     } else {
@@ -2712,14 +2707,14 @@ impl Checker {
             return r;
         }
         if t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
-            return Some(t.as_structured_type());
+            return t.as_structured_type();
         }
         self.resolve_structured_type_members_worker(t)
     }
 
     #[cfg_attr(feature = "site-counts", track_caller)]
     #[inline(never)]
-    fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> Option<&'static StructuredType> {
+    fn resolve_structured_type_members_worker(&mut self, t: P<Type>) -> &'static StructuredType {
         if !t.object_flags_lazy().intersects(ObjectFlags::MembersResolved) {
             self.members_resolving += 1;
             if t.flags().intersects(TypeFlags::Object) {
@@ -2745,7 +2740,7 @@ impl Checker {
             }
             self.members_resolving -= 1;
         }
-        Some(t.as_structured_type())
+        t.as_structured_type()
     }
 
     // checker.go:19435
@@ -2774,7 +2769,7 @@ impl Checker {
         let mut construct_signatures: Vec<P<Signature>>;
         let mut index_infos: Vec<P<IndexInfo>>;
         let mut instantiated = false;
-        let resolved = self.resolve_declared_members(source).unwrap();
+        let resolved = self.resolve_declared_members(source);
         if type_parameters == type_arguments {
             members = resolved.declared_members.get();
             call_signatures = resolved.declared_call_signatures.get().to_vec();
@@ -2802,7 +2797,7 @@ impl Checker {
                     instantiated_base_type = self.get_type_with_this_argument(inst, this_argument, false /*needsApparentType*/);
                 }
                 let base_properties = self.get_properties_of_type(instantiated_base_type);
-                members = self.add_inherited_members(members, base_properties);
+                members = Self::add_inherited_members(members, base_properties);
                 self.append_inherited_signatures_and_index_infos(&mut call_signatures, &mut construct_signatures, &mut index_infos, instantiated_base_type);
             }
         }
@@ -3051,53 +3046,50 @@ impl Checker {
     fn lazy_unaffected_members(&mut self, source: P<Type>, declared_members: P<SymbolTable>, mapper: P<TypeMapper>) -> &'static [&'static str] {
         let maps_this_only = mapper.maps_this_only();
         let memo = self.lazy_unaffected.get_mut(&source).filter(|memo| memo.table == declared_members && memo.len == declared_members.len() && memo.maps_this_only == maps_this_only);
-        let result = match memo {
-            Some(memo) => {
-                self.lazy_member_stats.member_table_declared_members += memo.named;
-                if memo.pending.is_empty() {
-                    memo.settled
-                } else {
-                    let pending = std::mem::take(&mut memo.pending);
-                    let settled = memo.settled;
-                    let mut added: Vec<&'static str> = Vec::new();
-                    let mut still_pending = Vec::new();
-                    for (name, symbol) in pending {
-                        match self.settled_unaffected(symbol, mapper) {
-                            Some(true) => added.push(name),
-                            Some(false) => {}
-                            None => still_pending.push((name, symbol)),
-                        }
-                    }
-                    let memo = self.lazy_unaffected.get_mut(&source).unwrap();
-                    memo.pending = still_pending;
-                    if !added.is_empty() {
-                        added.extend_from_slice(settled);
-                        added.sort_unstable();
-                        memo.settled = alloc_vec(added);
-                    }
-                    memo.settled
-                }
-            }
-            None => {
-                let mut settled: Vec<&'static str> = Vec::new();
-                let mut pending = Vec::new();
-                let mut named = 0;
-                for (name, symbol) in declared_members.entries() {
-                    if self.is_named_member(symbol, name) {
-                        named += 1;
-                        match self.settled_unaffected(symbol, mapper) {
-                            Some(true) => settled.push(name),
-                            Some(false) => {}
-                            None => pending.push((name, symbol)),
-                        }
+        let result = if let Some(memo) = memo {
+            self.lazy_member_stats.member_table_declared_members += memo.named;
+            if memo.pending.is_empty() {
+                memo.settled
+            } else {
+                let pending = std::mem::take(&mut memo.pending);
+                let settled = memo.settled;
+                let mut added: Vec<&'static str> = Vec::new();
+                let mut still_pending = Vec::new();
+                for (name, symbol) in pending {
+                    match self.settled_unaffected(symbol, mapper) {
+                        Some(true) => added.push(name),
+                        Some(false) => {}
+                        None => still_pending.push((name, symbol)),
                     }
                 }
-                self.lazy_member_stats.member_table_declared_members += named;
-                settled.sort_unstable();
-                let settled = alloc_vec(settled);
-                self.lazy_unaffected.insert(source, LazyUnaffected { table: declared_members, len: declared_members.len(), maps_this_only, named, settled, pending });
-                settled
+                let memo = self.lazy_unaffected.get_mut(&source).unwrap();
+                memo.pending = still_pending;
+                if !added.is_empty() {
+                    added.extend_from_slice(settled);
+                    added.sort_unstable();
+                    memo.settled = alloc_vec(added);
+                }
+                memo.settled
             }
+        } else {
+            let mut settled: Vec<&'static str> = Vec::new();
+            let mut pending = Vec::new();
+            let mut named = 0;
+            for (name, symbol) in declared_members.entries() {
+                if self.is_named_member(symbol, name) {
+                    named += 1;
+                    match self.settled_unaffected(symbol, mapper) {
+                        Some(true) => settled.push(name),
+                        Some(false) => {}
+                        None => pending.push((name, symbol)),
+                    }
+                }
+            }
+            self.lazy_member_stats.member_table_declared_members += named;
+            settled.sort_unstable();
+            let settled = alloc_vec(settled);
+            self.lazy_unaffected.insert(source, LazyUnaffected { table: declared_members, len: declared_members.len(), maps_this_only, named, settled, pending });
+            settled
         };
         if lazy_unaffected_shadow() {
             let mut fresh: Vec<&'static str> = Vec::new();
@@ -3125,7 +3117,7 @@ impl Checker {
     // Mirrors resolveObjectTypeMembers without creating member symbols.
     pub(crate) fn prepare_lazy_members(&mut self, t: P<Type>, lm: P<LazyMemberTable>, this_argument: Option<P<Type>>) {
         let source = t.object_target().unwrap();
-        let resolved = self.resolve_declared_members(source).unwrap();
+        let resolved = self.resolve_declared_members(source);
         let unaffected = match resolved.declared_members.get() {
             Some(declared_members) => self.lazy_unaffected_members(source, declared_members, lm.mapper),
             None => &[],
@@ -3184,7 +3176,7 @@ impl Checker {
         if t.target().unwrap().object_flags().intersects(ObjectFlags::Tuple) {
             self.lazy_member_stats.tuple_tables_resolved_in_full += 1;
         }
-        let resolved = self.resolve_declared_members(t.target().unwrap()).unwrap();
+        let resolved = self.resolve_declared_members(t.target().unwrap());
         let mut members: Option<P<SymbolTable>> = None;
         if let Some(declared_members) = resolved.declared_members.get().filter(|m| !m.is_empty()) {
             let table = SymbolTable::with_capacity(declared_members.len());
@@ -3199,7 +3191,7 @@ impl Checker {
         let ready = lm.ready.get().unwrap();
         for &base_type in ready.base_types.get() {
             let base_properties = self.get_properties_of_type(base_type);
-            members = self.add_inherited_members(members, base_properties);
+            members = Self::add_inherited_members(members, base_properties);
         }
         self.set_structured_type_members(t, members, ready.call_signatures.get(), ready.construct_signatures.get(), ready.index_infos.get());
         self.lazy_member_tables.remove(&t);
@@ -3246,12 +3238,12 @@ impl Checker {
         }
         let lm = self.get_ready_lazy_member_table(t);
         let Some(lm) = lm.filter(|_| !is_reserved_member_name(name)) else {
-            return self.resolve_structured_type_members(t).unwrap().members().and_then(|m| m.lookup(name));
+            return self.resolve_structured_type_members(t).members().and_then(|m| m.lookup(name));
         };
         self.lazy_member_stats.member_lookups += 1;
         // The declared member, else the first base type's property (see addInheritedMembers).
         let mut result: Option<P<Symbol>> = None;
-        let declared_members = self.resolve_declared_members(t.object_target().unwrap()).unwrap().declared_members.get();
+        let declared_members = self.resolve_declared_members(t.object_target().unwrap()).declared_members.get();
         if let Some((name, decl)) = declared_members.and_then(|m| m.lookup_entry(name)) {
             if self.is_named_member(decl, name) {
                 if instantiate {
@@ -3287,7 +3279,7 @@ impl Checker {
             }
             return result;
         }
-        let properties = self.resolve_structured_type_members(t).unwrap().properties();
+        let properties = self.resolve_structured_type_members(t).properties();
         properties.iter().all(|&p| f(self, p))
     }
 
@@ -3303,7 +3295,7 @@ impl Checker {
         seen: &mut FxHashSet<&'static str>,
         f: &mut dyn FnMut(&mut Checker, P<Symbol>) -> bool,
     ) -> bool {
-        if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).unwrap().declared_members.get() {
+        if let Some(declared_members) = self.resolve_declared_members(t.target().unwrap()).declared_members.get() {
             if (0..declared_members.len()).any(|i| {
                 let (id, symbol) = declared_members.entry(i);
                 self.is_named_member(symbol, id) && seen.insert(id) && !f(self, symbol)
@@ -3478,20 +3470,20 @@ impl Checker {
             return;
         }
         let base_type_node = get_base_type_node_of_class(t).unwrap();
-        let base_type: P<Type>;
+
         let mut original_base_type: Option<P<Type>> = None;
         if let Some(symbol) = base_constructor_type.symbol() {
             original_base_type = Some(self.get_declared_type_of_symbol(symbol));
         }
-        if base_constructor_type.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::Class))
+        let base_type: P<Type> = if base_constructor_type.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::Class))
             && self.are_all_outer_type_parameters_applied(original_base_type.unwrap())
         {
             // When base constructor type is a class with no captured type arguments we know that the constructors all have the same type parameters as the
             // class and all return the instance type of the class. There is no need for further checks and we can apply the
             // type arguments in the same manner as a type reference to get the same error reporting experience.
-            base_type = self.get_type_from_class_or_interface_reference(base_type_node, base_constructor_type.symbol().unwrap());
+            self.get_type_from_class_or_interface_reference(base_type_node, base_constructor_type.symbol().unwrap())
         } else if base_constructor_type.flags().intersects(TypeFlags::Any) {
-            base_type = base_constructor_type;
+            base_constructor_type
         } else {
             // The class derives from a "class-like" constructor function, check that we have at least one construct signature
             // with a matching number of type parameters and use the return type of the first instantiated signature. Elsewhere
@@ -3501,8 +3493,8 @@ impl Checker {
                 self.error(base_type_node.expression(), &diagnostics::No_base_constructor_has_the_specified_number_of_type_arguments, &[]);
                 return;
             }
-            base_type = self.get_return_type_of_signature(constructors[0]);
-        }
+            self.get_return_type_of_signature(constructors[0])
+        };
         if self.is_error_type(base_type) {
             return;
         }

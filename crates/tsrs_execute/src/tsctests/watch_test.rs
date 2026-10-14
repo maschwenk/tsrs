@@ -310,7 +310,7 @@ fn run_with(name: &str, args: &[&str], files: &[(&str, &str)], edits: Vec<(&str,
         .collect();
     let test = scenario {
         baseline: format!("watch_test/{name}"),
-        args: args.iter().map(|arg| arg.to_string()).collect(),
+        args: args.iter().map(std::string::ToString::to_string).collect(),
         cwd: ROOT.to_string(),
         env: FxHashMap::default(),
         output_is_tty: None,

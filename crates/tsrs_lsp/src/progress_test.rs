@@ -292,7 +292,7 @@ fn test_progress_shutdown_during_start_and_finish() {
     p.wait_idle();
 
     // Fill the channel buffer so start/finish block on send.
-    for _ in 0..p.capacity() {
+    for _ in 0..projectLoadingProgress::capacity() {
         assert!(p.fill(progressEvent { message: project_0(), args: project("fill"), finish: false }));
     }
 

@@ -622,7 +622,7 @@ fn checker_pool_disposed_checker_parked_when_data_escaped() {
     // The pool accumulates the diagnostics checker's global diagnostics (`noLib`: missing global types).
     let ctx = with_checker_data_lease(&ctx_with("globals", CheckerLifetime::Diagnostics));
     drop(pool.get_checker(&ctx, None));
-    assert!(!pool.get_global_diagnostics().is_empty());
+    assert_ne!(pool.get_global_diagnostics(), [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     let mut c = pool.get_checker(&ctx, None);
     cancel_checker(&mut c, source_file);
     drop(c);
@@ -669,7 +669,7 @@ fn checker_pool_merged_global_diagnostic_keeps_the_checker_region() {
             new_compiler_diagnostic(&diagnostics::Cannot_find_global_type_0, &[&"Array"]).add_related_info(Some(related("b"))),
         )
     };
-    let merged = accumulate_global_diagnostics(&[first, second]);
+    let merged = accumulate_global_diagnostics(&<[_; 2]>::from((first, second)));
     assert_eq!(merged.len(), 1);
     assert!(Region::containing(merged[0].addr()).is_none_or(|r| !r.ptr_eq(&region)), "the merged copy is made outside the region");
     assert_eq!(merged[0].related_information().len(), 2);

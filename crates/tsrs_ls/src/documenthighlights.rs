@@ -45,6 +45,7 @@ impl LanguageService {
     }
 
     // documenthighlights.go:41
+    #[expect(clippy::unnecessary_wraps, reason = "Language service operations share the fallible response signature used by LSP and cross-project dispatch.")]
     fn provide_document_highlights_worker(
         &self,
         ctx: &Context,
@@ -143,14 +144,11 @@ fn combine_multi_document_highlights(results: Vec<lsproto::MultiDocumentHighligh
             continue;
         };
         for document in documents {
-            let index = match by_uri.get(&document.uri) {
-                Some(&index) => index,
-                None => {
-                    combined_documents.push(lsproto::MultiDocumentHighlight { uri: document.uri.clone(), highlights: Vec::new() });
-                    let index = combined_documents.len() - 1;
-                    by_uri.insert(document.uri.clone(), index);
-                    index
-                }
+            let index = if let Some(&index) = by_uri.get(&document.uri) { index } else {
+                combined_documents.push(lsproto::MultiDocumentHighlight { uri: document.uri.clone(), highlights: Vec::new() });
+                let index = combined_documents.len() - 1;
+                by_uri.insert(document.uri.clone(), index);
+                index
             };
             let ranges = seen.entry(document.uri.clone()).or_default();
             combined_documents[index].highlights.extend(document.highlights.into_iter().filter(|highlight| ranges.add_if_absent(highlight.range)));
@@ -755,6 +753,7 @@ fn get_yield_occurrences(node: P<Node>, source_file: P<SourceFile>) -> Vec<P<Nod
 }
 
 // documenthighlights.go:715
+#[expect(clippy::only_used_in_recursion, reason = "The pinned Go function also carries these parameters through recursion without otherwise reading them.")]
 fn traverse_without_crossing_function(node: P<Node>, source_file: P<SourceFile>, cb: &mut dyn FnMut(P<Node>)) {
     cb(node);
     if !ast::is_function_like(Some(node))

@@ -40,7 +40,7 @@ impl std::fmt::Display for EncodeError {
 
 impl std::error::Error for EncodeError {}
 
-/// Go `NodeIndexTable`: encoder index → node (index 0 is the nil sentinel, NodeList records map to `None`).
+/// Go `NodeIndexTable`: encoder index → node (index 0 is the nil sentinel, `NodeList` records map to `None`).
 pub struct NodeIndexTable {
     pub nodes: Vec<Option<P<Node>>>,
     sorted: OnceLock<Vec<u32>>,
@@ -52,11 +52,11 @@ impl NodeIndexTable {
     }
 
     /// Go `GetIndex`, ported exactly: on the first call the non-nil indices are sorted by node id with Go's
-    /// `slices.SortFunc` (pdqsort, `tsrs_core::goslices::sort_func`), assigning ids lazily in comparison order
-    /// like `ast.GetNodeId`, then looked up with `core.BinarySearchUniqueFunc`. A node can occur at several
-    /// indices (a JSDoc comment hosting `@typedef`/`@callback` is encoded under every declaration it is
-    /// attached to); which of them is returned is decided by that sort and search exactly as in Go, so the
-    /// handles sent to clients match. Returns 0 when the node is not in the table.
+    /// `slices.SortFunc` (pdqsort, `tsrs_core::goslices::sort_func`), assigning ids lazily in comparison
+    /// order like `ast.GetNodeId`, then looked up with `core.BinarySearchUniqueFunc`. A node can occur at
+    /// several indices (a `JSDoc` comment hosting `@typedef`/`@callback` is encoded under every declaration
+    /// it is attached to); which of them is returned is decided by that sort and search exactly as in Go, so
+    /// the handles sent to clients match. Returns 0 when the node is not in the table.
     pub fn get_index(&self, node: P<Node>) -> u32 {
         let sorted = self.sorted.get_or_init(|| {
             let mut idx: Vec<u32> = (0..self.nodes.len() as u32).filter(|&i| self.nodes[i as usize].is_some()).collect();
@@ -77,7 +77,7 @@ impl NodeIndexTable {
         if found { sorted[i] } else { 0 }
     }
 
-    /// The node at encoder index `index` (`None` for 0, NodeList records and out-of-range indices).
+    /// The node at encoder index `index` (`None` for 0, `NodeList` records and out-of-range indices).
     pub fn node(&self, index: u32) -> Option<P<Node>> {
         self.nodes.get(index as usize).copied().flatten()
     }
@@ -160,21 +160,24 @@ fn encode_parse_options(opts: ExternalModuleIndicatorOptions) -> u32 {
     (opts.jsx as u32) | ((opts.force as u32) << 1)
 }
 
-/// Go `EncodeSourceFile`. Returns the encoded bytes and the node index table (same indices as the bytes). The
-/// caller owns caching the table for the source file's lifetime (Go stores it in the file's data map).
+/// Go `EncodeSourceFile`.
+///
+/// Returns the encoded bytes and the node index table (same indices as the bytes). The caller owns caching
+/// the table for the source file's lifetime (Go stores it in the file's data map).
 pub fn encode_source_file(file: &'static SourceFile) -> Result<(Vec<u8>, NodeIndexTable), EncodeError> {
     encode_tree(file.as_node(), Some(file))
 }
 
-/// Go `EncodeNode`: encodes an arbitrary subtree. `source_file` supplies JSDoc and the position map; pass `None`
-/// for synthesized nodes (e.g. a checker `typeToTypeNode` result), as the pinned session does.
+/// Go `EncodeNode`: encodes an arbitrary subtree. `source_file` supplies `JSDoc` and the position map; pass
+/// `None` for synthesized nodes (e.g. a checker `typeToTypeNode` result), as the pinned session does.
 pub fn encode_node(node: P<Node>, source_file: Option<&'static SourceFile>) -> Result<(Vec<u8>, NodeIndexTable), EncodeError> {
     encode_tree(node, source_file)
 }
 
-/// Walks `root` in exactly the order of the pinned encoder: Go `NodeVisitor.VisitEachChild` with the `VisitNodes`
-/// and `VisitModifiers` hooks overridden, then the node's JSDoc. `enter_node` gets each node, `enter_list` each
-/// NodeList (modifier lists only when non-empty); each returns the state that `leave` restores after the children.
+/// Walks `root` in exactly the order of the pinned encoder: Go `NodeVisitor.VisitEachChild` with the
+/// `VisitNodes` and `VisitModifiers` hooks overridden, then the node's `JSDoc`. `enter_node` gets each node,
+/// `enter_list` each `NodeList` (modifier lists only when non-empty); each returns the state that `leave`
+/// restores after the children.
 trait Walker {
     fn enter_node(&mut self, node: P<Node>) -> (u32, u32);
     fn enter_list(&mut self, list: &NodeList) -> (u32, u32);
@@ -356,7 +359,7 @@ fn encode_tree(root: P<Node>, source_file: Option<&'static SourceFile>) -> Resul
             total += 1;
         }
         if total > 0 {
-            let mut map = FxHashMap::with_capacity_and_hasher(total, Default::default());
+            let mut map = FxHashMap::with_capacity_and_hasher(total, rustc_hash::FxBuildHasher);
             map.extend(sf.imports.get().iter().chain(sf.module_augmentations.get()).map(|&n| (n, 0)));
             if let Some(e) = emi.filter(|&e| e != root) {
                 map.insert(e, 0);
@@ -486,6 +489,7 @@ pub fn build_node_index_table(file: &'static SourceFile) -> NodeIndexTable {
 
 // ── hand-written extended data (Go recordExtendedData_*) ──────────────────────
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_source_file(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let sf = node.as_source_file();
     let text_index = cx.strs.add(sf.text(), Kind::SourceFile, node.pos(), node.end());
@@ -536,18 +540,21 @@ fn record_template_like(node: P<Node>, text: &str, raw_text: &str, flags: TokenF
     append_u32s(&mut cx.extended_data, &[text_index, raw_index, flags.bits()]);
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_template_head(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_template_head();
     record_template_like(node, n.text(), n.raw_text(), n.template_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_template_middle(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_template_middle();
     record_template_like(node, n.text(), n.raw_text(), n.template_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_template_tail(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_template_tail();
     record_template_like(node, n.text(), n.raw_text(), n.template_flags(), cx);
@@ -559,30 +566,35 @@ fn record_literal(node: P<Node>, text: &str, flags: TokenFlags, cx: &mut EncodeC
     append_u32s(&mut cx.extended_data, &[text_index, flags.bits()]);
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_string_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_string_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_numeric_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_numeric_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_big_int_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_big_int_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_regular_expression_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_regular_expression_literal();
     record_literal(node, n.text(), n.token_flags(), cx);
     Ok(())
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "Extended-data encoder callbacks share a fallible signature with encoders that can reject node data.")]
 pub(crate) fn record_extended_data_no_substitution_template_literal(node: P<Node>, cx: &mut EncodeContext) -> Result<(), EncodeError> {
     let n = node.as_no_substitution_template_literal();
     record_literal(node, n.text(), n.template_flags(), cx);

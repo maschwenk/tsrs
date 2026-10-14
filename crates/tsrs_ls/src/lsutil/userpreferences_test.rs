@@ -15,7 +15,7 @@ fn config(text: &str) -> OrderedMap<String, Value> {
 }
 
 fn marshal_prefs(p: &UserPreferences) -> String {
-    json::marshal(&p.marshal_json_to().unwrap()).unwrap()
+    json::marshal(&p.marshal_json_to()).unwrap()
 }
 
 fn object<'a>(v: &'a OrderedMap<String, Value>, key: &str) -> &'a OrderedMap<String, Value> {

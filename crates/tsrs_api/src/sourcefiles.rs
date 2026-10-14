@@ -187,7 +187,7 @@ impl Session {
     }
 
     /// Go `encoder.EncodeNode(node, nil)`.
-    pub(crate) fn encode_node(&self, node: P<Node>) -> ApiResult<Vec<u8>> {
+    pub(crate) fn encode_node(node: P<Node>) -> ApiResult<Vec<u8>> {
         codec::encode_node(node, None).map(|(d, _)| d).map_err(|e| ApiError::internal(format!("failed to encode node: {e}")))
     }
 
