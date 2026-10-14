@@ -270,8 +270,9 @@ impl CommonJSModuleTransformer {
     // commonjsmodule.go:1270
     pub(crate) fn visit_top_level_nested_with_statement(&self, node: P<Node>) -> P<Node> {
         let n = node.as_with_statement();
+        let statement = self.top_level_nested_visitor().visit_embedded_statement(Some(n.statement())).unwrap_or_else(|| self.factory().new_empty_statement());
         let expression = self.visitor().visit_node(Some(n.expression)).unwrap();
-        self.factory().update_with_statement(node, expression, self.top_level_nested_visitor().visit_embedded_statement(Some(n.statement())).unwrap())
+        self.factory().update_with_statement(node, expression, statement)
     }
 
     // commonjsmodule.go:1280

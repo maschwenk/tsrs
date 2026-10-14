@@ -20,3 +20,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64553](https://github.com/microsoft/TypeScript/commit/c8e9b7d259268e30605ed14910cb8d118929ed63) | Port invokeOnce for alias/reference arguments and its priority/variance key. |
 | [#64554](https://github.com/microsoft/TypeScript/commit/43521c80ec5ebe4bc2948f1df3747773e48d8312) | Port snapshot preferences/import preparation and require same-snapshot completion symbols; retain equivalent flat Rust preference storage. SDK refresh is included with the final pin. |
 | [#64558](https://github.com/microsoft/TypeScript/commit/edf7da4e93ab65e1f7766deae156c35132c0cde3) | Port reverse-mapped emit expansion, cycle diagnostics, and declaration-based depth limits. |
+| [#64574](https://github.com/microsoft/TypeScript/commit/02c1c9a6ab49334a5ca9c1d7852647b7a3fad18a) | Port the empty-statement fallback after CommonJS hoisting. |
