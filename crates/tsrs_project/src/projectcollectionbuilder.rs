@@ -145,12 +145,11 @@ pub(crate) fn new_project_collection_builder(
     }
 }
 
-// Go `reflect.DeepEqual` on compiler options (CompilerOptions has no PartialEq: its Debug rendering covers every
-// field).
+// Compare compiler option values, including path keys in insertion order.
 fn compiler_options_deep_equal(a: Option<P<CompilerOptions>>, b: Option<P<CompilerOptions>>) -> bool {
     match (a, b) {
         (None, None) => true,
-        (Some(a), Some(b)) => a == b || format!("{:?}", *a) == format!("{:?}", *b),
+        (Some(a), Some(b)) => a == b || a.equals(&b),
         _ => false,
     }
 }

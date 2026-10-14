@@ -6,7 +6,6 @@ use tsrs_diagnostics::Message;
 use crate::commandlineoption::CommandLineOption;
 use crate::declsbuild::BUILD_OPTS;
 use crate::declscompiler::OPTIONS_DECLARATIONS;
-use crate::declswatch::OPTIONS_FOR_WATCH;
 use crate::namemap::{BUILD_NAME_MAP, COMPILER_NAME_MAP, NameMap};
 
 pub struct DidYouMeanOptionsDiagnostics {
@@ -44,18 +43,6 @@ pub(crate) fn get_parse_command_line_worker_diagnostics(decls: &[&'static Comman
         option_type_mismatch_diagnostic: &diagnostics::Compiler_option_0_expects_an_argument,
     }
 }
-
-pub(crate) static WATCH_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS: LazyLock<ParseCommandLineWorkerDiagnostics> =
-    LazyLock::new(|| ParseCommandLineWorkerDiagnostics {
-        did_you_mean: DidYouMeanOptionsDiagnostics {
-            // no alternateMode
-            alternate_mode: None,
-            option_declarations: OPTIONS_FOR_WATCH.clone(),
-            unknown_option_diagnostic: &diagnostics::Unknown_watch_option_0,
-            unknown_did_you_mean_diagnostic: &diagnostics::Unknown_watch_option_0_Did_you_mean_1,
-        },
-        option_type_mismatch_diagnostic: &diagnostics::Watch_option_0_requires_a_value_of_type_1,
-    });
 
 pub(crate) static BUILD_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS: LazyLock<ParseCommandLineWorkerDiagnostics> =
     LazyLock::new(|| ParseCommandLineWorkerDiagnostics {

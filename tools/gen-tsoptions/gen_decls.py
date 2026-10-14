@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """Converts the Go option declaration lists in ts-ref/tsc/internal/tsoptions/decls*.go into Rust statics.
 
-Usage: gen_decls.py <go file> <rust file>
+Usage: gen_decls.py <go file> <rust file> [comma-separated declaration names] [options.ts]
 Only the `[]*CommandLineOption{...}` and `CommandLineOption{...}` literals are converted; the
 surrounding Rust (imports, functions) lives in the hand-written part of the target file between the
 `// BEGIN GENERATED` / `// END GENERATED` markers.
 """
 import re
 import sys
+import json
+import subprocess
+
+METADATA = {}
 
 KIND = {
     "CommandLineOptionTypeString": "String",
@@ -84,6 +88,8 @@ def convert_field(key, value):
 
 def convert_literal(body, indent):
     fields = []
+    keys = set()
+    name = None
     for line in body.split("\n"):
         line = re.sub(r"//.*$", "", line).strip()
         if not line:
@@ -91,7 +97,17 @@ def convert_literal(body, indent):
         m = re.fullmatch(r"(\w+):\s*(.+?),?", line)
         if not m:
             raise Exception("cannot parse line: " + line)
+        keys.add(m.group(1))
+        if m.group(1) == "Name":
+            name = json.loads(m.group(2).rstrip(","))
         fields.append(convert_field(m.group(1), m.group(2)))
+    for key in (
+        "affectsDeclarationPath", "affectsProgramStructure", "affectsSemanticDiagnostics", "affectsBuildInfo",
+        "affectsBindDiagnostics", "affectsSourceFile", "affectsModuleResolution", "affectsEmit", "allowJsFlag", "strictFlag",
+        "allowConfigDirTemplateSubstitution",
+    ):
+        if key not in keys and METADATA.get(name, {}).get(key):
+            fields.append(convert_field(key, "true"))
     pad = " " * (indent + 4)
     out = "CommandLineOption {\n"
     for f in fields:
@@ -108,16 +124,26 @@ def scream(n):
 
 
 def main():
+    global METADATA
     go = open(sys.argv[1]).read()
+    names = set(sys.argv[3].split(",")) if len(sys.argv) > 3 else None
+    if len(sys.argv) > 4:
+        script = "const {options}=await import(process.argv[1]); console.log(JSON.stringify(options.compilerOptions));"
+        options = json.loads(subprocess.check_output(["node", "--input-type=module", "-e", script, sys.argv[4]], text=True))
+        METADATA = {option["name"]: option.get("declaration", {}) for option in options}
     out = []
     # single named literals: var X = CommandLineOption{ ... }
     for m in re.finditer(r"^var (\w+) = CommandLineOption\{\n(.*?)\n\}", go, re.S | re.M):
         name, body = m.group(1), m.group(2)
+        if names is not None and name not in names:
+            continue
         vis = "pub " if name[0].isupper() else "pub(crate) "
         name = scream(name)
         out.append(f"{vis}static {name}: CommandLineOption = {convert_literal(body, 0)};\n")
     for m in re.finditer(r"^var (\w+) = \[\]\*CommandLineOption\{\n(.*?)\n\}\n", go, re.S | re.M):
         name, body = m.group(1), m.group(2)
+        if names is not None and name not in names:
+            continue
         vis = "pub " if name[0].isupper() else "pub(crate) "
         name = scream(name)
         items = []

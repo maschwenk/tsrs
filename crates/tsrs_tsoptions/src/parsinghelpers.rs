@@ -234,22 +234,6 @@ impl OptionParser for CompilerOptionsParser {
     }
 }
 
-pub(crate) struct WatchOptionsParser(pub(crate) WatchOptions);
-
-impl OptionParser for WatchOptionsParser {
-    fn parse_option(&mut self, key: &str, value: &CompilerOptionsValue) -> Vec<P<Diagnostic>> {
-        parse_watch_options(key, value, &mut self.0)
-    }
-
-    fn unknown_option_diagnostic(&self) -> &'static Message {
-        extra_key_diagnostics("watchOptions").unwrap()
-    }
-
-    fn unknown_did_you_mean_diagnostic(&self) -> &'static Message {
-        extra_key_did_you_mean_diagnostics("watchOptions").unwrap()
-    }
-}
-
 pub(crate) struct TypeAcquisitionParser(pub(crate) TypeAcquisition);
 
 impl OptionParser for TypeAcquisitionParser {

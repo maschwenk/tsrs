@@ -207,16 +207,6 @@ fn test_command_line_parse_result() {
         ("parse --incremental", args(&["--incremental", "0.ts"])),
         ("parse --tsBuildInfoFile", args(&["--tsBuildInfoFile", "build.tsbuildinfo", "0.ts"])),
         ("allows tsconfig only option to be set to null", args(&["--composite", "null", "-tsBuildInfoFile", "null", "0.ts"])),
-        // ****** Watch Options ******
-        ("parse --watchFile", args(&["--watchFile", "UseFsEvents", "0.ts"])),
-        ("parse --watchDirectory", args(&["--watchDirectory", "FixedPollingInterval", "0.ts"])),
-        ("parse --fallbackPolling", args(&["--fallbackPolling", "PriorityInterval", "0.ts"])),
-        ("parse --synchronousWatchDirectory", args(&["--synchronousWatchDirectory", "0.ts"])),
-        ("errors on missing argument to --fallbackPolling", args(&["0.ts", "--fallbackPolling"])),
-        ("parse --excludeDirectories", args(&["--excludeDirectories", "**/temp", "0.ts"])),
-        ("errors on invalid excludeDirectories", args(&["--excludeDirectories", "**/../*", "0.ts"])),
-        ("parse --excludeFiles", args(&["--excludeFiles", "**/temp/*.ts", "0.ts"])),
-        ("errors on invalid excludeFiles", args(&["--excludeFiles", "**/../*", "0.ts"])),
     ];
 
     let mut failures = Vec::new();
@@ -370,14 +360,6 @@ fn test_parse_build_command_line() {
         ("--clean and --verbose together is invalid", args(&["--clean", "--verbose"])),
         ("--clean and --watch together is invalid", args(&["--clean", "--watch"])),
         ("--watch and --dry together is invalid", args(&["--watch", "--dry"])),
-        ("parse --watchFile", args(&["--watchFile", "UseFsEvents", "--verbose"])),
-        ("parse --watchDirectory", args(&["--watchDirectory", "FixedPollingInterval", "--verbose"])),
-        ("parse --fallbackPolling", args(&["--fallbackPolling", "PriorityInterval", "--verbose"])),
-        ("parse --synchronousWatchDirectory", args(&["--synchronousWatchDirectory", "--verbose"])),
-        ("errors on missing argument", args(&["--verbose", "--fallbackPolling"])),
-        ("errors on invalid excludeDirectories", args(&["--excludeDirectories", "**/../*"])),
-        ("parse --excludeFiles", args(&["--excludeFiles", "**/temp/*.ts"])),
-        ("errors on invalid excludeFiles", args(&["--excludeFiles", "**/../*"])),
         ("parse --builders", args(&["--builders", "2"])),
         ("--singleThreaded and --builders together", args(&["--singleThreaded", "--builders", "2"])),
         ("reports error when --builders is 0", args(&["--builders", "0"])),

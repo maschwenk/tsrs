@@ -187,6 +187,13 @@ pub fn empty_compiler_options() -> crate::P<CompilerOptions> {
 }
 
 impl CompilerOptions {
+    pub fn equals(&self, other: &Self) -> bool {
+        self == other && match (&self.paths, &other.paths) {
+            (Some(a), Some(b)) => a.iter().eq(b.iter()),
+            _ => true,
+        }
+    }
+
     pub fn get_emit_script_target(&self) -> ScriptTarget {
         if self.target != ScriptTarget::None {
             return self.target;

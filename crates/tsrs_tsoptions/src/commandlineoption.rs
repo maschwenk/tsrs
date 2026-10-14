@@ -117,7 +117,6 @@ pub struct CommandLineOption {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum ExtraValidation {
     None,
-    Spec,
     Locale,
 }
 
@@ -240,7 +239,6 @@ pub(crate) static COMMAND_LINE_OPTION_ELEMENTS: LazyLock<FxHashMap<&'static str,
             name: "excludeDirectory",
             kind: CommandLineOptionKind::String,
             is_file_path: true,
-            extra_validation: ExtraValidation::Spec,
             ..CommandLineOption::DEFAULT
         },
     );
@@ -250,7 +248,6 @@ pub(crate) static COMMAND_LINE_OPTION_ELEMENTS: LazyLock<FxHashMap<&'static str,
             name: "excludeFile",
             kind: CommandLineOptionKind::String,
             is_file_path: true,
-            extra_validation: ExtraValidation::Spec,
             ..CommandLineOption::DEFAULT
         },
     );
