@@ -256,6 +256,20 @@ impl toProgramSnapshot {
             self.snapshot.build_info_emit_pending.set(true);
         }
         // Source/order/option changes can change a merge's declarations even when its slots remain equal.
+        // tsrs-only: a changed file moves a report site only by adding or removing a declaration of a merged
+        // interface, so it counts when its new or old text declares an interface. Without the old text (a program
+        // loaded from build info) every changed file counts. Counting every changed file made a comment edit in
+        // a watch recheck every checked file that declares an interface: 690 -> 70 ms per edit on vscode
+        // (notes/watch-interface-refresh.md).
+        let declares_interface_before_or_after = |file: P<SourceFile>| {
+            contains_interface_declaration(file.as_node())
+                || match old_compiler_program {
+                    Some(old_program) => old_program
+                        .get_source_file_by_path(file.path())
+                        .is_some_and(|old_file| old_file != file && contains_interface_declaration(old_file.as_node())),
+                    None => true,
+                }
+        };
         let refresh_interface_diagnostics = reporting_policy_changed
             || canonical_diagnostics
                 && old.is_some_and(|old| {
@@ -263,7 +277,10 @@ impl toProgramSnapshot {
                         || old.options().skip_lib_check != new_options.skip_lib_check
                         || old.options().skip_default_lib_check != new_options.skip_default_lib_check
                         || !deleted_files.is_empty()
-                        || results.iter().any(|(_, _, change)| change.add_to_change_set)
+                        || files
+                            .iter()
+                            .zip(&results)
+                            .any(|(&file, (_, _, change))| change.add_to_change_set && declares_interface_before_or_after(file))
                 });
         for (&file, (info, new_references, mut change)) in files.iter().zip(results) {
             if refresh_interface_diagnostics
