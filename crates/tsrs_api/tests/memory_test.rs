@@ -2,7 +2,6 @@
 // binary (other test files are separate processes).
 // `rss_kib` needs glibc `malloc_trim` and `/proc`, so the binary is empty elsewhere.
 #![cfg(all(target_os = "linux", target_env = "gnu"))]
-#[expect(dead_code, reason = "This target uses only part of the shared integration helper module.")]
 mod common;
 use common::*;
 use std::sync::Mutex;
