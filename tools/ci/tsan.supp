@@ -1,0 +1,8 @@
+# ThreadSanitizer suppressions for tools/ci/tsan.sh (TSAN_OPTIONS=suppressions=...). Each entry needs the reason it is
+# not a tsrs race; a report that matches no entry fails the job.
+
+# crossbeam-deque, rayon's work-stealing queue: a thief reads a job slot speculatively (`read_volatile`) and keeps it
+# only if a compare-and-swap on the queue's indices then succeeds, while the owner may be writing the slot. The protocol
+# orders the two with fences, which ThreadSanitizer does not model. Seen from `tsrs_vfs::vfsmatch::prefetch_listings`'
+# rayon scope under the language server.
+race:crossbeam_deque

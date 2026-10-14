@@ -479,3 +479,88 @@ jobs:
           cargo build --release --locked -p tsrs_testrunner
           TSRS_TEST=target/abort/release/tsrs-test TSRS_TEST_RESULTS="$PWD/target/abort/test-results" \
             .github/scripts/conformance-gate.sh
+
+  # tools/ci/tsan.sh: tsrs built with ThreadSanitizer runs the multi-threaded paths (type checks at 2 and 8 checkers,
+  # emit, `-b` on a generated project graph, `--watch` and `-b --watch` with edits, a language-server session) and any
+  # report fails the job. `P<T>` is `Send`/`Sync` by decree, so this is the only check that threads do not race on arena
+  # data (#510 fixed the first race it found). Suppressions, each with its reason, are in tools/ci/tsan.supp.
+  thread-sanitizer:
+    runs-on: depot-ubuntu-24.04-8
+    timeout-minutes: 45
+    steps:
+      - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
+
+      - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
+
+      - uses: oxc-project/setup-rust@3d6fb132fbe7cdcb66bf8ec193911c2945369d12 # v1.0.17
+        with:
+          save-cache: ${{ github.ref_name == 'main' }}
+          cache-key: tsan
+
+      # ThreadSanitizer needs a nightly (-Zsanitizer, -Zbuild-std); pinned like the Miri job's.
+      - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
+        with:
+          toolchain: nightly-2026-10-04
+          components: rust-src
+
+      # ThreadSanitizer's fixed memory layout fails with the 32 bits of mmap randomization Ubuntu 24.04 kernels use
+      # ("unexpected memory mapping"); the watch workloads need more inotify watches than the default.
+      - name: Kernel settings
+        run: |
+          sudo sysctl -w vm.mmap_rnd_bits=28
+          sudo sysctl -w fs.inotify.max_user_watches=524288 fs.inotify.max_user_instances=1024
+
+      - name: Bench cache keys
+        id: tsan-keys
+        run: python3 bench/run.py --print-cache-keys --projects xstate-main,webpack | tee -a "$GITHUB_OUTPUT"
+
+      - parallel:
+          - name: Restore the bench compilers
+            uses: actions/cache/restore@v4
+            with:
+              path: |
+                bench/.work/suite
+                bench/.work/tsgo
+              key: bench-shared-${{ runner.os }}-${{ steps.tsan-keys.outputs.shared }}
+
+          - name: Restore xstate-main
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/xstate-main
+              key: bench-xstate-main-${{ runner.os }}-${{ steps.tsan-keys.outputs['xstate-main'] }}
+
+          - name: Restore webpack
+            uses: actions/cache/restore@v4
+            with:
+              path: bench/.work/solutions/webpack
+              key: bench-webpack-${{ runner.os }}-${{ steps.tsan-keys.outputs['webpack'] }}
+
+          # Plain pointers: ThreadSanitizer's shadow memory takes the compressed handles' address range. The system
+          # allocator: ThreadSanitizer cannot see mimalloc's reuse of memory across threads (false races).
+          - name: Build tsrs with ThreadSanitizer
+            env:
+              RUSTFLAGS: -Zsanitizer=thread
+              CARGO_PROFILE_RELEASE_STRIP: "false"
+              CARGO_PROFILE_RELEASE_DEBUG: line-tables-only
+              CARGO_TARGET_DIR: target/tsan
+            run: >-
+              cargo +nightly-2026-10-04 build --release --locked -p tsrs_cli -Zbuild-std
+              --features tsrs_core/plain-ptrs,tsrs_cli/system-alloc --target x86_64-unknown-linux-gnu
+
+      - name: Set up the bench projects
+        run: python3 bench/run.py --setup-only --projects xstate-main,webpack
+
+      - name: ThreadSanitizer
+        env:
+          TMPDIR: ${{ runner.temp }}/tsan
+        run: |
+          mkdir -p "$TMPDIR"
+          tools/ci/tsan.sh target/tsan/x86_64-unknown-linux-gnu/release/tsrs --projects xstate-main,webpack
+
+      - name: Upload ThreadSanitizer logs
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: tsan-logs
+          path: ${{ runner.temp }}/tsan
+          if-no-files-found: ignore

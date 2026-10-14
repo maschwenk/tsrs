@@ -452,6 +452,26 @@ always looks like a survivor); leave them out. The build is several times slower
 allocator's mimalloc does not take the collect hook (`set_heap_hooks`), so its committed and RSS numbers are those of
 a watch without the post-cycle collect. notes/watch-macos.md ("Memory") has a worked example.
 
+## Data races: ThreadSanitizer (`tools/ci/tsan.sh`)
+
+`P<T>` is `Send`/`Sync` by decree (`tsrs_core::ptr`): nothing in the type system stops two threads from writing the same
+arena value. CI's `thread-sanitizer` job builds tsrs with ThreadSanitizer and runs `tools/ci/tsan.sh`, which fails on
+any report: type checks at 2 and 8 checkers, emit, `-b` on a generated graph of 12 projects, `--watch` and `-b --watch`
+with edits, and a language-server session. To run it locally (about 2 minutes on an M3 Max after a 2.5-minute build):
+
+```sh
+RUSTFLAGS=-Zsanitizer=thread CARGO_PROFILE_RELEASE_STRIP=false CARGO_PROFILE_RELEASE_DEBUG=line-tables-only \
+  CARGO_TARGET_DIR=target/tsan cargo +nightly-2026-10-04 build --release -p tsrs_cli -Zbuild-std \
+  --features tsrs_core/plain-ptrs,tsrs_cli/system-alloc --target "$(rustc -vV | sed -n 's/^host: //p')"
+tools/ci/tsan.sh target/tsan/<host triple>/release/tsrs
+```
+
+`plain-ptrs` because ThreadSanitizer's shadow memory takes the compressed handles' address range; `system-alloc`
+because it cannot see mimalloc reuse memory across threads (with mimalloc it reports about 120 races that are not).
+On Linux, ThreadSanitizer needs `sudo sysctl vm.mmap_rnd_bits=28` on kernels that randomize 32 bits. A failing run
+prints each race once with one full report (`tools/ci/tsan_summary.py`) and keeps the logs. `tools/ci/tsan.supp` lists
+reports that are not tsrs races, each with its reason; anything else is a race to fix.
+
 ## Profiling
 
 Profile the `dist` profile. It inherits `release` (fat LTO, one codegen unit, symbols stripped, no debug info);
