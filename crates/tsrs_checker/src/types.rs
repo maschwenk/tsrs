@@ -1304,7 +1304,7 @@ struct TypeAlloc<T> {
 /// Census builds (`TSRS_CENSUS=1`): registers the fields of checker arena types that the census's strong mark must
 /// not read as plain pointers (`tsrs_core::census_layout`), from the current layouts: type headers (flags, ids and
 /// the data tag; the symbol word may carry the record bit), literal values, type parameter and mapped type flags,
-/// empty type-argument slices, conditional roots, inference infos. Once per process (with the AST's); nothing in
+/// empty type-argument slices, conditional roots, inference infos, index infos. Once per process (with the AST's); nothing in
 /// other builds.
 pub(crate) fn census_layouts() {
     use std::any::type_name;
@@ -1444,6 +1444,18 @@ pub(crate) fn census_layouts() {
         .map(|&o| CensusField::scalar(0, o, &offsets, size))
         .collect();
         tsrs_core::census_layout(type_name::<InferenceInfo>(), &scalars);
+        // `is_readonly`'s padding keeps stale stack bytes; with `false` in the low byte they can form the address of
+        // a mapper that `append_mapped_type_index_info` recycled just before making the info.
+        let offsets = [
+            offset_of!(IndexInfo, key_type),
+            offset_of!(IndexInfo, value_type),
+            offset_of!(IndexInfo, is_readonly),
+            offset_of!(IndexInfo, declaration),
+            offset_of!(IndexInfo, index_symbol),
+            offset_of!(IndexInfo, components),
+        ];
+        let is_readonly = CensusField::scalar(0, offset_of!(IndexInfo, is_readonly), &offsets, size_of::<IndexInfo>());
+        tsrs_core::census_layout(type_name::<IndexInfo>(), &[is_readonly]);
     });
 }
 

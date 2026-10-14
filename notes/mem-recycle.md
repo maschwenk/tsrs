@@ -39,19 +39,19 @@ Verification modes (no reuse in either):
    antecedents, antecedent lists, flow node nodes) is checked against the would-free set. This is exact for the
    parser and binder frees.
 2. **Strong mark** (crates/tsrs_core/src/alloc_profile/census.rs `check_would_free`): the conservative mark keeps
-   thousands of freed blocks "reachable", because freed objects are exactly the ones whose addresses linger in
-   dead stack slots, struct padding (`P::new` copies a value with its padding from the stack: `TypeParameter`,
-   `LiteralType`, `MappedType`, `Diagnostic`, the empty `OnceCell<LazyMembers>` of a lazy member table), pooled
-   vectors' spare capacity (scrubbed in census builds), empty tail slices pointing at the next block, and bytes of
-   text or number pairs. So reachability is recomputed from the roots with the references the program stores: a
-   48-bit pointer to a block start (tags on mapper / context words, length bits in mapper slice words, interior
-   pointers into heap blocks and 8-aligned into arena lists), x8-encoded symbol entries in heap blocks. An edge into
-   a freed block must also come from a block allocated before the free and not be 64 KiB-aligned (a stale pointer
-   whose low bytes a small field overwrote). Every freed block reached that way is a violation; the report names
-   the referrer, its offset and its neighbouring words (heap referrers by allocating function). On the private
-   monorepo the strong mark covers 94% of the conservatively reachable bytes; the rest is lazily parsed JSDoc,
-   string slices and similar. Positive control: with the escape barrier removed from `MapperCell::set`, one
-   conformance test reports 35 violations (conditional types holding freed mappers).
+   thousands of freed blocks "reachable", because freed objects are exactly the ones whose addresses linger in dead
+   stack slots, struct padding (`P::new` copies a value with its padding from the stack: `TypeParameter`,
+   `LiteralType`, `MappedType`, `IndexInfo`, `Diagnostic`, the empty `OnceCell<LazyMembers>` of a lazy member table),
+   pooled vectors' spare capacity (scrubbed in census builds), empty tail slices pointing at the next block, and
+   bytes of text or number pairs. So reachability is recomputed from the roots with the references the program
+   stores: a 48-bit pointer to a block start (tags on mapper / context words, length bits in mapper slice words,
+   interior pointers into heap blocks and 8-aligned into arena lists), x8-encoded symbol entries in heap blocks. An
+   edge into a freed block must also come from a block allocated before the free and not be 64 KiB-aligned (a stale
+   pointer whose low bytes a small field overwrote). Every freed block reached that way is a violation; the report
+   names the referrer, its offset and its neighbouring words (heap referrers by allocating function). On the private
+   monorepo the strong mark covers 94% of the conservatively reachable bytes; the rest is lazily parsed JSDoc, string
+   slices and similar. Positive control: with the escape barrier removed from `MapperCell::set`, one conformance test
+   reports 35 violations (conditional types holding freed mappers).
 
 Both must be 0. `TSRS_CENSUS_ASSERT=1` exits with status 3 otherwise.
 
