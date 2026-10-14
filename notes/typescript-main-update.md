@@ -34,3 +34,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64536](https://github.com/microsoft/TypeScript/commit/a4b1410230c7299957ec3f8f8dee4cccc55a4798) | Copy the upstream Array.at documentation for arrays and typed arrays. |
 | [#64572](https://github.com/microsoft/TypeScript/commit/efbf3b5067547539c9cf8331d51943543c8bc91a) | VS Code content-mapped JSX insertion; the tsrs language server content-mapper capability remains unsupported. |
 | [#64562](https://github.com/microsoft/TypeScript/commit/dca8e236a227e37183dcf1dd4e51b22571f5b558) | Upstream brace-expansion dependency; tsrs does not use this package. |
+| [#64583](https://github.com/microsoft/TypeScript/commit/0ad3777160acc032a2063da0cb0edd02be8b23a9) | VS Code LSP middleware hooks; no corresponding extension in tsrs. SDK sources refresh with the final pin. |
