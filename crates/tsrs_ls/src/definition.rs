@@ -294,7 +294,9 @@ impl LanguageService {
 
         locations.extend(declarations.iter().filter_map(|&decl| {
             let file = ast::get_source_file_of_node(decl).unwrap();
-            let name = ast::get_name_of_declaration(decl).unwrap_or(decl);
+            // The `this` parameter a JSDoc `@this` tag adds has a name without a position; Go converts its -1
+            // range to the start of the file. Point at the declaration (the tag name) instead.
+            let name = ast::get_name_of_declaration(decl).filter(|name| !name.pos().is_synthetic()).unwrap_or(decl);
             let name_range = if name.kind() == Kind::EmptyStatement {
                 let pos = name
                     .pos()

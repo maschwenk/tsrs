@@ -396,7 +396,9 @@ fn get_source_definition_entry_declarations(source_file: P<SourceFile>) -> Vec<P
 // findallreferences.go:496 (getFileAndStartPosFromDeclaration)
 fn get_file_and_start_pos_from_declaration(declaration: P<Node>) -> (P<SourceFile>, TextPos) {
     let file = ast::get_source_file_of_node(declaration).unwrap();
-    let name = ast::get_name_of_declaration(declaration).unwrap_or(declaration);
+    // A name without a position (the `this` parameter of a JSDoc `@this` tag) starts at -1 in Go; use the
+    // declaration's position instead (definition.rs create_definition_locations).
+    let name = ast::get_name_of_declaration(declaration).filter(|name| !name.pos().is_synthetic()).unwrap_or(declaration);
     let text_range = get_range_of_node(name, Some(file), None /*endNode*/);
     (file, text_range.pos())
 }

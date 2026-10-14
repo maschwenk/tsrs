@@ -2064,9 +2064,14 @@ impl SourceFile {
                     || is_private_identifier(node)
                 {
                     let text = node.text();
+                    // Go stores Pos() unchanged, so a reparsed name without a position (the `this` parameter
+                    // a JSDoc `@this` tag adds) stores -1, the same value as "appears more than once".
                     name_table.entry(text)
                         .and_modify(|entry| *entry = NameTableEntry::Multiple)
-                        .or_insert_with(|| NameTableEntry::Unique(node.pos().expect_source("parsed names have source positions")));
+                        .or_insert_with(|| match node.pos().source_offset() {
+                            Some(pos) => NameTableEntry::Unique(pos),
+                            None => NameTableEntry::Multiple,
+                        });
                 }
 
                 node.for_each_child(&mut |c| walk(c, file, name_table));
