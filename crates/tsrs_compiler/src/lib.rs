@@ -18,6 +18,7 @@ mod program;
 mod program_emit;
 mod programlike;
 mod splitcheck;
+mod stealgate;
 mod sharedgraph;
 mod projectreferencedtsfakinghost;
 mod projectreferencefilemapper;

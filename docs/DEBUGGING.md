@@ -81,7 +81,8 @@ Each checker begins the type-check pass with the files of its queue whose static
 checker's share, heaviest first, then the rest in program order (notes/perf-checker-64.md,
 notes/perf-heavy-first-threshold.md); `TSRS_HEAVY_SHARE_DIVISOR=<n>` changes the divisor for experiments.
 `--checkerCostCache <file>` (opt-in, locality only) balances the checkers on the previous run's per-file CPU times
-(notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds.
+(notes/perf-balance.md); `TSRS_ASSIGNMENT_STATS=times` prints per-checker wall and CPU seconds and, on macOS, the
+instructions each checker thread retired (notes/perf-icount-assign.md).
 From 16 checkers on, the locality placement also counts the modules (files and their imports, library declaration
 files included) a group shares with each checker, then moves groups while that lowers the modules held per checker
 (notes/perf-clustered-assignment.md); `TSRS_MODULE_AFFINITY=off` restores the placement by import edges alone, and
@@ -89,7 +90,11 @@ files included) a group shares with each checker, then moves groups while that l
 From 16 checkers on, a thief also keeps stealing from the checker it stole from last while that checker has at least
 half the busiest one's work left; `TSRS_STEAL_STICKY=0` picks the busiest checker for every file. From 8 to 15
 checkers at most a quarter of the checkers take files from any one checker at a time (notes/perf-icount-assign.md);
-`TSRS_STEAL_MAX_THIEVES=<m>` sets that limit at every checker count, `0` for none.
+`TSRS_STEAL_MAX_THIEVES=<m>` sets that limit at every checker count, `0` for none. `TSRS_STEAL_GATE=<rules>` (experiments,
+crates/tsrs_compiler/src/stealgate.rs) adds rules that keep thieves from some files, e.g. `hub`: files that import nearly
+the whole program go first on their owner and are never stolen. `TSRS_ASSIGNMENT_STATS=times` keeps the leaf trees'
+freeing on (it walks no tree), and `TSRS_FILE_TIMES` lines end with `|`, the file's start in its pass, its instructions
+(macOS), whether it was stolen and its static weight.
 
 ## Why a TS2590 comes and goes: `TSRS_TRACE_UNION_REDUCTION`
 
