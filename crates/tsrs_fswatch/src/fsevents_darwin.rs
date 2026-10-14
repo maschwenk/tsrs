@@ -65,7 +65,11 @@ pub(crate) struct fsEventsBackend {
 #[derive(Default)]
 struct fsEventsState {
     watches: FxHashMap<dwKey, Arc<fseventsState>>,
-    streams: Vec<Arc<fseventsStream>>,
+    // tsrs-only (Go has one `streams` list for every root; see `fseventsMaxRootStreams`): the stream of each root
+    // (physical directory) that has its own, and the roots past the limit with the streams they share.
+    root_streams: FxHashMap<String, Arc<fseventsStream>>,
+    shared_roots: FxHashSet<String>,
+    shared_streams: Vec<Arc<fseventsStream>>,
 }
 
 // fsevents_darwin.go:161 (init)
@@ -111,6 +115,18 @@ fn stream_start_error(e: streamStartError) -> Error {
 
 const fseventsPathsPerStream: usize = 512;
 
+// tsrs-only: each watched root gets its own FSEventStream, up to this many; the roots past it share streams, as every
+// root does in Go. When fseventsd falls behind a stream it drops that stream's events and reports the drop
+// (UserDropped | MustScanSubDirs) on every root of the stream, which the watch turns into an overflow on every
+// callback of each root. With one stream for every root, a burst of writes under one root (a checkout or an install
+// in a project) overflowed every other root too, though nothing had changed there: a language server watching a
+// project and the package directories it resolves into a package store outside it logged one overflow per watched
+// package directory for each drop. A drop on one root's stream reaches no other stream (a minimal C client with two
+// streams, under a burst that dropped events on one, saw nothing on the other). A process can start 512 streams (the
+// 513th fails to start), so this leaves room for the shared streams and anything else in the process using FSEvents.
+// Adding or removing a watch also restarts only its root's stream instead of every root's.
+const fseventsMaxRootStreams: usize = 256;
+
 #[derive(Clone)]
 pub(crate) struct fseventsWatchSnapshot {
     pub(crate) w: Arc<dirWatch>,
@@ -136,6 +152,89 @@ impl fsEventsBackend {
     // fsevents_darwin.go:226
     fn start_streams(&self, watches: &[fseventsWatchSnapshot]) -> Result<Vec<Arc<fseventsStream>>, Error> {
         start_fs_events_streams(watches, &|paths, watches| self.start_stream(paths, watches))
+    }
+
+    // tsrs-only (Go restarts one set of streams for every root; see `fseventsMaxRootStreams`): restarts the streams
+    // of `roots`, the physical directories whose watches changed, from the current watches. The new streams start
+    // before the old ones stop, so no root misses events in between. On an error nothing is replaced.
+    fn restart_root_streams(&self, roots: &FxHashSet<String>) -> Result<(), Error> {
+        let st = self.mu.lock().unwrap();
+        let watches = st.active_watches_locked();
+        let mut root_stream_count = st.root_streams.len();
+        let mut shared_roots = st.shared_roots.clone();
+        let mut shared_changed = false;
+        let mut has_stream = FxHashSet::default();
+        has_stream.extend(roots.iter().filter(|root| st.root_streams.contains_key(*root)).cloned());
+        drop(st);
+
+        let mut sorted_roots: Vec<&String> = roots.iter().collect();
+        sorted_roots.sort();
+        let mut started: Vec<(String, Option<Arc<fseventsStream>>)> = Vec::with_capacity(sorted_roots.len());
+        let stop_started = |started: &[(String, Option<Arc<fseventsStream>>)]| {
+            for (_, stream) in started {
+                if let Some(stream) = stream {
+                    stop_fs_events_stream(stream);
+                }
+            }
+        };
+        let mut watches_by_root: FxHashMap<&str, Vec<fseventsWatchSnapshot>> = FxHashMap::default();
+        for watch in watches.iter().filter(|watch| roots.contains(&watch.w.physical_dir)) {
+            watches_by_root.entry(watch.w.physical_dir.as_str()).or_default().push(watch.clone());
+        }
+        for root in sorted_roots {
+            let root_watches = watches_by_root.remove(root.as_str()).unwrap_or_default();
+            if has_stream.contains(root) {
+                if root_watches.is_empty() {
+                    root_stream_count -= 1;
+                    started.push((root.clone(), None));
+                    continue;
+                }
+            } else if root_watches.is_empty() {
+                shared_changed |= shared_roots.remove(root);
+                continue;
+            } else if shared_roots.contains(root) || root_stream_count >= fseventsMaxRootStreams {
+                shared_roots.insert(root.clone());
+                shared_changed = true;
+                continue;
+            } else {
+                root_stream_count += 1;
+            }
+            match self.start_stream(std::slice::from_ref(root), &root_watches) {
+                Ok(stream) => started.push((root.clone(), stream)),
+                Err(err) => {
+                    stop_started(&started);
+                    return Err(err);
+                }
+            }
+        }
+        let shared_streams = if shared_changed {
+            let shared_watches: Vec<fseventsWatchSnapshot> = watches.iter().filter(|watch| shared_roots.contains(&watch.w.physical_dir)).cloned().collect();
+            match self.start_streams(&shared_watches) {
+                Ok(streams) => Some(streams),
+                Err(err) => {
+                    stop_started(&started);
+                    return Err(err);
+                }
+            }
+        } else {
+            None
+        };
+
+        let mut st = self.mu.lock().unwrap();
+        let mut old_streams = Vec::new();
+        for (root, stream) in started {
+            old_streams.extend(match stream {
+                Some(stream) => st.root_streams.insert(root, stream),
+                None => st.root_streams.remove(&root),
+            });
+        }
+        if let Some(shared_streams) = shared_streams {
+            old_streams.extend(std::mem::replace(&mut st.shared_streams, shared_streams));
+            st.shared_roots = shared_roots;
+        }
+        drop(st);
+        stop_fs_events_streams(&old_streams);
+        Ok(())
     }
 
     // fsevents_darwin.go:278
@@ -255,28 +354,21 @@ impl watcherImpl for fsEventsBackend {
             *w.state.lock().unwrap() = Some(Arc::<fseventsState>::clone(state));
             st.watches.insert(dwKey(Arc::clone(w)), Arc::clone(state));
         }
-        let watches = st.active_watches_locked();
         drop(st);
 
-        let streams = match self.start_streams(&watches) {
-            Ok(streams) => streams,
-            Err(err) => {
-                let mut st = self.mu.lock().unwrap();
-                for (w, state) in &states {
-                    let key = dwKey(Arc::clone(w));
-                    if st.watches.get(&key).is_some_and(|s| Arc::ptr_eq(s, state)) {
-                        st.watches.remove(&key);
-                        *w.state.lock().unwrap() = None;
-                    }
+        let mut roots = FxHashSet::default();
+        roots.extend(states.iter().map(|(w, _)| w.physical_dir.clone()));
+        if let Err(err) = self.restart_root_streams(&roots) {
+            let mut st = self.mu.lock().unwrap();
+            for (w, state) in &states {
+                let key = dwKey(Arc::clone(w));
+                if st.watches.get(&key).is_some_and(|s| Arc::ptr_eq(s, state)) {
+                    st.watches.remove(&key);
+                    *w.state.lock().unwrap() = None;
                 }
-                return Some(Err(err));
             }
-        };
-
-        let mut st = self.mu.lock().unwrap();
-        let old_streams = std::mem::replace(&mut st.streams, streams);
-        drop(st);
-        stop_fs_events_streams(&old_streams);
+            return Some(Err(err));
+        }
         Some(Ok(()))
     }
 
@@ -291,16 +383,11 @@ impl watcherImpl for fsEventsBackend {
 
         let mut st = self.mu.lock().unwrap();
         st.watches.remove(&dwKey(Arc::clone(w)));
-        let watches = st.active_watches_locked();
         drop(st);
 
-        let streams = self.start_streams(&watches)?;
-
-        let mut st = self.mu.lock().unwrap();
-        let old_streams = std::mem::replace(&mut st.streams, streams);
-        drop(st);
-        stop_fs_events_streams(&old_streams);
-        Ok(())
+        let mut roots = FxHashSet::default();
+        roots.insert(w.physical_dir.clone());
+        self.restart_root_streams(&roots)
     }
 }
 
@@ -513,3 +600,7 @@ fn fsevents_overflow_matches_prepared(w: &dirWatch, raw_path: &mut comparisonPat
     }
     false
 }
+
+#[cfg(test)]
+#[path = "fsevents_darwin_test.rs"]
+mod tests;

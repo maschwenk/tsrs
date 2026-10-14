@@ -529,16 +529,24 @@ impl watcher {
             if !is_in_directory_or_self(&physical_parent, physical_dir) {
                 return String::new();
             }
-            let count = 1;
-            // only counts matches; returns `parent` regardless of traversal order
-            if st
+            // tsrs-only: Go counts the watches under `parent`; this counts the children of `parent` that hold one (the
+            // new watch's among them), so consolidation joins siblings. Counting watches let one crowded subtree carry
+            // any directory above it: a language server's watches on the package directories of a package store
+            // under the home directory consolidated into the store, and the next watch elsewhere in the home
+            // directory (the project) consolidated into the home directory itself, which then streamed every write
+            // in it to the process, and each drop of events on that stream became an overflow on every watch.
+            let mut children: FxHashSet<&str> = FxHashSet::default();
+            children.insert(&dir);
+            // only collects the distinct children; returns `parent` regardless of traversal order
+            let enough = st
                 .dir_watches
                 .values()
-                .filter(|dw| is_in_directory_or_self(&parent, &dw.dir) && is_in_directory_or_self(&physical_parent, &dw.physical_dir))
-                .take(recursiveConsolidateThreshold - count)
-                .count()
-                >= recursiveConsolidateThreshold - count
-            {
+                .filter(|dw| dw.dir != parent && is_in_directory_or_self(&parent, &dw.dir) && is_in_directory_or_self(&physical_parent, &dw.physical_dir))
+                .any(|dw| {
+                    children.insert(child_on_path(&parent, &dw.dir));
+                    children.len() >= recursiveConsolidateThreshold
+                });
+            if enough {
                 return parent;
             }
             let next = filepath_dir(&parent);
@@ -1426,6 +1434,13 @@ pub(crate) fn is_in_directory_or_self(dir: &str, path: &str) -> bool {
     rest.starts_with('/')
 }
 
+// tsrs-only (`find_consolidation_dir_locked`): the child of `dir` that `path`, a path strictly inside `dir`, is in
+// or is.
+fn child_on_path<'p>(dir: &str, path: &'p str) -> &'p str {
+    let start = if dir.ends_with('/') { dir.len() } else { dir.len() + 1 };
+    path[start..].find('/').map_or(path, |i| &path[..start + i])
+}
+
 // watcher.go:1108
 // isDirectChild reports whether path is an immediate child of dir.
 // Both paths must be absolute. Returns false for path == dir.
@@ -1479,3 +1494,7 @@ pub(crate) fn filepath_dir(path: &str) -> String {
     let i = path.rfind('/').map_or(0, |i| i + 1);
     filepath_clean(&path[..i])
 }
+
+#[cfg(all(test, target_os = "macos"))]
+#[path = "watcher_consolidation_test.rs"]
+mod consolidation_tests;
