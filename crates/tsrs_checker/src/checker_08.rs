@@ -262,7 +262,7 @@ impl Checker {
                 self.error(error_node, resolution_diagnostic, &[&module_reference, &resolved_module.resolved_file_name]);
             }
 
-            if error_node.is_some() {
+            if error_node.is_some() && !resolved_module.is_custom_resolution {
                 if resolved_module.resolved_using_ts_extension && tspath::is_declaration_file_name(module_reference) {
                     if ast::find_ancestor(location, ast::is_emittable_import).is_some() {
                         let ts_extension = tspath::try_extract_ts_extension(module_reference);

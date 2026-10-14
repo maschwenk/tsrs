@@ -243,7 +243,7 @@ fn static_resolution_to_resolved_module(v: &Value, cwd: &str) -> ApiResult<P<Res
     };
     let resolved_file_name = abs("resolvedFileName")?;
     let original_path = if p.has("originalPath") { abs("originalPath")? } else { String::new() };
-    let mut r = ResolvedModule::default();
+    let mut r = ResolvedModule { is_custom_resolution: true, ..Default::default() };
     if p.has("packageId") {
         let pkg = Params(p.get("packageId"));
         r.package_id = tsrs_module::PackageId {

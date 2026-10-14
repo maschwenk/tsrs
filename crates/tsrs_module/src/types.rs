@@ -101,6 +101,7 @@ pub struct ResolvedModule {
     pub resolved_using_extra_extensions: bool,
     pub package_id: PackageId,
     pub is_external_library_import: bool,
+    pub is_custom_resolution: bool,
     pub alternate_result: &'static str,
 }
 
