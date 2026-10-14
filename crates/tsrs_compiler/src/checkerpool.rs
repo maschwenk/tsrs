@@ -724,15 +724,15 @@ impl checkerPool {
                 let checkers: &'static [CheckerSlot] =
                     Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
                 tsrs_core::phases::record("Checkers: create", create_start.elapsed());
-                let associations = match &self.inherited_associations {
-                    Some(associations) => associations.clone(),
+                let (associations, measured_weights) = match &self.inherited_associations {
+                    Some(associations) => (associations.clone(), None),
                     None => tsrs_core::phases::time("Checkers: assign files", || compute_associations(program, self.checker_count)),
                 };
-                (checkers, associations)
+                (checkers, associations, measured_weights)
             };
             // tsrs-only: the CLI's leaf classification reads only the loaded program; it runs meanwhile
             // (fileregions.rs `prepare`).
-            let (checkers, associations) = if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
+            let (checkers, associations, measured_weights) = if program.leaf_files != crate::fileregions::LeafMode::Off && !self.single_threaded {
                 std::thread::scope(|s| {
                     let prepare = s.spawn(|| crate::fileregions::prepare(program));
                     let created = create_and_assign();
@@ -747,7 +747,7 @@ impl checkerPool {
             let file_indices: FxHashMap<P<SourceFile>, usize> = files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
             let owners = associations.iter().map(|&c| std::sync::atomic::AtomicU32::new(c as u32)).collect();
             let associations_for_reuse = associations;
-            let weights = if self.checker_count > 1 { checked_file_weights(program) } else { Vec::new() };
+            let weights = if self.checker_count > 1 { measured_weights.unwrap_or_else(|| checked_file_weights(program)) } else { Vec::new() };
             poolState {
                 shared_graph: shared,
                 checkers,
@@ -921,11 +921,15 @@ impl checkerPool {
             while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, max_thieves, &mut slot, sticky.then_some(&mut last_victim)) {
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
                     let piece_start = file_times.then(std::time::Instant::now);
-                    let cpu_start = if file_times { thread_cpu_seconds() } else { 0.0 };
+                    let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
                     split.files[s].run_queued_piece(&mut guard, split_ctx.unwrap(), k);
                     if let Some(piece_start) = piece_start {
                         let cpu = thread_cpu_seconds() - cpu_start;
                         state.file_times.lock().unwrap().push((split.files[s].file, checker_idx, piece_start.elapsed().as_secs_f64(), cpu));
+                    }
+                    // A split file costs all its pieces: the cache must not see a cheap file and stop splitting it.
+                    if cost_cache {
+                        file_cpu.push((split.files[s].file, thread_cpu_seconds() - cpu_start));
                     }
                     count += 1;
                     continue;
@@ -1506,13 +1510,20 @@ pub(crate) fn tsgo_default_check_slots(program: &Program) -> FxHashMap<P<SourceF
         .collect()
 }
 
-fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+// The assignment, and with a cost cache and TSRS_COST_CACHE_WEIGHTS the measured costs in weight units for the pool's
+// `weights` (what heavy-first, stealing and splitting read).
+fn compute_associations(program: &Program, checker_count: usize) -> (Vec<usize>, Option<Vec<i64>>) {
     if checker_count <= 1 {
-        return vec![0; program.files.len()];
+        return (vec![0; program.files.len()], None);
     }
+    let mut measured_weights = None;
     let associations = match checker_assignment() {
         CheckerAssignment::Go => go_associations(program, checker_count, true),
-        CheckerAssignment::Locality => locality_associations(program, checker_count),
+        CheckerAssignment::Locality => {
+            let (associations, weights) = locality_associations(program, checker_count);
+            measured_weights = weights;
+            associations
+        }
         CheckerAssignment::Random(seed) => {
             let mut state = seed;
             std::iter::repeat_with(|| (splitmix64(&mut state) % checker_count as u64) as usize).take(program.files.len()).collect()
@@ -1527,20 +1538,38 @@ fn compute_associations(program: &Program, checker_count: usize) -> Vec<usize> {
     if let Ok(path) = std::env::var("TSRS_ASSIGNMENT_DUMP") {
         dump_assignment_inputs(program, &associations, &path);
     }
-    associations
+    (associations, measured_weights)
 }
 
-// tsrs-only, opt-in: `--checkerCostCache <file>` (CLI) or TSRS_CHECKER_COST_CACHE=<file>. The locality
-// assignment balances the checkers on per-file check seconds measured by a previous run (read from the file
-// when it exists) instead of the syntactic weight, and the run writes its own measurements back. Without
-// the option nothing is read or written and the assignment depends only on the program.
-static CLI_CHECKER_COST_CACHE: OnceLock<String> = OnceLock::new();
+// TSRS_COST_CACHE_WEIGHTS=1 (experiment, notes/perf-cost-cache-default.md): with a cost cache, the type-check pass's
+// heavy-first order, steal victims and split decisions use the measured costs (in static weight units) instead of the
+// static weights.
+fn cost_cache_weights() -> bool {
+    static VALUE: OnceLock<bool> = OnceLock::new();
+    *VALUE.get_or_init(|| std::env::var("TSRS_COST_CACHE_WEIGHTS").is_ok_and(|v| v == "1"))
+}
 
+// tsrs-only: `--checkerCostCache <file>` (CLI) or TSRS_CHECKER_COST_CACHE=<file>, else the CLI's default file
+// (`set_default_checker_cost_cache`, notes/perf-cost-cache-default.md). The locality assignment balances the checkers on
+// per-file check seconds measured by a previous run (read from the file when it exists) instead of the syntactic
+// weight, and the run writes its own measurements back. `--noCheckerCostCache` or an empty TSRS_CHECKER_COST_CACHE
+// turns it off. Without a cache nothing is read or written and the assignment depends only on the program.
+static CLI_CHECKER_COST_CACHE: OnceLock<String> = OnceLock::new();
+static DEFAULT_CHECKER_COST_CACHE: OnceLock<String> = OnceLock::new();
+
+/// `--checkerCostCache <file>`; an empty path is `--noCheckerCostCache` (no cache, not even the default one).
 pub fn set_checker_cost_cache_from_cli(path: &str) {
     let _ = CLI_CHECKER_COST_CACHE.set(path.to_string());
 }
 
-// The cost cache path; None unless the option is set and the locality assignment is used.
+/// The CLI's cache file when neither `--checkerCostCache` nor TSRS_CHECKER_COST_CACHE is given. Used only in the
+/// default scheduling mode (no assignment named, stealing on), whose assignment already varies from run to run: a named
+/// assignment stays a function of the program alone.
+pub fn set_default_checker_cost_cache(path: &str) {
+    let _ = DEFAULT_CHECKER_COST_CACHE.set(path.to_string());
+}
+
+// The cost cache path; None unless a cache is given (or defaulted) and the locality assignment is used.
 fn checker_cost_cache_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
     PATH.get_or_init(|| {
@@ -1548,6 +1577,7 @@ fn checker_cost_cache_path() -> Option<&'static str> {
             .get()
             .cloned()
             .or_else(|| std::env::var("TSRS_CHECKER_COST_CACHE").ok())
+            .or_else(|| DEFAULT_CHECKER_COST_CACHE.get().filter(|_| stealing_enabled()).cloned())
             .filter(|p| !p.is_empty() && matches!(checker_assignment(), CheckerAssignment::Locality))
     })
     .as_deref()
@@ -1593,7 +1623,9 @@ fn read_cost_cache(path: &str) -> (FxHashMap<String, CostEntry>, usize) {
 }
 
 // Writes the cost cache when it is enabled and more than one checker ran: per type-checked file, its thread CPU
-// seconds summed over the checker passes and its checker. Files of other runs are dropped.
+// seconds summed over the checker passes and its checker. A checked file of this program that the run did not check
+// (an incremental run checks only the affected files) keeps its previous entry; files no longer in the program are
+// dropped.
 pub(crate) fn write_cost_cache(program: &'static Program) {
     use std::fmt::Write;
     // Programs with an external checker pool (language server / API projects) have no cost state to write.
@@ -1603,6 +1635,7 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
     if state.checkers.len() <= 1 {
         return;
     }
+    let start = std::time::Instant::now();
     let file_indices: FxHashMap<P<SourceFile>, usize> = program.files.iter().enumerate().map(|(i, &f)| (f, i)).collect();
     let mut measured: Vec<f64> = vec![-1.0; program.files.len()];
     for &(file, seconds) in state.file_cpu.lock().unwrap().iter() {
@@ -1610,10 +1643,17 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
             measured[i] = measured[i].max(0.0) + seconds;
         }
     }
+    let checked = |file: &P<SourceFile>| !((file.is_declaration_file.get() || ast::is_json_source_file(*file)) && program.skip_type_checking(*file, false));
+    let previous = if program.files.iter().enumerate().any(|(i, f)| measured[i] < 0.0 && checked(f)) { read_cost_cache(path).0 } else { FxHashMap::default() };
     let mut entries: Vec<(&str, f64, usize)> = Vec::new();
     entries.extend(program.files.iter().enumerate().filter_map(|(i, file)| {
-        let skipped = (file.is_declaration_file.get() || ast::is_json_source_file(*file)) && program.skip_type_checking(*file, false);
-        if measured[i] >= 0.0 && !skipped { Some((file.path().as_str(), measured[i], state.owner_at(i))) } else { None }
+        if !checked(file) {
+            return None;
+        }
+        if measured[i] >= 0.0 {
+            return Some((file.path().as_str(), measured[i], state.owner_at(i)));
+        }
+        previous.get(file.path().as_str()).filter(|e| e.checker < state.checkers.len()).map(|e| (file.path().as_str(), e.seconds, e.checker))
     }));
     entries.sort_by(|a, b| a.0.cmp(b.0));
     let mut out = String::with_capacity(entries.len() * 100);
@@ -1621,11 +1661,16 @@ pub(crate) fn write_cost_cache(program: &'static Program) {
     for (file, seconds, checker) in entries {
         let _ = writeln!(out, "{seconds:.6}\t{checker}\t{file}");
     }
-    // Write-then-rename so a concurrent reader never sees a partial file; on failure the old cache stays.
+    // Write-then-rename so a concurrent reader never sees a partial file; on failure (a read-only directory) the old
+    // cache stays and the run is unaffected.
+    if let Some(dir) = std::path::Path::new(path).parent().filter(|d| !d.as_os_str().is_empty() && !d.exists()) {
+        let _ = std::fs::create_dir_all(dir);
+    }
     let tmp = format!("{path}.tmp{}", std::process::id());
     if std::fs::write(&tmp, out).is_ok() && std::fs::rename(&tmp, path).is_err() {
         let _ = std::fs::remove_file(&tmp);
     }
+    tsrs_core::phases::record("Checkers: cost cache write", start.elapsed());
 }
 
 // tsrs-only: how files are assigned to checkers. `--checkerAssignment <name>` (CLI) or
@@ -1779,7 +1824,7 @@ pub fn checker_count_upper_bound(options: &tsrs_core::CompilerOptions, single_th
 // edges between groups, 101% load cap) in descending weight order, largest first. Deterministic: paths are
 // sorted, groups are numbered in path order, ties are broken by index. Unchecked declaration files go to
 // checker 0 (no checker ever runs over them).
-fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> {
+fn locality_associations(program: &Program, checker_count: usize) -> (Vec<usize>, Option<Vec<i64>>) {
     // tsrs-only: the import graph (built on the worker pool) does not depend on the groups; it is built while they
     // are formed.
     if program.single_threaded() {
@@ -1791,13 +1836,13 @@ fn locality_associations(program: &Program, checker_count: usize) -> Vec<usize> 
     })
 }
 
-fn locality_associations_with(program: &Program, checker_count: usize, import_targets: impl FnOnce() -> Vec<Vec<usize>>) -> Vec<usize> {
+fn locality_associations_with(program: &Program, checker_count: usize, import_targets: impl FnOnce() -> Vec<Vec<usize>>) -> (Vec<usize>, Option<Vec<i64>>) {
     let files = &program.files;
     let weights = checked_file_weights(program);
     let mut order: Vec<usize> = (0..files.len()).filter(|&i| weights[i] > 0).collect();
     let mut associations = vec![0usize; files.len()];
     if order.is_empty() {
-        return associations;
+        return (associations, None);
     }
     // A total order (ties by index), so the parallel sort is deterministic.
     let by_path = |&a: &usize, &b: &usize| files[a].path().cmp(files[b].path()).then(a.cmp(&b));
@@ -1809,7 +1854,9 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
     }
 
     // With a cost cache, groups are formed and placed by measured cost (see measured_file_costs).
-    let measured = checker_cost_cache_path().and_then(|path| measured_file_costs(&read_cost_cache(path), checker_count, files, &order, &weights));
+    let measured = checker_cost_cache_path().and_then(|path| {
+        tsrs_core::phases::time("Checkers: cost cache read", || measured_file_costs(&read_cost_cache(path), checker_count, files, &order, &weights))
+    });
     let costs: &[i64] = measured.as_ref().map_or(&weights, |m| &m.costs);
 
     let total: i64 = order.iter().map(|&i| costs[i]).sum();
@@ -1906,7 +1953,8 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
     for &i in &order {
         associations[i] = group_associations[group_of_file[i]];
     }
-    associations
+    let measured_weights = measured.filter(|_| cost_cache_weights()).map(|m| m.costs.iter().map(|&c| (c as f64 / m.ns_per_weight) as i64).collect());
+    (associations, measured_weights)
 }
 
 struct MeasuredCosts {
@@ -1916,6 +1964,8 @@ struct MeasuredCosts {
     // Per program file, the checker that ran it in the previous run (None without an entry); None when that
     // run used a different checker count.
     checkers: Option<Vec<Option<usize>>>,
+    // The cache's average nanoseconds per static weight unit.
+    ns_per_weight: f64,
 }
 
 // None when the cache has no entry for a checked file of this program (first run, other project, ...).
@@ -1948,7 +1998,7 @@ fn measured_file_costs(
         })
         .collect();
     let checkers = (*cached_checker_count == checker_count).then(|| cached.iter().map(|e| e.map(|e| e.checker)).collect());
-    Some(MeasuredCosts { costs, checkers })
+    Some(MeasuredCosts { costs, checkers, ns_per_weight })
 }
 
 // A group moved to another checker shares less with its new neighbors than with its old ones: measured on the

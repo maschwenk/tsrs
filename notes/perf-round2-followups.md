@@ -413,6 +413,12 @@ with the switch off, which is why it is not in the default build.
   between kinds of files; import-closure weights are worse on all three projects (mui-docs CPU imbalance 36% -> 77-98%);
   dropping the fanout term helps vscode and mui-docs but slows mui-docs' slowest checker. In-checker order is not free
   either: reversing it changed a printed TS2345 message.
+- The checker cost cache on by default (notes/perf-cost-cache-default.md, branch `probe/cost-cache-default`): exact,
+  ms of I/O, Check time -13..-19% on t3code-server and mui-docs on the loaded Mac, nothing on vscode, webpack, Compiler.
+  It costs t3code-server +4..+17% instructions and +4..+9% peak, from running Effect-heavy files on separate checkers.
+  Not landed until a Linux probe at 8-32 checkers shows wall. Two variants that kept the placement were worse: order
+  only by measured cost (five costly files stay on one checker, +6% slowest checker at 16) and moving only the costly
+  files (as many instructions as the full cache).
 - A per-file check-cost model fitted from syntax (notes/speed-frontend.md): in-sample within 0.5 points, but used for
   the assignment it made the slowest checker 21.5% above the mean (check 8.2 -> 9.5 s), because the assignment moves
   the first-touch costs.
