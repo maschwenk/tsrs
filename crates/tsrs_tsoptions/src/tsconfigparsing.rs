@@ -1425,6 +1425,7 @@ fn parse_config(
             let mut extended_source_files = source_file.extended_source_files.borrow_mut();
             #[expect(clippy::iter_over_hash_type, reason = "each file is inserted at its sorted position")]
             for extended_source_file in result.extended_source_files {
+                if tspath::to_path(&extended_source_file, &base_path, host.fs().use_case_sensitive_file_names()) == resolved_path { continue; }
                 let i = extended_source_files.binary_search(&extended_source_file).unwrap_or_else(|i| i);
                 extended_source_files.insert(i, extended_source_file);
             }
