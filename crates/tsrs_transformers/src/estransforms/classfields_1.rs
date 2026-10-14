@@ -354,7 +354,7 @@ impl classFieldsTransformer {
             return Some(self.visit_identifier(node));
         }
         if node.kind() == Kind::PropertyAccessExpression && ast::is_identifier(node.as_property_access_expression().name()) {
-            return Some(self.visit_property_access_expression_for_substitution(node));
+            return Some(self.visit_property_access_expression_for_substitution(node, &mut self.substitution_visitor()));
         }
         self.substitution_visitor().visit_each_child(Some(node))
     }
@@ -1171,7 +1171,7 @@ impl classFieldsTransformer {
         // Private identifier names are still visited through VisitEachChild so they can be
         // transformed by visitPrivateIdentifier.
         if ast::is_identifier(pa.name()) {
-            return Some(self.visit_property_access_expression_for_substitution(node));
+            return Some(self.visit_property_access_expression_for_substitution(node, &mut self.visitor()));
         }
         self.visitor().visit_each_child(Some(node))
     }
@@ -1180,9 +1180,9 @@ impl classFieldsTransformer {
     // visitPropertyAccessExpressionForSubstitution visits only the expression of a PropertyAccessExpression,
     // leaving the name unchanged. This prevents the name from being treated as a standalone identifier
     // reference and incorrectly substituted with a class alias.
-    pub(crate) fn visit_property_access_expression_for_substitution(&self, node: P<Node>) -> P<Node> {
+    pub(crate) fn visit_property_access_expression_for_substitution(&self, node: P<Node>, visitor: &mut NodeVisitor) -> P<Node> {
         let pa = node.as_property_access_expression();
-        let expression = self.visitor().visit_node(Some(pa.expression)).unwrap();
+        let expression = visitor.visit_node(Some(pa.expression)).unwrap();
         if expression != pa.expression {
             return self.factory().update_property_access_expression(node, expression, pa.question_dot_token(), pa.name(), node.flags());
         }
