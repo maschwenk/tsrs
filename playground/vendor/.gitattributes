@@ -1,0 +1,2 @@
+# Preserve upstream bytes and whitespace in the vendored tree.
+* -text whitespace=-blank-at-eol,-blank-at-eof

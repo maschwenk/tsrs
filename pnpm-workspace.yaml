@@ -1,2 +1,5 @@
 packages:
   - npm
+  - playground
+allowBuilds:
+  '@parcel/watcher': false

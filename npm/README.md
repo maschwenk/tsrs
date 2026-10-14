@@ -17,6 +17,9 @@ The main package name is set in `npm/tsrs/package.json`; platform packages are `
 
 The repository's root `README.md` is also the main package README. `npm/build.mjs` copies it into the staged package.
 
+The [browser playground](../playground/README.md) uses the local WASM package for checking and emit. It is a separate
+private workspace application with a static build; it is not included in the published compiler packages.
+
 ## How the launcher finds the binary
 
 `bin/tsrs` -> `lib/tsrs.js` -> `lib/getExePath.js`:
