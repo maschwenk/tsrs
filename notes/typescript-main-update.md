@@ -26,3 +26,4 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64457](https://github.com/microsoft/TypeScript/commit/e8fd69fc1e1974f7f7410f79a04adad692dff0dc) | Port generated declarations, metadata, runner variation lists and option change comparisons, legacy watch-option removal, validation, and ordered option equality; Rust retains its existing typed option fields. |
 | [#64556](https://github.com/microsoft/TypeScript/commit/15dee00a1c6549a4953ab17ccac4c56d252ba4cc) | Port canonical container cycle identities and inferred-parameter nodebuilder cache keys. |
 | [#64573](https://github.com/microsoft/TypeScript/commit/af36d532b0120413a8b6d2157a7f5be7f8d61f03) | Port cyclic alias-chain resolution for export-equals class visibility. |
+| [#64093](https://github.com/microsoft/TypeScript/commit/bf00f213ffd67ce4cc765c0db341e86c7057be44) | Copy upstream Promise.allKeyed/allSettledKeyed declarations, library references and load order. |

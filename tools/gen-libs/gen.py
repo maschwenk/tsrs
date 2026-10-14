@@ -10,9 +10,12 @@ Usage: python3 tools/gen-libs/gen.py   (from the repo root)
 import os
 import shutil
 import sys
+import argparse
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-GO_BUNDLED = os.path.join(ROOT, "ts-ref", "tsc", "internal", "bundled")
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--bundled", default=os.path.join(ROOT, "ts-ref", "tsc", "internal", "bundled"))
+GO_BUNDLED = os.path.abspath(parser.parse_args().bundled)
 SRC_LIBS = os.path.join(GO_BUNDLED, "libs")
 COPYRIGHT = os.path.join(GO_BUNDLED, "CopyrightNotice.txt")
 CRATE = os.path.join(ROOT, "crates", "tsrs_vfs")
