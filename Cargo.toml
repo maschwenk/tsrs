@@ -92,6 +92,15 @@ strip = "symbols" # set to `false` for debug information
 debug = false # set to `true` for debug information
 panic = "unwind"
 
+# The fourslash harness and its ~750k lines of generated tests need no -O3: at opt-level 3 in one codegen unit they
+# took 79 s to compile and the tsrs-fourslash link 106 s, the longest serial path of CI's release build (212 s on
+# 14 cores, against 137 s with this). The language server it runs comes from the other crates, still at opt-level 3
+# and through the same fat LTO, so the suite's results and run time (4.2 s) are unchanged. opt-level 0 also slows the
+# server's code in the binary (the suite took 6.7 s) and saves no wall time.
+[profile.release.package.tsrs_fourslash]
+opt-level = 1
+codegen-units = 16
+
 # Release binaries (.github/workflows/release.yml) build with this profile twice, for PGO: -Cprofile-generate,
 # training run, -Cprofile-use (notes/perf-pgo.md). `release` has the same LTO and codegen units; the release
 # workflow's `dist` builds add only the PGO profile (and, on Linux, BOLT through .github/scripts/bolt.sh).
