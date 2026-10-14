@@ -6,9 +6,9 @@
 # Raise MIN_PASS / MIN_TYPES / MIN_SYMBOLS when a fix lands more passes.
 set -euo pipefail
 
-MIN_PASS="${MIN_PASS:-13458}"
-MIN_TYPES="${MIN_TYPES:-12779}"
-MIN_SYMBOLS="${MIN_SYMBOLS:-12779}"
+MIN_PASS="${MIN_PASS:-13572}"
+MIN_TYPES="${MIN_TYPES:-12875}"
+MIN_SYMBOLS="${MIN_SYMBOLS:-12875}"
 BASELINES="${BASELINES:-types,symbols}"
 TSRS_TEST="${TSRS_TEST:-target/release/tsrs-test}"
 export TSRS_TEST_RESULTS="${TSRS_TEST_RESULTS:-$PWD/target/test-results}"

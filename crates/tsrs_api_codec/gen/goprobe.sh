@@ -10,7 +10,7 @@ trap 'rm -rf "$probe"' EXIT
 mkdir -p "$probe"
 cp "$crate/gen/goprobe/main.go" "$probe/main.go"
 out="$(mktemp -d)"
-(cd "$ref/tsc" && GOWORK=off GOTOOLCHAIN=local go build -o "$out/codecprobe" ./cmd/codecprobe)
+(cd "$ref/tsc" && GOWORK=off GOTOOLCHAIN=auto go build -o "$out/codecprobe" ./cmd/codecprobe)
 "$out/codecprobe" getindex "$crate/tests/fixtures" > "$crate/tests/golden/get_index.txt"
 echo "wrote tests/golden/get_index.txt ($(wc -l < "$crate/tests/golden/get_index.txt") lines) from ts-ref $pin"
 # Go DecodeNodes + EncodeNode(nil) of every server golden and every client-encoded print input.

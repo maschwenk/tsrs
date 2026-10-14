@@ -417,7 +417,7 @@ impl LanguageService {
     // For example, if specifier "a.js" resolves to file a.ts, renaming "a.js" -> "b.js" should mean file rename a.ts -> b.ts.
     // rename.go:351
     fn get_new_file_name_for_module_rename(&self, old_path: &str, specifier_text: &str, new_name: &str) -> String {
-        let mut new_path = tspath::to_rooted_path(new_name, &tspath::get_directory_path(old_path));
+        let mut new_path = if new_name.is_empty() { tspath::get_directory_path(old_path) } else { tspath::to_rooted_path(new_name, &tspath::get_directory_path(old_path)) };
         let ignore_case = !self.use_case_sensitive_file_names();
         let old_ext = if tspath::is_declaration_file_name(old_path) {
             tspath::get_declaration_file_extension(old_path)

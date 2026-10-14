@@ -3,7 +3,7 @@
 // lone surrogates, a source file whose text itself contains a lone surrogate, deep nesting, and checker
 // queries addressed by UTF-16 positions after astral text, overloads and JSDoc-typed JavaScript.
 
-import type { Node, SourceFile } from "@typescript/typescript/unstable/ast";
+import type { Node, SourceFile } from "@typescript/typescript/ast";
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { golden, syncAPI } from "./utils.ts";
@@ -25,7 +25,7 @@ function walk(file: SourceFile) {
 
 function open(files: Record<string, string>, config = `{ "compilerOptions": { "strict": true, "jsx": "preserve", "allowJs": true, "checkJs": true } }`) {
     const ctx = syncAPI({ "/tsconfig.json": config, ...files });
-    const project = ctx.api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!;
+    const project = ctx.api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!;
     return { ...ctx, program: project.program, checker: project.checker };
 }
 
@@ -56,7 +56,7 @@ describe("parity: AST and checker at the UTF-16/WTF-8 boundary", () => {
         using api = ctx.api;
         let outcome: string;
         try {
-            const program = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
+            const program = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!.program;
             outcome = program.getSourceFile("/src/lone.ts")!.text === text ? "round-trip" : "altered";
         }
         catch (e) {

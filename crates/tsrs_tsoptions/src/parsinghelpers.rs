@@ -61,11 +61,25 @@ pub(crate) fn parse_number(value: &CompilerOptionsValue) -> Option<i32> {
     }
 }
 
+// Go uses CVTTSD2SI on x64 (the minimum integer on overflow) and FCVTZS on arm64
+// (saturation). Rust casts saturate on both, so preserve Go's x64 result explicitly.
+pub fn go_float64_to_int32(value: f64) -> i32 {
+    #[cfg(target_arch = "x86_64")]
+    if value.is_nan() || value >= 2147483648.0 { return i32::MIN; }
+    value as i32
+}
+
+fn go_float64_to_int64(value: f64) -> i64 {
+    #[cfg(target_arch = "x86_64")]
+    if value.is_nan() || value >= 9223372036854775808.0 { return i64::MIN; }
+    value as i64
+}
+
 // parseNumber into a Go `*int` (64-bit) option.
 pub(crate) fn parse_number_int(value: &CompilerOptionsValue) -> Option<i64> {
     match value {
         CompilerOptionsValue::Int(num) => Some(*num),
-        CompilerOptionsValue::Float(num) => Some(*num as i64),
+        CompilerOptionsValue::Float(num) => Some(go_float64_to_int64(*num)),
         _ => None,
     }
 }
@@ -457,14 +471,14 @@ pub(crate) fn parse_compiler_options_worker(key: &str, value: &CompilerOptionsVa
 }
 
 // floatOrInt32ToFlag[T]: the value is either already the enum (from the enum maps) or a float64
-// (options that came from JSON). Every enum value a float can name appears in the option's enum map.
+// (options that came from JSON). Go preserves unnamed numeric flags too.
 macro_rules! float_or_int32_to_flag {
-    ($fn_name:ident, $ty:ident, $map:ident) => {
+    ($fn_name:ident, $ty:ident, $map:ident, $fallback:expr) => {
         fn $fn_name(value: &CompilerOptionsValue) -> $ty {
             match value {
                 CompilerOptionsValue::$ty(v) => *v,
                 CompilerOptionsValue::Float(f) => {
-                    let n = *f as i32;
+                    let n = go_float64_to_int32(*f);
                     if let Some(value) = $map.values().find_map(|v| {
                         if let CompilerOptionsValue::$ty(v) = v {
                             if v.value() == n {
@@ -475,20 +489,26 @@ macro_rules! float_or_int32_to_flag {
                     }) {
                         return value;
                     }
-                    $ty::default()
+                    ($fallback)(n)
                 }
-                _ => panic!("interface conversion: value is not {}", stringify!($ty)),
+                v => panic!("interface conversion: interface {{}} is {}, not float64", match v {
+                    CompilerOptionsValue::String(_) => "string",
+                    CompilerOptionsValue::Bool(_) => "bool",
+                    CompilerOptionsValue::Object(_) => "map[string]interface {}",
+                    CompilerOptionsValue::Array(_) => "[]interface {}",
+                    _ => "nil",
+                }),
             }
         }
     };
 }
 
-float_or_int32_to_flag!(float_or_int32_to_jsx_emit, JsxEmit, JSX_OPTION_MAP);
-float_or_int32_to_flag!(float_or_int32_to_module_kind, ModuleKind, MODULE_OPTION_MAP);
-float_or_int32_to_flag!(float_or_int32_to_module_detection_kind, ModuleDetectionKind, MODULE_DETECTION_OPTION_MAP);
-float_or_int32_to_flag!(float_or_int32_to_module_resolution_kind, ModuleResolutionKind, MODULE_RESOLUTION_OPTION_MAP);
-float_or_int32_to_flag!(float_or_int32_to_script_target, ScriptTarget, TARGET_OPTION_MAP);
-float_or_int32_to_flag!(float_or_int32_to_new_line_kind, NewLineKind, NEW_LINE_OPTION_MAP);
+float_or_int32_to_flag!(float_or_int32_to_jsx_emit, JsxEmit, JSX_OPTION_MAP, JsxEmit);
+float_or_int32_to_flag!(float_or_int32_to_module_kind, ModuleKind, MODULE_OPTION_MAP, ModuleKind);
+float_or_int32_to_flag!(float_or_int32_to_module_detection_kind, ModuleDetectionKind, MODULE_DETECTION_OPTION_MAP, |_| ModuleDetectionKind::default());
+float_or_int32_to_flag!(float_or_int32_to_module_resolution_kind, ModuleResolutionKind, MODULE_RESOLUTION_OPTION_MAP, ModuleResolutionKind);
+float_or_int32_to_flag!(float_or_int32_to_script_target, ScriptTarget, TARGET_OPTION_MAP, ScriptTarget);
+float_or_int32_to_flag!(float_or_int32_to_new_line_kind, NewLineKind, NEW_LINE_OPTION_MAP, |_| NewLineKind::default());
 
 pub fn parse_watch_options(key: &str, value: &CompilerOptionsValue, all_options: &mut WatchOptions) -> Vec<P<Diagnostic>> {
     match key {

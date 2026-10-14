@@ -21,7 +21,7 @@ import type {
     StringLiteralLikeNode,
     TypeElement,
     VariableStatement,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import {
     getCombinedModifierFlags,
     getNameOfDeclaration,
@@ -37,11 +37,11 @@ import {
     NodeFlags,
     SyntaxKind,
     TokenFlags,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import {
     getSynthesizedDeepClone,
     getSynthesizedDeepClones,
-} from "tsrs/unstable/ast/clone";
+} from "tsrs/ast/clone";
 import {
     cloneNode,
     createBinaryExpression,
@@ -56,18 +56,18 @@ import {
     createSourceFile,
     createStringLiteral,
     createToken,
-    NodeObject,
-} from "tsrs/unstable/ast/factory";
+} from "tsrs/ast/factory";
 import {
     visitEachChild,
     visitNode,
     visitNodes,
-} from "tsrs/unstable/ast/visitor";
+} from "tsrs/ast/visitor";
 import {
     API,
     Checker,
+    isRemoteNode,
     TypeFlags,
-} from "tsrs/unstable/sync";
+} from "tsrs/sync";
 import assert from "node:assert";
 import {
     describe,
@@ -615,7 +615,7 @@ function spawnAPI(files: Record<string, string> = {
 }
 
 function getRemoteSourceFileAndChecker(api: API, configPath: string, filePath: string) {
-    const snapshot = api.createSnapshot({ openProject: configPath });
+    const snapshot = api.createSnapshot({ openProjects: [configPath] });
     const project = snapshot.getConfiguredProject(configPath)!;
     return [project.program.getSourceFile(filePath)!, project.checker] as const;
 }
@@ -789,13 +789,14 @@ interface I extends Parent<boolean> {}
         }
     });
 
-    test("cloneNode produces a NodeObject from a RemoteNode", () => {
+    test("cloneNode produces a synthesized node from a remote node", () => {
         const api = spawnAPI();
         try {
             const sf = getRemoteSourceFile(api, "/tsconfig.json", "/src/foo.ts");
             const clone = cloneNode(sf);
             assert.notStrictEqual(clone, sf);
-            assert.ok(clone instanceof NodeObject);
+            assert.ok(isRemoteNode(sf));
+            assert.ok(!isRemoteNode(clone));
             assert.strictEqual(clone.statements, sf.statements);
             assert.strictEqual(clone.text, sf.text);
             assert.strictEqual(clone.fileName, sf.fileName);
@@ -875,7 +876,7 @@ describe("RemoteNode + visitEachChild", { concurrency }, () => {
         }
     });
 
-    test("visitor can transform remote tree into NodeObject tree", () => {
+    test("visitor can transform a remote tree into a synthesized tree", () => {
         const api = spawnAPI();
         try {
             const sf = getRemoteSourceFile(api, "/tsconfig.json", "/src/index.ts");
@@ -954,7 +955,7 @@ describe("RemoteNode + getSynthesizedDeepClone", { concurrency }, () => {
         }
     });
 
-    test("deep clone of remote tree produces independent NodeObject tree", () => {
+    test("deep clone of remote tree produces an independent synthesized tree", () => {
         const api = spawnAPI();
         try {
             const sf = getRemoteSourceFile(api, "/tsconfig.json", "/src/foo.ts");
@@ -968,7 +969,7 @@ describe("RemoteNode + getSynthesizedDeepClone", { concurrency }, () => {
 
             // But be entirely separate objects
             clone.forEachChild(function visit(node) {
-                assert.ok(node instanceof NodeObject);
+                assert.ok(!isRemoteNode(node));
                 node.forEachChild(visit);
             });
         }

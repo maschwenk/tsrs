@@ -1,4 +1,4 @@
-tsrs patch to microsoft/TypeScript@b85298b6a81f packages/typescript/src/api/async/client.ts
+tsrs patch to microsoft/TypeScript@9eedcb0dd725 packages/typescript/src/api/async/client.ts
 (applied by npm/sdk/sync-upstream.mjs; the pinned original is recorded in npm/tsrs/UPSTREAM.json "patchedFiles").
 
 Upstream, if the API server process dies or closes the connection while the async client is open, vscode-jsonrpc
@@ -14,7 +14,7 @@ or "Unexpected EOF while reading from child process (...)".
 
 --- a/src/api/async/client.ts
 +++ b/src/api/async/client.ts
-@@ -53,6 +53,9 @@
+@@ -58,6 +58,9 @@
      private connected = false;
      private closed = false;
      private connecting: Promise<void> | undefined;
@@ -24,7 +24,7 @@ or "Unexpected EOF while reading from child process (...)".
      private timing: TimingCollector | undefined;
      private batchedRequests: { method: APIRequest["method"]; params: APIRequest["params"]; resolve: (value: unknown) => void; reject: (reason?: any) => void; }[] = [];
      private nextBatch: NodeJS.Immediate | "manual" | undefined;
-@@ -112,6 +115,10 @@
+@@ -117,6 +120,10 @@
              const writer = new StreamMessageWriter(this.process.stdin!);
              this.connection = createMessageConnection(reader, writer);
              this.registerFSCallbacks(this.connection, options.fs, fsConfiguration);
@@ -35,7 +35,7 @@ or "Unexpected EOF while reading from child process (...)".
              this.connection.listen();
          });
      }
-@@ -124,6 +131,7 @@
+@@ -129,6 +136,7 @@
                  const reader = new SocketMessageReader(this.socket!);
                  const writer = new SocketMessageWriter(this.socket!);
                  this.connection = createMessageConnection(reader, writer);
@@ -43,7 +43,7 @@ or "Unexpected EOF while reading from child process (...)".
                  this.connection.listen();
                  this.connected = true;
                  resolve();
-@@ -252,10 +260,24 @@
+@@ -305,10 +313,24 @@
              }
          }
          catch (error) {
@@ -69,7 +69,7 @@ or "Unexpected EOF while reading from child process (...)".
      private scheduleImmediateBatch(): void {
          if (this.nextBatch) return;
          this.nextBatch = setImmediate(this.doBatch.bind(this));
-@@ -280,6 +302,7 @@
+@@ -333,6 +355,7 @@
  
      async apiRequest<K extends APIRequest["method"]>(method: K, params: APIMethodInfo[K]["params"]): Promise<APIMethodInfo[K]["result"]> {
          if (this.closed) throw new Error("Client is closed");

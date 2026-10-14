@@ -2,7 +2,7 @@
 // getOuterTypeParametersOfType, getConstraintOfType, getCurrentLanguageServerSnapshot and the profiling methods.
 // Each is driven through the pinned client's public surface; outcomes are oracle-recorded.
 
-import { API } from "@typescript/typescript/unstable/sync";
+import { API } from "@typescript/typescript/sync";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -28,7 +28,7 @@ const source = [
 describe("parity: methods without upstream coverage", () => {
     test("getExportSymbolOfSymbol, getOuterTypeParametersOfType, getConstraintOfType", () => {
         using api = new API({ cwd, fs: createVirtualFileSystem({ "/tsconfig.json": `{ "compilerOptions": { "strict": true } }`, "/src/index.ts": source }) });
-        const project = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!;
+        const project = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!;
         const { checker, program } = project;
         const file = program.getSourceFile("/src/index.ts")!;
 
@@ -79,10 +79,10 @@ describe("parity: methods without upstream coverage", () => {
             }
         };
         try {
-            const start = outcome(() => api.internal.startCPUProfile(dir));
-            api.createSnapshot({ openProject: "/tsconfig.json" });
-            const stop = outcome(() => api.internal.stopCPUProfile());
-            const heap = outcome(() => api.internal.saveHeapProfile(dir));
+            const start = outcome(() => api.debug.startCPUProfile(dir));
+            api.createSnapshot({ openProjects: ["/tsconfig.json"] });
+            const stop = outcome(() => api.debug.stopCPUProfile());
+            const heap = outcome(() => api.debug.saveHeapProfile(dir));
             const written = fs.readdirSync(dir).map(f => f.replace(/\d+/g, "N")).sort();
             soft.check(t, "profiling", { start, stop, heap, written });
             g.check("profiling.serverSurvives", api.parseCommandLine(["--noEmit"]).options.noEmit === true);

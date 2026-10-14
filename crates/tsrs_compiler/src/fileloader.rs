@@ -1322,10 +1322,15 @@ impl fileLoader {
                     _ => None,
                 };
                 let module_name = entry.text();
-                if module_name.is_empty() {
+                if module_name.is_empty() || entry.parent().is_some_and(ast::is_source_phase_import) {
                     continue;
                 }
 
+                if file.ambient_module_names().contains(&module_name) {
+                    let mode = get_mode_for_usage_location(file.file_name(), &self.tasks[t].metadata(), entry, Some(&options_for_file));
+                    resolutions_in_file.insert(ModeAwareCacheKey { name: alloc_str(module_name), mode }, P::new(ResolvedModule::default()));
+                    continue;
+                }
                 let (resolution, mode, prepared) = match prefetched_resolution {
                     Some(prefetched) => (prefetched.resolution, prefetched.mode, Some(prefetched.prepared)),
                     None => {

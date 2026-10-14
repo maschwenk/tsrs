@@ -18,7 +18,7 @@ describe("parity: programs and diagnostics", () => {
         ].join("\n");
         const { api } = syncAPI({ "/tsconfig.json": `{ "compilerOptions": { "strict": true } }`, "/src/index.ts": source });
         using _ = api;
-        const program = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
+        const program = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!.program;
         g.check("utf16.syntactic", diags(program.getSyntacticDiagnostics("/src/index.ts")));
         g.check("utf16.semantic", diags(program.getSemanticDiagnostics("/src/index.ts")));
         g.check("utf16.text", program.getSourceFile("/src/index.ts")!.text === source);
@@ -33,7 +33,7 @@ describe("parity: programs and diagnostics", () => {
             "/src/a.ts": `export const a = 1;`,
         });
         using _ = api;
-        const program = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
+        const program = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!.program;
         g.check("config.parsing", diags(program.getConfigFileParsingDiagnostics()));
         g.check("config.program", diags(program.getProgramDiagnostics()));
         g.check("config.global", diags(program.getGlobalDiagnostics()));
@@ -49,7 +49,7 @@ describe("parity: programs and diagnostics", () => {
             "/src/index.ts": `export function f(x) { return x; }\nexport const s: string = null;`,
         });
         using _ = api;
-        const program = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
+        const program = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!.program;
         g.check("extends.semantic", diags(program.getSemanticDiagnostics("/src/index.ts")));
         g.check("extends.configFiles", program.getConfigFileNames());
         g.check("extends.parsing", diags(program.getConfigFileParsingDiagnostics()));
@@ -72,7 +72,7 @@ describe("parity: programs and diagnostics", () => {
             ].join("\n"),
         });
         using _ = api;
-        const program = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
+        const program = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!.program;
         g.check("modules.semantic", diags(program.getSemanticDiagnostics("/src/index.ts")));
         g.check("modules.names", program.getSourceFileNames().filter(f => !f.includes("lib.")).sort());
         g.check("modules.external", program.isSourceFileFromExternalLibrary(program.getSourceFile("/node_modules/pkg/dist/index.d.ts")!));

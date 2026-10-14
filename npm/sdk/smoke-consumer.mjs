@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Installs the packed tarballs from `node npm/build.mjs ... --pack` into a fresh consumer project outside the repo
-// and exercises the published package: the CLI, the root version export, a nodenext typecheck of the unstable/*
+// and exercises the published package: the CLI, the root version export, a nodenext typecheck of the beta API
 // declarations (with the packaged binary), and real sync + async compiles through the JS API.
 //
 //   node npm/sdk/smoke-consumer.mjs [--dist npm/dist] [--node <node binary>]... [--keep]
@@ -42,7 +42,7 @@ try {
 
     const pkg = JSON.parse(fs.readFileSync(path.join(dir, "node_modules/tsrs/package.json"), "utf8"));
     for (const sub of Object.keys(pkg.exports)) {
-        if (!sub.startsWith("./unstable/")) continue;
+        if (sub == "." || sub == "./package.json") continue;
         const target = pkg.exports[sub].default;
         if (!fs.existsSync(path.join(dir, "node_modules/tsrs", target))) throw new Error(`export ${sub} -> ${target} is not in the tarball`);
         if (!fs.existsSync(path.join(dir, "node_modules/tsrs", target.replace(/\.js$/, ".d.ts")))) throw new Error(`export ${sub} has no declarations`);
@@ -58,7 +58,7 @@ try {
         files: ["typed.mts"],
     }));
     run(bin, ["-p", "tsconfig.json"]);
-    console.log("typecheck ok: unstable/* declarations from a nodenext consumer");
+    console.log("typecheck ok: beta API declarations from a nodenext consumer");
 
     fs.copyFileSync(path.join(here, "smoke", "consumer.mjs"), path.join(dir, "consumer.mjs"));
     for (const node of nodes) {

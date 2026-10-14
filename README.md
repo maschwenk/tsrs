@@ -31,7 +31,7 @@ for supported features and known gaps.
 
 - [CLI usage and memory tuning](https://github.com/maschwenk/tsrs/blob/main/docs/USAGE.md)
 - [Editor setup](https://github.com/maschwenk/tsrs/blob/main/docs/LSP.md#editor-setup)
-- [Node API (unstable)](https://github.com/maschwenk/tsrs/blob/main/docs/NODE_API.md)
+- [Node API (beta)](https://github.com/maschwenk/tsrs/blob/main/docs/NODE_API.md)
 - [WebAssembly for Node and browsers](https://github.com/maschwenk/tsrs/blob/main/npm/tsrs-wasm/README.md)
 - [Benchmarks and methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)
 - [Release notes](https://github.com/maschwenk/tsrs/blob/main/docs/STATUS.md)

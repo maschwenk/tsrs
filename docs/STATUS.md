@@ -5,6 +5,21 @@ change are identified separately from measurements of the packaged release. For 
 see the [compatibility table](COMPATIBILITY.md); detailed investigations are indexed in the
 [engineering notes](../notes/README.md). The early development log follows the release entries.
 
+## 2026-10-14: TypeScript main port (unreleased)
+
+Advance the TypeScript source pin to `9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a`
+(`7.1.0-dev.20261014`, matching npm nightly `7.1.0-dev.20261014.1`). The
+[merge audit](../notes/typescript-main-update.md) accounts for all 87 upstream commits.
+The port includes source-phase imports, generated compiler options, typed-path behavior, content-mapper output
+extensions, scoped emit contexts, merged-symbol API queries, beta SDK exports and updated standard libraries.
+
+The Go-history conformance run passes all 13,576 diagnostic baselines, all 12,876 type and symbol baselines,
+13,502 JavaScript/declaration baselines, 149 JavaScript maps and 156 source-map records. The runner retains the parsed config base directory, including in pre-emit programs. The canonical and no-lazy runs meet
+the raised gate (13,572 diagnostic passes; 12,875 canonical type/symbol passes and 12,876 no-lazy passes).
+Fourslash: 4,083 pass, 65 fail and 413 skip; the failures are 57 unsupported content-mapper cases and eight
+cases requiring the unported build harness. The pinned Node API and shipped SDK comparisons have zero failures
+([validation](NODE_API_VALIDATION.md#current-pin-2026-10-14)). No npm release is made by this port.
+
 ## 2026-10-13: 0.14.1 release
 
 Highlights:

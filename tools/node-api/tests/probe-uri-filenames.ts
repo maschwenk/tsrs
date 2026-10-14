@@ -4,9 +4,9 @@
 //
 //   node --conditions @typescript/source test/parity/probe-uri-filenames.ts <binary> <sync|async> <order: e.g. 0123>
 
-import { API as AsyncAPI } from "@typescript/typescript/unstable/async";
-import { createFileSystem } from "@typescript/typescript/unstable/fs";
-import { API } from "@typescript/typescript/unstable/sync";
+import { API as AsyncAPI } from "@typescript/typescript/async";
+import { createFileSystem } from "@typescript/typescript/fs";
+import { API } from "@typescript/typescript/sync";
 
 const [binary, mode, order = "0123"] = process.argv.slice(2);
 const docs: [{ uri: string; }, string][] = [
@@ -26,7 +26,7 @@ if (mode === "async") {
     const snap = await client.apiRequest("createSnapshot", params);
     const perDoc = [];
     for (const [d] of files) perDoc.push(lists([await client.apiRequest("getDefaultProjectForFile", { snapshot: snap.snapshot, file: d })].filter(Boolean)));
-    out = { snapshot: lists(snap.projects), perDoc };
+    out = { snapshot: lists(snap.getProjects()), perDoc };
     await api.close();
 }
 else {
@@ -35,7 +35,7 @@ else {
     const client = (api as any).client;
     const snap = client.apiRequest("createSnapshot", params);
     const perDoc = files.map(([d]) => lists([client.apiRequest("getDefaultProjectForFile", { snapshot: snap.snapshot, file: d })].filter(Boolean)));
-    out = { snapshot: lists(snap.projects), perDoc };
+    out = { snapshot: lists(snap.getProjects()), perDoc };
     api.close();
 }
 console.log(JSON.stringify({ mode, order, ...(out as object) }));

@@ -1,10 +1,5 @@
-// A global interface declared in several files whose merged checks fail: Go runs them once per checker, at the first
-// declaration the checker visits, so the files that report TS2320 / TS2430 depend on which files share a checker
-// (tsgo-ref on merged-interface-check-site: a.ts only at 1-2 checkers, a.ts and b.ts at 3-4, all four files at 8). By
-// default tsrs reports them where tsgo does at its default four checkers, whatever its own checker count and assignment,
-// and still reports each file's index-constraint errors (merged-interface-extends-site: TS2411 in c.ts and d.ts, which
-// do not report the TS2430). expected.txt is tsgo-ref's default output; `--checkerAssignment go` keeps Go's behaviour
-// (notes/fix-history-dependent-diagnostics.md).
+// Upstream #64566 reports merged interface checks at the first declaration, independently of checker assignment.
+// Incremental builds must preserve that site while retaining every declaration's index-constraint diagnostics.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -31,8 +26,7 @@ fn run_in(dir: &Path, args: &[&str]) -> String {
     String::from_utf8(out.stdout).unwrap()
 }
 
-// Adding an unrelated module changes the virtual check slots. Reusing the unchanged interface files' diagnostics
-// used to retain a TS2320 that a clean build suppressed, and could also retain an empty cache where an error appears.
+// Adding or moving an unrelated module must preserve the merged interface reporting site in a warm build.
 #[test]
 fn incremental_merged_interface_sites_match_clean_builds() {
     for mode in [&["--singleThreaded"][..], &["--checkers", "4"][..]] {
@@ -59,13 +53,13 @@ fn incremental_merged_interface_sites_match_clean_builds() {
         config(&extra_first);
         let added = run_in(&dir, mode);
         let added_clean = clean();
-        assert_ne!(initial, added_clean, "fixture must change reporting sites");
+        assert_eq!(initial, added_clean, "an unrelated module must preserve the first declaration");
         assert_eq!(added, added_clean, "adding unrelated module: {mode:?}");
-        // The same files and contents can move the reporting site when their root order changes.
+        // The first interface declaration stays the same when only the unrelated root moves.
         config(&format!(r#"{roots},"extra.ts""#));
         let reordered = run_in(&dir, mode);
         let reordered_clean = clean();
-        assert_ne!(added_clean, reordered_clean, "root order must change reporting sites");
+        assert_eq!(added_clean, reordered_clean, "moving an unrelated root must preserve the first declaration");
         assert_eq!(reordered, reordered_clean, "reordering roots: {mode:?}");
         config(&extra_first);
         assert_eq!(run_in(&dir, mode), clean(), "restoring root order: {mode:?}");
@@ -96,7 +90,7 @@ fn incremental_merged_interface_sites_follow_history_changes() {
         assert_eq!(std::fs::metadata(&info).unwrap().modified().unwrap(), modified, "unchanged history must not rewrite build info");
     };
     let initial = run_in(&dir, &default);
-    assert_eq!(initial.lines().filter(|line| line.contains("TS2320")).count(), 2);
+    assert_eq!(initial.lines().filter(|line| line.contains("TS2320")).count(), 1);
     let default_info = std::fs::read_to_string(&info).unwrap();
     unchanged(&default, &initial);
     let switched = run_in(&dir, &go);
@@ -104,7 +98,7 @@ fn incremental_merged_interface_sites_follow_history_changes() {
     assert!(!go_info.contains("tsrsCanonicalCheckSignature"), "Go history must rewrite tagged default caches");
     std::fs::remove_file(&info).unwrap();
     let fresh_go = run_in(&dir, &go);
-    assert_eq!(fresh_go.lines().filter(|line| line.contains("TS2320")).count(), 4);
+    assert_eq!(fresh_go.lines().filter(|line| line.contains("TS2320")).count(), 1);
     assert_eq!(switched, fresh_go, "default-to-Go must preserve the full ordered diagnostics");
     assert_eq!(std::fs::read_to_string(&info).unwrap(), go_info);
     unchanged(&go, &fresh_go);
@@ -124,8 +118,8 @@ fn incremental_merged_interface_sites_follow_history_changes() {
     std::fs::remove_dir_all(dir).unwrap();
 }
 
-// Package exports can change the resolved import multigraph without changing source text, root order or the
-// deduplicated reference sets in build info. Cached TS2320 presence and absence must follow the new report slots.
+// Package exports can change resolved edges without changing source text or root order. Warm and fresh builds
+// must continue to agree on first-declaration merged diagnostics.
 #[test]
 fn incremental_merged_interface_sites_follow_package_export_aliases() {
     for mode in [&["--singleThreaded"][..], &["--checkers", "4"][..], &["--checkers", "8", "--checkerAssignment", "random:3"][..]] {
@@ -164,7 +158,7 @@ fn incremental_merged_interface_sites_follow_package_export_aliases() {
         package("b");
         let changed = run_in(&dir, mode);
         let fresh = clean();
-        assert_eq!(fresh.lines().filter(|line| line.contains("TS2320")).count(), 2);
+        assert_eq!(fresh.lines().filter(|line| line.contains("TS2320")).count(), 1);
         assert_eq!(changed, fresh, "alias a -> b must discard cached absence: {mode:?}");
         package("a");
         assert_eq!(run_in(&dir, mode), clean(), "alias b -> a must discard cached error: {mode:?}");
@@ -186,9 +180,9 @@ fn merged_interface_reports_where_tsgo_does() {
         }
         assert_eq!(run(name, &["--checkers", "4", "--checkerAssignment", "go"]), expected, "{name} go at 4 checkers");
     }
-    // Go's history at one checker: only the first declaration reports, as tsgo-ref does.
+    // The pinned Go revision reports only the first declaration at every checker count.
     let go_one = run("merged-interface-check-site", &["--checkers", "1", "--checkerAssignment", "go"]);
     assert_eq!(go_one.lines().filter(|l| l.contains("TS2320")).collect::<Vec<_>>(), ["a.ts(1,11): error TS2320: Interface 'Merged' cannot simultaneously extend types 'Left' and 'Right'."]);
     let go_eight = run("merged-interface-check-site", &["--checkers", "8", "--checkerAssignment", "go"]);
-    assert_eq!(go_eight.lines().filter(|l| l.contains("TS2320")).count(), 4);
+    assert_eq!(go_eight.lines().filter(|l| l.contains("TS2320")).count(), 1);
 }

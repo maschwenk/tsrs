@@ -242,7 +242,9 @@ fn compile_files_ex(
 
     let config_file = tsconfig.and_then(|t| t.config_file);
     let errors = tsconfig.map(|t| t.errors.clone()).unwrap_or_default();
-    let mut config = tsoptions::new_parsed_command_line(P::new(compiler_options), program_file_names, Vec::new(), ComparePathsOptions::default());
+    let base_directory = tsconfig.map(|config| config.get().get_current_directory()).filter(|directory| !directory.is_empty()).unwrap_or(current_directory);
+    let compare_paths = ComparePathsOptions { current_directory: base_directory.to_string(), use_case_sensitive_file_names: harness_options.use_case_sensitive_file_names };
+    let mut config = tsoptions::new_parsed_command_line(P::new(compiler_options), program_file_names, Vec::new(), compare_paths);
     config.config_file = config_file;
     config.errors = errors;
     let config = P::new(config);

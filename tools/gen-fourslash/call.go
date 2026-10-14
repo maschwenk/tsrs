@@ -150,6 +150,9 @@ func (g *gen) methodCall(e *ast.CallExpr, fun *ast.SelectorExpr, sel *types.Sele
 	} else {
 		recv = parenIfNeeded(recv)
 	}
+	if isNamed(derefType(recvT), tspathPath, "RootedFilePath") && name == "AsString" {
+		return g.expr(fun.X, g.typeOf(fun.X), mOwned)
+	}
 	switch {
 	case isTestingTPtr(recvT):
 		switch name {
@@ -190,6 +193,9 @@ func (g *gen) methodCall(e *ast.CallExpr, fun *ast.SelectorExpr, sel *types.Sele
 		harness = true
 	}
 	args := g.args(e, sig, harness)
+	if isFourslashTestPtr(recvT) && name == "Replace" {
+		args[1] = parenIfNeeded(args[1]) + ".into()"
+	}
 	if isFourslashTestPtr(recvT) && name == "GoToEachMarker" {
 		args = g.argsWithClosureParamOverride(e, sig, harness, 2, 1, "usize")
 	}
@@ -244,6 +250,9 @@ func (g *gen) qualifiedCall(e *ast.CallExpr, f *types.Func) string {
 			return g.expr(e.Args[0], types.Typ[types.Int], mOwned) + ".to_string()"
 		}
 	case "strings":
+		if name == "ReplaceAll" {
+			return parenIfNeeded(g.expr(e.Args[0], types.Typ[types.String], mParam)) + ".replace(" + g.expr(e.Args[1], types.Typ[types.String], mParam) + ", " + g.expr(e.Args[2], types.Typ[types.String], mParam) + ")"
+		}
 		return "go::strings::" + ident(name) + "(" + strings.Join(g.args(e, sig, false), ", ") + ")"
 	case "slices":
 		switch name {
@@ -255,6 +264,13 @@ func (g *gen) qualifiedCall(e *ast.CallExpr, f *types.Func) string {
 			return "[" + strings.Join(parts, ", ") + "].concat()"
 		case "Clone":
 			return g.expr(e.Args[0], g.typeOf(e.Args[0]), mOwned)
+		}
+	case tspathPath:
+		if name == "IsDeclarationFileName" {
+			return "tsrs_core::tspath::is_declaration_file_name(" + g.expr(e.Args[0], types.Typ[types.String], mParam) + ")"
+		}
+		if name == "RemoveFileExtension" {
+			return "tsrs_core::tspath::remove_file_extension(" + g.expr(e.Args[0], types.Typ[types.String], mParam) + ").to_string()"
 		}
 	case corePath:
 		switch name {

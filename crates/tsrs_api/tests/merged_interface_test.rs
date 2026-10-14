@@ -7,7 +7,7 @@ use common::*;
 use tsrs_core::json::Value;
 
 #[test]
-fn merged_interface_diagnostics_finish_and_report_in_each_declaring_file() {
+fn merged_interface_diagnostics_finish_and_report_at_the_first_declaration() {
     let (done, rx) = std::sync::mpsc::channel();
     let worker = std::thread::spawn(move || {
         let dir = TempDir::new("merged");
@@ -41,13 +41,13 @@ fn merged_interface_diagnostics_finish_and_report_in_each_declaring_file() {
             } else if round % 3 == 1 {
                 let last = declaring_files.last().unwrap();
                 let selected = call(&s, "getSemanticDiagnostics", &format!("{{{sp},\"files\":[{}]}}", quote(last)));
-                assert_eq!(diagnostic_sites(&selected), expected_sites(std::slice::from_ref(last)));
+                assert_eq!(diagnostic_sites(&selected), expected_sites(std::slice::from_ref(last), &declaring_files[0]));
             }
             let all = call(&s, "getSemanticDiagnostics", &format!("{{{sp}}}"));
-            assert_eq!(diagnostic_sites(&all), expected_sites(&declaring_files), "round {round}");
+            assert_eq!(diagnostic_sites(&all), expected_sites(&declaring_files, &declaring_files[0]), "round {round}");
             for file in declaring_files.iter().rev() {
                 let selected = call(&s, "getSemanticDiagnostics", &format!("{{{sp},\"files\":[{}]}}", quote(file)));
-                assert_eq!(diagnostic_sites(&selected), expected_sites(std::slice::from_ref(file)));
+                assert_eq!(diagnostic_sites(&selected), expected_sites(std::slice::from_ref(file), &declaring_files[0]));
             }
             assert_eq!(call(&s, "getGlobalDiagnostics", &format!("{{{sp}}}")), Value::Array(vec![]));
             assert_eq!(call(&s, "release", &format!("{{\"snapshot\":{snapshot}}}")), Value::Bool(true));
@@ -73,8 +73,8 @@ fn diagnostic_sites(diagnostics: &Value) -> Vec<(u32, String)> {
     sites
 }
 
-fn expected_sites(files: &[String]) -> Vec<(u32, String)> {
-    let mut sites: Vec<_> = files.iter().flat_map(|file| [2320, 2430, 2411].map(|code| (code, file.clone()))).collect();
+fn expected_sites(files: &[String], first: &str) -> Vec<(u32, String)> {
+    let mut sites: Vec<_> = files.iter().flat_map(|file| [2320, 2430, 2411].into_iter().filter(move |code| *code == 2411 || file == first).map(|code| (code, file.clone()))).collect();
     sites.sort();
     sites
 }

@@ -1380,7 +1380,7 @@ fn parse_config(
     if let Some(extended_config_paths) = own_config.extended_config_path.clone() {
         // copy the resolution stack so it is never reused between branches in potential diamond-problem scenarios.
         let mut resolution_stack = resolution_stack.to_vec();
-        resolution_stack.push(resolved_path);
+        resolution_stack.push(resolved_path.clone());
         let mut result = ExtendsResult {
             options: CompilerOptions::default(),
             include: None,

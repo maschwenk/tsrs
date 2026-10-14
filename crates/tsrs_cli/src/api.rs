@@ -347,7 +347,7 @@ mod tests {
             String::from_utf8(output.stdout).unwrap()
         };
         let expected_cli = cli();
-        assert_eq!(expected_cli.matches("error TS2320").count(), 2);
+        assert_eq!(expected_cli.matches("error TS2320").count(), 1);
         let info = dir.join("tsconfig.tsbuildinfo");
         let cli_info = std::fs::read_to_string(&info).unwrap();
         assert!(cli_info.contains("tsrsCanonicalCheckSignature"));
@@ -367,7 +367,7 @@ mod tests {
         let migrated = build();
         assert_eq!(get(&migrated, "status"), &Value::Number(2.0));
         let Value::Array(diagnostics) = get(&migrated, "diagnostics") else { panic!("{migrated:?}") };
-        assert_eq!(diagnostics.iter().filter(|d| get(d, "code") == &Value::Number(2320.0)).count(), 4);
+        assert_eq!(diagnostics.iter().filter(|d| get(d, "code") == &Value::Number(2320.0)).count(), 1);
         let api_info = std::fs::read_to_string(&info).unwrap();
         assert!(!api_info.contains("tsrsCanonicalCheckSignature"));
         for _ in 0..2 {

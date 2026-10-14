@@ -130,7 +130,7 @@ jobs:
       # Node 24 matches release.yml; the build-only TypeScript compiler in npm/package.json needs >=16.20.
       - uses: oxc-project/setup-node@f46a72f95efdc55273fcd042d61c84e723b2892c # v1.4.1
 
-      # npm/build.mjs compiles the unstable/* JS API with the npm workspace's build-only tools.
+      # npm/build.mjs compiles the beta JS API with the npm workspace's build-only tools.
       - name: npm packaging smoke test
         run: |
           node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack

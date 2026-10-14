@@ -64,7 +64,7 @@ function virtualFS(log) {
 }
 
 function syncClient(options = {}) {
-    return new SyncClient({ tsserverPath: SERVER, cwd: tmp, ...options });
+    return new SyncClient({ tsserverPath: SERVER, cwd: tmp, useCaseSensitiveFileNames: true, ...options });
 }
 
 describe("sync client (MessagePack, pinned SyncRpcChannel)", () => {
@@ -224,7 +224,7 @@ describe("sync client (MessagePack, pinned SyncRpcChannel)", () => {
 });
 
 function asyncClient(options = {}) {
-    return new AsyncClient({ tsserverPath: SERVER, cwd: tmp, ...options });
+    return new AsyncClient({ tsserverPath: SERVER, cwd: tmp, useCaseSensitiveFileNames: true, ...options });
 }
 
 describe("async client (JSON-RPC, pinned vscode-jsonrpc client)", () => {

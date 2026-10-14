@@ -108,8 +108,6 @@ pub struct CommandLineOption {
     pub affects_module_resolution: bool,
     pub affects_emit: bool,
 
-    pub(crate) allow_js_flag: bool,
-    pub(crate) strict_flag: bool,
 
     // used in transpileoptions worker
     // todo: revisit to see if this can be reduced to boolean
@@ -152,8 +150,6 @@ impl CommandLineOption {
         affects_source_file: false,
         affects_module_resolution: false,
         affects_emit: false,
-        allow_js_flag: false,
-        strict_flag: false,
         transpile_option_value: Tristate::Unknown,
         list_preserve_falsy_values: false,
         element_options: None,

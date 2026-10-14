@@ -52,7 +52,7 @@ pub(crate) fn new_state_baseline(fs_from_map: Arc<IoVFS<MapFS>>) -> StateBaselin
         serialized_open_files: FxHashMap::default(),
         serialized_config_file_registry: None,
     };
-    writeln!(state_baseline.baseline, "UseCaseSensitiveFileNames: {use_case_sensitive_file_names}").unwrap();
+    writeln!(state_baseline.baseline, "CaseSensitivity: {use_case_sensitive_file_names}").unwrap();
     let mut b = std::mem::take(&mut state_baseline.baseline);
     state_baseline.fs_differ.baseline_fs_with_diff(&mut b);
     state_baseline.baseline = b;

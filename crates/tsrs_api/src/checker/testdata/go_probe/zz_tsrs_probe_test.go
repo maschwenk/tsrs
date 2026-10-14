@@ -3,7 +3,7 @@ package api
 // tsrs checker-lane differential probe. Copied temporarily into the pinned reference checkout
 // (ts-ref/tsc/internal/api) by regen.sh, which removes it again afterwards. Drives the pinned Go API
 // session over its JSON request surface with the fixture in ./fixture and the needles in needles.txt,
-// and writes go_probe_b85298b6.jsonl. The request sequence mirrors probe_lines() in
+// and writes go_probe_9eedcb0d.jsonl. The request sequence mirrors probe_lines() in
 // crates/tsrs_api/src/checker/tests.rs; keep both in sync.
 
 import (
@@ -15,6 +15,7 @@ import (
 	"unicode/utf16"
 
 	"github.com/microsoft/TypeScript/tsc/internal/ast"
+	"github.com/microsoft/TypeScript/tsc/internal/tspath"
 	"github.com/microsoft/TypeScript/tsc/internal/astnav"
 	"github.com/microsoft/TypeScript/tsc/internal/json"
 	"github.com/microsoft/TypeScript/tsc/internal/project"
@@ -450,7 +451,7 @@ func TestTsrsCheckerFlags(t *testing.T) {
 		snap, proj := snaps[fx][0], snaps[fx][1]
 		sd, _ := s.getSnapshotData(SnapshotID(snap.(float64)))
 		program, _ := sd.getProgram(project.ID(proj.(string)))
-		sf := program.GetSourceFile("/" + fx + "/" + file)
+		sf := program.GetSourceFile(tspath.RootedFilePath("/" + fx + "/" + file))
 		text := sf.Text()
 		pos := strings.Index(text, needle) + len(needle)
 		if kind != "alias" {

@@ -1,7 +1,7 @@
 # Node API checker lane
 
 Port of the checker / symbol / type / signature request handlers of the pinned tsgo API
-(microsoft/TypeScript `b85298b6a81f772d080b0455de0ca9d744cd6fd6`, `tsc/internal/api/session.go` and
+(microsoft/TypeScript `9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a`, `tsc/internal/api/session.go` and
 `proto.go`). Wire shapes, id ownership and nullability follow the Go structs and handlers one to one;
 there is no separate "tsrs subset" API.
 
@@ -69,8 +69,8 @@ non-BMP text, plus stale / cross-project / released / malformed handle validatio
 
 What `Tested` does **not** mean yet (open gaps, for the integration lead):
 
-* `pinned_go_differential` compares 71 results with `testdata/go_probe/go_probe_b85298b6.jsonl`. The
-  file is recorded from pinned Go's `Session.HandleRequest` (built from b85298b6, go1.27.1). Regenerate
+* `pinned_go_differential` compares 71 results with `testdata/go_probe/go_probe_9eedcb0d.jsonl`. The
+  file is recorded from pinned Go's `Session.HandleRequest` (built from 9eedcb0d, go1.27.0). Regenerate
   it with `testdata/go_probe/regen.sh`. The script checks that `ts-ref` is clean and at the commit pinned
   in `Cargo.toml`, copies `zz_tsrs_probe_test.go` into it for the run only, and removes it again,
   failing if the checkout is not clean afterwards. Fixture and needles are shared with the Rust side
@@ -94,7 +94,7 @@ What `Tested` does **not** mean yet (open gaps, for the integration lead):
   `Session` run; the broad upstream client suite belongs to the parity lane.
 * `session_responses_match_pinned_go` (checker/session_tests.rs) runs through core's real `Session`, with
   codec node handles, source-file descriptors and leases. It compares 84 full responses with
-  `testdata/go_probe/go_shapes_b85298b6.jsonl`, recorded by `TestTsrsCheckerShapes` in the same probe.
+  `testdata/go_probe/go_shapes_9eedcb0d.jsonl`, recorded by `TestTsrsCheckerShapes` in the same probe.
   All 84 match after normalizing per-process counters: type, signature and symbol ids, source-file node
   ids, and the symbol id embedded in `__@iterator@<id>` names. Node handles, content hashes, flags and
   error texts are compared as is. It pins:

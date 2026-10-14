@@ -669,6 +669,9 @@ func (g *gen) canMove(e ast.Expr) bool {
 }
 
 func (g *gen) binding(name string, obj types.Object) string {
+	if !g.objectUsed(obj) {
+		name = "_" + name
+	}
 	if g.assigned[obj] || isFourslashTestPtr(obj.Type()) || isNamed(derefType(obj.Type()), "strings", "Builder") {
 		return "mut " + name
 	}

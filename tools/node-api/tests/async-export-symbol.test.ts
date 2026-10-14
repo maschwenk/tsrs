@@ -4,7 +4,7 @@
 // the same client connection, whose answer must identify the same symbol as the cached one. The client cache is
 // not disabled; the request goes through the pinned client's own apiRequest.
 
-import { API } from "@typescript/typescript/unstable/async";
+import { API } from "@typescript/typescript/async";
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { createVirtualFileSystem } from "../testUtils.ts";
@@ -18,7 +18,7 @@ describe("parity: async getExportSymbolOfSymbol", () => {
     test("public cached result and real wire request agree", async () => {
         const api = new API({ cwd, fs: createVirtualFileSystem({ "/tsconfig.json": `{ "compilerOptions": { "strict": true } }`, "/src/index.ts": source }) });
         try {
-            const project = (await api.createSnapshot({ openProject: "/tsconfig.json" })).getConfiguredProject("/tsconfig.json")!;
+            const project = (await api.createSnapshot({ openProjects: ["/tsconfig.json"] })).getConfiguredProject("/tsconfig.json")!;
             const file = (await project.program.getSourceFile("/src/index.ts"))!;
             const local = (await project.checker.getSymbolsInScope((file as any).statements[1], SymbolFlagsValue)).find(s => s.name === "exported" && (s as any).exportSymbol)!;
             assert.ok(local, "module-local symbol with an export symbol");

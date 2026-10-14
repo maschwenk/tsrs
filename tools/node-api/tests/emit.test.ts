@@ -2,7 +2,7 @@
 // emitDeclarationOnly, allowJs with declarations from JS, source and declaration maps, d.ts-only inputs, and the
 // string-returning emit methods. Outputs are captured as the API returns them and as written via the host fs.
 
-import { EmitOnly } from "@typescript/typescript/unstable/sync";
+import { EmitOnly } from "@typescript/typescript/sync";
 import { describe, test } from "node:test";
 import { diags, golden, sortedWrites, syncAPI } from "./utils.ts";
 
@@ -10,7 +10,7 @@ const g = golden("emit");
 
 function project(files: Record<string, string>) {
     const ctx = syncAPI(files);
-    const program = ctx.api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json")!.program;
+    const program = ctx.api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json")!.program;
     return { ...ctx, program };
 }
 

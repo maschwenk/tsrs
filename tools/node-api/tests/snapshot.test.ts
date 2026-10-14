@@ -38,7 +38,7 @@ describe("parity: snapshots during edits", () => {
             "/src/c.ts": `export const c = 1;\n`,
         });
         using _ = api;
-        const snap1 = api.createSnapshot({ openProject: "/tsconfig.json" });
+        const snap1 = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
         g.check("before", observe(snap1));
 
         vfs.writeFile("/src/a.ts", `export const value: string = "s";\n`);
@@ -57,7 +57,7 @@ describe("parity: snapshots during edits", () => {
         g.check("old.afterNewDisposed", observe(snap1));
 
         // Recreating from scratch sees the latest host state.
-        const snap3 = api.createSnapshot({ openProject: "/tsconfig.json" });
+        const snap3 = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
         g.check("fresh", observe(snap3));
         snap1.dispose();
         g.check("fresh.afterOldDisposed", observe(snap3));
@@ -71,7 +71,7 @@ describe("parity: snapshots during edits", () => {
         });
         using _ = api;
         const program = (s: any) => s.getConfiguredProject("/tsconfig.json")!.program;
-        const s1 = api.createSnapshot({ openProject: "/tsconfig.json" });
+        const s1 = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
         vfs.removeFile("/src/dep.ts");
         const s2 = s1.update({ fileNotifications: { deleted: ["/src/dep.ts"] }, ensurePrograms: true });
         vfs.writeFile("/src/dep.ts", `export const dep = "back";\n`);

@@ -3,7 +3,6 @@
 
 use std::sync::LazyLock;
 
-use rustc_hash::FxHashSet;
 use tsrs_core::tspath;
 use tsrs_tsoptions::{self as tsoptions, CommandLineOption, CommandLineOptionKind, CompilerOptionsValue};
 
@@ -68,27 +67,7 @@ pub fn get_harness_option(name: &str) -> Option<&'static CommandLineOption> {
 
 // compilerVaryBy (compiler_runner.go getCompilerVaryByMap) and the option kinds used for variations.
 pub fn tsoptions_option_table() -> OptionTable {
-    let mut vary_by = FxHashSet::default();
-    vary_by.extend(tsoptions::OPTIONS_DECLARATIONS.iter().filter_map(|option| {
-        if !option.is_command_line_only
-            && (option.kind == CommandLineOptionKind::Boolean || option.kind == CommandLineOptionKind::Enum)
-            && (option.affects_program_structure
-                || option.affects_emit
-                || option.affects_module_resolution
-                || option.affects_bind_diagnostics
-                || option.affects_semantic_diagnostics
-                || option.affects_source_file
-                || option.affects_declaration_path
-                || option.affects_build_info)
-        {
-            Some(option.name.to_lowercase())
-        } else {
-            None
-        }
-    }));
-    // explicit variations that do not match above conditions
-    vary_by.insert("noemit".to_string());
-    vary_by.insert("isolatedmodules".to_string());
+    let vary_by = crate::options_generated::COMPILER_VARY_BY.iter().map(|name| (*name).to_string()).collect();
 
     let decls = HARNESS_COMPILER_OPTIONS
         .iter()

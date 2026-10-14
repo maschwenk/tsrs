@@ -44,7 +44,7 @@ try {
     execFileSync("pnpm", ["add", "--offline", ...tarballs], { cwd: dir, stdio: "inherit", env, shell: win });
     const pkgDir = path.join(dir, "node_modules", "tsrs");
     const pkg = JSON.parse(fs.readFileSync(path.join(pkgDir, "package.json"), "utf8"));
-    for (const sub of ["./unstable/sync", "./unstable/async"]) check(pkg.exports?.[sub] !== undefined, `package exports ${sub}`);
+    for (const sub of ["./sync", "./async"]) check(pkg.exports?.[sub] !== undefined, `package exports ${sub}`);
     const bin = path.join(dir, "node_modules", ".bin", win ? "tsrs.cmd" : "tsrs");
 
     // ── CLI regressions ──
@@ -63,7 +63,7 @@ try {
     write("proj/src/helper.ts", "export function helper(n: number) { return n * 2; }\nexport const wrong: string = 1;\n");
     const proj = path.join(dir, "proj").replace(/\\/g, "/");
     const script = (api, flavor) => `
-import { API } from "tsrs/unstable/${api}";
+import { API } from "tsrs/${api}";
 import fs from "node:fs";
 const out = {};
 const api = new API({ cwd: ${JSON.stringify(proj)} });
@@ -113,10 +113,10 @@ console.log(JSON.stringify(out));
 
     // ── published declarations ──
     write("types/use.mts", [
-        `import { API, type Snapshot } from "tsrs/unstable/sync";`,
-        `import { API as AsyncAPI } from "tsrs/unstable/async";`,
-        `import { SyntaxKind } from "tsrs/unstable/ast";`,
-        `export function open(api: API): Snapshot { return api.createSnapshot({ openProject: "/tsconfig.json" }); }`,
+        `import { API, type Snapshot } from "tsrs/sync";`,
+        `import { API as AsyncAPI } from "tsrs/async";`,
+        `import { SyntaxKind } from "tsrs/ast";`,
+        `export function open(api: API): Snapshot { return api.createSnapshot({ openProjects: ["/tsconfig.json"] }); }`,
         `export async function openAsync(api: AsyncAPI) { return (await api.createSnapshot()).getProjects().length; }`,
         `export const kind: SyntaxKind = SyntaxKind.Identifier;`,
         `export const wrong: number = new API({}).createSnapshot();`,

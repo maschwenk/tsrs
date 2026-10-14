@@ -26,10 +26,8 @@ impl DocumentUri {
             let Ok((host, path)) = parse_file_url(uri) else {
                 panic!("invalid file URI: {uri}");
             };
-            if !host.is_empty() {
-                return format!("//{host}{path}");
-            }
-            return fix_windows_uri_path(&path).to_string();
+            let file_name = if !host.is_empty() { format!("//{host}{path}") } else { fix_windows_uri_path(&path).to_string() };
+            return tspath::to_rooted_path(&file_name, "/");
         }
 
         // Leave all other URIs escaped so we can round-trip them.

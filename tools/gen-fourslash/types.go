@@ -10,6 +10,7 @@ const (
 	lsprotoPath     = modPath + "/internal/lsp/lsproto"
 	lsutilPath      = modPath + "/internal/ls/lsutil"
 	lsPath          = modPath + "/internal/ls"
+	tspathPath      = modPath + "/internal/tspath"
 	corePath        = modPath + "/internal/core"
 	utilPath        = modPath + "/internal/fourslash/tests/util"
 	collectionsPath = modPath + "/internal/collections"

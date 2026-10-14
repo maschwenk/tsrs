@@ -1,7 +1,7 @@
 import {
     createScanner,
     SyntaxKind,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import assert from "node:assert";
 import { test } from "node:test";
 

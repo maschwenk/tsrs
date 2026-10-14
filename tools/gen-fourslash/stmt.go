@@ -132,7 +132,8 @@ func (g *gen) stmt(s ast.Stmt) {
 				vs := sp.(*ast.ValueSpec)
 				for _, n := range vs.Names {
 					obj := g.info.Defs[n].(*types.Const)
-					name := ident(n.Name)
+					// Constants can lose every use when Go folds a larger expression.
+					name := "_" + ident(n.Name)
 					k := kOwned
 					if isString(obj.Type()) {
 						k = kStr
@@ -715,6 +716,9 @@ func (g *gen) lvalue(e ast.Expr) string {
 		base := g.lvalue(e.X)
 		if isOptionPtr(g.typeOf(e.X)) {
 			base += ".as_mut().unwrap()"
+		}
+		if isNamed(derefType(g.typeOf(e.X)), lsutilPath, "UserPreferences") {
+			return base + "." + preferenceField(e.Sel.Name)
 		}
 		return base + embeddedPath(g.typeOf(e.X), sel.Index()) + "." + ident(e.Sel.Name)
 	case *ast.IndexExpr:

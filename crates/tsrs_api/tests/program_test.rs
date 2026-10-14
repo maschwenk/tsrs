@@ -147,7 +147,7 @@ fn malformed_snapshot_params_are_bounded_errors() {
     let e = call_err(&s, "createSnapshot", r#"{"createPrograms":[null]}"#);
     assert!(e.contains("createPrograms[0] must not be null"), "{e}");
     let e = call_err(&s, "createSnapshot", r#"{"createPrograms":[{"rootFiles":[],"compilerOptions":{"target":"es5"}}]}"#);
-    assert!(e.starts_with("api: invalid request"), "{e}");
+    assert_eq!(e, "panic: interface conversion: interface {} is string, not float64");
     let e = call_err(&s, "createSnapshot", r#"{"reconfigurePrograms":[{"id":"bogus","rootFiles":[],"compilerOptions":{}}]}"#);
     // Go: project.SyntheticProjectID's decoder rejects it while decoding the params (invalid request).
     assert!(e.starts_with("api: invalid request:") && e.ends_with("invalid synthetic project ID: bogus"), "{e}");

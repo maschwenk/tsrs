@@ -27,9 +27,9 @@
   },
   "declOnly.writes": {
     "/dist/helper.d.ts": "/** doubles */\nexport declare function helper(n: number): number;\n//# sourceMappingURL=helper.d.ts.map",
-    "/dist/helper.d.ts.map": "{\"version\":3,\"file\":\"helper.d.ts\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,wBAAgB,MAAM,CAAC,CAAC,EAAE,MAAM,UAAmB\"}",
+    "/dist/helper.d.ts.map": "{\"version\":3,\"file\":\"helper.d.ts\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,wBAAgB,MAAM,CAAC,CAAC,EAAE,MAAM,UAAmB\"}",
     "/dist/index.d.ts": "export declare const value: number;\nexport declare class Box<T> {\n    item: T;\n    constructor(item: T);\n}\n//# sourceMappingURL=index.d.ts.map",
-    "/dist/index.d.ts.map": "{\"version\":3,\"file\":\"index.d.ts\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AACA,eAAO,MAAM,KAAK,EAAE,MAAkB,CAAC;AACvC,qBAAa,GAAG,CAAC,CAAC;IAAuB,IAAI,EAAE,CAAC;IAA1B,YAAmB,IAAI,EAAE,CAAC,EAAI;CAAE\"}"
+    "/dist/index.d.ts.map": "{\"version\":3,\"file\":\"index.d.ts\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AACA,eAAO,MAAM,KAAK,EAAE,MAAkB,CAAC;AACvC,qBAAa,GAAG,CAAC,CAAC;IAAuB,IAAI,EAAE,CAAC;IAA1B,YAAmB,IAAI,EAAE,CAAC,EAAI;CAAE\"}"
   },
   "dtsInput.result": {
     "emitSkipped": false,
@@ -62,7 +62,7 @@
         "sourceFileName": "/src/index.ts"
       },
       "/dist/index.js.map": {
-        "text": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
+        "text": "{\"version\":3,\"file\":\"index.js\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
         "sourceFileName": "/src/index.ts"
       }
     }
@@ -114,9 +114,9 @@
   },
   "sourceMap.writes": {
     "/dist/helper.js": "\"use strict\";\nObject.defineProperty(exports, \"__esModule\", { value: true });\nexports.helper = helper;\n/** doubles */\nfunction helper(n) { return n * 2; }\n//# sourceMappingURL=helper.js.map",
-    "/dist/helper.js.map": "{\"version\":3,\"file\":\"helper.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\";;;AAAA,cAAc;AACd,gBAAuB,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\",\"sourcesContent\":[\"/** doubles */\\nexport function helper(n: number) { return n * 2; }\\n\"]}",
+    "/dist/helper.js.map": "{\"version\":3,\"file\":\"helper.js\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\";;;AAAA,cAAc;AACd,gBAAuB,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\",\"sourcesContent\":[\"/** doubles */\\nexport function helper(n: number) { return n * 2; }\\n\"]}",
     "/dist/index.js": "\"use strict\";\nObject.defineProperty(exports, \"__esModule\", { value: true });\nexports.Box = exports.value = void 0;\nconst helper_1 = require(\"./helper\");\nexports.value = (0, helper_1.helper)(2);\nclass Box {\n    constructor(item) {\n        this.item = item;\n    }\n}\nexports.Box = Box;\n//# sourceMappingURL=index.js.map",
-    "/dist/index.js.map": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\";;;AAAA,qCAAkC;AACrB,QAAA,KAAK,GAAW,IAAA,eAAM,EAAC,CAAC,CAAC,CAAC;AACvC;IAAsB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\",\"sourcesContent\":[\"import { helper } from \\\"./helper\\\";\\nexport const value: number = helper(2);\\nexport class Box<T> { constructor(public item: T) {} }\\n\"]}"
+    "/dist/index.js.map": "{\"version\":3,\"file\":\"index.js\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\";;;AAAA,qCAAkC;AACrB,QAAA,KAAK,GAAW,IAAA,eAAM,EAAC,CAAC,CAAC,CAAC;AACvC;IAAsB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\",\"sourcesContent\":[\"import { helper } from \\\"./helper\\\";\\nexport const value: number = helper(2);\\nexport class Box<T> { constructor(public item: T) {} }\\n\"]}"
   },
   "toString.all": {
     "emitSkipped": false,
@@ -131,7 +131,7 @@
         "sourceFileName": "/src/helper.ts"
       },
       "/dist/helper.js.map": {
-        "text": "{\"version\":3,\"file\":\"helper.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,MAAM,UAAU,MAAM,CAAC,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\"}",
+        "text": "{\"version\":3,\"file\":\"helper.js\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,MAAM,UAAU,MAAM,CAAC,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\"}",
         "sourceFileName": "/src/helper.ts"
       },
       "/dist/index.d.ts": {
@@ -143,7 +143,7 @@
         "sourceFileName": "/src/index.ts"
       },
       "/dist/index.js.map": {
-        "text": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
+        "text": "{\"version\":3,\"file\":\"index.js\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
         "sourceFileName": "/src/index.ts"
       }
     }
@@ -171,7 +171,7 @@
         "sourceFileName": "/src/helper.ts"
       },
       "/dist/helper.js.map": {
-        "text": "{\"version\":3,\"file\":\"helper.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,MAAM,UAAU,MAAM,CAAC,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\"}",
+        "text": "{\"version\":3,\"file\":\"helper.js\",\"sources\":[\"../src/helper.ts\"],\"names\":[],\"mappings\":\"AAAA,cAAc;AACd,MAAM,UAAU,MAAM,CAAC,CAAS,IAAI,OAAO,CAAC,GAAG,CAAC,CAAC,CAAC,CAAC\"}",
         "sourceFileName": "/src/helper.ts"
       },
       "/dist/index.js": {
@@ -179,7 +179,7 @@
         "sourceFileName": "/src/index.ts"
       },
       "/dist/index.js.map": {
-        "text": "{\"version\":3,\"file\":\"index.js\",\"sourceRoot\":\"\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
+        "text": "{\"version\":3,\"file\":\"index.js\",\"sources\":[\"../src/index.ts\"],\"names\":[],\"mappings\":\"AAAA,OAAO,EAAE,MAAM,EAAE,MAAM,UAAU,CAAC;AAClC,MAAM,CAAC,MAAM,KAAK,GAAW,MAAM,CAAC,CAAC,CAAC,CAAC;AACvC,MAAM,OAAO,GAAG;IAAyB,IAAI;IAAvB,YAAmB,IAAO;oBAAP,IAAI;IAAM,CAAC;CAAE\"}",
         "sourceFileName": "/src/index.ts"
       }
     }

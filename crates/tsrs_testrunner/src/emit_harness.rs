@@ -112,7 +112,8 @@ pub fn compile_files_with_host_emit(
     let mut pre_errors = Vec::new();
     let mut pre_compiler_options: CompilerOptions = (*config.compiler_options().unwrap()).clone();
     pre_compiler_options.trace_resolution = Tristate::False;
-    let mut pre_config = tsrs_tsoptions::new_parsed_command_line(P::new(pre_compiler_options), config.file_names().to_vec(), Vec::new(), ComparePathsOptions::default());
+    let compare_paths = ComparePathsOptions { current_directory: config.get_current_directory().to_string(), use_case_sensitive_file_names: config.use_case_sensitive_file_names() };
+    let mut pre_config = tsrs_tsoptions::new_parsed_command_line(P::new(pre_compiler_options), config.file_names().to_vec(), config.project_references().to_vec(), compare_paths);
     pre_config.config_file = config.config_file;
     pre_config.errors.clone_from(&config.errors);
     let pre_program = create_program(Arc::clone(&host), P::new(pre_config));

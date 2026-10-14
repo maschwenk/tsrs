@@ -501,3 +501,5 @@ fn main() {
         }
     }
 }
+
+mod options_generated;

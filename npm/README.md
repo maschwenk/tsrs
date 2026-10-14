@@ -4,7 +4,7 @@ tsrs ships on npm the way TypeScript 7 ships its native compiler (`typescript@7`
 
 | package | contents |
 | --- | --- |
-| `tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `dist/` + `vendor/` (the `unstable/*` JS API, see below), `optionalDependencies` on every platform package |
+| `tsrs` | `bin/tsrs` (Node launcher), `lib/` (binary lookup, `version.cjs`), `dist/` + `vendor/` (the `beta API` JS API, see below), `optionalDependencies` on every platform package |
 | `@ts-rs/<os>-<arch>[-<libc>]` | the `tsrs` binary and default TypeScript libraries for one platform, with `os`/`cpu` (and `libc: glibc` or `musl` on Linux) so package managers install only the matching one |
 | `@ts-rs/wasm` | the WebAssembly module (`npm/tsrs-wasm`, notes/wasm-build.md): a `tsrs-wasm` command and a `tsc()` API for Node 22+ and browsers, single-threaded; no platform packages |
 
@@ -43,21 +43,21 @@ One source of truth, the workspace `Cargo.toml`:
 
 ```toml
 [workspace.package]
-version = "0.10.0"
+version = "0.14.1"
 
 [workspace.metadata.typescript]
-version = "7.1.0-dev.20260929"                         # the TypeScript version the port follows
-commit = "b85298b6a81f772d080b0455de0ca9d744cd6fd6"    # and its commit (CI checks out its tsc/testdata)
-nightly = "7.1.0-dev.20260930.4"                      # npm nightly used for the compiler's reported version
+version = "7.1.0-dev.20261014"                         # the TypeScript version the port follows
+commit = "9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a"    # and its commit (CI checks out its tsc/testdata)
+nightly = "7.1.0-dev.20261014.1"                      # npm nightly used for the compiler's reported version
 ```
 
-npm version: `<version>-ts<typescript version>` = `0.10.0-ts7.1.0-dev.20260929`, for every package including
+npm version: `<version>-ts<typescript version>` = `0.14.1-ts7.1.0-dev.20261014`, for every package including
 `@ts-rs/wasm` (`npm/tsrs-wasm/package.json` holds a placeholder that `npm/build.mjs` replaces). `tsrs --version`
 and `tsrs-wasm --version` include the package version, embedded at build time by `crates/tsrs_execute/build.rs`.
 The example package version below illustrates the format; read `Cargo.toml` for the current version:
 
 ```
-Version 7.1.0-dev.20260930.4 (tsrs 0.10.0-ts7.1.0-dev.20260929, microsoft/TypeScript@b85298b6a81f)
+Version 7.1.0-dev.20261014.1 (tsrs 0.14.1-ts7.1.0-dev.20261014, microsoft/TypeScript@9eedcb0dd725)
 ```
 
 To release a fix on the same TypeScript commit, bump `[workspace.package] version`; after porting a newer TypeScript
@@ -92,7 +92,7 @@ pnpm add -D tsrs@file:/abs/npm/dist/tsrs-<version>.tgz \
 `@ts-rs/darwin-arm64` at the tarball reproduces the registry layout exactly, but changing `overrides` makes
 pnpm re-resolve the whole lockfile.)
 
-## JS API (`unstable/*` exports)
+## JS API (beta exports)
 
 `npm/tsrs/src`, `npm/tsrs/vendor` (vscode-jsonrpc, MIT, with its license) and `npm/tsrs/test` are TypeScript 7's JS API
 package (`packages/typescript` in microsoft/TypeScript) at the pinned commit, copied by `npm/sdk/sync-upstream.mjs`
@@ -107,6 +107,8 @@ cd npm/tsrs && TSRS_BINARY=/path/to/server node --conditions @typescript/source 
 node npm/sdk/smoke-consumer.mjs            # after build.mjs --pack: offline install into a temp consumer, typecheck, sync+async compile
 node npm/sdk/method-coverage.mjs --server tsgo=/path/to/pinned/tsgo --server tsrs=target/release/tsrs  # -> npm/sdk/METHODS.md
 ```
+
+The beta entry points are `tsrs/sync`, `tsrs/async`, `tsrs/fs`, `tsrs/path`, `tsrs/proto` and `tsrs/ast` (with AST helper subpaths). Snapshot project operations use `openProjects` and `closeProjects` arrays.
 
 The tests and the inventory can run against a tsgo built from the pinned commit (`cd ts-ref/tsc && go build -o
 /tmp/tsgo ./cmd/tsc`) as the reference server. The SDK spawns `getExePath()` (so `TSRS_BINARY` applies) unless the
@@ -192,7 +194,7 @@ After a release is on npm (version below as an example):
 ```sh
 # 1. Add it next to the TypeScript compiler. If the workspace sets pnpm's minimumReleaseAge, either wait or list
 #    the main package and the platform packages in minimumReleaseAgeExclude.
-pnpm add -D tsrs@0.10.0-ts7.1.0-dev.20260929
+pnpm add -D tsrs@0.14.1-ts7.1.0-dev.20261014
 #    Review the pnpm-lock.yaml diff: a non-frozen install can re-resolve unrelated entries.
 
 # 2. Run it.

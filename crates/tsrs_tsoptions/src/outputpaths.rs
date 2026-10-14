@@ -334,9 +334,10 @@ pub fn get_source_file_path_in_new_dir_worker(
 ) -> String {
     let source_file_path = tspath::get_normalized_absolute_path(file_name, current_directory);
     let compare = ComparePathsOptions { use_case_sensitive_file_names, current_directory: String::new() };
-    if tspath::compare_paths(&source_file_path, common_source_directory, &compare).is_eq() { return new_dir_path.to_string(); }
+    if tspath::compare_paths(&source_file_path, common_source_directory, &compare).is_eq() { return source_file_path; }
     if tspath::contains_path(common_source_directory, &source_file_path, &compare) {
         let relative = tspath::get_relative_path_from_directory(common_source_directory, &source_file_path, &compare);
+        if relative.is_empty() { return source_file_path; }
         return tspath::get_normalized_absolute_path(&relative, new_dir_path);
     }
     source_file_path

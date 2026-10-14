@@ -1,4 +1,4 @@
-// @generated from pinned tsc/internal/api/proto.go (microsoft/TypeScript b85298b6). One row per Method constant.
+// @generated from pinned tsc/internal/api/proto.go (microsoft/TypeScript 9eedcb0d). One row per Method constant.
 // Lane: Checker = owned by the checker lane; Ls = language-service backed (unassigned, needs core decision); Other = owned by another lane.
 use super::coverage_types::{Lane::*, Status::*, Row};
 
@@ -149,6 +149,7 @@ pub const PINNED_METHODS: &[Row] = &[
     Row { method: "getReferencedSymbolsForNode", lane: Checker, status: Tested },
     Row { method: "getSignatureUsages", lane: Checker, status: Tested },
     Row { method: "getCompletionsAtPosition", lane: Checker, status: Tested },
+    Row { method: "formatNodeForInsertion", lane: Other, status: NotOwned },
     Row { method: "getSyntacticDiagnostics", lane: Other, status: NotOwned },
     Row { method: "getBindDiagnostics", lane: Other, status: NotOwned },
     Row { method: "getSemanticDiagnostics", lane: Other, status: NotOwned },
@@ -158,7 +159,6 @@ pub const PINNED_METHODS: &[Row] = &[
     Row { method: "getGlobalDiagnostics", lane: Other, status: NotOwned },
     Row { method: "getConfigFileParsingDiagnostics", lane: Other, status: NotOwned },
     Row { method: "printNode", lane: Other, status: NotOwned },
-    Row { method: "formatNodeForInsertion", lane: Other, status: NotOwned },
     Row { method: "emit", lane: Other, status: NotOwned },
     Row { method: "emitToString", lane: Other, status: NotOwned },
     Row { method: "getJavaScriptEmit", lane: Other, status: NotOwned },
@@ -180,4 +180,5 @@ pub const PINNED_METHODS: &[Row] = &[
     Row { method: "startCPUProfile", lane: Other, status: NotOwned },
     Row { method: "stopCPUProfile", lane: Other, status: NotOwned },
     Row { method: "saveHeapProfile", lane: Other, status: NotOwned },
+
 ];

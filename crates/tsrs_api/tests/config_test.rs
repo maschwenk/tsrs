@@ -1,6 +1,6 @@
 mod common;
 use common::*;
-use tsrs_core::json::{self, Value};
+use tsrs_core::json::Value;
 
 #[test]
 fn initialize_and_unknown_methods() {
@@ -8,7 +8,7 @@ fn initialize_and_unknown_methods() {
     let s = session(&dir.dir(), false);
     let r = call(&s, "initialize", "");
     assert_eq!(str_of(get(&r, "currentDirectory")), dir.dir());
-    assert!(matches!(get(&r, "useCaseSensitiveFileNames"), Value::Bool(_)));
+    assert!(matches!(get(&r, "caseSensitivity"), Value::Number(_)));
     assert_eq!(call(&s, "ping", ""), Value::String("pong".into()));
     let e = call_err(&s, "noSuchMethod", "{}");
     assert!(e.starts_with("api: invalid request: unknown API method"), "{e}");
@@ -63,7 +63,7 @@ fn parse_json_config_file_content_and_command_line() {
     let r = call(&s, "parseCommandLine", r#"{"commandLine":["--strict","--target","es2022","x.ts"]}"#);
     assert_eq!(get(&r, "options.strict"), &Value::Bool(true));
     assert_eq!(get(&r, "options.target"), &Value::Number(9.0));
-    assert_eq!(json::marshal(get(&r, "fileNames")).unwrap(), "[\"x.ts\"]");
+    assert_eq!(get(&r, "fileNames"), &Value::Array(vec![Value::String(dir.path("x.ts"))]));
 }
 
 #[test]
@@ -115,19 +115,18 @@ fn non_object_params_are_typed_invalid_requests() {
 fn null_params_are_the_zero_value_struct() {
     let dir = TempDir::new("nullparams");
     let s = session(&dir.dir(), false);
-    // readConfigFile({}): file "" resolves to the cwd, which cannot be read: config {} plus TS5083.
-    let r = call(&s, "readConfigFile", "null");
-    assert_eq!(get(&r, "error.code"), &tsrs_core::json::Value::Number(5083.0));
-    let r2 = call(&s, "readConfigFile", "{}");
-    assert_eq!(r, r2);
+    // Missing identifiers hit the pinned rooted-path assertion; explicit null is rejected while decoding.
+    let error = call_err(&s, "readConfigFile", "null");
+    assert_eq!(error, "panic: path must not be empty");
+    assert_eq!(call_err(&s, "readConfigFile", "{}"), error);
     // An explicit null DocumentIdentifier is a decode error (Go's custom decoder), unlike an absent field.
     let e = call_err(&s, "readConfigFile", r#"{"file":null}"#);
     assert_eq!(e, "api: invalid request: failed to unmarshal *api.ReadConfigFileParams: json: cannot unmarshal into Go api.DocumentIdentifier within \"/file\": DocumentIdentifier: expected string or object, got null");
     let e = call_err(&s, "getDefaultProjectForFile", r#"{"snapshot":0,"file":null}"#);
     assert!(e.starts_with("api: invalid request: failed to unmarshal *api.GetDefaultProjectForFileParams:"), "{e}");
-    // parseConfigFile({}): a client error (cannot read the file), not an invalid request.
+    // parseConfigFile({}) reaches the same rooted-path assertion.
     let e = call_err(&s, "parseConfigFile", "null");
-    assert!(e.starts_with("api: client error: could not read file"), "{e}");
+    assert_eq!(e, "panic: path must not be empty");
     // Source file descriptor field types are decoding errors.
     for method in ["retainSourceFile", "getCachedSourceFile"] {
         let e = call_err(&s, method, r#"{"file":{"fileName":1}}"#);
@@ -292,16 +291,16 @@ fn external_struct_decoding_matches_go_classes() {
         let e = call_err(&s, method, payload);
         assert!(e.starts_with("api: invalid request:"), "{method} {payload}: {e}");
     };
-    // CompilerOptions: Go keeps an unknown int32 enum value (echoed back); exponent syntax is invalid; malformed
+    // CompilerOptions: Go keeps unknown numeric enum values (echoed back), accepts exponent syntax, and ignores malformed
     // tristates and unknown options are ignored.
     call(&s, "transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":12345}}}"#);
     let r = call(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{"target":12345,"module":1}}}}]}}"#));
-    assert_eq!(get(&r, "projects.0.compilerOptions.target"), &tsrs_core::json::Value::Number(12345.0), "{}", tsrs_core::json::marshal(&r).unwrap());
+    assert_eq!(get(&r, "projects.0.parsedCommandLine.options.target"), &tsrs_core::json::Value::Number(12345.0), "{}", tsrs_core::json::marshal(&r).unwrap());
     assert_eq!(get(&r, "projects.0.parsedCommandLine.options.target"), &tsrs_core::json::Value::Number(12345.0));
-    assert_eq!(get(&r, "projects.0.compilerOptions.module"), &tsrs_core::json::Value::Number(1.0));
-    invalid("transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":1e1}}}"#);
-    invalid("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{"target":1e1}}}}]}}"#));
-    invalid("transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":9007199254740993}}}"#);
+    assert_eq!(get(&r, "projects.0.parsedCommandLine.options.module"), &tsrs_core::json::Value::Number(1.0));
+    call(&s, "transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":1e1}}}"#);
+    call(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{f}],"compilerOptions":{{"target":1e1}}}}]}}"#));
+    call(&s, "transpileModule", r#"{"input":"const x: number = 1;","options":{"compilerOptions":{"target":9007199254740993}}}"#);
     for co in [r#"{"strict":"yes"}"#, r#"{"strict":null}"#, r#"{"strict":1}"#, r#"{"bogusOption":true}"#, r#"{"noEmit":{}}"#] {
         call(&s, "transpileModule", &format!(r#"{{"input":"const x: number = 1;","options":{{"compilerOptions":{co}}}}}"#));
     }
@@ -338,7 +337,7 @@ fn external_struct_decoding_matches_go_classes() {
 }
 
 /// runtime-f2-review (f2_enum_cases.json): unknown int32 enum values compile like pinned Go, and Go `*int`
-/// options keep their exact 64-bit value.
+/// options are converted from RawCompilerOptions JSON numbers.
 #[test]
 fn unknown_enum_values_and_go_int_options_match_go() {
     let dir = TempDir::new("f2enums");
@@ -377,29 +376,29 @@ fn unknown_enum_values_and_go_int_options_match_go() {
     let e = call_err(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"moduleResolution":-1}}}}]}}"#, quote(&imp)));
     assert_eq!(e, "api: client error: unsupported moduleResolution value -1 (not a ModuleResolutionKind)");
     call(&s, "createSnapshot", "{}");
-    // Go `*int`: any int64, echoed exactly; beyond int64, fractions and exponents are invalid (accepted builders
-    // values are covered with the CLI build backend in tsrs_cli `api::tests`).
-    for n in ["2147483648", "-2147483649", "9223372036854775807"] {
-        let out = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"maxNodeModuleJsDepth":{n}}}}}]}}"#, quote(&a))).unwrap();
-        assert!(out.contains(&format!("\"maxNodeModuleJsDepth\":{n}")), "{n}: {out}");
+    // RawCompilerOptions now decodes JSON numbers as float64, then converts to Go int.
+    // Fractions truncate and exponent syntax is accepted. Compare decoded numbers, since JSON
+    // rounds values larger than its exact integer range on both sides.
+    let overflow = if cfg!(target_arch = "x86_64") { i64::MIN } else { i64::MAX } as f64;
+    for key in ["checkers", "maxNodeModuleJsDepth"] {
+        for (literal, expected) in [
+            ("2147483648", 2147483648.0), ("-2147483649", -2147483649.0),
+            ("9223372036854775807", overflow), ("9223372036854775808", overflow),
+            ("1.5", 1.0), ("1e0", 1.0), ("1.0", 1.0),
+        ] {
+            let r = call(&s, "createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"{key}":{literal}}}}}]}}"#, quote(&a)));
+            assert_eq!(get(&r, &format!("projects.0.parsedCommandLine.options.{key}")), &tsrs_core::json::Value::Number(expected), "{key} {literal}");
+            raw("transpileModule", &format!(r#"{{"input":"const x = 1;","options":{{"compilerOptions":{{"{key}":{literal}}}}}}}"#)).unwrap();
+        }
     }
-    // `checkers` is a Go *int too; the checker pool clamps it like Go (max(min(n, files, 256), 1)).
-    for n in ["2147483648", "9223372036854775807", "-1", "0", "4"] {
-        let out = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"checkers":{n}}}}}]}}"#, quote(&a))).unwrap();
-        assert!(out.contains(&format!("\"checkers\":{n}")) || n == "0", "{n}: {out}");
-        let snap = match get(&tsrs_core::json::unmarshal(&out).unwrap(), "snapshot") { tsrs_core::json::Value::Number(n) => *n as u64, _ => unreachable!() };
-        assert_eq!(raw("getSemanticDiagnostics", &format!(r#"{{"snapshot":{snap},"project":"/dev/null/synthetic/1"}}"#)).unwrap(), "[]");
-        raw("transpileModule", &format!(r#"{{"input":"const x = 1;","options":{{"compilerOptions":{{"checkers":{n}}}}}}}"#)).unwrap();
+    // Go's direct float64-to-int32 conversion also follows the CPU's overflow result.
+    let enum_overflow = if cfg!(target_arch = "x86_64") { i32::MIN } else { i32::MAX } as f64;
+    let r = call(&s, "createSnapshot", r#"{"createPrograms":[{"rootFiles":[],"compilerOptions":{"target":9007199254740993,"newLine":9007199254740993}}]}"#);
+    for key in ["target", "newLine"] {
+        assert_eq!(get(&r, &format!("projects.0.parsedCommandLine.options.{key}")), &tsrs_core::json::Value::Number(enum_overflow));
     }
+    // BuildOptions remains a structured Go decode rather than RawCompilerOptions.
     for n in ["9223372036854775808", "1.5", "1e0", "1.0"] {
-        let e = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"checkers":{n}}}}}]}}"#, quote(&a))).unwrap_err();
-        assert!(e.starts_with("api: invalid request:"), "checkers {n}: {e}");
-        let e = raw("transpileModule", &format!(r#"{{"input":"const x = 1;","options":{{"compilerOptions":{{"checkers":{n}}}}}}}"#)).unwrap_err();
-        assert!(e.starts_with("api: invalid request:"), "checkers {n}: {e}");
-    }
-    for n in ["9223372036854775808", "1.5", "1e0", "1.0"] {
-        let e = raw("createSnapshot", &format!(r#"{{"createPrograms":[{{"rootFiles":[{}],"compilerOptions":{{"maxNodeModuleJsDepth":{n}}}}}]}}"#, quote(&a))).unwrap_err();
-        assert!(e.starts_with("api: invalid request:"), "{n}: {e}");
         let e = raw("createBuildOrchestrator", &format!(r#"{{"rootNames":["/x/tsconfig.json"],"buildOptions":{{"builders":{n}}}}}"#)).unwrap_err();
         assert!(e.starts_with("api: invalid request:"), "{n}: {e}");
     }

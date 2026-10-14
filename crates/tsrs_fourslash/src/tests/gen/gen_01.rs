@@ -7,7 +7,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_export_map7(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -43,7 +43,7 @@ export function fooFromLol(): void;
 import { fooFromIndex } from "dependency";
 // @Filename: /home/src/workspaces/project/src/foo.ts
 fooFrom/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -65,7 +65,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_export_map8(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -101,7 +101,7 @@ import { fooFromIndex } from "dependency";
 fooFrom/*cts*/
 // @Filename: /home/src/workspaces/project/src/foo.mts
 fooFrom/*mts*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -125,7 +125,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_export_map9(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -156,7 +156,7 @@ export function fooFromLol(): void;
 import { fooFromIndex } from "dependency";
 // @Filename: /home/src/workspaces/project/src/foo.ts
 fooFrom/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -178,7 +178,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_global_typings_cache(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/Library/Caches/typescript/node_modules/@types/react-router-dom/package.json
+        let _content: &str = r#"// @Filename: /home/src/Library/Caches/typescript/node_modules/@types/react-router-dom/package.json
  { "name": "@types/react-router-dom", "version": "16.8.4", "types": "index.d.ts" }
 // @Filename: /home/src/Library/Caches/typescript/node_modules/@types/react-router-dom/index.d.ts
  export class BrowserRouterFromDts {}
@@ -195,7 +195,7 @@ pub fn test_auto_import_provider_global_typings_cache(t: &T) {
  export const BrowserRouterFromJs = () => null;
 // @Filename: /home/src/workspaces/project/index.js
 BrowserRouter/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -216,7 +216,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_imports_map1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -241,7 +241,7 @@ export const isBrowser = true;
 export const isBrowser = false;
 // @Filename: /home/src/workspaces/project/src/a.ts
 isBrowser/**/"##;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -262,7 +262,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_imports_map2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -282,7 +282,7 @@ pub fn test_auto_import_provider_imports_map2(t: &T) {
 export function something(name: string) {}
 // @Filename: /home/src/workspaces/project/src/a.ts
 something/**/"##;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -303,7 +303,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_imports_map3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -323,7 +323,7 @@ pub fn test_auto_import_provider_imports_map3(t: &T) {
 export function something(name: string) {}
 // @Filename: /home/src/workspaces/project/src/a.ts
 something/**/"##;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -344,7 +344,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_imports_map4(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -367,7 +367,7 @@ pub fn test_auto_import_provider_imports_map4(t: &T) {
 export const isBrowser = true;
 // @Filename: /home/src/workspaces/project/src/a.ts
 isBrowser/**/"##;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -388,7 +388,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_imports_map5(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r##"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -412,7 +412,7 @@ pub fn test_auto_import_provider_imports_map5(t: &T) {
 export const isBrowser = true;
 // @Filename: /home/src/workspaces/project/src/a.ts
 isBrowser/**/"##;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -433,7 +433,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_namespace_same_name_as_intrinsic(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/node_modules/fp-ts/package.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/node_modules/fp-ts/package.json
 { "name": "fp-ts", "version": "0.10.4" }
 // @Filename: /home/src/workspaces/project/node_modules/fp-ts/index.d.ts
 export * as string from "./lib/string";
@@ -446,7 +446,7 @@ export type SafeString = string;
 { "compilerOptions": { "module": "commonjs", "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/index.ts
 type A = { name: string/**/ }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -468,7 +468,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_pnpm(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 { "compilerOptions": { "module": "commonjs", "lib": ["es5"] } }
 // @Filename: /home/src/workspaces/project/package.json
 { "dependencies": { "mobx": "*" } }
@@ -479,7 +479,7 @@ export declare function autorun(): void;
 // @Filename: /home/src/workspaces/project/index.ts
 autorun/**/
 // @link: /home/src/workspaces/project/node_modules/.pnpm/mobx@6.0.4/node_modules/mobx -> /home/src/workspaces/project/node_modules/mobx"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -503,7 +503,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_references_crash(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/a/package.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/a/package.json
 {}
 // @Filename: /home/src/workspaces/project/a/tsconfig.json
 { "compilerOptions": { "lib": ["es5"] } }
@@ -530,7 +530,7 @@ new A/**/();
 // @Filename: /home/src/workspaces/project/c/index.ts
 export {};
 // @link: /home/src/workspaces/project/a -> /home/src/workspaces/project/c/node_modules/a"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -552,7 +552,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_wildcard_exports1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 {
     "name": "pkg",
     "version": "1.0.0",
@@ -593,7 +593,7 @@ export const d1: number;
 }
 // @Filename: /home/src/workspaces/project/main.ts
 /**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -614,7 +614,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_wildcard_exports2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/node_modules/pkg/package.json
 {
     "name": "pkg",
     "version": "1.0.0",
@@ -643,7 +643,7 @@ export function test(): void;
 }
 // @Filename: /home/src/workspaces/project/main.ts
 /**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -664,7 +664,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_provider_wildcard_exports3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/packages/ui/package.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/packages/ui/package.json
 {
   "name": "@repo/ui",
   "version": "1.0.0",
@@ -696,7 +696,7 @@ export const Card = () => null;
 // @Filename: /home/src/workspaces/project/apps/web/app/index.tsx
 (<Card/**/ />);
 // @link: /home/src/workspaces/project/packages/ui -> /home/src/workspaces/project/apps/web/node_modules/@repo/ui"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -718,14 +718,14 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_quote_detection(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @module: esnext
+        let _content: &str = r"// @module: esnext
 // @Filename: /a.ts
 export const foo = 0;
 // @Filename: /b.ts
 import {} from 'node:path';
 
 fo/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -749,7 +749,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_re_export_from_ambient_module(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "commonjs",
@@ -765,7 +765,7 @@ declare module "fs" {
 export * from "fs";
 // @Filename: /home/src/workspaces/project/index.ts
 access/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -789,7 +789,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_reexport_of_cross_package_augmentation(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /node_modules/vitest/package.json
+        let _content: &str = r#"// @Filename: /node_modules/vitest/package.json
 { "name": "vitest", "version": "1.0.0", "types": "index.d.ts" }
 // @Filename: /node_modules/vitest/index.d.ts
 export { AugmentedInterface, uniqueFunction } from "@vitest/expect";
@@ -813,7 +813,7 @@ export interface AugmentedInterface {
 { "name": "test", "dependencies": { "vitest": "*" } }
 // @Filename: /index.ts
 uniqueFunction/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut prefs = lsutil::new_default_user_preferences();
@@ -837,7 +837,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_relative_path_to_monorepo_package(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
+        let _content: &str = r#"// @Filename: /home/src/workspaces/project/tsconfig.json
 {
   "compilerOptions": {
     "module": "nodenext",
@@ -855,7 +855,7 @@ export const x: number;
 // @Filename: /home/src/workspaces/project/script.ts
 import {} from "./packages/app/dist/index.js";
 x/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -877,7 +877,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_root_dirs(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /tsconfig.json
+        let _content: &str = r#"// @Filename: /tsconfig.json
 {
     "compilerOptions": {
         "module": "commonjs",
@@ -888,7 +888,7 @@ pub fn test_auto_import_root_dirs(t: &T) {
 export type Something = {};
 // @Filename: /index.ts
 const s: Something/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_import_fix_module_specifiers(t, "", &["./types"], None);
@@ -908,7 +908,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_same_name_default_exported(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+        let _content: &str = r"// @lib: es5
 // @module: commonjs
 // @Filename: /node_modules/antd/index.d.ts
 declare function Table(): void;
@@ -918,7 +918,7 @@ declare function Table(): void;
 export default Table;
 // @Filename: /index.ts
 Table/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::completion_globals_plus(&[Any::CompletionItem(lsproto::CompletionItem { label: "Table".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "antd".to_string(), ..Default::default() }), ..Default::default() }), sort_text: Some("16".to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "Table".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "rc-table".to_string(), ..Default::default() }), ..Default::default() }), sort_text: Some("16".to_string()), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), ..Default::default() })], false)), ..Default::default() }), ..Default::default() }));
@@ -938,7 +938,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_sort_case_sensitivity1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /exports1.ts
+        let _content: &str = r#"// @Filename: /exports1.ts
 export const a = 0;
 export const A = 1;
 export const b = 2;
@@ -957,7 +957,7 @@ a/*0*/
 import { A, a, B, b } from "./exports1";
 import { E } from "./exports2";
 d/*1*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "0");
@@ -988,7 +988,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_sort_case_sensitivity2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /a.ts
+        let _content: &str = r#"// @Filename: /a.ts
 export interface HasBar { bar: number }
 export function hasBar(x: unknown): x is HasBar { return x && typeof x.bar === "number" }
 export function foo() {}
@@ -996,12 +996,46 @@ export type __String = string;
 // @Filename: /b.ts
 import { __String, HasBar, hasBar } from "./a";
 f/**/;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./a".to_string(), ..Default::default() }), ..Default::default() }), detail: Some("function foo(): void".to_string()), kind: Some(lsproto::CompletionItemKind::Function), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), sort_text: Some("16".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
             f.verify_apply_code_action_from_completion(t, Some(String::new()), Some(fourslash::ApplyCodeActionFromCompletionOptions { name: "foo".to_string(), source: "./a".to_string(), description: r#"Update import from "./a""#.to_string(), new_file_content: Some(r#"import { __String, foo, HasBar, hasBar } from "./a";
 f;"#.to_string()), ..Default::default() }));
+        });
+        done(&mut *f, t);
+        go::resume(__defer2);
+    });
+    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
+}
+
+}
+
+pub mod auto_import_source_phase {
+use crate::tests::prelude::*;
+
+// autoImport_sourcePhase_test.go:10
+pub fn test_auto_import_does_not_add_to_source_phase_import(t: &T) {
+    t.parallel();
+    let __defer1 = go::run(|| {
+        let _content: &str = r#"// @module: esnext
+// @Filename: /a.ts
+const a = 0;
+export default a;
+export const b = 1;
+
+// @Filename: /b.ts
+import source a from "./a";
+a;
+b/**/"#;
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
+        let f = &mut f;
+        let __defer2 = go::run(|| {
+            f.go_to_marker(t, "");
+            f.verify_import_fix_at_position(t, &[r#"import source a from "./a";
+import { b } from "./a";
+a;
+b"#], None);
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1018,17 +1052,17 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_specifier_exclude_regexes(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: foo.ts
+        let _content: &str = r"// @Filename: foo.ts
 export const mySymbol = 1;
 // @Filename: ignoreme.ts
 export const ignoredSymbol = 2;
 // @Filename: bar.ts
 mySym/*1*/
 ignoredSym/*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            f.configure(t, lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec![".*ignoreme.*".to_string()]), include_completions_for_module_exports: Tristate::True, include_completions_for_import_statements: Tristate::True, ..Default::default() });
+            f.configure(t, { let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec![".*ignoreme.*".to_string()]); __preferences.include_completions_for_module_exports = Tristate::True; __preferences.include_completions_for_import_statements = Tristate::True; __preferences });
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("mySymbol".to_string())], ..Default::default() }), ..Default::default() }));
             f.verify_completions(t, Any::String("2".to_string()), Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["ignoredSymbol".to_string()], ..Default::default() }), ..Default::default() }));
             f.baseline_auto_imports_completions(t, &["1", "2"]);
@@ -1048,7 +1082,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_specifier_exclude_regexes1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: preserve
+        let _content: &str = r#"// @module: preserve
 // @Filename: /node_modules/lib/index.d.ts
 declare module "ambient" {
     export const x: number;
@@ -1058,21 +1092,21 @@ declare module "ambient/utils" {
 }
 // @Filename: /index.ts
 x/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_import_fix_module_specifiers(t, "", &["ambient", "ambient/utils"], None);
-            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["utils".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient", "ambient/utils"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["/UTILS/".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["/UTILS/i".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient", "ambient/utils"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["/ambient/utils/".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec![r"/ambient\/utils/".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["/.*?$".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["^ambient/".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient/utils"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["ambient$".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["ambient", "ambient/utils"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["oops(".to_string()]), ..Default::default() }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["utils".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient", "ambient/utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["/UTILS/".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["/UTILS/i".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient", "ambient/utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["/ambient/utils/".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec![r"/ambient\/utils/".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["/.*?$".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["^ambient/".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient/utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["ambient$".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["ambient", "ambient/utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["oops(".to_string()]); __preferences }));
             f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "ambient".to_string(), ..Default::default() }), ..Default::default() }), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), sort_text: Some("16".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "ambient/utils".to_string(), ..Default::default() }), ..Default::default() }), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), sort_text: Some("16".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
-            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["ambient/utils".to_string()], ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["utils".to_string()]), ..Default::default() }) }));
+            f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { excludes: vec!["ambient/utils".to_string()], ..Default::default() }), user_preferences: Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["utils".to_string()]); __preferences }) }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1089,7 +1123,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_specifier_exclude_regexes2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /tsconfig.json
+        let _content: &str = r#"// @Filename: /tsconfig.json
 {
     "compilerOptions": {
         "module": "preserve",
@@ -1102,14 +1136,14 @@ pub fn test_auto_import_specifier_exclude_regexes2(t: &T) {
 export function add(a: number, b: number) {}
 // @Filename: /src/index.ts
 add/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_import_fix_module_specifiers(t, "", &["./utils"], None);
-            f.verify_import_fix_module_specifiers(t, "", &["@app/utils"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec![r"^\./".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["@app/utils"], Some(lsutil::UserPreferences { import_module_specifier_preference: modulespecifiers::ImportModuleSpecifierPreference::NonRelative, ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &["./utils"], Some(lsutil::UserPreferences { import_module_specifier_preference: modulespecifiers::ImportModuleSpecifierPreference::NonRelative, auto_import_specifier_exclude_regexes: Some(vec!["^@app/".to_string()]), ..Default::default() }));
-            f.verify_import_fix_module_specifiers(t, "", &[], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["utils".to_string()]), ..Default::default() }));
+            f.verify_import_fix_module_specifiers(t, "", &["@app/utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec![r"^\./".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["@app/utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.import_module_specifier_preference = modulespecifiers::ImportModuleSpecifierPreference::NonRelative; __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &["./utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.import_module_specifier_preference = modulespecifiers::ImportModuleSpecifierPreference::NonRelative; __preferences.auto_import_specifier_exclude_regexes = Some(vec!["^@app/".to_string()]); __preferences }));
+            f.verify_import_fix_module_specifiers(t, "", &[], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["utils".to_string()]); __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1126,7 +1160,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_specifier_exclude_regexes3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: preserve
+        let _content: &str = r#"// @module: preserve
 // @Filename: /node_modules/pkg/package.json
 {
     "name": "pkg",
@@ -1142,11 +1176,11 @@ export function add(a: number, b: number) {}
 export * from "./utils";
 // @Filename: /src/index.ts
 add/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_import_fix_module_specifiers(t, "", &["pkg", "pkg/utils"], None);
-            f.verify_import_fix_module_specifiers(t, "", &["pkg/utils"], Some(lsutil::UserPreferences { auto_import_specifier_exclude_regexes: Some(vec!["^pkg$".to_string()]), ..Default::default() }));
+            f.verify_import_fix_module_specifiers(t, "", &["pkg/utils"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_specifier_exclude_regexes = Some(vec!["^pkg$".to_string()]); __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1163,7 +1197,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_symlink_case_sensitive(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /tsconfig.json
+        let _content: &str = r#"// @Filename: /tsconfig.json
 { "compilerOptions": { "module": "commonjs" } }
 // @Filename: /node_modules/.pnpm/mobx@6.0.4/node_modules/MobX/Foo.d.ts
 export declare function autorun(): void;
@@ -1173,10 +1207,10 @@ autorun/**/
 import "MobX/Foo";
 // @link: /node_modules/.pnpm/mobx@6.0.4/node_modules/MobX -> /node_modules/MobX
 // @link: /node_modules/.pnpm/mobx@6.0.4/node_modules/MobX -> /node_modules/.pnpm/cool-mobx-dependent@1.2.3/node_modules/MobX"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            f.configure(t, lsutil::UserPreferences { auto_import_entrypoint_directory_search: Tristate::True, ..Default::default() });
+            f.configure(t, { let mut __preferences = lsutil::UserPreferences::default(); __preferences.auto_import_entrypoint_directory_search = Tristate::True; __preferences });
             f.go_to_marker(t, "");
             f.verify_import_fix_at_position(t, &[r#"import { autorun } from "MobX/Foo";
 
@@ -1197,7 +1231,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_symlinked_monorepo(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /packages/project-b/package.json
+        let _content: &str = r#"// @Filename: /packages/project-b/package.json
 { "name": "project-b", "version": "1.0.0", "main": "index.js", "types": "index.d.ts" }
 // @Filename: /packages/project-b/index.d.ts
 export declare const projectBValue: number;
@@ -1211,7 +1245,7 @@ import { projectBValue } from "project-b";
 console.log(projectBValue);
 projectBFunc/**/
 // @link: /packages/project-b -> /packages/project-a/node_modules/project-b"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1232,7 +1266,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_symlinked_monorepo_granular_update(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
+        let _content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
 {
   "compilerOptions": {
     "composite": true,
@@ -1278,7 +1312,7 @@ import { projectBValue } from "project-b";
 console.log(projectBValue);
 newlyAdded/*projectACompletion*/
 // @link: /packages/project-b -> /packages/project-a/node_modules/project-b"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "projectACompletion");
@@ -1304,7 +1338,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_symlinked_monorepo_project_references(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
+        let _content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
 {
   "compilerOptions": {
     "composite": true,
@@ -1351,7 +1385,7 @@ import { projectBValue } from "project-b";
 console.log(projectBValue);
 projectBFunc/**/
 // @link: /packages/project-b -> /packages/project-a/node_modules/project-b"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1372,7 +1406,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_symlinked_monorepo_project_references_no_pkg_exports(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
+        let _content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
 {
   "compilerOptions": {
     "composite": true,
@@ -1415,7 +1449,7 @@ import { projectBValue } from "project-b";
 console.log(projectBValue);
 projectBFunc/**/
 // @link: /packages/project-b -> /packages/project-a/node_modules/project-b"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -1436,7 +1470,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_symlinked_monorepo_reexport(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
+        let _content: &str = r#"// @Filename: /packages/project-b/tsconfig.json
 {
   "compilerOptions": {
     "composite": true,
@@ -1483,7 +1517,7 @@ import { projectBValue } from "project-b";
 console.log(projectBValue);
 projectBFunction/**/
 // @link: /packages/project-b -> /packages/project-a/node_modules/project-b"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             let mut prefs = lsutil::new_default_user_preferences();
@@ -1694,7 +1728,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_import1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @verbatimModuleSyntax: true
+        let _content: &str = r"// @verbatimModuleSyntax: true
 // @target: esnext
 // @Filename: /foo.ts
 export const A = 1;
@@ -1705,19 +1739,19 @@ export class D = { y: string };
 import { A, D, type C } from './foo';
 const b: B/**/ | C;
 console.log(A, D);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
             f.verify_import_fix_at_position(t, &[r"import { A, D, type C, type B } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Inline, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Inline; __preferences }));
             f.verify_import_fix_at_position(t, &[r"import { A, D, type B, type C } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.verify_import_fix_at_position(t, &[r"import { A, D, type C, type B } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::First, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::First; __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1734,7 +1768,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_import2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @verbatimModuleSyntax: true
+        let _content: &str = r"// @verbatimModuleSyntax: true
 // @target: esnext
 // @Filename: /foo.ts
 export const A = 1;
@@ -1745,19 +1779,19 @@ export class D = { y: string };
 import { A, type C, D } from './foo';
 const b: B/**/ | C;
 console.log(A, D);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
             f.verify_import_fix_at_position(t, &[r"import { A, type B, type C, D } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Inline, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Inline; __preferences }));
             f.verify_import_fix_at_position(t, &[r"import { A, type C, D, type B } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.verify_import_fix_at_position(t, &[r"import { A, type C, D, type B } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::First, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::First; __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1774,7 +1808,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_import3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @verbatimModuleSyntax: true
+        let _content: &str = r"// @verbatimModuleSyntax: true
 // @target: esnext
 // @Filename: /foo.ts
 export const A = 1;
@@ -1785,19 +1819,19 @@ export class D = { y: string };
 import { A, type B, type C } from './foo';
 const b: B | C;
 console.log(A, D/**/);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
             f.verify_import_fix_at_position(t, &[r"import { A, D, type B, type C } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.verify_import_fix_at_position(t, &[r"import { A, type B, type C, D } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Inline, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Inline; __preferences }));
             f.verify_import_fix_at_position(t, &[r"import { A, type B, type C, D } from './foo';
 const b: B | C;
-console.log(A, D);"], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::First, ..Default::default() }));
+console.log(A, D);"], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::First; __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1814,7 +1848,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_import4(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @verbatimModuleSyntax: true
+        let _content: &str = r#"// @verbatimModuleSyntax: true
 // @target: esnext
 // @Filename: /exports1.ts
 export const a = 0;
@@ -1844,7 +1878,7 @@ b;
 import { A, a, B, b, type Y, type Z } from "./exports1";
 import { E } from "./exports2";
 d/*2*//*2a*//*2b*//*2c*/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "0");
@@ -1852,53 +1886,53 @@ d/*2*//*2a*//*2b*//*2c*/"#;
 a;
 b;"#, r#"import { A, b, B, C } from "./exports1";
 a;
-b;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+b;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.go_to_marker(t, "0a");
             f.verify_import_fix_at_position(t, &[r#"import { a, A, B, C } from "./exports1";
 a;
 b;"#, r#"import { A, b, B, C } from "./exports1";
 a;
-b;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+b;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.go_to_marker(t, "1");
             f.verify_import_fix_at_position(t, &[r#"import { a, A, B, C, type Y, type Z } from "./exports1";
 a;
 b;"#, r#"import { A, b, B, C, type Y, type Z } from "./exports1";
 a;
-b;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+b;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.go_to_marker(t, "1a");
             f.verify_import_fix_at_position(t, &[r#"import { a, A, B, C, type Y, type Z } from "./exports1";
 a;
 b;"#, r#"import { A, b, B, C, type Y, type Z } from "./exports1";
 a;
-b;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+b;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.go_to_marker(t, "1b");
             f.verify_import_fix_at_position(t, &[r#"import { a, A, B, C, type Y, type Z } from "./exports1";
 a;
 b;"#, r#"import { A, b, B, C, type Y, type Z } from "./exports1";
 a;
-b;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Inline, ..Default::default() }));
+b;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Inline; __preferences }));
             f.go_to_marker(t, "1c");
             f.verify_import_fix_at_position(t, &[r#"import { a, A, B, C, type Y, type Z } from "./exports1";
 a;
 b;"#, r#"import { A, b, B, C, type Y, type Z } from "./exports1";
 a;
-b;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Inline, ..Default::default() }));
+b;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Inline; __preferences }));
             f.go_to_marker(t, "2");
             f.verify_import_fix_at_position(t, &[r#"import { A, a, B, b, type Y, type Z } from "./exports1";
 import { d, E } from "./exports2";
-d"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+d"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.go_to_marker(t, "2a");
             f.verify_import_fix_at_position(t, &[r#"import { A, a, B, b, type Y, type Z } from "./exports1";
 import { E, d } from "./exports2";
-d"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+d"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.go_to_marker(t, "2b");
             f.verify_import_fix_at_position(t, &[r#"import { A, a, B, b, type Y, type Z } from "./exports1";
 import { d, E } from "./exports2";
-d"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+d"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.go_to_marker(t, "2c");
             f.verify_import_fix_at_position(t, &[r#"import { A, a, B, b, type Y, type Z } from "./exports1";
 import { E, d } from "./exports2";
-d"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+d"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -1915,7 +1949,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_import5(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @verbatimModuleSyntax: true
+        let _content: &str = r#"// @verbatimModuleSyntax: true
 // @target: esnext
 // @Filename: /exports1.ts
 export const a = 0;
@@ -1942,7 +1976,7 @@ const bar: y;
 import { A, B, type X, type Y, type Z } from "./exports1";
 const foo: x/*1*/;
 const bar: y;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "0");
@@ -1950,43 +1984,43 @@ const bar: y;"#;
 const foo: x;
 const bar: y;"#, r#"import { type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.verify_import_fix_at_position(t, &[r#"import { type x, type X, type Y, type Z } from "./exports1";
 const foo: x;
 const bar: y;"#, r#"import { type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.verify_import_fix_at_position(t, &[r#"import { type x, type X, type Y, type Z } from "./exports1";
 const foo: x;
 const bar: y;"#, r#"import { type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Inline, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Inline; __preferences }));
             f.verify_import_fix_at_position(t, &[r#"import { type x, type X, type Y, type Z } from "./exports1";
 const foo: x;
 const bar: y;"#, r#"import { type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Inline, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Inline; __preferences }));
             f.verify_import_fix_at_position(t, &[r#"import { type x, type X, type Y, type Z } from "./exports1";
 const foo: x;
 const bar: y;"#, r#"import { type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::First, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::First; __preferences }));
             f.verify_import_fix_at_position(t, &[r#"import { type x, type X, type Y, type Z } from "./exports1";
 const foo: x;
 const bar: y;"#, r#"import { type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::First, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::First; __preferences }));
             f.go_to_marker(t, "1");
             f.verify_import_fix_at_position(t, &[r#"import { A, B, type x, type X, type Y, type Z } from "./exports1";
 const foo: x;
 const bar: y;"#, r#"import { A, B, type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
             f.verify_import_fix_at_position(t, &[r#"import { A, B, type x, type X, type Y, type Z } from "./exports1";
 const foo: x;
 const bar: y;"#, r#"import { A, B, type X, type y, type Y, type Z } from "./exports1";
 const foo: x;
-const bar: y;"#], Some(lsutil::UserPreferences { organize_imports_type_order: lsutil::OrganizeImportsTypeOrder::Last, ..Default::default() }));
+const bar: y;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.organize_imports_type_order = lsutil::OrganizeImportsTypeOrder::Last; __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -2003,7 +2037,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_only_preferred1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @verbatimModuleSyntax: true
+        let _content: &str = r"// @verbatimModuleSyntax: true
 // @module: esnext
 // @moduleResolution: bundler
 // @Filename: /ts.d.ts
@@ -2018,7 +2052,7 @@ export = ts;
 export interface VFS {
   getSourceFile(path: string): ts/**/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             (f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "ts".to_string(), data: Some(lsproto::CompletionItemData { auto_import: Some(lsproto::AutoImportFix { module_specifier: "./ts".to_string(), ..Default::default() }), ..Default::default() }), additional_text_edits: fourslash::ANY_TEXT_EDITS.clone(), sort_text: Some("16".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() })).and_apply_code_action)(&mut *f, t, Some(fourslash::CompletionsExpectedCodeAction { name: "ts".to_string(), source: "./ts".to_string(), description: r#"Add import from "./ts""#.to_string(), new_file_content: r#"import type ts from "./ts";
@@ -2042,7 +2076,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_only_preferred2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /node_modules/react/index.d.ts
+        let _content: &str = r#"// @Filename: /node_modules/react/index.d.ts
 export interface ComponentType {}
 export interface ComponentProps {}
 export declare function useState<T>(initialState: T): [T, (newState: T) => void];
@@ -2060,7 +2094,7 @@ import { useState } from "react";
 import type { ComponentType } from "react";
 
 type _ = ComponentProps/*2*/;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2092,7 +2126,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_type_only_preferred3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: esnext
+        let _content: &str = r#"// @module: esnext
 // @moduleResolution: bundler
 // @Filename: /a.ts
 export class A {}
@@ -2110,17 +2144,17 @@ let x: B;
 export * as default from "./a";
 // @Filename: /e.ts
 let x: /*e*/ns.A;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "b");
             f.verify_import_fix_at_position(t, &[r#"import type { A } from "./a";
 
-let x: A;"#], Some(lsutil::UserPreferences { prefer_type_only_auto_imports: Tristate::True, ..Default::default() }));
+let x: A;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.prefer_type_only_auto_imports = Tristate::True; __preferences }));
             f.go_to_marker(t, "c");
             f.verify_import_fix_at_position(t, &[r#"import { A, type B } from "./a";
 new A();
-let x: B;"#], Some(lsutil::UserPreferences { prefer_type_only_auto_imports: Tristate::True, ..Default::default() }));
+let x: B;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.prefer_type_only_auto_imports = Tristate::True; __preferences }));
             f.go_to_file(t, "/d.ts");
             f.verify_code_fix_all(t, fourslash::VerifyCodeFixAllOptions { fix_id: "fixMissingImport".to_string(), new_file_content: r#"import { A, type B } from "./a";
 
@@ -2129,7 +2163,7 @@ let x: B;"#.to_string() });
             f.go_to_marker(t, "e");
             f.verify_import_fix_at_position(t, &[r#"import type ns from "./ns";
 
-let x: ns.A;"#], Some(lsutil::UserPreferences { prefer_type_only_auto_imports: Tristate::True, ..Default::default() }));
+let x: ns.A;"#], Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.prefer_type_only_auto_imports = Tristate::True; __preferences }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -2146,7 +2180,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_typedef_missing_name(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @allowJs: true
+        let _content: &str = r"// @allowJs: true
 // @checkJs: true
 // @Filename: /utils.js
 /** @typedef {{ x: number }} */
@@ -2154,7 +2188,7 @@ pub fn test_auto_import_typedef_missing_name(t: &T) {
 export function doSomething() {}
 // @Filename: /index.ts
 doSomething/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2175,7 +2209,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_import_verbatim_type_only1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @module: node18
+        let _content: &str = r"// @module: node18
 // @verbatimModuleSyntax: true
 // @Filename: /mod.ts
 export const value = 0;
@@ -2183,7 +2217,7 @@ export class C { constructor(v: any) {} }
 export interface I {}
 // @Filename: /a.mts
 const x: /**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_apply_code_action_from_completion(t, Some(String::new()), Some(fourslash::ApplyCodeActionFromCompletionOptions { name: "I".to_string(), source: "./mod".to_string(), description: r#"Add import from "./mod.js""#.to_string(), auto_import_fix: Some(lsproto::AutoImportFix { module_specifier: "./mod.js".to_string(), ..Default::default() }), new_file_content: Some("import type { I } from \"./mod.js\";\n\nconst x: ".to_string()), ..Default::default() }));
@@ -2207,7 +2241,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_imports_custom_conditions(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: esnext
+        let _content: &str = r#"// @module: esnext
 // @moduleResolution: bundler
 // @customConditions: custom
 // @Filename: /node_modules/dep/package.json
@@ -2224,7 +2258,7 @@ pub fn test_auto_imports_custom_conditions(t: &T) {
 export const dep: number;
 // @Filename: /index.ts
 dep/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_import_fix_module_specifiers(t, "", &["dep"], None);
@@ -2244,7 +2278,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_imports_node_next1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @module: node18
+        let _content: &str = r#"// @module: node18
 // @Filename: /node_modules/pack/package.json
 {
     "name": "pack",
@@ -2261,7 +2295,7 @@ export const fromUnreachable = 0;
 // @Filename: /index.mts
 import { fromMain } from "pack";
 fromUnreachable/**/"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2283,7 +2317,7 @@ use crate::tests::prelude::*;
 pub fn test_auto_imports_with_root_dirs_and_rooted_path01(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /dir/foo.ts
+        let _content: &str = r#"// @Filename: /dir/foo.ts
  export function foo() {}
 // @Filename: /dir/bar.ts
  /*$*/
@@ -2295,7 +2329,7 @@ pub fn test_auto_imports_with_root_dirs_and_rooted_path01(t: &T) {
         "rootDirs": ["D:/"]
     }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "$");
@@ -2316,7 +2350,7 @@ use crate::tests::prelude::*;
 pub fn test_automatic_constructor_toggling(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"class A<T> { }
+        let _content: &str = r#"class A<T> { }
 class B<T> {/*B*/ }
 class C<T> { /*C*/constructor(val: T) { } }
 class D<T> { constructor(/*D*/val: T) { } }
@@ -2325,7 +2359,7 @@ new /*Asig*/A<string>();
 new /*Bsig*/B("");
 new /*Csig*/C("");
 new /*Dsig*/D<string>();"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "B");
@@ -2362,14 +2396,14 @@ use crate::tests::prelude::*;
 pub fn test_basic_backspace(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"export {};
+        let _content: &str = r"export {};
 interface Point {
 	x: number;
 	y: number;/*b*/
 }
 declare const p: Point;
 p./*a*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("y".to_string())], ..Default::default() }), ..Default::default() }));
@@ -2392,10 +2426,10 @@ use crate::tests::prelude::*;
 pub fn test_basic_class_element_keywords(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+        let _content: &str = r"class C {
 	/*a*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_CLASS_ELEMENT_KEYWORDS.clone()), ..Default::default() }), ..Default::default() }));
@@ -2415,11 +2449,11 @@ use crate::tests::prelude::*;
 pub fn test_basic_class_members(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class n {
+        let _content: &str = r"class n {
     constructor (public x: number, public y: number, private z: string) { }
 }
 var t = new n(0, 1, '');";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_eof(t);
@@ -2441,14 +2475,14 @@ use crate::tests::prelude::*;
 pub fn test_basic_edit(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"export {};
+        let _content: &str = r"export {};
 interface Point {
 	x: number;
 	y: number;
 }
 declare const p: Point;
 p/*a*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "a");
@@ -2471,9 +2505,9 @@ use crate::tests::prelude::*;
 pub fn test_basic_global_completions(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+        let _content: &str = r"// @lib: es5
 /*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(util::COMPLETION_GLOBALS.clone()), ..Default::default() }), ..Default::default() }));
@@ -2493,14 +2527,14 @@ use crate::tests::prelude::*;
 pub fn test_basic_interface_members(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"export {};
+        let _content: &str = r"export {};
 interface Point {
 	x: number;
 	y: number;
 }
 declare const p: Point;
 p./*a*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::CompletionItem(lsproto::CompletionItem { label: "x".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() }), Any::String("y".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -2520,7 +2554,7 @@ use crate::tests::prelude::*;
 pub fn test_basic_jsdoc_completions(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"
+        let _content: &str = r"
 // @filename: file.js
 // @allowJs: true
 /**
@@ -2561,7 +2595,7 @@ function baz(x = 0) {
   return x * 2;
 }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "link".to_string(), kind: Some(lsproto::CompletionItemKind::Keyword), detail: Some("link".to_string()), ..Default::default() }), Any::String("param".to_string()), Any::String("returns".to_string()), Any::String("param {*} x ".to_string())], ..Default::default() }), ..Default::default() }));
@@ -2585,13 +2619,13 @@ use crate::tests::prelude::*;
 pub fn test_basic_multifile_completions(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /a.ts
+        let _content: &str = r"// @Filename: /a.ts
 export const foo = { bar: 'baz' };
 
 // @Filename: /b.ts
 import { foo } from './a';
 const test = foo./*1*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "bar".to_string(), kind: Some(lsproto::CompletionItemKind::Field), sort_text: Some("11".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -2611,7 +2645,7 @@ use crate::tests::prelude::*;
 pub fn test_basic_quick_info(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"
+        let _content: &str = r"
 /**
  * Some var
  */
@@ -2627,7 +2661,7 @@ class Foo/*3*/ {
 	#bar: string;
 }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", "var someVar: number", "Some var");
@@ -2649,14 +2683,14 @@ use crate::tests::prelude::*;
 pub fn test_basic_replace_line(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"export {};
+        let _content: &str = r"export {};
 interface Point {
 	x: number;
 	y: number;
 }
 declare const p: Point;
 p./*a*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), ..Default::default() }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::String("y".to_string())], ..Default::default() }), ..Default::default() }));
@@ -2678,7 +2712,7 @@ use crate::tests::prelude::*;
 pub fn test_best_common_type_object_literals(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @stableTypeOrdering: true
+        let _content: &str = r"// @stableTypeOrdering: true
 var a = { name: 'bob', age: 18 };
 var b = { name: 'jim', age: 20 };
 var /*1*/c = [a, b];
@@ -2694,7 +2728,7 @@ interface I {
 }
 var i: I;
 var /*4*/c3 = [i, a];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "1", r"var c: {
@@ -2731,7 +2765,7 @@ use crate::tests::prelude::*;
 pub fn test_best_common_type_object_literals1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"var a = { name: 'bob', age: 18 };
+        let _content: &str = r"var a = { name: 'bob', age: 18 };
 var b = { name: 'jim', age: 20 };
 var /*1*/c = [a, b];
 var a1 = { name: 'bob', age: 18 };
@@ -2746,7 +2780,7 @@ interface I {
 }
 var i: I;
 var /*4*/c3 = [i, a];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "4", "var c3: I[]", "");
@@ -2784,7 +2818,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_accessor(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     new C().bar;
 }
 
@@ -2796,7 +2830,7 @@ class C {
 
 function baz() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -2817,11 +2851,11 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_anonymous_class_no_crash1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /main.ts
+        let _content: &str = r"// @Filename: /main.ts
 class {
     con/*1*/structor() {}
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2842,11 +2876,11 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_anonymous_class_no_crash2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /main.ts
+        let _content: &str = r"// @Filename: /main.ts
 (class {
     con/*1*/structor() {}
 })";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2867,7 +2901,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_anonymous_class_no_crash3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /main.ts
+        let _content: &str = r#"// @Filename: /main.ts
 import Bar from "./other";
 
 function foo() {
@@ -2877,7 +2911,7 @@ function foo() {
 export default class {
     constructor() {}
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2898,9 +2932,9 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_anonymous_function_no_crash1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /main.ts
+        let _content: &str = r"// @Filename: /main.ts
 func/*1*/tion() {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2921,9 +2955,9 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_anonymous_function_no_crash2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /main.ts
+        let _content: &str = r"// @Filename: /main.ts
 (func/*1*/tion() {})";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2944,7 +2978,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_anonymous_function_no_crash3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /main.ts
+        let _content: &str = r#"// @Filename: /main.ts
 import bar from "./other";
 
 function foo() {
@@ -2952,7 +2986,7 @@ function foo() {
 }
 // @Filename: /other.ts
 export default function() {}"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -2973,7 +3007,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_call_expression_by_const_named_function_expression(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     bar();
 }
 
@@ -2985,7 +3019,7 @@ function baz() {
 }
 
 /**/bar()";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3006,7 +3040,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_class(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     bar();
 }
 
@@ -3016,7 +3050,7 @@ function /**/bar() {
 
 class Baz {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3037,7 +3071,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_class_property_arrow_function(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+        let _content: &str = r"class C {
     caller = () => {
         this.callee();
     }
@@ -3045,7 +3079,7 @@ pub fn test_call_hierarchy_class_property_arrow_function(t: &T) {
     /**/callee = () => {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3066,7 +3100,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_class_static_block(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+        let _content: &str = r"class C {
     static {
         function foo() {
             bar();
@@ -3087,7 +3121,7 @@ function baz() {
 
 function quxx() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3108,7 +3142,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_class_static_block2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+        let _content: &str = r"class C {
     /**/static {
         function foo() {
             bar();
@@ -3129,7 +3163,7 @@ function baz() {
 
 function quxx() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3150,7 +3184,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_const_named_arrow_function(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     bar();
 }
 
@@ -3160,7 +3194,7 @@ const /**/bar = () => {
 
 function baz() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3181,7 +3215,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_const_named_class_expression(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     new Bar();
 }
 
@@ -3193,7 +3227,7 @@ const /**/Bar = class {
 
 function baz() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3214,7 +3248,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_const_named_function_expression(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     bar();
 }
 
@@ -3224,7 +3258,7 @@ const /**/bar = function () {
 
 function baz() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3245,7 +3279,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_container_name(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function /**/f() {}
+        let _content: &str = r"function /**/f() {}
 
 class A {
   static sameName() {
@@ -3280,7 +3314,7 @@ namespace Foo {
 namespace Foo.Bar {
   const sameName = () => new Foo.C();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3301,7 +3335,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_container_name_server(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+        let _content: &str = r"// @lib: es5
 function /**/f() {}
 
 class A {
@@ -3337,7 +3371,7 @@ namespace Foo {
 namespace Foo.Bar {
   const sameName = () => new Foo.C();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.mark_test_as_strada_server();
@@ -3359,7 +3393,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_cross_file(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: /a.ts
+        let _content: &str = r#"// @filename: /a.ts
 export function /**/createModelReference() {}
 // @filename: /b.ts
 import { createModelReference } from "./a";
@@ -3371,7 +3405,7 @@ import { createModelReference } from "./a";
 function registerDefaultLanguageCommand() {
   createModelReference();
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3392,7 +3426,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_decorator(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @experimentalDecorators: true
+        let _content: &str = r"// @experimentalDecorators: true
 @bar
 class Foo {
 }
@@ -3403,7 +3437,7 @@ function /**/bar() {
 
 function baz() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3424,7 +3458,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_export_default_class(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: main.ts
+        let _content: &str = r#"// @filename: main.ts
 import Bar from "./other";
 
 function foo() {
@@ -3439,7 +3473,7 @@ export /**/default class {
 
 function baz() {
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3460,7 +3494,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_export_default_function(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: main.ts
+        let _content: &str = r#"// @filename: main.ts
 import bar from "./other";
 
 function foo() {
@@ -3473,7 +3507,7 @@ export /**/default function () {
 
 function baz() {
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3494,7 +3528,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_export_equals_function(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @filename: main.ts
+        let _content: &str = r#"// @filename: main.ts
 import bar = require("./other");
 
 function foo() {
@@ -3507,7 +3541,7 @@ export = /**/function () {
 
 function baz() {
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3528,10 +3562,10 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_file(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"foo();
+        let _content: &str = r"foo();
 function /**/foo() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3552,7 +3586,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_function(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     bar();
 }
 
@@ -3567,7 +3601,7 @@ function baz() {
 
 function quxx() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3588,7 +3622,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_function_ambiguity1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: a.d.ts
+        let _content: &str = r"// @filename: a.d.ts
 declare function foo(x?: number): void;
 // @filename: b.d.ts
 declare function foo(x?: string): void;
@@ -3597,7 +3631,7 @@ declare function foo(x?: boolean): void;
 function bar() {
     /**/foo();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3618,7 +3652,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_function_ambiguity2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: a.d.ts
+        let _content: &str = r"// @filename: a.d.ts
 declare function /**/foo(x?: number): void;
 // @filename: b.d.ts
 declare function foo(x?: string): void;
@@ -3627,7 +3661,7 @@ declare function foo(x?: boolean): void;
 function bar() {
     foo();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3648,7 +3682,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_function_ambiguity3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: a.d.ts
+        let _content: &str = r"// @filename: a.d.ts
 declare function foo(x?: number): void;
 // @filename: b.d.ts
 declare function /**/foo(x?: string): void;
@@ -3657,7 +3691,7 @@ declare function foo(x?: boolean): void;
 function bar() {
     foo();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3678,7 +3712,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_function_ambiguity4(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: a.d.ts
+        let _content: &str = r"// @filename: a.d.ts
 declare function foo(x?: number): void;
 // @filename: b.d.ts
 declare function foo(x?: string): void;
@@ -3687,7 +3721,7 @@ declare function /**/foo(x?: boolean): void;
 function bar() {
     foo();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3708,7 +3742,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_function_ambiguity5(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @filename: a.d.ts
+        let _content: &str = r"// @filename: a.d.ts
 declare function foo(x?: number): void;
 // @filename: b.d.ts
 declare function foo(x?: string): void;
@@ -3717,7 +3751,7 @@ declare function foo(x?: boolean): void;
 function /**/bar() {
     foo();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3738,7 +3772,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_in_prop_declaration_of_exported_default_class1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: /main.ts
+        let _content: &str = r"// @Filename: /main.ts
 export default class {
   onSave = () => {
     const values = [];
@@ -3746,7 +3780,7 @@ export default class {
   };
 }
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "m1");
@@ -3767,8 +3801,8 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_incoming_calls_no_crash_array_push(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = "function splitNames(name: string) {\n  return (name || \"\").split(\",\").filter(Boolean);\n}\n\nasync function trim(packageNames: string[]) {\n  const nameOrPkgs = packageNames.filter(Boolean);\n  const names = [];\n  for (const nameOrPkg of nameOrPkgs) {\n    try {\n      names./*push*/push(nameOrPkg);\n    } catch (error) {\n    }\n  }\n  return names;\n}\n\t";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let _content: &str = "function splitNames(name: string) {\n  return (name || \"\").split(\",\").filter(Boolean);\n}\n\nasync function trim(packageNames: string[]) {\n  const nameOrPkgs = packageNames.filter(Boolean);\n  const names = [];\n  for (const nameOrPkg of nameOrPkgs) {\n    try {\n      names./*push*/push(nameOrPkg);\n    } catch (error) {\n    }\n  }\n  return names;\n}\n\t";
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "push");
@@ -3789,7 +3823,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_incoming_calls_object_literal_method_in_expression_computed_property(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"const obj = {
+        let _content: &str = r#"const obj = {
   [1 + 2]: {
     method() {
       return ""./*split*/split(",");
@@ -3797,7 +3831,7 @@ pub fn test_call_hierarchy_incoming_calls_object_literal_method_in_expression_co
   }
 };
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "split");
@@ -3818,7 +3852,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_incoming_calls_object_literal_method_in_identifier_computed_property(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"const key = "x";
+        let _content: &str = r#"const key = "x";
 const obj = {
   [key]: {
     method() {
@@ -3827,7 +3861,7 @@ const obj = {
   }
 };
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "split");
@@ -3848,7 +3882,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_incoming_calls_object_literal_method_in_string_literal_computed_property(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"const obj = {
+        let _content: &str = r#"const obj = {
   ["x"]: {
     method() {
       return ""./*split*/split(",");
@@ -3856,7 +3890,7 @@ pub fn test_call_hierarchy_incoming_calls_object_literal_method_in_string_litera
   }
 };
 "#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "split");
@@ -3877,14 +3911,14 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_interface_method(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"interface I {
+        let _content: &str = r"interface I {
     /**/foo(): void;
 }
 
 const obj: I = { foo() {} };
 
 obj.foo();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3905,7 +3939,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_jsx_element(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @jsx: preserve
+        let _content: &str = r"// @jsx: preserve
 // @filename: main.tsx
 function foo() {
     return <Bar/>;
@@ -3917,7 +3951,7 @@ function /**/Bar() {
 
 function baz() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3938,7 +3972,7 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_tagged_template(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function foo() {
+        let _content: &str = r"function foo() {
     bar`a${1}b`;
 }
 
@@ -3948,7 +3982,7 @@ function /**/bar(array: TemplateStringsArray, ...args: any[]) {
 
 function baz() {
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -3969,12 +4003,12 @@ use crate::tests::prelude::*;
 pub fn test_call_hierarchy_unclosed_template_expr_no_crash1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @Filename: /main.ts
+        let _content: &str = r#"// @Filename: /main.ts
 function updateBadge() {
     const header = `<div class="sub">${format`;
     const badge = `<div /*1*/class="badge">`;
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -3995,12 +4029,12 @@ use crate::tests::prelude::*;
 pub fn test_call_signature_help(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"interface C {
+        let _content: &str = r"interface C {
    (): number;
 }
 var c: C;
 c(/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -4021,7 +4055,7 @@ use crate::tests::prelude::*;
 pub fn test_called_unions_of_dissimilar_tyeshave_good_display(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"declare const callableThing1:
+        let _content: &str = r"declare const callableThing1:
     | ((o1: {x: number}) => void)
     | ((o1: {y: number}) => void)
     ;
@@ -4063,7 +4097,7 @@ declare const callableThing5:
 
 callableThing5(/*5*/1)
 ";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "1");
@@ -4092,8 +4126,8 @@ use crate::tests::prelude::*;
 pub fn test_chained_fat_arrow_formatting(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = "var fn = () => () => null/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let _content: &str = "var fn = () => () => null/**/";
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -4115,7 +4149,7 @@ use crate::tests::prelude::*;
 pub fn test_chinese_character_display_in_hover(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"
+        let _content: &str = r#"
 interface 中文界面 {
     上居中: string;
     下居中: string;
@@ -4132,7 +4166,7 @@ class 中文类 {
 
 let /*instanceHover*/实例 = new 中文类();
 let 属性对象 = 实例./*methodHover*/获取中文属性();"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "instanceHover", "let 实例: 中文类", "");
@@ -4148,7 +4182,7 @@ let 属性对象 = 实例./*methodHover*/获取中文属性();"#;
 pub fn test_chinese_character_display_in_union_types(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"
+        let _content: &str = r#"
 // Test the original issue: Chinese characters in method parameters should display correctly
 class TSLine {
     setLengthTextPositionPreset(/*methodParam*/preset: "上居中" | "下居中" | "右居中" | "左居中"): void {}
@@ -4156,7 +4190,7 @@ class TSLine {
 
 let lines = new TSLine();
 lines./*method*/setLengthTextPositionPreset;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "method", r#"(method) TSLine.setLengthTextPositionPreset(preset: "上居中" | "下居中" | "右居中" | "左居中"): void"#, "");
@@ -4176,7 +4210,7 @@ use crate::tests::prelude::*;
 pub fn test_class_extends_interface_sig_help1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class C {
+        let _content: &str = r"class C {
     public foo(x: string);
     public foo(x: number);
     public foo(x: any) { return x; }
@@ -4186,7 +4220,7 @@ interface I extends C {
 }
 var i: I;
 i.foo(/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_marker(t, "");
@@ -4207,7 +4241,7 @@ use crate::tests::prelude::*;
 pub fn test_class_interface_insert(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"interface Intersection {
+        let _content: &str = r"interface Intersection {
     dist: number;
 }
 /*interfaceGoesHere*/
@@ -4215,7 +4249,7 @@ class /*className*/Sphere {
     constructor(private center) {
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_quick_info_at(t, "className", "class Sphere", "");
@@ -4242,16 +4276,16 @@ use crate::tests::prelude::*;
 pub fn test_class_member_completion_keeps_name_fallback(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class B {
+        let _content: &str = r"class B {
 	constructor(public value: string) {}
 }
 class C extends B {
 	/*a*/
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
-            f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "value".to_string(), insert_text: Some("value".to_string()), ..Default::default() })], ..Default::default() }), user_preferences: Some(lsutil::UserPreferences { include_completions_with_class_member_snippets: Tristate::True, ..Default::default() }), ..Default::default() }));
+            f.verify_completions(t, Any::String("a".to_string()), Some(fourslash::CompletionsExpectedList { item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(vec![]), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "value".to_string(), insert_text: Some("value".to_string()), ..Default::default() })], ..Default::default() }), user_preferences: Some({ let mut __preferences = lsutil::UserPreferences::default(); __preferences.include_completions_with_class_member_snippets = Tristate::True; __preferences }), ..Default::default() }));
         });
         done(&mut *f, t);
         go::resume(__defer2);
@@ -4263,12 +4297,12 @@ class C extends B {
 pub fn test_implement_class_fix_does_not_add_invalid_override(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @noImplicitOverride: true
+        let _content: &str = r"// @noImplicitOverride: true
 class B {
     method() {}
 }
 class C implements B {[| |]}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'B'".to_string(), new_file_content: r#"class B {
@@ -4295,7 +4329,7 @@ use crate::tests::prelude::*;
 pub fn test_clodule_as_base_class(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @lib: es5
+        let _content: &str = r"// @lib: es5
 // @strict: false
 class A {
     constructor(x: number) { }
@@ -4319,7 +4353,7 @@ class D extends A {
 var d: D;
 d./*1*/
 D./*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo".to_string()), Any::String("foo2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -4343,7 +4377,7 @@ use crate::tests::prelude::*;
 pub fn test_clodule_as_base_class2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @module: commonjs
+        let _content: &str = r"// @module: commonjs
 // @strict: false
 // @Filename: cloduleAsBaseClass2_0.ts
 class A {
@@ -4371,7 +4405,7 @@ class D extends B {
 var d: D;
 d./*1*/
 D./*2*/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { exact: Some(vec![Any::String("foo".to_string()), Any::String("foo2".to_string())]), ..Default::default() }), ..Default::default() }));
@@ -4395,7 +4429,7 @@ use crate::tests::prelude::*;
 pub fn test_clodule_type_of1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+        let _content: &str = r"// @strict: false
 class C<T> {
     static foo(x: number) { }
     x: T;
@@ -4409,7 +4443,7 @@ namespace C {
         return typeof r;
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String("1".to_string()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "f".to_string(), sort_text: Some("11".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "foo".to_string(), sort_text: Some("10".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -4436,10 +4470,10 @@ use crate::tests::prelude::*;
 pub fn test_closed_comments_in_constructor(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class Foo {
+        let _content: &str = r"class Foo {
     constructor(/* /**/ */) { }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String(String::new()), None);
@@ -4459,10 +4493,10 @@ use crate::tests::prelude::*;
 pub fn test_code_completion_escaping(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: a.js
+        let _content: &str = r"// @Filename: a.js
 // @allowJs: true
 ___foo; __foo;/**/";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_completions(t, Any::String(String::new()), Some(fourslash::CompletionsExpectedList { is_incomplete: false, item_defaults: Some(fourslash::CompletionsExpectedItemDefaults { commit_characters: Some(util::DEFAULT_COMMIT_CHARACTERS.clone()), edit_range: Any::Ignored }), items: Some(fourslash::CompletionsExpectedItems { includes: vec![Any::CompletionItem(lsproto::CompletionItem { label: "__foo".to_string(), kind: Some(lsproto::CompletionItemKind::Text), sort_text: Some("18".to_string()), ..Default::default() }), Any::CompletionItem(lsproto::CompletionItem { label: "___foo".to_string(), kind: Some(lsproto::CompletionItemKind::Text), sort_text: Some("18".to_string()), ..Default::default() })], ..Default::default() }), ..Default::default() }));
@@ -4482,11 +4516,11 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_convert_to_unknown_for_non_overlapping_types9(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @checkJs: true
+        let _content: &str = r"// @checkJs: true
 // @allowJs: true
 // @filename: a.js
 let x = /** @type {string} */ (100);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["Add 'unknown' conversion for non-overlapping types"]);
@@ -4506,7 +4540,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_attributes10(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @jsx: preserve
+        let _content: &str = r"// @jsx: preserve
 // @filename: foo.tsx
 type A = 'a' | 'b' | 'c' | 'd' | 'e';
 type B = 1 | 2 | 3;
@@ -4517,7 +4551,7 @@ const A = (props: { [K in D]: K }) =>
 
 const Bar = () =>
    [|<A></A>|]";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixMissingAttributes"]);
@@ -4537,7 +4571,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_attributes5(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @jsx: preserve
+        let _content: &str = r#"// @jsx: preserve
 // @filename: foo.tsx
 interface P {
     a: number;
@@ -4551,7 +4585,7 @@ const A = ({ a, b, c, d }: P) =>
 
 const Bar = () =>
     [|<A a={100} b={""} c={[]} d={undefined}></A>|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixMissingAttributes"]);
@@ -4571,7 +4605,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_attributes6(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @jsx: preserve
+        let _content: &str = r#"// @jsx: preserve
 // @filename: foo.tsx
 interface P {
     a: number;
@@ -4586,7 +4620,7 @@ const A = ({ a, b, c, d }: P) =>
 const props = { a: 1, b: "", c: [], d: undefined };
 const Bar = () =>
     [|<A {...props}></A>|]"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixMissingAttributes"]);
@@ -4606,10 +4640,10 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_await_not_available_without_promise(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"async function fn(a: {}, b: number) {
+        let _content: &str = r"async function fn(a: {}, b: number) {
   a + b;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["addMissingAwait"]);
@@ -4629,13 +4663,13 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_await_top_level(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"declare function getPromise(): Promise<string>;
+        let _content: &str = r"declare function getPromise(): Promise<string>;
 const p = getPromise();
 while (true) {
   p/*0*/.toLowerCase();
   getPromise()/*1*/.toLowerCase();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["addMissingAwait"]);
@@ -4656,9 +4690,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_const_to_array_destructuring3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"let x: any;
+        let _content: &str = r"let x: any;
 [x, y] = [0, 1];";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -4678,9 +4712,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_const_to_comma_separated_initializer4(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"let y: any;
+        let _content: &str = r"let y: any;
 x = 0, y = 0;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -4700,10 +4734,10 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_enum_member13(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"enum E { A, B }
+        let _content: &str = r"enum E { A, B }
 declare var a: E;
 a.C;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixMissingMember"]);
@@ -4723,13 +4757,13 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_function_declaration16(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @moduleResolution: bundler
+        let _content: &str = r#"// @moduleResolution: bundler
 // @filename: /node_modules/test/index.js
 export const x = 1;
 // @filename: /foo.ts
 import * as test from "test";
 test.foo();"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "/foo.ts");
@@ -4750,9 +4784,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_function_declaration19(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"declare function f(x: number): any;
+        let _content: &str = r"declare function f(x: number): any;
 f(foo);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixMissingFunctionDeclaration"]);
@@ -4772,11 +4806,11 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_function_declaration20(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"const a = {
+        let _content: &str = r"const a = {
    b: { f(x: number) {} }
 }
 a.b.f(foo);";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixMissingFunctionDeclaration"]);
@@ -4796,7 +4830,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_import_for_react_jsx1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @jsx: react-jsx
+        let _content: &str = r#"// @jsx: react-jsx
 // @Filename: node_modules/react/index.d.ts
 export declare var React: any;
 // @Filename: node_modules/react/package.json
@@ -4818,7 +4852,7 @@ export declare var React: any;
     "react": "*"
   }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "bar.tsx");
@@ -4843,7 +4877,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_import_for_react_jsx2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @jsx: react-jsxdev
+        let _content: &str = r#"// @jsx: react-jsxdev
 // @Filename: node_modules/react/index.d.ts
 export declare var React: any;
 // @Filename: node_modules/react/package.json
@@ -4865,7 +4899,7 @@ export declare var React: any;
     "react": "*"
   }
 }"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.go_to_file(t, "bar.tsx");
@@ -4890,11 +4924,11 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_member21(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"declare let p: Promise<string>;
+        let _content: &str = r"declare let p: Promise<string>;
 async function f() {
     p.toLowerCase();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["fixMissingMember"]);
@@ -4914,10 +4948,10 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_member8(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @Filename: a.ts
+        let _content: &str = r"// @Filename: a.ts
 declare var x: [1, 2];
 x.b;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -4937,9 +4971,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_missing_param15(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function f(a: number, b: number) {}
+        let _content: &str = r"function f(a: number, b: number) {}
 f();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["addMissingParam"]);
@@ -4959,13 +4993,13 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_optional_param14(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"function f(a: string): string;
+        let _content: &str = r#"function f(a: string): string;
 function f(a: string, b: number): string;
 function f(a: string, b?: number): string {
     return "";
 }
 f("", "", 1);"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["addOptionalParam"]);
@@ -4985,9 +5019,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_optional_param15(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"function f(a: number, b: number) {}
+        let _content: &str = r"function f(a: number, b: number) {}
 f();";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["addOptionalParam"]);
@@ -5007,9 +5041,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_optional_param18(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"[|function f(a: number, c: string) {}|]
+        let _content: &str = r#"[|function f(a: number, c: string) {}|]
 f(1, 1, "");"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["addOptionalParam"]);
@@ -5029,9 +5063,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_parameter_names1(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @noImplicitAny: true
+        let _content: &str = r"// @noImplicitAny: true
 var x: ([|number |]) => string;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "arg0: number", false, 0, 0);
@@ -5051,9 +5085,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_parameter_names2(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @noImplicitAny: true
+        let _content: &str = r"// @noImplicitAny: true
 type Rest = ([|...number|]) => void;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "...arg0: number[]", false, 0, 0);
@@ -5073,9 +5107,9 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_parameter_names3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @noImplicitAny: true
+        let _content: &str = r"// @noImplicitAny: true
 type Rest = ([|public string|]) => void;";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, "public arg0: string", false, 0, 0);
@@ -5095,11 +5129,11 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_void_to_promise5(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @target: esnext
+        let _content: &str = r"// @target: esnext
 // @lib: es2015
 // @strict: true
 const p4: Promise<number> = new Promise(resolve => resolve());";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -5119,7 +5153,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_add_void_to_promise_js5(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @target: esnext
+        let _content: &str = r"// @target: esnext
 // @lib: es2015
 // @strict: true
 // @allowJS: true
@@ -5127,7 +5161,7 @@ pub fn test_code_fix_add_void_to_promise_js5(t: &T) {
 // @filename: main.js
 /** @type {Promise<number>} */
 const p2 = new Promise(resolve => resolve());";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["Add 'void' to Promise resolved without a value"]);
@@ -5147,7 +5181,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_ambient_class_implement_class_abstract_getters_and_setters(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"abstract class A {
+        let _content: &str = r"abstract class A {
     abstract get a(): string;
     abstract set a(newName: string);
 
@@ -5157,7 +5191,7 @@ pub fn test_code_fix_ambient_class_implement_class_abstract_getters_and_setters(
 }
 
 declare class C implements A {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r"abstract class A {
@@ -5191,7 +5225,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_ambient_class_implement_class_method_via_heritage(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class C1 {
+        let _content: &str = r"class C1 {
     f1() {}
 }
 
@@ -5202,7 +5236,7 @@ class C2 extends C1 {
 declare class C3 implements C2 {[|
     |]f2();
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r"f1(): void;
@@ -5223,7 +5257,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_await_in_sync_function3(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"const f = {
+        let _content: &str = r"const f = {
     get a() {
         return await Promise.resolve();
     },
@@ -5231,7 +5265,7 @@ pub fn test_code_fix_await_in_sync_function3(t: &T) {
         await Promise.resolve();
     },
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -5251,12 +5285,12 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_await_in_sync_function4(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class Foo {
+        let _content: &str = r"class Foo {
     constructor {
         await Promise.resolve();
     }
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -5276,8 +5310,8 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_await_should_not_crash_if_not_in_function(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = "await a";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let _content: &str = "await a";
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &["addMissingAwait"]);
@@ -5297,7 +5331,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_cannot_find_module_suggestion_false_positive(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r#"// @moduleResolution: bundler
+        let _content: &str = r#"// @moduleResolution: bundler
 // @module: commonjs
 // @resolveJsonModule: true
 // @strict: true
@@ -5306,7 +5340,7 @@ pub fn test_code_fix_cannot_find_module_suggestion_false_positive(t: &T) {
 // @Filename: /a.ts
 import abs = require([|"foo/bar.json"|]);
 abs;"#;
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_no_errors(t);
@@ -5328,11 +5362,11 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_class_expr_class_implement_class_function_void_inferred(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class A {
+        let _content: &str = r"class A {
     f() {}
 }
 let B = class implements A {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"class A {
@@ -5359,14 +5393,14 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_class_extend_abstract_private_property(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @noImplicitOverride: true
+        let _content: &str = r"// @noImplicitOverride: true
 abstract class A {
    private abstract x: number;
    m() { this.x; } // Avoid unused private
 }
 
 class C extends A {[| |]}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix_not_available(t, &[]);
@@ -5386,7 +5420,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_class_extend_abstract_some_properties_present(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
+        let _content: &str = r"// @strict: false
 // @noImplicitOverride: true
 abstract class A {
    abstract x: number;
@@ -5398,7 +5432,7 @@ class C extends A {[|
    |]constructor(public x: number) { super(); }
    y: number;
 }";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_range_after_code_fix(t, r"
@@ -5420,7 +5454,7 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_class_implement_class_abstract_getters_and_setters(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"abstract class A {
+        let _content: &str = r"abstract class A {
     abstract get a(): string;
     abstract set a(newName: string);
 
@@ -5432,7 +5466,7 @@ pub fn test_code_fix_class_implement_class_abstract_getters_and_setters(t: &T) {
 }
 
 class C implements A {}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"abstract class A {
@@ -5477,12 +5511,12 @@ use crate::tests::prelude::*;
 pub fn test_code_fix_class_implement_class_function_void_inferred(t: &T) {
     t.parallel();
     let __defer1 = go::run(|| {
-        let content: &str = r"class A {
+        let _content: &str = r"class A {
     f() {}
 }
 
 class B implements A {[| |]}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
+        let (mut f, done) = fourslash::new_fourslash(t, None, _content);
         let f = &mut f;
         let __defer2 = go::run(|| {
             f.verify_code_fix(t, fourslash::VerifyCodeFixOptions { description: "Implement interface 'A'".to_string(), new_file_content: r#"class A {
@@ -5494,36 +5528,6 @@ class B implements A {
         throw new Error("Method not implemented.");
     }
 }"#.to_string(), index: 0, ..Default::default() });
-        });
-        done(&mut *f, t);
-        go::resume(__defer2);
-    });
-    testutil::recover_and_fail(t, "Panic on fourslash test", __defer1);
-}
-
-}
-
-pub mod code_fix_class_implement_class_member_anonymous_class {
-use crate::tests::prelude::*;
-
-// codeFixClassImplementClassMemberAnonymousClass_test.go:10
-pub fn test_code_fix_class_implement_class_member_anonymous_class(t: &T) {
-    t.parallel();
-    let __defer1 = go::run(|| {
-        let content: &str = r"// @strict: false
-class A {
-    foo() {
-        return class { x: number; }
-    }
-    bar() {
-        return new class { x: number; }
-    }
-}
-class C implements A {[| |]}";
-        let (mut f, done) = fourslash::new_fourslash(t, None, content);
-        let f = &mut f;
-        let __defer2 = go::run(|| {
-            f.verify_code_fix_not_available(t, &[]);
         });
         done(&mut *f, t);
         go::resume(__defer2);

@@ -6,6 +6,6 @@
     "devDependencies": {
         "@types/node": "22.20.1",
         "tinybench": "6.1.6",
-        "typescript": "7.1.0-dev.20260929.1"
+        "typescript": "7.1.0-dev.20261014.1"
     }
 }

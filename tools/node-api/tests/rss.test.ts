@@ -3,7 +3,7 @@
 // GC noise) and identical for every server: after warm-up, 150 more edit/ensure/query/dispose cycles may not
 // grow RSS by more than max(96 MiB, 60% of the warm RSS), and the last third may not grow faster than the first.
 
-import { API } from "@typescript/typescript/unstable/sync";
+import { API } from "@typescript/typescript/sync";
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { createVirtualFileSystem } from "../testUtils.ts";
@@ -27,7 +27,7 @@ describe("parity: memory over repeated snapshots", () => {
                 "/src/use.ts": useSource,
             });
             using api = new API({ cwd, fs: vfs });
-            let snap = api.createSnapshot({ openProject: "/tsconfig.json" });
+            let snap = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
             const pid = apiServerPid(process.pid);
             assert.ok(pid, "server pid not found");
             const samples: { cycle: number; rssKiB: number; }[] = [];
@@ -36,7 +36,7 @@ describe("parity: memory over repeated snapshots", () => {
                 vfs.writeFile("/src/gen.ts", source(i));
                 const next = mode === "update"
                     ? snap.update({ fileNotifications: { changed: ["/src/gen.ts"] }, ensurePrograms: true })
-                    : api.createSnapshot({ openProject: "/tsconfig.json", fileNotifications: { changed: ["/src/gen.ts"] } });
+                    : api.createSnapshot({ openProjects: ["/tsconfig.json"], fileNotifications: { changed: ["/src/gen.ts"] } });
                 const project = next.getConfiguredProject("/tsconfig.json")!;
                 assert.equal(project.program.getSemanticDiagnostics("/src/use.ts").length, 0);
                 const t = project.checker.getTypeAtPosition("/src/use.ts", useSource.indexOf("r ="));

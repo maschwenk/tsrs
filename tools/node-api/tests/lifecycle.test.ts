@@ -3,7 +3,7 @@
 // async close with pending requests, and server crashes under both bindings. Anything that could hang runs in
 // a separate process with a hard timeout; a timeout is recorded as a timeout, never as a pass.
 
-import { API } from "@typescript/typescript/unstable/sync";
+import { API } from "@typescript/typescript/sync";
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import { cwd, golden, linuxOnly, runIsolated, softGolden } from "./utils.ts";
@@ -31,7 +31,7 @@ describe("parity: handles", () => {
         using api = new API({ cwd, fs: createVirtualFileSystem(files) });
         using other = new API({ cwd, fs: createVirtualFileSystem(files) });
         const raw = (a: API) => (a as any).client as { apiRequest(method: string, params?: unknown): any; };
-        const snap = api.createSnapshot({ openProject: "/tsconfig.json" });
+        const snap = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
         const project = snap.getConfiguredProject("/tsconfig.json")!;
         const symbol = project.checker.getSymbolAtPosition("/src/index.ts", files["/src/index.ts"].indexOf("value"))!;
         const symbolRef = { ...(symbol as any).reference ?? {}, id: (symbol as any).id };
@@ -50,7 +50,7 @@ describe("parity: handles", () => {
             "release.invalid": () => raw(api).apiRequest("release", { snapshot: 424242 }),
         };
         // Same numeric snapshot id in a second session: ids are session scoped, so this must not reach api's state.
-        const otherSnap = other.createSnapshot({ openProject: "/tsconfig.json" });
+        const otherSnap = other.createSnapshot({ openProjects: ["/tsconfig.json"] });
         cases["foreign.sameIdOtherSession"] = () => raw(other).apiRequest("getSourceFileNames", { snapshot: snap.id, project: project.id });
         const outcome: Record<string, boolean> = {};
         for (const [name, fn] of Object.entries(cases)) {
@@ -66,7 +66,7 @@ describe("parity: handles", () => {
         outcome["released.clientObject"] = attempt(() => project.program.getSourceFileNames()).threw;
         outcome["released.twice"] = attempt(() => raw(api).apiRequest("release", { snapshot: live.snapshot })).threw;
         // The server must still work after every rejection.
-        const fresh = api.createSnapshot({ openProject: "/tsconfig.json" });
+        const fresh = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
         outcome["survives"] = fresh.getConfiguredProject("/tsconfig.json")!.program.getSourceFileNames().includes("/src/index.ts");
         outcome["otherSurvives"] = otherSnap.getConfiguredProject("/tsconfig.json")!.program.getSourceFileNames().includes("/src/index.ts");
         g.check("handles.threw", outcome);
@@ -88,7 +88,7 @@ describe("parity: callbacks and process lifecycle", () => {
                 return readFile(p);
             };
             api = new API({ cwd, fs: vfs });
-            const names = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json").program.getSourceFileNames();
+            const names = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json").program.getSourceFileNames();
             const after = api.parseCommandLine(["--noEmit"]).options.noEmit;
             api.close();
             return { nested: nested.startsWith("threw") ? "threw" : nested, nestedMessage: nested, sawIndex: names.includes("/src/index.ts"), after };
@@ -115,7 +115,7 @@ describe("parity: callbacks and process lifecycle", () => {
                     return readFile(p);
                 };
                 api = new API({ cwd, fs: vfs });
-                const names = api.createSnapshot({ openProject: "/tsconfig.json" }).getConfiguredProject("/tsconfig.json").program.getSourceFileNames();
+                const names = api.createSnapshot({ openProjects: ["/tsconfig.json"] }).getConfiguredProject("/tsconfig.json").program.getSourceFileNames();
                 if (!names.includes("/src/index.ts")) dropped++;
                 api.close();
             }
@@ -139,7 +139,7 @@ describe("parity: callbacks and process lifecycle", () => {
                 return readFile(p);
             };
             api = new AsyncAPI({ cwd, fs: vfs });
-            const snapshot = await api.createSnapshot({ openProject: "/tsconfig.json" });
+            const snapshot = await api.createSnapshot({ openProjects: ["/tsconfig.json"] });
             const names = await snapshot.getConfiguredProject("/tsconfig.json").program.getSourceFileNames();
             for (let i = 0; i < 100 && nested === "pending"; i++) await new Promise(r => setTimeout(r, 20));
             await api.close();
@@ -153,7 +153,7 @@ describe("parity: callbacks and process lifecycle", () => {
     test("async close with requests in flight settles every promise", t => {
         const r = runIsolated(`
             const api = new AsyncAPI({ cwd, fs: createVirtualFileSystem(${JSON.stringify(files)}) });
-            const snapshot = await api.createSnapshot({ openProject: "/tsconfig.json" });
+            const snapshot = await api.createSnapshot({ openProjects: ["/tsconfig.json"] });
             const program = snapshot.getConfiguredProject("/tsconfig.json").program;
             const pending = [];
             for (let i = 0; i < 50; i++) pending.push(program.getSemanticDiagnostics("/src/index.ts"));
@@ -174,7 +174,7 @@ describe("parity: callbacks and process lifecycle", () => {
         const r = runIsolated(`
             const { apiServerPid } = await import("./utils.ts");
             const api = new API({ cwd, fs: createVirtualFileSystem(${JSON.stringify(files)}) });
-            const snapshot = api.createSnapshot({ openProject: "/tsconfig.json" });
+            const snapshot = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
             const pid = apiServerPid(process.pid);
             if (!pid) return { error: "no server pid" };
             process.kill(pid, "SIGKILL");
@@ -198,7 +198,7 @@ describe("parity: callbacks and process lifecycle", () => {
         const r = runIsolated(`
             const { apiServerPid } = await import("./utils.ts");
             const api = new AsyncAPI({ cwd, fs: createVirtualFileSystem(${JSON.stringify(files)}) });
-            const snapshot = await api.createSnapshot({ openProject: "/tsconfig.json" });
+            const snapshot = await api.createSnapshot({ openProjects: ["/tsconfig.json"] });
             const program = snapshot.getConfiguredProject("/tsconfig.json").program;
             const pid = apiServerPid(process.pid);
             if (!pid) return { error: "no server pid" };

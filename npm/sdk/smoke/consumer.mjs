@@ -13,10 +13,10 @@ const root = require("tsrs");
 assert.match(root.version, /^\d+\.\d+\.\d+.*-ts/);
 assert.match(root.typescriptCommit, /^[0-9a-f]{40}$/);
 
-const sync = await import("tsrs/unstable/sync");
-const asyncApi = await import("tsrs/unstable/async");
-const { SyntaxKind } = await import("tsrs/unstable/ast");
-const { createFileSystemWithLib, serverFS } = await import("tsrs/unstable/fs");
+const sync = await import("tsrs/sync");
+const asyncApi = await import("tsrs/async");
+const { SyntaxKind } = await import("tsrs/ast");
+const { createFileSystemWithLib, serverFS } = await import("tsrs/fs");
 
 const base = path.resolve(process.argv[2] ?? "project");
 const only = process.argv[3]; // optional: "sync" or "async"
@@ -86,8 +86,8 @@ async function runVariant(variant, API) {
         });
 
         let snapshot, project, sourceFile;
-        await step(`${variant}: createSnapshot(openProject) + getSourceFile`, async () => {
-            snapshot = await api.createSnapshot({ openProject: config });
+        await step(`${variant}: createSnapshot(openProjects) + getSourceFile`, async () => {
+            snapshot = await api.createSnapshot({ openProjects: [config] });
             project = snapshot.getConfiguredProject(config);
             assert.ok(project, "configured project");
             sourceFile = await project.program.getSourceFile(main);
@@ -158,7 +158,7 @@ async function runVariant(variant, API) {
 
         await step(`${variant}: in-memory request filesystem`, async () => {
             const memory = await api.createSnapshot({
-                openProject: "/mem/tsconfig.json",
+                openProjects: ["/mem/tsconfig.json"],
                 fileSystem: createFileSystemWithLib([
                     ["/mem/tsconfig.json", JSON.stringify({ compilerOptions: { strict: true, noEmit: true }, files: ["a.ts"] })],
                     ["/mem/a.ts", "export const n: number = 'x';\n"],
@@ -194,7 +194,7 @@ async function runVariant(variant, API) {
             },
         });
         try {
-            const callbackSnapshot = await callbackApi.createSnapshot({ openProject: config });
+            const callbackSnapshot = await callbackApi.createSnapshot({ openProjects: [config] });
             const callbackProject = callbackSnapshot.getConfiguredProject(config);
             const file = await callbackProject.program.getSourceFile(main);
             assert.equal(file.text, overlay);
@@ -215,7 +215,7 @@ async function crashAndClose(dir, config, main) {
         const api = new asyncApi.API({ cwd: dir });
         let child;
         try {
-            const warm = await api.createSnapshot({ openProject: config });
+            const warm = await api.createSnapshot({ openProjects: [config] });
             child = serverProcess(api);
             assert.ok(child?.pid, "async server process");
             // Whole-program semantic diagnostics (default lib included) keep the server busy for well over 20 ms;
@@ -276,7 +276,7 @@ async function crashAndClose(dir, config, main) {
         const api = new asyncApi.API({ cwd: dir });
         await api.parseConfigFile(config);
         const child = serverProcess(api);
-        const pending = api.createSnapshot({ openProject: config });
+        const pending = api.createSnapshot({ openProjects: [config] });
         await tick();
         const closed = await settle(api.close());
         assert.equal(closed.state, "resolved");

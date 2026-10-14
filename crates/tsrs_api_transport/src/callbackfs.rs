@@ -316,7 +316,7 @@ impl FS for CallbackFs {
         if self.is_enabled(CALLBACK_REALPATH) {
             let response = self.call_path(CALLBACK_REALPATH, path);
             return match response.kind.as_str() {
-                "value" => response.string_value(CALLBACK_REALPATH),
+                "value" => tsrs_core::tspath::to_rooted_path(&response.string_value(CALLBACK_REALPATH), &tsrs_core::tspath::get_directory_path(path)),
                 "identity" => path.to_string(),
                 "useOS" => self.base.realpath(path),
                 _ => invalid_kind(CALLBACK_REALPATH, &response),

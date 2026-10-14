@@ -3,7 +3,7 @@
 // buildinfo in a new session over the same filesystem, buildinfo shape, and a referenced project's API change
 // surfacing as a downstream diagnostic.
 
-import { API } from "@typescript/typescript/unstable/sync";
+import { API } from "@typescript/typescript/sync";
 import { describe, test } from "node:test";
 import { cwd, diags, golden, recordingFS, softGolden } from "./utils.ts";
 

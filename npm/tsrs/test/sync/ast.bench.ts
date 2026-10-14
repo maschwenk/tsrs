@@ -9,18 +9,18 @@ import type {
     Block,
     Identifier,
     Node,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import {
     isBlock,
     isIdentifier,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import {
     createBlock,
     createExpressionStatement,
     createIdentifier,
     createIfStatement,
-} from "tsrs/unstable/ast/factory";
-import { API } from "tsrs/unstable/sync";
+} from "tsrs/ast/factory";
+import { API } from "tsrs/sync";
 import assert from "node:assert/strict";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
@@ -141,7 +141,7 @@ export function runBenchmarks(options?: { filter?: string; singleIteration?: boo
         }),
     });
 
-    const snapshot = api.createSnapshot({ openProject: configPath });
+    const snapshot = api.createSnapshot({ openProjects: [configPath] });
     const remoteSourceFile = snapshot.getConfiguredProject(configPath)!.program.getSourceFile(sourcePath)!;
     assert.ok(remoteSourceFile.statements);
     const remoteTree = remoteSourceFile.statements[0];

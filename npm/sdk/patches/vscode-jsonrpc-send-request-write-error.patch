@@ -1,4 +1,4 @@
-tsrs patch to the vendored vscode-jsonrpc 9.0.2 (MIT, vendored by microsoft/TypeScript@b85298b6a81f under
+tsrs patch to the vendored vscode-jsonrpc 9.0.2 (MIT, vendored by microsoft/TypeScript@9eedcb0dd725 under
 packages/typescript/vendor/vscode-jsonrpc; applied by npm/sdk/sync-upstream.mjs, original recorded in
 npm/tsrs/UPSTREAM.json "patchedFiles").
 

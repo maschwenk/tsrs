@@ -16,7 +16,7 @@ fn setup<'h>(host: &'h dyn CheckerHost, p: &Params) -> CheckerResult<Setup<'h>> 
 
 // Wrong-kind requests: pinned Go does not validate these; the handler panics and the ipc connection
 // (or batchRequests) recovers it as `panic: <value>\n<stack>`. The checks below reproduce the same
-// failure class and first line (recorded in testdata/go_probe/go_shapes_b85298b6.jsonl) without
+// failure class and first line (recorded in testdata/go_probe/go_shapes_9eedcb0d.jsonl) without
 // actually panicking (no stack is attached).
 fn go_panic(message: impl std::fmt::Display) -> CheckerError {
     CheckerError { kind: CheckerErrorKind::Internal, message: format!("panic: {message}") }
@@ -24,38 +24,12 @@ fn go_panic(message: impl std::fmt::Display) -> CheckerError {
 
 const GO_NIL_DEREF: &str = "runtime error: invalid memory address or nil pointer dereference";
 
-/// Go's name for the `checker.TypeData` implementation behind a type.
-fn go_type_data_name(tag: TypeDataTag) -> &'static str {
-    match tag {
-        TypeDataTag::Intrinsic => "IntrinsicType",
-        TypeDataTag::Literal => "LiteralType",
-        TypeDataTag::UniqueESSymbol => "UniqueESSymbolType",
-        TypeDataTag::Object => "ObjectType",
-        TypeDataTag::TypeReference => "TypeReference",
-        TypeDataTag::Interface => "InterfaceType",
-        TypeDataTag::Tuple => "TupleType",
-        TypeDataTag::InstantiationExpression => "InstantiationExpressionType",
-        TypeDataTag::Mapped => "MappedType",
-        TypeDataTag::ReverseMapped => "ReverseMappedType",
-        TypeDataTag::EvolvingArray => "EvolvingArrayType",
-        TypeDataTag::Union => "UnionType",
-        TypeDataTag::Intersection => "IntersectionType",
-        TypeDataTag::TypeParameter => "TypeParameter",
-        TypeDataTag::Index => "IndexType",
-        TypeDataTag::IndexedAccess => "IndexedAccessType",
-        TypeDataTag::TemplateLiteral => "TemplateLiteralType",
-        TypeDataTag::StringMapping => "StringMappingType",
-        TypeDataTag::Substitution => "SubstitutionType",
-        TypeDataTag::Conditional => "ConditionalType",
-    }
-}
-
-/// Go `t.AsXxx()` (a `t.data.(*Xxx)` type assertion).
+/// Go `t.AsXxx()` validates the compact type tag.
 fn tagged(t: P<Type>, tag: TypeDataTag) -> CheckerResult<P<Type>> {
     if t.data_tag() == tag {
         Ok(t)
     } else {
-        Err(go_panic(format!("interface conversion: checker.TypeData is *checker.{}, not *checker.{}", go_type_data_name(t.data_tag()), go_type_data_name(tag))))
+        Err(go_panic("Invalid type cast"))
     }
 }
 

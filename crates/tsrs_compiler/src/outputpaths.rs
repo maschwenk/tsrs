@@ -1,7 +1,7 @@
 // The common source directory helpers of Go's `outputpaths` package, used by option verification and
 // sourceFileMayBeEmitted. The emit output paths live in tsrs_tsoptions::outputpaths.
 
-use tsrs_core::tspath;
+use tsrs_core::tspath::{self, ComparePathsOptions};
 use tsrs_core::CompilerOptions;
 
 fn compute_common_source_directory_of_filenames(file_names: &[String], current_directory: &str, use_case_sensitive_file_names: bool) -> String {
@@ -99,7 +99,10 @@ pub fn get_source_file_path_in_new_dir_worker(
     use_case_sensitive_file_names: bool,
 ) -> String {
     let mut source_file_path = tspath::get_normalized_absolute_path(file_name, current_directory);
+    let compare = ComparePathsOptions { use_case_sensitive_file_names, current_directory: String::new() };
+    if tspath::compare_paths(&source_file_path, common_source_directory, &compare).is_eq() { return source_file_path; }
     if let Some(trimmed) = tspath::trim_file_path_prefix(&source_file_path, common_source_directory, use_case_sensitive_file_names) {
+        if trimmed.is_empty() { return source_file_path; }
         source_file_path = trimmed.to_string();
     }
     tspath::combine_paths(new_dir_path, &[&source_file_path])

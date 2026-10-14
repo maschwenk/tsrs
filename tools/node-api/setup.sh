@@ -27,7 +27,7 @@ if [[ "$head" != "$pin" ]]; then
 fi
 # CI's conformance checkout is sparse (tsc/testdata only); widen it to what the harness needs.
 if [[ "$(git -C "$ref" config --get core.sparseCheckout || true)" == "true" ]]; then
-    git -C "$ref" sparse-checkout add packages/typescript tsc go.work go.work.sum package.json package-lock.json
+    git -C "$ref" sparse-checkout add packages/typescript tsc
 fi
 
 if [[ ! -d "$ref/packages/typescript/node_modules/tinybench" ]]; then

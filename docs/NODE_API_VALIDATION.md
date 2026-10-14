@@ -1,8 +1,16 @@
 # Node API validation (parity lane)
 
 How the `tsrs --api` server is validated against the pinned TypeScript 7 native API
-(microsoft/TypeScript `b85298b6a81f772d080b0455de0ca9d744cd6fd6`, the commit in `Cargo.toml`). The
+(microsoft/TypeScript `9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a`, the commit in `Cargo.toml`). The
 contract itself is `docs/NODE_API.md`; this file covers the independent evidence.
+
+## Current pin: 2026-10-14
+
+At `9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a`, the unmodified upstream client and independent parity harness
+run 940 cases against each server: 934 pass, 0 fail, 4 skip and 2 TODO. The shipped SDK runs 941 cases against
+both pinned Go and Rust, all passing. The remaining soft differences cover unsupported profiling and oversized
+transport-frame rejection. Binary AST and checker fixtures are regenerated from the pinned Go server with Go 1.27.
+The beta API uses `openProjects`/`closeProjects`, `debug` handlers, `caseSensitivity` and `parsedCommandLine.options`.
 
 ## Principles
 

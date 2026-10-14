@@ -1,6 +1,6 @@
 // Integrated regression tests through core's real `Session` (codec node handles, source-file
 // descriptors and leases, transport-independent request dispatch), compared with responses recorded
-// from the pinned Go session (testdata/go_probe/go_shapes_b85298b6.jsonl, see regen.sh).
+// from the pinned Go session (testdata/go_probe/go_shapes_9eedcb0d.jsonl, see regen.sh).
 //
 // Compared as JSON values after one normalization: ids that are per-process or per-checker counters
 // (type / signature / symbol ids, source-file node ids) are renamed per line in order of first
@@ -22,7 +22,7 @@ const MAIN: &str = include_str!("testdata/go_probe/fixture/main.ts");
 const TYPES: &str = include_str!("testdata/go_probe/fixture/types.d.ts");
 const TSCONFIG: &str = include_str!("testdata/go_probe/fixture/tsconfig.json");
 const OTHER: &str = include_str!("testdata/go_probe/fixture/other.ts");
-const GO_SHAPES: &str = include_str!("testdata/go_probe/go_shapes_b85298b6.jsonl");
+const GO_SHAPES: &str = include_str!("testdata/go_probe/go_shapes_9eedcb0d.jsonl");
 
 const ID_KEYS: &[&str] = &[
     "id", "target", "freshType", "regularType", "thisType", "typeParameter", "constraintType", "nameType", "templateType", "objectType",
@@ -443,11 +443,11 @@ fn uint64_handles_above_2_pow_53_are_looked_up_exactly() {
 }
 
 /// Full type responses (objectFlags included) for the cases in testdata/go_probe/flags/cases.txt, compared
-/// with go_flags_b85298b6.jsonl recorded by `TestTsrsCheckerFlags` (same fixtures, same request order).
+/// with go_flags_9eedcb0d.jsonl recorded by `TestTsrsCheckerFlags` (same fixtures, same request order).
 #[test]
 fn type_flags_and_tuple_targets_match_pinned_go() {
     const CASES: &str = include_str!("testdata/go_probe/flags/cases.txt");
-    const GOLDEN: &str = include_str!("testdata/go_probe/go_flags_b85298b6.jsonl");
+    const GOLDEN: &str = include_str!("testdata/go_probe/go_flags_9eedcb0d.jsonl");
     let files = [
         ("/t/tsconfig.json", include_str!("testdata/go_probe/flags/t/tsconfig.json")),
         ("/t/main.ts", include_str!("testdata/go_probe/flags/t/main.ts")),

@@ -178,7 +178,7 @@ fn organize_imports_worker(
             let mut coalesced =
                 coalesce_imports_worker(import_group, comparer.module_specifier_comparer(), &specifier_comparer, Some(source_file), change_tracker);
             if should_sort {
-                goslices::sort_func(&mut coalesced, |&a, &b| lsutil::compare_imports_or_require_statements(a, b, comparer.module_specifier_comparer()));
+                coalesced.sort_by(|&a, &b| lsutil::compare_imports_or_require_statements(a, b, comparer.module_specifier_comparer()));
             }
             coalesced
         }));

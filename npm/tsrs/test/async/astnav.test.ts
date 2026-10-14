@@ -1,6 +1,6 @@
-import { API } from "tsrs/unstable/async"; // @sync-skip
+import { API } from "tsrs/async"; // @sync-skip
 // @sync-only-start
-// import { API } from "tsrs/unstable/sync";
+// import { API } from "tsrs/sync";
 // @sync-only-end
 import {
     findNextToken,
@@ -8,11 +8,11 @@ import {
     formatSyntaxKind,
     getTokenAtPosition,
     getTouchingPropertyName,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import type {
     Node,
     SourceFile,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -106,7 +106,7 @@ describe("astnav", { concurrency: areTestsFiltered() }, () => {
             }),
         });
 
-        const snapshot = await api.createSnapshot({ openProject: "/tsconfig.json" });
+        const snapshot = await api.createSnapshot({ openProjects: ["/tsconfig.json"] });
         const project = snapshot.getConfiguredProject("/tsconfig.json")!;
         const sf = await project.program.getSourceFile("/src/testFile.ts");
         assert.ok(sf, "Failed to get source file from API");

@@ -12,12 +12,12 @@ import {
     formatSyntaxKind,
     getTokenAtPosition,
     getTouchingPropertyName,
-} from "tsrs/unstable/ast";
+} from "tsrs/ast";
 import type {
     Node,
     SourceFile,
-} from "tsrs/unstable/ast";
-import { API } from "tsrs/unstable/sync";
+} from "tsrs/ast";
+import { API } from "tsrs/sync";
 import assert from "node:assert";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -111,7 +111,7 @@ describe("astnav", { concurrency: areTestsFiltered() }, () => {
             }),
         });
 
-        const snapshot = api.createSnapshot({ openProject: "/tsconfig.json" });
+        const snapshot = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
         const project = snapshot.getConfiguredProject("/tsconfig.json")!;
         const sf = project.program.getSourceFile("/src/testFile.ts");
         assert.ok(sf, "Failed to get source file from API");

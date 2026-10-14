@@ -93,3 +93,16 @@ or why the change does not apply to tsrs. The source pin advances after the port
 | [#64773](https://github.com/microsoft/TypeScript/commit/67a1c76aacdeed279c72a87347e41c1b12a26a0f) | Upstream generates generic AST accessors; Rust already generates them. Regenerated AST, flags and API codec from the new source with no differences. |
 | [#64774](https://github.com/microsoft/TypeScript/commit/f3a9375b53f80533a4bb1f6809155d8f0459e860) | Go replaces its TypeData interface with an explicit type tag; Rust already has compact TypeDataTag metadata and equivalent typed accessors. Port the API wrong-cast panic text (`Invalid type cast`). |
 | [#64793](https://github.com/microsoft/TypeScript/commit/ce609c851b5109a44579ee2cdc29545292dd654f) | Go batches common checker type allocations; Rust already allocates these through checker arenas. Retain existing arena ownership and initialization. |
+| [#64794](https://github.com/microsoft/TypeScript/commit/9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a) | Retain the existing Rust type-list key builder; presizing is an upstream allocation optimization with no semantic change and requires measurements before adding a Rust optimization. Advance Cargo and SDK pins to this commit and the verified matching nightly. |
+
+Validation at the new pin: the fast CLI/test runner build, workspace check, Clippy, source lint, WebAssembly compile,
+all generators, regressions and applicable Rust unit/integration suites pass. Conformance: 13,576 diagnostic,
+12,876 type/symbol and 13,502 JavaScript/declaration baseline passes, with no differences, crashes or timeouts. The runner retains the parsed config base directory
+in both programs, matching the typed-path harness changes. The canonical/no-lazy gates pass. Fourslash:
+4,083 pass, 65 fail (57 unsupported content-mapper and eight build-harness cases), 413 skip, no untranslated tests.
+The unmodified upstream Node client/parity suite has 934 passes for both Go and Rust; the shipped SDK has 941
+passes against each. The offline packed consumer passes all 24 steps. Fixtures come from Go 1.27.0 at the source
+pin; raw numeric option overflow is also verified against the x64 Go binary. npm nightly `7.1.0-dev.20261014.1` has exactly the same gitHead.
+
+The earlier `importDeferInvalidDefault` unvaried case is replaced by the generated module variations upstream.
+All other former diagnostic passes remain passing.

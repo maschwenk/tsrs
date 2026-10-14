@@ -593,7 +593,11 @@ func (g *gen) selectorExpr(e *ast.SelectorExpr) (string, kind) {
 	} else {
 		base = parenIfNeeded(base)
 	}
-	base += embeddedPath(xt, sel.Index())
+	if isNamed(derefType(xt), lsutilPath, "UserPreferences") {
+		field = preferenceField(e.Sel.Name)
+	} else {
+		base += embeddedPath(xt, sel.Index())
+	}
 	if isOptionSliceField(xt, e.Sel.Name) {
 		fail("read of an Option<Vec> field")
 	}
@@ -843,7 +847,7 @@ func (g *gen) constLit(v constant.Value, t types.Type) string {
 			if stringNewtype(n) || isLsprotoIntEnum(n) {
 				return namedPath(n) + "(" + g.constLit(v, n.Underlying()) + ")"
 			}
-			if isNamed(n, lsPath, "SortText") {
+			if isNamed(n, lsPath, "SortText") || isNamed(n, tspathPath, "RootedFilePath") || isNamed(n, tspathPath, "PathKey") {
 				return g.constLit(v, types.Typ[types.String])
 			}
 			if !rustEnumType(n) {
@@ -915,12 +919,32 @@ func (g *gen) compositeLit(e *ast.CompositeLit, t types.Type) string {
 						fl = u.Field(j)
 					}
 				}
+				if fl == nil {
+					// Go composite literals may initialize promoted preference fields.
+					object, _, _ := types.LookupFieldOrMethod(t, true, nil, name)
+					fl, _ = object.(*types.Var)
+				}
+				if fl == nil {
+					fail("field %s missing in %s", name, t)
+				}
 				val = kv.Value
 			} else {
 				fl = u.Field(i)
 				val = el
 			}
 			set++
+			if isNamed(t, lsutilPath, "UserPreferences") {
+				value := g.fieldValue(val, fl.Type())
+				if isOptionSliceField(t, fl.Name()) {
+					if g.isNil(val) {
+						value = "None"
+					} else {
+						value = "Some(" + value + ")"
+					}
+				}
+				fields = append(fields, "__preferences."+preferenceField(fl.Name())+" = "+value+";")
+				continue
+			}
 			if isOptionSliceField(t, fl.Name()) {
 				if g.isNil(val) {
 					fields = append(fields, ident(fl.Name())+": None")
@@ -936,6 +960,9 @@ func (g *gen) compositeLit(e *ast.CompositeLit, t types.Type) string {
 			} else {
 				fields = append(fields, name+": "+value)
 			}
+		}
+		if isNamed(t, lsutilPath, "UserPreferences") {
+			return "{ let mut __preferences = " + path + "::default(); " + strings.Join(fields, " ") + " __preferences }"
 		}
 		if set < u.NumFields() {
 			fields = append(fields, "..Default::default()")
@@ -1032,4 +1059,21 @@ func (g *gen) naturalIfPlace(e ast.Expr) (string, kind) {
 		return g.natural(e)
 	}
 	return "", kOwned
+}
+
+// preferenceField maps Go's generated preference names to the existing Rust layout.
+func preferenceField(name string) string {
+	switch name {
+	case "CompleteJSDocs":
+		return "enable_jsdoc_completions"
+	case "ProvidePrefixAndSuffixTextForRename":
+		return "use_aliases_for_rename"
+	}
+	if strings.HasPrefix(name, "IncludeInlay") {
+		return "inlay_hints." + ident(name)
+	}
+	if strings.Contains(name, "CodeLens") {
+		return "code_lens." + ident(name)
+	}
+	return ident(name)
 }

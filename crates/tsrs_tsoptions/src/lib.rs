@@ -51,3 +51,6 @@ pub use parsedcommandline::*;
 pub use parsedoptions::*;
 pub use parsinghelpers::*;
 pub use tsconfigparsing::*;
+
+mod options_generated;
+pub use options_generated::*;

@@ -1,5 +1,5 @@
 // Pinned method inventory: every `Method` constant in microsoft/TypeScript
-// tsc/internal/api/proto.go @ b85298b6a81f772d080b0455de0ca9d744cd6fd6 (177 entries, same order).
+// tsc/internal/api/proto.go @ 9eedcb0dd7257f8a1a175adbef28f3b6d3492d7a (177 entries, same order).
 // `status` is the honest implementation state in tsrs; it must only become `Supported` when a real
 // compiler-backed test exercises the method (docs/NODE_API.md keeps the matrix in sync).
 
@@ -165,6 +165,7 @@ pub const METHODS: [MethodInfo; 177] = [
     MethodInfo { name: "getReferencedSymbolsForNode", owner: Owner::Checker, status: Status::Partial },
     MethodInfo { name: "getSignatureUsages", owner: Owner::Checker, status: Status::Partial },
     MethodInfo { name: "getCompletionsAtPosition", owner: Owner::Checker, status: Status::Partial },
+    MethodInfo { name: "formatNodeForInsertion", owner: Owner::Core, status: Status::Partial },
     MethodInfo { name: "getSyntacticDiagnostics", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "getBindDiagnostics", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "getSemanticDiagnostics", owner: Owner::Core, status: Status::Supported },
@@ -174,7 +175,6 @@ pub const METHODS: [MethodInfo; 177] = [
     MethodInfo { name: "getGlobalDiagnostics", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "getConfigFileParsingDiagnostics", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "printNode", owner: Owner::Core, status: Status::Partial },
-    MethodInfo { name: "formatNodeForInsertion", owner: Owner::Core, status: Status::Partial },
     MethodInfo { name: "emit", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "emitToString", owner: Owner::Core, status: Status::Supported },
     MethodInfo { name: "getJavaScriptEmit", owner: Owner::Core, status: Status::Supported },
@@ -196,6 +196,7 @@ pub const METHODS: [MethodInfo; 177] = [
     MethodInfo { name: "startCPUProfile", owner: Owner::Core, status: Status::NotImplemented },
     MethodInfo { name: "stopCPUProfile", owner: Owner::Core, status: Status::NotImplemented },
     MethodInfo { name: "saveHeapProfile", owner: Owner::Core, status: Status::NotImplemented },
+
 ];
 
 pub fn method_info(name: &str) -> Option<&'static MethodInfo> {
@@ -204,12 +205,12 @@ pub fn method_info(name: &str) -> Option<&'static MethodInfo> {
 // Go `unmarshalers` (proto.go): the params type each method decodes into, for Go's error text
 // `failed to unmarshal *api.<Type>`. `None` = `noParams`.
 pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
-    ("batchRequests", Some("BatchRequestsParams")),
     ("release", Some("ReleaseParams")),
     ("releaseSourceFile", Some("ReleaseSourceFileParams")),
     ("retainSourceFile", Some("RetainSourceFileParams")),
     ("getCachedSourceFile", Some("GetCachedSourceFileParams")),
     ("getSymbolOfDeclaration", Some("GetSymbolOfDeclarationParams")),
+    ("batchRequests", Some("BatchRequestsParams")),
     ("initialize", None),
     ("createSnapshot", Some("CreateSnapshotParams")),
     ("updateSnapshot", Some("UpdateSnapshotParams")),
@@ -234,6 +235,16 @@ pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
     ("transpileDeclaration", Some("TranspileParams")),
     ("transpileDeclarationFromFile", Some("TranspileFromFileParams")),
     ("getDefaultProjectForFile", Some("GetDefaultProjectForFileParams")),
+    ("getSymbolAtPosition", Some("GetSymbolAtPositionParams")),
+    ("getSymbolsAtPositions", Some("GetSymbolsAtPositionsParams")),
+    ("getSymbolAtLocation", Some("GetSymbolAtLocationParams")),
+    ("getSymbolsAtLocations", Some("GetSymbolsAtLocationsParams")),
+    ("getSymbolOfSourceFile", Some("GetSymbolOfSourceFileParams")),
+    ("getSymbolsOfSourceFiles", Some("GetSymbolsOfSourceFilesParams")),
+    ("getTypeOfSymbol", Some("GetTypeOfSymbolParams")),
+    ("getTypesOfSymbols", Some("GetTypesOfSymbolsParams")),
+    ("getDeclaredTypeOfSymbol", Some("GetTypeOfSymbolParams")),
+    ("getNonMissingTypeOfSymbol", Some("GetTypeOfSymbolParams")),
     ("getSourceFile", Some("GetSourceFileParams")),
     ("getSourceFileNames", Some("GetSourceFileNamesParams")),
     ("getSourceFileMetadata", Some("GetSourceFileParams")),
@@ -245,16 +256,6 @@ pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
     ("getResolvedTypeReferenceDirectiveFromTypeReferenceDirective", Some("GetResolvedTypeReferenceDirectiveFromReferenceParams")),
     ("getConfigFileNames", Some("GetProjectDiagnosticsParams")),
     ("getConfigSourceFile", Some("GetSourceFileParams")),
-    ("getSymbolAtPosition", Some("GetSymbolAtPositionParams")),
-    ("getSymbolsAtPositions", Some("GetSymbolsAtPositionsParams")),
-    ("getSymbolAtLocation", Some("GetSymbolAtLocationParams")),
-    ("getSymbolsAtLocations", Some("GetSymbolsAtLocationsParams")),
-    ("getSymbolOfSourceFile", Some("GetSymbolOfSourceFileParams")),
-    ("getSymbolsOfSourceFiles", Some("GetSymbolsOfSourceFilesParams")),
-    ("getTypeOfSymbol", Some("GetTypeOfSymbolParams")),
-    ("getTypesOfSymbols", Some("GetTypesOfSymbolsParams")),
-    ("getDeclaredTypeOfSymbol", Some("GetTypeOfSymbolParams")),
-    ("getNonMissingTypeOfSymbol", Some("GetTypeOfSymbolParams")),
     ("resolveName", Some("ResolveNameParams")),
     ("getSymbolsInScope", Some("GetSymbolsInScopeParams")),
     ("getSignaturesOfType", Some("GetSignaturesOfTypeParams")),
@@ -288,8 +289,6 @@ pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
     ("getConstraintTypeOfMappedType", Some("GetTypePropertyParams")),
     ("getNameTypeOfMappedType", Some("GetTypePropertyParams")),
     ("getTemplateTypeOfMappedType", Some("GetTypePropertyParams")),
-    ("getTrueTypeOfConditionalType", Some("GetTypePropertyParams")),
-    ("getFalseTypeOfConditionalType", Some("GetTypePropertyParams")),
     ("getTypeParametersOfSignature", Some("GetSignaturePropertyParams")),
     ("getParametersOfSignature", Some("GetSignaturePropertyParams")),
     ("getThisParameterOfSignature", Some("GetSignaturePropertyParams")),
@@ -324,10 +323,12 @@ pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
     ("getIndexInfoOfType", Some("GetIndexInfoOfTypeParams")),
     ("getIndexInfosOfType", Some("CheckerTypeParams")),
     ("getConstraintOfTypeParameter", Some("GetTypePropertyParams")),
-    ("getBaseConstraintOfType", Some("CheckerTypeParams")),
     ("getDefaultFromTypeParameter", Some("GetTypePropertyParams")),
+    ("getBaseConstraintOfType", Some("CheckerTypeParams")),
     ("getTypeArguments", Some("CheckerTypeParams")),
     ("getImportAdderEdits", Some("GetImportAdderEditsParams")),
+    ("getTrueTypeOfConditionalType", Some("GetTypePropertyParams")),
+    ("getFalseTypeOfConditionalType", Some("GetTypePropertyParams")),
     ("getConstantValue", Some("CheckerNodeParams")),
     ("getSignatureFromDeclaration", Some("CheckerNodeParams")),
     ("getExportSpecifierLocalTargetSymbol", Some("CheckerNodeParams")),
@@ -350,8 +351,16 @@ pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
     ("getReferencedSymbolsForNode", Some("GetReferencedSymbolsForNodeParams")),
     ("getSignatureUsages", Some("GetSignatureUsagesParams")),
     ("getCompletionsAtPosition", Some("GetCompletionsAtPositionParams")),
-    ("printNode", Some("PrintNodeParams")),
     ("formatNodeForInsertion", Some("FormatNodeForInsertionParams")),
+    ("getSyntacticDiagnostics", Some("GetDiagnosticsParams")),
+    ("getBindDiagnostics", Some("GetDiagnosticsParams")),
+    ("getSemanticDiagnostics", Some("GetDiagnosticsParams")),
+    ("getSuggestionDiagnostics", Some("GetDiagnosticsParams")),
+    ("getDeclarationDiagnostics", Some("GetDiagnosticsParams")),
+    ("getProgramDiagnostics", Some("GetProjectDiagnosticsParams")),
+    ("getGlobalDiagnostics", Some("GetProjectDiagnosticsParams")),
+    ("getConfigFileParsingDiagnostics", Some("GetProjectDiagnosticsParams")),
+    ("printNode", Some("PrintNodeParams")),
     ("emit", Some("EmitParams")),
     ("emitToString", Some("EmitParams")),
     ("getJavaScriptEmit", Some("SelectedFilesEmitParams")),
@@ -370,17 +379,10 @@ pub const PARAMS_TYPES: &[(&str, Option<&str>)] = &[
     ("getNonPrimitiveType", Some("GetIntrinsicTypeParams")),
     ("getWellKnownSymbols", Some("GetIntrinsicTypeParams")),
     ("getWellKnownSignatures", Some("GetIntrinsicTypeParams")),
-    ("getSyntacticDiagnostics", Some("GetDiagnosticsParams")),
-    ("getBindDiagnostics", Some("GetDiagnosticsParams")),
-    ("getSemanticDiagnostics", Some("GetDiagnosticsParams")),
-    ("getSuggestionDiagnostics", Some("GetDiagnosticsParams")),
-    ("getDeclarationDiagnostics", Some("GetDiagnosticsParams")),
-    ("getProgramDiagnostics", Some("GetProjectDiagnosticsParams")),
-    ("getGlobalDiagnostics", Some("GetProjectDiagnosticsParams")),
-    ("getConfigFileParsingDiagnostics", Some("GetProjectDiagnosticsParams")),
     ("startCPUProfile", Some("ProfileParams")),
     ("stopCPUProfile", None),
     ("saveHeapProfile", Some("ProfileParams")),
+
 ];
 
 pub fn params_type(method: &str) -> Option<&'static str> {

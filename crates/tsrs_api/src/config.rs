@@ -202,6 +202,15 @@ pub(crate) fn finalize_compiler_options(v: &Value, cwd: &str) -> ApiResult<tsrs_
             }
         }
         tsrs_tsoptions::parse_compiler_options(key, &parsed, &mut result);
+        // These Rust enums are closed; Go retains unnamed int32 values in the API response.
+        if let CompilerOptionsValue::Float(n) = parsed {
+            let n = tsrs_tsoptions::go_float64_to_int32(n);
+            if key == "moduleDetection" && !(0..=3).contains(&n) {
+                result.api_unknown_enum_values.push(("moduleDetection", n));
+            } else if key == "newLine" && !(0..=2).contains(&n) {
+                result.api_unknown_enum_values.push(("newLine", n));
+            }
+        }
     }
     Ok(result)
 }

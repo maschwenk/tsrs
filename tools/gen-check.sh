@@ -9,8 +9,8 @@
 #   tools/gen-check.sh --write   regenerate only (leaves the result in the working tree)
 #
 # Not covered (hand-run tooling): the oracle-only files under tools/oracle and crates/*/tests,
-# crates/tsrs_api/src/checker/coverage_table.rs (written from proto.go), and the `BEGIN GENERATED` regions that
-# tools/gen-tsoptions writes in crates/tsrs_tsoptions/src.
+# crates/tsrs_api/src/checker/coverage_table.rs (written from proto.go), and the build/type-acquisition declaration
+# regions written by tools/gen-tsoptions/gen_decls.py.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,6 +21,7 @@ generators=(
   "python3 tools/gen/stringutil_tables.py"
   "python3 tools/gen-diagnostics/gen.py"
   "python3 tools/gen-libs/gen.py"
+  "python3 tools/gen-tsoptions/gen.py"
   "node tools/gen-lsproto/generate.mts"
 )
 

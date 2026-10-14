@@ -8,7 +8,7 @@
 // (transpileModule only, no snapshots), build (createBuildOrchestrator + build + dispose of a 2-project
 // reference graph per cycle, with an edit). Prints one JSON line: samples every cycles/10 cycles, in MiB.
 
-import { API } from "@typescript/typescript/unstable/sync";
+import { API } from "@typescript/typescript/sync";
 import fs from "node:fs";
 import { createVirtualFileSystem } from "../testUtils.ts";
 
@@ -26,7 +26,7 @@ const vfs = createVirtualFileSystem({
     "/c/src/index.ts": `import { a } from "../../a/src/index";\nexport const c: number = a;\n`,
 });
 const api = new API({ cwd: "/", fs: vfs, tsserverPath: binary });
-let snap = api.createSnapshot({ openProject: "/tsconfig.json" });
+let snap = api.createSnapshot({ openProjects: ["/tsconfig.json"] });
 const child = (api as any).client.channel.child;
 const rss = () => Math.round(Number(/VmRSS:\s+(\d+)/.exec(fs.readFileSync(`/proc/${child.pid}/status`, "utf8"))![1]) / 1024);
 const samples: number[] = [rss()];
@@ -44,7 +44,7 @@ for (let i = 1; i <= cycles; i++) {
     else {
         if (variant === "create-edit" || variant === "update") vfs.writeFile("/src/gen.ts", gen(i));
         const changes = variant === "create-edit" || variant === "update" ? { fileNotifications: { changed: ["/src/gen.ts"] } } : {};
-        const next = variant === "update" ? snap.update({ ...changes, ensurePrograms: true }) : api.createSnapshot({ openProject: "/tsconfig.json", ...changes });
+        const next = variant === "update" ? snap.update({ ...changes, ensurePrograms: true }) : api.createSnapshot({ openProjects: ["/tsconfig.json"], ...changes });
         const p = next.getConfiguredProject("/tsconfig.json")!;
         if (variant === "create-diag") p.program.getSemanticDiagnostics("/src/use.ts");
         if (variant === "create-type") p.checker.getTypeAtPosition("/src/use.ts", use.indexOf("r ="));

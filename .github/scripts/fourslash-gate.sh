@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Runs TypeScript's fourslash (language service) tests against the in-process tsrs language server and fails unless
 # the result is at least as good as docs/LSP.md says main is. Needs ts-ref/tsc/testdata and a built tsrs-fourslash.
-# Raise MIN_PASS when a fix lands more passes; MAX_FAIL counts the tests that cannot pass yet: 55 content-mapper tests
+# Raise MIN_PASS when a fix lands more passes; MAX_FAIL counts the tests that cannot pass yet: 57 content-mapper tests
 # (out of scope) and 8 `@tsc` tests that need the harness to run `tsc --build` first (Go
 # `tsctests.GetFileMapWithBuild`, not ported).
 set -euo pipefail
 
-MIN_PASS="${MIN_PASS:-4066}"
-MAX_FAIL="${MAX_FAIL:-63}"
+MIN_PASS="${MIN_PASS:-4083}"
+MAX_FAIL="${MAX_FAIL:-65}"
 TSRS_FOURSLASH="${TSRS_FOURSLASH:-target/release/tsrs-fourslash}"
 results="${TSRS_FOURSLASH_RESULTS:-$PWD/target/fourslash-results}"
 

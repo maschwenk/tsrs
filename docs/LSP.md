@@ -1,7 +1,7 @@
 # The language server (`tsrs --lsp -stdio`)
 
 tsrs provides diagnostics, hover, go to definition, references, rename, completions with auto-imports, code fixes
-and formatting through the TypeScript 7 language-server protocol. It passes 4,066 of 4,546 fourslash tests; see
+and formatting through the TypeScript 7 language-server protocol. It passes 4,083 of 4,561 fourslash tests; see
 [known gaps](#known-gaps) and the [compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do).
 
 ## Editor setup
@@ -230,9 +230,9 @@ index 0, as in Go), so `sort_symbols` uses Go's pdqsort port there (`checker::Pr
 ## Fourslash
 
 `tools/gen-fourslash` (Go, `go/types`) converts every Go fourslash test that `go test` builds
-(`internal/fourslash/tests/*_test.go`, 4,546 `Test*` functions; files excluded by Go build constraints, such as the 13
+(`internal/fourslash/tests/*_test.go`, 4,561 `Test*` functions; files excluded by Go build constraints, such as the 13
 tests in `*_js_test.go` files that only build for GOOS=js, are skipped like `go test` skips them) into a Rust
-function in `crates/tsrs_fourslash/src/tests/gen/` plus a registry (name, file, fn, skip reason for the 386
+function in `crates/tsrs_fourslash/src/tests/gen/` plus a registry (name, file, fn, skip reason for the 382
 `t.Skip("Known failing…")` tests). Regenerate with `cd tools/gen-fourslash && GOTOOLCHAIN=auto go run .`; nothing
 is left untranslated. The harness (`tsrs_fourslash::fourslash`) mirrors Go's `FourslashTest` method for method and
 drives the real server in-process (`tsrs_lsp::lsptestutil`, Go's `testutil/lsptestutil`: framed JSON over byte
@@ -246,18 +246,18 @@ in worker processes (`tsrs-fourslash worker`, replaced after a crash, a 120 s ti
 the process on an unrecovered panic in one of its threads, like a Go program. Recycling workers bounds retained
 test state. See [the generator mapping rules and deviations](../notes/lsp-fsgen.md).
 
-Recorded result: **4,066 pass, 63 fail and 417 skip**, out of 4,546 generated tests. The
+Recorded result: **4,083 pass, 65 fail and 413 skip**, out of 4,561 generated tests. The
 [port log](history/LSP.md#fourslash) retains the earlier runs and verify-family breakdown.
 
-Skips: 386 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
+Skips: 382 known failing in Go (registry) + 31 `SkipUnsupportedCompilerOptions` (module UMD/System, moduleResolution
 node10/classic, `esModuleInterop`/`allowSyntheticDefaultImports` false, `baseUrl`, ES5 target, `alwaysStrict` false).
-Failures (63, the CI gate's maximum in `.github/scripts/fourslash-gate.sh`): 55 content-mapper tests (out of scope)
-and 8 tests with `@tsc` command lines (not ported yet); see [known gaps](#known-gaps). These 63 fail before the session starts, so
+Failures (65, the CI gate's maximum in `.github/scripts/fourslash-gate.sh`): 57 content-mapper tests (out of scope)
+and 8 tests with `@tsc` command lines (not ported yet); see [known gaps](#known-gaps). These 65 fail before the session starts, so
 with the gate green no failure is a divergence in a ported feature.
 
 ## Known gaps
 
-- Content mappers are not loaded by the language server; 55 fourslash cases fail before the session starts.
+- Content mappers are not loaded by the language server; 57 fourslash cases fail before the session starts.
   CLI checks and builds support them ([content-mapper note](../notes/contentmappers.md)). The language service's
   span-map branches are retained but receive no content-mapped scripts.
 - LSP-attached API sessions, automatic type acquisition, telemetry, profiling requests and localized messages

@@ -105,7 +105,7 @@ def convert_literal(body, indent):
         fields.append(convert_field(m.group(1), m.group(2)))
     for key in (
         "affectsDeclarationPath", "affectsProgramStructure", "affectsSemanticDiagnostics", "affectsBuildInfo",
-        "affectsBindDiagnostics", "affectsSourceFile", "affectsModuleResolution", "affectsEmit", "allowJsFlag", "strictFlag",
+        "affectsBindDiagnostics", "affectsSourceFile", "affectsModuleResolution", "affectsEmit",
         "allowConfigDirTemplateSubstitution",
     ):
         if key not in keys and METADATA.get(name, {}).get(key):

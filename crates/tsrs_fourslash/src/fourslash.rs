@@ -3423,7 +3423,7 @@ impl FourslashTest {
 
             if !files_to_search.is_empty() {
                 // Multi-file: use the custom method.
-                let search_uris: Vec<lsproto::DocumentUri> = files_to_search.iter().map(|file| lsconv::file_name_to_document_uri(file)).collect();
+                let search_uris: Vec<lsproto::DocumentUri> = files_to_search.iter().map(|file| lsconv::file_name_to_document_uri(&tspath::to_rooted_path(file, ROOT_DIR))).collect();
 
                 let params = lsproto::MultiDocumentHighlightParams {
                     text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },

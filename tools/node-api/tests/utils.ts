@@ -5,8 +5,8 @@
 // recorded from the Go oracle only (run-upstream.mjs --record refuses any other binary). A tsrs mismatch is a
 // parity failure to report to the owning lane, never a reason to re-record.
 
-import { API as AsyncAPI } from "@typescript/typescript/unstable/async";
-import { API } from "@typescript/typescript/unstable/sync";
+import { API as AsyncAPI } from "@typescript/typescript/async";
+import { API } from "@typescript/typescript/sync";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
@@ -163,8 +163,8 @@ export function runIsolated(body: string, timeoutMs = 20_000): IsolatedResult {
     const file = path.join(here, `.isolated-${process.pid}-${Math.random().toString(36).slice(2)}.ts`);
     fs.writeFileSync(
         file,
-        `import { API } from "@typescript/typescript/unstable/sync";
-import { API as AsyncAPI } from "@typescript/typescript/unstable/async";
+        `import { API } from "@typescript/typescript/sync";
+import { API as AsyncAPI } from "@typescript/typescript/async";
 import { createVirtualFileSystem } from "../testUtils.ts";
 const cwd = ${JSON.stringify(cwd)};
 void API; void AsyncAPI; void createVirtualFileSystem; void cwd;
