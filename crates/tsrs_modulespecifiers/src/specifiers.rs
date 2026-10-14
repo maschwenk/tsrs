@@ -770,11 +770,24 @@ pub(crate) fn try_get_module_name_as_node_module(
         return String::new();
     };
 
+    let case_sensitive = host.use_case_sensitive_file_names();
+    let global_typings_cache_location = host.get_global_typings_cache_location();
+    // Get a path that's relative to node_modules or the importing file's path
+    // if node_modules folder is in this folder or any of its parent folders, no need to keep it.
+    let path_to_top_level_node_modules = &path_obj.file_name[0..parts.top_level_node_modules_index];
+
+    let compare = tspath::ComparePathsOptions { use_case_sensitive_file_names: case_sensitive, current_directory: String::new() };
+    let search_root = if path_to_top_level_node_modules.is_empty() { &path_obj.file_name[..tspath::get_root_length(&path_obj.file_name)] } else { path_to_top_level_node_modules };
+    if !tspath::contains_path(search_root, &info.source_directory, &compare) ||
+        !global_typings_cache_location.is_empty() && tspath::contains_path(search_root, &global_typings_cache_location, &compare)
+    {
+        return String::new();
+    }
+
     // Simplify the full file path to something that can be resolved by Node.
     let preferences = get_module_specifier_preferences(user_preferences, host, options, importing_source_file, "");
     let allowed_endings = preferences.get_allowed_endings_in_preferred_order(host, options, RESOLUTION_MODE_NONE);
 
-    let case_sensitive = host.use_case_sensitive_file_names();
     let mut module_specifier = path_obj.file_name.clone();
     let mut is_package_root_path = false;
     if !package_name_only && parts.package_root_index.is_none() {
@@ -819,19 +832,6 @@ pub(crate) fn try_get_module_name_as_node_module(
     }
 
     if path_obj.is_redirect && !is_package_root_path {
-        return String::new();
-    }
-
-    let global_typings_cache_location = host.get_global_typings_cache_location();
-    // Get a path that's relative to node_modules or the importing file's path
-    // if node_modules folder is in this folder or any of its parent folders, no need to keep it.
-    let path_to_top_level_node_modules = &module_specifier[0..parts.top_level_node_modules_index];
-
-    let compare = tspath::ComparePathsOptions { use_case_sensitive_file_names: case_sensitive, current_directory: String::new() };
-    let search_root = if path_to_top_level_node_modules.is_empty() { &module_specifier[..tspath::get_root_length(&module_specifier)] } else { path_to_top_level_node_modules };
-    if !tspath::contains_path(search_root, &info.source_directory, &compare) ||
-        !global_typings_cache_location.is_empty() && tspath::contains_path(search_root, &global_typings_cache_location, &compare)
-    {
         return String::new();
     }
 
