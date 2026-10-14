@@ -173,6 +173,11 @@ with the switch off, which is why it is not in the default build.
   masks and bounded IDs retain their width, emitter indexes avoid narrowing, and genuine signed domains remain
   signed. Before/after validation and measurements are recorded in the same note.
 
+- Requested rust decimal number parsing ([rust-decimal-parsing.md](rust-decimal-parsing.md)): production code -121 lines. Five-pair
+  Mac screening on Compiler/Compiler-Unions: -0.004% to +0.002% single instructions,
+  +0.260% to +0.881% default RSS. Retained for maintenance at the user's request, with no
+  qualifying performance gain or speedup claim.
+
 - A tracing collector for checker data instead of retiring checkers (notes/mem-checker-gc.md): weak identity caches
   free 3% more than garbage at mid-run; even an upper bound with member tables and value-symbol links weak frees
   ~37% of the program's memory, about where `--maxMemory` already gets, for weeks of data-model changes.

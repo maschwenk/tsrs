@@ -35,18 +35,9 @@ impl fmt::Display for Number {
 
 // https://tc39.es/ecma262/2024/multipage/abstract-operations.html#sec-stringtonumber
 pub fn from_string(s: &str) -> Number {
-    // Implementing StringToNumber exactly as written in the spec involves
-    // writing a parser, along with the conversion of the parsed AST into the
-    // actual value.
-    //
-    // We've already implemented a number parser in the scanner, but we can't
-    // import it here. We also do not have the conversion implemented since we
-    // previously just wrote `+literal` and let the runtime handle it.
-    //
-    // The strategy below is to instead break the number apart and fix it up
-    // such that Go's own parsing functionality can handle it. This won't be
-    // the fastest method, but it saves us from writing the full parser and
-    // conversion logic.
+    // Keep JavaScript's whitespace, Infinity spelling and radix rules around
+    // Rust's decimal float parser. Its accepted decimal forms already include
+    // leading zeros, an omitted integer/fractional part and signed exponents.
 
     let s = s.trim_matches(is_str_white_space);
 
@@ -76,7 +67,7 @@ pub fn from_string(s: &str) -> Number {
         return nan();
     }
 
-    let f = parse_float_string(s);
+    let f = s.parse::<f64>().unwrap_or(f64::NAN);
     if f.is_nan() {
         return nan();
     }
@@ -175,102 +166,6 @@ fn parse_int(s: &str, base: u32) -> (i64, bool) {
     }
 }
 
-pub(crate) fn parse_float_string(s: &str) -> f64 {
-    let has_dot;
-    let has_exp;
-
-    // <a>
-    // <a>.<b>
-    // <a>.<b>e<c>
-    // <a>e<c>
-    let mut a;
-    let mut b = "";
-    let c;
-
-    match s.split_once('.') {
-        Some((before, rest)) => {
-            a = before;
-            has_dot = true;
-            // <a>.<b>
-            // <a>.<b>e<c>
-            (b, c, has_exp) = cut_any(rest, "eE");
-        }
-        None => {
-            has_dot = false;
-            // <a>
-            // <a>e<c>
-            (a, c, has_exp) = cut_any(s, "eE");
-        }
-    }
-
-    let mut sb = String::with_capacity(a.len() + b.len() + c.len() + 3);
-
-    if a.is_empty() {
-        if has_dot && b.is_empty() {
-            return f64::NAN;
-        }
-        if has_exp && c.is_empty() {
-            return f64::NAN;
-        }
-        sb.push('0');
-    } else {
-        a = trim_leading_zeros(a);
-        if !is_all_digits(a) {
-            return f64::NAN;
-        }
-        sb.push_str(a);
-    }
-
-    if has_dot {
-        sb.push('.');
-        if b.is_empty() {
-            sb.push('0');
-        } else {
-            b = trim_trailing_zeros(b);
-            if !is_all_digits(b) {
-                return f64::NAN;
-            }
-            sb.push_str(b);
-        }
-    }
-
-    if has_exp {
-        sb.push('e');
-
-        let (mut c, negative) = cut_prefix(c, "-");
-        if negative {
-            sb.push('-');
-        } else {
-            (c, _) = cut_prefix(c, "+");
-        }
-        c = trim_leading_zeros(c);
-        if !is_all_digits(c) {
-            return f64::NAN;
-        }
-        sb.push_str(c);
-    }
-
-    string_to_float64(&sb)
-}
-
-pub(crate) fn cut_any<'a>(s: &'a str, cutset: &str) -> (&'a str, &'a str, bool) {
-    if cutset == "eE" {
-        // An ASCII match is always a UTF-8 boundary and occupies one byte.
-        return match s.bytes().position(|b| matches!(b, b'e' | b'E')) {
-            Some(i) => (&s[..i], &s[i + 1..], true),
-            None => (s, "", false),
-        };
-    }
-    if let Some(i) = s.find(|r: char| cutset.contains(r)) {
-        let before = &s[..i];
-        let after_and_found = &s[i..];
-        let size = after_and_found.chars().next().unwrap().len_utf8();
-        let after = &after_and_found[size..];
-        return (before, after, true);
-    }
-    (s, "", false)
-}
-
 pub(crate) fn trim_leading_zeros(s: &str) -> &str {
     let mut s = s;
     if s.starts_with('0') {
@@ -280,22 +175,6 @@ pub(crate) fn trim_leading_zeros(s: &str) -> &str {
         }
     }
     s
-}
-
-pub(crate) fn trim_trailing_zeros(s: &str) -> &str {
-    let mut s = s;
-    if s.ends_with('0') {
-        s = s.trim_end_matches('0');
-        if s.is_empty() {
-            return "0";
-        }
-    }
-    s
-}
-
-pub(crate) fn string_to_float64(s: &str) -> f64 {
-    // Out-of-range values parse to ±Inf (Go reports ErrRange alongside ±Inf).
-    s.parse::<f64>().unwrap_or(f64::NAN)
 }
 
 pub(crate) fn is_all_digits(s: &str) -> bool {

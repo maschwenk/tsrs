@@ -188,13 +188,24 @@ fn test_string_roundtrip() {
 }
 
 #[test]
-fn cut_any_preserves_unicode_cutsets() {
-    assert_eq!(cut_any("é1E2e3", "eE"), ("é1", "2e3", true));
-    assert_eq!(cut_any("é😀1", "😀é"), ("", "😀1", true));
-    assert_eq!(cut_any("a😀b", "😀"), ("a", "b", true));
-    assert_eq!(cut_any("aébE2", "éE"), ("a", "bE2", true));
-    assert_eq!(cut_any("é😀", "eE"), ("é😀", "", false));
-    assert_eq!(cut_any("é😀", ""), ("é😀", "", false));
+fn from_string_preserves_decimal_bits() {
+    for (text, expected) in [
+        ("-000.000", (-0.0f64).to_bits()),
+        ("-1e-1000", (-0.0f64).to_bits()),
+        ("000.001e+000003", 1.0f64.to_bits()),
+        (".5E+0001", 5.0f64.to_bits()),
+        ("0e999999999999999999", 0.0f64.to_bits()),
+        ("+1e999999999999999999", f64::INFINITY.to_bits()),
+        ("-1e999999999999999999", f64::NEG_INFINITY.to_bits()),
+        ("1e1.0", nan().0.to_bits()),
+        ("1.e-", nan().0.to_bits()),
+        ("+0x1", nan().0.to_bits()),
+        ("inf", nan().0.to_bits()),
+    ] {
+        assert_eq!(from_string(text).0.to_bits(), expected, "{text}");
+    }
+    let padded_exponent = format!("1e+{}1", "0".repeat(1000));
+    assert_eq!(from_string(&padded_exponent).0.to_bits(), 10.0f64.to_bits());
 }
 
 // TestStringJS, FuzzStringJS, FuzzFromStringJS and getStringResultsFromJS

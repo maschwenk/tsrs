@@ -29,6 +29,7 @@ starting another experiment.
 | Shared checker graphs, an opt-in experiment | [Shared-graph design and measurements](spike-shared-graph.md) |
 | Persisting parse and bind results, a deferred design | [Persisted front end](../docs/PERSISTED_FRONTEND.md) |
 | Release build optimization | [PGO](perf-pgo.md) and [build configuration](perf-build-level.md) |
+| Decimal number parsing | [Rust decimal parsing](rust-decimal-parsing.md) |
 
 ## Correctness and ownership
 
