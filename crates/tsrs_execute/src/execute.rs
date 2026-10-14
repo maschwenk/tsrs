@@ -85,8 +85,13 @@ pub fn command_line_with_testing(
         }
         args.drain(pos..(pos + 2).min(args.len()));
     }
-    // tsrs-only, opt-in: `--checkerCostCache <file>` balances the checkers on per-file check times measured by
-    // the previous run that used the same file, and writes this run's times to it (checkerpool.rs).
+    // tsrs-only: `--checkerCostCache <file>` balances the checkers on per-file check times measured by the previous run
+    // that used the same file, and writes this run's times to it (checkerpool.rs). Without it a project's run uses a
+    // file under node_modules/.cache/tsrs (`default_checker_cost_cache`); `--noCheckerCostCache` turns both off.
+    if args.iter().any(|a| a.eq_ignore_ascii_case("--noCheckerCostCache")) {
+        tsrs_compiler::set_checker_cost_cache_from_cli("");
+        args.retain(|a| !a.eq_ignore_ascii_case("--noCheckerCostCache"));
+    }
     if let Some(pos) = args.iter().position(|a| a.eq_ignore_ascii_case("--checkerCostCache")) {
         let Some(path) = args.get(pos + 1).cloned().filter(|p| !p.starts_with('-')) else {
             sys.write("error: --checkerCostCache expects a file path.\n");
@@ -258,6 +263,12 @@ fn tsc_compilation(
     }
 
     let config_options = config_for_compilation.compiler_options().unwrap();
+    // Watch mode keeps its first assignment across rebuilds (`inherited_associations`), so a cache would only be written.
+    if !config_file_name.is_empty() && !tsrs_core::NO_THREADS && !config_options.watch.is_true() {
+        if let Some(path) = default_checker_cost_cache(sys, &config_file_name) {
+            tsrs_compiler::set_default_checker_cost_cache(&path);
+        }
+    }
     let report_error_summary = create_report_error_summary(sys, &config_options);
     if compiler_options_from_command_line.show_config.is_true() {
         return not_supported(sys, "--showConfig");
@@ -304,6 +315,31 @@ fn find_config_file(search_path: &str, file_exists: impl Fn(&str) -> bool, confi
         }
     })
     .unwrap_or_default()
+}
+
+// tsrs-only: the checker cost cache of a project when `--checkerCostCache` is not given (notes/perf-cost-cache-default.md):
+// `$TSRS_CACHE_DIR/` if set, else `node_modules/.cache/tsrs/` in the nearest directory at or above the config file that
+// has a package.json, if that directory has a node_modules (find-cache-dir's convention: Babel, AVA, terser); one file
+// per config file path. None otherwise: tsrs creates no node_modules and writes nowhere else.
+fn default_checker_cost_cache(sys: &dyn System, config_file_name: &str) -> Option<String> {
+    let config = tspath::get_normalized_absolute_path(config_file_name, sys.get_current_directory());
+    let dir = match std::env::var("TSRS_CACHE_DIR") {
+        Ok(dir) if !dir.is_empty() => dir,
+        _ => {
+            let fs = sys.fs();
+            let package_dir = tspath::for_each_ancestor_directory(&tspath::get_directory_path(&config), |dir| {
+                fs.file_exists(&tspath::combine_paths(dir, &["package.json"])).then(|| dir.to_string())
+            })?;
+            let node_modules = tspath::combine_paths(&package_dir, &["node_modules"]);
+            if !fs.directory_exists(&node_modules) {
+                return None;
+            }
+            tspath::combine_paths(&node_modules, &[".cache", "tsrs"])
+        }
+    };
+    // FNV-1a: stable across tsrs versions and platforms, unlike the std hasher.
+    let hash = config.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3));
+    Some(tspath::combine_paths(&dir, &[&format!("checker-costs-{hash:016x}.txt")]))
 }
 
 // tsc's "Version X" first (scripts grep for it), then the tsrs release and the TypeScript commit it ports.

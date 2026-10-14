@@ -35,8 +35,10 @@ Alongside the supported `tsc` flags, tsrs offers options to control performance:
   count doesn't change the diagnostics, apart from the known exceptions in the
   [compatibility table](COMPATIBILITY.md#what-it-does-and-doesnt-do).
 - `--singleThreaded` uses one thread, for the lowest memory use.
-- `--checkerCostCache <file>` remembers how long each file took to check and uses that to balance threads on the next
-  run (up to ~15% faster on repeated runs).
+- tsrs remembers how long each file took to check and uses that to balance threads on the next run, in
+  `node_modules/.cache/tsrs/` of the nearest package.json directory that has a `node_modules` (or in `$TSRS_CACHE_DIR`).
+  It never changes the diagnostics. `--checkerCostCache <file>` uses that file instead; `--noCheckerCostCache` turns it
+  off. Not used by `--build`, `--watch` or a named `--checkerAssignment`.
 - `--maxMemory <size>` (for example `12G`; `--noEmit` checks only) keeps the process near that much memory: above it,
   tsrs replaces its largest checker with a fresh one, trading CPU for memory. The diagnostics are the same.
 - `--checkerAssignment go` splits files across threads the way tsgo does, for byte-identical output with tsgo.
