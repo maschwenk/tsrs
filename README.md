@@ -27,9 +27,9 @@ for supported features and known gaps.
 
 <a href="https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/dimitri/dark-readme/bench/large-projects-dark.svg">
-    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/dimitri/dark-readme/bench/large-projects.svg">
-    <img alt="Performance" src="https://raw.githubusercontent.com/maschwenk/tsrs/dimitri/dark-readme/bench/large-projects.svg">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg">
+    <img alt="Performance" src="https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg">
   </picture>
 </a>
 
