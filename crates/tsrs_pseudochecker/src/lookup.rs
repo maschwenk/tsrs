@@ -206,9 +206,9 @@ impl PseudoChecker {
             return node.as_get_accessor_declaration().type_();
         }
         let set = node.as_set_accessor_declaration();
-        let params = match set.parameters() {
-            Some(params) => params.nodes(),
-            None => return None,
+        let params = {
+            let params = set.parameters()?;
+            params.nodes()
         };
         if params.is_empty() {
             return None;

@@ -495,8 +495,8 @@ pub(crate) enum SignatureTypeOp {
     RestType,
 }
 
-/// `field`: "objectId" for getReturnTypeOfSignature (GetSignaturePropertyParams), "signature" for
-/// getRestTypeOfSignature (CheckerSignatureParams).
+/// `field`: "objectId" for getReturnTypeOfSignature (`GetSignaturePropertyParams`), "signature" for
+/// getRestTypeOfSignature (`CheckerSignatureParams`).
 pub(crate) fn signature_type_op(host: &dyn CheckerHost, p: &Params, field: &str, op: SignatureTypeOp) -> CheckerResult<Value> {
     let mut s = setup(host, p)?;
     let sig = s.resolve_signature(p.u64(field)?)?;

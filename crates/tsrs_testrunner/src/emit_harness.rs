@@ -112,7 +112,7 @@ pub fn compile_files_with_host_emit(
     let mut pre_errors = Vec::new();
     let mut pre_compiler_options: CompilerOptions = (*config.compiler_options().unwrap()).clone();
     pre_compiler_options.trace_resolution = Tristate::False;
-    let mut pre_config = tsrs_tsoptions::new_parsed_command_line(P::new(pre_compiler_options), config.file_names().to_vec(), Vec::new(), ComparePathsOptions::default());
+    let mut pre_config = tsrs_tsoptions::new_parsed_command_line(P::new(pre_compiler_options), config.file_names().to_vec(), Vec::new(), tsrs_core::tspath::ComparePathsOptions::default());
     pre_config.config_file = config.config_file;
     pre_config.errors.clone_from(&config.errors);
     let pre_program = create_program(Arc::clone(&host), P::new(pre_config));
@@ -335,7 +335,7 @@ pub fn do_js_emit_baseline(
         // compileDeclarationFiles (js_emit_baseline.go:283): Go passes a tsconfig that carries only the config file
         // (and its content mappers; this runner skips runExternalCode tests, so there are none).
         let tsconfig = result.program.command_line().config_file.map(|config_file| {
-            let mut c = tsrs_tsoptions::new_parsed_command_line(P::new(CompilerOptions::default()), Vec::new(), Vec::new(), ComparePathsOptions::default());
+            let mut c = tsrs_tsoptions::new_parsed_command_line(P::new(tsrs_core::CompilerOptions::default()), Vec::new(), Vec::new(), tsrs_core::tspath::ComparePathsOptions::default());
             c.config_file = Some(config_file);
             P::new(c)
         });

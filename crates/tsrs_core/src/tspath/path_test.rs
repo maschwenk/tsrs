@@ -388,26 +388,26 @@ fn test_get_normalized_absolute_path_without_root() {
 fn test_get_relative_path_to_directory_or_url() {
     // !!!
     // Based on tests for `getRelativePathFromDirectory`.
-    assert_eq!(get_relative_path_to_directory_or_url("/", "/", false, &ComparePathsOptions::default()), "");
-    assert_eq!(get_relative_path_to_directory_or_url("/a", "/a", false, &ComparePathsOptions::default()), "");
-    assert_eq!(get_relative_path_to_directory_or_url("/a/", "/a", false, &ComparePathsOptions::default()), "");
-    assert_eq!(get_relative_path_to_directory_or_url("/a", "/", false, &ComparePathsOptions::default()), "..");
-    assert_eq!(get_relative_path_to_directory_or_url("/a", "/b", false, &ComparePathsOptions::default()), "../b");
-    assert_eq!(get_relative_path_to_directory_or_url("/a/b", "/b", false, &ComparePathsOptions::default()), "../../b");
-    assert_eq!(get_relative_path_to_directory_or_url("/a/b/c", "/b", false, &ComparePathsOptions::default()), "../../../b");
-    assert_eq!(get_relative_path_to_directory_or_url("/a/b/c", "/b/c", false, &ComparePathsOptions::default()), "../../../b/c");
-    assert_eq!(get_relative_path_to_directory_or_url("/a/b/c", "/a/b", false, &ComparePathsOptions::default()), "..");
-    assert_eq!(get_relative_path_to_directory_or_url("c:", "d:", false, &ComparePathsOptions::default()), "d:/");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///", "file:///", false, &ComparePathsOptions::default()), "");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a", "file:///a", false, &ComparePathsOptions::default()), "");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a/", "file:///a", false, &ComparePathsOptions::default()), "");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a", "file:///", false, &ComparePathsOptions::default()), "..");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a", "file:///b", false, &ComparePathsOptions::default()), "../b");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b", "file:///b", false, &ComparePathsOptions::default()), "../../b");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b/c", "file:///b", false, &ComparePathsOptions::default()), "../../../b");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b/c", "file:///b/c", false, &ComparePathsOptions::default()), "../../../b/c");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b/c", "file:///a/b", false, &ComparePathsOptions::default()), "..");
-    assert_eq!(get_relative_path_to_directory_or_url("file:///c:", "file:///d:", false, &ComparePathsOptions::default()), "file:///d:/");
+    assert_eq!(get_relative_path_to_directory_or_url("/", "/", false, &crate::tspath::ComparePathsOptions::default()), "");
+    assert_eq!(get_relative_path_to_directory_or_url("/a", "/a", false, &crate::tspath::ComparePathsOptions::default()), "");
+    assert_eq!(get_relative_path_to_directory_or_url("/a/", "/a", false, &crate::tspath::ComparePathsOptions::default()), "");
+    assert_eq!(get_relative_path_to_directory_or_url("/a", "/", false, &crate::tspath::ComparePathsOptions::default()), "..");
+    assert_eq!(get_relative_path_to_directory_or_url("/a", "/b", false, &crate::tspath::ComparePathsOptions::default()), "../b");
+    assert_eq!(get_relative_path_to_directory_or_url("/a/b", "/b", false, &crate::tspath::ComparePathsOptions::default()), "../../b");
+    assert_eq!(get_relative_path_to_directory_or_url("/a/b/c", "/b", false, &crate::tspath::ComparePathsOptions::default()), "../../../b");
+    assert_eq!(get_relative_path_to_directory_or_url("/a/b/c", "/b/c", false, &crate::tspath::ComparePathsOptions::default()), "../../../b/c");
+    assert_eq!(get_relative_path_to_directory_or_url("/a/b/c", "/a/b", false, &crate::tspath::ComparePathsOptions::default()), "..");
+    assert_eq!(get_relative_path_to_directory_or_url("c:", "d:", false, &crate::tspath::ComparePathsOptions::default()), "d:/");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///", "file:///", false, &crate::tspath::ComparePathsOptions::default()), "");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a", "file:///a", false, &crate::tspath::ComparePathsOptions::default()), "");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a/", "file:///a", false, &crate::tspath::ComparePathsOptions::default()), "");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a", "file:///", false, &crate::tspath::ComparePathsOptions::default()), "..");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a", "file:///b", false, &crate::tspath::ComparePathsOptions::default()), "../b");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b", "file:///b", false, &crate::tspath::ComparePathsOptions::default()), "../../b");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b/c", "file:///b", false, &crate::tspath::ComparePathsOptions::default()), "../../../b");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b/c", "file:///b/c", false, &crate::tspath::ComparePathsOptions::default()), "../../../b/c");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///a/b/c", "file:///a/b", false, &crate::tspath::ComparePathsOptions::default()), "..");
+    assert_eq!(get_relative_path_to_directory_or_url("file:///c:", "file:///d:", false, &crate::tspath::ComparePathsOptions::default()), "file:///d:/");
 }
 
 #[test]
@@ -475,7 +475,7 @@ fn test_has_relative_path_segment_matches_segment_split() {
         let segments: Vec<&str> = p.split('/').collect();
         segments.iter().enumerate().any(|(i, s)| *s == "." || *s == ".." || s.is_empty() && i > 0 && i + 1 < segments.len())
     }
-    let alphabet = [b'/', b'.', b'a'];
+    let alphabet = *b"/.a";
     let mut bytes = Vec::new();
     for len in 0..=11 {
         for mut code in 0..3usize.pow(len) {
@@ -520,7 +520,7 @@ fn test_path_is_relative() {
 
 #[test]
 fn test_get_common_parents() {
-    let opts = ComparePathsOptions::default();
+    let opts = crate::tspath::ComparePathsOptions::default();
     let s = |v: &[&str]| v.iter().map(std::string::ToString::to_string).collect::<Vec<String>>();
     let run = |paths: &[&str], min: usize| get_common_parents(&s(paths), min, get_path_components, &opts);
 

@@ -138,7 +138,7 @@ fn null_params_are_the_zero_value_struct() {
 }
 
 /// Every field of the method's pinned params struct is decoded before lookups; unknown keys are ignored
-/// (runtime review of c2abd68: payload matrix in crates/tsrs_api_transport/INTEGRATION.md).
+/// (runtime review of c2abd68: payload matrix in `crates/tsrs_api_transport/INTEGRATION.md`).
 #[test]
 fn params_decode_before_lookups_and_ignore_unknown_keys() {
     let dir = TempDir::new("predecode");
@@ -171,7 +171,8 @@ fn params_decode_before_lookups_and_ignore_unknown_keys() {
     assert!(e.contains("empty handle"), "{e}");
 }
 
-/// Runtime field/value matrix on f70371e (crates/tsrs_api_transport/INTEGRATION.md, "419 class mismatches").
+/// Runtime field/value matrix on f70371e (`crates/tsrs_api_transport/INTEGRATION.md`, "419 class
+/// mismatches").
 #[test]
 fn field_values_match_go_classes() {
     let dir = TempDir::new("fieldvalues");
@@ -337,7 +338,7 @@ fn external_struct_decoding_matches_go_classes() {
     assert!(tsrs_core::json::marshal(&d).unwrap().contains("not found"), "{}", tsrs_core::json::marshal(&d).unwrap());
 }
 
-/// runtime-f2-review (f2_enum_cases.json): unknown int32 enum values compile like pinned Go, and Go `*int`
+/// runtime-f2-review (`f2_enum_cases.json)`: unknown int32 enum values compile like pinned Go, and Go `*int`
 /// options keep their exact 64-bit value.
 #[test]
 fn unknown_enum_values_and_go_int_options_match_go() {

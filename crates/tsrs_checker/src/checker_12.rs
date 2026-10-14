@@ -871,6 +871,7 @@ impl Checker {
     }
 
     // checker.go:24655
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_array_element_type_node(&mut self, node: P<Node>) -> Option<P<Node>> {
         match node.kind() {
             Kind::ParenthesizedType => {
@@ -1475,6 +1476,7 @@ impl Checker {
     }
 
     // checker.go:25120
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_identifier_chain(&mut self, node: P<Node>) -> Vec<P<Node>> {
         if ast::is_identifier(node) {
             return vec![node];
@@ -2721,7 +2723,7 @@ impl Checker {
     }
 }
 
-/// Kind of a type for the creation-site counters (tsrs_core::sitecount).
+/// Kind of a type for the creation-site counters (`tsrs_core::sitecount`).
 pub(crate) fn type_kind_label(flags: TypeFlags, object_flags: ObjectFlags) -> &'static str {
     if flags.intersects(TypeFlags::Object) {
         if object_flags.intersects(ObjectFlags::ClassOrInterface) {

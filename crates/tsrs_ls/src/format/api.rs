@@ -8,6 +8,7 @@ use crate::lsutil::{self, FormatCodeSettings};
 
 // api.go:14
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[expect(clippy::enum_variant_names, reason = "The variant names preserve the upstream Go enum names.")]
 pub enum FormatRequestKind {
     FormatDocument,
     FormatSelection,

@@ -577,9 +577,7 @@ impl kqueueBackend {
             if let Some(m) = st.entry_maps.get(&map_id) {
                 // stale children are removed from disjoint subtrees and from per-path event entries; Go ranges the map too
                 to_remove.extend(m.keys().filter_map(|p| {
-                    let Some(rest) = p.strip_prefix(&dir_start) else {
-                        return None;
-                    };
+                    let rest = p.strip_prefix(&dir_start)?;
                     if rest.contains('/') {
                         return None;
                     }

@@ -593,13 +593,9 @@ impl Checker {
                 }
                 let import_attributes_type = self.get_import_attributes_type_for_module_specifier(import_ref);
                 let resolved_module = self.resolve_external_module_name(enclosing_declaration, import_ref /*ignoreErrors*/, true, import_attributes_type);
-                let Some(resolved_module) = resolved_module else {
-                    return None;
-                };
+                let resolved_module = resolved_module?;
                 let ref_ = self.get_alias_for_symbol_in_container(resolved_module, symbol);
-                if ref_.is_none() {
-                    return None;
-                }
+                ref_?;
                 Some(resolved_module)
             }));
             if !results.is_empty() {
@@ -629,9 +625,7 @@ impl Checker {
                     }
                     let sym = self.get_symbol_of_declaration(file.as_node()).unwrap();
                     let ref_ = self.get_alias_for_symbol_in_container(sym, symbol);
-                    if ref_.is_none() {
-                        return None;
-                    }
+                    ref_?;
                     Some(sym)
                 }));
             }
@@ -655,9 +649,7 @@ impl Checker {
             }
             declarations[0]
         };
-        let Some(parent) = first_decl.parent() else {
-            return None;
-        };
+        let parent = first_decl.parent()?;
         if !ast::is_variable_declaration(parent) {
             return None;
         }
@@ -987,7 +979,7 @@ impl Checker {
             enclosing_declaration,
             meaning,
             use_only_external_aliasing,
-            visited_symbol_tables_map: Default::default(),
+            visited_symbol_tables_map: std::rc::Rc::default(),
         })
     }
 
@@ -1452,7 +1444,7 @@ impl Checker {
      *
      * @param symbol a Symbol to check if accessible
      * @param enclosingDeclaration a Node containing reference to the symbol
-     * @param meaning a SymbolFlags to check if such meaning of the symbol is accessible
+     * @param meaning a `SymbolFlags` to check if such meaning of the symbol is accessible
      * @param shouldComputeAliasToMakeVisible a boolean value to indicate whether to return aliases to be mark visible in case the symbol is accessible
      */
     // symbolaccessibility.go:839

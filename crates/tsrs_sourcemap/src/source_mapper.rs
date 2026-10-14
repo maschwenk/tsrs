@@ -60,7 +60,7 @@ pub(crate) fn create_document_position_mapper(host: &dyn Host, source_map: &RawS
     let source_file_absolute_paths: Vec<String> =
         source_map.sources.iter().map(|source| tspath::get_normalized_absolute_path(source, &source_root)).collect();
     let use_case_sensitive_file_names = host.use_case_sensitive_file_names();
-    let mut source_to_source_index_map = FxHashMap::with_capacity_and_hasher(source_file_absolute_paths.len(), Default::default());
+    let mut source_to_source_index_map = FxHashMap::with_capacity_and_hasher(source_file_absolute_paths.len(), rustc_hash::FxBuildHasher);
     source_to_source_index_map.extend(
         source_file_absolute_paths
             .iter()

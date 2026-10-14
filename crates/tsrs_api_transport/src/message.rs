@@ -94,9 +94,11 @@ impl Message {
     }
 }
 
-/// A handler result. `Json` must hold one complete JSON value (validated before it is written);
-/// `Binary` is api.RawBinary: written verbatim as the MessagePack tuple payload, and (like Go's
-/// json.Marshal of a byte slice) as a base64 JSON string under JSON-RPC.
+/// A handler result.
+///
+/// `Json` must hold one complete JSON value (validated before it is written); `Binary` is api.RawBinary:
+/// written verbatim as the `MessagePack` tuple payload, and (like Go's json.Marshal of a byte slice) as a
+/// base64 JSON string under JSON-RPC.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Response {
     Json(Vec<u8>),
@@ -114,9 +116,10 @@ impl Response {
     }
 }
 
-/// A structured handler error. All API session errors are reported with CodeInternalError by
-/// ipc.handleRequest; the message is the only data the client sees (msgpack Error payload / JSON-RPC
-/// error.message).
+/// A structured handler error.
+///
+/// All API session errors are reported with `CodeInternalError` by ipc.handleRequest; the message is the only
+/// data the client sees (msgpack Error payload / JSON-RPC error.message).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ApiError {
     pub code: i32,
@@ -137,8 +140,8 @@ impl fmt::Display for ApiError {
 
 impl std::error::Error for ApiError {}
 
-/// Transport-level failure. Every variant ends the connection's Run loop (as in Go, where any
-/// ReadMessage error other than io.EOF is returned from Run).
+/// Transport-level failure. Every variant ends the connection's Run loop (as in Go, where any `ReadMessage`
+/// error other than io.EOF is returned from Run).
 #[derive(Debug)]
 pub enum TransportError {
     /// Clean EOF before the first byte of a frame.

@@ -119,11 +119,13 @@ pub fn unicode_to_lower(r: Rune) -> Rune {
     }
 }
 
-/// Go `unicode.ToUpper` (simple uppercase mapping) via Rust's full uppercase mapping, keeping the rune when that
-/// mapping is not a single char. The only runes whose full uppercase is multi-char but whose simple uppercase is
-/// another rune are the 27 Greek letters with ypogegrammeni, which map to their titlecase form (U+1F80 -> U+1F88,
-/// U+1FB3 -> U+1FBC); they are special-cased. Checked exhaustively against Go 1.27 (Unicode 17.0.0, the same version
-/// as the pinned Rust toolchain's `char::UNICODE_VERSION`).
+/// Go `unicode.ToUpper` (simple uppercase mapping) via Rust's full uppercase mapping, keeping the rune when
+/// that mapping is not a single char.
+///
+/// The only runes whose full uppercase is multi-char but whose simple uppercase is another rune are the 27
+/// Greek letters with ypogegrammeni, which map to their titlecase form (U+1F80 -> U+1F88, U+1FB3 -> U+1FBC);
+/// they are special-cased. Checked exhaustively against Go 1.27 (Unicode 17.0.0, the same version as the
+/// pinned Rust toolchain's `char::UNICODE_VERSION`).
 pub fn unicode_to_upper(r: Rune) -> Rune {
     if r < 0x80 {
         if (b'a' as Rune..=b'z' as Rune).contains(&r) {
@@ -146,9 +148,11 @@ pub fn unicode_to_upper(r: Rune) -> Rune {
     }
 }
 
-/// Go `unicode.SimpleFold` (Go 1.27 unicode/letter.go:354): the next rune after `r` in its simple case folding orbit,
-/// wrapping around to the smallest. Go first consults its `asciiFold` table for ASCII; that table agrees with
-/// `CASE_ORBIT` (K, S, k, s) and the ToLower/ToUpper fallback, so it is not copied.
+/// Go `unicode.SimpleFold` (Go 1.27 unicode/letter.go:354): the next rune after `r` in its simple case
+/// folding orbit, wrapping around to the smallest.
+///
+/// Go first consults its `asciiFold` table for ASCII; that table agrees with `CASE_ORBIT` (K, S, k, s) and
+/// the ToLower/ToUpper fallback, so it is not copied.
 pub fn unicode_simple_fold(r: Rune) -> Rune {
     if r > 0x0010_FFFF {
         return r;
@@ -187,8 +191,8 @@ static CASE_ORBIT: [(u16, u16); 94] = [
     (0xA64A, 0xA64B), (0xA64B, 0x1C88), (0xFB05, 0xFB06), (0xFB06, 0xFB05),
 ];
 
-/// Go `utf8.DecodeRuneInString` over raw bytes: returns (RuneError, 1) for invalid
-/// encodings (including surrogate encodings) and (RuneError, 0) for empty input.
+/// Go `utf8.DecodeRuneInString` over raw bytes: returns (`RuneError`, 1) for invalid encodings (including
+/// surrogate encodings) and (`RuneError`, 0) for empty input.
 pub fn decode_rune(s: &[u8]) -> (Rune, usize) {
     const RUNE_ERROR: Rune = 0xFFFD;
     if s.is_empty() {

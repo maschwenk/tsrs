@@ -6,7 +6,7 @@ use std::fmt::Write as _;
 use std::sync::LazyLock;
 
 use regex::Regex;
-use tsrs_core::tspath::{self, ComparePathsOptions};
+use tsrs_core::tspath;
 
 use crate::fourslash::FourslashDiagnostic;
 use crate::testing::T;
@@ -115,7 +115,7 @@ fn iterate_error_baseline(
                 tspath::compare_paths(
                     &remove_test_path_prefixes(&e.file.file_name),
                     &unit,
-                    &ComparePathsOptions::default(),
+                    &tsrs_core::tspath::ComparePathsOptions::default(),
                 )
                 .is_eq()
             })
@@ -219,7 +219,7 @@ fn format_location(diag: &FourslashDiagnostic) -> String {
             .expect_source("fourslash diagnostics have source positions"),
     );
     let relative_file_name =
-        tspath::convert_to_relative_path(&diag.file.file_name, &ComparePathsOptions::default());
+        tspath::convert_to_relative_path(&diag.file.file_name, &tsrs_core::tspath::ComparePathsOptions::default());
     format!(
         "{}:{}:{}",
         relative_file_name,
@@ -260,7 +260,7 @@ fn write_format_diagnostic(output: &mut String, diagnostic: &FourslashDiagnostic
     );
     let relative_file_name = tspath::convert_to_relative_path(
         &diagnostic.file.file_name,
-        &ComparePathsOptions::default(),
+        &tsrs_core::tspath::ComparePathsOptions::default(),
     );
     write!(output, "{}({},{}): ",
         relative_file_name,

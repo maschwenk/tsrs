@@ -225,9 +225,7 @@ impl Checker {
         // If there is no contextual type (e.g. we are trying to resolve stateful component), get attributes type from resolving element's tagName
         if ast::is_jsx_attribute(attribute) {
             let attributes_type = self.get_apparent_type_of_contextual_type(attribute.parent().unwrap(), context_flags);
-            let Some(attributes_type) = attributes_type else {
-                return None;
-            };
+            let attributes_type = attributes_type?;
             if is_type_any(Some(attributes_type)) {
                 return None;
             }
@@ -380,18 +378,16 @@ impl Checker {
                 return reported_error;
             }
             let more_than_one_real_children = valid_children.len() > 1;
-            let array_like_target_parts;
-            let non_array_like_target_parts;
+
+
             let iterable_type = self.get_global_iterable_type();
-            if iterable_type != self.empty_generic_type {
+            let (array_like_target_parts, non_array_like_target_parts) = if iterable_type != self.empty_generic_type {
                 let any_type = self.any_type;
                 let any_iterable = self.create_iterable_type(any_type);
-                array_like_target_parts = self.filter_type(children_target_type, |c, t| c.is_type_assignable_to(t, any_iterable));
-                non_array_like_target_parts = self.filter_type(children_target_type, |c, t| !c.is_type_assignable_to(t, any_iterable));
+                (self.filter_type(children_target_type, |c, t| c.is_type_assignable_to(t, any_iterable)), self.filter_type(children_target_type, |c, t| !c.is_type_assignable_to(t, any_iterable)))
             } else {
-                array_like_target_parts = self.filter_type(children_target_type, super::checker::Checker::is_array_or_tuple_like_type);
-                non_array_like_target_parts = self.filter_type(children_target_type, |c, t| !c.is_array_or_tuple_like_type(t));
-            }
+                (self.filter_type(children_target_type, super::checker::Checker::is_array_or_tuple_like_type), self.filter_type(children_target_type, |c, t| !c.is_array_or_tuple_like_type(t)))
+            };
             let invalid_text_diagnostic: RefCell<Option<(&'static Message, Vec<String>)>> = RefCell::new(None);
             let children_prop_name_for_diagnostic = children_prop_name.clone();
             let get_invalid_textual_child_diagnostic: InvalidTextDiagnosticFn = Rc::new(move |c: &mut Checker| {
@@ -683,8 +679,8 @@ impl Checker {
     // jsx.go:545
     pub(crate) fn resolve_jsx_opening_like_element(&mut self, node: P<Node>, candidates_out_array: Option<&mut Vec<P<Signature>>>, check_mode: CheckMode) -> P<Signature> {
         let is_jsx_open_fragment = ast::is_jsx_opening_fragment(node);
-        let expr_types;
-        if !is_jsx_open_fragment {
+
+        let expr_types = if !is_jsx_open_fragment {
             if is_jsx_intrinsic_tag_name(node.tag_name()) {
                 let result = self.get_intrinsic_attributes_type_from_jsx_opening_like_element(node).unwrap();
                 let fake_signature = self.create_signature_for_jsx_intrinsic(node, result);
@@ -717,10 +713,10 @@ impl Checker {
                 }
                 return fake_signature;
             }
-            expr_types = self.check_expression(node.tag_name());
+            self.check_expression(node.tag_name())
         } else {
-            expr_types = self.get_jsx_fragment_type(node);
-        }
+            self.get_jsx_fragment_type(node)
+        };
         let apparent_type = self.get_apparent_type(expr_types);
         if self.is_error_type(apparent_type) {
             return self.resolve_error_call(node);
@@ -1079,16 +1075,16 @@ impl Checker {
         if !self.is_error_type(intrinsic_class_attribs) {
             let type_params = self.get_local_type_parameters_of_class_or_interface_or_type_alias(intrinsic_class_attribs.symbol().unwrap());
             let host_class_type = self.get_return_type_of_signature(sig);
-            let library_managed_attribute_type;
-            if !type_params.is_empty() {
+
+            let library_managed_attribute_type = if !type_params.is_empty() {
                 // apply JSX.IntrinsicClassAttributes<hostClassType, ...>
                 let min_type_argument_count = self.get_min_type_argument_count(&type_params);
                 let inferred_args = self.fill_missing_type_arguments(&[host_class_type], &type_params, min_type_argument_count, ast::is_in_js_file(context));
                 let mapper = new_type_mapper(alloc_vec(type_params), alloc_vec(inferred_args));
-                library_managed_attribute_type = self.instantiate_type(intrinsic_class_attribs, Some(mapper));
+                self.instantiate_type(intrinsic_class_attribs, Some(mapper))
             } else {
-                library_managed_attribute_type = intrinsic_class_attribs;
-            }
+                intrinsic_class_attribs
+            };
             apparent_attributes_type = self.intersect_types(Some(library_managed_attribute_type), Some(apparent_attributes_type)).unwrap();
         }
         let intrinsic_attribs = self.get_jsx_type(JsxNames.intrinsic_attributes, context);
@@ -1426,9 +1422,7 @@ impl Checker {
     // jsx.go:1277
     pub(crate) fn get_jsx_element_type_type_at(&mut self, location: P<Node>) -> Option<P<Type>> {
         let ns = self.get_jsx_namespace_at(Some(location));
-        if ns.is_none() {
-            return None;
-        }
+        ns?;
         let sym = self.get_jsx_element_type_symbol(ns)?;
         let t = self.instantiate_alias_or_interface_with_defaults(sym, &[], ast::is_in_js_file(location));
         match t {

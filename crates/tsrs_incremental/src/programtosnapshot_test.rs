@@ -20,7 +20,7 @@ impl ParseConfigHost for configHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -63,7 +63,7 @@ fn compiler_program_with(files: &[(&'static str, &'static str)], host: Arc<dyn C
     let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(files.iter().copied(), true));
     let config_host: &'static configHost = Box::leak(Box::new(configHost { fs }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, config_host, None);
-    assert!(diagnostics.is_empty());
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     new_program(ProgramOptions::new(P::new(config.unwrap()), host))
 }
 
@@ -124,7 +124,7 @@ fn file_states(program: &Program) -> Vec<(Path, String, bool, Vec<String>)> {
         .map(|path| {
             let info = snapshot.file_infos.load(&path).unwrap();
             let mut references: Vec<String> =
-                snapshot.referenced_map.get_references(&path).map(|refs| refs.iter().map(|p| p.to_string()).collect()).unwrap_or_default();
+                snapshot.referenced_map.get_references(&path).map(|refs| refs.iter().map(std::string::ToString::to_string).collect()).unwrap_or_default();
             references.sort();
             (path, info.version, info.affects_global_scope, references)
         })
@@ -132,7 +132,7 @@ fn file_states(program: &Program) -> Vec<(Path, String, bool, Vec<String>)> {
 }
 
 fn changed_files(program: &Program) -> Vec<String> {
-    let mut changed: Vec<String> = program.snapshot.changed_files_set.keys().iter().map(|p| p.to_string()).collect();
+    let mut changed: Vec<String> = program.snapshot.changed_files_set.keys().iter().map(std::string::ToString::to_string).collect();
     changed.sort();
     changed
 }
@@ -190,7 +190,7 @@ fn deleting_a_global_file_changes_every_file() {
 fn deleting_a_module_changes_its_importers_only() {
     let old = incremental(compiler_program(&FILES), None);
     let new = incremental(compiler_program(&with(&[("/src/d.ts", None)])), Some(old));
-    assert!(changed_files(&new).is_empty());
+    assert_eq!(changed_files(&new), [] as [std::string::String; 0]);
     assert!(new.snapshot.build_info_emit_pending.get());
 }
 

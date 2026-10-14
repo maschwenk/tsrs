@@ -3,7 +3,7 @@
 //!
 //! In a CLI run where no declaration file is type-checked (`skipLibCheck` or `noCheck`), the parser parses the member
 //! list of an interface, class or type literal in a declaration file as usual, and if the list is plain (no
-//! diagnostic, no eager JSDoc, no comment directive, nothing whose binding reaches outside the list, and the arena can
+//! diagnostic, no eager `JSDoc`, no comment directive, nothing whose binding reaches outside the list, and the arena can
 //! discard what the list allocated: `tsrs_parser`'s `parse_member_list_lazily`), it throws the nodes away and keeps a
 //! `LazyNodeList` instead: the owner node, where the list starts and the parser context there. The owner's `NodeList`
 //! points at the record (a long-form `ThinSlice` whose slice is `LAZY_HEAD_DATA`). The binder skips the list and

@@ -664,8 +664,8 @@ impl Snapshot {
         let should_clean_file_cache = change.clean_file_cache
             || !change.file_changes.opened.0.is_empty()
             || !change.file_changes.reopened.0.is_empty()
-            || change.file_changes.closed.len() > 0
-            || change.file_changes.deleted.len() > 0;
+            || !change.file_changes.closed.is_empty()
+            || !change.file_changes.deleted.is_empty();
         if should_clean_file_cache {
             // The set of seen files can change only if a program was constructed (not cloned) during this snapshot.
             // When cleanFileCache is explicitly set, always attempt cleaning.
@@ -874,7 +874,7 @@ impl Snapshot {
 
 // snapshot.go:193
 fn overlay_file_handles(overlays: &OverlayMap) -> FxHashMap<Path, Arc<dyn FileHandle>> {
-    let mut files: FxHashMap<Path, Arc<dyn FileHandle>> = FxHashMap::with_capacity_and_hasher(overlays.len(), Default::default());
+    let mut files: FxHashMap<Path, Arc<dyn FileHandle>> = FxHashMap::with_capacity_and_hasher(overlays.len(), rustc_hash::FxBuildHasher);
     // pure map inserts; Go ranges the map too
     files.extend(overlays.iter().map(|(path, overlay)| (path.clone(), Arc::<crate::overlayfs::Overlay>::clone(overlay) as Arc<dyn FileHandle>)));
     files

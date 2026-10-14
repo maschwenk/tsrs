@@ -22,6 +22,7 @@ bitflags! {
 }
 
 impl GeneratedIdentifierFlags {
+    #[must_use]
     pub fn kind(self) -> GeneratedIdentifierFlags {
         self & GeneratedIdentifierFlags::KindMask
     }

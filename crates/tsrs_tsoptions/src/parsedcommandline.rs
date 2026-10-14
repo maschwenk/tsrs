@@ -70,7 +70,7 @@ impl ParsedCommandLine {
             errors: Vec::new(),
             raw: CompilerOptionsValue::Null,
             compile_on_save: None,
-            compare_paths_options: ComparePathsOptions::default(),
+            compare_paths_options: tsrs_core::tspath::ComparePathsOptions::default(),
             wildcard_directories: OnceLock::new(),
             include_globs: OnceLock::new(),
             source_and_output_maps: OnceLock::new(),
@@ -111,6 +111,7 @@ fn clone_once_lock<T: Clone>(lock: &OnceLock<T>) -> OnceLock<T> {
 }
 
 impl ParsedCommandLine {
+    #[must_use]
     pub fn with_file_names(&self, file_names: Vec<String>) -> ParsedCommandLine {
         let mut parsed_config = self.parsed_config.clone();
         parsed_config.file_names = file_names;
@@ -346,7 +347,7 @@ impl ParsedCommandLine {
 
     pub fn file_names_by_path(&self) -> &FxHashMap<Path, String> {
         self.file_names_by_path.get_or_init(|| {
-            let mut file_names_by_path = FxHashMap::with_capacity_and_hasher(self.parsed_config.file_names.len(), Default::default());
+            let mut file_names_by_path = FxHashMap::with_capacity_and_hasher(self.parsed_config.file_names.len(), rustc_hash::FxBuildHasher);
             file_names_by_path.extend(self.parsed_config.file_names.iter().map(|file_name| {
                 let path = tspath::to_path(file_name, self.get_current_directory(), self.use_case_sensitive_file_names());
                 (path, file_name.clone())
@@ -494,6 +495,7 @@ impl ParsedCommandLine {
         (specs.get_matched_include_spec(file_name, &self.compare_paths_options), false)
     }
 
+    #[must_use]
     pub fn reload_file_names_of_parsed_command_line(&self, fs: &dyn FS) -> ParsedCommandLine {
         let mut parsed_config = self.parsed_config.clone();
         let config_file = self.config_file.unwrap();

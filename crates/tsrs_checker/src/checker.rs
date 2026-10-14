@@ -548,9 +548,12 @@ impl InferenceContext {
     }
 }
 
-/// A Go slice field that most of its owners leave empty (inference candidate lists, 1.78M of them on the private monorepo, 64%
-/// never get a covariant and 98% never a contravariant candidate): 8 bytes, and the list lives in an arena
-/// `RefCell<Vec>` allocated by the first `push` or a non-empty `from_vec`. Reads of an absent list see it empty.
+/// Defers allocating vector storage until a slice field needs values.
+///
+/// A Go slice field that most of its owners leave empty: 8 bytes, with the list stored in an arena
+/// `RefCell<Vec>` allocated by the first `push` or a non-empty `from_vec`.
+///
+/// Reads of an absent list see it empty.
 pub struct LazyVec<T: 'static>(Cell<Option<P<RefCell<Vec<T>>>>>);
 
 impl<T> Default for LazyVec<T> {
@@ -1021,11 +1024,11 @@ pub struct Checker {
     pub signature_count: u32,
     pub total_instantiation_count: u32,
     pub instantiation_count: u32,
-    /// TSRS_WORK_CENSUS (workcensus.rs); None unless the variable is set.
+    /// `TSRS_WORK_CENSUS` (workcensus.rs); None unless the variable is set.
     pub census: Option<Box<crate::workcensus::Census>>,
-    /// TSRS_UNION_CACHE (unioncache.rs; on by default, off under Go-compatible history).
+    /// `TSRS_UNION_CACHE` (unioncache.rs; on by default, off under Go-compatible history).
     pub(crate) union_front_cache: crate::unioncache::UnionFrontCache,
-    /// TSRS_INFER_MEMO (infermemo.rs; on by default, off under Go-compatible history).
+    /// `TSRS_INFER_MEMO` (infermemo.rs; on by default, off under Go-compatible history).
     pub(crate) infer_memo: crate::infermemo::InferMemo,
     /// Calls of `add_diagnostic` and `add_suggestion_diagnostic`, duplicates included (wrapping): the inference memo
     /// stores only walks that added none.
@@ -1085,7 +1088,7 @@ pub struct Checker {
     pub enum_literal_types: FxHashMap<EnumLiteralKey, P<Type>>,
     pub enum_nan_literal_types: FxHashMap<P<Symbol>, P<Type>>,
     pub indexed_access_types: crate::basedmap::Based<PackedMap<CacheHashKey, P<Type>>>,
-    /// `get_indexed_access_type_by_union_memoized` (checker_13.rs).
+    /// `get_indexed_access_type_by_union_memoized` (`checker_13.rs`).
     pub(crate) indexed_access_union_memo: FxHashMap<(P<Type>, P<Type>, u32), Option<P<Type>>>,
     pub template_literal_types: PackedMap<CacheHashKey, P<Type>>,
     pub string_mapping_types: FxHashMap<StringMappingKey, P<Type>>,
@@ -1175,10 +1178,12 @@ pub struct Checker {
     // Go `ObjectType.instantiations` of object types that are not interfaces or tuples (see `ObjectType`).
     pub(crate) object_type_instantiations: crate::basedmap::Based<FxHashMap<P<Type>, PackedMap<CacheHashKey, P<Type>>>, P<Type>>,
     pub(crate) lazy_mapped_tables: crate::basedmap::Based<FxHashMap<P<Type>, std::rc::Rc<LazyMappedTable>>, P<Type>>,
-    /// tsrs_core::lazymembers::enabled() (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy table is created when false.
+    /// `tsrs_core::lazymembers::enabled()` (default on; `--noLazyMembers` / `TSRS_LAZY_MEMBERS=0`): no lazy
+    /// table is created when false.
     pub lazy_members: bool,
-    /// `TSRS_DEEP_NESTED=shadow`: every deeply-nested test on a relater stack is also made without the stack's kept
-    /// recursion identities, and the kept identities are recomputed; any difference panics (relater_1.rs).
+    /// `TSRS_DEEP_NESTED=shadow`: every deeply-nested test on a relater stack is also made without the
+    /// stack's kept recursion identities, and the kept identities are recomputed; any difference panics
+    /// (`relater_1.rs`).
     pub(crate) deep_nested_shadow: bool,
     /// notes/mem-lazy.md L1: tuple references get lazy member tables too.
     pub lazy_tuples: bool,
@@ -1199,20 +1204,23 @@ pub struct Checker {
     /// The member names of `Function`, `CallableFunction`, `NewableFunction` and `Object`, once all four are
     /// resolved (`may_be_augment_member`).
     pub(crate) augment_filter: Option<tsrs_ast::NameFilter>,
-    /// Reused buffers for `get_unmatched_property_recording` (relater_1.rs), one per nested `propertiesRelatedTo`.
+    /// Reused buffers for `get_unmatched_property_recording` (`relater_1.rs`), one per nested
+    /// `propertiesRelatedTo`.
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub(crate) unmatched_found_pool: Vec<Vec<Option<Option<P<Symbol>>>>>,
-    /// Reused buffers for `some_property_reduces_to_never` (checker_11.rs), one per nested call.
+    /// Reused buffers for `some_property_reduces_to_never` (`checker_11.rs`), one per nested call.
     pub(crate) name_counts_pool: Vec<crate::checker_11::NameCounts>,
-    /// `contextual_property_type_of_large_union` (checker_15.rs): per (union, name hash), the name, the
+    /// `contextual_property_type_of_large_union` (`checker_15.rs`): per (union, name hash), the name, the
     /// `members_reset_epoch` it was computed in and the positions of the constituents that can contribute.
     pub(crate) contextual_relevant: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[u32]>)>>,
-    /// `discriminant_property_types` (relater_1.rs): per (union, name hash), the name, the `members_reset_epoch` it
-    /// was computed in and, by constituent, the property type when known for good.
+    /// `discriminant_property_types` (`relater_1.rs`): per (union, name hash), the name, the
+    /// `members_reset_epoch` it was computed in and, by constituent, the property type when known for good.
     pub(crate) discriminant_property_types: FxHashMap<(P<Type>, u32), Vec<(&'static str, u32, std::rc::Rc<[Option<Option<P<Type>>>]>)>>,
-    /// `constituent_flags` (checker_13.rs): the flags of the constituents of a large union or intersection, nested
-    /// ones included.
+    /// `constituent_flags` (`checker_13.rs`): the flags of the constituents of a large union or intersection,
+    /// nested ones included.
     pub(crate) constituent_flags: FxHashMap<P<Type>, TypeFlags>,
-    /// `intersection_recursion_ids` (relater_1.rs): the recursion identities of an intersection's constituents.
+    /// `intersection_recursion_ids` (`relater_1.rs`): the recursion identities of an intersection's
+    /// constituents.
     pub(crate) intersection_recursion_ids: FxHashMap<P<Type>, &'static [u64]>,
     /// Bumped whenever a type's resolved members are reset (`get_base_types`, `canonicalize_base_type_cycles`).
     pub(crate) members_reset_epoch: u32,
@@ -1363,24 +1371,35 @@ pub struct Checker {
     pub get_global_import_meta_type_cache: Option<P<Type>>,
     pub get_global_import_attributes_type_cache: Option<P<Type>>,
     pub get_global_import_attributes_type_checked_cache: Option<P<Type>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_non_nullable_type_alias_or_nil_cache: Option<Option<P<Symbol>>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_extract_symbol_cache: Option<Option<P<Symbol>>>,
     pub get_global_disposable_type_cache: Option<P<Type>>,
     pub get_global_async_disposable_type_cache: Option<P<Type>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_awaited_symbol_cache: Option<Option<P<Symbol>>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_awaited_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_nan_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_record_symbol_cache: Option<Option<P<Symbol>>>,
     pub get_global_template_strings_array_type_cache: Option<P<Type>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_es_symbol_constructor_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_es_symbol_constructor_type_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
     pub get_global_import_call_options_type_cache: Option<P<Type>>,
     pub get_global_import_call_options_type_checked_cache: Option<P<Type>>,
     pub get_global_promise_type_cache: Option<P<Type>>,
     pub get_global_promise_type_checked_cache: Option<P<Type>>,
     pub get_global_promise_like_type_cache: Option<P<Type>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_promise_constructor_symbol_cache: Option<Option<P<Symbol>>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_promise_constructor_symbol_or_nil_cache: Option<Option<P<Symbol>>>,
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub get_global_omit_symbol_cache: Option<Option<P<Symbol>>>,
     pub get_global_iterator_type_cache: Option<P<Type>>,
     pub get_global_iterable_type_cache: Option<P<Type>>,
@@ -1534,7 +1553,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         bigint_literal_types: FxHashMap::default(),
         enum_literal_types: FxHashMap::default(),
         enum_nan_literal_types: FxHashMap::default(),
-        indexed_access_types: Default::default(),
+        indexed_access_types: crate::basedmap::Based::default(),
         indexed_access_union_memo: FxHashMap::default(),
         template_literal_types: PackedMap::default(),
         string_mapping_types: FxHashMap::default(),
@@ -1569,10 +1588,10 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         class_expression_name_tables: FxHashMap::default(),
         name_resolver: dummy_resolver,
         name_resolver_for_suggestion: dummy_resolver,
-        tuple_types: Default::default(),
-        union_types: Default::default(),
-        union_of_union_types: Default::default(),
-        intersection_types: Default::default(),
+        tuple_types: crate::basedmap::Based::default(),
+        union_types: crate::basedmap::Based::default(),
+        union_of_union_types: crate::basedmap::Based::default(),
+        intersection_types: crate::basedmap::Based::default(),
         properties_types: FxHashMap::default(),
         diagnostics: ast::DiagnosticsCollection::default(),
         suggestion_diagnostics: ast::DiagnosticsCollection::default(),
@@ -1607,12 +1626,12 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         source_file_links: LinkStore::default(),
         reg_exp_scanner: None,
         pattern_for_type: FxHashMap::default(),
-        lazy_member_tables: Default::default(),
+        lazy_member_tables: crate::basedmap::Based::default(),
         lazy_unaffected: FxHashMap::default(),
         object_types_without_abstract_construct_signatures: FxHashMap::default(),
         structured_type_base_constraints: FxHashMap::default(),
-        object_type_instantiations: Default::default(),
-        lazy_mapped_tables: Default::default(),
+        object_type_instantiations: crate::basedmap::Based::default(),
+        lazy_mapped_tables: crate::basedmap::Based::default(),
         lazy_members: tsrs_core::lazymembers::enabled(),
         deep_nested_shadow: std::env::var("TSRS_DEEP_NESTED").is_ok_and(|v| v == "shadow"),
         lazy_tuples: tsrs_core::lazymembers::lazy_tuples(),
@@ -1623,7 +1642,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         lazy_has_prop: tsrs_core::lazymembers::lazy_has_prop(),
         lazy_unmatched: tsrs_core::lazymembers::lazy_unmatched(),
         lazy_empty: tsrs_core::lazymembers::lazy_empty(),
-        lazy_member_stats: Default::default(),
+        lazy_member_stats: tsrs_core::lazymembers::LazyMemberStats::default(),
         augment_filter: None,
         unmatched_found_pool: Vec::new(),
         name_counts_pool: Vec::new(),
@@ -1841,7 +1860,7 @@ pub fn new_checker(program: &'static dyn Program) -> Box<Checker> {
         non_existent_properties: Set::new(),
         deferred_diagnostic_callbacks: Vec::new(),
         exports_by_target_index: FxHashMap::default(),
-        module_export_index: Default::default(),
+        module_export_index: ModuleExportIndex::default(),
         alias_cache_blockers: 1,
         unassigned_type: dummy_type,
         type_to_string_nodebuilder: None,
@@ -2339,7 +2358,7 @@ impl Checker {
             non_existent_properties: base.non_existent_properties.clone(),
             deferred_diagnostic_callbacks: Vec::new(),
             exports_by_target_index: FxHashMap::default(),
-            module_export_index: Default::default(),
+            module_export_index: ModuleExportIndex::default(),
             alias_cache_blockers: base.alias_cache_blockers.clone(),
             unassigned_type: base.unassigned_type.clone(),
             type_to_string_nodebuilder: None,
@@ -2920,8 +2939,10 @@ impl Checker {
     }
 }
 
-/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`. Go builds a map and ranges over it in random order;
-/// a list in declaration order gives the spelling suggestion one answer when two of these tie.
+/// Go `var primitiveTypeAliasSuggestions = sync.OnceValue(...)`.
+///
+/// Go builds a map and ranges over it in random order; a list in declaration order gives the spelling
+/// suggestion one answer when two of these tie.
 pub fn primitive_type_alias_suggestions() -> &'static [(&'static str, P<Symbol>)] {
     static MAP: OnceLock<Vec<(&'static str, P<Symbol>)>> = OnceLock::new();
     MAP.get_or_init(|| {
@@ -2986,9 +3007,11 @@ bitflags! {
     }
 }
 
-/// Go `*ExportCollision` in `ExportCollisionTable`: owned by the table here. The table is local to one
-/// `getExportsOfModuleWorker` visit and nothing keeps a record past it, so an arena record (never freed) would only
-/// leak; owned records and their strings are dropped with the table (notes/mem-export-star-scratch.md).
+/// Go `*ExportCollision` in `ExportCollisionTable`: owned by the table here.
+///
+/// The table is local to one `getExportsOfModuleWorker` visit and nothing keeps a record past it, so an arena
+/// record (never freed) would only leak; owned records and their strings are dropped with the table
+/// (notes/mem-export-star-scratch.md).
 pub struct ExportCollision {
     pub specifier_text: String,
     pub exports_with_duplicate: Vec<P<Node>>,
@@ -3017,7 +3040,7 @@ impl CacheHashKey {
     }
 }
 
-/// Go `keyBuilder`; its methods are in checker_09.rs.
+/// Go `keyBuilder`; its methods are in `checker_09.rs`.
 pub struct keyBuilder {
     pub inline_length: usize,
     pub overflow_buffer: Option<Vec<u8>>, // Go nil slice = no overflow yet

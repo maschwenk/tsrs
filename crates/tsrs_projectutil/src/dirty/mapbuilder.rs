@@ -13,6 +13,7 @@ pub struct MapBuilder<K, VBase, VBuilder> {
 }
 
 // mapbuilder.go:14
+#[expect(clippy::implicit_hasher, reason = "The API deliberately accepts only FxHashMap, as required by the workspace hashing policy.")]
 pub fn new_map_builder<K, VBase, VBuilder>(
     base: Arc<FxHashMap<K, VBase>>,
     to_builder: impl Fn(&VBase) -> VBuilder + Send + Sync + 'static,
@@ -40,7 +41,7 @@ impl<K: Hash + Eq + Clone, VBase: Clone, VBuilder: Clone> MapBuilder<K, VBase, V
     // copies the keys into a set
     pub fn clear(&mut self) {
         self.dirty = FxHashMap::default();
-        let mut deleted = FxHashSet::with_capacity_and_hasher(self.base.len(), Default::default());
+        let mut deleted = FxHashSet::with_capacity_and_hasher(self.base.len(), rustc_hash::FxBuildHasher);
         deleted.extend(self.base.keys().map(std::clone::Clone::clone));
         self.deleted = Some(deleted);
     }

@@ -403,13 +403,13 @@ pub(crate) fn create_resolution_lookup_glob_mapper(
         if include_lib {
             globs.push(get_recursive_glob_pattern(&lib_directory_path));
         }
-        if node_modules_directories.len() > 0 {
+        if !node_modules_directories.is_empty() {
             let mut node_modules_globs: Vec<String> = node_modules_directories.keys().iter().map(|dir| get_recursive_glob_pattern(dir)).collect();
             node_modules_globs.sort();
             globs.extend(node_modules_globs);
         }
         let mut outside_dirs = Vec::new();
-        if external_directories.len() > 0 {
+        if !external_directories.is_empty() {
             let external_dir_strings: Vec<String> = external_directories.keys().iter().map(std::string::ToString::to_string).collect();
             let (mut external_directory_parents, ignored_external_dirs) = tspath::get_common_parents(
                 &external_dir_strings,

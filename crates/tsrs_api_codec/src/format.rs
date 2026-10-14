@@ -1,5 +1,6 @@
-//! Wire constants of the binary source file format (pinned `tsc/internal/api/encoder/encoder.go`). The layout
-//! is documented there in full ("Source File Binary Format"); the client decoder is
+//! Wire constants of the binary source file format (pinned `tsc/internal/api/encoder/encoder.go`).
+//!
+//! The layout is documented there in full ("Source File Binary Format"); the client decoder is
 //! `packages/typescript/src/api/node/node.infrastructure.ts` + `protocol.generated.ts`.
 
 // Byte offsets of the fields of one node record.
@@ -21,7 +22,7 @@ pub const NODE_DATA_TYPE_MASK: u32 = 0xc0_00_00_00;
 pub const NODE_DATA_CHILD_MASK: u32 = 0x00_00_00_ff;
 pub const NODE_DATA_STRING_INDEX_MASK: u32 = 0x00_ff_ff_ff;
 
-/// `kind` of a NodeList record.
+/// `kind` of a `NodeList` record.
 pub const SYNTAX_KIND_NODE_LIST: u32 = u32::MAX;
 
 // Byte offsets of the header fields.
@@ -44,8 +45,8 @@ pub const HEADER_SIZE: usize = 64;
 /// Pinned `encoder.ProtocolVersion`, stored in the high byte of the metadata word.
 pub const PROTOCOL_VERSION: u8 = 9;
 
-/// "No data" marker for optional structured data / string indices in the SourceFile extended data.
+/// "No data" marker for optional structured data / string indices in the `SourceFile` extended data.
 pub const NO_STRUCTURED_DATA: u32 = 0xFFFF_FFFF;
 
-/// Byte size of the SourceFile extended data record (19 uint32 fields).
+/// Byte size of the `SourceFile` extended data record (19 uint32 fields).
 pub const SOURCE_FILE_EXTENDED_DATA_SIZE: usize = 76;

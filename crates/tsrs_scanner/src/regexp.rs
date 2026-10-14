@@ -151,6 +151,7 @@ fn add_unique(set: &mut Vec<&'static str>, name: &'static str) {
 }
 
 impl RegExpParser {
+    #[expect(clippy::fn_params_excessive_bools, reason = "The boolean parameters preserve the upstream Go function signature.")]
     pub(crate) fn new(
         scanner: Scanner,
         end: u32,

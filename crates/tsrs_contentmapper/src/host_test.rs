@@ -982,7 +982,7 @@ fn test_runner_consolidates_by_identity() {
     let project = r
         .project(ProjectSpec {
             mappers: vec![vue_a, vue_b, svelte],
-            compiler_options: compiler_options(CompilerOptions::default()),
+            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
             ..Default::default()
         })
         .unwrap();
@@ -1181,7 +1181,7 @@ fn test_project_lifecycle() {
         .project(ProjectSpec {
             config_file_name: "/repo/tsconfig.json".to_string(),
             mappers: vec![static_mapper],
-            compiler_options: compiler_options(CompilerOptions::default()),
+            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
         })
         .unwrap();
     assert_eq!(spawner.spawns.load(SeqCst), 0, "static identity should not spawn the mapper");
@@ -1191,7 +1191,7 @@ fn test_project_lifecycle() {
 
     let dynamic_a = project_mapper(r#"{"mode":"a"}"#, "dynamic", &["jsx"], true);
     let dynamic_b = project_mapper(r#"{"mode":"b"}"#, "dynamic", &[], true);
-    let dynamic_a_options = compiler_options(CompilerOptions::default());
+    let dynamic_a_options = compiler_options(tsrs_core::CompilerOptions::default());
     let project = |config_file_name: &str, mappers: Vec<&'static Mapper>, compiler_options: Option<P<CompilerOptions>>| {
         host.project(ProjectSpec { config_file_name: config_file_name.to_string(), mappers, compiler_options }).unwrap()
     };
@@ -1202,7 +1202,7 @@ fn test_project_lifecycle() {
         vec![dynamic_a],
         compiler_options(CompilerOptions { jsx: JsxEmit::React, ..Default::default() }),
     );
-    let project_b = project("/repo/b/tsconfig.json", vec![dynamic_a], compiler_options(CompilerOptions::default()));
+    let project_b = project("/repo/b/tsconfig.json", vec![dynamic_a], compiler_options(tsrs_core::CompilerOptions::default()));
     let project_a_again = project("/repo/a/tsconfig.json", vec![dynamic_a, dynamic_b], dynamic_a_options);
     assert_eq!(spawner.spawns.load(SeqCst), 0, "getting dynamic projects should not start the mapper");
     let project_a_identities = project_a.identities().unwrap();
@@ -1256,7 +1256,7 @@ fn test_project_methods_after_host_close() {
         .project(ProjectSpec {
             config_file_name: "/repo/tsconfig.json".to_string(),
             mappers: vec![mapper],
-            compiler_options: compiler_options(CompilerOptions::default()),
+            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
         })
         .unwrap();
     project.transform(mapper, request("/repo/file.ext", "x")).unwrap();
@@ -1287,7 +1287,7 @@ fn project_error_kind(mapper_process: recordingMapper, project_mapper_: &'static
         .project(ProjectSpec {
             config_file_name: "/repo/tsconfig.json".to_string(),
             mappers: vec![project_mapper_],
-            compiler_options: compiler_options(CompilerOptions::default()),
+            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
         })
         .unwrap();
     let err = project.transform(project_mapper_, request("/repo/file.ext", "x")).unwrap_err();
@@ -1358,7 +1358,7 @@ fn test_project_rejects_invalid_option_diagnostic_path() {
     let project = host
         .project(ProjectSpec {
             mappers: vec![project_mapper],
-            compiler_options: compiler_options(CompilerOptions::default()),
+            compiler_options: compiler_options(tsrs_core::CompilerOptions::default()),
             ..Default::default()
         })
         .unwrap();

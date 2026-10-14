@@ -271,6 +271,7 @@ impl Checker {
      * its value is discarded (e.g. the left side of the comma operator).
      */
     // checker.go:13219
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_side_effect_free(&mut self, node: P<Node>) -> bool {
         let node = ast::skip_parentheses(node);
         match node.kind() {
@@ -630,6 +631,7 @@ impl Checker {
                 self.check_node_deferred(member_decl);
             }
             let member = member.unwrap();
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if computed_name_type.is_some() && !computed_name_type.unwrap().flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique) {
                 let computed_name_type = computed_name_type.unwrap();
                 let string_number_symbol_type = self.string_number_symbol_type;
@@ -990,6 +992,7 @@ impl Checker {
     }
 
     // checker.go:13826
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn has_default_value(&mut self, node: P<Node>) -> bool {
         ast::is_binding_element(node) && node.initializer().is_some()
             || ast::is_property_assignment(node) && self.has_default_value(node.initializer().unwrap())
@@ -1003,6 +1006,7 @@ impl Checker {
     }
 
     /// `is_const_context`, and `get_contextual_type(node, ContextFlags::None)` when it was computed on the way.
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn is_const_context_ex(&mut self, node: P<Node>) -> (bool, Option<Option<P<Type>>>) {
         let parent = node.parent().unwrap();
         if ast::is_const_assertion(parent) || self.is_inline_import_attributes(node) {
@@ -2239,7 +2243,7 @@ impl Checker {
     pub(crate) fn get_target_of_module_default(&mut self, module_symbol: P<Symbol>, node: P<Node>, dont_resolve_alias: bool) -> Option<P<Symbol>> {
         let file = module_symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d));
         let specifier = self.get_module_specifier_for_import_or_export(node);
-        let export_default_symbol: Option<P<Symbol>>;
+
         let mut export_module_dot_exports_symbol: Option<P<Symbol>> = None;
         if is_shorthand_ambient_module_symbol(module_symbol) {
             // !!! exportDefaultSymbol = moduleSymbol
@@ -2253,7 +2257,7 @@ impl Checker {
         {
             export_module_dot_exports_symbol = self.resolve_export_by_name(module_symbol, InternalSymbolNameModuleExports, Some(node), dont_resolve_alias);
         }
-        if export_module_dot_exports_symbol.is_some() {
+        let export_default_symbol: Option<P<Symbol>> = if export_module_dot_exports_symbol.is_some() {
             // We have a transpiled default import where the `require` resolves to an ES module with a `module.exports` named
             // export. With `esModuleInterop` (always enabled), this will work:
             //
@@ -2262,8 +2266,8 @@ impl Checker {
             self.mark_symbol_of_alias_declaration_if_type_only(Some(node), None);
             return export_module_dot_exports_symbol;
         } else {
-            export_default_symbol = self.resolve_export_by_name(module_symbol, InternalSymbolNameDefault, Some(node), dont_resolve_alias);
-        }
+            self.resolve_export_by_name(module_symbol, InternalSymbolNameDefault, Some(node), dont_resolve_alias)
+        };
         let Some(specifier) = specifier else {
             return export_default_symbol;
         };

@@ -809,8 +809,8 @@ impl Checker {
             prop = self.get_property_of_type_ex(apparent_type, right.text(), is_const_enum_object_type(apparent_type) /*skipObjectFunctionPropertyAugment*/, node.kind() == Kind::QualifiedName /*includeTypeOnlyMembers*/);
         }
         self.mark_linked_references(node, ReferenceHint::Property, prop, Some(left_type));
-        let prop_type: P<Type>;
-        match prop {
+
+        let prop_type: P<Type> = match prop {
             None => {
                 let mut index_info: Option<P<IndexInfo>> = None;
                 if !ast::is_private_identifier(right) && (assignment_kind == AssignmentKind::None || !self.is_generic_object_type(left_type) || is_this_type_parameter(left_type)) {
@@ -857,7 +857,7 @@ impl Checker {
                         self.add_deprecated_suggestion(right, &[declaration], right.text());
                     }
                 }
-                prop_type = pt;
+                pt
             }
             Some(prop) => {
                 let target_prop_symbol = self.resolve_alias_with_deprecation_check(prop, right);
@@ -874,15 +874,15 @@ impl Checker {
                     self.error(Some(right), &diagnostics::Cannot_assign_to_0_because_it_is_a_read_only_property, &[&right.text()]);
                     return self.error_type;
                 }
-                prop_type = if self.is_this_property_access_in_constructor(node, prop) {
+                if self.is_this_property_access_in_constructor(node, prop) {
                     self.auto_type
                 } else if write_only || ast::is_write_only_access(node) {
                     self.get_write_type_of_symbol(prop).unwrap()
                 } else {
                     self.get_type_of_symbol(prop)
-                };
+                }
             }
-        }
+        };
         self.get_flow_type_of_access_expression(node, prop, prop_type, right, check_mode)
     }
 
@@ -1258,6 +1258,7 @@ impl Checker {
      * Climbs up parents to a heritage clause element and returns its entity name.
      */
     // checker.go:11879
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_entity_name_for_extending_interface(&mut self, node: P<Node>) -> Option<P<Node>> {
         match node.kind() {
             Kind::Identifier | Kind::QualifiedName | Kind::PropertyAccessExpression => {
@@ -2133,12 +2134,12 @@ impl Checker {
                 // otherwise just check each operand separately and report errors as normal
                 let left_ok = self.check_arithmetic_operand_type(left, left_type, &diagnostics::The_left_hand_side_of_an_arithmetic_operation_must_be_of_type_any_number_bigint_or_an_enum_type, true /*isAwaitValid*/);
                 let right_ok = self.check_arithmetic_operand_type(right, right_type, &diagnostics::The_right_hand_side_of_an_arithmetic_operation_must_be_of_type_any_number_bigint_or_an_enum_type, true /*isAwaitValid*/);
-                let result_type: P<Type>;
+
                 // If both are any or unknown, allow operation; assume it will resolve to number
-                if self.is_type_assignable_to_kind(left_type, TypeFlags::AnyOrUnknown) && self.is_type_assignable_to_kind(right_type, TypeFlags::AnyOrUnknown)
+                let result_type: P<Type> = if self.is_type_assignable_to_kind(left_type, TypeFlags::AnyOrUnknown) && self.is_type_assignable_to_kind(right_type, TypeFlags::AnyOrUnknown)
                     || !self.maybe_type_of_kind(left_type, TypeFlags::BigIntLike) && !self.maybe_type_of_kind(right_type, TypeFlags::BigIntLike)
                 {
-                    result_type = self.number_type;
+                    self.number_type
                 } else if self.both_are_big_int_like(left_type, right_type) {
                     match operator {
                         Kind::GreaterThanGreaterThanGreaterThanToken | Kind::GreaterThanGreaterThanGreaterThanEqualsToken => {
@@ -2151,11 +2152,11 @@ impl Checker {
                         }
                         _ => {}
                     }
-                    result_type = self.bigint_type;
+                    self.bigint_type
                 } else {
                     self.report_operator_error(left_type, operator, right_type, error_node, Some(&mut |c: &mut Checker, l: P<Type>, r: P<Type>| c.both_are_big_int_like(l, r)));
-                    result_type = self.error_type;
-                }
+                    self.error_type
+                };
                 if left_ok && right_ok {
                     self.check_assignment_operator(left, operator, right, left_type, result_type);
                     match operator {

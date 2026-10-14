@@ -2543,7 +2543,8 @@ function generateCode() {
                     method = "value";
                 }
             }
-            writeLine(`        w.${method}(${rustStr(prop.name)}, &self.${f.rust});`);
+            const value = method === "opt" ? `self.${f.rust}.as_ref()` : `&self.${f.rust}`;
+            writeLine(`        w.${method}(${rustStr(prop.name)}, ${value});`);
         }
         writeLine("        w.finish()");
         writeLine("    }");
@@ -3137,9 +3138,9 @@ function generateCode() {
         const errInvalidValueExpr = `Err(JsonError::method(Self::GO_TYPE, err_invalid_value(${rustStr(name)}, v)))`;
         const errInvalidKindExpr = `Err(JsonError::method(Self::GO_TYPE, err_invalid_kind(${rustStr(name)}, k)))`;
 
-        function armAssign(entry: UnionArm, indent: string, expr: string) {
+        function armAssign(entry: UnionArm, indent: string, expr: string, tail = false) {
             writeLine(`${indent}o.${rustField.get(entry.fieldName)} = ${expr};`);
-            writeLine(`${indent}return Ok(o);`);
+            writeLine(`${indent}${tail ? "" : "return "}Ok(o)${tail ? "" : ";"}`);
         }
 
         // Try-each decoding of the given entries (Go's speculative json.Unmarshal).
@@ -3156,10 +3157,12 @@ function generateCode() {
             disc: NonNullable<ReturnType<typeof findDiscriminatorField>>,
             indent: string,
         ): boolean {
+            const presence = disc.unmapped.length > 1 ? findPresenceDiscriminator(disc.unmapped) : undefined;
+            const tail = disc.unmapped.length === 1 || !!presence && collectAllPresenceChecks(presence).finalUnmapped.length === 1;
             writeLine(`${indent}match json_object_raw_field(v, ${rustStr(disc.fieldName)}).and_then(value_str) {`);
             for (const [value, entry] of disc.mapping) {
                 writeLine(`${indent}    Some(${rustStr(value)}) => {`);
-                armAssign(entry, indent + "        ", "arm_buffered(v)?");
+                armAssign(entry, indent + "        ", "arm_buffered(v)?", tail);
                 writeLine(`${indent}    }`);
             }
             let exhaustive = false;
@@ -3183,16 +3186,16 @@ function generateCode() {
             writeLine(`${indent}match state.discriminator_str() {`);
             for (const [value, entry] of disc.mapping) {
                 writeLine(`${indent}    Some(${rustStr(value)}) => {`);
-                armAssign(entry, indent + "        ", `Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, ${rustStr(disc.fieldName)})?)`);
+                armAssign(entry, indent + "        ", `Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, ${rustStr(disc.fieldName)})?)`, true);
                 writeLine(`${indent}    }`);
             }
             if (disc.unmapped.length === 1) {
                 writeLine(`${indent}    _ => {`);
-                armAssign(disc.unmapped[0], indent + "        ", `Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, ${rustStr(disc.fieldName)})?)`);
+                armAssign(disc.unmapped[0], indent + "        ", `Some(unmarshal_discriminated_arm(v, Self::GO_TYPE, ${rustStr(disc.fieldName)})?)`, true);
                 writeLine(`${indent}    }`);
             }
             else {
-                writeLine(`${indent}    _ => return Err(state.invalid_discriminator(Self::GO_TYPE)),`);
+                writeLine(`${indent}    _ => Err(state.invalid_discriminator(Self::GO_TYPE)),`);
             }
             writeLine(`${indent}}`);
         }
@@ -3218,7 +3221,7 @@ function generateCode() {
                 // Exactly 1 entry: it's the only remaining variant after dispatch,
                 // so use a hard error return instead of speculative decoding.
                 for (const entry of unmapped) {
-                    armAssign(entry, indent, "arm_buffered(v)?");
+                    armAssign(entry, indent, "arm_buffered(v)?", true);
                 }
                 return unmapped.length === 1;
             }
@@ -3252,19 +3255,20 @@ function generateCode() {
             indent: string,
         ): boolean {
             const { allChecks, finalUnmapped } = collectAllPresenceChecks(pres);
+            const tail = finalUnmapped.length === 1;
             const args = allChecks.map(c => rustStr(c.jsonFieldName)).join(", ");
             writeLine(`${indent}match json_object_has_key(v, &[${args}]) {`);
             for (let i = 0; i < allChecks.length; i++) {
                 writeLine(`${indent}    // ${allChecks[i].jsonFieldName}`);
                 writeLine(`${indent}    Some(${i}) => {`);
-                armAssign(allChecks[i].entry, indent + "        ", "arm_buffered(v)?");
+                armAssign(allChecks[i].entry, indent + "        ", "arm_buffered(v)?", tail);
                 writeLine(`${indent}    }`);
             }
             if (finalUnmapped.length > 0) {
                 writeLine(`${indent}    _ => {`);
                 if (finalUnmapped.length === 1) {
                     // Only one variant left after dispatch — use hard error return.
-                    armAssign(finalUnmapped[0], indent + "        ", "arm_buffered(v)?");
+                    armAssign(finalUnmapped[0], indent + "        ", "arm_buffered(v)?", tail);
                 }
                 else {
                     tryEach(finalUnmapped, indent + "        ");
@@ -3351,10 +3355,10 @@ function generateCode() {
 
         function unambiguousArm(kind: string, entry: UnionArm, indent: string) {
             if (kind === "boolean") {
-                armAssign(entry, indent, "Some(k == b't')");
+                armAssign(entry, indent, "Some(k == b't')", true);
             }
             else {
-                armAssign(entry, indent, "arm(v)?");
+                armAssign(entry, indent, "arm(v)?", true);
             }
         }
 

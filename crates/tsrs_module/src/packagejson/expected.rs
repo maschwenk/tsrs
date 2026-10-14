@@ -82,6 +82,7 @@ impl ExpectedValue for Vec<String> {
     }
 }
 
+#[expect(clippy::implicit_hasher, reason = "The API deliberately accepts only FxHashMap, as required by the workspace hashing policy.")]
 impl ExpectedValue for FxHashMap<String, String> {
     fn unmarshal_from(&mut self, value: &Json) -> bool {
         match value {

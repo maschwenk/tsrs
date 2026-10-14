@@ -23,7 +23,7 @@
 //! (`ScanError::args`); pass them on as `&[&dyn Display]`.
 //!
 //! Speculation (Go `Mark` / `Rewind`). `mark()` returns a `Copy` `ScannerState` snapshot
-//! (positions, token, token value, flags, JSDoc asterisk depth and the slice of comment directives
+//! (positions, token, token value, flags, `JSDoc` asterisk depth and the slice of comment directives
 //! collected so far); `rewind(state)` restores it. Adding a directive copies the slice into a new
 //! arena slice, so a saved snapshot is never modified, which is what Go's shared-backing-array
 //! slice restore amounts to. Buffered
@@ -54,6 +54,7 @@ use crate::utilities::token_is_identifier_or_keyword;
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub(crate) enum IdentifierVariant {
     Standard,
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     JSX,
     RegExpGroupName,
 }
@@ -1916,7 +1917,7 @@ impl Scanner {
         self.scan_jsx_attribute_value()
     }
 
-    /** In addition to the usual JSDoc ast.Kinds, can also return ast.KindJSDocCommentTextToken */
+    /** In addition to the usual `JSDoc` ast.Kinds, can also return ast.KindJSDocCommentTextToken */
     pub fn scan_jsdoc_comment_text_token(&mut self, in_backticks: bool) -> Kind {
         self.state.full_start_pos = self.state.pos;
         self.state.token_flags = TokenFlags::None;
@@ -2508,14 +2509,14 @@ impl Scanner {
         self.state.pos += 2;
         let start = self.state.pos;
         let extended = self.char() == Some(b'{');
-        let hex_digits;
-        if extended {
+
+        let hex_digits = if extended {
             self.state.pos += 1;
-            hex_digits = self.scan_hex_digits(1, true, false);
+            self.scan_hex_digits(1, true, false)
         } else {
             self.state.token_flags |= TokenFlags::UnicodeEscape;
-            hex_digits = self.scan_hex_digits(4, false, false);
-        }
+            self.scan_hex_digits(4, false, false)
+        };
         if hex_digits.is_empty() {
             self.state.token_flags |= TokenFlags::ContainsInvalidEscape;
             if should_emit_invalid_escape_error {
@@ -2688,13 +2689,13 @@ impl Scanner {
             self.state.token_value = self.canonical_number(self.state.token_value);
             return Kind::NumericLiteral;
         }
-        let result;
-        if fixed_part_end == self.state.pos {
-            result = self.scan_big_int_suffix();
+
+        let result = if fixed_part_end == self.state.pos {
+            self.scan_big_int_suffix()
         } else {
             self.state.token_value = self.canonical_number(self.state.token_value);
-            result = Kind::NumericLiteral;
-        }
+            Kind::NumericLiteral
+        };
         let (ch, _) = self.char_and_size();
         if is_identifier_start(ch) {
             let id_start = self.state.pos;

@@ -868,8 +868,8 @@ impl ExistingNodeTree {
         }
         if ast::is_type_predicate_node(node) {
             let tp = node.as_type_predicate_node();
-            let parameter_name;
-            if ast::is_identifier(tp.parameter_name) {
+
+            let parameter_name = if ast::is_identifier(tp.parameter_name) {
                 let (introduces_error, result, _) = self.track_existing_entity_name(c, tp.parameter_name, None);
                 // Should not usually happen the only case is when a type predicate comes from a JSDoc type annotation with it's own parameter symbol definition.
                 // /** @type {(v: unknown) => v is undefined} */
@@ -877,10 +877,10 @@ impl ExistingNodeTree {
                 if introduces_error {
                     bound.mark_error(None);
                 }
-                parameter_name = result;
+                result
             } else {
-                parameter_name = tp.parameter_name.clone_node(factory);
-            }
+                tp.parameter_name.clone_node(factory)
+            };
             let asserts_modifier = self.visit_node(c, v, tp.asserts_modifier);
             let type_ = self.visit_node(c, v, tp.type_);
             return Some(factory.update_type_predicate_node(node, asserts_modifier, parameter_name, type_));

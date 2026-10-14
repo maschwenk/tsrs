@@ -1,17 +1,20 @@
 use crate::*;
 use tsrs_core::{PKey, PSlot};
 
-/// Go `core.LinkStore` keyed by node or symbol identity. Most of the checker's link stores use this type;
-/// `KeyedLinkStore`, `SymbolReferenceLinkStore`, `NodeLinkStore` (Go `nodeLinkStore`) and `SymbolArenaLinkStore`
-/// (Go `symbolArenaLinkStore`) below cover the rest. (The node builder's link stores use `tsrs_core::LinkStore`.)
-/// Values live in the arena, so `get` hands out a `Copy` pointer whose `Cell` fields are mutated in place.
+/// Go `core.LinkStore` keyed by node or symbol identity.
 ///
-/// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its handle with compressed pointers,
-/// else its address) and the value's index (8 or 12 bytes, 4-aligned) instead of two pointers, and the values live in fixed-size arena chunks in first-access order (stable
-/// addresses, as before). 5.1M links in 26 stores on the private monorepo single.
+/// Most of the checker's link stores use this type; `KeyedLinkStore`, `SymbolReferenceLinkStore`,
+/// `NodeLinkStore` (Go `nodeLinkStore`) and `SymbolArenaLinkStore` (Go `symbolArenaLinkStore`) below cover
+/// the rest. (The node builder's link stores use `tsrs_core::LinkStore`.) Values live in the arena, so `get`
+/// hands out a `Copy` pointer whose `Cell` fields are mutated in place.
 ///
-/// Stable addresses: a chunk is never reallocated, freed or recycled, so a `P<V>` handed out stays valid for the
-/// store's lifetime. Callers rely on it: they keep links across accesses that create others, and
+/// Keyed by the key's identity like Go's `map[K]*V`. A slot is the key (`P::key`: its handle with compressed
+/// pointers, else its address) and the value's index (8 or 12 bytes, 4-aligned) instead of two pointers, and
+/// the values live in fixed-size arena chunks in first-access order (stable addresses, as before). 5.1M links
+/// in 26 stores on the private monorepo single.
+///
+/// Stable addresses: a chunk is never reallocated, freed or recycled, so a `P<V>` handed out stays valid for
+/// the store's lifetime. Callers rely on it: they keep links across accesses that create others, and
 /// `run_without_resolved_signature_caching` keeps them in a vector across a nested check.
 pub struct LinkStore<K: 'static, V: 'static> {
     slots: hashbrown::HashTable<LinkSlot>,
@@ -92,6 +95,7 @@ impl<K: 'static, V: 'static> LinkStore<K, V> {
     }
 
     /// Shared graph: an empty store that reads through to `self` (frozen).
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         LinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: Some(self) }
     }
@@ -137,8 +141,9 @@ impl<K: 'static, V: Default + LinkCopy + 'static> LinkStore<K, V> {
 }
 
 /// Shared graph: how a fork copies a link record of the frozen seed into its own store on first access.
-/// Records made only of `Cell`s copy bitwise (`bitwise_link_copy!`); records that own or point to mutable side
-/// objects copy those too.
+///
+/// Records made only of `Cell`s copy bitwise (`bitwise_link_copy!`); records that own or point to mutable
+/// side objects copy those too.
 pub trait LinkCopy {
     fn copy_link_from(&self, frozen: &Self);
 }
@@ -175,18 +180,22 @@ pub trait KeyedLinks {
     fn link_key(&self) -> &Cell<PKey>;
 }
 
-/// `LinkStore` for values with room for their key: a bucket holds only the value's index (4 bytes plus hashbrown's
-/// control byte, against 8 + 1), and a probe compares the key the value holds. `signature_links` and `type_node_links`
-/// keep the key in what was padding (`SignatureLinks` 12 -> 16 bytes in a 16-byte slot, `TypeNodeLinks` 20 -> 24 in
-/// 24, compressed pointers), so the values do not grow and the tables shrink by 4/9 (notes/mem-dense-link-tables.md:
-/// 18.0 -> 10.0 MiB each on vscode at one checker). Go's `LinkStore` maps the key's identity the same way.
+/// `LinkStore` for values with room for their key: a bucket holds only the value's index (4 bytes plus
+/// hashbrown's control byte, against 8 + 1), and a probe compares the key the value holds.
 ///
-/// The key is written before the index is inserted, so a probe never sees a value without its key (and a fresh value's
-/// key 0 is never a handle: the reservation never hands out offset 0). A hit loads the value the caller reads next; a
-/// false positive of hashbrown's 7-bit tag costs one value load; a rehash reads each value's key once.
+/// `signature_links` and `type_node_links` keep the key in what was padding (`SignatureLinks` 12 -> 16 bytes
+/// in a 16-byte slot, `TypeNodeLinks` 20 -> 24 in 24, compressed pointers), so the values do not grow and the
+/// tables shrink by 4/9 (notes/mem-dense-link-tables.md: 18.0 -> 10.0 MiB each on vscode at one checker).
+/// Go's `LinkStore` maps the key's identity the same way.
 ///
-/// Stable addresses: as `LinkStore`, the values sit in arena chunks that are never reallocated, freed or recycled, so
-/// a `P<V>` stays valid for the store's lifetime while the table of indexes grows and rehashes around it.
+/// The key is written before the index is inserted, so a probe never sees a value without its key (and a
+/// fresh value's key 0 is never a handle: the reservation never hands out offset 0). A hit loads the value
+/// the caller reads next; a false positive of hashbrown's 7-bit tag costs one value load; a rehash reads each
+/// value's key once.
+///
+/// Stable addresses: as `LinkStore`, the values sit in arena chunks that are never reallocated, freed or
+/// recycled, so a `P<V>` stays valid for the store's lifetime while the table of indexes grows and rehashes
+/// around it.
 pub struct KeyedLinkStore<K: 'static, V: 'static> {
     slots: hashbrown::HashTable<u32>, // the value's position in `chunks`
     chunks: Vec<P<PSlot<V>>>,         // first slot of each chunk
@@ -235,6 +244,7 @@ impl<K: 'static, V: KeyedLinks + 'static> KeyedLinkStore<K, V> {
     }
 
     /// Shared graph: an empty store that reads through to `self` (frozen).
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         KeyedLinkStore { slots: hashbrown::HashTable::new(), chunks: Vec::new(), len: 0, key: std::marker::PhantomData, parent: Some(self) }
     }
@@ -285,13 +295,15 @@ impl<K: 'static, V: KeyedLinks + Default + LinkCopy + 'static> KeyedLinkStore<K,
     }
 }
 
-/// Go `symbolReferenceLinks` (`core.LinkStore[*ast.Symbol, SymbolReferenceLinks]`). The record has one field,
-/// `referenceKinds`, a 4-byte `SymbolFlags`, kept in the slot next to the key (8 bytes with compressed pointers, the
-/// size of `LinkStore`'s key-and-index slot) instead of in an 8-byte arena slot of its own: -6.5 MB on vscode at one
-/// checker (notes/mem-dense-link-tables.md).
+/// Go `symbolReferenceLinks` (`core.LinkStore[*ast.Symbol, SymbolReferenceLinks]`).
 ///
-/// No stable address: the flags move when the table grows, so the store hands out no reference. Go's callers never
-/// keep the record: `symbolReferenced` ORs meanings into it and the unused-locals checks read it, each on the spot.
+/// The record has one field, `referenceKinds`, a 4-byte `SymbolFlags`, kept in the slot next to the key (8
+/// bytes with compressed pointers, the size of `LinkStore`'s key-and-index slot) instead of in an 8-byte
+/// arena slot of its own: -6.5 MB on vscode at one checker (notes/mem-dense-link-tables.md).
+///
+/// No stable address: the flags move when the table grows, so the store hands out no reference. Go's callers
+/// never keep the record: `symbolReferenced` ORs meanings into it and the unused-locals checks read it, each
+/// on the spot.
 #[derive(Default)]
 pub struct SymbolReferenceLinkStore {
     slots: hashbrown::HashTable<ReferenceKindsSlot>,
@@ -299,6 +311,7 @@ pub struct SymbolReferenceLinkStore {
 
 impl SymbolReferenceLinkStore {
     /// Shared graph: a copy (the slots are heap data of the frozen seed checker).
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         SymbolReferenceLinkStore { slots: self.slots.clone() }
     }
@@ -352,19 +365,22 @@ impl SymbolReferenceLinkStore {
     }
 }
 
-/// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores). Like Go, the id is looked up by indexing,
-/// not hashing: a group of `ID_GROUP` consecutive ids holds 2 bytes per id (the slot's offset from the group's first
-/// slot, 0 = no links), found through a vector indexed by group number (one `Option<P<IdGroup>>` per group of the id
-/// space below the highest id seen). The groups and the values live in the arena (the values in fixed-size chunks,
-/// in first-access order). Stable addresses: chunks are never reallocated, freed or recycled, so a `P<V>` stays valid
-/// for the store's lifetime (`value_symbol_links` callers keep links across other accesses).
+/// Links keyed by a node/symbol id (Go `PagedLinkStore`-backed stores).
 ///
-/// Node and symbol ids come from process-wide counters in per-thread blocks of 1,024, so with several checkers one
-/// checker's links are dense in its own blocks and spread thinly over the other checkers' (every checker touches
-/// most lib symbols, whichever checker numbered them). Groups are small (128 ids, 264 bytes) so that a thinly used
-/// block costs little: the 1,024-id pages they replace were 14% full on vscode at 64 checkers, and the ids-to-slots
-/// tables took 3.3 MB per checker (notes/mem-64.md). A group whose offsets outgrow 16 bits (a link made more than
-/// 65,535 links after the group's first) gets a 4-byte-per-id dense form, as the narrow pages did.
+/// Like Go, the id is looked up by indexing, not hashing: a group of `ID_GROUP` consecutive ids holds 2 bytes
+/// per id (the slot's offset from the group's first slot, 0 = no links), found through a vector indexed by
+/// group number (one `Option<P<IdGroup>>` per group of the id space below the highest id seen). The groups
+/// and the values live in the arena (the values in fixed-size chunks, in first-access order). Stable
+/// addresses: chunks are never reallocated, freed or recycled, so a `P<V>` stays valid for the store's
+/// lifetime (`value_symbol_links` callers keep links across other accesses).
+///
+/// Node and symbol ids come from process-wide counters in per-thread blocks of 1,024, so with several
+/// checkers one checker's links are dense in its own blocks and spread thinly over the other checkers' (every
+/// checker touches most lib symbols, whichever checker numbered them). Groups are small (128 ids, 264 bytes)
+/// so that a thinly used block costs little: the 1,024-id pages they replace were 14% full on vscode at 64
+/// checkers, and the ids-to-slots tables took 3.3 MB per checker (notes/mem-64.md). A group whose offsets
+/// outgrow 16 bits (a link made more than 65,535 links after the group's first) gets a 4-byte-per-id dense
+/// form, as the narrow pages did.
 pub struct IdLinkStore<V: 'static> {
     index: Vec<Option<P<IdGroup>>>,
     wide_slots: FxHashMap<u64, u32>, // ids >= 2^32 (long-running processes such as the test runner)
@@ -389,8 +405,10 @@ const _: () = assert!(std::mem::size_of::<IdGroup>() == if tsrs_core::COMPRESSED
 #[cfg(target_pointer_width = "32")]
 const _: () = assert!(std::mem::size_of::<IdGroup>() == 264);
 
-/// Kept for embedders (tsrslint) and the pool, which chose sparse id pages for multi-checker runs: the groups above
-/// made the sparse form unnecessary, so these are inert and `TSRS_SPARSE_ID_PAGES` is ignored.
+/// Preserves the configuration entry point used by embedders.
+///
+/// Kept for embedders (tsrslint) and the pool, which chose sparse id pages for multi-checker runs: the groups
+/// above made the sparse form unnecessary, so these are inert and `TSRS_SPARSE_ID_PAGES` is ignored.
 pub fn set_multiple_checkers(_multiple: bool) {}
 
 /// See `set_multiple_checkers`.
@@ -466,6 +484,7 @@ impl<V: 'static> IdLinkStore<V> {
     }
 
     /// Shared graph: an empty store that reads through to `self` (frozen).
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         IdLinkStore { index: Vec::new(), wide_slots: FxHashMap::default(), chunks: Vec::new(), len: 0, parent: Some(self) }
     }
@@ -562,22 +581,25 @@ impl<V: Default + LinkCopy + 'static> IdLinkStore<V> {
     }
 }
 
-/// Links keyed by a node or symbol id whose value is small (a 4-byte handle), stored in the table itself: no slot, no
-/// offset, no separate value chunk. Ids map through two levels that follow the per-thread id blocks of 1,024
-/// (`ast::use_id_blocks`): `blocks[id >> 10]` points at an arena table of 32 group pointers, and a group is an arena
-/// array of 32 values (`[V; 32]`, 128 bytes for a 4-byte `V`), allocated on the first access to one of its ids and
-/// default (unset) until written. A checker's own id blocks fill their groups; the blocks other checkers numbered get
-/// a 128-byte table and only the groups they touch (notes/mem-dense-link-tables.md: 0.98 / 0.67 of a group's ids have
-/// links at 1 / 32 checkers on vscode, against 0.98 / 0.41 for 128-id groups).
+/// Links keyed by a node or symbol id whose value is small (a 4-byte handle), stored in the table itself: no
+/// slot, no offset, no separate value chunk.
 ///
-/// Stable addresses: groups and tables are arena objects that are never freed, moved or recycled (like `IdLinkStore`'s
-/// groups and chunks), so a value handed out stays where it is for the store's lifetime. Callers keep the reference
-/// across later accesses that create other links (`get_resolved_symbol` holds it across `resolve_name`). Values are
-/// handed out as `&'static V`, not `P<V>`: a cell of a 4-byte value is 4-aligned, and a `P` handle names 8-byte units.
+/// Ids map through two levels that follow the per-thread id blocks of 1,024 (`ast::use_id_blocks`):
+/// `blocks[id >> 10]` points at an arena table of 32 group pointers, and a group is an arena array of 32
+/// values (`[V; 32]`, 128 bytes for a 4-byte `V`), allocated on the first access to one of its ids and
+/// default (unset) until written. A checker's own id blocks fill their groups; the blocks other checkers
+/// numbered get a 128-byte table and only the groups they touch (notes/mem-dense-link-tables.md: 0.98 / 0.67
+/// of a group's ids have links at 1 / 32 checkers on vscode, against 0.98 / 0.41 for 128-id groups).
 ///
-/// Unlike `IdLinkStore`, the store cannot tell an id whose links were never created from one whose links are unset:
-/// both read as `V::default()`. That is the same answer for every reader of a value whose fields are all unset by
-/// default (`SymbolNodeLinks`).
+/// Stable addresses: groups and tables are arena objects that are never freed, moved or recycled (like
+/// `IdLinkStore`'s groups and chunks), so a value handed out stays where it is for the store's lifetime.
+/// Callers keep the reference across later accesses that create other links (`get_resolved_symbol` holds it
+/// across `resolve_name`). Values are handed out as `&'static V`, not `P<V>`: a cell of a 4-byte value is
+/// 4-aligned, and a `P` handle names 8-byte units.
+///
+/// Unlike `IdLinkStore`, the store cannot tell an id whose links were never created from one whose links are
+/// unset: both read as `V::default()`. That is the same answer for every reader of a value whose fields are
+/// all unset by default (`SymbolNodeLinks`).
 pub struct InlineIdStore<V: 'static> {
     blocks: Vec<Option<P<InlineBlock<V>>>>,
     wide: FxHashMap<u64, P<V>>, // ids >= 2^32 (long-running processes such as the test runner)
@@ -621,6 +643,7 @@ impl<V: 'static> InlineIdStore<V> {
     }
 
     /// Shared graph: an empty store that reads through to `self` (frozen).
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         InlineIdStore { blocks: Vec::new(), wide: FxHashMap::default(), parent: Some(self) }
     }
@@ -725,9 +748,12 @@ impl<V: Default + LinkCopy + 'static> InlineIdStore<V> {
     }
 }
 
-/// Go `nodeLinkStore`: keyed by the node id, so every access assigns the node its id (`ast.GetNodeId`) the way Go
-/// does. Ids are observable (e.g. in cache keys and internal names), so the assignment order must match. The values
-/// are stored inline (`InlineIdStore`): its one user, `symbol_node_links`, holds a 4-byte symbol handle per node.
+/// Go `nodeLinkStore`: keyed by the node id, so every access assigns the node its id (`ast.GetNodeId`) the
+/// way Go does.
+///
+/// Ids are observable (e.g. in cache keys and internal names), so the assignment order must match. The values
+/// are stored inline (`InlineIdStore`): its one user, `symbol_node_links`, holds a 4-byte symbol handle per
+/// node.
 pub struct NodeLinkStore<V: 'static> {
     store: InlineIdStore<V>,
 }
@@ -740,6 +766,7 @@ impl<V: 'static> Default for NodeLinkStore<V> {
 
 impl<V: 'static> NodeLinkStore<V> {
     /// Shared graph: see `InlineIdStore::fork`.
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         NodeLinkStore { store: self.store.fork() }
     }
@@ -778,9 +805,10 @@ impl<V: 'static> NodeLinkStore<V> {
 }
 
 /// Go `symbolArenaLinkStore`: keyed by the symbol id, so every access assigns the symbol its id
-/// (`ast.GetSymbolId`) the way Go does. Symbol ids are observable (the internal names of unique-symbol-keyed
-/// properties embed them, and the node builder counts their length toward truncation), so the assignment order
-/// must match.
+/// (`ast.GetSymbolId`) the way Go does.
+///
+/// Symbol ids are observable (the internal names of unique-symbol-keyed properties embed them, and the node
+/// builder counts their length toward truncation), so the assignment order must match.
 pub struct SymbolArenaLinkStore<V: 'static> {
     store: IdLinkStore<V>,
 }
@@ -793,6 +821,7 @@ impl<V: 'static> Default for SymbolArenaLinkStore<V> {
 
 impl<V: 'static> SymbolArenaLinkStore<V> {
     /// Shared graph: see `IdLinkStore::fork`.
+    #[must_use]
     pub fn fork(&'static self) -> Self {
         SymbolArenaLinkStore { store: self.store.fork() }
     }

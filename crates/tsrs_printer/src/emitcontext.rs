@@ -51,9 +51,13 @@ pub fn new_emit_context() -> P<EmitContext> {
     new_emit_context_in(false)
 }
 
+/// Places temporary emit nodes in the current scratch region.
+///
 /// tsrs-only: an emit context whose nodes die with the thread's scratch region (one file's emit,
-/// notes/mem-emit-regions.md): the context and every node its factory creates (also through a node builder that
-/// uses it) are allocated there (`P::new_scratch`). Without an entered scratch region it is `new_emit_context`.
+/// notes/mem-emit-regions.md): the context and every node its factory creates (also through a node builder
+/// that uses it) are allocated there (`P::new_scratch`).
+///
+/// Without an entered scratch region it is `new_emit_context`.
 pub fn new_scratch_emit_context() -> P<EmitContext> {
     new_emit_context_in(true)
 }
@@ -96,15 +100,15 @@ impl EmitContext {
     // scratch region for the scratch variants, freed with the region), so `reset` also releases the tables' memory
     // instead of keeping their capacity.
     pub fn reset(&self) {
-        *self.auto_generate.borrow_mut() = Default::default();
-        *self.text_source.borrow_mut() = Default::default();
-        *self.original.borrow_mut() = Default::default();
-        *self.emit_nodes.borrow_mut() = Default::default();
-        *self.assigned_name.borrow_mut() = Default::default();
-        *self.class_this.borrow_mut() = Default::default();
+        *self.auto_generate.borrow_mut() = rustc_hash::FxHashMap::default();
+        *self.text_source.borrow_mut() = rustc_hash::FxHashMap::default();
+        *self.original.borrow_mut() = rustc_hash::FxHashMap::default();
+        *self.emit_nodes.borrow_mut() = rustc_hash::FxHashMap::default();
+        *self.assigned_name.borrow_mut() = rustc_hash::FxHashMap::default();
+        *self.class_this.borrow_mut() = rustc_hash::FxHashMap::default();
         *self.var_scope_stack.borrow_mut() = Stack::default();
         *self.let_scope_stack.borrow_mut() = Stack::default();
-        *self.emit_helpers.borrow_mut() = Default::default();
+        *self.emit_helpers.borrow_mut() = tsrs_core::collections::OrderedSet::default();
     }
 
     // emitcontext.go:90

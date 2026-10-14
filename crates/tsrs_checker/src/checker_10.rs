@@ -1253,14 +1253,14 @@ impl Checker {
             // Go appends a possibly-nil result here; a nil constituent would crash the union below.
             let yielded = self.get_yielded_type_of_yield_expression(yield_expr, yield_expr_type, self.any_type, is_async).unwrap();
             append_if_unique(&mut yield_types, yielded);
-            let next_type;
-            if yield_expr.as_yield_expression().asterisk_token.is_some() {
+
+            let next_type = if yield_expr.as_yield_expression().asterisk_token.is_some() {
                 let use_ = if is_async { IterationUse::AsyncYieldStar } else { IterationUse::YieldStar };
                 let iteration_types = self.get_iteration_types_of_iterable(yield_expr_type, use_, yield_expr.expression());
-                next_type = iteration_types.next_type;
+                iteration_types.next_type
             } else {
-                next_type = self.get_contextual_type(yield_expr, ContextFlags::None);
-            }
+                self.get_contextual_type(yield_expr, ContextFlags::None)
+            };
             if let Some(next_type) = next_type {
                 append_if_unique(&mut next_types, next_type);
             }
@@ -1754,9 +1754,7 @@ impl Checker {
 
     // checker.go:21081
     pub(crate) fn instantiate_symbol_table(&mut self, symbols: Option<P<SymbolTable>>, m: P<TypeMapper>) -> Option<P<SymbolTable>> {
-        let Some(symbols) = symbols.filter(|s| !s.is_empty()) else {
-            return None;
-        };
+        let symbols = symbols.filter(|s| !s.is_empty())?;
         let result = SymbolTable::with_capacity(symbols.len());
         for (id, symbol) in symbols.entries() {
             if self.is_named_member(symbol, id) {
@@ -2184,6 +2182,7 @@ impl Checker {
     }
 
     // Go returns (member, ok); None here is !ok.
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub(crate) fn get_lazy_mapped_type_member(&mut self, t: P<Type>, lazy: &std::rc::Rc<LazyMappedTable>, name: &str) -> Option<Option<P<Symbol>>> {
         let existing = lazy.members.borrow().get(name).copied();
         if let Some(existing) = existing {
@@ -2754,7 +2753,7 @@ impl Checker {
         for &sig in new_signatures {
             let mut all_different = true;
             if !signatures.is_empty() {
-                for element in signatures.iter() {
+                for element in &signatures {
                     let s = *element;
                     if self.compare_signatures_identical(
                         s,
@@ -2782,15 +2781,13 @@ impl Checker {
         for info_slot in index_infos.iter_mut() {
             let info = *info_slot;
             if info.key_type.get() == new_info.key_type.get() {
-                let value_type;
-                let is_readonly;
-                if union {
-                    value_type = self.get_union_type(&[info.value_type(), new_info.value_type()]);
-                    is_readonly = info.is_readonly.get() || new_info.is_readonly.get();
+
+
+                let (value_type, is_readonly) = if union {
+                    (self.get_union_type(&[info.value_type(), new_info.value_type()]), info.is_readonly.get() || new_info.is_readonly.get())
                 } else {
-                    value_type = self.get_intersection_type(&[info.value_type(), new_info.value_type()]);
-                    is_readonly = info.is_readonly.get() && new_info.is_readonly.get();
-                }
+                    (self.get_intersection_type(&[info.value_type(), new_info.value_type()]), info.is_readonly.get() && new_info.is_readonly.get())
+                };
                 *info_slot = self.new_index_info(info.key_type(), value_type, is_readonly, None, &[]);
                 return index_infos.to_vec();
             }

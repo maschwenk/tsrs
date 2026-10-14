@@ -163,7 +163,7 @@ pub(crate) fn get_resolved_package_names(ctx: &Context, program: &'static Progra
             .extend(types.iter().filter_map(|name| if name != "*" { Some(module::get_package_name_from_types_package_name(name)) } else { None }));
     }
 
-    if unresolved_package_names.len() > 0 {
+    if !unresolved_package_names.is_empty() {
         let mut checker = program.get_type_checker(ctx);
         // read-only globals lookup, then adds to a set; Go ranges the set too
         resolved_package_names.m.extend(unresolved_package_names.keys().iter().filter_map(|name| {

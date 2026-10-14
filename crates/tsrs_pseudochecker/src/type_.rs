@@ -40,9 +40,11 @@ pub enum PseudoTypeKind {
     BigIntLiteral,
 }
 
-/// Go `PseudoType` (handled as `P<PseudoType>`, immutable). Go's `data pseudoTypeData` interface, whose
-/// implementations embed the `PseudoType` header, is the `data` enum; `as_pseudo_type_x()` are Go's
-/// `AsPseudoTypeX()` casts (panic on a shape mismatch like the Go type assertion).
+/// Go `PseudoType` (handled as `P<PseudoType>`, immutable).
+///
+/// Go's `data pseudoTypeData` interface, whose implementations embed the `PseudoType` header, is the `data`
+/// enum; `as_pseudo_type_x()` are Go's `AsPseudoTypeX()` casts (panic on a shape mismatch like the Go type
+/// assertion).
 pub struct PseudoType {
     pub kind: PseudoTypeKind,
     pub data: PseudoTypeData,

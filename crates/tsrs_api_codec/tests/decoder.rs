@@ -148,10 +148,11 @@ fn decode_rejects_malformed_input_without_panicking() {
     assert!(errors > cases / 10);
 }
 
-/// Go `DecodeNodes` followed by `EncodeNode(node, nil)` (`EncodeSourceFile` for a SourceFile root), run by the
-/// pinned sources (gen/goprobe.sh, tests/golden/reencode), against the same in Rust, byte for byte. Covers the
-/// server's SourceFile encodings and every client-encoded print input, incl. synthesized trees whose wire
-/// positions are 0xFFFFFFFF (Go decodes them to int 4294967295, Rust to `TextPos::Synthetic`; both write 0xFFFFFFFF back).
+/// Go `DecodeNodes` followed by `EncodeNode(node, nil)` (`EncodeSourceFile` for a `SourceFile` root), run by
+/// the pinned sources (gen/goprobe.sh, tests/golden/reencode), against the same in Rust, byte for byte.
+/// Covers the server's `SourceFile` encodings and every client-encoded print input, incl. synthesized trees
+/// whose wire positions are 0xFFFFFFFF (Go decodes them to int 4294967295, Rust to `TextPos::Synthetic`; both
+/// write 0xFFFFFFFF back).
 #[test]
 fn decode_reencode_matches_pinned_go() {
     let dir = crate_dir().join("tests/golden/reencode");

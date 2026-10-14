@@ -47,6 +47,7 @@ impl classFieldsTransformer {
         // Register class alias BEFORE visiting members (Strada registers after, since its
         // onSubstituteNode runs at emit time; we substitute eagerly during transformation).
         let alias = self.get_class_lexical_environment().class_constructor.get();
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if is_class_with_constructor_reference && alias.is_some() {
             self.class_aliases.borrow_mut().insert(self.emit_context().most_original(Some(node)).unwrap(), alias.unwrap());
         }
@@ -807,9 +808,7 @@ impl classFieldsTransformer {
             } else {
                 self.transform_property(property, receiver)
             };
-            let Some(expression) = expression else {
-                return None;
-            };
+            let expression = expression?;
             self.emit_context().set_original_ex(expression, property, true /*allowOverwrite*/);
             self.emit_context().assign_comment_and_source_map_ranges(expression, property);
             Some(expression)
@@ -1584,13 +1583,13 @@ pub(crate) fn create_member_access_for_property_name(factory: &printer::NodeFact
         expression.set_loc(location.loc());
         return expression;
     }
-    let expression: P<Node>;
-    if ast::is_identifier(name) || ast::is_private_identifier(name) {
-        expression = factory.new_property_access_expression(receiver, None, name, NodeFlags::None);
+
+    let expression: P<Node> = if ast::is_identifier(name) || ast::is_private_identifier(name) {
+        factory.new_property_access_expression(receiver, None, name, NodeFlags::None)
     } else {
         // string or numeric literal
-        expression = factory.new_element_access_expression(receiver, None, name, NodeFlags::None);
-    }
+        factory.new_element_access_expression(receiver, None, name, NodeFlags::None)
+    };
     emit_context.set_comment_range(expression, name.loc());
     emit_context.set_source_map_range(expression, name.loc());
     emit_context.add_emit_flags(expression, printer::EmitFlags::NoNestedSourceMaps);

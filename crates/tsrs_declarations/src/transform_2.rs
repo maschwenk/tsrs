@@ -340,19 +340,19 @@ impl DeclarationTransformer {
                 *self.state.get_symbol_accessibility_diagnostic.borrow_mut() = create_get_symbol_accessibility_diagnostic_for_node(node);
             }
         }
-        let type_node;
+
 
         let mut flags = declarationEmitNodeBuilderFlags;
         if self.in_class_expression_declaration.get() {
             flags &= !nodebuilder::Flags::WriteClassExpressionAsTypeLiteral;
         }
-        if ast::has_inferred_type(node) {
-            type_node = self.resolver.create_type_of_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+        let type_node = if ast::has_inferred_type(node) {
+            self.resolver.create_type_of_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get())
         } else if ast::is_function_like(node) {
-            type_node = self.resolver.create_return_type_of_signature_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get());
+            self.resolver.create_return_type_of_signature_declaration(self.emit_context(), node, self.enclosing_declaration.get(), flags, declarationEmitInternalNodeBuilderFlags, self.tracker.get())
         } else {
             panic!("Unhandled node kind in ensureType: {:?}", node.kind());
-        }
+        };
 
         self.state.error_name_node.set(old_error_name_node);
         if let Some(old_diag) = old_diag {

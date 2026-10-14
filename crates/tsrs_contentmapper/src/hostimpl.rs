@@ -793,7 +793,7 @@ impl timingCollector {
             }
             (request_wait, t.mappers.clone())
         };
-        let mut result = Timings { mappers: OrderedMap::with_capacity_and_hasher(mappers.len(), Default::default()), request_wait };
+        let mut result = Timings { mappers: OrderedMap::with_capacity_and_hasher(mappers.len(), rustc_hash::FxBuildHasher), request_wait };
         result.mappers.extend(mappers.into_iter().map(|(identity, timing)| {
             (
                 identity,
@@ -1209,7 +1209,7 @@ impl Host for host {
             Entry::Occupied(entry) => return Some(entry.get().retain_locked()),
             Entry::Vacant(entry) => entry,
         };
-        let mut entries = OrderedMap::with_capacity_and_hasher(spec.mappers.len(), Default::default());
+        let mut entries = OrderedMap::with_capacity_and_hasher(spec.mappers.len(), rustc_hash::FxBuildHasher);
         for &mapper in &spec.mappers {
             let entry_key = format!("{}:{}", mapper.identity(), next_project_id);
             *next_project_id += 1;
@@ -1268,7 +1268,7 @@ impl Host for host {
         let project = self
             .project(ProjectSpec {
                 mappers: vec![mapper],
-                compiler_options: Some(P::new(CompilerOptions::default())),
+                compiler_options: Some(P::new(tsrs_core::CompilerOptions::default())),
                 ..Default::default()
             })
             // Go calls Transform and Close on the nil Project, which panics, once the host is closed.
@@ -1731,9 +1731,7 @@ impl Project for projectLease {
             self.mappers
                 .iter()
                 .filter_map(|&mapper| {
-                    let Some(entry) = projects.get(self.entry_key(mapper)) else {
-                        return None;
-                    };
+                    let entry = projects.get(self.entry_key(mapper))?;
                     if !entry.opened {
                         return None;
                     }

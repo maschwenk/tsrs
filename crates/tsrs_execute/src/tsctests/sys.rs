@@ -267,6 +267,7 @@ impl TestSys {
                 Some(_) => {}
             }
         }
+        #[expect(clippy::iter_over_hash_type, reason = "Go ranges this map too; the watcher coalesces these unique deleted paths before checking.")]
         for path in old_snap.snap.keys() {
             if self.map_fs().get_file_info(path).is_none() {
                 changes.push(super::mockwatch::FileChange { path: path.clone(), deleted: true });
@@ -286,12 +287,12 @@ impl TestSys {
             if file.mode.intersects(FileMode::Symlink) {
                 let target = self.map_fs().get_target_of_symlink(&path).unwrap_or_else(|| panic!("Failed to resolve symlink target: {path}"));
                 let entry = DiffEntry { content: String::new(), m_time: None, is_written: false, symlink_target: target };
-                add_fs_entry_diff(&serialized, current_libs.as_ref(), &mut diffs, Some(&entry), &path);
+                add_fs_entry_diff(serialized.as_ref(), current_libs.as_ref(), &mut diffs, Some(&entry), &path);
                 snap.insert(path, entry);
             } else if file.mode.is_regular() {
                 let content = sanitize_internal_symbol_name(&tsrs_core::utf8::from_utf8_lossy(&file.data));
                 let entry = DiffEntry { content, m_time: file.mod_time, is_written: written.contains(&path), symlink_target: String::new() };
-                add_fs_entry_diff(&serialized, current_libs.as_ref(), &mut diffs, Some(&entry), &path);
+                add_fs_entry_diff(serialized.as_ref(), current_libs.as_ref(), &mut diffs, Some(&entry), &path);
                 snap.insert(path, entry);
             }
         }
@@ -299,7 +300,7 @@ impl TestSys {
             let mut deleted: Vec<String> = Vec::new();
             deleted.extend(old.snap.keys().filter_map(|path| if self.map_fs().get_file_info(path).is_none() { Some(path.clone()) } else { None }));
             for path in deleted {
-                add_fs_entry_diff(&serialized, current_libs.as_ref(), &mut diffs, None, &path);
+                add_fs_entry_diff(serialized.as_ref(), current_libs.as_ref(), &mut diffs, None, &path);
             }
         }
         *serialized = Some(Snapshot { snap, default_libs: current_libs.unwrap_or_default() });
@@ -367,14 +368,14 @@ impl TestSys {
 
 // fsbaselineutil addFsEntryDiff
 fn add_fs_entry_diff(
-    serialized: &Option<Snapshot>,
+    serialized: Option<&Snapshot>,
     current_libs: Option<&FxHashSet<String>>,
     diffs: &mut FxHashMap<String, String>,
     new: Option<&DiffEntry>,
     path: &str,
 ) {
-    let old = serialized.as_ref().and_then(|s| s.snap.get(path));
-    let old_libs = serialized.as_ref().map(|s| &s.default_libs);
+    let old = serialized.and_then(|s| s.snap.get(path));
+    let old_libs = serialized.map(|s| &s.default_libs);
     match (old, new) {
         (None, Some(new)) => {
             if !current_libs.is_some_and(|l| l.contains(path)) {

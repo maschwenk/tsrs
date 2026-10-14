@@ -1292,7 +1292,7 @@ fn test_content_mapper_declaration_outputs_are_not_inputs() {
 
         let reloaded = parsed.reload_file_names_of_parsed_command_line(host.vfs);
         assert_eq!(reloaded.file_names(), parsed.file_names(), "{include}");
-        assert!(std::ptr::eq(&reloaded.content_mappers()[0], &parsed.content_mappers()[0]), "{include}: the copy shares the mappers");
+        assert!(std::ptr::eq(&raw const reloaded.content_mappers()[0], &raw const parsed.content_mappers()[0]), "{include}: the copy shares the mappers");
     }
 }
 

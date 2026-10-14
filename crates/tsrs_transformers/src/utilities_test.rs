@@ -10,7 +10,7 @@ use crate::is_original_node_single_line;
 fn a_synthesized_original_node_is_single_line() {
     let file_name = "/a.ts";
     let file = tsrs_parser::parse_source_file(
-        SourceFileParseOptions { file_name: file_name.to_string(), path: Path::new(file_name.to_string()), external_module_indicator_options: Default::default() },
+        SourceFileParseOptions { file_name: file_name.to_string(), path: Path::new(file_name.to_string()), external_module_indicator_options: tsrs_ast::parseoptions::ExternalModuleIndicatorOptions::default() },
         "const a = 1;\nconst b = 2;\n",
         get_script_kind_from_file_name(file_name),
     );

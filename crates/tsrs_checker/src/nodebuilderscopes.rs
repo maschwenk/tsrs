@@ -225,10 +225,9 @@ fn push_fake_scope(b: &NodeBuilderImpl, c: &mut Checker, kind: &'static str, add
 fn bind_pattern(b: &NodeBuilderImpl, c: &mut Checker, p: P<Node>, add: AddSymbol) {
     if let Some(&e) = p.elements().first() {
         match e.kind() {
-            Kind::OmittedExpression => return,
+            Kind::OmittedExpression => (),
             Kind::BindingElement => {
                 bind_element(b, c, e, add);
-                return;
             }
             _ => panic!("Unhandled binding element kind"),
         }

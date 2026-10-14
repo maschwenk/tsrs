@@ -24,7 +24,7 @@ impl ParseConfigHost for configHost {
     fn fs(&self) -> &dyn FS {
         &*self.fs
     }
-    fn get_current_directory(&self) -> &str {
+    fn get_current_directory(&self) -> &'static str {
         "/"
     }
 }
@@ -83,7 +83,7 @@ fn compiler_program(files: &[(&'static str, String)]) -> &'static CompilerProgra
     let fs: Arc<dyn FS> = Arc::new(vfstest::from_map(files.iter().map(|(k, v)| (*k, v.as_str())), true));
     let config_host: &'static configHost = Box::leak(Box::new(configHost { fs }));
     let (config, diagnostics) = tsoptions::get_parsed_command_line_of_config_file("/src/tsconfig.json", None, None, config_host, None);
-    assert!(diagnostics.is_empty());
+    assert_eq!(diagnostics, [] as [tsrs_core::P<tsrs_ast::Diagnostic>; 0]);
     new_program(ProgramOptions::new(P::new(config.unwrap()), compiler_host(files)))
 }
 
@@ -149,7 +149,7 @@ fn run(config: &str, seed: u64, steps: usize) -> (usize, usize) {
     for step in 0..steps {
         let (name, variants) = VARIANTS[(splitmix(&mut rng) % VARIANTS.len() as u64) as usize];
         let mut text = variants[(splitmix(&mut rng) % variants.len() as u64) as usize].to_string();
-        if splitmix(&mut rng) % 7 == 0 {
+        if splitmix(&mut rng).is_multiple_of(7) {
             text.push_str("const = ;\n");
         }
         texts.insert(name, text);
@@ -165,7 +165,7 @@ fn run(config: &str, seed: u64, steps: usize) -> (usize, usize) {
         type_errors += usize::from(fresh.iter().any(|d| d.contains(" TS2322 ")));
         assert_eq!(incremental_diagnostics(&ctx, program), fresh, "{config}\nseed {seed}, step {step}: {name}\n{texts:#?}");
         // The watch computes the signatures while it waits for the next change, unless the change comes first.
-        if splitmix(&mut rng) % 3 != 0 {
+        if !splitmix(&mut rng).is_multiple_of(3) {
             stored += program.compute_placeholder_signatures(&ctx, 2);
         }
     }

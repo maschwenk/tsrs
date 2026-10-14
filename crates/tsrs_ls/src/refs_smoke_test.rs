@@ -149,7 +149,7 @@ fn setup(d: &dataset) -> (LanguageService, Context) {
     program.bind_source_files();
     let fs_for_lines = std::sync::Arc::clone(&fs);
     // Cached like the project system's snapshot line maps (keyword references land thousands of times in the libs).
-    let line_maps: Mutex<rustc_hash::FxHashMap<String, Arc<lsconv::LSPLineMap>>> = Mutex::new(Default::default());
+    let line_maps: Mutex<rustc_hash::FxHashMap<String, Arc<lsconv::LSPLineMap>>> = Mutex::new(rustc_hash::FxHashMap::default());
     let converters = lsconv::new_converters(lsproto::PositionEncodingKind::UTF16, move |file_name| {
         if let Some(line_map) = line_maps.lock().unwrap().get(file_name) {
             return Some(std::sync::Arc::clone(line_map));

@@ -343,7 +343,7 @@ impl DeclarationTransformer {
                 if let Some(export_equals) = export_equals {
                     let declarations = export_equals.declarations().to_vec();
                     if declarations.len() > 1 {
-                        for &node in declarations.iter() {
+                        for &node in &declarations {
                             self.state.add_diagnostic(create_diagnostic_for_node(node, &diagnostics::Multiple_module_exports_assignments_cannot_be_serialized_for_declaration_emit, &[]));
                         }
                     }
@@ -471,13 +471,11 @@ impl DeclarationTransformer {
                 return None;
             }
 
-            let Some(file) = self.host.get_source_file_from_reference(source_file, ref_) else {
-                return None;
-            };
+            let file = self.host.get_source_file_from_reference(source_file, ref_)?;
 
-            let decl_file_name: String;
-            if file.is_declaration_file() {
-                decl_file_name = file.file_name().to_string();
+
+            let decl_file_name: String = if file.is_declaration_file() {
+                file.file_name().to_string()
             } else {
                 let paths = self.host.get_output_paths_for(file, true);
                 // Try to use output path for referenced file, or output js path if that doesn't exist, or the input path if all else fails
@@ -488,8 +486,8 @@ impl DeclarationTransformer {
                 if name.is_empty() {
                     name = file.file_name().to_string();
                 }
-                decl_file_name = name;
-            }
+                name
+            };
             // Should only be missing if the source file is missing a fileName (at which point we can't name a reference to it anyway)
             // TODO: Shouldn't this be a crash or assert instead of a silent continue?
             if decl_file_name.is_empty() {

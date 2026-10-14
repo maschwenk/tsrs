@@ -755,6 +755,7 @@ fn get_yield_occurrences(node: P<Node>, source_file: P<SourceFile>) -> Vec<P<Nod
 }
 
 // documenthighlights.go:715
+#[expect(clippy::only_used_in_recursion, reason = "The pinned Go function also carries these parameters through recursion without otherwise reading them.")]
 fn traverse_without_crossing_function(node: P<Node>, source_file: P<SourceFile>, cb: &mut dyn FnMut(P<Node>)) {
     cb(node);
     if !ast::is_function_like(Some(node))

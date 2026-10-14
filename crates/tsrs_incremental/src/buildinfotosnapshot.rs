@@ -127,7 +127,7 @@ impl toSnapshot<'_> {
         dig: &BuildInfoDiagnosticsOfFile,
     ) -> std::sync::Arc<DiagnosticsOrBuildInfoDiagnosticsWithFileName> {
         std::sync::Arc::new(DiagnosticsOrBuildInfoDiagnosticsWithFileName {
-            diagnostics: Default::default(),
+            diagnostics: std::sync::Mutex::default(),
             build_info_diagnostics: self.to_build_info_diagnostics_with_file_name(&dig.diagnostics),
         })
     }
@@ -181,7 +181,7 @@ impl toSnapshot<'_> {
         self.snapshot.file_infos.range(|path, _info| {
             // Initialize to have no diagnostics if its not changed file
             if !self.snapshot.changed_files_set.has(path) {
-                self.snapshot.semantic_diagnostics_per_file.store(path.clone(), Default::default());
+                self.snapshot.semantic_diagnostics_per_file.store(path.clone(), std::sync::Arc::default());
             }
             true
         });

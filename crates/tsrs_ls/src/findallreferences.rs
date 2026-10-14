@@ -1302,9 +1302,7 @@ impl LanguageService {
         let mut links: Vec<lsproto::LocationLink> = Vec::with_capacity(entries.len());
         links.extend(entries.iter().filter_map(|entry| {
             // Get the selection range (the actual reference)
-            let Some(loc) = self.get_location_of_entry_for_feature(entry, feature) else {
-                return None;
-            };
+            let loc = self.get_location_of_entry_for_feature(entry, feature)?;
             let target_selection_range = loc.range;
             let mut target_range = target_selection_range;
 
@@ -1458,9 +1456,7 @@ impl LanguageService {
                 if !r.is_node_entry() {
                     return None;
                 }
-                let Some(node) = r.node() else {
-                    return None;
-                };
+                let node = r.node()?;
                 if decl_names.contains(&node) {
                     return None;
                 }
@@ -1662,10 +1658,9 @@ impl LanguageService {
         if !symbol.flags().intersects(SymbolFlags::Module) || symbol.declarations().is_empty() {
             return None;
         }
-        if let Some(module_source_file) = symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d)) {
+        {
+            let module_source_file = symbol.declarations().iter().copied().find(|&d| ast::is_source_file(d))?;
             module_source_file_name = module_source_file.as_source_file().file_name();
-        } else {
-            return None;
         }
         let export_equals = symbol.exports().and_then(|exports| exports.lookup(ast::InternalSymbolNameExportEquals));
         // If exportEquals != nil, we're about to add references to `import("mod")` anyway, so don't double-count them.
@@ -2167,18 +2162,18 @@ impl LanguageService {
             references.extend(exported.declarations().iter().filter_map(|&decl| {
                 let source_file = ast::get_source_file_of_node(decl).unwrap();
                 if source_files_set.has(&source_file.file_name().to_string()) {
-                    let node: P<Node>;
+
                     // At `module.exports = ...`, reference node is `module`
-                    if ast::is_binary_expression(decl) && ast::is_property_access_expression(decl.as_binary_expression().left) {
-                        node = decl.as_binary_expression().left.expression().unwrap();
+                    let node: P<Node> = if ast::is_binary_expression(decl) && ast::is_property_access_expression(decl.as_binary_expression().left) {
+                        decl.as_binary_expression().left.expression().unwrap()
                     } else if ast::is_export_assignment(decl) {
                         // Find the export keyword
                         let n = astnav::find_child_of_kind(decl, Kind::ExportKeyword, source_file);
                         assert!(n.is_some(), "Expected to find export keyword");
-                        node = n.unwrap();
+                        n.unwrap()
                     } else {
-                        node = ast::get_name_of_declaration(Some(decl)).unwrap_or(decl);
-                    }
+                        ast::get_name_of_declaration(Some(decl)).unwrap_or(decl)
+                    };
                     Some(new_node_entry(node))
                 } else {
                     None
@@ -3080,6 +3075,7 @@ impl RefState<'_> {
 
     // Go's `fromRoot` closure; it receives the state and the callbacks first (PORTING.md callback rule).
     // findallreferences.go:2600
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     fn from_root(
         &mut self,
         cb_symbol: &mut dyn FnMut(P<Symbol>, Option<P<Symbol>>, Option<P<Symbol>>) -> Option<P<Symbol>>,
@@ -3213,15 +3209,15 @@ impl RefState<'_> {
         // symbolAtLocation for a binding element is the local symbol. See if the search symbol is the property.
         // Don't do this when populating search set for a rename when prefix and suffix text will be provided -- just rename the local.
         if !is_for_rename_populate_search_symbol_set {
-            let binding_element_property_symbol: Option<P<Symbol>>;
-            if only_include_binding_element_at_reference_location {
+
+            let binding_element_property_symbol: Option<P<Symbol>> = if only_include_binding_element_at_reference_location {
                 if !is_object_binding_element_without_property_name(location.parent().unwrap()) {
                     return (None, EntryKind::None);
                 }
-                binding_element_property_symbol = get_property_symbol_from_binding_element(self.checker, location.parent().unwrap());
+                get_property_symbol_from_binding_element(self.checker, location.parent().unwrap())
             } else {
-                binding_element_property_symbol = get_property_symbol_of_object_binding_pattern_without_property_name(symbol, self.checker);
-            }
+                get_property_symbol_of_object_binding_pattern_without_property_name(symbol, self.checker)
+            };
             let Some(binding_element_property_symbol) = binding_element_property_symbol else {
                 return (None, EntryKind::None);
             };

@@ -546,7 +546,7 @@ impl Checker {
         const BITS: u32 = 12;
         let key = n.key();
         // The mask matters only with plain pointers, whose keys are 64-bit addresses.
-        let slot = (key.wrapping_mul(0x9E37_79B1) >> (32 - BITS)) as usize & ((1 << BITS) - 1);
+        let slot = tsrs_core::ptr::key_to_usize(key.wrapping_mul(0x9E37_79B1) >> (32 - BITS)) & ((1 << BITS) - 1);
         if self.node_file_cache.is_empty() {
             self.node_file_cache = vec![(0, 0, 0); 1 << BITS];
         }
@@ -1245,7 +1245,7 @@ impl<T: Copy + Eq + std::hash::Hash> orderedSet<T> {
             if self.values.len() <= orderedSetMapThreshold {
                 return;
             }
-            let mut m = FxHashSet::with_capacity_and_hasher(self.values.len(), Default::default());
+            let mut m = FxHashSet::with_capacity_and_hasher(self.values.len(), rustc_hash::FxBuildHasher);
             m.extend(self.values[..self.values.len() - 1].iter().copied());
             self.values_by_key = Some(m);
         }
@@ -1826,7 +1826,7 @@ pub(crate) fn get_any_import_syntax(node: P<Node>) -> Option<P<Node>> {
         Kind::ImportClause => node.parent(),
         Kind::NamespaceImport => node.parent().unwrap().parent(),
         Kind::ImportSpecifier => node.parent().unwrap().parent().unwrap().parent(),
-        _ => return None,
+        _ => None,
     }
 }
 

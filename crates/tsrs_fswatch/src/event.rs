@@ -254,9 +254,7 @@ impl eventListState {
         let mut out = Vec::with_capacity(self.entries.len());
         // order-independent: entries are keyed by path, so a batch has at most one event per path, and Go ranges the map too (getEvents: "Order is not guaranteed")
         out.extend(self.entries.iter().filter_map(|(path, e)| {
-            let Some(kind) = e.kind_since(start_seq) else {
-                return None;
-            };
+            let kind = e.kind_since(start_seq)?;
             Some(Event { kind, path: path.clone(), included_watch_root: e.included_watch_root })
         }));
         out

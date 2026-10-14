@@ -1121,6 +1121,7 @@ impl Checker {
     }
 
     // checker.go:3081
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_deprecated_suggestion_node(&mut self, node: P<Node>) -> Option<P<Node>> {
         let node = ast::skip_parentheses(node);
         match node.kind() {
@@ -2604,6 +2605,7 @@ impl Checker {
     // checker.go:4306
     pub(crate) fn check_class_declaration(&mut self, node: P<Node>) {
         let first_decorator = node.modifier_nodes().iter().copied().find(|&m| ast::is_decorator(m));
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if self.legacy_decorators
             && first_decorator.is_some()
             && node.members().iter().any(|&p| ast::has_static_modifier(p) && ast::is_private_identifier_class_element_declaration(p))

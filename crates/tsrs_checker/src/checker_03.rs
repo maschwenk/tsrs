@@ -578,6 +578,7 @@ impl Checker {
     }
 
     // checker.go:4815
+    #[expect(clippy::fn_params_excessive_bools, reason = "The boolean parameters preserve the upstream Go function signature.")]
     pub(crate) fn check_member_for_override_modifier_worker(&mut self, node: P<Node>, static_type: P<Type>, base_static_type: P<Type>, base_with_this: Option<P<Type>>, t: P<Type>, type_with_this: P<Type>, member_has_override_modifier: bool, member_has_abstract_modifier: bool, member_is_static: bool, member_is_parameter_property: bool, member: P<Symbol>, error_node: Option<P<Node>>) -> MemberOverrideStatus {
         let is_js = is_in_js_file(node);
         if member_has_override_modifier {
@@ -828,7 +829,7 @@ impl Checker {
             return;
         };
         // Go iterates a map here (random order); an insertion-ordered map keeps diagnostics deterministic.
-        let mut index_signature_map: collections::OrderedMap<P<Type>, Vec<P<Node>>> = Default::default();
+        let mut index_signature_map: collections::OrderedMap<P<Type>, Vec<P<Node>>> = tsrs_core::collections::OrderedMap::default();
         let declarations = index_symbol.declarations();
         for &declaration in declarations {
             if is_index_signature_declaration(declaration) {
@@ -1262,16 +1263,16 @@ impl Checker {
         if let Some(&t) = self.module_import_attributes_types.get(&symbol) {
             return t;
         }
-        let result;
+
         let module_decl = symbol.declarations().iter().copied().find(|&d| is_module_with_string_literal_name(d));
-        match module_decl {
+        let result = match module_decl {
             None => {
-                result = self.empty_object_type;
+                self.empty_object_type
             }
             Some(module_decl) => {
-                result = self.get_type_of_module_declaration_import_attributes(module_decl.as_module_declaration().attributes);
+                self.get_type_of_module_declaration_import_attributes(module_decl.as_module_declaration().attributes)
             }
-        }
+        };
         self.module_import_attributes_types.insert(symbol, result);
         result
     }
@@ -2484,6 +2485,7 @@ impl Checker {
     }
 
     // checker.go:6457
+    #[expect(clippy::only_used_in_recursion, reason = "The pinned Go function also carries these parameters through recursion without otherwise reading them.")]
     pub(crate) fn get_iteration_types_of_iterable_worker(&mut self, t: P<Type>, use_: IterationUse, error_node: Option<P<Node>>, no_cache: bool) -> IterationTypes {
         if t.flags().intersects(TypeFlags::Union) {
             let mut all_iteration_types: Vec<IterationTypes> = Vec::with_capacity(t.types().len());

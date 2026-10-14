@@ -98,6 +98,7 @@ impl Number {
     }
 
     // https://tc39.es/ecma262/2024/multipage/abstract-operations.html#sec-toint32
+    #[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
     pub(crate) fn to_int32(self) -> i32 {
         let mut x = self.0;
 
@@ -127,21 +128,25 @@ impl Number {
     }
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-signedRightShift
+    #[must_use]
     pub fn signed_right_shift(self, y: Number) -> Number {
         Number((self.to_int32() >> y.to_shift_count()) as f64)
     }
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-unsignedRightShift
+    #[must_use]
     pub fn unsigned_right_shift(self, y: Number) -> Number {
         Number((self.to_uint32() >> y.to_shift_count()) as f64)
     }
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-leftShift
+    #[must_use]
     pub fn left_shift(self, y: Number) -> Number {
         Number((self.to_int32() << y.to_shift_count()) as f64)
     }
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-bitwiseNOT
+    #[must_use]
     pub fn bitwise_not(self) -> Number {
         Number((!self.to_int32()) as f64)
     }
@@ -149,24 +154,29 @@ impl Number {
     // The below are implemented by https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numberbitwiseop.
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-bitwiseOR
+    #[must_use]
     pub fn bitwise_or(self, y: Number) -> Number {
         Number((self.to_int32() | y.to_int32()) as f64)
     }
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-bitwiseAND
+    #[must_use]
     pub fn bitwise_and(self, y: Number) -> Number {
         Number((self.to_int32() & y.to_int32()) as f64)
     }
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-bitwiseXOR
+    #[must_use]
     pub fn bitwise_xor(self, y: Number) -> Number {
         Number((self.to_int32() ^ y.to_int32()) as f64)
     }
 
+    #[must_use]
     pub fn floor(self) -> Number {
         Number(self.0.floor())
     }
 
+    #[must_use]
     pub fn abs(self) -> Number {
         Number(self.0.abs())
     }
@@ -177,6 +187,7 @@ pub(crate) const negative_zero: Number = Number(-0.0);
 
 impl Number {
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-remainder
+    #[must_use]
     pub fn remainder(self, d: Number) -> Number {
         let n = self;
         if n.is_nan() || d.is_nan() {
@@ -194,6 +205,8 @@ impl Number {
     }
 
     // https://tc39.es/ecma262/2024/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-exponentiate
+    #[must_use]
+    #[expect(clippy::float_cmp, reason = "Exact equality preserves JavaScript numeric identity; an epsilon comparison would merge distinct values.")]
     pub fn exponentiate(self, exponent: Number) -> Number {
         let base = self;
         if (base == Number(1.0) || base == Number(-1.0)) && exponent.is_inf() {

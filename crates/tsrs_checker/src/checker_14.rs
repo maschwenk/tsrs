@@ -1891,15 +1891,15 @@ impl Checker {
             let links = self.signature_links.get(iife);
             let cached = links.resolved_signature.get();
             links.resolved_signature.set(Some(self.any_signature));
-            let t: Option<P<Type>>;
-            if index_of_parameter < args.len() {
+
+            let t: Option<P<Type>> = if index_of_parameter < args.len() {
                 let arg_type = self.check_expression(args[index_of_parameter]);
-                t = Some(self.get_widened_literal_type(arg_type));
+                Some(self.get_widened_literal_type(arg_type))
             } else if parameter.initializer().is_some() {
-                t = None;
+                None
             } else {
-                t = Some(self.undefined_widening_type);
-            }
+                Some(self.undefined_widening_type)
+            };
             links.resolved_signature.set(cached);
             return t;
         }
@@ -2046,9 +2046,7 @@ impl Checker {
         let parent_type = parent_type?;
         if is_array_binding_pattern(parent.name().unwrap()) {
             let index = declaration.parent().unwrap().elements().iter().position(|&e| e == declaration);
-            let Some(index) = index else {
-                return None;
-            };
+            let index = index?;
             return self.get_contextual_type_for_element_expression(
                 Some(parent_type),
                 index,
@@ -2089,18 +2087,14 @@ impl Checker {
                         contextual_return_type = self.filter_type(contextual_return_type, |c, t| c.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Return, t, is_async_generator).is_some());
                     }
                     let iteration_return_type = self.get_iteration_type_of_generator_function_return_type(IterationTypeKind::Return, contextual_return_type, function_flags.intersects(FunctionFlags::Async));
-                    let Some(iteration_return_type) = iteration_return_type else {
-                        return None;
-                    };
+                    let iteration_return_type = iteration_return_type?;
                     contextual_return_type = iteration_return_type;
                     // falls through to unwrap Promise for AsyncGenerators
                 }
                 if function_flags.intersects(FunctionFlags::Async) {
                     // Get the awaited type without the `Awaited<T>` alias
                     let contextual_awaited_type = self.map_type(contextual_return_type, super::checker::Checker::get_awaited_type_no_alias);
-                    let Some(contextual_awaited_type) = contextual_awaited_type else {
-                        return None;
-                    };
+                    let contextual_awaited_type = contextual_awaited_type?;
                     let promise_like = self.create_promise_like_type(contextual_awaited_type);
                     return Some(self.get_union_type(&[contextual_awaited_type, promise_like]));
                 }
@@ -2237,9 +2231,7 @@ impl Checker {
         let args = self.get_effective_call_arguments(call_target);
         let arg_index = args.iter().position(|&a| a == arg);
         // -1 for e.g. the expression of a CallExpression, or the tag of a TaggedTemplateExpression
-        let Some(arg_index) = arg_index else {
-            return None;
-        };
+        let arg_index = arg_index?;
         self.get_contextual_type_for_argument_at_index(call_target, arg_index)
     }
 

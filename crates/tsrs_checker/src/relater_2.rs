@@ -1371,6 +1371,7 @@ impl Relater {
                     let name_type = c.get_name_type_from_mapped_type(target_type);
                     let constraint_type = c.get_constraint_type_from_mapped_type(target_type);
                     let target_keys;
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if name_type.is_some() && c.is_mapped_type_with_keyof_constraint_declaration(target_type) {
                         // we need to get the apparent mappings and union them with the generic mappings, since some properties may be
                         // missing from the `constraintType` which will otherwise be mapped in the object
@@ -1583,6 +1584,7 @@ impl Relater {
                 // allow assignments of index types of identical (or similar enough) mapped types.
                 // eg, `keyof {[X in keyof A]: Obj[X]}` should be assignable to `keyof {[Y in keyof A]: Tup[Y]}` because both map over the same set of keys (`keyof A`).
                 // Without this source-side breakdown, a `keyof {[X in keyof A]: Obj[X]}` style type won't be assignable to anything except itself, which is much too strict.
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 let source_mapped_keys = if name_type.is_some() && c.is_mapped_type_with_keyof_constraint_declaration(mapped_type) {
                     c.get_apparent_mapped_type_keys(name_type.unwrap(), mapped_type)
                 } else if let Some(name_type) = name_type {
@@ -2096,7 +2098,7 @@ impl Relater {
                 let target_type_arguments = c.get_type_arguments(target);
                 let target_start_count = get_start_element_count(target.target_tuple_type(), ElementFlags::NonRest);
                 let target_end_count = get_end_element_count(target.target_tuple_type(), ElementFlags::NonRest);
-                let mut can_exclude_discriminants = excluded_properties.len() != 0;
+                let mut can_exclude_discriminants = !excluded_properties.is_empty();
                 for (source_position, &source_type_argument) in source_type_arguments.iter().enumerate().take(source_arity) {
                     let source_flags = if is_tuple_type(source) {
                         source.target_tuple_type().element_infos.get()[source_position].flags
@@ -2104,9 +2106,9 @@ impl Relater {
                         ElementFlags::Rest
                     };
                     let source_position_from_end = source_arity - 1 - source_position;
-                    let target_position;
-                    if target_has_rest_element && source_position >= target_start_count {
-                        target_position = target_arity - 1 - source_position_from_end.min(target_end_count);
+
+                    let target_position = if target_has_rest_element && source_position >= target_start_count {
+                        target_arity - 1 - source_position_from_end.min(target_end_count)
                     } else {
                         if source_position >= target_arity {
                             if report_errors {
@@ -2114,8 +2116,8 @@ impl Relater {
                             }
                             return Ternary::False;
                         }
-                        target_position = source_position;
-                    }
+                        source_position
+                    };
                     let target_flags =
                         target.target_tuple_type().element_infos.get()[target_position].flags;
                     if target_flags.intersects(ElementFlags::Variadic)
@@ -2184,6 +2186,7 @@ impl Relater {
     }
 
     #[expect(clippy::too_many_arguments, reason = "the tail of properties_related_to, split off to return its buffer to the pool")]
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn properties_related_to_rest(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, excluded_properties: &Set<String>, optionals_only: bool, intersection_state: IntersectionState, require_optional_properties: bool, unmatched_property: Option<P<Symbol>>, found: &[Option<Option<P<Symbol>>>]) -> Ternary {
         let mut result = Ternary::True;
         if let Some(unmatched_property) = unmatched_property {
@@ -2214,7 +2217,7 @@ impl Relater {
         let properties = c.get_properties_of_type(target);
         let numeric_names_only = is_tuple_type(source) && is_tuple_type(target);
         // `found` is by position in `properties` when it covers them all and nothing is excluded.
-        let found = if found.len() == properties.len() && excluded_properties.len() == 0 { found } else { &[] };
+        let found = if found.len() == properties.len() && excluded_properties.is_empty() { found } else { &[] };
         let resolved_source = c.resolved_property_source(source);
         for (i, target_prop) in exclude_properties(properties, excluded_properties).iter().copied().enumerate() {
             let name = target_prop.name();
@@ -2857,6 +2860,7 @@ impl Relater {
         };
         if target_flags.intersects(TypeFlags::TypeParameter) && target != c.marker_super_type_for_check && target != c.marker_sub_type_for_check {
             let constraint = c.get_base_constraint_of_type(target);
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if is_distributed_type_parameter(target) && c.is_type_assignable_to(generalized_source, target.as_type_parameter().constraint.get().unwrap()) {
                 self.report_error(c, &diagnostics::X_0_is_only_assignable_to_the_non_distributed_1_but_1_has_been_distributed_here, &[&generalized_source_type, &target_type]);
             } else if constraint.is_some() && c.is_type_assignable_to(generalized_source, constraint.unwrap()) {
@@ -3016,9 +3020,7 @@ impl Relater {
         let mut index = index;
         let mut e = self.error_chain.get();
         loop {
-            let Some(chain) = e else {
-                return None;
-            };
+            let chain = e?;
             if index == 0 {
                 return Some(chain.message);
             }

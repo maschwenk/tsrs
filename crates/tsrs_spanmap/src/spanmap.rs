@@ -277,9 +277,7 @@ impl SpanMap {
 
 // spanmap.go:188 with a nil receiver.
 pub fn validate(m: Option<&SpanMap>, virtual_: &str, original: &str) -> Option<MappingError> {
-    let Some(m) = m else {
-        return None;
-    };
+    let m = m?;
     m.validate(virtual_, original)
 }
 
@@ -529,9 +527,7 @@ impl SpanMap {
 
 // spanmap.go:364 with a nil receiver.
 pub fn alias_for_virtual_span(m: Option<&SpanMap>, r: TextRange) -> Option<Segment> {
-    let Some(m) = m else {
-        return None;
-    };
+    let m = m?;
     m.alias_for_virtual_span(r)
 }
 

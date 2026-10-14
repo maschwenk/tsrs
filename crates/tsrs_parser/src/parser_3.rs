@@ -116,16 +116,16 @@ impl Parser {
         //      yield [no LineTerminator here] [Lexical goal InputElementRegExp]AssignmentExpression[?In, Yield]
         //      yield [no LineTerminator here] * [Lexical goal InputElementRegExp]AssignmentExpression[?In, Yield]
         self.next_token();
-        let result;
-        if !self.has_preceding_line_break() && (self.token == Kind::AsteriskToken || self.is_start_of_expression()) {
+
+        let result = if !self.has_preceding_line_break() && (self.token == Kind::AsteriskToken || self.is_start_of_expression()) {
             let asterisk_token = self.parse_optional_token(Kind::AsteriskToken);
             let expression = self.parse_assignment_expression_or_higher();
-            result = self.factory.new_yield_expression(asterisk_token, Some(expression));
+            self.factory.new_yield_expression(asterisk_token, Some(expression))
         } else {
             // if the next token is not on the same line as yield.  or we don't have an '*' or
             // the start of an expression, then this is just a simple "yield" expression.
-            result = self.factory.new_yield_expression(None /*asteriskToken*/, None /*expression*/);
-        }
+            self.factory.new_yield_expression(None /*asteriskToken*/, None /*expression*/)
+        };
         self.finish_node(result, pos)
     }
 
@@ -302,9 +302,9 @@ impl Parser {
         } else {
             if !allow_ambiguity {
                 let maybe_parameters = self.parse_parameters_worker(signature_flags, allow_ambiguity);
-                match maybe_parameters {
-                    None => return None,
-                    Some(maybe_parameters) => parameters = maybe_parameters,
+                {
+                    let maybe_parameters = maybe_parameters?;
+                    parameters = maybe_parameters;
                 }
             } else {
                 parameters = self.parse_parameters_worker(signature_flags, allow_ambiguity).unwrap();
@@ -1038,13 +1038,13 @@ impl Parser {
             type_arguments = self.parse_type_arguments();
         }
         let attributes = self.parse_jsx_attributes();
-        let result;
-        if self.token == Kind::GreaterThanToken {
+
+        let result = if self.token == Kind::GreaterThanToken {
             // Closing tag, so scan the immediately-following text with the JSX scanning instead
             // of regular scanning to avoid treating illegal characters (e.g. '#') as immediate
             // scanning errors
             self.scan_jsx_text();
-            result = self.factory.new_jsx_opening_element(tag_name, type_arguments, attributes);
+            self.factory.new_jsx_opening_element(tag_name, type_arguments, attributes)
         } else {
             self.parse_expected(Kind::SlashToken);
             if self.parse_expected_without_advancing(Kind::GreaterThanToken) {
@@ -1054,8 +1054,8 @@ impl Parser {
                     self.scan_jsx_text();
                 }
             }
-            result = self.factory.new_jsx_self_closing_element(tag_name, type_arguments, attributes);
-        }
+            self.factory.new_jsx_self_closing_element(tag_name, type_arguments, attributes)
+        };
         self.finish_node(result, pos)
     }
 
@@ -1710,13 +1710,13 @@ impl Parser {
         question_dot_token: Option<P<Node>>,
         type_arguments: Option<P<NodeList>>,
     ) -> P<Node> {
-        let template: P<Node>;
-        if self.token == Kind::NoSubstitutionTemplateLiteral {
+
+        let template: P<Node> = if self.token == Kind::NoSubstitutionTemplateLiteral {
             self.re_scan_template_token(true /*isTaggedTemplate*/);
-            template = self.parse_literal_expression();
+            self.parse_literal_expression()
         } else {
-            template = self.parse_template_expression(true /*isTaggedTemplate*/);
-        }
+            self.parse_template_expression(true /*isTaggedTemplate*/)
+        };
         let is_optional_chain = question_dot_token.is_some() || tag.flags().intersects(NodeFlags::OptionalChain);
         let node = self.factory.new_tagged_template_expression(tag, question_dot_token, type_arguments, template, if is_optional_chain { NodeFlags::OptionalChain } else { NodeFlags::None });
         let node = self.finish_node(node, pos);
@@ -1860,20 +1860,20 @@ impl Parser {
         // CoverInitializedName[Yield] :
         //     IdentifierReference[?Yield] Initializer[In, ?Yield]
         // this is necessary because ObjectLiteral productions are also used to cover grammar for ObjectAssignmentPattern
-        let node: P<Node>;
+
         let is_shorthand_property_assignment = token_is_identifier && self.token != Kind::ColonToken;
-        if is_shorthand_property_assignment {
+        let node: P<Node> = if is_shorthand_property_assignment {
             let equals_token = self.parse_optional_token(Kind::EqualsToken);
             let mut initializer: Option<P<Node>> = None;
             if equals_token.is_some() {
                 initializer = Some(self.do_in_context(NodeFlags::DisallowInContext, false, Parser::parse_assignment_expression_or_higher));
             }
-            node = self.factory.new_shorthand_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, equals_token, initializer);
+            self.factory.new_shorthand_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, equals_token, initializer)
         } else {
             self.parse_expected(Kind::ColonToken);
             let initializer = self.do_in_context(NodeFlags::DisallowInContext, false, Parser::parse_assignment_expression_or_higher);
-            node = self.factory.new_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, initializer);
-        }
+            self.factory.new_property_assignment(modifiers, name, postfix_token, None /*typeNode*/, initializer)
+        };
         self.finish_node(node, pos);
         self.with_jsdoc(node, jsdoc);
         node
@@ -3126,7 +3126,7 @@ fn extract_pragmas(comment_range: ast::CommentRange, text: &str) -> Vec<ast::Pra
                 let start = skip_blanks(text, name_end);
                 let arg_end = skip_non_blanks(text, start);
                 if arg_end != start {
-                    let mut args: FxHashMap<String, ast::PragmaArgument> = FxHashMap::with_capacity_and_hasher(1, Default::default());
+                    let mut args: FxHashMap<String, ast::PragmaArgument> = FxHashMap::with_capacity_and_hasher(1, rustc_hash::FxBuildHasher);
                     args.insert(
                         "factory".to_string(),
                         ast::PragmaArgument {

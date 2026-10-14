@@ -48,7 +48,7 @@ const _: () = assert!(std::mem::align_of::<InferenceContext>() >= 8 && std::mem:
 const _: () = {
     assert!(std::mem::size_of::<TypeMapper>() == 16);
     // A 32-bit address shifted left by one, the tags (with `ESCAPED`) and the list length do not overlap.
-    assert!(ADDR_MASK == ((u32::MAX as u64) << 1 | 1));
+    assert!(ADDR_MASK == (((u32::MAX as u64) << 1) | 1));
     assert!(ADDR_MASK & TAG_MASK == 0 && ESCAPED & TAG_MASK == ESCAPED);
     assert!(TAG_MASK >> LEN_SHIFT == 0 && (u16::MAX as u64) << LEN_SHIFT >> LEN_SHIFT == u16::MAX as u64);
     assert!(TAG_RARE & !TAG_MASK == 0 && TAG_RARE & ESCAPED == 0);
@@ -178,9 +178,10 @@ unsafe fn untagged<T>(w: usize) -> P<T> {
 /// 32-bit twin of `pack_slice`: every 4-aligned address fits (see `MapperWord`).
 #[cfg(target_pointer_width = "32")]
 #[inline]
+#[expect(clippy::verbose_bit_mask, reason = "the mask directly documents the two tag bits reserved in the packed address")]
 fn pack_slice(s: &'static [P<Type>]) -> Option<u64> {
     let a = s.as_ptr().expose_provenance();
-    (a & 3 == 0 && s.len() <= u16::MAX as usize).then(|| u64::from(a as u32) << 1 | (s.len() as u64) << LEN_SHIFT)
+    (a & 3 == 0 && u16::try_from(s.len()).is_ok()).then(|| (u64::from(a as u32) << 1) | ((s.len() as u64) << LEN_SHIFT))
 }
 
 /// # Safety

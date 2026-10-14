@@ -1272,6 +1272,7 @@ impl Parser {
 
         // Only include the characters between the name end and the next token if a comment was actually parsed out - otherwise it's just whitespace
         let end = end.unwrap_or_else(|| {
+            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if has_children && type_expression.is_some() {
                 type_expression
                     .unwrap()

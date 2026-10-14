@@ -32,7 +32,7 @@ fn in_memory_interface_diagnostics_require_unchanged_report_slots() {
     };
     let build_info_path = dir.join("tsconfig.tsbuildinfo");
     let options = CompilerOptions { incremental: Tristate::True, no_emit: Tristate::True, no_lib: Tristate::True, module: ModuleKind::NodeNext, ts_build_info_file: build_info_path.to_str().unwrap().to_string(), ..Default::default() };
-    let config = P::new(tsrs_tsoptions::new_parsed_command_line(P::new(options), files.iter().map(|file| dir.join(file).to_str().unwrap().to_string()).collect(), Vec::new(), Default::default()));
+    let config = P::new(tsrs_tsoptions::new_parsed_command_line(P::new(options), files.iter().map(|file| dir.join(file).to_str().unwrap().to_string()).collect(), Vec::new(), tsrs_core::tspath::ComparePathsOptions::default()));
     let create_with_policy = |old: Option<P<Program>>, loaded: bool, canonical_diagnostics: bool| {
         let host = new_compiler_host(dir.to_str().unwrap(), Arc::new(tsrs_vfs::osvfs::fs()), "", None, None, None);
         let old = if loaded {

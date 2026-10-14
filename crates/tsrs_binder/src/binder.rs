@@ -115,7 +115,7 @@ fn bind_source_file_worker(file: P<SourceFile>) {
     });
 }
 
-/// tsrs-only: bind lazily parsed member lists of declaration files on first use (tsrs_ast `lazylist`); with
+/// tsrs-only: bind lazily parsed member lists of declaration files on first use (`tsrs_ast` `lazylist`); with
 /// `tsrs_parser::enable_lazy_dts`.
 pub fn enable_lazy_dts() {
     lazylist::set_bind_hook(bind_lazy_list);
@@ -195,7 +195,7 @@ impl Binder {
      * @param symbolTable - The symbol table which node will be added to.
      * @param parent - node's parent declaration.
      * @param node - The declaration to be added to the symbol table
-     * @param includes - The SymbolFlags that node has in addition to its declaration type (eg: export, ambient, etc.)
+     * @param includes - The `SymbolFlags` that node has in addition to its declaration type (eg: export, ambient, etc.)
      * @param excludes - The flags which node cannot be declared alongside in a symbol table. Used to report forbidden declarations.
      */
     pub(crate) fn declare_symbol(
@@ -1238,7 +1238,7 @@ impl Binder {
 
     pub(crate) fn bind_deferred_expando_assignments(&mut self) {
         let assignments = std::mem::take(&mut self.expando_assignments);
-        for info in assignments.iter() {
+        for info in &assignments {
             self.container = info.container;
             self.block_scope_container = info.block_scope_container;
             self.bind_deferred_expando_assignment(info.node);
@@ -2020,11 +2020,12 @@ impl Binder {
         self.in_assignment_pattern = save_in_assignment_pattern;
     }
 
-    /// tsrs-only (tsrs_ast `lazylist`, notes/mem-lazy-dts-members.md): `node`'s member list, if the parser made it
-    /// lazy, was just skipped by `bind_each_child` (an unparsed lazy list has no members yet), at the point where the
-    /// members would have been bound. In the usual state (no flow targets or labels, reachable, an owner symbol) the
-    /// binder state is recorded on the list and the owner symbol, and the first reader binds the members with it;
-    /// otherwise the list is parsed now and bound here, as if it had never been lazy.
+    /// tsrs-only (`tsrs_ast` `lazylist`, notes/mem-lazy-dts-members.md): `node`'s member list, if the parser
+    /// made it lazy, was just skipped by `bind_each_child` (an unparsed lazy list has no members yet), at the
+    /// point where the members would have been bound. In the usual state (no flow targets or labels,
+    /// reachable, an owner symbol) the binder state is recorded on the list and the owner symbol, and the
+    /// first reader binds the members with it; otherwise the list is parsed now and bound here, as if it had
+    /// never been lazy.
     fn bind_lazy_member_list(&mut self, node: P<Node>) {
         if !matches!(node.kind(), Kind::InterfaceDeclaration | Kind::ClassDeclaration | Kind::ClassExpression | Kind::TypeLiteral) {
             return;

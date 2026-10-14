@@ -155,7 +155,7 @@ impl Json for ResponseError {
         let mut w = ObjectWriter::new(3);
         w.field("code", &self.code);
         w.field("message", &self.message);
-        w.opt("data", &self.data);
+        w.opt("data", self.data.as_ref());
         w.finish()
     }
 
@@ -249,13 +249,13 @@ impl Json for Message {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(6);
         w.field("jsonrpc", &JSONRPCVersion);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         if !self.method.is_empty() {
             w.field("method", &self.method);
         }
-        w.opt("params", &self.params);
-        w.opt("result", &self.result);
-        w.opt("error", &self.error);
+        w.opt("params", self.params.as_ref());
+        w.opt("result", self.result.as_ref());
+        w.opt("error", self.error.as_ref());
         w.finish()
     }
 
@@ -296,9 +296,9 @@ impl Json for RequestMessage {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("jsonrpc", &JSONRPCVersion);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.field("method", &self.method);
-        w.opt("params", &self.params);
+        w.opt("params", self.params.as_ref());
         w.finish()
     }
 
@@ -337,9 +337,9 @@ impl Json for ResponseMessage {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("jsonrpc", &JSONRPCVersion);
-        w.opt("id", &self.id);
-        w.opt("result", &self.result);
-        w.opt("error", &self.error);
+        w.opt("id", self.id.as_ref());
+        w.opt("result", self.result.as_ref());
+        w.opt("error", self.error.as_ref());
         w.finish()
     }
 

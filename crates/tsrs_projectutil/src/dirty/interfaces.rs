@@ -5,6 +5,7 @@ use std::sync::Arc;
 // Go `Cloneable[T]`: the type's own `Clone()` method, which may differ from a field-by-field copy (e.g.
 // `Project.Clone` resets `ProgramUpdateKind`).
 pub trait Cloneable {
+    #[must_use]
     fn clone_value(&self) -> Self;
 }
 
@@ -42,6 +43,7 @@ impl<T> Shared<T> {
 
 impl<T: Cloneable> Shared<T> {
     // Go `v.Clone()` on the pointer.
+    #[must_use]
     pub fn clone_shared(&self) -> Shared<T> {
         Shared(Arc::new(self.0.clone_value()))
     }

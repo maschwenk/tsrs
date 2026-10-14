@@ -945,12 +945,12 @@ impl classFieldsTransformer {
         self.emit_context().add_emit_flags(backing_field, EmitFlags::NoComments);
         self.emit_context().set_source_map_range(backing_field, source_map_range);
 
-        let receiver;
-        if ast::is_static(node) {
-            receiver = self.try_get_class_this().unwrap_or_else(|| self.factory().new_this_expression());
+
+        let receiver = if ast::is_static(node) {
+            self.try_get_class_this().unwrap_or_else(|| self.factory().new_this_expression())
         } else {
-            receiver = self.factory().new_this_expression();
-        }
+            self.factory().new_this_expression()
+        };
 
         let getter = self.create_accessor_property_get_redirector(node, modifiers, getter_name, receiver);
         self.emit_context().set_original(getter, node);
@@ -1554,14 +1554,14 @@ impl classFieldsTransformer {
                 b.operator_token,
                 self.visitor().visit_node(Some(b.right())).unwrap(),
             );
-            let result: P<Node>;
-            if !self.pending_expressions.borrow().is_empty() {
+
+            let result: P<Node> = if !self.pending_expressions.borrow().is_empty() {
                 let mut exprs = self.pending_expressions.borrow().clone();
                 exprs.push(updated);
-                result = self.factory().inline_expressions(&exprs).unwrap();
+                self.factory().inline_expressions(&exprs).unwrap()
             } else {
-                result = updated;
-            }
+                updated
+            };
             *self.pending_expressions.borrow_mut() = saved_pending_expressions;
             return Some(result);
         }

@@ -65,8 +65,8 @@ pub struct ProgramOptions {
     /// back (watch mode, which replaces its program every cycle; the CLI's single build leaks its checkers).
     pub checker_regions: bool,
     /// tsrs-only, with `checker_regions`: the diagnostics each checker makes go to a region of its own, which
-    /// `free_program` gives back too (checkerpool.rs `SlotChecker`): the caller copies those it keeps (watch mode's
-    /// snapshot, tsrs_incremental `Program::copy_diagnostics`).
+    /// `free_program` gives back too (checkerpool.rs `SlotChecker`): the caller copies those it keeps (watch
+    /// mode's snapshot, `tsrs_incremental` `Program::copy_diagnostics`).
     pub checker_diagnostic_regions: bool,
     /// tsrs-only: what the file loader allocates goes to these regions (programregions.rs), which the caller frees
     /// once nothing uses the program's processed-file and resolution data (watch mode).
@@ -422,10 +422,12 @@ impl Program {
 // exactly, as before (bench/run.py's single-threaded counter uses 1).
 const PARSE_THREAD_CAP: usize = 32;
 
+/// Runs worker jobs on the calling thread for threadless targets.
+///
 /// `tsrs_core::NO_THREADS` targets: a one-thread pool on the calling thread (`use_current_thread`), on which
-/// `install`, `par_iter`, `broadcast` and nested scopes run inline. It must be the first rayon use on that thread:
-/// once rayon's global pool has started there, building it fails with "The current thread is already part of
-/// another thread pool", so an embedder calls `worker_pool()` before anything else.
+/// `install`, `par_iter`, `broadcast` and nested scopes run inline. It must be the first rayon use on that
+/// thread: once rayon's global pool has started there, building it fails with "The current thread is already
+/// part of another thread pool", so an embedder calls `worker_pool()` before anything else.
 pub fn worker_pool() -> &'static rayon::ThreadPool {
     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
     POOL.get_or_init(|| {
@@ -455,7 +457,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         opts: opts.program_config(),
         // Go's NewProgram never sets `comparePathsOptions`: it is the zero value (no current directory,
         // case-insensitive), which e.g. makes IsGlobalTypingsFile false when no typings location is set.
-        compare_paths_options: ComparePathsOptions::default(),
+        compare_paths_options: tsrs_core::tspath::ComparePathsOptions::default(),
         resolution_host: crate::projectreferencefilemapper::resolution_host_for(Arc::clone(&host)),
         host,
         resolution_data,
@@ -478,7 +480,7 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
         package_names: OnceLock::new(),
         has_ts_file: OnceLock::new(),
         packages_map: OnceLock::new(),
-        exports_module_name_cache: Default::default(),
+        exports_module_name_cache: tsrs_modulespecifiers::ExportsModuleNameCache::default(),
         leaf_files: opts.leaf_files,
         leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
         leaf_referred: OnceLock::new(),
@@ -504,9 +506,12 @@ pub fn new_program(opts: ProgramOptions) -> &'static Program {
     p
 }
 
-/// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller guarantees that
-/// nothing uses it any more: no checker of its pool is held, and no snapshot or language service refers to it. What
-/// it shares with other versions (`processed`, the project reference file mapper) stays.
+/// Releases a program after every external reference to it has ended.
+///
+/// Frees a program made by `new_program` or `update_program` (language server; Go's GC). The caller
+/// guarantees that nothing uses it any more: no checker of its pool is held, and no snapshot or language
+/// service refers to it. What it shares with other versions (`processed`, the project reference file mapper)
+/// stays.
 ///
 /// # Safety
 /// `program` came from `new_program` / `update_program` and is not used afterwards.
@@ -519,10 +524,12 @@ pub unsafe fn free_program(program: &'static Program) {
     drop(unsafe { Box::from_raw(resolution_host as *mut dyn ResolutionHost) });
 }
 
-/// Frees a program from `new_program` that never shared data with another version (it was not the source or the
-/// result of `update_program`), including its processed-file data and project reference file mapper, which
-/// `free_program` keeps because language-server program versions share them. Used for one-shot programs (the
-/// native API's transpileModule / transpileDeclaration).
+/// Releases a program that never shared data with another version.
+///
+/// Frees a program from `new_program` that never shared data with another version (it was not the source or
+/// the result of `update_program`), including its processed-file data and project reference file mapper,
+/// which `free_program` keeps because language-server program versions share them. Used for one-shot programs
+/// (the native API's transpileModule / transpileDeclaration).
 ///
 /// # Safety
 /// As `free_program`, and additionally: no other program refers to `program`'s processed files or mapper.
@@ -534,6 +541,8 @@ pub unsafe fn free_unshared_program(program: &'static Program) {
     unsafe { shared.free() };
 }
 
+/// Keeps data shared between program versions alive together.
+///
 /// The data program versions share (`processed`, the project reference file mapper, the file loader's
 /// resolution host and the mapper's dts-faking host), as an address pair that can be moved into a region's
 /// `on_free` hook.
@@ -706,7 +715,7 @@ impl Program {
             package_names: OnceLock::new(),
             has_ts_file: OnceLock::new(),
             packages_map: OnceLock::new(),
-            exports_module_name_cache: Default::default(),
+            exports_module_name_cache: tsrs_modulespecifiers::ExportsModuleNameCache::default(),
             // A reused program keeps the files of this one, so nothing of them may be freed.
             leaf_files: crate::fileregions::LeafMode::Off,
             leaf_pass_started: std::sync::atomic::AtomicBool::new(false),
@@ -1547,7 +1556,7 @@ impl Program {
             let mut root_paths: FxHashSet<Path> = FxHashSet::default();
             root_paths.extend(self.opts.config.file_names().iter().map(|file_name| self.to_path(file_name)));
 
-            for &file in self.files.iter() {
+            for &file in self.files {
                 let mut root_path = file.path();
                 if let Some(canonical) = file.canonical_source_file() {
                     root_path = canonical.get().path();
@@ -1648,7 +1657,7 @@ impl Program {
             };
 
         if let Some(paths) = &options.paths {
-            for (key, value) in paths.iter() {
+            for (key, value) in paths {
                 // !!! This code does not handle cases where where the path mappings have the wrong types,
                 // as that information is mostly lost during the parsing process.
                 if !has_zero_or_one_asterisk_character(key) {

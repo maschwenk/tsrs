@@ -215,16 +215,14 @@ impl Checker {
                         - usize::from(ast::get_this_parameter(parent).is_some());
                     // A parameter declaration decorator will have three arguments (see `ParameterDecorator` in
                     // core.d.ts).
-                    let target_type;
-                    let key_type;
-                    if ast::is_constructor_declaration(parent) {
+
+
+                    let (target_type, key_type) = if ast::is_constructor_declaration(parent) {
                         let sym = self.get_symbol_of_declaration(parent.parent().unwrap()).unwrap();
-                        target_type = self.get_type_of_symbol(sym);
-                        key_type = self.undefined_type;
+                        (self.get_type_of_symbol(sym), self.undefined_type)
                     } else {
-                        target_type = self.get_parent_type_of_class_element(parent);
-                        key_type = self.get_class_element_property_key_type(parent);
-                    }
+                        (self.get_parent_type_of_class_element(parent), self.get_class_element_property_key_type(parent))
+                    };
                     let index_type = self.get_number_literal_type(jsnum::Number(index as f64));
                     let target_param = self.new_parameter("target", target_type);
                     let key_param = self.new_parameter("propertyKey", key_type);
@@ -384,20 +382,20 @@ impl Checker {
                     //
                     // In all three cases, the `This` type argument is the "final type" of either the class or
                     // instance, depending on whether the member was `static`.
-                    let value_type;
-                    if ast::is_method_declaration(node) {
+
+                    let value_type = if ast::is_method_declaration(node) {
                         let sig = self.get_signature_from_declaration(node);
-                        value_type = self.get_or_create_type_from_signature(sig);
+                        self.get_or_create_type_from_signature(sig)
                     } else {
-                        value_type = self.get_type_of_node(node);
-                    }
-                    let this_type;
+                        self.get_type_of_node(node)
+                    };
+
                     let class_symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
-                    if ast::has_static_modifier(node) {
-                        this_type = self.get_type_of_symbol(class_symbol);
+                    let this_type = if ast::has_static_modifier(node) {
+                        self.get_type_of_symbol(class_symbol)
                     } else {
-                        this_type = self.get_declared_type_of_class_or_interface(class_symbol);
-                    }
+                        self.get_declared_type_of_class_or_interface(class_symbol)
+                    };
                     // We wrap the "input type", if necessary, to match the decoration target. For getters this is
                     // something like `() => inputType`, for setters it's `(value: inputType) => void` and for
                     // methods it is just the input type.
@@ -422,13 +420,13 @@ impl Checker {
                     // depending on whether the member was `static`, and the `Value` type argument corresponds to
                     // the "final type" of the value stored in the field.
                     let value_type = self.get_type_of_node(node);
-                    let this_type;
+
                     let class_symbol = self.get_symbol_of_declaration(node.parent().unwrap()).unwrap();
-                    if ast::has_static_modifier(node) {
-                        this_type = self.get_type_of_symbol(class_symbol);
+                    let this_type = if ast::has_static_modifier(node) {
+                        self.get_type_of_symbol(class_symbol)
                     } else {
-                        this_type = self.get_declared_type_of_class_or_interface(class_symbol);
-                    }
+                        self.get_declared_type_of_class_or_interface(class_symbol)
+                    };
                     // The `target` of an auto-accessor decorator is a `{ get, set }` object, representing the
                     // runtime-generated getter and setter that are added to the class/prototype. The `target` of a
                     // regular field decorator is always `undefined` as it isn't installed until it is initialized.
@@ -733,6 +731,7 @@ impl Checker {
     /// with no member resolution in progress and dropped when any type's members are reset. The visited
     /// constituents are mapped in the same order and combined as `map_type_ex` does (a skipped one maps to None,
     /// so the result is never the union itself).
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn contextual_property_type_of_large_union(&mut self, t: P<Type>, name: &str, name_type: Option<P<Type>>) -> Option<Option<P<Type>>> {
         let u = t.as_union_type();
         let types = match u.origin() {
@@ -827,9 +826,7 @@ impl Checker {
     // checker.go:31127
     pub(crate) fn get_type_of_concrete_property_of_contextual_type(&mut self, t: P<Type>, name: &str) -> Option<P<Type>> {
         let prop = self.get_property_of_type(t, name);
-        let Some(prop) = prop else {
-            return None;
-        };
+        let prop = prop?;
         if self.is_circular_mapped_property(prop) {
             return None;
         }
@@ -854,9 +851,7 @@ impl Checker {
             None => self.get_string_literal_type(name),
         };
         let index_info = self.find_applicable_index_info(index_infos, name_type);
-        let Some(index_info) = index_info else {
-            return None;
-        };
+        let index_info = index_info?;
         index_info.value_type.get()
     }
 
@@ -1032,6 +1027,7 @@ impl Checker {
     // expressions we check to those that don't depend on their contextual type in order not to cause
     // recursive (and possibly infinite) invocations of getContextualType.
     // checker.go:31291
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_possibly_discriminant_value(&mut self, node: P<Node>) -> bool {
         match node.kind() {
             Kind::StringLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateExpression
@@ -1646,9 +1642,7 @@ impl Checker {
             self.awaited_type_stack.push(t);
             let awaited_type = self.get_awaited_type_no_alias_ex(promised_type, error_node, diagnostic_message, args);
             self.awaited_type_stack.pop();
-            let Some(awaited_type) = awaited_type else {
-                return None;
-            };
+            let awaited_type = awaited_type?;
             self.cached_types.insert(key, awaited_type);
             return Some(awaited_type);
         }

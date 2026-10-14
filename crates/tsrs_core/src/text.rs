@@ -93,6 +93,7 @@ impl TextPos {
     }
 
     #[inline]
+    #[must_use]
     pub const fn offset_by(self, offset: u32) -> TextPos {
         match self {
             TextPos::Synthetic => TextPos::Synthetic,
@@ -224,6 +225,7 @@ impl TextRange {
     }
 
     #[inline]
+    #[expect(clippy::len_without_is_empty, reason = "This accessor reports a position or optional diagnostic length, not a container size.")]
     pub fn len(self) -> Option<u32> {
         let TextPos::Source(pos) = self.pos else {
             return None;
@@ -257,10 +259,12 @@ impl TextRange {
         self.pos < pos && pos < self.end
     }
 
+    #[must_use]
     pub const fn with_pos(self, pos: TextPos) -> TextRange {
         TextRange { pos, end: self.end }
     }
 
+    #[must_use]
     pub const fn with_end(self, end: TextPos) -> TextRange {
         TextRange { pos: self.pos, end }
     }

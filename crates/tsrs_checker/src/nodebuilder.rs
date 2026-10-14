@@ -300,6 +300,7 @@ pub fn new_node_builder(ch: &mut Checker, e: P<EmitContext>) -> P<NodeBuilder> {
 }
 
 // nodebuilder.go:283
+#[expect(clippy::implicit_hasher, reason = "The API deliberately accepts only FxHashMap, as required by the workspace hashing policy.")]
 pub fn new_node_builder_ex(ch: &mut Checker, e: P<EmitContext>, id_to_symbol: Option<P<RefCell<FxHashMap<P<Node>, P<Symbol>>>>>) -> P<NodeBuilder> {
     let impl_ = new_node_builder_impl(ch, e, id_to_symbol);
     P::new_in(e.factory.is_scratch(), NodeBuilder { impl_, ctx_stack: RefCell::new(Vec::with_capacity(1)), host: ch.program.as_module_specifier_generation_host(), verbosity: Cell::new(None) })

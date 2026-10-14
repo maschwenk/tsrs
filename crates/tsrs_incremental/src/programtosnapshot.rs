@@ -569,7 +569,7 @@ fn referenced_files_of(
     if own.len() + shared_len == 0 {
         return None;
     }
-    if ambient_paths.len() == 0 {
+    if ambient_paths.is_empty() {
         return Some(std::sync::Arc::new(RefSet::flat(own)));
     }
     let skip = if file_is_ambient { Some(file.path().clone()) } else { None };

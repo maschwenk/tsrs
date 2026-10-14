@@ -1,6 +1,8 @@
-//! Work census (`TSRS_WORK_CENSUS=<output file>`, docs/DEBUGGING.md): attributes checker work to source-level
-//! identities (the conditional type's root alias, the callee's declaration, the relation target's symbol, the flow
-//! container) instead of to functions. Off unless the variable is set; every hook first tests `Checker::census`.
+//! Attributes checker work to source-level patterns.
+//!
+//! Work census (`TSRS_WORK_CENSUS=<output file>`, docs/DEBUGGING.md): attributes checker work to source-level identities (the conditional type's root alias, the callee's declaration, the relation target's symbol, the flow container) instead of to functions.
+//!
+//! Off unless the variable is set; every hook first tests `Checker::census`.
 //!
 //! Timing: each hooked call is a span on a stack. A span's inclusive time counts toward its category only when no
 //! other span of that category encloses it, and toward its key only when no span with the same key encloses it, so
@@ -19,7 +21,7 @@ use tsrs_ast as ast;
 use tsrs_ast::{Node, Symbol};
 use tsrs_core::P;
 
-/// TSRS_WORK_CENSUS_SLOW=<ms>: print spans of a few categories that take longer (diagnosis only).
+/// `TSRS_WORK_CENSUS_SLOW`=<ms>: print spans of a few categories that take longer (diagnosis only).
 pub fn slow_threshold_ns() -> u64 {
     static NS: OnceLock<u64> = OnceLock::new();
     *NS.get_or_init(|| std::env::var("TSRS_WORK_CENSUS_SLOW").ok().and_then(|v| v.parse::<f64>().ok()).map_or(u64::MAX, |ms| (ms * 1e6) as u64))

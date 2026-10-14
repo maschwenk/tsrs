@@ -757,10 +757,10 @@ pub(crate) fn get_relation_key(c: &mut Checker, source: P<Type>, target: P<Type>
 #[inline(never)]
 fn get_relation_key_worker(c: &mut Checker, source: P<Type>, target: P<Type>, intersection_state: IntersectionState, ignore_constraints: bool) -> (RelationKey, bool) {
     let mut b = keyBuilder::default();
-    let constrained;
-    if is_type_reference_with_generic_arguments(c, source) && is_type_reference_with_generic_arguments(c, target) {
+
+    let constrained = if is_type_reference_with_generic_arguments(c, source) && is_type_reference_with_generic_arguments(c, target) {
         b.write_byte(b'g');
-        constrained = b.write_generic_type_references(c, source, target, ignore_constraints);
+        b.write_generic_type_references(c, source, target, ignore_constraints)
     } else {
         // The simple key `'s', source id, target id, intersection state`, packed when it fits (`RelationKey`).
         if let Some(key) = RelationKey::pair(source.id, target.id, intersection_state) {
@@ -769,8 +769,8 @@ fn get_relation_key_worker(c: &mut Checker, source: P<Type>, target: P<Type>, in
         b.write_byte(b's');
         b.write_type(source);
         b.write_type(target);
-        constrained = false;
-    }
+        false
+    };
     b.write_uint32(intersection_state.bits());
     (RelationKey::Hashed(b.hash()), constrained)
 }
@@ -1298,11 +1298,11 @@ impl Checker {
     // checker.go:18456
     pub(crate) fn get_assignment_declaration_initializer_type(&mut self, node: P<Node>) -> Option<P<Type>> {
         if is_binary_expression(node) {
-            let t: P<Type>;
-            match get_assignment_declaration_kind(node) {
+
+            let t: P<Type> = match get_assignment_declaration_kind(node) {
                 JSDeclarationKind::ModuleExports | JSDeclarationKind::ExportsProperty => {
                     let e = self.check_expression_cached(get_right_most_assigned_expression(node));
-                    t = self.get_regular_type_of_literal_type(e);
+                    self.get_regular_type_of_literal_type(e)
                 }
                 kind => {
                     if kind == JSDeclarationKind::ThisProperty {
@@ -1312,9 +1312,9 @@ impl Checker {
                         }
                     }
                     // fallthrough
-                    t = self.check_expression_for_mutable_location(node.as_binary_expression().right(), CheckMode::Normal);
+                    self.check_expression_for_mutable_location(node.as_binary_expression().right(), CheckMode::Normal)
                 }
-            }
+            };
             if self.is_empty_array_literal_type(t) && !self.has_parent_with_type_annotation(node.symbol().unwrap()) {
                 self.report_implicit_any(node, self.any_array_type, WideningKind::Normal);
                 return Some(self.any_array_type);
@@ -2399,6 +2399,7 @@ impl Checker {
     /// object type with resolved members and the member table alone answers it (as in `get_resolved_property`);
     /// `None` when the full path must decide. For a loop that looks up one name in many types.
     #[inline]
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     pub(crate) fn try_resolved_property(&mut self, t: P<Type>, key: HashedName<'_>, skip_object_function_property_augment: bool) -> Option<Option<P<Symbol>>> {
         if t.flags() != TypeFlags::Object
             || t.object_flags().intersects(ObjectFlags::Mapped)
@@ -3478,20 +3479,20 @@ impl Checker {
             return;
         }
         let base_type_node = get_base_type_node_of_class(t).unwrap();
-        let base_type: P<Type>;
+
         let mut original_base_type: Option<P<Type>> = None;
         if let Some(symbol) = base_constructor_type.symbol() {
             original_base_type = Some(self.get_declared_type_of_symbol(symbol));
         }
-        if base_constructor_type.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::Class))
+        let base_type: P<Type> = if base_constructor_type.symbol().is_some_and(|s| s.flags().intersects(SymbolFlags::Class))
             && self.are_all_outer_type_parameters_applied(original_base_type.unwrap())
         {
             // When base constructor type is a class with no captured type arguments we know that the constructors all have the same type parameters as the
             // class and all return the instance type of the class. There is no need for further checks and we can apply the
             // type arguments in the same manner as a type reference to get the same error reporting experience.
-            base_type = self.get_type_from_class_or_interface_reference(base_type_node, base_constructor_type.symbol().unwrap());
+            self.get_type_from_class_or_interface_reference(base_type_node, base_constructor_type.symbol().unwrap())
         } else if base_constructor_type.flags().intersects(TypeFlags::Any) {
-            base_type = base_constructor_type;
+            base_constructor_type
         } else {
             // The class derives from a "class-like" constructor function, check that we have at least one construct signature
             // with a matching number of type parameters and use the return type of the first instantiated signature. Elsewhere
@@ -3501,8 +3502,8 @@ impl Checker {
                 self.error(base_type_node.expression(), &diagnostics::No_base_constructor_has_the_specified_number_of_type_arguments, &[]);
                 return;
             }
-            base_type = self.get_return_type_of_signature(constructors[0]);
-        }
+            self.get_return_type_of_signature(constructors[0])
+        };
         if self.is_error_type(base_type) {
             return;
         }

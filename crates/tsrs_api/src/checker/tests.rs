@@ -100,7 +100,7 @@ impl TestHost {
         };
         root.deref();
         let handle = snapshot.id();
-        TestHost { snapshot_host, snapshot, registry: Arc::new(CheckerRegistry::new()), handle, project: id.0, clones: Default::default() }
+        TestHost { snapshot_host, snapshot, registry: Arc::new(CheckerRegistry::new()), handle, project: id.0, clones: std::sync::Mutex::default() }
     }
 
     fn program(&self) -> &'static Program {
@@ -288,7 +288,7 @@ fn coverage_inventory_matches_pinned_proto_and_dispatch() {
     let core: Vec<&str> = crate::methods::METHODS.iter().map(|m| m.name).collect();
     let ours: Vec<&str> = PINNED_METHODS.iter().map(|r| r.method).collect();
     assert_eq!(core, ours);
-    for m in crate::methods::METHODS.iter() {
+    for m in &crate::methods::METHODS {
         if is_checker_method(m.name) {
             assert_eq!(m.owner, crate::methods::Owner::Checker, "{} dispatched by checker but owned by core", m.name);
         }
@@ -875,14 +875,14 @@ fn core_session_hook_maps_errors_and_encodings() {
 
 
 /// Differential check against the pinned Go API session (microsoft/TypeScript b85298b6, tsc/internal/api).
-/// testdata/go_probe/go_probe_b85298b6.jsonl is produced by testdata/go_probe/regen.sh, which runs
-/// testdata/go_probe/zz_tsrs_probe_test.go inside the pinned reference checkout against Go's
-/// `Session.HandleRequest` with the same fixture (testdata/go_probe/fixture) and needles; `probe_lines`
+/// `testdata/go_probe/go_probe_b85298b6.jsonl` is produced by `testdata/go_probe/regen.sh`, which runs
+/// `testdata/go_probe/zz_tsrs_probe_test.go` inside the pinned reference checkout against Go's
+/// `Session.HandleRequest` with the same fixture (`testdata/go_probe/fixture`) and needles; `probe_lines`
 /// issues the same request sequence through the tsrs handlers. Results are compared as JSON values (not
 /// bytes), with two explicit, narrow exceptions:
 /// * `objectFlags` are compared with only `ObjectFlags::MembersResolved` (1 << 21) masked out: it is a
-///   lazily set cache bit (Go reports different values for the same type at "box:" and "box.value").
-///   The raw differences are collected and must be confined to that bit.
+///   lazily set cache bit (Go reports different values for the same type at "box:" and "box.value"). The
+///   raw differences are collected and must be confined to that bit.
 /// * `err.badType` (a string where a type id is expected): both are `api: invalid request: ...`, but
 ///   tsrs says `field "type": expected an unsigned integer in range` while Go prints its json/v2 decoder
 ///   error (whose wording itself varied between Go runs: "unable to unmarshal" / "cannot unmarshal").

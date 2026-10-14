@@ -632,9 +632,9 @@ impl BuildInfo {
         o.bool("errors", self.errors);
         o.bool("checkPending", self.check_pending);
         o.list("root", &self.root, BuildInfoRoot::marshal_json);
-        o.opt_strings("packageJsons", &self.package_jsons);
-        o.opt_strings("missingPackageJsons", &self.missing_package_jsons);
-        o.opt_strings("contentMapperIdentities", &self.content_mapper_identities);
+        o.opt_strings("packageJsons", self.package_jsons.as_deref());
+        o.opt_strings("missingPackageJsons", self.missing_package_jsons.as_deref());
+        o.opt_strings("contentMapperIdentities", self.content_mapper_identities.as_deref());
         o.str("tsrsCanonicalCheckSignature", &self.tsrs_canonical_check_signature);
         if !self.file_names.is_empty() {
             o.set("fileNames", strings(&self.file_names));
@@ -736,9 +736,9 @@ impl BuildInfo {
         w.bool("errors", self.errors);
         w.bool("checkPending", self.check_pending);
         w.values("root", &self.root, BuildInfoRoot::marshal_json);
-        w.opt_strings("packageJsons", &self.package_jsons);
-        w.opt_strings("missingPackageJsons", &self.missing_package_jsons);
-        w.opt_strings("contentMapperIdentities", &self.content_mapper_identities);
+        w.opt_strings("packageJsons", self.package_jsons.as_deref());
+        w.opt_strings("missingPackageJsons", self.missing_package_jsons.as_deref());
+        w.opt_strings("contentMapperIdentities", self.content_mapper_identities.as_deref());
         w.str("tsrsCanonicalCheckSignature", &self.tsrs_canonical_check_signature);
         if !self.file_names.is_empty() {
             w.strings("fileNames", &self.file_names);
@@ -815,7 +815,7 @@ impl BuildInfo {
 
     // buildInfo.go:541
     pub fn get_compiler_options(&self, build_info_directory: &str) -> CompilerOptions {
-        let mut options = CompilerOptions::default();
+        let mut options = tsrs_core::CompilerOptions::default();
         if let Some(entries) = &self.options {
             for (option, value) in entries {
                 let value = json_to_option_value(value);
@@ -1003,7 +1003,7 @@ impl ObjWriter<'_> {
         self.key(key);
         write_array(self.out, v, |out, s| tsrs_core::json::write_compact_string(out, s));
     }
-    fn opt_strings(&mut self, key: &str, v: &Option<Vec<String>>) {
+    fn opt_strings(&mut self, key: &str, v: Option<&[String]>) {
         // omitzero on a slice omits nil and empty slices.
         if let Some(v) = v {
             if !v.is_empty() {
@@ -1045,7 +1045,7 @@ impl Obj {
             self.set(key, Value::Array(items.iter().map(f).collect()));
         }
     }
-    fn opt_strings(&mut self, key: &str, v: &Option<Vec<String>>) {
+    fn opt_strings(&mut self, key: &str, v: Option<&[String]>) {
         // omitzero on a slice omits nil and empty slices.
         if let Some(v) = v {
             if !v.is_empty() {

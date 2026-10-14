@@ -20,24 +20,29 @@ pub const UNIT_SHIFT: u32 = 3;
 pub const RESERVE: usize = 1 << (32 + UNIT_SHIFT);
 /// Chunk sizes and offsets are multiples of this (a multiple of every supported page size).
 const GRANULE: usize = 64 << 10;
-/// Size and alignment of `huge` chunks: on Linux the transparent huge page of a 4 KiB-page kernel (x86-64, arm64). A
-/// fault gets a huge page only if the aligned 2 MiB around it lies inside one advised read-write mapping, so a chunk
+/// Size and alignment of `huge` chunks: on Linux the transparent huge page of a 4 KiB-page kernel (x86-64, arm64).
+///
+/// A fault gets a huge page only if the aligned 2 MiB around it lies inside one advised read-write mapping, so a chunk
 /// must not share a 2 MiB block with a neighbour. Elsewhere `GRANULE` (macOS has no huge pages for anonymous memory).
 #[cfg(target_os = "linux")]
 pub const HUGE_CHUNK: usize = 2 << 20;
 #[cfg(not(target_os = "linux"))]
 pub const HUGE_CHUNK: usize = GRANULE;
 
-/// Where the reservation lives: a fixed address, so `base()` is a constant and turning a handle into an address
-/// costs an add, no load (a loaded base cost ~25% more instructions). 64 TiB + 4 GiB is clear of every placement seen
-/// on the supported platforms: macOS keeps 4-448 GiB for the binary, the shared cache and its malloc zones and places
-/// other mappings upward from 448 GiB; mimalloc hints from 2 to 30 TiB; Linux puts PIE binaries near 85 TiB and maps
-/// top-down below the stack (near 128 TiB). It needs a 47-bit address space (x86-64, arm64 with 48-bit VA).
+/// Keeps handle reconstruction to a constant-base address calculation.
 ///
-/// The value is chosen for arm64 codegen: one `movz` materializes it (a single 16-bit chunk, `0x4001 << 32`), and
-/// bit 32 overlaps the offset range (`handle << 3` < 2^35), so LLVM cannot turn the add into an `orr`; `add x, base,
-/// w, uxtw #3` then folds the zero-extension and the shift of a 32-bit handle into the one instruction. A base with
-/// disjoint bits (0x4000_0000_0000) gave `mov w, w` + `orr` per dereference of a handle passed in a register.
+/// Where the reservation lives: a fixed address, so `base()` is a constant and turning a handle into an
+/// address costs an add, no load (a loaded base cost ~25% more instructions). 64 TiB + 4 GiB is clear of
+/// every placement seen on the supported platforms: macOS keeps 4-448 GiB for the binary, the shared cache
+/// and its malloc zones and places other mappings upward from 448 GiB; mimalloc hints from 2 to 30 TiB; Linux
+/// puts PIE binaries near 85 TiB and maps top-down below the stack (near 128 TiB). It needs a 47-bit address
+/// space (x86-64, arm64 with 48-bit VA).
+///
+/// The value is chosen for arm64 codegen: one `movz` materializes it (a single 16-bit chunk, `0x4001 << 32`),
+/// and bit 32 overlaps the offset range (`handle << 3` < 2^35), so LLVM cannot turn the add into an `orr`;
+/// `add x, base, w, uxtw #3` then folds the zero-extension and the shift of a 32-bit handle into the one
+/// instruction. A base with disjoint bits (`0x4000_0000_0000`) gave `mov w, w` + `orr` per dereference of a
+/// handle passed in a register.
 pub const BASE_ADDR: usize = 0x4001_0000_0000;
 
 static RESERVED: AtomicBool = AtomicBool::new(false);
@@ -229,19 +234,21 @@ pub(crate) fn page_size() -> usize {
     *PAGE_SIZE.get_or_init(|| usize::try_from(unsafe { libc::sysconf(libc::_SC_PAGESIZE) }).ok().filter(|p| p.is_power_of_two()).unwrap_or(4096))
 }
 
-/// Gives the memory of the whole pages inside `p .. p + len` (part of a chunk from `alloc_chunk`) back to the system
-/// without returning the range: it is never handed out again, so no later object gets the address of one that was
-/// there (a stale key in a table keyed by address stays stale). For a freed file region whose neighbours in its slab
-/// are alive (`arena::Region::retire_on_free`). Linux: `MADV_DONTNEED` (no mapping split, so no growth in the
-/// number of mappings; a stray read sees zeros). Elsewhere: a no-access mapping over the pages, as `decommit` (a stray
-/// access faults), which also takes them out of the macOS footprint at once (`MADV_FREE` only marks them reclaimable).
+/// Gives the memory of the whole pages inside `p .. p + len` (part of a chunk from `alloc_chunk`) back to the
+/// system without returning the range: it is never handed out again, so no later object gets the address of
+/// one that was there (a stale key in a table keyed by address stays stale). For a freed file region whose
+/// neighbours in its slab are alive (`arena::Region::retire_on_free`). Linux: `MADV_DONTNEED` (no mapping
+/// split, so no growth in the number of mappings; a stray read sees zeros). Elsewhere: a no-access mapping
+/// over the pages, as `decommit` (a stray access faults), which also takes them out of the macOS footprint at
+/// once (`MADV_FREE` only marks them reclaimable).
 ///
-/// Bound: a discarded range stays taken, so a run uses as much of the reservation as if the memory had never been
-/// freed, which is what the batch compiler did before. The retired file regions of a `--noEmit` check hold their
-/// chunks' capacity (vscode: 408 MB for 2,337 leaves; 2.0 GB of the reservation in use at the peak with 4 checkers,
-/// with or without freeing). File regions take about a third more reservation than the bytes they use (unused chunk
-/// tails: vscode 1,050 MB for 794 MB), so about 0.3 GiB more on the 38k-file codebase (27.5k TypeScript files, 954 MiB
-/// of parse and bind output), whose worst measured peak is 11.4 GiB of the 32 GiB (notes/mem-free-leaf-files.md).
+/// Bound: a discarded range stays taken, so a run uses as much of the reservation as if the memory had never
+/// been freed, which is what the batch compiler did before. The retired file regions of a `--noEmit` check
+/// hold their chunks' capacity (vscode: 408 MB for 2,337 leaves; 2.0 GB of the reservation in use at the peak
+/// with 4 checkers, with or without freeing). File regions take about a third more reservation than the bytes
+/// they use (unused chunk tails: vscode 1,050 MB for 794 MB), so about 0.3 GiB more on the 38k-file codebase
+/// (27.5k TypeScript files, 954 MiB of parse and bind output), whose worst measured peak is 11.4 GiB of the
+/// 32 GiB (notes/mem-free-leaf-files.md).
 ///
 /// # Safety
 /// Nothing may use the memory afterwards.

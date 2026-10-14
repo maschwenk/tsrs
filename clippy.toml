@@ -4,7 +4,7 @@
 avoid-breaking-exported-api = false
 
 # Keys whose Hash and Eq use the pointer, not the contents, so interior mutability cannot change the hash.
-ignore-interior-mutability = ["tsrs_fswatch::watcher::dwKey"]
+ignore-interior-mutability = ["tsrs_core::ptr::P", "tsrs_core::ptr::SP", "tsrs_fswatch::watcher::dwKey"]
 
 disallowed-types = [
   { path = "std::collections::HashMap", reason = "SipHash; use rustc_hash::FxHashMap, or tsrs_core::collections::OrderedMap when order matters (docs/PORTING.md)" },

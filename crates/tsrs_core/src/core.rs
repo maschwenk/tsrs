@@ -338,8 +338,10 @@ pub fn compute_ecma_line_starts_seq(text: &str, mut yield_: impl FnMut(u32) -> b
     yield_(line_start as u32);
 }
 
-/// tsrs-only: the number of positions `compute_ecma_line_starts_seq` yields (one per line terminator, with CR LF as
-/// one, plus the last line), counted with vectorized byte searches instead of the per-byte loop.
+/// Counts line starts with the same terminator rules as the line-map builder.
+///
+/// tsrs-only: the number of positions `compute_ecma_line_starts_seq` yields (one per line terminator, with CR
+/// LF as one, plus the last line), counted with vectorized byte searches instead of the per-byte loop.
 pub fn count_ecma_line_starts(text: &str) -> usize {
     let bytes = text.as_bytes();
     let mut n = 1 + memchr::memchr_iter(b'\n', bytes).count();
@@ -623,6 +625,7 @@ pub fn single_element_slice<T>(element: Option<T>) -> Vec<T> {
 // onAdded is called for each key-value pair that is in m2 but not in m1.
 // onRemoved is called for each key-value pair that is in m1 but not in m2.
 // onChanged is called for each key where the value in m1 differs from the value in m2.
+#[expect(clippy::implicit_hasher, reason = "The API deliberately accepts only FxHashMap, as required by the workspace hashing policy.")]
 pub fn diff_maps<K: Hash + Eq, V: PartialEq>(
     m1: &FxHashMap<K, V>,
     m2: &FxHashMap<K, V>,
@@ -637,6 +640,7 @@ pub fn diff_maps<K: Hash + Eq, V: PartialEq>(
     clippy::iter_over_hash_type,
     reason = "Go's DiffMapsFunc ranges over the maps too; the one caller (tsrs_project update_watches) collects watch changes, whose order is not output"
 )]
+#[expect(clippy::implicit_hasher, reason = "The API deliberately accepts only FxHashMap, as required by the workspace hashing policy.")]
 pub fn diff_maps_func<K: Hash + Eq, V1, V2>(
     m1: &FxHashMap<K, V1>,
     m2: &FxHashMap<K, V2>,
@@ -671,6 +675,7 @@ pub fn diff_maps_func<K: Hash + Eq, V1, V2>(
 }
 
 // CopyMapInto is maps.Copy, unless dst is nil, in which case it clones and returns src.
+#[expect(clippy::implicit_hasher, reason = "The API deliberately accepts only FxHashMap, as required by the workspace hashing policy.")]
 pub fn copy_map_into<K: Hash + Eq + Clone, V: Clone>(dst: Option<FxHashMap<K, V>>, src: &FxHashMap<K, V>) -> FxHashMap<K, V> {
     match dst {
         None => src.clone(),

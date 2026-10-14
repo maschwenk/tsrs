@@ -259,7 +259,7 @@ fn start_fs_events_streams(
     if watches.is_empty() {
         return Ok(Vec::new());
     }
-    let mut seen = FxHashSet::with_capacity_and_hasher(watches.len(), Default::default());
+    let mut seen = FxHashSet::with_capacity_and_hasher(watches.len(), rustc_hash::FxBuildHasher);
     let mut paths = Vec::with_capacity(watches.len());
     paths.extend(watches.iter().filter_map(|watch| {
         let path = watch.w.physical_dir.clone();

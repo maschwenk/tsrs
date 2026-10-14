@@ -171,7 +171,7 @@ struct SubtreeFactsCache {
 
 thread_local! {
     static SUBTREE_FACTS_CACHE: SubtreeFactsCache =
-        SubtreeFactsCache { enabled: std::cell::Cell::new(false), facts: std::cell::RefCell::new(Default::default()) };
+        SubtreeFactsCache { enabled: std::cell::Cell::new(false), facts: std::cell::RefCell::new(rustc_hash::FxHashMap::default()) };
 }
 
 /// Runs `f` with `Node::subtree_facts` cached on this thread (nested calls share the outer cache).

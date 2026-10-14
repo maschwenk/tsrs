@@ -635,9 +635,7 @@ impl RuntimeSyntaxTransformer {
             expressions.extend(node.as_variable_statement().declaration_list.as_variable_declaration_list().declarations.nodes().iter().filter_map(
                 |&declaration| {
                     let v = declaration.as_variable_declaration();
-                    if v.initializer().is_none() {
-                        return None;
-                    }
+                    v.initializer()?;
                     if ast::is_binding_pattern(declaration.name().unwrap()) {
                         let visited = self.visitor().visit_node(Some(declaration)).unwrap();
                         let callback = |export_name: P<Node>, export_value: P<Node>, location: Option<&TextRange>| {

@@ -107,11 +107,12 @@ impl Freer {
 
     /// tsrs-only: once the frees queued so far are done, after each cycle (and the first build):
     /// - macOS: the allocator gives its freed memory back (`mi_collect(true)`), on every worker-pool thread and here.
-    ///   mimalloc keeps much of what a cycle freed resident there (after a few full rebuilds of vscode, its heap stood
-    ///   ~1 GB above the initial build), and purging at once on every free slows the cycles themselves
-    ///   (MIMALLOC_PURGE_DELAY=0: the hub edit 1.3 -> 2.0 s). The pool's threads matter as much as this one: what they
-    ///   allocated during the cycle is freed here, from another thread, and such a block stays allocated in its page
-    ///   (unpurgeable) until the owning thread collects (notes/watch-macos.md, "memory").
+    ///   mimalloc keeps much of what a cycle freed resident there (after a few full rebuilds of vscode, its
+    ///   heap stood ~1 GB above the initial build), and purging at once on every free slows the cycles
+    ///   themselves (`MIMALLOC_PURGE_DELAY=0`: the hub edit 1.3 -> 2.0 s). The pool's threads matter as much
+    ///   as this one: what they allocated during the cycle is freed here, from another thread, and such a
+    ///   block stays allocated in its page (unpurgeable) until the owning thread collects
+    ///   (notes/watch-macos.md, "memory").
     /// - the profiling build's per-cycle heap report (`tsrs_core::memsplit::cycle_done`; nothing otherwise).
     pub(crate) fn after_cycle(&self) {
         self.run(|| {

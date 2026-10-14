@@ -3,12 +3,12 @@
 `docs/PORTING.md` says how Go becomes Rust. This file says what the Rust must not do, how that is checked, and which
 performance techniques are in place, rejected or untried.
 
-The Clippy baseline follows oxc: the `all`, `pedantic`, `complexity`, `nursery`, and `cargo` groups, with oxc's
-documented global exceptions. The port keeps the Go source's public API, names, numeric domains, and control-flow
-shape where changing them would obscure parity, so `Cargo.toml` documents the additional active exceptions. The
-stricter rules below target costs and risks that a port can introduce: copies, allocations, argument passing, hash
-iteration order, threading, and `unsafe`. They draw on Bun, oxc, Rolldown, rust-analyzer, Ruff and ty, Biome,
-Turborepo, and swc. Where a rule copies one of them, it says which.
+The Clippy baseline follows oxc's `all`, `pedantic`, `complexity`, `nursery`, and `cargo` groups, with the
+remaining global exceptions documented in `Cargo.toml`. The port keeps the Go source's public API, names, numeric
+domains, and control-flow shape where changing them would obscure parity, so `Cargo.toml` documents the additional
+active exceptions. The stricter rules below target costs and risks that a port can introduce: copies, allocations,
+argument passing, hash iteration order, threading, and `unsafe`. They draw on Bun, oxc, Rolldown, rust-analyzer, Ruff
+and ty, Biome, Turborepo, and swc. Where a rule copies one of them, it says which.
 
 ## Clippy
 
@@ -33,6 +33,10 @@ Details:
 - Findings depend on the Clippy version, so `rust-toolchain.toml` pins it everywhere.
 - The command covers the library and binary targets of every workspace crate except `tsrs_fourslash`. That crate is
   mostly 750k lines of generated Go test translations and has its own generator and build gates.
+- Also check `--all-targets` and `--all-targets --all-features` when changing lint policy. The latter enables
+  `plain-ptrs`, so check optional features with compressed pointers separately. These scopes include tests,
+  examples, profiling tools and both pointer representations.
+- Workspace crates declare `publish = false`; missing crates.io metadata does not need a global exception.
 - Generated Rust is linted; fix its generator when Clippy finds something. When generated code intentionally needs
   an exception, emit the smallest reasoned `#[expect]` from the generator.
 - `dead_code`, `unused_imports`, `unused_variables`, `unused_mut` and `unsafe_op_in_unsafe_fn` are ordinary compiler

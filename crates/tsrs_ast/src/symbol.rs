@@ -825,7 +825,7 @@ impl SymbolMap {
                 }
             }
             extra.odd_keys.retain(|&(j, _)| j as usize != i);
-            for (j, _) in extra.odd_keys.iter_mut() {
+            for (j, _) in &mut extra.odd_keys {
                 if *j as usize > i {
                     *j -= 1;
                 }
@@ -860,9 +860,13 @@ impl<'a> HashedName<'a> {
     }
 }
 
-/// A 256-bit Bloom filter of the keys of a few tables taken together (two bits per key, other hash bits than a
-/// table's own filter), for a lookup that tries the same tables for every name: a name it rejects is a key of none
-/// of them. It holds the keys the tables had when they were added; the owner drops it when they may change.
+/// Rejects names absent from every table in a group.
+///
+/// A 256-bit Bloom filter of the keys of a few tables taken together (two bits per key, other hash bits than
+/// a table's own filter), for a lookup that tries the same tables for every name: a name it rejects is a key
+/// of none of them.
+///
+/// It holds the keys the tables had when they were added; the owner drops it when they may change.
 #[derive(Clone, Copy, Default)]
 pub struct NameFilter([u64; 4]);
 
@@ -906,6 +910,7 @@ impl SymbolTable {
     }
 
     /// A copy of the table as a value (shared graph: a checker's copy of a frozen table held inline).
+    #[must_use]
     pub fn clone_value(&self) -> SymbolTable {
         SymbolTable(FrozenCell::new(self.0.borrow().clone()))
     }

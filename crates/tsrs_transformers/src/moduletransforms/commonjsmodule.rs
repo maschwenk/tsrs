@@ -325,7 +325,7 @@ impl CommonJSModuleTransformer {
         // These are marked as custom prologue so they are ordered before the external helpers
         // import declaration (e.g., `const tslib_1 = require("tslib")`), matching TypeScript's emit order.
         let exported_functions_start = statements.len();
-        for &func in info.exported_functions.iter() {
+        for &func in &info.exported_functions {
             self.append_exports_of_class_or_function_declaration(&mut statements, func);
         }
         for &s in &statements[exported_functions_start..] {

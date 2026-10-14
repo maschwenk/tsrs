@@ -152,9 +152,9 @@ impl Json for RequestMessage {
     fn to_json(&self) -> Value {
         let mut w = ObjectWriter::new(4);
         w.field("jsonrpc", &JSONRPCVersion);
-        w.opt("id", &self.id);
+        w.opt("id", self.id.as_ref());
         w.field("method", &self.method);
-        w.opt("params", &self.params);
+        w.opt("params", self.params.as_ref());
         w.finish()
     }
 
@@ -193,8 +193,8 @@ impl Json for ResponseMessage {
         if self.result.is_none() && self.raw_result {
             w.raw("result", Value::Null);
         }
-        w.opt("result", &self.result);
-        w.opt("error", &self.error);
+        w.opt("result", self.result.as_ref());
+        w.opt("error", self.error.as_ref());
         w.finish()
     }
 

@@ -524,6 +524,7 @@ enum globalsSearch {
 
 impl CompletionList {
     // completions.go:384
+    #[expect(clippy::wrong_self_convention, reason = "The method name and mutable receiver match the upstream Go operation.")]
     pub fn to_lsp(self) -> lsproto::CompletionList {
         let mut items = Vec::with_capacity(self.items.len());
         items.extend(self.items.into_iter().map(|entry| entry.completion_item));
@@ -1292,6 +1293,7 @@ impl getCompletionDataState {
 
     // Aggregates relevant symbols for completion in object literals in type argument positions.
     // completions.go:1026
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn try_get_object_type_literal_in_type_argument_completion_symbols(&mut self, type_checker: &mut Checker) -> Result<globalsSearch, lsproto::Error> {
         let Some(type_literal_node) = try_get_type_literal_node(self.context_token) else {
             return Ok(globalsSearch::Continue);
@@ -1323,6 +1325,7 @@ impl getCompletionDataState {
     // Aggregates relevant symbols for completion in object literals and object binding patterns.
     // Relevant symbols are stored in the captured 'symbols' variable.
     // completions.go:1071
+    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn try_get_object_like_completion_symbols(&mut self, l: &LanguageService, ctx: &Context, type_checker: &mut Checker) -> Result<globalsSearch, lsproto::Error> {
         if let Some(context_token) = self.context_token {
             if context_token.kind() == Kind::DotDotDotToken {

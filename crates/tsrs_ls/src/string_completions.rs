@@ -503,6 +503,7 @@ fn to_path_completions(names: Vec<moduleCompletionNameAndKind>) -> Vec<pathCompl
 
 impl LanguageService {
     // string_completions.go:622 (Go `(*lsproto.Range, bool)`: None = not ok, Some(None) = no span)
+    #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn path_completion_replacement_span(&self, file: P<SourceFile>, text_range: Option<TextRange>) -> Option<Option<lsproto::Range>> {
         let Some(text_range) = text_range else {
             return Some(None);
@@ -798,7 +799,7 @@ fn get_ambient_module_completions(fragment: &str, fragment_directory: &str, type
 
     if !fragment_directory.is_empty() {
         let module_name_with_separator = tspath::ensure_trailing_directory_separator(fragment_directory);
-        for module_name in non_relative_module_names.iter_mut() {
+        for module_name in &mut non_relative_module_names {
             if let Some(stripped) = module_name.strip_prefix(module_name_with_separator.as_str()) {
                 *module_name = stripped.to_string();
             }
@@ -1409,7 +1410,7 @@ impl LanguageService {
             completions.extend(patterns.iter().flat_map(|pattern| {
                 let mut modules =
                     self.get_modules_for_paths_pattern("" /*fragment*/, package_directory, pattern, is_exports, is_imports, extension_options, program);
-                for module in modules.iter_mut() {
+                for module in &mut modules {
                     module.name = format!("{}{}{}", remaining_directory_prefix, module.name, if module.kind == moduleCompletionKind::File { path_suffix } else { "" });
                 }
                 modules
@@ -1425,7 +1426,7 @@ impl LanguageService {
         result.extend(patterns.iter().flat_map(|pattern| {
             let mut modules =
                 self.get_modules_for_paths_pattern(remaining_fragment, package_directory, pattern, is_exports, is_imports, extension_options, program);
-            for module in modules.iter_mut() {
+            for module in &mut modules {
                 module.name =
                     format!("{}{}{}", remaining_directory_fragment, module.name, if module.kind == moduleCompletionKind::File { path_suffix } else { "" });
             }
@@ -1545,9 +1546,7 @@ impl LanguageService {
 
         let trim_prefix_and_suffix = |path: &str, prefix_str: &str| -> String {
             if let Some(result) = matching_suffixes.iter().find_map(|suffix| {
-                let Some(inner) = without_start_and_end(&tspath::normalize_path(path), prefix_str, suffix) else {
-                    return None;
-                };
+                let inner = without_start_and_end(&tspath::normalize_path(path), prefix_str, suffix)?;
                 Some(remove_leading_directory_separator(&inner).to_string())
             }) {
                 return result;

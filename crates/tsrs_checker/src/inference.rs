@@ -1890,6 +1890,7 @@ impl Checker {
     }
 
     // inference.go:1590
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_combined_type_flags(&mut self, types: &[P<Type>]) -> TypeFlags {
         let mut flags = TypeFlags::None;
         for &t in types {

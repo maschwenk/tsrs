@@ -108,7 +108,7 @@ pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
 /// Targets without `localtime_r` (WASI has no time zone): UTC, as Go's js/wasm reports it.
 #[cfg(not(unix))]
 pub fn format_local_time_03_04_05_pm(t: std::time::SystemTime) -> String {
-    let secs = t.duration_since(std::time::UNIX_EPOCH).map(|d| d.as_secs()).unwrap_or(0) % 86_400;
+    let secs = t.duration_since(std::time::UNIX_EPOCH).map_or(0, |d| d.as_secs()) % 86_400;
     let (hour, min, sec) = (secs / 3600, secs / 60 % 60, secs % 60);
     let hour12 = match hour % 12 {
         0 => 12,

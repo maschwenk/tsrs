@@ -199,7 +199,7 @@ impl WatchManager {
         });
         {
             let mut changed = self.changed();
-            let paths = changed.paths.get_or_insert_with(|| FxHashMap::with_capacity_and_hasher(events.len(), Default::default()));
+            let paths = changed.paths.get_or_insert_with(|| FxHashMap::with_capacity_and_hasher(events.len(), rustc_hash::FxBuildHasher));
             for e in events {
                 paths.insert(e.path.clone(), e.kind);
             }
@@ -253,7 +253,7 @@ impl WatchManager {
 
     /// Go `ResolveDesiredDirs`: each wanted directory, or its nearest existing ancestor (non-recursive).
     pub fn resolve_desired_dirs(&self, desired_dirs: &FxHashMap<String, bool>) -> FxHashMap<String, bool> {
-        let mut resolved: FxHashMap<String, bool> = FxHashMap::with_capacity_and_hasher(desired_dirs.len(), Default::default());
+        let mut resolved: FxHashMap<String, bool> = FxHashMap::with_capacity_and_hasher(desired_dirs.len(), rustc_hash::FxBuildHasher);
         #[expect(clippy::iter_over_hash_type, reason = "Go ranges over a map too; the result is a map merged with `||`")]
         for (dir, &recursive) in desired_dirs {
             // Only directories on disk can be watched. The embedded libs (bundled:///libs) exist in the FS but not on disk.
@@ -442,7 +442,7 @@ impl DirWatchSet {
     }
 }
 
-/// tsrs-only: whether `p` is a node_modules directory or lies in one.
+/// tsrs-only: whether `p` is a `node_modules` directory or lies in one.
 pub fn is_in_node_modules(p: &tspath::Path) -> bool {
     let s = p.as_str();
     s.ends_with("/node_modules") || s.contains("/node_modules/")

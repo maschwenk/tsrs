@@ -402,7 +402,7 @@ impl fileLoader {
             } else {
                 let mut reason = FileIncludeReason::new(fileIncludeKind::AutomaticTypeDirectiveFile);
                 reason.automatic_type_directive =
-                    Some(P::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: Default::default() }));
+                    Some(P::new(automaticTypeDirectiveFileData { type_reference: name.clone(), package_id: tsrs_module::PackageId::default() }));
                 p_diagnostics.push(processingDiagnostic::explaining(includeExplainingDiagnostic {
                     file: None,
                     diagnostic_reason: Some(P::new(reason)),
@@ -1166,7 +1166,7 @@ impl fileLoader {
             increase_depth: false,
             elide_on_depth: false,
             include_reason,
-            package_id: Default::default(),
+            package_id: tsrs_module::PackageId::default(),
         })
     }
 

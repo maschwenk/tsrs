@@ -839,7 +839,7 @@ impl Checker {
             } else if seen_default {
                 self.error(Some(node), &diagnostics::Required_type_parameters_may_not_follow_optional_type_parameters, &[]);
             }
-            for element in type_parameter_declarations[..i].iter() {
+            for element in &type_parameter_declarations[..i] {
                 if element.symbol() == node.symbol() {
                     self.error(node.name(), &diagnostics::Duplicate_identifier_0, &[&tsrs_scanner::declaration_name_to_string(node.name())]);
                 }
@@ -2025,6 +2025,7 @@ impl Checker {
     }
 
     // checker.go:8175
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn is_template_literal_context(&mut self, node: P<Node>) -> bool {
         let parent = node.parent().unwrap();
         is_parenthesized_expression(parent) && self.is_template_literal_context(parent)
@@ -2135,8 +2136,8 @@ impl Checker {
             let tuple = self.create_tuple_type_ex(&element_types, &element_infos, readonly /*readonly*/);
             return self.create_array_literal_type(tuple);
         }
-        let element_type: P<Type>;
-        if !element_types.is_empty() {
+
+        let element_type: P<Type> = if !element_types.is_empty() {
             for (i, element) in element_types.iter_mut().enumerate() {
                 let e = *element;
                 if element_infos[i].flags.intersects(ElementFlags::Variadic) {
@@ -2144,10 +2145,8 @@ impl Checker {
                     (*element) = self.get_indexed_access_type_or_undefined(e, number_type, AccessFlags::None, None, AliasArg::None).unwrap_or(self.any_type);
                 }
             }
-            element_type = self.get_union_type_ex(&element_types, UnionReduction::Subtype, AliasArg::None, None);
-        } else {
-            element_type = if self.strict_null_checks { self.implicit_never_type } else { self.undefined_widening_type };
-        }
+            self.get_union_type_ex(&element_types, UnionReduction::Subtype, AliasArg::None, None)
+        } else if self.strict_null_checks { self.implicit_never_type } else { self.undefined_widening_type };
         let array_type = self.create_array_type_ex(element_type, in_const_context);
         self.create_array_literal_type(array_type)
     }

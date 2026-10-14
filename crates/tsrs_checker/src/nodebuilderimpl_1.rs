@@ -252,7 +252,7 @@ impl NodeBuilderImpl {
             let type_ref = root.as_type_reference_node();
             let type_arguments = root.type_argument_list();
             if self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) && type_arguments.is_some() && !type_arguments.unwrap().nodes().is_empty() {
-                let access = self.create_access_expression(c, type_ref.type_name);
+                let access = self.create_access_expression(type_ref.type_name);
                 let mut expr = self.create_expression_with_type_arguments(c, access, type_arguments);
                 expr = get_access_stack(ref_).into_iter().fold(expr, |mut expr, id| {
                     expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
@@ -269,7 +269,7 @@ impl NodeBuilderImpl {
             });
             return Some(self.f.update_type_reference_node(root, type_name, ref_.type_argument_list()));
         }
-        let mut expr = self.create_access_expression(c, root);
+        let mut expr = self.create_access_expression(root);
         expr = get_access_stack(ref_).into_iter().fold(expr, |mut expr, id| {
             expr = self.f.new_property_access_expression(expr, None, id, NodeFlags::None);
 
@@ -493,9 +493,7 @@ impl NodeBuilderImpl {
 
     // nodebuilderimpl.go:511
     pub(crate) fn try_get_resolved_symbol_from_type_node(&self, c: &mut Checker, node: P<Node>) -> Option<P<Symbol>> {
-        if node.parent().is_none() {
-            return None;
-        }
+        node.parent()?;
         c.get_type_from_type_node(node);
         // call to ensure symbol is resolved
         let links = c.symbol_node_links.try_get(node)?;
@@ -889,7 +887,7 @@ impl NodeBuilderImpl {
             if !self.ctx().flags.get().intersects(Flags::UseInstantiationExpressions) || is_entity_name(lhs) && (type_parameter_nodes.is_none() || type_parameter_nodes.unwrap().nodes().is_empty()) {
                 return self.f.new_qualified_name(lhs, identifier);
             }
-            let access = self.create_access_expression(c, lhs);
+            let access = self.create_access_expression(lhs);
             return self.create_expression_with_type_arguments(c, self.f.new_property_access_expression(access, None, identifier, NodeFlags::None), type_parameter_nodes);
         }
         identifier
@@ -1405,6 +1403,7 @@ impl NodeBuilderImpl {
 
         let context_file = self.ctx().enclosing_file.get().unwrap();
         let mut resolution_mode = override_import_mode;
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if resolution_mode == RESOLUTION_MODE_NONE && original_module_specifier.is_some() {
             resolution_mode = c.program.get_mode_for_usage_location(context_file, original_module_specifier.unwrap());
         } else if resolution_mode == RESOLUTION_MODE_NONE {
@@ -1698,7 +1697,7 @@ impl NodeBuilderImpl {
         if let Some(token) = decl.question_token {
             question_token = Some(self.f.new_token(token.kind()));
         }
-        let appropriate_constraint_type_node: Option<P<Node>>;
+
         let mut new_type_variable: Option<P<Node>> = None;
         let mut template_type = c.get_template_type_from_mapped_type(t);
         let type_parameter = c.get_type_parameter_from_mapped_type(t);
@@ -1709,7 +1708,7 @@ impl NodeBuilderImpl {
                 c.get_constraint_of_type_parameter(constraint_type).unwrap().flags().intersects(TypeFlags::Index)
             });
 
-        if c.is_mapped_type_with_keyof_constraint_declaration(t) {
+        let appropriate_constraint_type_node: Option<P<Node>> = if c.is_mapped_type_with_keyof_constraint_declaration(t) {
             // We have a { [P in keyof T]: X }
             // We do this to ensure we retain the toplevel keyof-ness of the type which may be lost due to keyof distribution during `getConstraintTypeFromMappedType`
             if self.ctx().flags.get().intersects(Flags::GenerateNamesForShadowedTypeParams) && self.is_homomorphic_mapped_type_with_non_homomorphic_instantiation(c, t) {
@@ -1728,7 +1727,7 @@ impl NodeBuilderImpl {
                 let modifiers_type = c.get_modifiers_type_from_mapped_type(t);
                 index_target = self.type_to_type_node(c, Some(modifiers_type));
             }
-            appropriate_constraint_type_node = Some(self.f.new_type_operator_node(Kind::KeyOfKeyword, index_target.unwrap()));
+            Some(self.f.new_type_operator_node(Kind::KeyOfKeyword, index_target.unwrap()))
         } else if needs_modifier_preserving_wrapper {
             // So, step 1: new type variable
             let new_symbol = c.new_symbol(SymbolFlags::TypeParameter, "T");
@@ -1736,11 +1735,11 @@ impl NodeBuilderImpl {
             let name = self.type_parameter_to_name(c, new_param);
             new_type_variable = Some(self.f.new_type_reference_node(name, None));
             // step 2: make that new type variable itself the constraint node, making the mapped type `{[K in T_1]: Template}`
-            appropriate_constraint_type_node = new_type_variable;
+            new_type_variable
         } else {
             let constraint_type = c.get_constraint_type_from_mapped_type(t);
-            appropriate_constraint_type_node = self.type_to_type_node(c, Some(constraint_type));
-        }
+            self.type_to_type_node(c, Some(constraint_type))
+        };
 
         // nameType and templateType nodes have to be in the new scope
         let scope_type_parameter = c.get_type_parameter_from_mapped_type(t);
@@ -1834,6 +1833,7 @@ impl NodeBuilderImpl {
         let Some(t) = t else {
             return Some(self.f.new_keyword_type_node(Kind::AnyKeyword));
         };
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if !self.is_actively_expanding(c) && type_node.is_some() && self.get_type_from_type_node(c, type_node.unwrap(), false) == Some(t) {
             let reused = self.try_reuse_existing_node_helper(c, type_node.unwrap());
             if reused.is_some() {
@@ -1901,6 +1901,7 @@ impl NodeBuilderImpl {
         let parameter_type = c.get_type_of_symbol(parameter_symbol);
         let parameter_type_node = self.serialize_type_for_declaration(c, parameter_declaration, Some(parameter_type), Some(parameter_symbol), true);
         let mut modifiers: Option<P<ModifierList>> = None;
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if !self.ctx().flags.get().intersects(Flags::OmitParameterModifiers) && preserve_modifier_flags && parameter_declaration.is_some() && can_have_modifiers(parameter_declaration.unwrap()) {
             let originals: Vec<P<Node>> = parameter_declaration.unwrap().modifier_nodes().iter().copied().filter(|&n| is_modifier(n)).collect();
             let clones: Vec<P<Node>> = originals.iter().map(|node| node.clone_node(&self.f)).collect();

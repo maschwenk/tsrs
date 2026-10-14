@@ -1716,6 +1716,7 @@ impl LanguageService {
     }
 
     // completions.go:5023
+    #[expect(clippy::fn_params_excessive_bools, reason = "The boolean parameters preserve the upstream Go function signature.")]
     pub(crate) fn create_lsp_completion_item(
         &self,
         _ctx: &Context,

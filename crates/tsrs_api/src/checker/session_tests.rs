@@ -203,7 +203,7 @@ pub(super) fn session_with(extra: &[(&str, &str)], configs: &[&str]) -> S {
     s
 }
 
-/// Same request sequence as `TestTsrsCheckerShapes` in testdata/go_probe/zz_tsrs_probe_test.go.
+/// Same request sequence as `TestTsrsCheckerShapes` in `testdata/go_probe/zz_tsrs_probe_test.go`.
 fn shapes() -> Vec<(String, Value)> {
     let mut s = session();
     let lit = s.shape("type.literal", "getTypeAtPosition", s.at("lit ="));
@@ -384,7 +384,7 @@ fn session_responses_match_pinned_go() {
 
 /// Exact uint64 handles through core's Session: values above 2^53 must reach the lookup unrounded (pinned Go
 /// reports the exact number), and small handles keep working. Recorded against pinned Go with
-/// testdata/node/numeric_ids_raw.mjs over raw sync/async payloads.
+/// `testdata/node/numeric_ids_raw.mjs` over raw sync/async payloads.
 #[test]
 fn uint64_handles_above_2_pow_53_are_looked_up_exactly() {
     let s = session();
@@ -442,8 +442,8 @@ fn uint64_handles_above_2_pow_53_are_looked_up_exactly() {
     }
 }
 
-/// Full type responses (objectFlags included) for the cases in testdata/go_probe/flags/cases.txt, compared
-/// with go_flags_b85298b6.jsonl recorded by `TestTsrsCheckerFlags` (same fixtures, same request order).
+/// Full type responses (objectFlags included) for the cases in `testdata/go_probe/flags/cases.txt`, compared
+/// with `go_flags_b85298b6.jsonl` recorded by `TestTsrsCheckerFlags` (same fixtures, same request order).
 #[test]
 fn type_flags_and_tuple_targets_match_pinned_go() {
     const CASES: &str = include_str!("testdata/go_probe/flags/cases.txt");

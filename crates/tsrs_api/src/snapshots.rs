@@ -75,7 +75,7 @@ fn compute_snapshot_changes(prev: &Snapshot, next: &Snapshot) -> Value {
     let next_projects = next.project_collection.projects_by_id();
     let mut removed = Vec::new();
     let mut changed = OrderedMap::default();
-    for (id, old) in prev_projects.iter() {
+    for (id, old) in &prev_projects {
         match next_projects.get(id) {
             None => removed.push(s(old.id().0)),
             Some(new) => {
@@ -88,7 +88,7 @@ fn compute_snapshot_changes(prev: &Snapshot, next: &Snapshot) -> Value {
                 let mut changed_files: Vec<&Path> = Vec::new();
                 let mut deleted_files: Vec<&Path> = Vec::new();
                 #[expect(clippy::iter_over_hash_type, reason = "both lists are sorted before they are serialized")]
-                for (path, old_file) in old_files.iter() {
+                for (path, old_file) in old_files {
                     match new_files.get(path) {
                         None => deleted_files.push(path),
                         Some(new_file) if !std::ptr::eq::<tsrs_ast::SourceFile>(&raw const **old_file, &raw const **new_file) => changed_files.push(path),
@@ -513,7 +513,7 @@ impl Session {
 
 /// Runs every filesystem call inside the request that created the snapshot (`RequestScope`), so client
 /// callbacks made from compiler worker threads while the program is built are attributed to that request by
-/// the transport's re-entrancy checks (crates/tsrs_api_transport/INTEGRATION.md). A snapshot may keep the
+/// the transport's re-entrancy checks (`crates/tsrs_api_transport/INTEGRATION.md`). A snapshot may keep the
 /// wrapper after its request ended; later lazy reads then count against a finished request, which holds
 /// nothing.
 pub(crate) struct ScopedFs {

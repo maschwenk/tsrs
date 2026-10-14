@@ -168,6 +168,7 @@ impl Context {
 
     // Go `context.WithValue(ctx, key, value)` where the key is the value's type (callers use a newtype per key,
     // as Go code uses an unexported key type).
+    #[must_use]
     pub fn with_value<T: Any + Send + Sync>(&self, value: T) -> Context {
         self.push(ctxKind::Value(TypeId::of::<T>(), Arc::new(value)))
     }
@@ -352,6 +353,7 @@ pub enum CheckerLifetime {
     #[default]
     Temporary = 0,
     Diagnostics = 1,
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     API = 2,
 }
 

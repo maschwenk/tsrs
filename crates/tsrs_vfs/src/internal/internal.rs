@@ -249,7 +249,7 @@ mod tests {
         fn by_elements(name: &str) -> bool {
             name == "." || name.split('/').all(|elem| !elem.is_empty() && elem != "." && elem != "..")
         }
-        let alphabet = [b'/', b'.', b'a'];
+        let alphabet = *b"/.a";
         let mut bytes = Vec::new();
         for len in 0..=9 {
             for mut code in 0..3usize.pow(len) {

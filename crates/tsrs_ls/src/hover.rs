@@ -310,9 +310,7 @@ fn documentation_from_alias(
 
     if let Some(result) = candidates.into_iter().find_map(|candidate| {
         let aliased_declaration = candidate.value_declaration().or_else(|| candidate.declarations().first().copied());
-        if aliased_declaration.is_none() {
-            return None;
-        }
+        aliased_declaration?;
 
         let documentation =
             get_documentation_from_declaration(get_mapped_location, c, Some(candidate), aliased_declaration, Some(node), content_format, comment_only);

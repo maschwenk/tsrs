@@ -193,7 +193,7 @@ impl Checker {
         let location = location.unwrap();
         let importing_source_file = ast::get_source_file_of_node(location).unwrap();
         let mut context_specifier: Option<P<Node>> = None;
-        let mode: ResolutionMode;
+
 
         if ast::is_string_literal_like(location) || location.parent().is_some() && ast::is_module_declaration(location.parent().unwrap()) && location.parent().unwrap().as_module_declaration().name() == location {
             context_specifier = Some(location);
@@ -232,14 +232,14 @@ impl Checker {
             }
         }
 
-        match context_specifier {
+        let mode: ResolutionMode = match context_specifier {
             Some(cs) if ast::is_string_literal_like(cs) => {
-                mode = self.program.get_mode_for_usage_location(importing_source_file, cs);
+                self.program.get_mode_for_usage_location(importing_source_file, cs)
             }
             _ => {
-                mode = self.program.get_default_resolution_mode_for_file(importing_source_file);
+                self.program.get_default_resolution_mode_for_file(importing_source_file)
             }
-        }
+        };
 
         let resolved_module = self.program.get_resolved_module(importing_source_file, module_reference, mode);
         let is_resolved = resolved_module.is_some_and(|r| r.is_resolved());
@@ -358,14 +358,14 @@ impl Checker {
                                     diagnostic_details = Some(self.create_mode_mismatch_details(importing_source_file, error_node));
                                 }
 
-                                let message: &'static Message;
-                                if override_host.is_some_and(|h| h.kind() == Kind::ImportDeclaration && h.import_clause().is_some() && h.import_clause().unwrap().is_type_only()) {
-                                    message = &diagnostics::Type_only_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute;
+
+                                let message: &'static Message = if override_host.is_some_and(|h| h.kind() == Kind::ImportDeclaration && h.import_clause().is_some() && h.import_clause().unwrap().is_type_only()) {
+                                    &diagnostics::Type_only_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute
                                 } else if override_host.is_some_and(|h| h.kind() == Kind::ImportType) {
-                                    message = &diagnostics::Type_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute;
+                                    &diagnostics::Type_import_of_an_ECMAScript_module_from_a_CommonJS_module_must_have_a_resolution_mode_attribute
                                 } else {
-                                    message = &diagnostics::The_current_file_is_a_CommonJS_module_whose_imports_will_produce_require_calls_however_the_referenced_file_is_an_ECMAScript_module_and_cannot_be_imported_with_require_Consider_writing_a_dynamic_import_0_call_instead;
-                                }
+                                    &diagnostics::The_current_file_is_a_CommonJS_module_whose_imports_will_produce_require_calls_however_the_referenced_file_is_an_ECMAScript_module_and_cannot_be_imported_with_require_Consider_writing_a_dynamic_import_0_call_instead
+                                };
 
                                 self.add_diagnostic(new_diagnostic_chain_for_node(diagnostic_details, error_node, Some(message), &[&module_reference]));
                             }
@@ -471,6 +471,7 @@ impl Checker {
 
                 if candidates.len() == 1 {
                     let merged_candidate = self.get_merged_symbol(candidates[0].symbol);
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                         return Some(self.get_merged_symbol(augmentation.unwrap()));
                     }
@@ -488,6 +489,7 @@ impl Checker {
                 }));
                 if best_type_candidates.len() == 1 {
                     let merged_candidate = self.get_merged_symbol(best_type_candidates[0].symbol);
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                         return Some(self.get_merged_symbol(augmentation.unwrap()));
                     }
@@ -495,6 +497,7 @@ impl Checker {
                 }
                 let pattern = find_best_pattern_match(&best_type_candidates, |v| &v.pattern, module_reference).unwrap();
                 let merged_candidate = self.get_merged_symbol(pattern.symbol);
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
                     return Some(self.get_merged_symbol(augmentation.unwrap()));
                 }
@@ -698,6 +701,7 @@ impl Checker {
                 let target_file = module_symbol.declarations().iter().copied().find(|d| ast::is_source_file(*d));
                 let usage_mode = self.get_emit_syntax_for_module_specifier_expression(reference);
                 let mut export_module_dot_exports_symbol: Option<P<Symbol>> = None;
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if namespace_import.is_some()
                     && target_file.is_some()
                     && ModuleKind::Node20 <= self.module_kind
@@ -1264,7 +1268,7 @@ impl Checker {
     }
 
     /**
-     * Gets a SymbolTable containing both the early- and late-bound members of a symbol.
+     * Gets a `SymbolTable` containing both the early- and late-bound members of a symbol.
      *
      * For a description of late-binding, see `lateBindMember`.
      */
@@ -1333,7 +1337,7 @@ impl Checker {
                     clippy::iter_over_hash_type,
                     reason = "Go ranges over the map too; the loop only adds diagnostics (each names its own export), which the collection sorts on read"
                 )]
-                for (id, s) in lookup_table.iter() {
+                for (id, s) in &lookup_table {
                     // It's not an error if the file with multiple `export *`s with duplicate names exports a member with that name itself
                     if id == InternalSymbolNameExportEquals || s.exports_with_duplicate.is_empty() || symbols.lookup(id).is_some() {
                         continue;
@@ -1418,6 +1422,7 @@ impl Checker {
                     }
                 }
                 Some(target_symbol) => {
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if lookup_table.is_some() && export_node.is_some() && self.resolve_symbol(target_symbol) != self.resolve_symbol(source_symbol) {
                         let s = lookup_table.as_deref_mut().unwrap().get_mut(id).unwrap();
                         s.exports_with_duplicate.push(export_node.unwrap());
@@ -1581,7 +1586,7 @@ impl Checker {
                 if target == symbol || seen_symbols.has(&target) {
                     break;
                 }
-                if seen_symbols.len() == 0 {
+                if seen_symbols.is_empty() {
                     seen_symbols.add(symbol);
                 }
                 seen_symbols.add(target);
@@ -1994,6 +1999,7 @@ impl Checker {
                 if let Some(getter) = getter {
                     let getter_signature = self.get_signature_from_declaration(getter);
                     let this_parameter = self.get_accessor_this_parameter(fn_);
+                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                     if this_parameter.is_some() && Some(declaration) == this_parameter {
                         // Use the type from the *getter*
                         assert!(this_parameter.unwrap().type_node().is_none());

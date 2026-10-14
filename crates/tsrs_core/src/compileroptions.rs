@@ -181,7 +181,7 @@ pub fn empty_compiler_options() -> crate::P<CompilerOptions> {
         static EMPTY: std::sync::OnceLock<crate::P<CompilerOptions>> = std::sync::OnceLock::new();
         *EMPTY.get_or_init(|| {
             let _scope = crate::arena::enter_thread_arena();
-            crate::P::new(CompilerOptions::default())
+            crate::P::new(crate::CompilerOptions::default())
         })
     }
 }
@@ -472,9 +472,12 @@ pub const RESOLUTION_MODE_NONE: ResolutionMode = ModuleKind::None;
 pub const RESOLUTION_MODE_COMMON_JS: ResolutionMode = ModuleKind::CommonJS;
 pub const RESOLUTION_MODE_ESM: ResolutionMode = ModuleKind::ESNext;
 
-/// Go `type ModuleResolutionKind int32`: any int32 is representable (the API can receive values with no named constant; Go keeps
-/// them and panics only when a module is actually resolved, see `tsrs_module` resolver). Named values are
-/// associated constants, usable as patterns.
+/// Preserves unnamed resolution-mode values received through the Go API.
+///
+/// Go `type ModuleResolutionKind int32`: any int32 is representable (the API can receive values with no named
+/// constant; Go keeps them and panics only when a module is actually resolved, see `tsrs_module` resolver).
+///
+/// Named values are associated constants, usable as patterns.
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Default)]
 pub struct ModuleResolutionKind(pub i32);
@@ -556,6 +559,7 @@ impl fmt::Display for ModuleResolutionKind {
 pub enum NewLineKind {
     #[default]
     None = 0,
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     CRLF = 1,
     LF = 2,
 }

@@ -15,8 +15,8 @@ pub enum AssignmentKind {
 
 pub type AssignmentTarget = Node; // BinaryExpression | PrefixUnaryExpression | PostfixUnaryExpression | ForInOrOfStatement
 
-/// orderedSetMapThreshold is the size at which an orderedSet materializes its dedup map.
-/// Below this, contains() scans the values slice.
+/// orderedSetMapThreshold is the size at which an orderedSet materializes its dedup map. Below this,
+/// `contains()` scans the values slice.
 pub const orderedSetMapThreshold: usize = 16;
 
 pub struct orderedSet<T: Copy + Eq + std::hash::Hash> {
@@ -109,8 +109,8 @@ static FEATURE_MAP: &[(&str, FeatureList)] = &[
     ("Date", &[("esnext", &["toTemporalInstant"])]),
 ];
 
-/// DiagnosticDetails holds a resolved diagnostic message and its arguments,
-/// used for sharing diagnostic chain computation between the checker and incremental builder.
+/// `DiagnosticDetails` holds a resolved diagnostic message and its arguments, used for sharing diagnostic
+/// chain computation between the checker and incremental builder.
 #[derive(Clone, Debug)]
 pub struct DiagnosticDetails {
     pub message: &'static Message,

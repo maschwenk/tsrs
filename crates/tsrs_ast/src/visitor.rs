@@ -68,9 +68,7 @@ impl NodeVisitor {
     //   - If v.Visit returns nil, then the output is nil.
     //   - If v.Visit returns a SyntaxList Node, then the output is the only child of the SyntaxList Node.
     pub fn visit_node(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
-        let Some(node) = node else {
-            return None;
-        };
+        let node = node?;
         let Some(visit) = self.visit.clone() else {
             return Some(node);
         };
@@ -93,9 +91,7 @@ impl NodeVisitor {
     //   - If v.Visit returns nil, then the output is nil.
     //   - If v.Visit returns a SyntaxList Node, then the output is either the only child of the SyntaxList Node, or a Block containing the nodes in the list.
     pub fn visit_embedded_statement(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
-        let Some(node) = node else {
-            return None;
-        };
+        let node = node?;
         let Some(visit) = self.visit.clone() else {
             return Some(node);
         };
@@ -112,9 +108,7 @@ impl NodeVisitor {
     //   - If v.Visit returns a SyntaxList Node, then the children of that node will be merged into the output and a new NodeList will be returned.
     //   - If this method returns a new NodeList for any reason, it will have the same Loc as the input NodeList.
     pub fn visit_nodes(&mut self, nodes: Option<P<NodeList>>) -> Option<P<NodeList>> {
-        let Some(nodes) = nodes else {
-            return None;
-        };
+        let nodes = nodes?;
         if self.visit.is_none() {
             return Some(nodes);
         }
@@ -130,9 +124,7 @@ impl NodeVisitor {
     // Visits a ModifierList, possibly returning a new ModifierList in its place.
     // Same contract as visit_nodes.
     pub fn visit_modifiers(&mut self, nodes: Option<P<ModifierList>>) -> Option<P<ModifierList>> {
-        let Some(nodes) = nodes else {
-            return None;
-        };
+        let nodes = nodes?;
         if self.visit.is_none() {
             return Some(nodes);
         }
@@ -190,9 +182,7 @@ impl NodeVisitor {
 
     // Visits each child of a Node, possibly returning a new Node of the same kind in its place.
     pub fn visit_each_child(&mut self, node: Option<P<Node>>) -> Option<P<Node>> {
-        let Some(node) = node else {
-            return None;
-        };
+        let node = node?;
         if self.visit.is_none() {
             return Some(node);
         }
@@ -285,11 +275,13 @@ impl NodeVisitor {
     }
 }
 
-/// A child that the Go AST allows to be nil only by accident of construction (a "required" child) is non-optional in the
-/// Rust AST. Go's `VisitEachChild` stores whatever the visitor returns, so a visitor that returns nil for such a child
-/// produces a node with a nil child. That happens only in traversals whose result is discarded (the declaration
-/// transformer's side-effect visitors, e.g. `visitThisPropertyAssignments` returning nil outside its `this`
-/// container), so the Rust visitor keeps the original child instead of failing.
+/// A child that the Go AST allows to be nil only by accident of construction (a "required" child) is
+/// non-optional in the Rust AST.
+///
+/// Go's `VisitEachChild` stores whatever the visitor returns, so a visitor that returns nil for such a child
+/// produces a node with a nil child. That happens only in traversals whose result is discarded (the
+/// declaration transformer's side-effect visitors, e.g. `visitThisPropertyAssignments` returning nil outside
+/// its `this` container), so the Rust visitor keeps the original child instead of failing.
 pub fn required_child<T>(visited: Option<T>, original: T) -> T {
     visited.unwrap_or(original)
 }

@@ -752,7 +752,7 @@ impl CommandLineOptionNameMap {
 }
 
 pub(crate) fn command_line_options_to_map(compiler_options: &[&'static CommandLineOption]) -> CommandLineOptionNameMap {
-    let mut result = FxHashMap::with_capacity_and_hasher(compiler_options.len() * 2, Default::default());
+    let mut result = FxHashMap::with_capacity_and_hasher(compiler_options.len() * 2, rustc_hash::FxBuildHasher);
     result.extend(compiler_options.iter().flat_map(|option| {
         let lower: &'static str = tsrs_core::alloc_str(&tsrs_core::stringutil::go_strings_to_lower(option.name));
         [(option.name, *option), (lower, *option)]
@@ -765,7 +765,7 @@ pub static COMMAND_LINE_COMPILER_OPTIONS_MAP: LazyLock<CommandLineOptionNameMap>
 
 pub(crate) fn convert_map_to_options<O: OptionParser>(compiler_options: &OrderedMap<String, CompilerOptionsValue>, mut result: O) -> O {
     // this assumes any `key`, `value` pair in `options` will have `value` already be the correct type. this function should no error handling
-    for (key, value) in compiler_options.iter() {
+    for (key, value) in compiler_options {
         result.parse_option(key, value);
     }
     result
@@ -785,7 +785,7 @@ fn convert_options_from_json<O: OptionParser>(
         return (result, Vec::new());
     };
     let mut errors: Vec<P<Diagnostic>> = Vec::new();
-    for (key, value) in json_map.iter() {
+    for (key, value) in json_map {
         let opt = options_name_map.get(key);
         if let Some(opt) = opt {
             if opt.name != key {
@@ -1117,7 +1117,7 @@ pub fn parse_json_config_file_content(
 fn normalize_json_value(value: CompilerOptionsValue) -> CompilerOptionsValue {
     match value {
         CompilerOptionsValue::Object(mut value) => {
-            for (_, child) in value.iter_mut() {
+            for (_, child) in &mut value {
                 *child = normalize_json_value(std::mem::take(child));
             }
             CompilerOptionsValue::Object(value)
@@ -1139,7 +1139,7 @@ fn convert_to_object(source_file: P<SourceFile>) -> (CompilerOptionsValue, Vec<P
 }
 
 fn get_default_compiler_options(config_file_name: &str) -> CompilerOptions {
-    let mut options = CompilerOptions::default();
+    let mut options = tsrs_core::CompilerOptions::default();
     if !config_file_name.is_empty() && tspath::get_base_file_name(config_file_name) == "jsconfig.json" {
         let depth = 2;
         options = CompilerOptions {
@@ -1347,10 +1347,10 @@ fn parse_config(
     let resolved_path = tspath::to_path(config_file_name, &base_path, host.fs().use_case_sensitive_file_names());
     let mut errors: Vec<P<Diagnostic>> = Vec::new();
     if resolution_stack.contains(&resolved_path) {
-        let result;
+
         errors.push(new_compiler_diagnostic(&diagnostics::Circularity_detected_while_resolving_configuration_Colon_0, &[]));
-        if json.as_ref().map_or(0, tsrs_core::collections::OrderedMapExt::size) == 0 {
-            result = ParsedTsconfig {
+        let result = if json.as_ref().map_or(0, tsrs_core::collections::OrderedMapExt::size) == 0 {
+            ParsedTsconfig {
                 raw: match json {
                     Some(json) => CompilerOptionsValue::Object(json),
                     None => CompilerOptionsValue::Null,
@@ -1358,12 +1358,12 @@ fn parse_config(
                 options: None,
                 type_acquisition: None,
                 extended_config_path: None,
-            };
+            }
         } else {
             let (raw_result, err) = convert_to_object(source_file.unwrap().source_file);
             errors.extend(err);
-            result = ParsedTsconfig { raw: raw_result, options: None, type_acquisition: None, extended_config_path: None };
-        }
+            ParsedTsconfig { raw: raw_result, options: None, type_acquisition: None, extended_config_path: None }
+        };
         return (result, errors);
     }
 
@@ -1387,7 +1387,7 @@ fn parse_config(
         let mut resolution_stack = resolution_stack.to_vec();
         resolution_stack.push(resolved_path);
         let mut result = ExtendsResult {
-            options: CompilerOptions::default(),
+            options: tsrs_core::CompilerOptions::default(),
             include: None,
             exclude: None,
             files: None,
@@ -1746,13 +1746,13 @@ fn parse_json_config_file_content_worker(
     }
     let total_content_mapper_extensions: usize = content_mappers.iter().map(|m| m.definition.extensions.len()).sum();
     let mut seen_content_mapper_extensions: FxHashSet<String> =
-        FxHashSet::with_capacity_and_hasher(total_content_mapper_extensions, Default::default());
+        FxHashSet::with_capacity_and_hasher(total_content_mapper_extensions, rustc_hash::FxBuildHasher);
     let mut content_mapper_extensions: Vec<String> = Vec::with_capacity(total_content_mapper_extensions);
     let native_extensions: Vec<&str> = tspath::ALL_SUPPORTED_EXTENSIONS_WITH_JSON.iter().flat_map(|g| g.iter().copied()).collect();
     let canonical_extension = |extension: &str| tspath::get_canonical_file_name(extension, host.fs().use_case_sensitive_file_names());
     for (j, mapper) in content_mappers.iter_mut().enumerate() {
         let mut valid_extensions: Vec<String> = Vec::with_capacity(mapper.definition.extensions.len());
-        for ext in mapper.definition.extensions.iter() {
+        for ext in &mapper.definition.extensions {
             let ext_node = get_content_mapper_extension_syntax(content_mapper_source_file, content_mapper_indices[j], ext);
             let canonical_ext = canonical_extension(ext);
             if !ext.starts_with('.') {

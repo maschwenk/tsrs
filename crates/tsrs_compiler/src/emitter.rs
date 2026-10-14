@@ -143,6 +143,7 @@ mod emit {
 
     // emitter.go:24
     #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+    #[expect(clippy::enum_variant_names, reason = "The variant names preserve the upstream Go enum names.")]
     pub enum EmitOnly {
         #[default]
         EmitAll,

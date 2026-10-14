@@ -311,7 +311,7 @@ mod tests {
         let table = crate::options::tsoptions_option_table();
         let mut checked = 0;
         let mut mismatches = Vec::new();
-        let mut paths: rustc_hash::FxHashMap<String, String> = Default::default();
+        let mut paths: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
         for suite in SUITES {
             paths.extend(enumerate_test_files(suite).into_iter().map(|p| (format!("{suite}/{}", tspath::get_base_file_name(&p)), p)));
         }

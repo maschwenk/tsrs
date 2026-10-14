@@ -81,7 +81,7 @@ pub fn parse_build_command_line(command_line: &[String], host: &'static dyn Pars
     let parser =
         parse_command_line_worker(&BUILD_OPTIONS_DID_YOU_MEAN_DIAGNOSTICS, command_line, Some(host.fs()), host.get_current_directory());
     let mut compiler_options = CompilerOptions::default();
-    for (key, value) in parser.options.iter() {
+    for (key, value) in &parser.options {
         let build_option = BUILD_NAME_MAP.get(key);
         let is_tsc_build_option = build_option.is_some_and(|o| std::ptr::eq(o, &raw const TSC_BUILD_OPTION));
         let same_as_compiler_option = match (build_option, COMPILER_NAME_MAP.get(key)) {

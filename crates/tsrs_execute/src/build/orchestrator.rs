@@ -1133,7 +1133,7 @@ impl Orchestrator {
                 desired_dirs.set(&tspath::get_directory_path(&fs.realpath(cfg_path.as_str())), false);
             }
             if let Some(wildcards) = resolved.wildcard_directories() {
-                for (dir, &recursive) in wildcards.iter() {
+                for (dir, &recursive) in wildcards {
                     desired_dirs.set(&fs.realpath(dir), recursive);
                 }
             }
@@ -1388,7 +1388,7 @@ pub fn new_orchestrator(opts: Options) -> &'static Orchestrator {
         resolved_references: parseCache::default(),
         m_times: Mutex::new(Arc::new(Mutex::new(FxHashMap::default()))),
         watch_source_files: watch.then(|| Mutex::new(FxHashMap::default())),
-        watch_file_regions: Default::default(),
+        watch_file_regions: crate::watchmem::FileRegions::default(),
     }));
     let _ = h.orchestrator.set(orchestrator);
     let _ = orchestrator.host.set(h);

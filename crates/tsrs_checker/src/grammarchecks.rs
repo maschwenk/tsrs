@@ -1214,8 +1214,8 @@ impl Checker {
             //    c.IsAccessorDescriptor(previous) is true and IsDataDescriptor(propId.descriptor) is true.
             //    d.IsAccessorDescriptor(previous) is true and IsAccessorDescriptor(propId.descriptor) is true
             // and either both previous and propId.descriptor have[[Get]] fields or both previous and propId.descriptor have[[Set]] fields
-            let current_kind: DeclarationMeaning;
-            match prop.kind() {
+
+            let current_kind: DeclarationMeaning = match prop.kind() {
                 Kind::ShorthandPropertyAssignment | Kind::PropertyAssignment => {
                     let common_prop = if prop.kind() == Kind::ShorthandPropertyAssignment {
                         prop.class_like_data();
@@ -1236,13 +1236,13 @@ impl Checker {
                         self.add_error_or_suggestion(true, create_diagnostic_for_node(Some(name), &diagnostics::A_bigint_literal_cannot_be_used_as_a_property_name, &[]));
                     }
 
-                    current_kind = DeclarationMeaning::PropertyAssignment;
+                    DeclarationMeaning::PropertyAssignment
                 }
-                Kind::MethodDeclaration => current_kind = DeclarationMeaning::Method,
-                Kind::GetAccessor => current_kind = DeclarationMeaning::GetAccessor,
-                Kind::SetAccessor => current_kind = DeclarationMeaning::SetAccessor,
+                Kind::MethodDeclaration => DeclarationMeaning::Method,
+                Kind::GetAccessor => DeclarationMeaning::GetAccessor,
+                Kind::SetAccessor => DeclarationMeaning::SetAccessor,
                 _ => panic!("Unexpected node kind {:?}", prop.kind()),
-            }
+            };
 
             if !in_destructuring {
                 let (effective_name, ok) = self.get_effective_property_name_for_property_name_node(name);
@@ -2062,6 +2062,7 @@ impl Checker {
     }
 
     // grammarchecks.go:1796
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn container_allows_block_scoped_variable(&mut self, parent: P<Node>) -> bool {
         match parent.kind() {
             Kind::IfStatement | Kind::DoStatement | Kind::WhileStatement | Kind::WithStatement | Kind::ForStatement | Kind::ForInStatement | Kind::ForOfStatement => return false,

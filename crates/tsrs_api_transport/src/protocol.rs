@@ -17,8 +17,8 @@ pub trait ProtocolWriter: Send {
     fn write_error(&mut self, id: &Id, err: &ResponseError) -> Result<(), TransportError>;
 }
 
-/// Which wire protocol a connection speaks. `--api` alone is MessagePack + sync connection;
-/// `--api --async` is JSON-RPC + async connection (server.go Run).
+/// Which wire protocol a connection speaks. `--api` alone is `MessagePack` + sync connection; `--api --async`
+/// is JSON-RPC + async connection (server.go Run).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WireProtocol {
     MessagePack,

@@ -39,7 +39,7 @@ pub fn parse_string_array(value: &CompilerOptionsValue) -> Option<Vec<String>> {
 
 pub(crate) fn parse_string_map(value: &CompilerOptionsValue) -> Option<OrderedMap<String, Option<Vec<String>>>> {
     if let CompilerOptionsValue::Object(m) = value {
-        let mut result = OrderedMap::with_capacity_and_hasher(m.len(), Default::default());
+        let mut result = OrderedMap::with_capacity_and_hasher(m.len(), rustc_hash::FxBuildHasher);
         result.extend(m.iter().map(|(k, v)| (k.clone(), parse_string_array(v))));
         return Some(result);
     }
@@ -176,7 +176,7 @@ pub(crate) fn parse_string_array_strict(value: &CompilerOptionsValue) -> Option<
 }
 
 pub(crate) fn parse_json_to_string_key(json: &CompilerOptionsValue) -> OrderedMap<String, CompilerOptionsValue> {
-    let mut result = OrderedMap::with_capacity_and_hasher(6, Default::default());
+    let mut result = OrderedMap::with_capacity_and_hasher(6, rustc_hash::FxBuildHasher);
     if let CompilerOptionsValue::Object(m) = json {
         if let Some(v) = m.get("include") {
             result.set("include".to_string(), v.clone());

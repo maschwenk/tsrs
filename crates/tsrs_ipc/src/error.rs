@@ -8,6 +8,7 @@ use std::fmt;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ErrorTag {
     // io.EOF: the stream ended where a message would start (Run returns nil for it).
+    #[expect(clippy::upper_case_acronyms, reason = "The name matches the upstream Go or protocol vocabulary.")]
     EOF,
     // ErrConnClosed (conn.go:11): the connection's read loop has exited.
     ConnClosed,

@@ -785,9 +785,7 @@ fn get_match_score(s: &str, pattern: &str) -> Option<usize> {
     for p in pattern.chars() {
         let exact = go_is_upper(p);
         loop {
-            let Some(c) = s.next() else {
-                return None;
-            };
+            let c = s.next()?;
             if exact && c == p || !exact && go_to_lower(c) == go_to_lower(p) {
                 break;
             }

@@ -61,7 +61,7 @@ fn test_base_reader_content_length_trim_space() {
         assert_eq!(new_base_reader(input).read().ok().as_deref(), Some(&b"{}"[..]), "{:?}", String::from_utf8_lossy(input));
     }
     assert!(new_base_reader(&b"Content-Length: 2\x85\r\n\r\n{}"[..]).read().is_err());
-    assert!(new_base_reader("Content-Length: 2\u{1c}\r\n\r\n{}".as_bytes()).read().is_err());
+    assert!(new_base_reader(&b"Content-Length: 2\x1c\r\n\r\n{}"[..]).read().is_err());
 }
 
 // baseproto_test.go:79

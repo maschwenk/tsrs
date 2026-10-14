@@ -13,7 +13,7 @@ impl<K: Hash + Eq, V> Default for MultiMap<K, V> {
 }
 
 pub fn new_multi_map_with_size_hint<K: Hash + Eq, V>(hint: usize) -> MultiMap<K, V> {
-    MultiMap { m: FxHashMap::with_capacity_and_hasher(hint, Default::default()) }
+    MultiMap { m: FxHashMap::with_capacity_and_hasher(hint, rustc_hash::FxBuildHasher) }
 }
 
 pub fn group_by<K: Hash + Eq, V: Clone>(items: &[V], mut group_id: impl FnMut(&V) -> K) -> MultiMap<K, V> {
@@ -58,6 +58,10 @@ impl<K: Hash + Eq, V> MultiMap<K, V> {
 
     pub fn len(&self) -> usize {
         self.m.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.m.is_empty()
     }
 
     pub fn keys(&self) -> impl Iterator<Item = &K> {

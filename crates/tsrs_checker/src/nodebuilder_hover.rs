@@ -578,7 +578,7 @@ impl NodeBuilderImpl {
         }
 
         // Add export modifier to exported statements (skip local declarations and ExportDeclarations).
-        for s in body_stmts.iter_mut() {
+        for s in &mut body_stmts {
             if s.is_local || is_export_declaration(s.node) {
                 continue;
             }
@@ -592,7 +592,7 @@ impl NodeBuilderImpl {
         let mut body_statements: Vec<P<Node>> = body_stmts.iter().map(|s| s.node).collect();
         let all_exported = !body_statements.is_empty() && body_statements.iter().all(|&d| has_syntactic_modifier(d, ModifierFlags::Export));
         if all_exported {
-            for element in body_statements.iter_mut() {
+            for element in &mut body_statements {
                 let stmt = *element;
                 if can_have_modifiers(stmt) {
                     let mf = stmt.modifier_flags() & !ModifierFlags::Export;
@@ -660,7 +660,7 @@ impl NodeBuilderImpl {
                 }
             }));
         }
-        if inherited.len() == 0 {
+        if inherited.is_empty() {
             return properties.to_vec();
         }
         properties.iter().copied().filter(|p| !inherited.has(&p.name())).collect()

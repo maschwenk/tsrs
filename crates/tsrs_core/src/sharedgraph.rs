@@ -1,5 +1,5 @@
 //! tsrs-only: a frozen seed graph shared by every checker thread (`--features shared-graph`, on with
-//! `TSRS_SHARED_GRAPH=1`; tsrs_compiler `sharedgraph` drives it, notes/spike-shared-graph.md).
+//! `TSRS_SHARED_GRAPH=1`; `tsrs_compiler` `sharedgraph` drives it, notes/spike-shared-graph.md).
 //!
 //! One seed checker runs in a region of its own; when it is done the region's chunks are *frozen*: marked in a page
 //! bitmap (`is_frozen_addr`) and `mprotect`ed read-only (`TSRS_SHARED_GRAPH_PROTECT=0` turns that off), so a missed

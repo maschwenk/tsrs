@@ -238,7 +238,7 @@ impl asyncTransformer {
         // names declared in a catch variable are block scoped
         let mut catch_clause_unshadowed_names: Option<FxHashSet<String>> = None;
         #[expect(clippy::iter_over_hash_type, reason = "removes names from a set; the set it ends with does not depend on the order")]
-        for escaped_name in catch_clause_names.iter() {
+        for escaped_name in &catch_clause_names {
             let enclosing = self.enclosing_function_parameter_names.borrow();
             if let Some(enclosing) = enclosing.as_ref() {
                 if enclosing.contains(escaped_name) {
@@ -311,6 +311,7 @@ impl asyncTransformer {
     fn visit_for_statement_in_async_body(&self, node: P<Node>) -> P<Node> {
         let n = node.as_for_statement();
         let initializer = n.initializer;
+        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         let visited_initializer = if initializer.is_some() && self.is_variable_declaration_list_with_colliding_name(initializer) {
             self.visit_variable_declaration_list_with_colliding_names(initializer.unwrap(), false)
         } else {
@@ -556,6 +557,7 @@ impl asyncTransformer {
     }
 
     // async.go:508
+    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     fn record_declaration_name(&self, node: P<Node>, names: &mut FxHashSet<String>) {
         let Some(name) = node.name() else {
             return;
@@ -843,8 +845,8 @@ impl asyncTransformer {
             async_body = s.substitute_super_accesses_in_body(async_body);
         }
 
-        let result;
-        if !is_arrow {
+
+        let result = if !is_arrow {
             self.emit_context().start_variable_environment();
 
             // Minor optimization, emit `_super` helper to capture `super` access in an arrow.
@@ -869,7 +871,7 @@ impl asyncTransformer {
                 }
             }
 
-            result = block;
+            block
         } else {
             let mut r = f.new_awaiter_helper(has_lexical_this, arguments_expression, inner_parameters, async_body);
 
@@ -884,8 +886,8 @@ impl asyncTransformer {
                     block.as_block().multi_line,
                 );
             }
-            result = r;
-        }
+            r
+        };
 
         *self.enclosing_function_parameter_names.borrow_mut() = saved_enclosing_function_parameter_names;
         if !is_arrow {

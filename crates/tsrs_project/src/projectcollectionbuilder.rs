@@ -484,7 +484,7 @@ impl ProjectCollectionBuilder {
 
     // projectcollectionbuilder.go:388
     pub(crate) fn did_change_files(&self, summary: &FileChangeSummary, logger: &LogTree) {
-        self.open_files_changed.set(self.open_files_changed.get() || !summary.opened.0.is_empty() || summary.closed.len() > 0);
+        self.open_files_changed.set(self.open_files_changed.get() || !summary.opened.0.is_empty() || !summary.closed.is_empty());
 
         let to_paths = |uris: &Set<lsproto::DocumentUri>| -> Vec<Path> { uris.keys().iter().map(|uri| (self.to_path)(&uri.file_name())).collect() };
         let changed_files = to_paths(&summary.changed);
@@ -513,7 +513,7 @@ impl ProjectCollectionBuilder {
 
             // Handle closed and changed files
             self.mark_files_changed(entry, &changed_files, lsproto::FileChangeType::Changed, logger);
-            if value.value().unwrap().kind == Kind::Inferred && summary.closed.len() > 0 {
+            if value.value().unwrap().kind == Kind::Inferred && !summary.closed.is_empty() {
                 let command_line = value.value().unwrap().command_line.unwrap();
                 let root_files_map = command_line.file_names_by_path();
                 let mut new_root_files: Vec<String> = command_line.file_names().to_vec();
@@ -537,12 +537,12 @@ impl ProjectCollectionBuilder {
             }
 
             // Handle deleted files
-            if summary.deleted.len() > 0 {
+            if !summary.deleted.is_empty() {
                 self.mark_files_changed(entry, &deleted_files, lsproto::FileChangeType::Deleted, logger);
             }
 
             // Handle created files
-            if summary.created.len() > 0 {
+            if !summary.created.is_empty() {
                 self.mark_files_changed(entry, &created_files, lsproto::FileChangeType::Created, logger);
             }
 

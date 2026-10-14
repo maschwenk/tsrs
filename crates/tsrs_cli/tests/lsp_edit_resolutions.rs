@@ -46,9 +46,9 @@ fn edit_of_a_jsx_file_keeps_the_jsx_runtime() {
     assert!(!after.contains("\"code\":2875"), "the JSX runtime lost its resolution after the edit: {after}");
 }
 
-/// Writes `files` to a temporary project, opens `open` in `tsrs --lsp` (with TSRS_ARENA_POISON=1), `edits` times
-/// inserts an undeclared identifier `c` as a new line before line `line` (0-based), and returns the file's
-/// diagnostics before the first edit and after the last.
+/// Writes `files` to a temporary project, opens `open` in `tsrs --lsp` (with `TSRS_ARENA_POISON=1`), `edits`
+/// times inserts an undeclared identifier `c` as a new line before line `line` (0-based), and returns the
+/// file's diagnostics before the first edit and after the last.
 fn diagnostics_after_edits(name: &str, files: &[(&str, &str)], open: &str, language_id: &str, line: u32, edits: u32) -> (String, String) {
     let dir = std::env::temp_dir().join(format!("tsrs-lsp-edit-{name}-{}", std::process::id()));
     for (path, text) in files {

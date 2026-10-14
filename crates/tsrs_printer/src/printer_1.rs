@@ -209,18 +209,18 @@ pub(crate) fn get_literal_text_of_node_worker(g: &mut NameGenerator, s: &printer
     let mut flags = flags;
     if is_string_literal(node) {
         if let Some(text_source_node) = s.emit_context.text_source(node) {
-            let text;
-            match text_source_node.kind() {
+
+            let text = match text_source_node.kind() {
                 Kind::NumericLiteral => {
-                    text = text_source_node.text().to_string();
+                    text_source_node.text().to_string()
                 }
                 Kind::Identifier | Kind::PrivateIdentifier | Kind::JsxNamespacedName => {
-                    text = get_text_of_node_worker(g, s, text_source_node, false);
+                    get_text_of_node_worker(g, s, text_source_node, false)
                 }
                 _ => {
                     return get_literal_text_of_node_worker(g, s, text_source_node, get_source_file_of_node(text_source_node), flags);
                 }
-            }
+            };
 
             if flags.intersects(getLiteralTextFlags::JsxAttributeEscape) {
                 return format!("\"{}\"", escape_jsx_attribute_string(&text, QuoteChar::DoubleQuote));
@@ -704,12 +704,12 @@ impl Printer {
             let mut pos = loc_pos;
             let mut current_line = first_line;
             while pos < loc_end {
-                let next_line_start;
-                if current_line + 1 == line_count {
-                    next_line_start = text.len() as u32 + 1;
+
+                let next_line_start = if current_line + 1 == line_count {
+                    text.len() as u32 + 1
                 } else {
-                    next_line_start = line_map[current_line + 1];
-                }
+                    line_map[current_line + 1]
+                };
 
                 if pos != loc_pos {
                     // If we are not emitting first line, we need to write the spaces to adjust the alignment
@@ -1436,6 +1436,7 @@ impl Printer {
 //
 
 #[derive(Clone, Copy, PartialEq, Eq)]
+#[expect(clippy::enum_variant_names, reason = "The variant names preserve the upstream Go enum names.")]
 enum Mode {
     ModeNone,
     ModeModifiers,

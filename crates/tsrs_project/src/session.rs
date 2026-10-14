@@ -442,6 +442,7 @@ impl Session {
                     continue;
                 }
                 let i = path_str.rfind('.');
+                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if i.is_none() || path_str.rfind('/') > i {
                     // Extensionless paths might be directories.
                     // For creations/changes, we can check the file system.
@@ -684,7 +685,6 @@ impl Session {
     // (Telemetry is not ported: the hook is kept and nothing is sent.)
     pub fn start_performance_telemetry(&self) {
         if !self.options.telemetry_enabled {
-            return;
         }
     }
 
@@ -700,7 +700,6 @@ impl Session {
     // (Telemetry is not ported: the hook is kept and nothing is sent.)
     fn send_project_info_telemetry_for_new_projects(&self, _old_snapshot: &Snapshot, _new_snapshot: &Snapshot) {
         if !self.options.telemetry_enabled {
-            return;
         }
     }
 
@@ -855,9 +854,7 @@ impl Session {
         let projects = snapshot.project_collection.language_service_projects();
         let mut services = Vec::with_capacity(projects.len());
         services.extend(projects.into_iter().filter_map(|project| {
-            let Some(program) = project.get_program() else {
-                return None;
-            };
+            let program = project.get_program()?;
 
             Some(Arc::new(new_language_service(ProjectID(project.id().0), program, Arc::<Snapshot>::clone(&snapshot), &active_file)))
         }));
@@ -1140,7 +1137,7 @@ impl Session {
                     if self.watches.acquire(watcher, glob_id.clone()) { Some((glob_id, watcher.clone())) } else { None }
                 }));
                 let mut watch_errors = Vec::new();
-                for (id, watcher) in new_watchers.iter() {
+                for (id, watcher) in &new_watchers {
                     // Create a fresh timeout per client call so earlier calls
                     // don't consume the deadline for later ones.
                     let (call_ctx, call_cancel) = ctx.with_timeout(watchRequestTimeout);
@@ -1486,7 +1483,7 @@ impl Session {
                     self.logger.logf(format_args!("\t\t\tExports: {}", bucket.export_count));
                     match bucket.state.recursive_search_packages() {
                         None => self.logger.log("\t\t\tRecursive search: all"),
-                        Some(packages) if packages.len() > 0 => {
+                        Some(packages) if !packages.is_empty() => {
                             self.logger.logf(format_args!("\t\t\tRecursive search: {} packages", packages.len()));
                         }
                         Some(_) => self.logger.log("\t\t\tRecursive search: none"),
@@ -1602,7 +1599,7 @@ impl Session {
             }
         }
         // Sync diagnostics for projects whose open-file state changed without a program update.
-        for (project_id, new_project) in new_projects.iter() {
+        for (project_id, new_project) in &new_projects {
             if new_project.kind != Kind::Configured {
                 continue;
             }

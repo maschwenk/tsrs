@@ -193,7 +193,7 @@ impl projectReferenceFileMapper {
         if self.config.project_references().is_empty() {
             return false;
         }
-        let mut seen_ref: FxHashSet<Path> = FxHashSet::with_capacity_and_hasher(self.references_in_config_file.len(), Default::default());
+        let mut seen_ref: FxHashSet<Path> = FxHashSet::with_capacity_and_hasher(self.references_in_config_file.len(), rustc_hash::FxBuildHasher);
         let root_config_path = self.root_config_path();
         seen_ref.insert(root_config_path.clone());
         let refs = self.references_in_config_file.get(&root_config_path).map_or(&[] as &[Path], std::vec::Vec::as_slice);
@@ -244,7 +244,7 @@ impl projectReferenceFileMapper {
         let Some(child_config_file) = child_config.config_file else {
             return false;
         };
-        let mut seen_ref: FxHashSet<Path> = FxHashSet::with_capacity_and_hasher(self.references_in_config_file.len(), Default::default());
+        let mut seen_ref: FxHashSet<Path> = FxHashSet::with_capacity_and_hasher(self.references_in_config_file.len(), rustc_hash::FxBuildHasher);
         seen_ref.insert(child_config_file.source_file.path().clone());
         let refs = self.references_in_config_file.get(child_config_file.source_file.path()).map_or(&[] as &[Path], std::vec::Vec::as_slice);
         self.range_resolved_reference_worker(refs, &mut f, self.config, &mut seen_ref)

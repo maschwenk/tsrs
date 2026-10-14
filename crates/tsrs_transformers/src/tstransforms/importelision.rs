@@ -97,10 +97,7 @@ impl ImportElisionTransformer {
                 let mut export_clause: Option<P<Node>> = None;
                 if let Some(c) = n.export_clause {
                     export_clause = v.visit_node(Some(c));
-                    if export_clause.is_none() {
-                        // all export bindings were elided
-                        return None;
-                    }
+                    export_clause?;
                 }
                 Some(f.update_export_declaration(node, None /*modifiers*/, false /*isTypeOnly*/, export_clause, v.visit_node(n.module_specifier), v.visit_node(n.attributes())))
             }
