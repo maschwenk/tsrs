@@ -67,3 +67,15 @@ fn test_format_checker_ts() {
     assert_ne!(new_text, "");
     assert_ne!(text, new_text);
 }
+
+// tsrs-only: a huge tab size (a client's `tabSize: 1e9`) indents by MAX_INDENT_SIZE columns per level instead of
+// building gigabyte indentation strings.
+#[test]
+fn huge_indent_sizes_are_clamped() {
+    let ctx = with_format_code_settings(&FormatContext::default(), settings(1_000_000_000, 1_000_000_000, 0, Tristate::True, |_| {}), "\n");
+    let text = "function f() {\nif(a) {\nb();\n}\n}\n";
+    let source_file = parse_for_test("/a.ts", text, ScriptKind::TS);
+    let new_text = apply_bulk_edits(text, &format_document(&ctx, source_file));
+    let pad = |level: usize| " ".repeat(level * MAX_INDENT_SIZE as usize);
+    assert_eq!(new_text, format!("function f() {{\n{}if(a) {{\n{}b();\n{}}}\n}}\n", pad(1), pad(2), pad(1)));
+}

@@ -1557,9 +1557,9 @@ impl Server {
             && matches!(&initialize_params.workspace_folders, Some(lsproto::WorkspaceFoldersOrNull { workspace_folders: Some(folders),  }) if folders.len() == 1)
         {
             let folders = initialize_params.workspace_folders.as_ref().unwrap().workspace_folders.as_ref().unwrap();
-            cwd = lsproto::DocumentUri(folders[0].uri.0.clone()).file_name();
+            cwd = file_name_or_empty(&lsproto::DocumentUri(folders[0].uri.0.clone()));
         } else if let Some(root_uri) = &initialize_params.root_uri.document_uri {
-            cwd = root_uri.file_name();
+            cwd = file_name_or_empty(root_uri);
         } else if let Some(lsproto::StringOrNull { string: Some(root_path),  }) = &initialize_params.root_path {
             cwd.clone_from(root_path);
         }
@@ -1661,6 +1661,7 @@ impl Server {
 
     // server.go:1809
     fn handle_did_open(self: &Arc<Self>, ctx: &Context, params: lsproto::DidOpenTextDocumentParams) -> Result<(), Error> {
+        check_uri(&params.text_document.uri)?;
         let doc = params.text_document;
         self.session().did_open_file(ctx, doc.uri, doc.version, doc.text, doc.language_id);
         Ok(())
@@ -1668,24 +1669,34 @@ impl Server {
 
     // server.go:1814
     fn handle_did_change(self: &Arc<Self>, ctx: &Context, params: lsproto::DidChangeTextDocumentParams) -> Result<(), Error> {
+        check_uri(&params.text_document.uri)?;
         self.session().did_change_file(ctx, params.text_document.uri, params.text_document.version, params.content_changes);
         Ok(())
     }
 
     // server.go:1819
     fn handle_did_save(self: &Arc<Self>, ctx: &Context, params: lsproto::DidSaveTextDocumentParams) -> Result<(), Error> {
+        check_uri(&params.text_document.uri)?;
         self.session().did_save_file(ctx, params.text_document.uri);
         Ok(())
     }
 
     // server.go:1824
     fn handle_did_close(self: &Arc<Self>, ctx: &Context, params: lsproto::DidCloseTextDocumentParams) -> Result<(), Error> {
+        check_uri(&params.text_document.uri)?;
         self.session().did_close_file(ctx, params.text_document.uri);
         Ok(())
     }
 
     // server.go:1829
     fn handle_did_change_watched_files(self: &Arc<Self>, ctx: &Context, params: &lsproto::DidChangeWatchedFilesParams) -> Result<(), Error> {
+        // tsrs-only: an event with a bad URI (`check_uri`) is dropped, not the whole notification.
+        if params.changes.iter().any(|change| change.uri.check().is_err()) {
+            let changes: Vec<lsproto::FileEvent> = params.changes.iter().filter(|change| change.uri.check().is_ok()).cloned().collect();
+            self.logger.error(&format!("ignored {} watched file event(s) with an invalid URI", params.changes.len() - changes.len()));
+            self.session().did_change_watched_files(ctx, &changes);
+            return Ok(());
+        }
         self.session().did_change_watched_files(ctx, &params.changes);
         Ok(())
     }
@@ -1782,6 +1793,7 @@ impl Server {
 
     // server.go:1924
     fn handle_rename(self: &Arc<Self>, ctx: &Context, params: &lsproto::RenameParams, req: &RequestMessage) -> Result<lsproto::RenameResponse, Error> {
+        check_uri(&params.text_document.uri)?;
         let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.text_document.uri, req)?;
         let info = default_ls.get_rename_info(ctx, &params.new_name, &params.text_document.uri, params.position);
         if info.can_rename && !info.file_to_rename.is_empty() {
@@ -1815,6 +1827,10 @@ impl Server {
 
     // server.go:1961
     fn handle_will_rename_files(self: &Arc<Self>, ctx: &Context, params: &lsproto::RenameFilesParams, msg: &RequestMessage) -> Result<lsproto::WillRenameFilesResponse, Error> {
+        for file in &params.files {
+            check_uri(&file.old_uri)?;
+            check_uri(&file.new_uri)?;
+        }
         self.handle_will_rename_files_worker(ctx, params, msg, false /*sendRenameFile*/)
     }
 
@@ -1977,6 +1993,10 @@ impl Server {
         let Some(data) = params.data.clone() else {
             return Err(Error::new("completion item data is nil"));
         };
+        // tsrs-only: Go turns any file name into a URI and panics on one that is not a rooted path ("", a URI).
+        if !tspath::is_rooted_disk_path(&data.file_name) && !data.file_name.starts_with("^/") {
+            return Err(Error::wrap_code(ErrorCode::InvalidParams, Error::new(format!("completion item data has no file name: {:?}", data.file_name))));
+        }
         let language_service = self.session().get_language_service(ctx, &tsrs_ls::lsconv::file_name_to_document_uri(&data.file_name))?;
         // `defer s.recover(reqMsg)`: Go answers the recovered panic with an internal error and then sends the nil
         // result; here the handler returns an error instead of a second (null) result.
@@ -2093,7 +2113,12 @@ impl Server {
 
     // server.go:2216
     fn handle_code_lens_resolve(self: &Arc<Self>, ctx: &Context, code_lens: lsproto::CodeLens, req_msg: &RequestMessage) -> Result<lsproto::CodeLensResolveResponse, Error> {
-        let uri = code_lens.data.as_ref().unwrap().uri.clone();
+        // tsrs-only: Go unwraps the data, which a client's lens may not have, and panics.
+        let Some(data) = &code_lens.data else {
+            return Err(Error::wrap_code(ErrorCode::InvalidParams, Error::new("code lens data is nil")));
+        };
+        let uri = data.uri.clone();
+        check_uri(&uri)?;
         let result = self.get_language_service_and_cross_project_orchestrator(ctx, &uri, req_msg);
         if let Some(err) = ctx.err() {
             return Err(err.into());
@@ -2140,6 +2165,7 @@ impl Server {
         params: &lsproto::CallHierarchyIncomingCallsParams,
         req_msg: &RequestMessage,
     ) -> Result<lsproto::CallHierarchyIncomingCallsResponse, Error> {
+        check_uri(&params.item.uri)?;
         let (default_ls, orchestrator) = self.get_language_service_and_cross_project_orchestrator(ctx, &params.item.uri, req_msg)?;
         default_ls.provide_call_hierarchy_incoming_calls(ctx, &params.item, Some(&*orchestrator))
     }
@@ -2151,6 +2177,7 @@ impl Server {
         params: &lsproto::CallHierarchyOutgoingCallsParams,
         _req: &RequestMessage,
     ) -> Result<lsproto::CallHierarchyOutgoingCallsResponse, Error> {
+        check_uri(&params.item.uri)?;
         let language_service = self.session().get_language_service(ctx, &params.item.uri)?;
         language_service.provide_call_hierarchy_outgoing_calls(ctx, &params.item)
     }
@@ -2217,6 +2244,7 @@ impl Server {
     // server.go:2436
     fn handle_project_info(self: &Arc<Self>, ctx: &Context, params: &lsproto::ProjectInfoParams, _req: &RequestMessage) -> Result<lsproto::CustomProjectInfoResponse, Error> {
         let uri = &params.text_document.uri;
+        check_uri(uri)?;
         let (default_project, _, _) = self.session().get_language_service_and_projects_for_file(ctx, uri)?;
         let mut config_file_path = String::new();
         if default_project.kind == project::Kind::Configured {
@@ -2461,7 +2489,12 @@ impl handlerMap {
         self.0.insert(
             info.method,
             Box::new(move |s, ctx, req| {
+                // tsrs-only: Go has no session check here and panics on a request before `initialized`.
+                if s.session.get().is_none() {
+                    return Err(ErrorCode::ServerNotInitialized.into());
+                }
                 let params = req.unmarshal_params::<Req>()?;
+                check_uri(params.text_document_uri())?;
                 let ls = s.session().get_language_service(ctx, params.text_document_uri())?;
                 let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
                 Ok(Some(Box::new(move || {
@@ -2493,7 +2526,12 @@ impl handlerMap {
         self.0.insert(
             info.method,
             Box::new(move |s, ctx, req| {
+                // tsrs-only: Go has no session check here and panics on a request before `initialized`.
+                if s.session.get().is_none() {
+                    return Err(ErrorCode::ServerNotInitialized.into());
+                }
                 let params = req.unmarshal_params::<Req>()?;
+                check_uri(params.text_document_uri())?;
                 let uri = params.text_document_uri().clone();
                 s.session().with_language_service_and_snapshot(ctx, &uri, |language_service, snapshot| {
                     let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
@@ -2535,7 +2573,12 @@ impl handlerMap {
         self.0.insert(
             info.method,
             Box::new(move |s, ctx, req| {
+                // tsrs-only: Go has no session check here and panics on a request before `initialized`.
+                if s.session.get().is_none() {
+                    return Err(ErrorCode::ServerNotInitialized.into());
+                }
                 let params = req.unmarshal_params::<Req>()?;
+                check_uri(params.text_document_uri())?;
                 // !!! sheetal: multiple projects that contain the file through symlinks
                 let (default_ls, orchestrator) = s.get_language_service_and_cross_project_orchestrator(ctx, params.text_document_uri(), req)?;
                 let (s, ctx, req) = (Arc::clone(s), ctx.clone(), Arc::clone(req));
@@ -2551,6 +2594,18 @@ impl handlerMap {
             }),
         );
     }
+}
+
+// tsrs-only: a URI from the client that `file_name` cannot turn into a file name (`DocumentUri::check`) is an
+// invalid-params error. Go panics on it, which ends the session.
+fn check_uri(uri: &lsproto::DocumentUri) -> Result<(), Error> {
+    uri.check().map_err(|err| Error::wrap_code(ErrorCode::InvalidParams, Error::new(err)))
+}
+
+// tsrs-only: the file name of a workspace URI, or "" (not absolute: the server's own directory is used) when it has
+// none; Go panics.
+fn file_name_or_empty(uri: &lsproto::DocumentUri) -> String {
+    if uri.check().is_ok() { uri.file_name() } else { String::new() }
 }
 
 // server.go:1431 (Go's req field is never read)

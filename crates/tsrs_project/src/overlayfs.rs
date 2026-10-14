@@ -624,7 +624,12 @@ impl overlayFS {
                     events.watch_changed = false;
                 }
                 FileChangeKind::Change => {
-                    assert!(events.close_change.is_none(), "should see no changes after close");
+                    // tsrs-only: Go asserts that no change follows a close in the batch, so a client that edits a
+                    // document it closed (a protocol error) ended the session. The change is dropped, as is the change
+                    // of a document that is not open (it has no overlay below).
+                    if events.close_change.is_some() {
+                        continue;
+                    }
                     events.changes.push(change.clone());
                     events.saved = false;
                     events.watch_changed = false;

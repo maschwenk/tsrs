@@ -51,6 +51,14 @@ impl DocumentUri {
         format!("^/{scheme}/{authority}/{path}")
     }
 
+    /// tsrs-only: whether `file_name` can turn this URI into a file name. Go takes any string and panics on one it
+    /// cannot: in `FileName` on a string without a scheme ("", "not a uri") or a file URI it cannot parse, and in the
+    /// file system on a file URI without a path ("file://"). The server checks the URIs a client sends with this
+    /// before it uses them, so a bad one is an error instead of the end of the session.
+    pub fn check(&self) -> Result<(), String> {
+        check_uri(&self.0)
+    }
+
     // lsp.go:52
     pub fn path(&self, use_case_sensitive_file_names: bool) -> tspath::Path {
         let file_name = self.file_name();
@@ -98,6 +106,31 @@ impl Json for DocumentUri {
     fn from_json(v: &Value) -> Result<Self, JsonError> {
         crate::json::decode_string(v, Self::GO_TYPE).map(|s| DocumentUri(s.to_string()))
     }
+}
+
+// tsrs-only (`DocumentUri::check`).
+fn check_uri(uri: &str) -> Result<(), String> {
+    if tsrs_vfs::bundled::is_bundled(uri) {
+        return Ok(());
+    }
+    if uri.starts_with("file://") {
+        let (host, path) = parse_file_url(uri).map_err(|err| format!("invalid file URI {uri:?}: {err}"))?;
+        if host.is_empty() && !tspath::path_is_absolute(fix_windows_uri_path(&path)) {
+            return Err(format!("file URI {uri:?} has no absolute path"));
+        }
+        return Ok(());
+    }
+    let Some((scheme, path)) = uri.split_once(':') else {
+        return Err(format!("invalid URI {uri:?}: no scheme"));
+    };
+    let mut chars = scheme.chars();
+    if !chars.next().is_some_and(|c| c.is_ascii_alphabetic()) || !chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.')) {
+        return Err(format!("invalid URI {uri:?}: bad scheme"));
+    }
+    if path.strip_prefix("//").is_some_and(|rest| !rest.contains('/')) {
+        return Err(format!("invalid URI {uri:?}: no path after the authority"));
+    }
+    Ok(())
 }
 
 impl JsonKey for DocumentUri {

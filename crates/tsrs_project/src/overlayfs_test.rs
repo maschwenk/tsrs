@@ -193,6 +193,31 @@ fn process_changes_close_and_change_without_overlay_should_not_panic() {
     assert!(result.is_empty());
 }
 
+// tsrs-only: a change after a close in the same batch (a client that edits a document it closed) is dropped; Go
+// asserts that there is none, which ended the session.
+#[test]
+fn process_changes_change_after_close_in_same_batch_is_dropped() {
+    let fs = create_overlay_fs();
+    fs.process_changes(&[open(test_uri1(), 1, "const x = 1;", lsproto::LanguageKind::TypeScript)]);
+    let edit = FileChange {
+        kind: FileChangeKind::Change,
+        uri: test_uri1(),
+        version: 2,
+        changes: vec![lsproto::TextDocumentContentChangePartialOrWholeDocument {
+            whole_document: Some(lsproto::TextDocumentContentChangeWholeDocument { text: "const x = 2;".to_string() }),
+            ..Default::default()
+        }],
+        ..Default::default()
+    };
+
+    let (result, overlays) = fs.process_changes(&[change(FileChangeKind::Close, test_uri1()), edit]);
+
+    assert!(result.closed.has(&test_uri1()));
+    assert!(!result.changed.has(&test_uri1()));
+    assert!(overlays.is_empty(), "the closed document keeps no overlay");
+    assert_eq!(fs.get_file(&test_uri1().file_name()).unwrap().content(), "// existing content");
+}
+
 // overlayfs_test.go:314 TestProcessChanges/close then open in same batch marks as changed
 #[test]
 fn process_changes_close_then_open_in_same_batch_marks_as_changed() {

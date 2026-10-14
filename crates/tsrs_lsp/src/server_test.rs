@@ -275,3 +275,133 @@ fn completion_resolve_snaps_client_data_position() {
     }
     let _ = close_client.close();
 }
+
+// Not a Go test (Go panics on each, ending the session). A client's bad input gets an error, and the server keeps
+// answering: URIs `file_name` cannot use (in document requests and notifications, file renames, watched file events
+// and call hierarchy items), a change after the close of the same document, a completion item without a rooted file
+// name and a code lens without data.
+#[test]
+fn bad_client_input_does_not_end_the_session() {
+    use crate::lsptestutil::{acknowledge_registrations, new_lsp_client, test_server_options};
+
+    let files = [("/home/projects/tsconfig.json", "{}"), ("/home/projects/index.ts", "export const abc = 1;\n")];
+    let (client, close_client) = new_lsp_client(test_server_options("/home/projects", &files), Some(acknowledge_registrations()));
+    let (init_msg, _) = client.send_request(lsproto::INITIALIZE_INFO, lsproto::InitializeParams::default());
+    assert!(init_msg.error.is_none(), "Initialize failed");
+    client.send_notification(lsproto::INITIALIZED_INFO, lsproto::InitializedParams::default());
+    client.server.init_complete().wait();
+    let good = lsproto::DocumentUri::from("file:///home/projects/index.ts");
+    let hover = |uri: &lsproto::DocumentUri| {
+        client.send_request(
+            lsproto::TEXT_DOCUMENT_HOVER_INFO,
+            lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() }, position: lsproto::Position { line: 0, character: 14 }, ..Default::default() },
+        )
+    };
+    let open = |uri: &lsproto::DocumentUri| {
+        client.send_notification(
+            lsproto::TEXT_DOCUMENT_DID_OPEN_INFO,
+            lsproto::DidOpenTextDocumentParams {
+                text_document: lsproto::TextDocumentItem { uri: uri.clone(), language_id: lsproto::LanguageKind::TypeScript, text: "export const abc = 1;\n".to_string(), ..Default::default() },
+            },
+        );
+    };
+    let is_invalid_params = |msg: &lsproto::ResponseMessage| msg.error.as_ref().is_some_and(|e| e.code == lsproto::ErrorCode::InvalidParams.0);
+    open(&good);
+
+    for bad in ["", "not a uri", "relative/path.ts", "file://", "foo://host"] {
+        let uri = lsproto::DocumentUri::from(bad);
+        let (msg, _) = hover(&uri);
+        assert!(is_invalid_params(&msg), "hover {bad:?}: {:?}", msg.error);
+        open(&uri);
+        client.send_notification(lsproto::TEXT_DOCUMENT_DID_CLOSE_INFO, lsproto::DidCloseTextDocumentParams { text_document: lsproto::TextDocumentIdentifier { uri: uri.clone() } });
+        client.send_notification(
+            lsproto::WORKSPACE_DID_CHANGE_WATCHED_FILES_INFO,
+            lsproto::DidChangeWatchedFilesParams { changes: vec![lsproto::FileEvent { uri: uri.clone(), type_: lsproto::FileChangeType(2) }] },
+        );
+        let (msg, _) = client.send_request(
+            lsproto::WORKSPACE_WILL_RENAME_FILES_INFO,
+            lsproto::RenameFilesParams { files: vec![lsproto::FileRename { old_uri: uri.clone(), new_uri: good.clone() }] },
+        );
+        assert!(is_invalid_params(&msg), "willRenameFiles {bad:?}: {:?}", msg.error);
+        let item = lsproto::CallHierarchyItem { name: "abc".to_string(), uri: uri.clone(), ..Default::default() };
+        let (msg, _) = client.send_request(lsproto::CALL_HIERARCHY_OUTGOING_CALLS_INFO, lsproto::CallHierarchyOutgoingCallsParams { item, ..Default::default() });
+        assert!(is_invalid_params(&msg), "outgoingCalls {bad:?}: {:?}", msg.error);
+    }
+
+    // A change right after the close of the same document.
+    let other = lsproto::DocumentUri::from("file:///home/projects/other.ts");
+    open(&other);
+    client.send_notification(lsproto::TEXT_DOCUMENT_DID_CLOSE_INFO, lsproto::DidCloseTextDocumentParams { text_document: lsproto::TextDocumentIdentifier { uri: other.clone() } });
+    client.send_notification(
+        lsproto::TEXT_DOCUMENT_DID_CHANGE_INFO,
+        lsproto::DidChangeTextDocumentParams {
+            text_document: lsproto::VersionedTextDocumentIdentifier { uri: other.clone(), version: 2 },
+            content_changes: vec![lsproto::TextDocumentContentChangePartialOrWholeDocument {
+                whole_document: Some(lsproto::TextDocumentContentChangeWholeDocument { text: "x".to_string() }),
+                ..Default::default()
+            }],
+        },
+    );
+
+    for file_name in ["", "tsconfig.json", "untitled:Untitled-1", "file:///home/projects/index.ts"] {
+        let item = lsproto::CompletionItem {
+            label: "abc".to_string(),
+            data: Some(lsproto::CompletionItemData { file_name: file_name.to_string(), ..Default::default() }),
+            ..Default::default()
+        };
+        let (msg, _) = client.send_request(lsproto::COMPLETION_ITEM_RESOLVE_INFO, item);
+        assert!(is_invalid_params(&msg), "resolve {file_name:?}: {:?}", msg.error);
+    }
+    let (msg, _) = client.send_request(lsproto::CODE_LENS_RESOLVE_INFO, lsproto::CodeLens::default());
+    assert!(is_invalid_params(&msg), "code lens without data: {:?}", msg.error);
+
+    let (msg, resp) = hover(&good);
+    assert!(msg.error.is_none() && resp.is_some(), "the session still answers: {:?}", msg.error);
+    let _ = close_client.close();
+}
+
+// Not a Go test (Go dereferences the missing session and panics). A document request between `initialize` and
+// `initialized` gets ServerNotInitialized.
+#[test]
+fn document_requests_before_initialized_get_an_error() {
+    use crate::lsptestutil::{acknowledge_registrations, new_lsp_client, test_server_options};
+
+    let (client, close_client) = new_lsp_client(test_server_options("/home/projects", &[]), Some(acknowledge_registrations()));
+    let (init_msg, _) = client.send_request(lsproto::INITIALIZE_INFO, lsproto::InitializeParams::default());
+    assert!(init_msg.error.is_none(), "Initialize failed");
+    let uri = lsproto::DocumentUri::from("file:///home/projects/index.ts");
+    let (msg, _) = client.send_request(
+        lsproto::TEXT_DOCUMENT_HOVER_INFO,
+        lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri }, ..Default::default() },
+    );
+    assert_eq!(msg.error.map(|e| e.code), Some(lsproto::ErrorCode::ServerNotInitialized.0));
+    let _ = close_client.close();
+}
+
+// Not a Go test (Go panics in `FileName` when the session starts). A rootUri the server cannot use falls back to the
+// server's directory.
+#[test]
+fn a_bad_root_uri_falls_back_to_the_server_directory() {
+    use crate::lsptestutil::{acknowledge_registrations, new_lsp_client, test_server_options};
+
+    let files = [("/home/projects/tsconfig.json", "{}"), ("/home/projects/index.ts", "export const abc = 1;\n")];
+    let (client, close_client) = new_lsp_client(test_server_options("/home/projects", &files), Some(acknowledge_registrations()));
+    let params = lsproto::InitializeParams { root_uri: lsproto::DocumentUriOrNull { document_uri: Some(lsproto::DocumentUri::from("not a uri")) }, ..Default::default() };
+    let (init_msg, _) = client.send_request(lsproto::INITIALIZE_INFO, params);
+    assert!(init_msg.error.is_none(), "Initialize failed");
+    client.send_notification(lsproto::INITIALIZED_INFO, lsproto::InitializedParams::default());
+    client.server.init_complete().wait();
+    let uri = lsproto::DocumentUri::from("file:///home/projects/index.ts");
+    client.send_notification(
+        lsproto::TEXT_DOCUMENT_DID_OPEN_INFO,
+        lsproto::DidOpenTextDocumentParams {
+            text_document: lsproto::TextDocumentItem { uri: uri.clone(), language_id: lsproto::LanguageKind::TypeScript, text: "export const abc = 1;\n".to_string(), ..Default::default() },
+        },
+    );
+    let (msg, resp) = client.send_request(
+        lsproto::TEXT_DOCUMENT_HOVER_INFO,
+        lsproto::HoverParams { text_document: lsproto::TextDocumentIdentifier { uri }, position: lsproto::Position { line: 0, character: 14 }, ..Default::default() },
+    );
+    assert!(msg.error.is_none() && resp.is_some(), "{:?}", msg.error);
+    let _ = close_client.close();
+}

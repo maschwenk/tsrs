@@ -28,8 +28,19 @@ pub struct FormatContext {
     format_newline: Option<String>,
 }
 
+/// tsrs-only: the largest indent, tab and base indent size the formatter uses (`with_format_code_settings`), far
+/// beyond any real indentation.
+pub const MAX_INDENT_SIZE: i32 = 100;
+
 // api.go:32
-pub fn with_format_code_settings(ctx: &FormatContext, options: FormatCodeSettings, new_line: &str) -> FormatContext {
+pub fn with_format_code_settings(ctx: &FormatContext, mut options: FormatCodeSettings, new_line: &str) -> FormatContext {
+    // tsrs-only: the formatter builds each line's indentation as a string of that many columns, so a client's
+    // `tabSize: 1e9` made every indented line a gigabyte (Go and tsrs grew until killed). Sizes past
+    // MAX_INDENT_SIZE are clamped to it.
+    let editor = &mut options.editor_settings;
+    for size in [&mut editor.indent_size, &mut editor.tab_size, &mut editor.base_indent_size] {
+        *size = (*size).min(MAX_INDENT_SIZE);
+    }
     let mut ctx = ctx.clone();
     ctx.format_options = Some(options);
     ctx.format_newline = Some(new_line.to_string());
