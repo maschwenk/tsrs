@@ -743,10 +743,11 @@ impl DeclarationTransformer {
                     }
                 }
 
-                let mut mods = None;
-                if is_static {
-                    mods = Some(f.new_modifier_list(vec![f.new_modifier(Kind::StaticKeyword)]));
-                }
+                let mut modifier_flags = self.ensure_modifier_flags(node);
+                if is_static { modifier_flags |= ModifierFlags::Static; }
+                let mods = if modifier_flags != ModifierFlags::None {
+                    Some(f.new_modifier_list(ast::create_modifiers_from_modifier_flags(modifier_flags, |kind| f.new_modifier(kind))))
+                } else { None };
                 if ast::has_dynamic_name(node) {
                     if !is_simple_inlineable_expression(name) {
                         break 'case_block; // Member either becomes an index signature or is a reassignment
