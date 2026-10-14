@@ -40,6 +40,27 @@ fn parse_int(s: &str) -> Result<i64, String> {
     s.parse::<i64>().map_err(|_| format!("strconv.ParseInt: parsing {}: value out of range", go_quote(s.as_bytes())))
 }
 
+// Go bytes.TrimSpace: trims Unicode white space (including '\v', U+0085 and U+00A0 as UTF-8, which `trim_ascii`
+// keeps); an invalid UTF-8 byte decodes as RuneError and stops the trim.
+fn trim_space(mut s: &[u8]) -> &[u8] {
+    let is_space = |r: u32| char::from_u32(r).is_some_and(char::is_whitespace);
+    loop {
+        let (r, size) = tsrs_core::stringutil::decode_rune(s);
+        if size == 0 || !is_space(r) {
+            break;
+        }
+        s = &s[size..];
+    }
+    loop {
+        let (r, size) = tsrs_core::stringutil::decode_last_rune(s);
+        if size == 0 || !is_space(r) {
+            break;
+        }
+        s = &s[..s.len() - size];
+    }
+    s
+}
+
 impl<R: Read> Reader<R> {
     // baseproto.go:34
     // Read reads the next message payload.
@@ -64,7 +85,7 @@ impl<R: Read> Reader<R> {
             let (key, value) = (&line[..colon], &line[colon + 1..]);
 
             if key == b"Content-Length" {
-                let value = tsrs_core::utf8::from_utf8_lossy(value.trim_ascii()).into_owned();
+                let value = tsrs_core::utf8::from_utf8_lossy(trim_space(value)).into_owned();
                 content_length = match parse_int(&value) {
                     Ok(n) => n,
                     Err(err) => {

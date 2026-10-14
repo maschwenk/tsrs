@@ -48,6 +48,22 @@ fn test_base_reader() {
     }
 }
 
+// Go trims the Content-Length value with bytes.TrimSpace, which also trims '\v' and Unicode spaces. A raw 0x85 byte is
+// invalid UTF-8, not U+0085, and is not trimmed.
+#[test]
+fn test_base_reader_content_length_trim_space() {
+    for input in [
+        &b"Content-Length:\t2\x0b\r\n\r\n{}"[..],
+        "Content-Length: 2\u{a0}\r\n\r\n{}".as_bytes(),
+        "Content-Length:\u{3000}2\u{85}\r\n\r\n{}".as_bytes(),
+        "Content-Length: \u{2028}2 \r\n\r\n{}".as_bytes(),
+    ] {
+        assert_eq!(new_base_reader(input).read().ok().as_deref(), Some(&b"{}"[..]), "{:?}", String::from_utf8_lossy(input));
+    }
+    assert!(new_base_reader(&b"Content-Length: 2\x85\r\n\r\n{}"[..]).read().is_err());
+    assert!(new_base_reader("Content-Length: 2\u{1c}\r\n\r\n{}".as_bytes()).read().is_err());
+}
+
 // baseproto_test.go:79
 #[test]
 fn test_base_reader_multiple_reads() {
