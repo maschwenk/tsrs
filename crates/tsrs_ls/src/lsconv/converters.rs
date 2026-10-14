@@ -579,8 +579,7 @@ impl Converters {
         if line_map.ascii_only || self.position_encoding == lsproto::PositionEncodingKind::UTF8 {
             // Go keeps a UTF-8 character offset that lands inside a multi-byte character and slices strings there;
             // snap it back to the start of that character, as the UTF-16 scan below does.
-            let pos = start.saturating_add(character).min(line_end);
-            return u32::try_from(script.text().floor_char_boundary(pos as usize)).expect("source position exceeds u32");
+            return snap_to_char_boundary(script.text(), start.saturating_add(character).min(line_end));
         }
 
         // Scan from line start counting UTF-16 code units to find the byte position.
@@ -644,6 +643,17 @@ impl Converters {
             character,
         }
     }
+}
+
+// Not in Go. Snaps a byte offset inside a multi-byte character back to the character's start and leaves any other
+// offset, including one past the end of the text, as it is. Offsets a client sends outside line/character positions
+// (completion item data, API positions, where the UTF-16 map sends an offset between the halves of a surrogate pair
+// into the character) skip the conversion above; Go slices its strings at whatever byte they name, Rust panics.
+pub fn snap_to_char_boundary(text: &str, position: u32) -> u32 {
+    if position as usize >= text.len() {
+        return position;
+    }
+    u32::try_from(text.floor_char_boundary(position as usize)).expect("source position exceeds u32")
 }
 
 // Go unicode/utf16 `RuneLen`.

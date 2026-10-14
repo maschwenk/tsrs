@@ -126,6 +126,7 @@ impl LanguageService {
         trigger_character: Option<&str>,
         include_symbols: bool,
     ) -> Result<Option<CompletionList>, lsproto::Error> {
+        let position = crate::lsconv::snap_to_char_boundary(file.text(), position);
         self.get_completions_at_position_internal(ctx, file, position, trigger_character, include_symbols)
     }
 }

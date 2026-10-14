@@ -17,6 +17,7 @@ use crate::autoimport::{self, ImportAdder};
 use crate::completions::*;
 use crate::format;
 use crate::languageservice::LanguageService;
+use crate::lsconv;
 use crate::lsutil::{self, FormatCodeSettings, QuotePreference, UserPreferences};
 use crate::utilities::{is_in_string, new_case_clause_tracker};
 
@@ -41,7 +42,7 @@ impl LanguageService {
             ctx,
             program,
             checker,
-            u32::try_from(data.position).unwrap_or(0),
+            lsconv::snap_to_char_boundary(file.text(), u32::try_from(data.position).unwrap_or(0)),
             file,
             item,
             data,

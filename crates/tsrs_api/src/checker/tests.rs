@@ -1192,3 +1192,14 @@ fn completions_needing_auto_imports_return_the_bare_error() {
         assert!(underflow, "the auto-import snapshot was not released by the handler");
     }
 }
+
+/// Not in Go. A UTF-16 offset between the two halves of a surrogate pair maps to a byte inside the character;
+/// completions there resolve like the character's start instead of panicking while slicing the text (Go slices the
+/// bytes inside the character).
+#[test]
+fn completions_at_a_client_offset_inside_a_character() {
+    let text = "/** \u{1F600} x */\nconst a = 1;\n";
+    let h = TestHost::new(&[("/p/tsconfig.json", TSCONFIG), ("/p/main.ts", text)]);
+    let at = utf16_pos(text, "\u{1F600}") + 1;
+    h.ok("getCompletionsAtPosition", &h.sp(&format!(r#""file":"/p/main.ts","position":{at},"includeSymbol":false"#)));
+}

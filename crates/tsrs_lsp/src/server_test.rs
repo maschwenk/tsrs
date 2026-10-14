@@ -237,3 +237,41 @@ fn server_shutdown_no_deadlock() {
 
     session.close();
 }
+
+// Not a Go test. completionItem/resolve takes the byte offset in `data.position` from the client unconverted; one
+// inside a multi-byte character (here in a JSDoc comment) resolves like the character's start instead of panicking
+// while slicing the text there; one past the end of the file resolves as in Go.
+#[test]
+fn completion_resolve_snaps_client_data_position() {
+    use crate::lsptestutil::{acknowledge_registrations, new_lsp_client, test_server_options};
+
+    let text = "/** 日本 ü */\nconst abc = 1;\nab\n";
+    let (client, close_client) = new_lsp_client(test_server_options("/home/projects", &[]), Some(acknowledge_registrations()));
+    let (init_msg, _) = client.send_request(lsproto::INITIALIZE_INFO, lsproto::InitializeParams::default());
+    assert!(init_msg.error.is_none(), "Initialize failed");
+    client.send_notification(lsproto::INITIALIZED_INFO, lsproto::InitializedParams::default());
+    client.server.init_complete().wait();
+    let uri = lsproto::DocumentUri::from("file:///home/projects/index.ts");
+    client.send_notification(
+        lsproto::TEXT_DOCUMENT_DID_OPEN_INFO,
+        lsproto::DidOpenTextDocumentParams {
+            text_document: lsproto::TextDocumentItem { uri: uri.clone(), language_id: lsproto::LanguageKind::TypeScript, text: text.to_string(), ..Default::default() },
+        },
+    );
+    let (msg, list) = client.send_request(
+        lsproto::TEXT_DOCUMENT_COMPLETION_INFO,
+        lsproto::CompletionParams { text_document: lsproto::TextDocumentIdentifier { uri }, position: lsproto::Position { line: 2, character: 2 }, ..Default::default() },
+    );
+    assert!(msg.error.is_none(), "{:?}", msg.error);
+    let list = list.unwrap();
+    let items = list.list.map(|l| l.items).or(list.items).unwrap();
+    let item = items.into_iter().find(|i| i.label == "abc").expect("abc completion");
+    let inside_character = text.find('日').unwrap() + 1;
+    for position in [inside_character, inside_character + 1, text.find('ü').unwrap() + 1, text.len() + 100] {
+        let mut item = item.clone();
+        item.data.as_mut().unwrap().position = i32::try_from(position).unwrap();
+        let (msg, _) = client.send_request(lsproto::COMPLETION_ITEM_RESOLVE_INFO, item);
+        assert!(msg.error.is_none(), "position {position}: {:?}", msg.error);
+    }
+    let _ = close_client.close();
+}
