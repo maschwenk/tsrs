@@ -11,10 +11,9 @@ wins, like Go). This note keeps the threading details and the deviations that st
   write loops are group threads; the read loop runs on a detached thread that reports its result to the group (Go's
   extra group member waiting on `readLoopErr` / `ctx.Done()` folded into it). All three have 512 MB stacks (the
   dispatch thread builds programs for synchronous handlers).
-- Async request work (`go func() { doAsyncWork() }()`) runs on a process-wide pool of at most
-  `max(4, available_parallelism)` threads with 512 MB stacks, started on demand, FIFO, never a thread per request.
-  Difference to Go: at most that many async jobs run concurrently; a job blocked in `sendClientRequest` holds its
-  thread.
+- Async request work (`go func() { doAsyncWork() }()`) runs on a process-wide pool of threads with 512 MB stacks
+  that starts a thread whenever a job finds no idle worker, so every job starts at once, as a goroutine does.
+  `max(4, available_parallelism)` workers stay; the others exit when the queue is empty. See "Worker threads" below.
 - `dynamicQueue` = `Mutex<VecDeque>` + `Condvar`; waits are cancelable through the context (`wait_until`: an
   `after_func` on the context notifies the condvar, so cancellation wakes waiters without polling).
 - `pendingServerRequests` channels -> `responseChan` (mutex + condvar, same select-on-ctx semantics).
@@ -23,6 +22,35 @@ wins, like Go). This note keeps the threading details and the deviations that st
   the panic site while inside a recover scope, instead of printing). Unrecovered panics on any server thread or
   worker exit the process with status 2, like an unrecovered goroutine panic.
 - `initComplete` (closed channel) -> a `Context` canceled when initialization completes.
+
+## Worker threads
+
+The pool used to stop at `max(4, available_parallelism)` threads, because a thread that ended kept its leak arena.
+Since threads hand their arena and current slab back when they exit (ptr.rs `ReleaseAtExit`, arena.rs
+`CurrentSlab`; notes/watch-memory.md), that reason no longer holds, and the cap made requests queue behind jobs
+waiting for a checker: the one diagnostics checker (`diag_sem`) or the query checkers. With 8 CPUs, a hover sent
+after 8 or more diagnostic pulls for different files waited for a worker. Now a job that finds no idle worker starts
+one, and workers beyond the cap exit when the queue is empty.
+
+Measured on xstate, 8 CPUs, `--profile fast` build, before -> after (tsgo for reference):
+
+| scenario | before | after | tsgo |
+| --- | --- | --- | --- |
+| hover / foldingRange / documentSymbol after 8 diagnostic pulls | 434-437 ms | 1-4 ms | |
+| the same after 60 diagnostic pulls | 696-699 ms | 1-3 ms | 1-3 ms |
+| 200 pipelined mixed requests: documentSymbol / foldingRange p50 | 596 / 597 ms | 28 / 27 ms | 8 / 9 ms |
+| the same: hover / definition p50 | 596 / 596 ms | 32 / 32 ms | 159 / 200 ms |
+| the same: total time | 0.96-1.07 s | 0.97-1.10 s | 1.02 s |
+| the same, 6 bursts in one session: peak RSS | 997 MiB | 1131 MiB | 1120 MiB |
+| the same: most threads at once / after the burst | 51 / 36 | 92-144 / 36 | 16 |
+
+The extra peak memory is the work of more requests in flight at once (mimalloc pages of the extra threads and their
+live results), not retained: with `MIMALLOC_PURGE_DELAY=0`, RSS after each burst is within 35 MiB of before (389-432
+-> 425-466 MiB), it stops growing after the third burst, and the tsrs arena range is unchanged (+6 MiB). Long
+sessions are flat as before: 2,000 hovers 186 -> 196 MiB before, 185 -> 194 after; 2,000 documentSymbol 167 -> 171
+before, 183 -> 188 after (16 run at once instead of 8); the edit/cancel stress script stays at 0.6-0.9 GB in both,
+with no missing responses, including under `TSRS_ARENA_POISON=1`. A thread spawn that fails (no threads or address
+space left) leaves the job queued for a running worker, as the fixed pool did.
 
 ## Deviations
 

@@ -1,12 +1,11 @@
 // The threads that run asynchronous request work (Go: `go func() { doAsyncWork() }()` in dispatchLoop, a fresh
-// goroutine per request). docs/LSP.md "Threading model": not a thread per request, because every thread owns a
-// leak arena (tsrs_core::ptr ARENA) that is never returned, so a thread per request would leak at least one arena
-// chunk per request. Instead a process-wide pool of at most `max(4, available_parallelism)` threads, each with a
-// 512 MB stack (the checker recurses as deeply as in the CLI; Go's goroutine stacks grow without a fixed limit).
-// Threads are started on demand, up to the limit, and live for the rest of the process.
-//
-// Difference to Go: at most that many async jobs run at once; further jobs wait in FIFO order. A job that blocks
-// (e.g. `sendClientRequest` waiting for the client) holds its thread while it waits.
+// goroutine per request). As in Go, a job never waits for a thread: when every worker is busy (often blocked on a
+// checker, e.g. behind the one diagnostics checker), `go` starts another, so a request that needs no checker or a
+// free one does not queue behind them. Up to `max(4, available_parallelism)` workers stay for the rest of the
+// process and wait for jobs; one started beyond that exits as soon as it finds no job, handing back its thread arena
+// and slab (tsrs_core ptr `ReleaseAtExit`, arena `CurrentSlab`), so the number of threads follows the number of
+// requests in flight, like Go's goroutines. Each has a 512 MB stack (the checker recurses as deeply as in the CLI;
+// Go's goroutine stacks grow without a fixed limit); the reservation is virtual.
 
 use std::collections::VecDeque;
 use std::sync::{Condvar, Mutex, OnceLock};
@@ -18,7 +17,8 @@ type job = Box<dyn FnOnce() + Send>;
 struct workerPool {
     state: Mutex<workerPoolState>,
     cond: Condvar,
-    max_threads: usize,
+    // Workers that stay when there is no job.
+    max_idle_threads: usize,
 }
 
 struct workerPoolState {
@@ -31,7 +31,7 @@ fn get_pool() -> &'static workerPool {
     static POOL: OnceLock<workerPool> = OnceLock::new();
     POOL.get_or_init(|| {
         let parallelism = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
-        workerPool { state: Mutex::new(workerPoolState { jobs: VecDeque::new(), threads: 0, idle: 0 }), cond: Condvar::new(), max_threads: parallelism.max(4) }
+        workerPool { state: Mutex::new(workerPoolState { jobs: VecDeque::new(), threads: 0, idle: 0 }), cond: Condvar::new(), max_idle_threads: parallelism.max(4) }
     })
 }
 
@@ -40,22 +40,27 @@ pub(crate) fn go(f: impl FnOnce() + Send + 'static) {
     let pool = get_pool();
     let mut state = pool.state.lock().unwrap();
     state.jobs.push_back(Box::new(f));
-    if state.idle == 0 && state.threads < pool.max_threads {
+    // Each idle worker takes one queued job (a notified one still counts as idle until it wakes).
+    if state.jobs.len() > state.idle {
         state.threads += 1;
         let n = state.threads;
         drop(state);
-        std::thread::Builder::new()
+        let spawned = std::thread::Builder::new()
             .name(format!("lsp-worker-{n}"))
             .stack_size(WORKER_STACK_SIZE)
-            .spawn(|| worker_loop(get_pool()))
-            .expect("failed to spawn a language server worker thread");
+            .spawn(|| worker_loop(get_pool()));
+        if let Err(err) = spawned {
+            // Out of threads or address space: the job waits for a running worker, as it did with a fixed pool.
+            let mut state = pool.state.lock().unwrap();
+            state.threads -= 1;
+            assert!(state.threads > 0, "failed to spawn a language server worker thread: {err}");
+        }
     } else {
         drop(state);
         pool.cond.notify_one();
     }
 }
 
-#[expect(clippy::infinite_loop, reason = "language-server workers wait for jobs until process exit")]
 fn worker_loop(pool: &'static workerPool) {
     let mut state = pool.state.lock().unwrap();
     loop {
@@ -65,10 +70,24 @@ fn worker_loop(pool: &'static workerPool) {
             state = pool.state.lock().unwrap();
             continue;
         }
+        if state.threads > pool.max_idle_threads {
+            state.threads -= 1;
+            return;
+        }
         state.idle += 1;
         state = pool.cond.wait(state).unwrap();
         state.idle -= 1;
     }
+}
+
+#[cfg(test)]
+pub(crate) fn max_idle_threads() -> usize {
+    get_pool().max_idle_threads
+}
+
+#[cfg(test)]
+pub(crate) fn threads() -> usize {
+    get_pool().state.lock().unwrap().threads
 }
 
 // An unrecovered panic in a goroutine ends a Go program (exit status 2, after the runtime prints the panic); the

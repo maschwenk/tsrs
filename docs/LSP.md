@@ -102,9 +102,11 @@ structure with OS threads:
 - read thread: `Server::read_loop` (frames, `initialize`, responses to server->client requests, `$/cancelRequest`);
 - dispatch thread: `Server::dispatch_loop`, runs `handle_request_or_notification`;
 - write thread: `Server::write_loop`;
-- async request work runs on a **fixed pool of worker threads** with 512 MB stacks (the checker recurses as deeply
-  as in the CLI). Not a thread per request: every thread owns a leak arena that is never returned (`tsrs_core::ptr`
-  `ARENA`), so a thread per request would leak at least one arena chunk per request.
+- async request work runs on worker threads with 512 MB stacks (the checker recurses as deeply as in the CLI). As
+  with Go's goroutine per request, a job never waits for a thread: when every worker is busy (often blocked on a
+  checker), another one starts. `max(4, available_parallelism)` workers stay and wait for jobs; one beyond that
+  exits when it finds no job, handing back its thread arena and slab (`tsrs_core::ptr` `ReleaseAtExit`), so the
+  thread count follows the requests in flight (notes/lsp-server.md has the numbers).
 - session-level background work (Go's `background.Queue`, scheduled diagnostics refreshes, snapshot updates on
   timers) runs on a separate fixed pool of 6 background threads with 512 MB stacks (`tsrs_project::background`);
   Go's `time.AfterFunc` -> one timer thread with a deadline heap that dispatches the callbacks onto those workers.

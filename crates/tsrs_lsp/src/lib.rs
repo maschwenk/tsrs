@@ -28,3 +28,5 @@ mod server_flakydiagnostics_test;
 mod server_progress_test;
 #[cfg(test)]
 mod server_projectinfo_test;
+#[cfg(test)]
+mod workerpool_test;
