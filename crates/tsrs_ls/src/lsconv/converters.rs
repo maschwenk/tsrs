@@ -577,7 +577,10 @@ impl Converters {
         };
 
         if line_map.ascii_only || self.position_encoding == lsproto::PositionEncodingKind::UTF8 {
-            return start.saturating_add(character).min(line_end);
+            // Go keeps a UTF-8 character offset that lands inside a multi-byte character and slices strings there;
+            // snap it back to the start of that character, as the UTF-16 scan below does.
+            let pos = start.saturating_add(character).min(line_end);
+            return u32::try_from(script.text().floor_char_boundary(pos as usize)).expect("source position exceeds u32");
         }
 
         // Scan from line start counting UTF-16 code units to find the byte position.

@@ -288,3 +288,6 @@ Checked in the code on 2026-10-10; collected from the porting waves' notes.
   subtracts one byte, which ends the line inside the break's three-byte encoding: a `#region` / `#endregion` line's
   folding range then ends two characters later and its collapsed text ends in two U+FFFD, and a `/**` followed by
   the break gets JSDoc tag completions instead of the JSDoc template that `\n` gets.
+- With the UTF-8 position encoding, a character offset inside a multi-byte character snaps back to the start of that
+  character (`line_and_character_to_position`), as a UTF-16 offset inside a surrogate pair does. Go keeps the byte
+  offset: an edit there splits the character and leaves invalid UTF-8 in the overlay, which Rust text cannot hold.

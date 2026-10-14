@@ -272,3 +272,18 @@ fn test_converters_against_js_reference() {
         }
     }
 }
+
+// Not a Go test. With the UTF-8 position encoding a client can send a character offset inside a multi-byte
+// character; Go keeps the offset and slices its strings there. The offset snaps back to the character's start, like
+// a UTF-16 offset inside a surrogate pair does.
+#[test]
+fn utf8_offset_inside_character_snaps_to_its_start() {
+    let text = "const s = \"\u{1F600}\";\nx";
+    let script = TestScript { name: "test.ts".to_string(), text: text.to_string(), original_text: String::new() };
+    let line_map = compute_lsp_line_starts(text);
+    let conv = new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(line_map.clone()));
+    for character in 11..=14 {
+        assert_eq!(conv.line_and_character_to_position(&script, lsproto::Position { line: 0, character }), 11, "{character}");
+    }
+    assert_eq!(conv.line_and_character_to_position(&script, lsproto::Position { line: 0, character: 15 }), 15);
+}
