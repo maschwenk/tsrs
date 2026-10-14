@@ -14,7 +14,16 @@ import run
 PROJECTS = (("vscode", "VS Code", "microsoft/vscode · src"),
             ("t3code-server", "T3 Code", "pingdotgg/t3code · apps/server"),
             ("mui-docs", "MUI docs", "mui/material-ui · docs"))
-COLORS = {"tsgo": "#3178c6", "tsrs": "#087b5b"}
+COMPILERS = ("tsgo", "tsrs")
+# The README shows the light or dark chart to match the reader's GitHub theme.
+THEMES = {
+    "light": {"tsgo": "#3178c6", "tsrs": "#087b5b", "background": "#fafcfb", "border": "#dce5e1",
+              "text": "#162d27", "card": "#ffffff", "card_border": "#e0e8e3", "muted": "#52655e",
+              "divider": "#e3eae6", "track": "#eef3f0"},
+    "dark": {"tsgo": "#58a6ff", "tsrs": "#3fb98c", "background": "#0d1117", "border": "#30363d",
+             "text": "#e6edf3", "card": "#161b22", "card_border": "#30363d", "muted": "#9198a1",
+             "divider": "#262c33", "track": "#21262d"},
+}
 GIB = 2**30
 
 
@@ -34,8 +43,9 @@ def comparison(metric: str, tsgo: float | None, tsrs: float | None) -> str:
     return f"{abs(percent):.0f}% {'less' if percent >= 0 else 'more'}"
 
 
-def svg(result: dict) -> str:
+def svg(result: dict, theme: str = "light") -> str:
     """Keep the original README layout and shared scales, growing scales only when necessary."""
+    colors = THEMES[theme]
     mode = "wide"
     if not any(mode in project for project in result["projects"].values()):
         raise ValueError(f"no benchmark results for mode {mode!r}")
@@ -43,7 +53,7 @@ def svg(result: dict) -> str:
     scales = {}
     for metric, minimum, step in (("wall_s", 16, 4), ("peak_rss_bytes", 8 * GIB, 2 * GIB)):
         maximum = max((measured(cell, compiler, metric) or 0 for cell in cells.values()
-                       for compiler in COLORS), default=0)
+                       for compiler in COMPILERS), default=0)
         scales[metric] = max(minimum, math.ceil(maximum / step) * step)
     root = ET.Element("svg", {"xmlns": "http://www.w3.org/2000/svg", "width": "960", "height": "940",
                               "viewBox": "0 0 960 940", "role": "img", "aria-labelledby": "title description"})
@@ -58,7 +68,7 @@ def svg(result: dict) -> str:
         if name == "t3code-server":
             detail += "Heavy use of Effect and Zod. "
         for metric, label in (("wall_s", "Time"), ("peak_rss_bytes", "Peak memory")):
-            values = [measured(cell, compiler, metric) for compiler in COLORS]
+            values = [measured(cell, compiler, metric) for compiler in COMPILERS]
             detail += (f"{label}: TypeScript 7 {format_value(metric, values[0])}; "
                        f"tsrs {format_value(metric, values[1])}; {comparison(metric, *values)}. ")
         if cell:
@@ -89,34 +99,34 @@ def svg(result: dict) -> str:
             attrs['text_anchor'] = 'end'
         element(parent, "text", **attrs).text = value
 
-    element(root, "rect", x=0.5, y=0.5, width=959, height=939, rx=20, fill="#fafcfb", stroke="#dce5e1")
-    drawing = element(root, "g", font_family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fill="#162d27")
+    element(root, "rect", x=0.5, y=0.5, width=959, height=939, rx=20, fill=colors["background"], stroke=colors["border"])
+    drawing = element(root, "g", font_family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fill=colors["text"])
     text(drawing, 40, 55, "Performance", 34, 700)
     for index, (name, title, source) in enumerate(PROJECTS):
         y = 88 + index * 282
         cell = cells[name]
         card = element(drawing, "g", id=name)
-        element(card, "rect", x=24, y=y, width=912, height=266, rx=12, fill="#ffffff", stroke="#e0e8e3")
+        element(card, "rect", x=24, y=y, width=912, height=266, rx=12, fill=colors["card"], stroke=colors["card_border"])
         text(card, 48, y + 37, title, 27, 700)
-        text(card, 48, y + 64, source, 17, fill="#52655e")
+        text(card, 48, y + 64, source, 17, fill=colors["muted"])
         files = measured(cell, "tsrs", "files")
         text(card, 912, y + 37, (f"{files:,.0f}" if files is not None else "n/a") + " files", 25, 700, end=True)
         if name == "t3code-server":
-            text(card, 912, y + 64, "Heavy use of Effect and Zod", 17, fill="#52655e", end=True)
-        element(card, "line", x1=48, y1=y + 81, x2=912, y2=y + 81, stroke="#e3eae6")
+            text(card, 912, y + 64, "Heavy use of Effect and Zod", 17, fill=colors["muted"], end=True)
+        element(card, "line", x1=48, y1=y + 81, x2=912, y2=y + 81, stroke=colors["divider"])
         for metric, label, x in (("wall_s", "Time", 48), ("peak_rss_bytes", "Peak memory", 514)):
             panel = element(card, "g", data_metric=metric)
-            values = [measured(cell, compiler, metric) for compiler in COLORS]
+            values = [measured(cell, compiler, metric) for compiler in COMPILERS]
             text(panel, x, y + 115, label, 19, 600)
-            text(panel, x + 398, y + 115, comparison(metric, *values), 23, 700, COLORS['tsrs'], end=True)
-            for offset, (compiler, value) in enumerate(zip(COLORS, values)):
+            text(panel, x + 398, y + 115, comparison(metric, *values), 23, 700, colors['tsrs'], end=True)
+            for offset, (compiler, value) in enumerate(zip(COMPILERS, values)):
                 label_y, bar_y = y + 145 + offset * 62, y + 155 + offset * 62
                 text(panel, x, label_y, "TypeScript 7" if compiler == "tsgo" else "tsrs", 17, 400 if offset == 0 else 700)
-                text(panel, x + 398, label_y, format_value(metric, value), 19, 700, COLORS[compiler], end=True)
-                element(panel, "rect", x=x, y=bar_y, width=398, height=20, rx=3, fill="#eef3f0")
+                text(panel, x + 398, label_y, format_value(metric, value), 19, 700, colors[compiler], end=True)
+                element(panel, "rect", x=x, y=bar_y, width=398, height=20, rx=3, fill=colors["track"])
                 if value is not None:
                     element(panel, "rect", data_compiler=compiler, x=x, y=bar_y,
-                            width=f"{398 * value / scales[metric]:.4f}", height=20, rx=3, fill=COLORS[compiler])
+                            width=f"{398 * value / scales[metric]:.4f}", height=20, rx=3, fill=colors[compiler])
     ET.indent(root, space="  ")
     return ET.tostring(root, encoding="unicode") + "\n"
 
@@ -131,9 +141,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("result", type=Path, help="recorded benchmark result (.json)")
     parser.add_argument("--output", type=Path, required=True, help="SVG destination")
+    parser.add_argument("--theme", choices=THEMES, default="light", help="color scheme (default: light)")
     args = parser.parse_args()
     try:
-        image = svg(json.loads(args.result.read_text()))
+        image = svg(json.loads(args.result.read_text()), args.theme)
     except ValueError as error:
         parser.error(str(error))
     args.output.parent.mkdir(parents=True, exist_ok=True)

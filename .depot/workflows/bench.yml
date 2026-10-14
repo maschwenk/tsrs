@@ -650,7 +650,7 @@ jobs:
   # Joins the per-project results into bench/results/<date>-<commit>.{json,md} and the summary table, flags
   # regressions, and commits. Runs only when every fixed-spec measuring job succeeded: the regression flag reads them.
   # bench/RESULTS.md shows one mode, the 16-vCPU machine's default mode (`wide`, with bun check); bench/results/<...>.md has
-  # every mode. The results commit also draws bench/large-projects.svg. If the wide job failed or was cancelled,
+  # every mode. The results commit also draws bench/large-projects.svg and its dark-theme twin. If the wide job failed or was cancelled,
   # the results file has no 16-vCPU sections and the summary tables and chart are left as they were.
   merge:
     needs: [build, measure, measure-wide, measure-watch]
@@ -727,7 +727,7 @@ jobs:
             # Render both the tables and SVG after fetching main on every retry. Older runs and missing wide
             # results preserve the latest report and chart together.
             python3 bench/publish.py /tmp/bench-merged/*.json
-            git add bench/RESULTS.md bench/large-projects.svg bench/results
+            git add bench/RESULTS.md bench/large-projects.svg bench/large-projects-dark.svg bench/results
             git commit -q -m "bench: results for ${measured::12} [skip ci]"
             git push -q origin HEAD:main && exit 0
             sleep $((attempt * 5))

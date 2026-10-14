@@ -154,12 +154,12 @@ class PublishTests(unittest.TestCase):
         return publish.publish(path, self.report, self.image)
 
     def latest(self):
-        return self.report.read_bytes(), self.image.read_bytes()
+        return self.report.read_bytes(), self.image.read_bytes(), publish.dark_image(self.image).read_bytes()
 
     def test_publishes_wide_summary_chart_and_source_links(self):
         commit = self.commits[0]
         self.assertTrue(self.publish(self.result(commit)))
-        report, svg = self.latest()
+        report, svg, dark_svg = self.latest()
         report = report.decode()
         self.assertIn(f'tsrs commit: `{commit[:12]}`', report)
         self.assertIn('### Default settings on 16 vCPUs', report)
@@ -171,6 +171,10 @@ class PublishTests(unittest.TestCase):
         self.assertIn(f'](results/2026-10-11-{commit[:12]}.json)', report)
         self.assertIn(f'](results/2026-10-11-{commit[:12]}.md)', report)
         self.assertEqual('{http://www.w3.org/2000/svg}svg', ET.fromstring(svg).tag)
+        self.assertEqual('{http://www.w3.org/2000/svg}svg', ET.fromstring(dark_svg).tag)
+        self.assertEqual(self.repo / 'bench/large-projects-dark.svg', publish.dark_image(self.image))
+        self.assertIn(chart.THEMES['light']['background'].encode(), svg)
+        self.assertIn(chart.THEMES['dark']['background'].encode(), dark_svg)
 
     def test_publishing_preserves_handwritten_sections_around_tables(self):
         before = '# Benchmark results\n\nPinned projects and methodology.\n\n'
@@ -195,13 +199,14 @@ class PublishTests(unittest.TestCase):
     def test_rerunning_same_commit_updates_report_and_chart(self):
         result = self.result(self.commits[1])
         self.assertTrue(self.publish(result))
-        old_report, old_svg = self.latest()
+        old_report, old_svg, old_dark_svg = self.latest()
         result['date'] = '2026-10-11 12:00 UTC'
         result['projects']['vscode']['wide']['tsrs']['wall_s'] *= 2
         self.assertTrue(self.publish(result))
-        report, svg = self.latest()
+        report, svg, dark_svg = self.latest()
         self.assertNotEqual(old_report, report)
         self.assertNotEqual(old_svg, svg)
+        self.assertNotEqual(old_dark_svg, dark_svg)
         self.assertIn(result['date'].encode(), report)
 
     def test_results_without_wide_measurements_preserve_latest(self):

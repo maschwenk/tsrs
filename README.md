@@ -25,7 +25,13 @@ We take conformance really seriously and are fixing the remaining 0.01% of issue
 `--init` and `--showConfig` are not supported. See [compatibility and evidence](https://github.com/maschwenk/tsrs/blob/main/docs/COMPATIBILITY.md)
 for supported features and known gaps.
 
-[![Performance](https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg)](https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md)
+<a href="https://github.com/maschwenk/tsrs/blob/main/bench/RESULTS.md">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects-dark.svg">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg">
+    <img alt="Performance" src="https://raw.githubusercontent.com/maschwenk/tsrs/main/bench/large-projects.svg">
+  </picture>
+</a>
 
 ## Extra features
 
