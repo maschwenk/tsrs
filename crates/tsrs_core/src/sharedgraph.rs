@@ -40,6 +40,14 @@ const WORDS: usize = SPAN >> PAGE_SHIFT >> 6;
 #[cfg(compressed_ptrs)]
 static FROZEN: [AtomicU64; WORDS] = [const { AtomicU64::new(0) }; WORDS];
 
+/// Plain pointers (no fixed reservation to keep a page bitmap for): the frozen chunks as sorted `(start, end)` ranges,
+/// one leaked slice behind one pointer, so a reader never sees a slice and a length from two freezes. Ranges are added
+/// as the bitmap's bits are (a later freeze keeps the earlier ones). Without them every object counted as unfrozen
+/// under `plain-ptrs`, and forks wrote their lazily filled fields into the shared seed: a write fault on its protected
+/// pages, and with `TSRS_SHARED_GRAPH_PROTECT=0` data races between forks (`ThreadSanitizer`, which needs plain pointers).
+#[cfg(not(compressed_ptrs))]
+static FROZEN_RANGES: std::sync::atomic::AtomicPtr<Box<[(usize, usize)]>> = std::sync::atomic::AtomicPtr::new(std::ptr::null_mut());
+
 /// The frozen chunks lie in `[FROZEN_LO, FROZEN_LO + FROZEN_SPAN)` (0 and 0 while nothing is frozen).
 static FROZEN_LO: AtomicUsize = AtomicUsize::new(0);
 static FROZEN_SPAN: AtomicUsize = AtomicUsize::new(0);
@@ -122,8 +130,15 @@ fn is_frozen_addr_slow(addr: usize) -> bool {
     }
     #[cfg(not(compressed_ptrs))]
     {
-        let _ = addr;
-        false
+        // Acquire: pairs with `freeze`'s Release store of the ranges.
+        let ranges = FROZEN_RANGES.load(Ordering::Acquire);
+        if ranges.is_null() {
+            return false;
+        }
+        // SAFETY: a leaked, never freed slice (`freeze`).
+        let ranges = unsafe { &**ranges };
+        let i = ranges.partition_point(|&(start, _)| start <= addr);
+        i > 0 && addr < ranges[i - 1].1
     }
 }
 
@@ -149,6 +164,21 @@ pub fn freeze(ranges: &[(usize, usize)]) {
             // Relaxed: published to the forks by spawning their threads.
             FROZEN[page >> 6].fetch_or(1 << (page & 63), Ordering::Relaxed);
         }
+    }
+    #[cfg(not(compressed_ptrs))]
+    {
+        // Acquire: pairs with the Release store below of an earlier freeze.
+        let old = FROZEN_RANGES.load(Ordering::Acquire);
+        let mut all: Vec<(usize, usize)> = if old.is_null() {
+            Vec::new()
+        } else {
+            // SAFETY: a leaked, never freed slice (stored below).
+            unsafe { (*old).to_vec() }
+        };
+        all.extend(ranges.iter().map(|&(start, len)| (start, start + len)));
+        all.sort_unstable();
+        // Release: a reader that loads the pointer (Acquire) sees the slice it points to.
+        FROZEN_RANGES.store(Box::into_raw(Box::new(all.into_boxed_slice())), Ordering::Release);
     }
     let lo = ranges.iter().map(|r| r.0).min().unwrap_or(0);
     let hi = ranges.iter().map(|r| r.0 + r.1).max().unwrap_or(0);
