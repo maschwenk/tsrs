@@ -90,6 +90,8 @@ fn setup_with(files: &[(&str, &str)], vs: bool) -> (LanguageService, Context) {
     caps.text_document.hover.content_format = vec![lsproto::MarkupKind::Markdown];
     caps.text_document.definition.link_support = true;
     caps.text_document.type_definition.link_support = true;
+    caps.text_document.semantic_tokens.token_types = ["namespace", "class", "enum", "interface", "struct", "typeParameter", "type", "parameter", "variable", "property", "enumMember", "decorator", "event", "function", "method", "macro", "label", "comment", "string", "keyword", "number", "regexp", "operator"].map(String::from).to_vec();
+    caps.text_document.semantic_tokens.token_modifiers = ["declaration", "definition", "readonly", "static", "deprecated", "abstract", "async", "modification", "documentation", "defaultLibrary"].map(String::from).to_vec();
     caps.vs_supports_visual_studio_extensions = vs;
     let ctx = lsproto::with_client_capabilities(&Context::background(), Arc::new(caps));
     (ls, ctx)
@@ -248,4 +250,19 @@ fn ecma_line_separators() {
     );
     let completion = json(&ls.provide_completion(&ctx, &uri, position_of(A, "\u{2029}function"), None).unwrap());
     assert!(completion.contains(r#""label":"/** */""#), "{completion}");
+}
+
+// `not` is a property whose type has call signatures and properties: Go classifies it as a property. With lazy member
+// tables the instantiated interface's resolved property list is empty, which used to make it a method. Expected
+// tokens recorded from `tsgo-ref --lsp -stdio`.
+#[test]
+fn semantic_tokens_property_of_lazily_resolved_interface() {
+    let text = "interface A<T> { (x: string): A<T>; not: A<T>; foo(): void }\ndeclare function expect<T>(x: T): A<T>;\nexpect(1).not.foo();\n";
+    let files = [("/tsconfig.json", r#"{"compilerOptions":{"strict":true},"files":["index.ts"]}"#), ("/index.ts", text)];
+    let (ls, ctx) = setup(&files);
+    let uri = lsconv::file_name_to_document_uri("/index.ts");
+    assert_eq!(
+        json(&ls.provide_semantic_tokens(&ctx, &uri).unwrap()),
+        r#"{"data":[0,10,1,3,1,0,2,1,5,1,0,6,1,7,1,0,12,1,3,0,0,2,1,5,0,0,4,3,9,1,0,5,1,3,0,0,2,1,5,0,0,4,3,14,1,1,17,6,13,1,0,7,1,5,1,0,3,1,7,1,0,3,1,5,0,0,4,1,3,0,0,2,1,5,0,1,0,6,13,0,0,10,3,9,0,0,4,3,14,0]}"#
+    );
 }

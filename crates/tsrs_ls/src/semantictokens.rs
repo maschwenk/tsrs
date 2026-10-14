@@ -477,7 +477,9 @@ fn reclassify_by_type(c: &mut Checker, node: P<Node>, tt: TokenType) -> TokenTyp
         // Must have call signatures AND (no properties OR be used in call context)
         let has_call_signatures = test(c, &|c, t| !c.get_signatures_of_type(t, SignatureKind::Call).is_empty());
         if has_call_signatures {
-            let has_no_properties = !test(c, &|_, t| t.data().as_object_type().is_some_and(|obj_type| !obj_type.properties().is_empty()));
+            // Go reads `objType.Properties()`, resolved by the signature queries above; with lazy member tables they
+            // may have been answered without resolving.
+            let has_no_properties = !test(c, &|c, t| t.data().as_object_type().is_some() && c.has_properties_of_structured_type_exported(t));
             if has_no_properties || is_expression_in_call_expression(node) {
                 if tt == TOKEN_TYPE_PROPERTY {
                     return TOKEN_TYPE_METHOD;
