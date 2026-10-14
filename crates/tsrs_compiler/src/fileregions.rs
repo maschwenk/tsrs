@@ -225,13 +225,13 @@ fn global_library_files(program: &crate::program::Program) -> Vec<P<SourceFile>>
 /// them at any count; `0` turns file regions off; `keep` makes the regions (at any count) but frees nothing;
 /// `stats` reports (`stats_report`); `all` gives every TypeScript root file a region
 /// (`LeafSettings::every_file`), at any count. Off under the debug modes that walk files or checker data
-/// after the pass (`TSRS_FILE_TIMES` walks every tree; `TSRS_ASSIGNMENT_STATS`, the work and heap censuses
-/// walk checker tables) or that must see every block alive (the reachability census, `TSRS_CENSUS=1`). Off
-/// without compressed pointers on unix (`Region::retire_on_free`), whatever the value.
+/// after the pass (`TSRS_FILE_TIMES` walks every tree; `TSRS_ASSIGNMENT_STATS` other than `times`, the work
+/// and heap censuses walk checker tables) or that must see every block alive (the reachability census,
+/// `TSRS_CENSUS=1`). Off without compressed pointers on unix (`Region::retire_on_free`), whatever the value.
 pub fn leaf_settings_from_env(checkers: usize) -> LeafSettings {
     let census = std::env::var_os("TSRS_CENSUS").is_some_and(|v| v == "1") || tsrs_core::census_recording();
     let checker_census = crate::Checker::census_enabled() || crate::Checker::heap_census_enabled();
-    if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_enabled() {
+    if census || checker_census || crate::checkerpool::file_times_path().is_some() || crate::checkerpool::assignment_stats_walk_files() {
         return LeafSettings::default();
     }
     // Only where a freed region's pages go back to the system and its range is never reused (`Region::retire_on_free`

@@ -362,8 +362,10 @@ pub(crate) struct poolState {
     pub(crate) group_runs: Mutex<Vec<Vec<(f64, usize)>>>,
     // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, thread CPU seconds per checker.
     pub(crate) group_cpu: Mutex<Vec<Vec<f64>>>,
-    // TSRS_FILE_TIMES only: (file, checker, seconds, thread CPU seconds) per checked file, in completion order.
-    pub(crate) file_times: Mutex<Vec<(P<SourceFile>, usize, f64, f64)>>,
+    // TSRS_ASSIGNMENT_STATS only: per for_each_checker_group_do call, instructions per checker (thread_instructions).
+    pub(crate) group_instructions: Mutex<Vec<Vec<u64>>>,
+    // TSRS_FILE_TIMES only: one entry per checked file, in completion order.
+    pub(crate) file_times: Mutex<Vec<FileTime>>,
     // Cost cache only: (file, thread CPU seconds) per checked file, per checker pass.
     file_cpu: Mutex<Vec<(P<SourceFile>, f64)>>,
     // Whether checkers live in regions and the type-check pass may retire them (`max_memory`).
@@ -371,9 +373,24 @@ pub(crate) struct poolState {
     pub(crate) retired: Mutex<RetiredCheckers>,
 }
 
+// TSRS_FILE_TIMES only: one file run by a checker group.
+pub(crate) struct FileTime {
+    file: P<SourceFile>,
+    checker: usize,
+    // Seconds from the start of the group pass to the start of this file.
+    start: f64,
+    seconds: f64,
+    cpu: f64,
+    // Instructions the checker thread retired on the file (macOS; 0 elsewhere).
+    instructions: u64,
+    // Taken from another checker's queue (stealing).
+    stolen: bool,
+}
+
 // TSRS_FILE_TIMES=<path> (experiments): after checking, write one line per file run by a checker group:
 // checker, seconds, thread CPU seconds, node count, text length, import count, file name, and the file's node-kind
-// histogram (`Kind=count` pairs), for fitting assignment cost models offline.
+// histogram (`Kind=count` pairs), for fitting assignment cost models offline. Then, after the histogram and a `|`:
+// the file's start in its pass (seconds), its instructions (macOS), whether it was stolen (0/1) and its static weight.
 pub(crate) fn file_times_path() -> Option<&'static str> {
     static PATH: OnceLock<Option<String>> = OnceLock::new();
     PATH.get_or_init(|| std::env::var("TSRS_FILE_TIMES").ok().filter(|v| !v.is_empty())).as_deref()
@@ -392,13 +409,15 @@ pub(crate) fn write_file_times(program: &'static Program) {
         });
     }
     let mut out = String::new();
-    for &(file, checker, seconds, cpu) in state.file_times.lock().unwrap().iter() {
+    for &FileTime { file, checker, start, seconds, cpu, instructions, stolen } in state.file_times.lock().unwrap().iter() {
         let mut counts = vec![0u32; tsrs_ast::Kind::Count as usize + 1];
         count_kinds(file.as_node(), &mut counts);
         let _ = write!(out, "{checker}\t{seconds:.6}\t{cpu:.6}\t{}\t{}\t{}\t{}\t", file.node_count.get(), file.text().len(), file.imports().len(), file.file_name());
         for (kind, &count) in counts.iter().enumerate().filter(|&(_, &c)| c > 0) {
             let _ = write!(out, "{:?}={count} ", tsrs_ast::Kind::from_i16(kind as i16));
         }
+        let weight = state.file_indices.get(&file).and_then(|&i| state.weights.get(i)).copied().unwrap_or(0);
+        let _ = write!(out, "|\t{start:.6}\t{instructions}\t{}\t{weight}", u8::from(stolen));
         out.push('\n');
     }
     std::fs::write(path, out).expect("TSRS_FILE_TIMES");
@@ -433,11 +452,38 @@ pub(crate) fn thread_cpu_seconds() -> f64 {
     0.0
 }
 
+// Instructions retired by the calling thread so far (TSRS_ASSIGNMENT_STATS), on macOS only (0 elsewhere): unlike CPU
+// time they do not depend on the machine's load, so they show each checker's share of the duplicated work.
+#[cfg(target_os = "macos")]
+pub(crate) fn thread_instructions() -> u64 {
+    unsafe extern "C" {
+        // xnu `thread_selfcounts`: with kind 1 it writes the calling thread's instructions and cycles.
+        fn thread_selfcounts(kind: i32, buf: *mut u64, nbytes: usize) -> i32;
+    }
+    let mut counts = [0u64; 2];
+    // SAFETY: the buffer holds the two counters the call writes.
+    if unsafe { thread_selfcounts(1, counts.as_mut_ptr(), std::mem::size_of_val(&counts)) } != 0 {
+        return 0;
+    }
+    counts[0]
+}
+
+#[cfg(not(target_os = "macos"))]
+pub(crate) fn thread_instructions() -> u64 {
+    0
+}
+
 // TSRS_ASSIGNMENT_STATS=1: record per-checker group timings and, after `--extendedDiagnostics`, print the
 // per-checker assignment report (checkerpool_stats.rs). Read once; nothing is recorded when unset.
 pub fn assignment_stats_enabled() -> bool {
     static ENABLED: OnceLock<bool> = OnceLock::new();
     *ENABLED.get_or_init(|| std::env::var("TSRS_ASSIGNMENT_STATS").is_ok_and(|v| !v.is_empty() && v != "0"))
+}
+
+// Whether the TSRS_ASSIGNMENT_STATS report walks the checkers' tables and the files' trees after the pass (every value
+// but `times`, which prints only the per-checker counters recorded during the pass), so the files must stay alive.
+pub(crate) fn assignment_stats_walk_files() -> bool {
+    assignment_stats_enabled() && std::env::var("TSRS_ASSIGNMENT_STATS").is_ok_and(|v| v != "times")
 }
 
 pub(crate) struct checkerPool {
@@ -758,6 +804,7 @@ impl checkerPool {
                 group_stolen: Mutex::new(Vec::new()),
                 group_runs: Mutex::new(Vec::new()),
                 group_cpu: Mutex::new(Vec::new()),
+                group_instructions: Mutex::new(Vec::new()),
                 file_times: Mutex::new(Vec::new()),
                 file_cpu: Mutex::new(Vec::new()),
                 recycle,
@@ -837,6 +884,7 @@ impl checkerPool {
         let n = state.checkers.len();
         let times: Vec<Mutex<(f64, usize)>> = if stats { std::iter::repeat_with(|| Mutex::new((0.0, 0))).take(n).collect() } else { Vec::new() };
         let cpu: Vec<Mutex<f64>> = if stats { std::iter::repeat_with(|| Mutex::new(0.0)).take(n).collect() } else { Vec::new() };
+        let instructions: Vec<std::sync::atomic::AtomicU64> = std::iter::repeat_with(|| std::sync::atomic::AtomicU64::new(0)).take(if stats { n } else { 0 }).collect();
         let stolen: Vec<std::sync::atomic::AtomicUsize> = std::iter::repeat_with(|| std::sync::atomic::AtomicUsize::new(0)).take(n).collect();
         let file_times = file_times_path().is_some();
         let cost_cache = checker_cost_cache_path().is_some() && n > 1;
@@ -868,12 +916,23 @@ impl checkerPool {
             Some(w) => w,
             None => file_weight(i),
         };
+        let gate = if steal && split_ctx.is_some() {
+            crate::stealgate::config().map(|cfg| {
+                let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
+                crate::stealgate::PassGate::new(cfg, self.program, files, n, active.len(), total)
+            })
+        } else {
+            None
+        };
         if steal {
             // Each owner starts with the files that could be the pass's tail (heavy_files_first).
             let total: u64 = positions.iter().flatten().map(|&i| weight(i)).sum();
             let threshold = total / (active.len() as u64 * heavy_share_divisor());
             for position in &mut positions {
                 heavy_files_first(position, threshold, weight);
+                if let Some(gate) = &gate {
+                    gate.hubs_first(position, weight);
+                }
             }
             if state.recycle && leaves_first() {
                 // With checkers retired under a memory target their memory stops growing, and what the front end holds sets
@@ -902,9 +961,11 @@ impl checkerPool {
         let region_sizes: Vec<std::sync::atomic::AtomicUsize> = std::iter::repeat_with(|| std::sync::atomic::AtomicUsize::new(0)).take(n).collect();
         // TSRS_MEM_SPLIT: the type-check pass reports once every checker is done and before any thread exits.
         let mem_split = (allow_steal && tsrs_core::memsplit::enabled()).then(|| std::sync::Barrier::new(if single { 1 } else { active.len() }));
+        let pass_start = std::time::Instant::now();
         let run = |checker_idx: usize| {
             let start = stats.then(std::time::Instant::now);
             let cpu_start = if stats { thread_cpu_seconds() } else { 0.0 };
+            let instructions_start = if stats { thread_instructions() } else { 0 };
             let mut count = 0;
             let mut file_cpu: Vec<(P<SourceFile>, f64)> = Vec::new();
             let mut guard = state.checkers[checker_idx].0.lock().unwrap();
@@ -918,14 +979,29 @@ impl checkerPool {
             crate::sharedgraph::enter_checker(&guard);
             let recycle = allow_steal && state.recycle;
             let (mut slot, mut last_victim) = (usize::MAX, usize::MAX);
-            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, max_thieves, &mut slot, sticky.then_some(&mut last_victim)) {
+            while let Some((i, from_other)) = queues_next(&queues, checker_idx, steal, max_thieves, &mut slot, sticky.then_some(&mut last_victim), gate.as_ref()) {
+                if let Some(gate) = &gate {
+                    gate.begin(checker_idx, if from_other { slot } else { checker_idx }, i as u32, weight(i as u32), from_other);
+                }
                 if let Some(&(s, k, _)) = i.checked_sub(files.len()).map(|p| &split.piece_items[p]) {
                     let piece_start = file_times.then(std::time::Instant::now);
                     let cpu_start = if file_times { thread_cpu_seconds() } else { 0.0 };
+                    let instructions_start = if file_times { thread_instructions() } else { 0 };
                     split.files[s].run_queued_piece(&mut guard, split_ctx.unwrap(), k);
+                    if let Some(gate) = &gate {
+                        gate.end(checker_idx);
+                    }
                     if let Some(piece_start) = piece_start {
                         let cpu = thread_cpu_seconds() - cpu_start;
-                        state.file_times.lock().unwrap().push((split.files[s].file, checker_idx, piece_start.elapsed().as_secs_f64(), cpu));
+                        state.file_times.lock().unwrap().push(FileTime {
+                            file: split.files[s].file,
+                            checker: checker_idx,
+                            start: piece_start.duration_since(pass_start).as_secs_f64(),
+                            seconds: piece_start.elapsed().as_secs_f64(),
+                            cpu,
+                            instructions: thread_instructions() - instructions_start,
+                            stolen: false,
+                        });
                     }
                     count += 1;
                     continue;
@@ -942,18 +1018,30 @@ impl checkerPool {
                 }
                 let file_start = file_times.then(std::time::Instant::now);
                 let cpu_start = if cost_cache || file_times { thread_cpu_seconds() } else { 0.0 };
+                let instructions_start = if file_times { thread_instructions() } else { 0 };
                 let split_file = split.split_of.get(&(i as u32)).map(|&s| &split.files[s]);
                 if let Some(split_file) = split_file {
                     split_file.run_owner(&mut guard, split_ctx.unwrap());
                 }
                 cb(&mut guard, i, file);
+                if let Some(gate) = &gate {
+                    gate.end(checker_idx);
+                }
                 if let Some(split_file) = split_file.filter(|f| f.is_shadow()) {
                     let whole = guard.file_diagnostics_so_far(file);
                     split_file.shadow_compare(&whole);
                 }
                 if let Some(file_start) = file_start {
                     let cpu = thread_cpu_seconds() - cpu_start;
-                    state.file_times.lock().unwrap().push((file, checker_idx, file_start.elapsed().as_secs_f64(), cpu));
+                    state.file_times.lock().unwrap().push(FileTime {
+                        file,
+                        checker: checker_idx,
+                        start: file_start.duration_since(pass_start).as_secs_f64(),
+                        seconds: file_start.elapsed().as_secs_f64(),
+                        cpu,
+                        instructions: thread_instructions() - instructions_start,
+                        stolen: from_other,
+                    });
                 }
                 if cost_cache {
                     file_cpu.push((file, thread_cpu_seconds() - cpu_start));
@@ -988,6 +1076,8 @@ impl checkerPool {
             if let Some(start) = start {
                 *times[checker_idx].lock().unwrap() = (start.elapsed().as_secs_f64(), count);
                 *cpu[checker_idx].lock().unwrap() = thread_cpu_seconds() - cpu_start;
+                // Read after the work group joined.
+                instructions[checker_idx].store(thread_instructions() - instructions_start, std::sync::atomic::Ordering::Relaxed);
             }
             // Memory peaks at the end of the type-check pass, while the last checkers still run: one that is done gives
             // back the resident, never used end of its arena chunk.
@@ -1016,6 +1106,7 @@ impl checkerPool {
             state.group_runs.lock().unwrap().push(times.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_cpu.lock().unwrap().push(cpu.into_iter().map(|t| t.into_inner().unwrap()).collect());
             state.group_stolen.lock().unwrap().push(stolen.into_iter().map(std::sync::atomic::AtomicUsize::into_inner).collect());
+            state.group_instructions.lock().unwrap().push(instructions.into_iter().map(std::sync::atomic::AtomicU64::into_inner).collect());
         }
     }
 }
@@ -1247,6 +1338,14 @@ impl FileQueue {
         }
     }
 
+    // The position a thief would take next and the number of files left (TSRS_STEAL_GATE).
+    fn back_and_left(&self) -> (Option<u32>, u64) {
+        // A heuristic read: a stale value only changes a gate's choice.
+        let r = self.range.load(std::sync::atomic::Ordering::Relaxed);
+        let (front, back) = ((r & QUEUE_LOW) as usize, (r >> 32) as usize);
+        if front < back { (Some(self.positions[back - 1]), (back - front) as u64) } else { (None, 0) }
+    }
+
     // Whether checker `me` may take from this queue as a thief: it is one of its thieves, or the queue has fewer than
     // `max` (0: no limit). Checkers from index 64 on are not counted.
     fn admits(&self, me: usize, max: u32) -> bool {
@@ -1347,33 +1446,76 @@ fn queues_next(
     max_thieves: u32,
     slot: &mut usize,
     mut last_victim: Option<&mut usize>,
+    gate: Option<&crate::stealgate::PassGate>,
 ) -> Option<(usize, bool)> {
+    use crate::stealgate::Verdict;
     if let Some(i) = queues[me].take(true) {
         return Some((i, false));
     }
     if !steal {
         return None;
     }
+    // TSRS_STEAL_GATE (stealgate.rs): whether `me` may take from queue `c` now, and whether a refusal may pass.
+    let verdict = |c: usize, q: &FileQueue, left: u64| match gate {
+        Some(gate) if left > 0 => {
+            let (back, files_left) = q.back_and_left();
+            gate.verdict(me, c, back, files_left, left)
+        }
+        _ => Verdict::Allow,
+    };
     loop {
         if queues.iter().all(|q| q.remaining() == 0) {
             // Queues whose remaining files weigh 0 (unchecked declaration files) are still drained by their owners.
             return queues.iter().enumerate().find_map(|(c, q)| if c == me { None } else { q.take(false).map(|i| (i, true)) });
         }
-        let (mut victim, left) = queues
-            .iter()
-            .enumerate()
-            .filter(|&(c, q)| c != me && q.admits(me, max_thieves))
-            .map(|(c, q)| (c, q.remaining()))
-            .max_by_key(|&(c, left)| (left, std::cmp::Reverse(c)))?;
-        if left == 0 {
-            // The queues with work left have their thieves; their owners finish them.
-            if *slot != usize::MAX {
+        let mut wait = false;
+        let mut best: Option<(usize, u64)> = None;
+        let mut best_held: Option<(usize, u64)> = None;
+        for (c, q) in queues.iter().enumerate() {
+            if c == me || !q.admits(me, max_thieves) {
+                continue;
+            }
+            let left = q.remaining();
+            match verdict(c, q, left) {
+                Verdict::Allow => {}
+                Verdict::Wait => {
+                    wait = true;
+                    continue;
+                }
+                Verdict::Closed => continue,
+            }
+            if let Some(gate) = gate.filter(|g| g.prefers_held() && left > 0) {
+                if gate.holds(me, q.back_and_left().0) && best_held.is_none_or(|(_, l)| left > l) {
+                    best_held = Some((c, left));
+                }
+            }
+            if best.is_none_or(|(_, l)| left > l) {
+                best = Some((c, left));
+            }
+        }
+        let Some((mut victim, left)) = best.filter(|&(_, left)| left > 0) else {
+            if wait {
+                // A gate refused a queue with work for now (another checker's file or claim); look again shortly.
+                std::thread::sleep(std::time::Duration::from_micros(100));
+                continue;
+            }
+            if best.is_some() && *slot != usize::MAX {
+                // The queues with work left have their thieves; their owners finish them.
                 queues[*slot].release(me);
             }
             return None;
+        };
+        let held = best_held.map(|(c, _)| c);
+        if let Some(c) = held {
+            victim = c;
         }
         if let Some(last) = last_victim.as_deref_mut() {
-            if *last != usize::MAX && queues[*last].admits(me, max_thieves) && queues[*last].remaining() * 2 >= left {
+            if held.is_none()
+                && *last != usize::MAX
+                && queues[*last].admits(me, max_thieves)
+                && queues[*last].remaining() * 2 >= left
+                && matches!(verdict(*last, &queues[*last], queues[*last].remaining()), Verdict::Allow)
+            {
                 victim = *last;
             }
             *last = victim;
@@ -1839,6 +1981,8 @@ fn locality_associations_with(program: &Program, checker_count: usize, import_ta
 
     // Import edges between groups of checked files, one adjacency entry per file-level edge and direction.
     let import_targets = import_targets();
+    // TSRS_STEAL_GATE=hub: the closures are computed from the same lists, off the type-check pass.
+    crate::stealgate::note_import_targets(&import_targets);
     let adjacent_files = undirected(&import_targets);
     let mut group_adjacency: Vec<Vec<usize>> = vec![Vec::new(); group_weights.len()];
     for &i in &order {
@@ -2092,7 +2236,7 @@ fn get_import_adjacency(program: &Program, concurrent: bool) -> Vec<Vec<usize>> 
 }
 
 // The in-program files each program file imports (resolved, other than itself), by file index.
-fn get_import_targets(program: &Program, concurrent: bool) -> Vec<Vec<usize>> {
+pub(crate) fn get_import_targets(program: &Program, concurrent: bool) -> Vec<Vec<usize>> {
     let files = &program.files;
     let mut file_indices: FxHashMap<P<SourceFile>, usize> = FxHashMap::default();
     file_indices.extend(files.iter().enumerate().map(|(i, &file)| (file, i)));
@@ -2181,7 +2325,7 @@ mod stealing_tests {
                     let mut mine = Vec::new();
                     // Every other thread keeps its victim (steal_sticky), so both rules are exercised.
                     let (mut slot, mut last_victim) = (usize::MAX, usize::MAX);
-                    while let Some(t) = queues_next(queues, me, true, max_thieves, &mut slot, (me % 2 == 0).then_some(&mut last_victim)) {
+                    while let Some(t) = queues_next(queues, me, true, max_thieves, &mut slot, (me % 2 == 0).then_some(&mut last_victim), None) {
                         mine.push(t);
                     }
                     taken.lock().unwrap().extend(mine);
@@ -2199,7 +2343,7 @@ mod stealing_tests {
     fn without_stealing_a_checker_keeps_its_own_files_in_order() {
         let queues = vec![FileQueue::new(vec![0, 2, 4], |_| 1), FileQueue::new(vec![1, 3], |_| 1)];
         let mut slot = usize::MAX;
-        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, 0, &mut slot, None)).collect();
+        let order: Vec<(usize, bool)> = std::iter::from_fn(|| queues_next(&queues, 0, false, 0, &mut slot, None, None)).collect();
         assert_eq!(order, vec![(0, false), (2, false), (4, false)]);
         assert_eq!(queues[1].remaining(), 2);
     }

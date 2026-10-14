@@ -5,8 +5,8 @@ each under its own environment, on the bench projects at several checker counts.
 Per run: wall (`os.wait4`), user + system CPU, peak RSS, the `--extendedDiagnostics` phase times (check, total,
 checker creation, file assignment) and a hash of the diagnostics (every `error TS` line with its continuation lines),
 which must be the same for every variant. After the timed runs, `--stats-reps` runs per cell with
-`TSRS_ASSIGNMENT_STATS=times` (which turns leaf freeing off, so they are not timed) give the CPU summed over the
-checkers. summary.md has the tables (medians), results.json every run.
+`TSRS_ASSIGNMENT_STATS=times` (kept out of the timed runs) give the CPU summed over the checkers. summary.md has
+the tables (medians), results.json every run.
 
     tools/perf/clusterprobe.py --work bench/.work --out probe-out --projects vscode,cal-diy --checkers 16,32 \\
         --reps 10 --bin base=/tmp/base/tsrs --bin new=/tmp/new/tsrs \\
