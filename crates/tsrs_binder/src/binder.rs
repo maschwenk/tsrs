@@ -128,7 +128,7 @@ pub fn enable_lazy_dts() {
 fn bind_lazy_list(record: &LazyNodeList, file: P<SourceFile>, nodes: &'static [P<Node>]) {
     let ctx = *record.bind_context().expect("a deferred list's binder state");
     let mut b = Binder::new_for_lazy_list(file, ctx.unreachable_flow);
-    b.bind_lazy_members(ctx, nodes);
+    b.bind_lazy_members(ctx, nodes, false);
 }
 
 fn new_flow_node_value(flags: FlowFlags, node: Option<P<Node>>, antecedent: Option<P<FlowNode>>, text_index: u32) -> P<FlowNode> {
@@ -2071,14 +2071,20 @@ impl Binder {
         let file = self.file;
         record.force_inline(file, &mut |nodes| {
             let ctx = record.bind_context().expect("a deferred list's binder state");
-            self.bind_lazy_members(*ctx, nodes);
+            self.bind_lazy_members(*ctx, nodes, true);
         });
     }
 
     /// Binds the members of a deferred lazy list with the binder state recorded at the list, then puts this binder's
-    /// state back. Containers the members add to the container chain are linked in where the list is, before the
-    /// containers bound after it.
-    pub(crate) fn bind_lazy_members(&mut self, ctx: LazyBindContext, nodes: &'static [P<Node>]) {
+    /// state back. With `splice` (the file's own binder, `force_pending_lazy_list`), containers the members add to the
+    /// container chain are linked in where the list is, before the containers bound after it.
+    ///
+    /// Without it (a list forced after its file was bound, on any thread: `bind_lazy_list`), the members' containers
+    /// are chained among themselves but not into the file's chain. Lists deferred one after another record the same
+    /// `last_container`, so two threads forcing two of them would write that node's `next_container` at once (a data
+    /// race that `ThreadSanitizer` reported in `fileregions::force_shared_lists`). Only declaration files have lazy lists, and
+    /// the chain is read only for emitted files (`tsrs_printer` name generator), so nothing reads these links.
+    pub(crate) fn bind_lazy_members(&mut self, ctx: LazyBindContext, nodes: &'static [P<Node>], splice: bool) {
         let saved = (
             self.container,
             self.this_container,
@@ -2099,7 +2105,7 @@ impl Binder {
         self.container = ctx.container;
         self.this_container = ctx.this_container;
         self.block_scope_container = ctx.block_scope_container;
-        self.last_container = ctx.last_container;
+        self.last_container = if splice { ctx.last_container } else { None };
         self.current_flow = ctx.current_flow;
         self.unreachable_flow = ctx.unreachable_flow;
         self.current_break_target = None;
@@ -2110,10 +2116,10 @@ impl Binder {
         self.current_exception_target = None;
         self.pre_switch_case_flow = None;
         self.in_assignment_pattern = false;
-        let next = ctx.last_container.and_then(|c| c.locals_container_data().unwrap().next_container.get());
+        let next = if splice { ctx.last_container.and_then(|c| c.locals_container_data().unwrap().next_container.get()) } else { None };
         self.bind_each(nodes);
         let last = self.last_container;
-        if last != ctx.last_container {
+        if splice && last != ctx.last_container {
             if let Some(last) = last {
                 last.locals_container_data().unwrap().next_container.set(next);
             }
@@ -2136,7 +2142,7 @@ impl Binder {
         self.active_label_list = saved_labels;
         self.in_assignment_pattern = saved_in_assignment_pattern;
         // The list was the end of the chain so far: what it added is the end now.
-        if saved.3 == ctx.last_container && next.is_none() {
+        if splice && saved.3 == ctx.last_container && next.is_none() {
             self.last_container = last;
         }
     }

@@ -1,5 +1,6 @@
-// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead.
-#[cfg(not(any(feature = "alloc-profile", miri)))]
+// The alloc-profile build installs tsrs_core's counting allocator (over mimalloc) instead; Miri (which cannot run
+// mimalloc) and `system-alloc` builds (sanitizers, which see only the system allocator's blocks) keep the system's.
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc", miri)))]
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(feature = "alloc-profile")]
@@ -10,13 +11,13 @@ static GLOBAL: tsrs_core::alloc_profile::CountingAllocator = tsrs_core::alloc_pr
 /// mimalloc gives every block of its size (at most 16 bytes, and at most the size) takes the plain entry points
 /// rather than the `_aligned` ones, whose extra alignment handling every allocation paid (as the `mimalloc` crate
 /// does).
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 struct MiMalloc;
 
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 const MI_MAX_ALIGN_SIZE: usize = 16;
 
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 // SAFETY: every method forwards to mimalloc, which returns blocks aligned as asked (`MI_MAX_ALIGN_SIZE` for the plain
 // entry points, for blocks at least that large; small blocks are aligned to their size class).
 unsafe impl std::alloc::GlobalAlloc for MiMalloc {
@@ -72,7 +73,7 @@ mod signals;
 use tsrs_execute::{build, execute, sys, tsc};
 
 // TSRS_MEM_SPLIT (tsrs_core::memsplit): mimalloc's view of its heap, every page of every thread.
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
     #[repr(C)]
     struct HeapArea {
@@ -109,7 +110,7 @@ fn mimalloc_heap_stats() -> tsrs_core::memsplit::HeapStats {
     stats
 }
 
-#[cfg(not(feature = "alloc-profile"))]
+#[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
 fn mimalloc_collect(force: bool) {
     unsafe extern "C" {
         fn mi_collect(force: bool);
@@ -140,7 +141,7 @@ fn main() {
     #[cfg(target_os = "linux")]
     allow_transparent_huge_pages();
     let args: Vec<String> = std::env::args().skip(1).collect();
-    #[cfg(not(feature = "alloc-profile"))]
+    #[cfg(not(any(feature = "alloc-profile", feature = "system-alloc")))]
     tsrs_core::memsplit::set_heap_hooks(mimalloc_heap_stats, mimalloc_collect);
     #[cfg(feature = "alloc-profile")]
     tsrs_execute::set_census_hook(census::run);
