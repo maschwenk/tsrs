@@ -635,8 +635,8 @@ mod memory_tests {
         let grown = rss_kib().saturating_sub(before);
         eprintln!("failed build x{n}: rss grew {grown} KiB");
         assert!(grown < (n as u64) * 256, "rss grew {grown} KiB over {n} failed builds");
-        assert!(s.handle_request("cleanBuild", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
-        assert!(s.handle_request("disposeBuildOrchestrator", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).is_ok());
+        s.handle_request("cleanBuild", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).unwrap();
+        s.handle_request("disposeBuildOrchestrator", format!("{{\"buildOrchestratorID\":{id}}}").as_bytes()).unwrap();
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
