@@ -267,7 +267,7 @@ impl Checker {
             && s.intersects(TypeFlags::EnumLiteral)
             && t.intersects(TypeFlags::StringLiteral)
             && !t.intersects(TypeFlags::EnumLiteral)
-            && source.as_literal_type().value() == target.as_literal_type().value()
+            && source.as_literal_type().value_equals(target.as_literal_type())
         {
             return true;
         }
@@ -278,7 +278,7 @@ impl Checker {
             && s.intersects(TypeFlags::EnumLiteral)
             && t.intersects(TypeFlags::NumberLiteral)
             && !t.intersects(TypeFlags::EnumLiteral)
-            && source.as_literal_type().value() == target.as_literal_type().value()
+            && source.as_literal_type().value_equals(target.as_literal_type())
         {
             return true;
         }
@@ -307,7 +307,7 @@ impl Checker {
             }
             if s.intersects(TypeFlags::Literal)
                 && t.intersects(TypeFlags::Literal)
-                && source.as_literal_type().value() == target.as_literal_type().value()
+                && source.as_literal_type().value_equals(target.as_literal_type())
                 && self.is_enum_type_related_to(source.symbol().unwrap(), target.symbol().unwrap(), reborrow_reporter(&mut error_reporter))
             {
                 return true;
@@ -351,7 +351,7 @@ impl Checker {
                 && (t.intersects(TypeFlags::Enum)
                     || t.intersects(TypeFlags::NumberLiteral)
                         && t.intersects(TypeFlags::EnumLiteral)
-                        && source.as_literal_type().value() == target.as_literal_type().value())
+                        && source.as_literal_type().value_equals(target.as_literal_type()))
             {
                 return true;
             }
