@@ -15,6 +15,9 @@ PROJECTS = (("vscode", "VS Code", "microsoft/vscode · src"),
             ("t3code-server", "T3 Code", "pingdotgg/t3code · apps/server"),
             ("mui-docs", "MUI docs", "mui/material-ui · docs"))
 COMPILERS = ("tsgo", "tsrs")
+# Both compilers at the same checker count on the 16-vCPU machine (bench/run.py MODE_FLAGS), so the chart compares
+# thread for thread: at their defaults tsrs would run 16 checker threads there and tsgo its fixed 4.
+MODE = "checkers16"
 # The README shows the light or dark chart to match the reader's GitHub theme.
 THEMES = {
     "light": {"tsgo": "#3178c6", "tsrs": "#087b5b", "background": "#fafcfb", "border": "#dce5e1",
@@ -46,9 +49,13 @@ def comparison(metric: str, tsgo: float | None, tsrs: float | None) -> str:
 def svg(result: dict, theme: str = "light") -> str:
     """Keep the original README layout and shared scales, growing scales only when necessary."""
     colors = THEMES[theme]
-    mode = "wide"
+    mode = MODE
     if not any(mode in project for project in result["projects"].values()):
         raise ValueError(f"no benchmark results for mode {mode!r}")
+    checkers = run.MODE_FLAGS[mode][-1]
+    machine = next((cell.get("machine", result["machine"]) for name, _, _ in PROJECTS
+                    if (cell := result["projects"].get(name, {}).get(mode))), result["machine"])
+    setting = f"Both compilers with --checkers {checkers} on {machine.get('cpus')} vCPUs"
     cells = {name: result["projects"].get(name, {}).get(mode, {}) for name, _, _ in PROJECTS}
     scales = {}
     for metric, minimum, step in (("wall_s", 16, 4), ("peak_rss_bytes", 8 * GIB, 2 * GIB)):
@@ -76,7 +83,7 @@ def svg(result: dict, theme: str = "light") -> str:
         details.append(detail)
     build = run.TSRS_BUILDS[result["tsrs"].get("build", "release")].replace("`", "")
     description.text = "".join(details) + (
-        f"Lower is better. {run.reps_text(result, [mode]).capitalize()}, using default compiler settings. tsrs uses {build}. "
+        f"Lower is better. {run.reps_text(result, [mode]).capitalize()}, {setting[0].lower()}{setting[1:]}. tsrs uses {build}. "
         f"File counts include libraries and dependencies. Shared bar scales: time 0–{scales['wall_s']:g} seconds, "
         f"memory 0–{scales['peak_rss_bytes'] / GIB:g} GiB. Failed or unavailable measurements are marked n/a. "
         f"Measured {result['date']}; tsrs commit {result['tsrs']['commit']}. "
@@ -102,6 +109,7 @@ def svg(result: dict, theme: str = "light") -> str:
     element(root, "rect", x=0.5, y=0.5, width=959, height=939, rx=20, fill=colors["background"], stroke=colors["border"])
     drawing = element(root, "g", font_family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", fill=colors["text"])
     text(drawing, 40, 55, "Performance", 34, 700)
+    text(drawing, 920, 55, setting, 17, fill=colors["muted"], end=True)
     for index, (name, title, source) in enumerate(PROJECTS):
         y = 88 + index * 282
         cell = cells[name]

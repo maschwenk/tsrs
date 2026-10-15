@@ -83,7 +83,7 @@ class ReportingTests(unittest.TestCase):
                            'tsgo': stats(1), 'tsrs': stats(0.25), 'sessions': {}}}
         with tempfile.TemporaryDirectory() as directory:
             paths = [Path(directory) / 'all.json', Path(directory) / 'watch.json']
-            paths[0].write_text(json.dumps(self.historical))
+            paths[0].write_text(json.dumps(self.resized()))
             paths[1].write_text(json.dumps(watch))
             merged = run.merge_results({'projects': [{'name': name} for name in self.historical['projects']]}, paths)
             other = dict(watch, tsrs=dict(watch['tsrs'], commit='0' * 40))
@@ -165,7 +165,7 @@ class PublishTests(unittest.TestCase):
         self.assertIn('### Default settings on 16 vCPUs', report)
         self.assertIn('### `--checkers 8`', report)
         self.assertNotIn('### `--checkers 4`', report)
-        self.assertNotIn('### `--checkers 16`', report)
+        self.assertIn('### `--checkers 16`', report)
         self.assertNotIn('### `--singleThreaded`', report)
         self.assertNotIn('### Scaling', report)
         self.assertTrue(report.startswith('# Benchmark results\n\n<!-- bench:start -->\n'))
@@ -178,6 +178,19 @@ class PublishTests(unittest.TestCase):
         self.assertIn(chart.THEMES['light']['background'].encode(), svg)
         self.assertIn(chart.THEMES['dark']['background'].encode(), dark_svg)
 
+    def test_chart_compares_both_compilers_at_sixteen_checkers(self):
+        result = self.result(self.commits[0])
+        self.assertTrue(self.publish(result))
+        _, svg, dark_svg = self.latest()
+        vscode = result['projects']['vscode']['checkers16']
+        for image in (svg, dark_svg):
+            root = ET.fromstring(image)
+            texts = [element.text for element in root.iter('{http://www.w3.org/2000/svg}text')]
+            self.assertIn('Both compilers with --checkers 16 on 16 vCPUs', texts)
+            self.assertIn(chart.format_value('wall_s', vscode['tsgo']['wall_s']), texts)
+            self.assertIn(chart.format_value('wall_s', vscode['tsrs']['wall_s']), texts)
+            self.assertIn('mode: checkers16', root.find('{http://www.w3.org/2000/svg}metadata').text)
+
     def test_publishes_equal_thread_tables_at_four_and_eight_checkers(self):
         result = self.result(self.commits[0])
         result['modes'].insert(result['modes'].index('checkers8'), 'checkers4')
@@ -186,10 +199,9 @@ class PublishTests(unittest.TestCase):
         vscode['checkers4'] = copy.deepcopy(vscode['checkers8'])
         self.assertTrue(self.publish(result))
         report = self.report.read_text()
-        wide, four, eight = (report.index(title) for title in (
-            '### Default settings on 16 vCPUs', '### `--checkers 4`', '### `--checkers 8`'))
-        self.assertLess(wide, four)
-        self.assertLess(four, eight)
+        positions = [report.index(title) for title in (
+            '### Default settings on 16 vCPUs', '### `--checkers 16`', '### `--checkers 4`', '### `--checkers 8`')]
+        self.assertEqual(sorted(positions), positions)
         self.assertIn("4 checker threads each (tsgo's default).", report)
         self.assertIn("8 checker threads each (tsrs's default on 8 vCPUs).", report)
 
@@ -219,6 +231,7 @@ class PublishTests(unittest.TestCase):
         old_report, old_svg, old_dark_svg = self.latest()
         result['date'] = '2026-10-11 12:00 UTC'
         result['projects']['vscode']['wide']['tsrs']['wall_s'] *= 2
+        result['projects']['vscode']['checkers16']['tsrs']['wall_s'] *= 2
         self.assertTrue(self.publish(result))
         report, svg, dark_svg = self.latest()
         self.assertNotEqual(old_report, report)
@@ -226,18 +239,19 @@ class PublishTests(unittest.TestCase):
         self.assertNotEqual(old_dark_svg, dark_svg)
         self.assertIn(result['date'].encode(), report)
 
-    def test_results_without_wide_measurements_preserve_latest(self):
+    def test_results_without_sixteen_vcpu_measurements_preserve_latest(self):
         self.assertTrue(self.publish(self.result(self.commits[0])))
         latest = self.latest()
-        for missing in ('mode', 'cells'):
-            with self.subTest(missing=missing):
-                result = self.result(self.commits[2])
-                if missing == 'mode':
-                    result['modes'].remove('wide')
-                else:
-                    del result['projects']['vscode']['wide']
-                self.assertFalse(self.publish(result))
-                self.assertEqual(latest, self.latest())
+        for mode in ('wide', 'checkers16'):
+            for missing in ('mode', 'cells'):
+                with self.subTest(mode=mode, missing=missing):
+                    result = self.result(self.commits[2])
+                    if missing == 'mode':
+                        result['modes'].remove(mode)
+                    else:
+                        del result['projects']['vscode'][mode]
+                    self.assertFalse(self.publish(result))
+                    self.assertEqual(latest, self.latest())
 
 
 if __name__ == '__main__':
