@@ -89,12 +89,13 @@ impl SnapshotData {
 /// Go `checkerSetup`. Holds the snapshot alive and the checker exclusively until dropped. Checker
 /// handles are not reentrant: never call `Session::setup_checker` again while one is held on the
 /// same program.
-pub struct CheckerSetup {
+pub struct CheckerSetup<'session> {
+    // Release the checker before dropping the snapshot that owns its program.
+    pub checker: CheckerHandle<'session>,
     pub sd: Arc<SnapshotData>,
     pub snapshot: SnapshotID,
     pub project: ProjectID,
     pub program: &'static Program,
-    pub checker: CheckerHandle,
 }
 
 pub struct Session {
@@ -246,7 +247,7 @@ impl Session {
     }
 
     /// Go `setupChecker`: resolves snapshot -> project -> program and acquires the API-lifetime checker.
-    pub fn setup_checker(&self, snapshot: SnapshotID, project: &ProjectID) -> ApiResult<CheckerSetup> {
+    pub fn setup_checker(&self, snapshot: SnapshotID, project: &ProjectID) -> ApiResult<CheckerSetup<'_>> {
         let sd = self.snapshot_data(snapshot)?;
         let program = sd.get_program(project)?;
         let ctx = with_checker_lifetime(&Context::background(), CheckerLifetime::API);

@@ -91,7 +91,7 @@ impl<'h> SnapshotCtx<'h> {
 
 /// Go `checkerSetup`. Field order matters: the checker handle is released before the snapshot scope.
 pub(crate) struct Setup<'h> {
-    pub(crate) checker: CheckerHandle,
+    pub(crate) checker: CheckerHandle<'h>,
     // Dropped after `checker`: the gate is released only once the checker slot is free again.
     _lease: super::lease::ApiCheckerLease,
     pub(crate) checker_id: u32,

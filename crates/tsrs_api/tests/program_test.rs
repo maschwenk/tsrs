@@ -77,6 +77,25 @@ fn create_program_diagnostics_emit_release() {
 }
 
 #[test]
+fn acquired_checker_keeps_released_snapshot_alive() {
+    let dir = TempDir::new("held-checker");
+    let a = dir.write("a.ts", "export const a: number = 'x';\n");
+    let s = session(&dir.dir(), false);
+    let (snapshot, project) = create_program(&s, std::slice::from_ref(&a), "{\"noLib\":true}");
+    let mut setup = s.setup_checker(snapshot, &tsrs_project::ID(project)).unwrap();
+    let snapshot_data = std::sync::Arc::downgrade(&setup.sd);
+
+    assert_eq!(call(&s, "release", &format!("{{\"snapshot\":{snapshot}}}")), Value::Bool(true));
+    assert!(snapshot_data.upgrade().is_some());
+    let file = setup.program.get_source_file(&a).unwrap();
+    let codes: Vec<_> = setup.checker.get_diagnostics_exported(&tsrs_core::context::Context::background(), file).iter().map(|d| d.code()).collect();
+    assert_eq!(codes, vec![2322]);
+
+    drop(setup);
+    assert!(snapshot_data.upgrade().is_none(), "the setup's snapshot keepalive ends after checker release");
+}
+
+#[test]
 fn no_emit_option_skips_emit() {
     let dir = TempDir::new("noemit");
     let a = dir.write("a.ts", "export const a = 1;\n");

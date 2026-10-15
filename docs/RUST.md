@@ -198,5 +198,6 @@ Not pursued: a binary-size check (Bun fails a pull request that grows the binary
 goal here (owner decision, 2026-10-05).
 
 Does not transfer: nightly-only flags (Bun's `-Zbuild-std`, `-Zlocation-detail=none`, `-Zshare-generics`; the release
-toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: no lifetime parameters), oxc's
+toolchain is stable), lifetime-carrying arenas such as bumpalo's `&'a T` (PORTING.md: graph data still uses legacy
+`'static` references; checker acquisitions borrow their owners), oxc's
 compile-time ban on `Drop` types in the arena (arena objects here own `Vec`s and maps on purpose).

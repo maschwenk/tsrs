@@ -43,16 +43,99 @@ struct testPool {
     program: &'static Program,
     idle: Arc<Mutex<Vec<PooledChecker>>>,
     acquired: Arc<AtomicUsize>,
+    released: AtomicUsize,
 }
 
 impl CheckerPool for testPool {
-    fn get_checker(&self, _ctx: &Context, _file: Option<P<tsrs_ast::SourceFile>>) -> CheckerHandle {
+    fn get_checker(&self, _ctx: &Context, _file: Option<P<tsrs_ast::SourceFile>>) -> CheckerHandle<'_> {
         self.acquired.fetch_add(1, Ordering::Relaxed);
         let mut checker = self.idle.lock().unwrap().pop().unwrap_or_else(|| PooledChecker::new(tsrs_checker::new_checker(self.program)));
         let ptr = checker.as_non_null();
-        let idle = std::sync::Arc::clone(&self.idle);
         // SAFETY: the checker is out of the idle list (held) until the release function puts it back.
-        unsafe { CheckerHandle::from_raw(ptr, move || idle.lock().unwrap().push(checker)) }
+        unsafe {
+            CheckerHandle::from_raw(self, ptr, move || {
+                self.idle.lock().unwrap().push(checker);
+                self.released.fetch_add(1, Ordering::SeqCst);
+            })
+        }
+    }
+}
+
+#[test]
+fn checker_handle_releases_once_on_drop_release_and_unwind() {
+    let files = [
+        ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true},"files":["a.ts"]}"#),
+        ("/src/a.ts", "export const a = 1;"),
+    ];
+    let program = new_program(ProgramOptions::new(config_for(&files), host_for(&files)));
+    let pool = testPool {
+        program,
+        idle: Arc::new(Mutex::new(Vec::new())),
+        acquired: Arc::new(AtomicUsize::new(0)),
+        released: AtomicUsize::new(0),
+    };
+    let handle = pool.get_checker(&Context::background(), None);
+    let id = handle.id;
+    drop(handle);
+    assert_eq!(pool.released.load(Ordering::SeqCst), 1);
+
+    let handle = pool.get_checker(&Context::background(), None);
+    assert_eq!(handle.id, id);
+    handle.release();
+    assert_eq!(pool.released.load(Ordering::SeqCst), 2);
+
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let handle = pool.get_checker(&Context::background(), None);
+        assert_eq!(handle.id, id);
+        panic!("unwind while a checker is held");
+    }));
+    assert!(result.is_err());
+    assert_eq!(pool.acquired.load(Ordering::SeqCst), 3);
+    assert_eq!(pool.released.load(Ordering::SeqCst), 3);
+    assert_eq!(pool.idle.lock().unwrap().len(), 1);
+    drop(pool);
+    // SAFETY: this standalone program was never shared; the only external pool and its acquisitions are gone.
+    unsafe { crate::free_unshared_program(program) };
+}
+
+#[test]
+fn checker_handle_restores_routing_and_owned_pool_drops_its_region() {
+    struct DropProbe(Arc<AtomicUsize>);
+    impl Drop for DropProbe {
+        fn drop(&mut self) {
+            self.0.fetch_add(1, Ordering::SeqCst);
+        }
+    }
+
+    for unwind in [false, true] {
+        let files = [
+            ("/src/tsconfig.json", r#"{"compilerOptions":{"noLib":true,"checkers":1},"files":["a.ts"]}"#),
+            ("/src/a.ts", "export const a = 1;"),
+        ];
+        let mut options = ProgramOptions::new(config_for(&files), host_for(&files));
+        options.checker_regions = true;
+        let program = new_program(options);
+        let pool = checkerPool::new(program, None);
+        let outer = tsrs_core::arena::Region::new(4096);
+        let scope = outer.enter();
+        let drops = Arc::new(AtomicUsize::new(0));
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let handle = pool.get_checker(&Context::background(), None);
+            let probe = P::new(DropProbe(Arc::clone(&drops)));
+            assert!(tsrs_core::arena::scratch_contains(probe.addr()));
+            assert!(!unwind, "unwind while a checker region is entered");
+            handle.release();
+        }));
+        assert_eq!(result.is_err(), unwind);
+        let after = P::new(0u64);
+        assert!(tsrs_core::arena::Region::containing(after.addr()).is_some_and(|r| r.ptr_eq(&outer)));
+        assert!(!tsrs_core::arena::scratch_contains(after.addr()));
+        assert_eq!(drops.load(Ordering::SeqCst), 0);
+        drop(pool);
+        assert_eq!(drops.load(Ordering::SeqCst), 1, "the owned checker array must release its regions");
+        drop(scope);
+        // SAFETY: this standalone program was never shared; its external pool and all acquisitions are gone.
+        unsafe { crate::free_unshared_program(program) };
     }
 }
 
@@ -156,7 +239,7 @@ fn external_checker_pool_diagnostics() {
     let mut opts = ProgramOptions::new(config, host_for(&files));
     let (idle_c, acquired_c) = (std::sync::Arc::clone(&idle), std::sync::Arc::clone(&acquired));
     opts.create_checker_pool = Some(Arc::new(move |program: &'static Program| -> Box<dyn CheckerPool> {
-        Box::new(testPool { program, idle: std::sync::Arc::clone(&idle_c), acquired: std::sync::Arc::clone(&acquired_c) })
+        Box::new(testPool { program, idle: std::sync::Arc::clone(&idle_c), acquired: std::sync::Arc::clone(&acquired_c), released: AtomicUsize::new(0) })
     }));
     let external = new_program(opts);
     assert!(external.compiler_checker_pool().is_none());

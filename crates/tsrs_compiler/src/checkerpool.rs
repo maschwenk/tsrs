@@ -27,36 +27,70 @@ fn new_checker(program: &'static Program) -> Box<Checker> {
 // Go returns `(*checker.Checker, func())`; the Rust pool returns a `CheckerHandle` that derefs to the checker
 // and runs the release function when dropped (or on `release()`).
 pub trait CheckerPool: Send + Sync {
-    fn get_checker(&self, ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle;
+    fn get_checker(&self, ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle<'_>;
 }
 
-// Go's `(*checker.Checker, func())` pair. Dropping the handle is Go's `done()`; like Go's `sync.OnceFunc`
-// releases it runs exactly once.
-pub struct CheckerHandle {
-    kind: checkerHandleKind,
+/// Go's `(*checker.Checker, func())` pair, borrowing its pool. Dropping the handle is Go's `done()`;
+/// like Go's `sync.OnceFunc` releases it runs exactly once.
+///
+/// An acquisition borrows the pool, not the request context:
+///
+/// ```no_run
+/// use tsrs_compiler::{CheckerHandle, CheckerPool, Context};
+/// fn acquire(pool: &dyn CheckerPool) -> CheckerHandle<'_> {
+///     pool.get_checker(&Context::background(), None)
+/// }
+/// ```
+///
+/// A handle cannot outlive that borrow:
+///
+/// ```compile_fail
+/// use tsrs_compiler::{CheckerHandle, CheckerPool, Context};
+/// fn escape(pool: &dyn CheckerPool) -> CheckerHandle<'static> {
+///     pool.get_checker(&Context::background(), None)
+/// }
+/// ```
+///
+/// Nor can an owned pool be dropped while its checker is held:
+///
+/// ```compile_fail
+/// use tsrs_compiler::{CheckerPool, Context};
+/// fn drop_pool(pool: Box<dyn CheckerPool>) {
+///     let checker = pool.get_checker(&Context::background(), None);
+///     drop(pool);
+///     let _ = checker.id;
+/// }
+/// ```
+///
+/// This borrow protects the acquisition only. Arena pointers returned by checker methods still follow the
+/// region and request-lease contracts, and unsafe program destruction must wait for every acquisition to end.
+pub struct CheckerHandle<'pool> {
+    kind: checkerHandleKind<'pool>,
 }
 
-enum checkerHandleKind {
+enum checkerHandleKind<'pool> {
     // The built-in pool's checkers live behind a mutex per checker (Go `locks[i]`).
     // The scope makes the checker's region (`SlotChecker::region`) the allocation target while the handle is held.
-    Locked { guard: MutexGuard<'static, SlotChecker>, _scope: Option<CheckerScope> },
+    // Field order: restore allocation routing before unlocking the checker for another acquisition.
+    Locked { _scope: Option<CheckerScope>, guard: MutexGuard<'pool, SlotChecker> },
     // A checker owned by an external pool, which tracks exclusivity itself (Go project pool's `heldBy`).
-    External { checker: NonNull<Checker>, release: Option<Box<dyn FnOnce()>> },
+    External { checker: NonNull<Checker>, release: Option<Box<dyn FnOnce() + 'pool>> },
 }
 
-impl CheckerHandle {
-    fn locked(guard: MutexGuard<'static, SlotChecker>) -> CheckerHandle {
+impl<'pool> CheckerHandle<'pool> {
+    fn locked(guard: MutexGuard<'pool, SlotChecker>) -> CheckerHandle<'pool> {
         let scope = guard.enter();
         crate::sharedgraph::enter_checker(&guard);
-        CheckerHandle { kind: checkerHandleKind::Locked { guard, _scope: scope } }
+        CheckerHandle { kind: checkerHandleKind::Locked { _scope: scope, guard } }
     }
 
-    /// Hands out a checker owned by a pool outside this crate; `release` runs when the handle is dropped.
+    /// Hands out a checker owned by a pool outside this crate, borrowing `owner` until `release` runs.
     ///
     /// # Safety
     /// Until `release` runs, the caller guarantees that `checker` stays alive and that nothing else accesses it
-    /// (the pool has marked it held, Go `heldBy[i] = requestID`).
-    pub unsafe fn from_raw(checker: NonNull<Checker>, release: impl FnOnce() + 'static) -> CheckerHandle {
+    /// (the pool has marked it held, Go `heldBy[i] = requestID`). The owner borrow does not by itself prove
+    /// these conditions: interior-mutability-based pools must still prevent disposal and concurrent access.
+    pub unsafe fn from_raw<O: ?Sized>(_owner: &'pool O, checker: NonNull<Checker>, release: impl FnOnce() + 'pool) -> CheckerHandle<'pool> {
         CheckerHandle { kind: checkerHandleKind::External { checker, release: Some(Box::new(release)) } }
     }
 
@@ -65,7 +99,7 @@ impl CheckerHandle {
     pub fn release(self) {}
 }
 
-impl std::ops::Deref for CheckerHandle {
+impl std::ops::Deref for CheckerHandle<'_> {
     type Target = Checker;
     fn deref(&self) -> &Checker {
         match &self.kind {
@@ -76,7 +110,7 @@ impl std::ops::Deref for CheckerHandle {
     }
 }
 
-impl std::ops::DerefMut for CheckerHandle {
+impl std::ops::DerefMut for CheckerHandle<'_> {
     fn deref_mut(&mut self) -> &mut Checker {
         match &mut self.kind {
             checkerHandleKind::Locked { guard, .. } => &mut guard.checker,
@@ -86,7 +120,7 @@ impl std::ops::DerefMut for CheckerHandle {
     }
 }
 
-impl Drop for CheckerHandle {
+impl Drop for CheckerHandle<'_> {
     fn drop(&mut self) {
         if let checkerHandleKind::External { release, .. } = &mut self.kind {
             if let Some(release) = release.take() {
@@ -333,21 +367,11 @@ unsafe impl Send for CheckerSlot {}
 // SAFETY: every access to the checker holds its mutex, and no reference outlives the guard (see above).
 unsafe impl Sync for CheckerSlot {}
 
-// A pool is dropped only with its program (`free_program` / `free_unshared_program`: no checker handle is held
-// any more), so the leaked checkers can be freed with it. Programs that are never freed (the CLI) never get here.
-impl Drop for poolState {
-    fn drop(&mut self) {
-        // SAFETY: `checkers` came from `Box::leak` of a boxed slice in `create_checkers`, and no handle borrowing a
-        // checker outlives the pool's program.
-        unsafe { drop(Box::from_raw(std::ptr::from_ref::<[CheckerSlot]>(self.checkers).cast_mut())) };
-    }
-}
-
 pub(crate) struct poolState {
     /// The shared graph is on (sharedgraph.rs): the type-check pass starts the seed and turns its checkers into forks.
     shared_graph: bool,
-    // Leaked like the program that owns the pool, so a handle can hold a checker's lock without borrowing the pool.
-    checkers: &'static [CheckerSlot],
+    // Owned by the pool; an acquired handle borrows a slot's lock through the pool.
+    checkers: Box<[CheckerSlot]>,
     // Program file index of each file.
     file_indices: FxHashMap<P<SourceFile>, usize>,
     // The checker that runs each program file: the static assignment until stealing moves a file to the checker that
@@ -658,7 +682,7 @@ impl checkerPool {
     // checkerpool.go:331
     // GetChecker implements CheckerPool. When file is non-nil, returns the checker
     // associated with that file; otherwise returns the first checker.
-    pub(crate) fn get_checker_exclusive(&self, file: Option<P<SourceFile>>) -> CheckerHandle {
+    pub(crate) fn get_checker_exclusive(&self, file: Option<P<SourceFile>>) -> CheckerHandle<'_> {
         if let Some(file) = file {
             return self.get_checker_for_file_exclusive(file);
         }
@@ -671,12 +695,12 @@ impl checkerPool {
     // This is only safe when the caller guarantees no concurrent access to the same checker,
     // e.g. for read-only operations like obtaining an emit resolver.
     // Rust hands out `&mut Checker` only under the checker's lock, so this locks like the exclusive variant.
-    pub(crate) fn get_checker_for_file_non_exclusive(&self, file: P<SourceFile>) -> CheckerHandle {
+    pub(crate) fn get_checker_for_file_non_exclusive(&self, file: P<SourceFile>) -> CheckerHandle<'_> {
         self.get_checker_for_file_exclusive(file)
     }
 
     // checkerpool.go:351
-    pub(crate) fn get_checker_for_file_exclusive(&self, file: P<SourceFile>) -> CheckerHandle {
+    pub(crate) fn get_checker_for_file_exclusive(&self, file: P<SourceFile>) -> CheckerHandle<'_> {
         let state = self.create_checkers();
         let idx = state.owner_of(file).expect("a file of the program");
         CheckerHandle::locked(state.checkers[idx].0.lock().unwrap())
@@ -684,7 +708,7 @@ impl checkerPool {
 
     // checkerpool.go:362
     // getCheckerNonExclusive returns the first checker without locking (locks in Rust, see above).
-    pub(crate) fn get_checker_non_exclusive(&self) -> CheckerHandle {
+    pub(crate) fn get_checker_non_exclusive(&self) -> CheckerHandle<'_> {
         let state = self.create_checkers();
         CheckerHandle::locked(state.checkers[0].0.lock().unwrap())
     }
@@ -722,8 +746,7 @@ impl checkerPool {
                     }
                     *slots[i].lock().unwrap() = Some(CheckerSlot(Mutex::new(c)));
                 });
-                let checkers: &'static [CheckerSlot] =
-                    Box::leak(slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice());
+                let checkers = slots.into_iter().map(|s| s.into_inner().unwrap().unwrap()).collect::<Vec<_>>().into_boxed_slice();
                 tsrs_core::phases::record("Checkers: create", create_start.elapsed());
                 let associations = match &self.inherited_associations {
                     Some(associations) => associations.clone(),
@@ -1395,7 +1418,7 @@ fn queues_next(
 }
 
 impl CheckerPool for checkerPool {
-    fn get_checker(&self, _ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle {
+    fn get_checker(&self, _ctx: &Context, file: Option<P<SourceFile>>) -> CheckerHandle<'_> {
         self.get_checker_exclusive(file)
     }
 }
