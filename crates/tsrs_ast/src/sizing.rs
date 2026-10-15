@@ -1,5 +1,5 @@
-// TOOL, compiled only with `--features tsrs_compiler/ast-sizing` (tsrs_compiler forwards it): counts the syntax tree of the parsed
-// program for notes/mem-compact-ast-sizing.md.
+// TOOL, compiled only with `--features tsrs_ast/ast-sizing`: counts the syntax tree of the parsed program for
+// notes/mem-compact-ast-sizing.md.
 //
 // `TSRS_AST_SIZING=<file>` makes the type-check pass (`Program::get_semantic_diagnostics(None)`) append TSV rows to
 // <file> at two points: `pre` (after load, bind and the leaf classification, before the checkers start: every file)

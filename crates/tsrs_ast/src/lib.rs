@@ -14,7 +14,13 @@ pub mod nodeflags;
 pub mod parseoptions;
 pub mod positionmap;
 #[cfg(feature = "ast-sizing")]
-pub mod sizing; // TOOL, opt-in `--features tsrs_compiler/ast-sizing` (notes/mem-compact-ast-sizing.md); not in default builds
+pub mod sizing; // TOOL, opt-in `--features tsrs_ast/ast-sizing` (notes/mem-compact-ast-sizing.md)
+#[cfg(not(feature = "ast-sizing"))]
+pub mod sizing {
+    /// Sizing is compiled out unless the `ast-sizing` feature is enabled.
+    #[inline]
+    pub fn run(_phase: &str, _files: &[tsrs_core::P<crate::SourceFile>], _skip_freed_leaves: bool) {}
+}
 pub mod precedence;
 pub mod subtreefacts;
 pub mod symbol;

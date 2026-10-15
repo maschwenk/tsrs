@@ -31,7 +31,5 @@ rustc-hash.workspace = true
 rayon.workspace = true
 
 [features]
-# TOOL: TSRS_AST_SIZING=<file> (tsrs_ast/ast-sizing, notes/mem-compact-ast-sizing.md).
-ast-sizing = ["tsrs_ast/ast-sizing"]
 # TSRS_ASSIGNMENT_STATS also attributes checker-created types/symbols to files.
 assignment-stats = ["tsrs_checker/assignment-stats"]
