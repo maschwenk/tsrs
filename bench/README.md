@@ -20,6 +20,13 @@ README.md shows the one matching the reader's GitHub theme, links to stable path
 project's times and memory are in the SVG's description and the report, with the error comparisons, all modes and raw
 measurements.
 
+[The latest results](RESULTS.md) open with two per-project charts from the same mode, also drawn by `bench/publish.py`
+in both themes (`bench/per-project-time.svg`, `bench/per-project-memory.svg` and their `-dark` twins; `python3
+bench/chart.py <result.json> --per-project wall_s|peak_rss_bytes --output <file>` draws one). Each row is a project,
+sorted by tsgo's check time, with a dot per compiler and how many times faster (or less memory) tsrs is than tsgo;
+bun check's multiple is shown on the rows where it beats tsrs. Check time is on a linear axis, so the long checks read
+as long; peak memory is on a log axis, where bun check and tsrs, which trade wins, stay apart.
+
 ```sh
 cargo build --release -p tsrs_cli
 python3 bench/run.py --local                                   # all projects, 3 reps, default/single/checkers4/checkers8 modes

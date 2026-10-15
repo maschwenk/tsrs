@@ -234,6 +234,29 @@ class PublishTests(unittest.TestCase):
         self.assertIn('Summed over 1 TypeScript project · 16 threads each · 16-vCPU Linux machine', texts)
         self.assertEqual(['tsrs', 'tsgo'], list(self.bars(root, 'wall_s')))
 
+    def test_publishes_per_project_charts_into_the_report(self):
+        result = self.with_wide_points(self.result(self.commits[0]))
+        cell = result['projects']['vscode']['wide-checkers4']
+        cell['bun']['peak_rss_bytes'] = cell['tsrs']['peak_rss_bytes'] / 2  # bun check wins on memory, not on time
+        cell['bun']['wall_s'] = cell['tsrs']['wall_s'] * 2
+        self.assertTrue(self.publish(result))
+        report = self.report.read_text()
+        ns = '{http://www.w3.org/2000/svg}'
+        for metric, stem, word in (('wall_s', 'per-project-time', 'faster'), ('peak_rss_bytes', 'per-project-memory', 'less')):
+            self.assertIn(f'{publish.RAW}/{stem}.svg', report)
+            self.assertIn(f'{publish.RAW}/{stem}-dark.svg', report)
+            self.assertLess(report.index(f'{stem}.svg'), report.index('### Default settings on 16 vCPUs'))
+            for suffix in ('', '-dark'):
+                root = ET.fromstring((self.repo / f'bench/{stem}{suffix}.svg').read_bytes())
+                row = root.find(f".//{ns}g[@data-project='vscode']")
+                self.assertEqual(['tsgo', 'bun', 'tsrs'], [c.get('data-compiler') for c in row.iter(f'{ns}circle')])
+                labels = [t.text for t in row.iter(f'{ns}text')][1:]
+                ratio = cell['tsgo'][metric] / cell['tsrs'][metric]
+                self.assertEqual(f'{ratio:.1f}x {word}', labels[0])
+                self.assertEqual(metric == 'peak_rss_bytes', any(label.startswith('bun ') for label in labels))
+                self.assertEqual('linear' if metric == 'wall_s' else 'log',
+                                 root.find(f".//{ns}g[@data-scale]").get('data-scale'))
+
     def test_publishes_sixteen_vcpu_tables_at_four_eight_and_sixteen_checkers(self):
         self.assertTrue(self.publish(self.with_wide_points(self.result(self.commits[0]))))
         report = self.report.read_text()

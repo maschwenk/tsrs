@@ -743,7 +743,7 @@ jobs:
             # Render both the tables and SVG after fetching main on every retry. Older runs and missing wide
             # results preserve the latest report and chart together.
             python3 bench/publish.py /tmp/bench-merged/*.json
-            git add bench/RESULTS.md bench/large-projects.svg bench/large-projects-dark.svg bench/results
+            git add bench/RESULTS.md bench/large-projects.svg bench/large-projects-dark.svg bench/per-project-*.svg bench/results
             git commit -q -m "bench: results for ${measured::12} [skip ci]"
             git push -q origin HEAD:main && exit 0
             sleep $((attempt * 5))
