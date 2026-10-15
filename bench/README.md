@@ -5,9 +5,11 @@
 open-source applications and libraries (see "Application projects") with tsrs, with tsgo 7.0.2 (npm `typescript@7.0.2`) and, where a
 Bun binary is given, with `bun check`, and reports wall time, peak memory and the error count of each.
 The Depot CI workflow `.depot/workflows/bench.yml` runs it after pushes to `main` that change the Rust source or build
-inputs. It measures every project on the fixed-spec 8-vCPU machine in three modes and on a 16-vCPU machine in two
-(with bun check); `bench/results/<date>-<commit>.md` has every table, and [the latest results](RESULTS.md) show the
-16-vCPU machine's default-mode tables: each compiler at its own thread count, tsgo, tsrs and bun check side by side.
+inputs. It measures every project on the fixed-spec 8-vCPU machine in four modes and on a 16-vCPU machine in two
+(with bun check); `bench/results/<date>-<commit>.md` has every table. [The latest results](RESULTS.md) show the
+16-vCPU machine's default-mode tables (each compiler at its own thread count, tsgo, tsrs and bun check side by side)
+and the 8-vCPU machine's `--checkers 4` and `--checkers 8` tables (both compilers at tsgo's default and at tsrs's
+8-vCPU default).
 
 The [README chart](large-projects.svg) compares TypeScript 7 and tsrs on VS Code, T3 Code and MUI docs using those
 `wide` measurements and the PGO-optimized `dist` build. The results commit step runs `bench/publish.py` to generate
@@ -17,7 +19,7 @@ time and memory scales; shorter bars are better. Error comparisons, all modes an
 
 ```sh
 cargo build --release -p tsrs_cli
-python3 bench/run.py --local                                   # all projects, 3 reps, default/single/checkers8 modes
+python3 bench/run.py --local                                   # all projects, 3 reps, default/single/checkers4/checkers8 modes
 python3 bench/run.py --local --projects webpack,Compiler --reps 1
 python3 bench/run.py --local --work-dir ~/bench-cache          # reuse clones across worktrees
 ```
@@ -132,11 +134,13 @@ tsrs's errors (the table's errors paragraph names such projects).
   in the default mode (no thread flag: tsgo uses 4 checker threads; tsrs every core up to 16, then half the cores,
   from 4 to 32, lowered toward 4 for programs with fewer than 32 type-checked files per checker, so 8 on the 8-vCPU
   machine and 16 on the 16-vCPU one, but fewer on small or mid-size projects (Compiler and Compiler-Unions get 4, xstate-main fewer than 8); tsrs additionally resolves members lazily, its default), with `--singleThreaded`, with
-  `--checkers 8` (the `checkers8` mode: both compilers at 8 checker threads, twice tsgo's default), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
+  `--checkers 4` (the `checkers4` mode: both compilers at tsgo's default of 4 checker threads), with `--checkers 8`
+  (the `checkers8` mode: both compilers at 8 checker threads, tsrs's default on the 8-vCPU machine), and on a 16-vCPU machine (see "CI") in the default mode again (the `wide` mode: the same flags as
   `default`, kept apart so that one result can hold both machines) and with `--checkers 16` (the `checkers16` mode: how
   each scales on a wide machine; for tsrs the same count as `wide` there, except on the projects the file-count rule
-  gives fewer). Select modes with `--modes` (default `default,single,checkers8`; flags in `MODE_FLAGS`
-  in `run.py`).
+  gives fewer). Select modes with `--modes` (default `default,single,checkers4,checkers8`; flags in `MODE_FLAGS`
+  in `run.py`). `--checkers` sets only the checker threads; parsing and binding still use every core, so `checkers4`
+  is 4 checker threads on the 8-vCPU machine, not a 4-vCPU machine.
 - `bun check` (`--bun <binary>`, Bun 1.4.3 canary or later) is a third column in every mode it is measured in: `bun check
   -p <project> --no-pretty --all`, with `--threads N` where tsgo and tsrs get `--checkers N` (bun's only thread knob,
   and it caps every thread). CI measures it on the 16-vCPU machine. Its error count is recorded, not compared: bun check

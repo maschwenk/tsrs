@@ -163,8 +163,10 @@ class PublishTests(unittest.TestCase):
         report = report.decode()
         self.assertIn(f'tsrs commit: `{commit[:12]}`', report)
         self.assertIn('### Default settings on 16 vCPUs', report)
+        self.assertIn('### `--checkers 8`', report)
+        self.assertNotIn('### `--checkers 4`', report)
+        self.assertNotIn('### `--checkers 16`', report)
         self.assertNotIn('### `--singleThreaded`', report)
-        self.assertNotIn('### `--checkers', report)
         self.assertNotIn('### Scaling', report)
         self.assertTrue(report.startswith('# Benchmark results\n\n<!-- bench:start -->\n'))
         self.assertIn('Method: [benchmark methodology](https://github.com/maschwenk/tsrs/blob/main/bench/README.md)', report)
@@ -175,6 +177,21 @@ class PublishTests(unittest.TestCase):
         self.assertEqual(self.repo / 'bench/large-projects-dark.svg', publish.dark_image(self.image))
         self.assertIn(chart.THEMES['light']['background'].encode(), svg)
         self.assertIn(chart.THEMES['dark']['background'].encode(), dark_svg)
+
+    def test_publishes_equal_thread_tables_at_four_and_eight_checkers(self):
+        result = self.result(self.commits[0])
+        result['modes'].insert(result['modes'].index('checkers8'), 'checkers4')
+        result['mode_reps']['checkers4'] = result['mode_reps']['checkers8']
+        vscode = result['projects']['vscode']
+        vscode['checkers4'] = copy.deepcopy(vscode['checkers8'])
+        self.assertTrue(self.publish(result))
+        report = self.report.read_text()
+        wide, four, eight = (report.index(title) for title in (
+            '### Default settings on 16 vCPUs', '### `--checkers 4`', '### `--checkers 8`'))
+        self.assertLess(wide, four)
+        self.assertLess(four, eight)
+        self.assertIn("4 checker threads each (tsgo's default).", report)
+        self.assertIn("8 checker threads each (tsrs's default on 8 vCPUs).", report)
 
     def test_publishing_preserves_handwritten_sections_around_tables(self):
         before = '# Benchmark results\n\nPinned projects and methodology.\n\n'
