@@ -16,10 +16,9 @@ import chart
 import run
 
 REPO = run.REPO
-# The summary tables: on the 16-vCPU machine each compiler at its own default and both at 16 checker threads (the
-# chart's mode), then on the 8-vCPU machine both at tsgo's default of 4 checker threads and at tsrs's default there of
-# 8, so every published default-mode number has an equal-thread counterpart. Modes a result lacks are skipped.
-PUBLISHED_MODES = ["wide", "checkers16", "checkers4", "checkers8"]
+# The summary tables, all from the 16-vCPU machine: each compiler at its own default, then both at 4 (tsgo's default),
+# 8 and 16 (tsrs's default there) checker threads, the chart's points. Modes a result lacks are skipped.
+PUBLISHED_MODES = ["wide", *chart.POINTS.values()]
 
 
 def dark_image(image_path: Path) -> Path:
@@ -29,9 +28,10 @@ def dark_image(image_path: Path) -> Path:
 
 def publish(result_path: Path, report: Path, image_path: Path) -> bool:
     result = json.loads(result_path.read_text())
+    # Both 16-vCPU jobs must have finished: with one, the tables and chart would show half the projects.
     for mode in ("wide", chart.MODE):
-        if mode not in result["modes"] or not any(mode in p for p in result["projects"].values()):
-            print(f"No {mode} results; keeping the latest report and chart.")
+        if mode not in result["modes"] or not all(mode in p for p in result["projects"].values()):
+            print(f"No {mode} results for every project; keeping the latest report and chart.")
             return False
 
     measured = subprocess.check_output(
