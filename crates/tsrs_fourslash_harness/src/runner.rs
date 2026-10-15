@@ -68,6 +68,7 @@ pub fn install_panic_hook() {
             let msg = payload_message(payload);
             let loc = info.location().map(|l| format!(" at {}:{}", l.file(), l.line())).unwrap_or_default();
             let bt = std::backtrace::Backtrace::force_capture().to_string();
+            // This flag only selects diagnostic output; it does not publish or protect any other data.
             if WORKER_MODE.load(Ordering::Relaxed) {
                 // The parent reports the last stderr line when the worker dies (a server thread's panic ends it).
                 let thread = std::thread::current().name().unwrap_or("").to_string();
@@ -303,6 +304,7 @@ pub fn run(registry: &'static [TestEntry], opts: &RunOptions) -> usize {
             s.spawn(|| {
                 let mut worker: Option<WorkerProcess> = None;
                 loop {
+                    // Atomicity gives every thread a distinct index; no data is published through this counter.
                     let i = next.fetch_add(1, Ordering::Relaxed);
                     if i >= selected.len() {
                         break;

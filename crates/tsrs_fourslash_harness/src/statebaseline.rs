@@ -515,7 +515,7 @@ impl FourslashTest {
         config_file_registry.for_each_test_config_file_names_entry(|path, entry| {
             let mut config_file_names_change = "";
             let old_entry = old_registry.as_ref().and_then(|r| r.get_test_config_file_names_entry(path));
-            let empty = Default::default();
+            let empty = FxHashMap::default();
             let new_ancestors = entry.ancestors.as_ref().unwrap_or(&empty);
             match &old_entry {
                 None => {

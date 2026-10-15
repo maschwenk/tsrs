@@ -46,6 +46,9 @@ cargo build --profile fast -p tsrs_fourslash
 tools/wasm/build.sh  # requires the wasm32-wasip1 target and wasm-opt
 ```
 
+The fourslash package is generated test glue compiled without optimization; its hand-written harness and the real
+language-server crates remain optimized, so filtered and full language-server tests use the same server code.
+
 ## Run the tests
 
 The conformance suite reads the reference baselines from a checkout of microsoft/TypeScript at the pinned commit in

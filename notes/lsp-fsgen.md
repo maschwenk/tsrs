@@ -2,9 +2,11 @@
 
 `tools/gen-fourslash` (Go, `go/types`) turns every Go fourslash test into a Rust function in
 `crates/tsrs_fourslash/src/tests/gen/gen_NN.rs` (one `pub mod` per Go file, one `pub fn` per Go function) plus a
-registry in `gen/mod.rs` (name, Go file, line, fn, skip reason). The harness (`fourslash.rs`, `baselineutil.rs`,
+registry in `gen/mod.rs` (name, Go file, line, fn, skip reason). The optimized `tsrs_fourslash_harness` crate
+(`fourslash.rs`, `baselineutil.rs`,
 `statebaseline.rs`, `harnessutil.rs`, `tsbaseline.rs`, `testing.rs`, `test_parser.rs`) is a port of Go's and drives the
-in-process server. How to regenerate and run, and the pass counts: docs/LSP.md, "Fourslash". This note keeps the
+in-process server; `tsrs_fourslash` contains only generated tests and a thin runner and re-exports the harness. How to
+regenerate and run, and the pass counts: docs/LSP.md, "Fourslash". This note keeps the
 mapping rules of the generator and the harness's deviations from Go. (It absorbs the
 former note of the wave that wired the harness to the in-process server.)
 

@@ -151,12 +151,11 @@ fn get_option_value(t: &T, option: &'static CommandLineOption, value: &str, cwd:
             "false" => CompilerOptionsValue::Bool(false),
             _ => t.fatal(&format!("Value for option '{}' must be a boolean, got: {value}", option.name)),
         },
-        CommandLineOptionKind::Enum => match option.enum_map().and_then(|m| m.get(value.to_lowercase().as_str())) {
-            Some(v) => v.clone(),
-            None => {
-                let keys: Vec<String> = option.enum_map().map(|m| m.iter().map(|(k, _)| k.to_string()).collect()).unwrap_or_default();
-                t.fatal(&format!("Value for option '{}' must be one of {}, got: {value}", option.name, keys.join(",")))
-            }
+        CommandLineOptionKind::Enum => if let Some(v) = option.enum_map().and_then(|m| m.get(value.to_lowercase().as_str())) {
+            v.clone()
+        } else {
+            let keys: Vec<String> = option.enum_map().map(|m| m.iter().map(|(k, _)| k.to_string()).collect()).unwrap_or_default();
+            t.fatal(&format!("Value for option '{}' must be one of {}, got: {value}", option.name, keys.join(",")))
         },
         CommandLineOptionKind::List | CommandLineOptionKind::ListOrElement => {
             let (list_val, errors) = tsoptions::parse_list_type_option(option, value);

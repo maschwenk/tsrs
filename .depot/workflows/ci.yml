@@ -28,6 +28,9 @@ jobs:
   check-and-test:
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60
+    env:
+      TSRS_TEST: target/ci-native/tsrs-test
+      TSRS_FOURSLASH: target/ci-native/tsrs-fourslash
     steps:
       - uses: taiki-e/checkout-action@7d1e50e93dc4fb3bba58f85018fadf77898aee8b # v1.4.2
 
@@ -72,7 +75,7 @@ jobs:
           key: ${{ steps.ts-ref.outputs.cache-primary-key }}
 
       - name: cargo check
-        run: cargo check --workspace --locked --config 'build.warnings="deny"'
+        run: cargo check --workspace --exclude tsrs_fourslash --locked --config 'build.warnings="deny"'
 
       # Feature-only tooling must compile too. Check compressed pointers separately: --workspace --all-features
       # also enables plain-ptrs, which overrides them.
@@ -80,7 +83,7 @@ jobs:
         env:
           RUSTFLAGS: -D warnings
         run: |
-          cargo check --workspace --all-targets --all-features --locked
+          cargo check --workspace --exclude tsrs_fourslash --all-targets --all-features --locked
           cargo check -p tsrs_cli --all-features --features tsrs_core/checked-cells --locked
           cargo check -p tsrs_cli -p tsrs_testrunner --features tsrs_cli/alloc-profile --locked
 
@@ -95,8 +98,10 @@ jobs:
           -p tsrs_tsoptions -p tsrs_printer -p tsrs_modulespecifiers -p tsrs_compiler -p tsrs_incremental -p tsrs_execute
           -p tsrs_testrunner -p tsrs_cli
 
-      - name: Build release binaries
-        run: cargo build --release --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
+      # Correctness gates do not need release's fat LTO. ci-native keeps release optimization but omits LTO, and
+      # compiles the generated fourslash bodies at opt-level 0; release.yml still tests the dist/PGO binaries.
+      - name: Build correctness binaries
+        run: cargo build --profile ci-native --locked -p tsrs_cli -p tsrs_testrunner -p tsrs_fourslash
 
       # Errors, .types and .symbols baselines, in tsgo's check history (`--checkerAssignment go`, tsrs_core::compat),
       # which the reference baselines need for byte-identity.
@@ -117,12 +122,12 @@ jobs:
 
       # testdata/regressions: bugs found outside the conformance suite, each with tsgo-ref's output.
       - name: Regression cases
-        run: tools/regressions.sh target/release/tsrs
+        run: tools/regressions.sh target/ci-native/tsrs
 
       # testdata/contentmapper: projects with a Node content mapper, run through the real process spawner, each with
       # tsgo's output.
       - name: Content mapper cases
-        run: tools/contentmapper-e2e.sh target/release/tsrs
+        run: tools/contentmapper-e2e.sh target/ci-native/tsrs
 
       - name: Fourslash (language service) suite
         run: .github/scripts/fourslash-gate.sh
@@ -133,7 +138,7 @@ jobs:
       # npm/build.mjs compiles the unstable/* JS API with the npm workspace's build-only tools.
       - name: npm packaging smoke test
         run: |
-          node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/release/tsrs --pack
+          node npm/build.mjs --binary x86_64-unknown-linux-gnu=target/ci-native/tsrs --pack
           dir=$(mktemp -d)
           cd "$dir"
           printf '{"private":true}\n' > package.json
@@ -190,7 +195,7 @@ jobs:
         run: python3 bench/run.py --setup-only --projects xstate-main,webpack,nuxt,drizzle-orm
 
       - name: Determinism
-        run: tools/ci/determinism.sh --self-test && tools/ci/determinism.sh target/release/tsrs
+        run: tools/ci/determinism.sh --self-test && tools/ci/determinism.sh target/ci-native/tsrs
 
       - name: Upload conformance results
         if: failure()

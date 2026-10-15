@@ -48,6 +48,21 @@ performance change, under the bar in AGENTS.md.
 - fourslash: 4,066 passes and 63 failures on both, identical pass lists. Building tsrs-fourslash after a checker edit
   takes 17.5 s with `fast` and 273 s with `release`; the run takes 12.9 s against 9.8 s.
 
+### Generated fourslash tests
+
+The 4,546 generated test bodies used to share a crate with the hand-written harness. On an arm64 macOS development
+host, a `fast` timing build spent 61.2 s compiling that crate: 5.4 s in the frontend and 55.8 s in code generation.
+Moving the harness into an optimized `tsrs_fourslash_harness` crate and compiling only the generated glue at
+opt-level 0 cut `tsrs_fourslash` to 6.2 s (5.0 s frontend, 1.3 s code generation), about 90%. The optimized harness
+crate took 3.1 s, and the whole candidate build took 29.54 s. Release and dist profiles are unchanged.
+
+The full suite took 4.3 s: 4,066 passed, 63 known failures, and 417 skipped. Before and after result files were
+byte-identical (SHA-256):
+
+- `pass.txt`: `272f329e11eaab849d5c312cd0f1e5922c09f5f95fb566e249e6d82e2acc8cf7`
+- `fail.txt`: `68a77b3bf208d66221f3aa41cf78cc9e26a302e7d54ce7e1bbf1afee3ce024f8`
+- `skip.txt`: `ccb960a7fa1f53597fcb5de33d680fcfdaad7b9829ae12adbebb247425606b0d`
+
 ## `cargo test` (the CI "fast crates" list)
 
 | | before | after |

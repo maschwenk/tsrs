@@ -32,7 +32,8 @@ Details:
 
 - Findings depend on the Clippy version, so `rust-toolchain.toml` pins it everywhere.
 - The command covers all targets, including tests and examples, of every workspace crate except `tsrs_fourslash`.
-  That crate is mostly 750k lines of generated Go test translations and has its own generator and build gates.
+  That crate is mostly 750k lines of generated Go test translations and has its own generator and build gates. Its
+  hand-written harness is `tsrs_fourslash_harness`, which this command does cover.
 - Also check `--all-features` when changing lint policy. It enables `plain-ptrs`, so check optional features with
   compressed pointers separately. These scopes include profiling tools and both pointer representations.
 - Workspace crates declare `publish = false`; missing crates.io metadata does not need a global exception.

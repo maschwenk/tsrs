@@ -614,6 +614,18 @@ name = "tsrs_fourslash"
 version = "0.15.0"
 dependencies = [
  "regex",
+ "tsrs_core",
+ "tsrs_fourslash_harness",
+ "tsrs_ls",
+ "tsrs_lsproto",
+ "tsrs_modulespecifiers",
+]
+
+[[package]]
+name = "tsrs_fourslash_harness"
+version = "0.15.0"
+dependencies = [
+ "regex",
  "rustc-hash",
  "tsrs_compiler",
  "tsrs_contentmapper",
@@ -623,7 +635,6 @@ dependencies = [
  "tsrs_ls",
  "tsrs_lsp",
  "tsrs_lsproto",
- "tsrs_modulespecifiers",
  "tsrs_project",
  "tsrs_scanner",
  "tsrs_tsoptions",

@@ -1,0 +1,26 @@
+[package]
+name = "tsrs_fourslash_harness"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tsrs_core.workspace = true
+tsrs_scanner.workspace = true
+tsrs_lsproto.workspace = true
+tsrs_ls.workspace = true
+tsrs_lsp.workspace = true
+tsrs_project.workspace = true
+tsrs_compiler.workspace = true
+tsrs_tsoptions.workspace = true
+tsrs_vfs.workspace = true
+tsrs_diagnostics.workspace = true
+tsrs_contentmapper.workspace = true
+tsrs_contentmappertest.workspace = true
+rustc-hash.workspace = true
+regex = "1"

@@ -69,7 +69,7 @@ The [initial port log](history/LSP.md) records the completed phases and their me
 | `project/dirty`, `project/logging` | `tsrs_projectutil` (re-exported as `tsrs_project::{dirty, logging}`) | leaf packages that `ls/autoimport` imports too |
 | `ls` (+ `lsconv`, `lsutil`, `change`, `autoimport`) | `tsrs_ls` (`tsrs_ls::lsconv`, `::lsutil`, `::change`, `::autoimport`, …) | one Rust file per Go file, same base names |
 | `astnav`, `format`, `sourcemap` | `tsrs_astnav` and `tsrs_sourcemap` (crates of their own, re-exported as `tsrs_ls::astnav` / `::sourcemap`), `tsrs_ls::format` | `tsrs_astnav` is also used by the checker and the API, `tsrs_sourcemap` by emit; `format` is used by the language service and by the API's `formatNodeForInsertion` (`tsrs_api/src/printing.rs`) |
-| `fourslash` (+ the tests in `fourslash/tests`) | `tsrs_fourslash` | harness + tests generated from the Go test files by `tools/gen-fourslash` |
+| `fourslash` (+ the tests in `fourslash/tests`) | `tsrs_fourslash_harness`, `tsrs_fourslash` | optimized hand-written harness; generated tests compiled without optimization by `tools/gen-fourslash` |
 | `checker/services.go`, `checker/exports.go` | `tsrs_checker` (`services.rs`, `exports.rs`) | the checker API the language service calls |
 | `compiler` (program reuse, pluggable checker pool) | `tsrs_compiler` | `UpdateProgram` / `ReuseProgram`, `ProgramOptions.CreateCheckerPool`, the `CheckerPool` interface |
 | `cmd/tsc/lsp.go` | `tsrs_cli` (`lsp.rs`) | `tsrs --lsp -stdio` |
@@ -236,7 +236,8 @@ index 0, as in Go), so `sort_symbols` uses Go's pdqsort port there (`checker::Pr
 tests in `*_js_test.go` files that only build for GOOS=js, are skipped like `go test` skips them) into a Rust
 function in `crates/tsrs_fourslash/src/tests/gen/` plus a registry (name, file, fn, skip reason for the 386
 `t.Skip("Known failing…")` tests). Regenerate with `cd tools/gen-fourslash && GOTOOLCHAIN=auto go run .`; nothing
-is left untranslated. The harness (`tsrs_fourslash::fourslash`) mirrors Go's `FourslashTest` method for method and
+is left untranslated. The optimized hand-written harness (`tsrs_fourslash_harness`, re-exported by
+`tsrs_fourslash::fourslash`) mirrors Go's `FourslashTest` method for method and
 drives the real server in-process (`tsrs_lsp::lsptestutil`, Go's `testutil/lsptestutil`: framed JSON over byte
 pipes, in-memory `vfstest` file system wrapped with the bundled libs, shared parse cache, compiler options from the
 test's `// @option` lines via `harnessutil.SetOptionsFromTestConfig`). Unsupported harness features fail with

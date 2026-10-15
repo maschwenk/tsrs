@@ -66,6 +66,7 @@ impl FourslashTest {
     }
 
     // baselineutil.go:96
+    #[expect(clippy::unused_self, reason = "this mirrors the Go harness method called by the shared baseline flow")]
     pub(crate) fn get_baseline_options(&self, command: BaselineCommand, _test_path: &str) -> baseline::Options {
         baseline::Options { subfolder: format!("fourslash/{}", normalize_command_name(command.0)), ..Default::default() }
     }
@@ -321,6 +322,7 @@ impl BaselineDetail {
 
 impl FourslashTest {
     // baselineutil.go:319
+    #[expect(clippy::unused_self, reason = "this mirrors the Go harness method called by the generated tests")]
     pub(crate) fn get_baseline_content_for_file(
         &self,
         file_name: &str,
@@ -522,11 +524,9 @@ impl FourslashTest {
                             text_with_context.new_content.push_str(" |}");
                         }
                     }
-                    DetailKind::ContextStart => {
-                        if can_determine_context_id_inline {
-                            let n = span_to_context_id.len();
-                            span_to_context_id.insert(span.clone(), n);
-                        }
+                    DetailKind::ContextStart if can_determine_context_id_inline => {
+                        let n = span_to_context_id.len();
+                        span_to_context_id.insert(span.clone(), n);
                     }
                     _ => {}
                 }
@@ -812,14 +812,13 @@ impl FourslashTest {
             let marker = &item_and_marker.marker;
             let item = &item_and_marker.item;
 
-            let text_range = match get_range(item) {
-                Some(r) => r,
-                None => {
-                    let start = marker.ls_position;
-                    let mut end = start;
-                    end.character += 1;
-                    lsproto::Range { start, end }
-                }
+            let text_range = if let Some(r) = get_range(item) {
+                r
+            } else {
+                let start = marker.ls_position;
+                let mut end = start;
+                end.character += 1;
+                lsproto::Range { start, end }
             };
 
             if text_range.start.line != text_range.end.line {

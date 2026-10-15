@@ -69,7 +69,7 @@ fn check_case(expected: &Value) -> Result<(), String> {
         return Err(format!("{test}: Go failed, Rust did not"));
     }
 
-    let files: Vec<(String, String)> = td.files.iter().map(|f| (f.file_name.clone(), f.content.clone())).collect();
+    let files: Vec<(String, String)> = td.files.iter().map(|f| (f.file_name(), f.content.clone())).collect();
     let want_files: Vec<(String, String)> = arr(field(expected, "files")).iter().map(|f| (s(field(f, "fileName")), s(field(f, "content")))).collect();
     if files != want_files {
         return Err(format!("{test}: files differ:\n  rust {files:?}\n  go   {want_files:?}"));
@@ -80,7 +80,7 @@ fn check_case(expected: &Value) -> Result<(), String> {
         return Err(format!("{test}: {} markers, Go has {}", td.markers.len(), want_markers.len()));
     }
     if let Some(result) = td.markers.iter().zip(want_markers).into_iter().find_map(|(m, w)| {
-        let got = (m.file_name.clone(), i64::from( m.position .expect_source("parsed markers have source positions"),
+        let got = (m.file_name(), i64::from( m.position .expect_source("parsed markers have source positions"),
             ), (m.ls_position.line as i64, m.ls_position.character as i64), m.name.clone(), );
         let name = match field(w, "name") {
             Value::Null => None,
@@ -118,7 +118,7 @@ fn check_case(expected: &Value) -> Result<(), String> {
             Some(m) => td.markers.iter().position(|x| std::sync::Arc::ptr_eq(x, m)).map_or(-2, |i| i as i64),
         };
         let got = (
-            r.file_name.clone(),
+            r.file_name(),
             i64::from(
                 r.range
                     .pos()

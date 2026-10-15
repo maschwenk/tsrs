@@ -10,6 +10,7 @@ pub use tsrs_contentmappertest::{
 };
 
 // spawner.go:18 (Go's interface value is never nil here; Some is FourslashOptions' optional field.)
+#[expect(clippy::unnecessary_wraps, reason = "the Go helper populates an optional FourslashOptions spawner field")]
 pub fn new_spawner() -> Option<Spawner> {
     Some(Spawner(tsrs_contentmappertest::new_spawner()))
 }

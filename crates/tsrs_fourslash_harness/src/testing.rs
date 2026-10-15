@@ -27,8 +27,10 @@ impl T {
         T { name: name.to_string(), file: file.to_string(), state: Mutex::new(TState::default()) }
     }
 
+    #[expect(clippy::unused_self, reason = "generated Go tests call testing.T.Parallel as a method")]
     pub fn parallel(&self) {}
 
+    #[expect(clippy::unused_self, reason = "the port preserves testing.T.Helper method calls")]
     pub fn helper(&self) {}
 
     pub fn name(&self) -> String {

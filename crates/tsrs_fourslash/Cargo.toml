@@ -10,20 +10,11 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+tsrs_fourslash_harness.workspace = true
 tsrs_core.workspace = true
-tsrs_scanner.workspace = true
 tsrs_lsproto.workspace = true
 tsrs_ls.workspace = true
-tsrs_lsp.workspace = true
-tsrs_project.workspace = true
-tsrs_compiler.workspace = true
-tsrs_tsoptions.workspace = true
-tsrs_vfs.workspace = true
-tsrs_diagnostics.workspace = true
 tsrs_modulespecifiers.workspace = true
-tsrs_contentmapper.workspace = true
-tsrs_contentmappertest.workspace = true
-rustc-hash.workspace = true
 regex = "1"
 
 [[bin]]

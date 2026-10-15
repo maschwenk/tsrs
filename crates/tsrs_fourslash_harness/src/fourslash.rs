@@ -551,10 +551,12 @@ fn default_semantic_token_modifiers() -> Vec<String> {
 
 // If modifying the defaults, update GetDefaultCapabilities too.
 // fourslash.go:446
+#[expect(clippy::unnecessary_wraps, reason = "LSP optional boolean fields use this helper at many construction sites")]
 fn ptr_true() -> Option<bool> {
     Some(true)
 }
 
+#[expect(clippy::unnecessary_wraps, reason = "LSP optional boolean fields use this helper at many construction sites")]
 fn ptr_false() -> Option<bool> {
     Some(false)
 }
@@ -647,6 +649,7 @@ static DEFAULT_WORKSPACE_EDIT_CAPABILITIES: LazyLock<lsproto::WorkspaceEditClien
     });
 
 // fourslash.go:530
+#[expect(clippy::unnecessary_wraps, reason = "the returned capabilities populate an optional LSP initialize field")]
 pub fn get_default_capabilities() -> Option<lsproto::ClientCapabilities> {
     Some(lsproto::ClientCapabilities {
         general: Some(lsproto::GeneralClientCapabilities {
@@ -994,10 +997,12 @@ pub static ANY_TEXT_EDITS: LazyLock<Option<Vec<lsproto::TextEdit>>> =
 pub static NO_TEXT_EDITS: LazyLock<Option<Vec<lsproto::TextEdit>>> =
     LazyLock::new(|| Some(vec![lsproto::TextEdit { new_text: "\u{0}fourslash.NoTextEdits\u{0}".to_string(), ..Default::default() }]));
 
+#[expect(clippy::ref_option, reason = "the whole Option value is compared with a Go pointer-identity sentinel")]
 pub(crate) fn is_any_text_edits(edits: &Option<Vec<lsproto::TextEdit>>) -> bool {
     *edits == *ANY_TEXT_EDITS
 }
 
+#[expect(clippy::ref_option, reason = "the whole Option value is compared with a Go pointer-identity sentinel")]
 pub(crate) fn is_no_text_edits(edits: &Option<Vec<lsproto::TextEdit>>) -> bool {
     *edits == *NO_TEXT_EDITS
 }
@@ -1322,12 +1327,14 @@ impl FourslashTest {
     }
 
     // fourslash.go:1064
+    #[expect(clippy::needless_pass_by_ref_mut, reason = "generated tests call this Go harness method through a mutable test handle")]
     pub fn verify_current_file_content(&mut self, t: &T, expected_content: &str) {
         let actual_content = self.get_script_info(&self.active_filename.clone()).content;
         crate::go::assert::equal(t, actual_content.as_str(), expected_content, "");
     }
 
     // fourslash.go:1070
+    #[expect(clippy::needless_pass_by_ref_mut, reason = "generated tests call this Go harness method through a mutable test handle")]
     pub fn verify_current_line_content(&mut self, t: &T, expected_content: &str) {
         let actual_content = self
             .get_script_info(&self.active_filename.clone())
@@ -1341,6 +1348,11 @@ impl FourslashTest {
     }
 
     // fourslash.go:1083
+    #[expect(
+        clippy::needless_pass_by_ref_mut,
+        clippy::unused_self,
+        reason = "the unimplemented Go-compatible harness entry point keeps its generated-call signature"
+    )]
     pub fn verify_indentation(&mut self, _t: &T, _num_spaces: usize) {
         // not implemented
     }
@@ -1376,16 +1388,16 @@ impl FourslashTest {
             }
             _ => t.fatal(&format!("Invalid marker input type: {}. Expected string, *Marker, []string, or []*Marker.", marker_input.type_name())),
         }
-        self.verify_completions_actions(list)
+        Self::verify_completions_actions(list)
     }
 
     // fourslash.go:1191
-    fn verify_completions_actions(&self, list: Option<lsproto::CompletionList>) -> VerifyCompletionsResult {
+    fn verify_completions_actions(list: Option<lsproto::CompletionList>) -> VerifyCompletionsResult {
         // Go's closures share the list; each Rust closure gets its own copy.
         let list_for_no_action = list.clone();
         // (Go dereferences a nil list and a nil expected action, which panics; so do these.)
-        fn find(list: &Option<lsproto::CompletionList>, action: &CompletionsExpectedCodeAction) -> Option<lsproto::CompletionItem> {
-            let list = list.as_ref().expect("runtime error: invalid memory address or nil pointer dereference");
+        fn find(list: Option<&lsproto::CompletionList>, action: &CompletionsExpectedCodeAction) -> Option<lsproto::CompletionItem> {
+            let list = list.expect("runtime error: invalid memory address or nil pointer dereference");
             list.items
                 .iter()
                 .find(|item| {
@@ -1405,7 +1417,7 @@ impl FourslashTest {
         VerifyCompletionsResult {
             and_apply_code_action: Box::new(move |f: &mut FourslashTest, t: &T, expected_action: Option<CompletionsExpectedCodeAction>| {
                 let expected_action = expected_action.expect("runtime error: invalid memory address or nil pointer dereference");
-                let Some(item) = find(&list, &expected_action) else {
+                let Some(item) = find(list.as_ref(), &expected_action) else {
                     t.fatal(&format!("Code action '{}' from source '{}' not found in completions.", expected_action.name, expected_action.source));
                 };
                 // Detail and AdditionalTextEdits for auto-import items are populated by
@@ -1429,7 +1441,7 @@ impl FourslashTest {
             }),
             and_has_no_code_action: Box::new(move |_f: &mut FourslashTest, t: &T, unexpected_action: Option<CompletionsExpectedCodeAction>| {
                 let unexpected_action = unexpected_action.expect("runtime error: invalid memory address or nil pointer dereference");
-                if find(&list_for_no_action, &unexpected_action).is_some() {
+                if find(list_for_no_action.as_ref(), &unexpected_action).is_some() {
                     t.fatal(&format!("Unexpected code action '{}' from source '{}' found in completions.", unexpected_action.name, unexpected_action.source));
                 }
             }),
@@ -1814,6 +1826,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:1655
+    #[expect(clippy::unnecessary_wraps, reason = "the Go harness accepts and returns optional completion-item pointers")]
     pub fn resolve_completion_item(&mut self, t: &T, item: Option<lsproto::CompletionItem>) -> Option<lsproto::CompletionItem> {
         t.helper();
         let item = item.expect("runtime error: invalid memory address or nil pointer dereference");
@@ -2952,9 +2965,7 @@ impl FourslashTest {
     pub fn verify_baseline_hover(&mut self, t: &T) {
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::Hover>>> = Vec::new();
         markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
-            if marker.name.is_none() {
-                return None;
-            }
+            marker.name.as_ref()?;
 
             let params = lsproto::HoverParams {
                 text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name) },
@@ -2989,9 +3000,7 @@ impl FourslashTest {
     pub fn verify_baseline_vs_hover(&mut self, t: &T) {
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::Hover>>> = Vec::new();
         markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
-            if marker.name.is_none() {
-                return None;
-            }
+            marker.name.as_ref()?;
 
             let params = lsproto::HoverParams {
                 text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name) },
@@ -3119,9 +3128,7 @@ impl FourslashTest {
     pub fn verify_baseline_signature_help(&mut self, t: &T) {
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::SignatureHelp>>> = Vec::new();
         markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
-            if marker.name.is_none() {
-                return None;
-            }
+            marker.name.as_ref()?;
 
             let params = lsproto::SignatureHelpParams {
                 text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name) },
@@ -3575,7 +3582,7 @@ impl FourslashTest {
             t.fatal(&format!("Expected hover result at marker '{}' but got nil", self.last_known_marker_name.clone().unwrap_or_default()));
         };
         let prefix = self.get_current_position_prefix();
-        self.verify_hover_content(t, &hover.contents, expected_text, expected_documentation, &prefix);
+        Self::verify_hover_content(t, &hover.contents, expected_text, expected_documentation, &prefix);
     }
 
     // fourslash.go:4229
@@ -3601,13 +3608,13 @@ impl FourslashTest {
             panic!("runtime error: invalid memory address or nil pointer dereference");
         };
         let prefix = self.get_current_position_prefix();
-        self.verify_hover_content(t, &hover.contents, expected_text, expected_documentation, &prefix);
+        Self::verify_hover_content(t, &hover.contents, expected_text, expected_documentation, &prefix);
     }
 
     // fourslash.go:4255
     #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_jsx_closing_tag(&mut self, t: &T, markers_to_new_text: OrderedMap<String, Option<String>>) {
-        for (marker, expected_text) in markers_to_new_text.iter() {
+        for (marker, expected_text) in &markers_to_new_text {
             self.go_to_marker(t, marker);
             let params = lsproto::VSOnAutoInsertParams {
                 vs_text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
@@ -3643,9 +3650,7 @@ impl FourslashTest {
 
         let mut markers_and_items: Vec<MarkerAndItem<Option<lsproto::VSOnAutoInsertResponseItem>>> = Vec::new();
         markers_and_items.extend(self.markers().into_iter().filter_map(|marker| {
-            if marker.name.is_none() {
-                return None;
-            }
+            marker.name.as_ref()?;
 
             let params = lsproto::VSOnAutoInsertParams {
                 vs_text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&marker.file_name) },
@@ -3723,7 +3728,7 @@ impl FourslashTest {
 
         // Verify doc comment
         if !expected.doc_comment.is_empty() {
-            let actual_doc = documentation_text(&selected_sig.documentation);
+            let actual_doc = documentation_text(selected_sig.documentation.as_ref());
             if actual_doc != expected.doc_comment {
                 t.error(&format!("{prefix}Expected doc comment {}, got {}", crate::go::quote(&expected.doc_comment), crate::go::quote(&actual_doc)));
             }
@@ -3794,7 +3799,7 @@ impl FourslashTest {
             match active_param {
                 None => t.error(&format!("{prefix}Expected parameter doc comment {}, but no active parameter", crate::go::quote(&expected.parameter_doc_comment))),
                 Some(active_param) => {
-                    let actual_doc = documentation_text(&active_param.documentation);
+                    let actual_doc = documentation_text(active_param.documentation.as_ref());
                     if actual_doc != expected.parameter_doc_comment {
                         t.error(&format!(
                             "{prefix}Expected parameter doc comment {}, got {}",
@@ -3938,6 +3943,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4642
+    #[expect(clippy::unused_self, reason = "this mirrors the Go harness method used by signature-help verification")]
     fn verify_signature_help_result(&self, t: &T, actual: Option<&lsproto::SignatureHelp>, expected: Option<&lsproto::SignatureHelp>, prefix: &str) {
         assert_deep_equal(t, &actual, &expected, &format!("{prefix} SignatureHelp mismatch"));
     }
@@ -4001,12 +4007,11 @@ impl FourslashTest {
                 let converters = new_test_converters(lsconv::new_converters(lsproto::PositionEncodingKind::UTF8, move |_| Some(Arc::clone(&line_map))));
                 let list: Vec<lsproto::CompletionItem> = match result.items.filter(|items| !items.is_empty()) {
                     Some(items) => items,
-                    None => match result.list.filter(|list| !list.items.is_empty()) {
-                        Some(list) => list.items,
-                        None => {
-                            self.write_to_baseline(AUTO_IMPORTS_CMD, "no autoimport completions found\n\n");
-                            continue;
-                        }
+                    None => if let Some(list) = result.list.filter(|list| !list.items.is_empty()) {
+                        list.items
+                    } else {
+                        self.write_to_baseline(AUTO_IMPORTS_CMD, "no autoimport completions found\n\n");
+                        continue;
                     },
                 };
 
@@ -4454,6 +4459,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:5257
+    #[expect(clippy::needless_pass_by_ref_mut, reason = "the Go harness finalizer receives the mutable test handle")]
     pub(crate) fn verify_baselines(&mut self, t: &T, test_path: &str) {
         if !self.test_data.is_state_baselining_enabled() {
             for (command, content) in &self.baselines {
@@ -4611,7 +4617,7 @@ impl FourslashTest {
     // fourslash.go:5407
     #[expect(clippy::needless_pass_by_value, reason = "Go harness entry points take owned option records and interface values; generated callers mirror those signatures.")]
     pub fn verify_linked_editing(&mut self, t: &T, marker_names_to_expected: OrderedMap<String, Vec<lsproto::Range>>) {
-        for (marker_name, expected_ranges) in marker_names_to_expected.iter() {
+        for (marker_name, expected_ranges) in &marker_names_to_expected {
             self.go_to_marker(t, marker_name);
             let params = lsproto::LinkedEditingRangeParams {
                 text_document: lsproto::TextDocumentIdentifier { uri: lsconv::file_name_to_document_uri(&self.active_filename) },
@@ -5299,7 +5305,7 @@ impl FourslashTest {
             let edit_end = change.end();
             let script = self.edit_script(t, file_name, change);
             let mut replaced: FxHashMap<*const Marker, Arc<Marker>> = FxHashMap::default();
-            for marker in self.test_data.markers.iter_mut() {
+            for marker in &mut self.test_data.markers {
                 if marker.file_name() == file_name {
                     let mut updated = (**marker).clone();
                     updated.position = update_position(updated.position, edit_start, edit_end, &change.new_text);
@@ -5309,12 +5315,12 @@ impl FourslashTest {
                     *marker = updated;
                 }
             }
-            for (_, marker) in self.test_data.marker_positions.iter_mut() {
+            for marker in self.test_data.marker_positions.values_mut() {
                 if let Some(updated) = replaced.get(&Arc::as_ptr(marker)) {
                     *marker = Arc::clone(updated);
                 }
             }
-            for range_marker in self.test_data.ranges.iter_mut() {
+            for range_marker in &mut self.test_data.ranges {
                 let relink = range_marker.marker.as_ref().and_then(|m| replaced.get(&Arc::as_ptr(m)).cloned());
                 if range_marker.file_name() == file_name || relink.is_some() {
                     let mut updated = (**range_marker).clone();
@@ -5349,6 +5355,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4133
+    #[expect(clippy::wrong_self_convention, reason = "the name mirrors the Go converter-backed harness method")]
     pub(crate) fn from_lsp_range(&self, script: &ScriptInfo, r: lsproto::Range) -> TextRange {
         let ranges = self.converters.converters.from_lsp_range(script.clone(), r, Feature::All);
         if ranges.len() != 1 {
@@ -5388,7 +5395,7 @@ impl FourslashTest {
     }
 
     // fourslash.go:4170
-    fn get_or_load_script_info(&mut self, file_name: &str) -> Option<ScriptInfo> {
+    fn get_or_load_script_info(&self, file_name: &str) -> Option<ScriptInfo> {
         if let Some(script) = self.try_get_script_info(file_name) {
             return Some(script);
         }
@@ -5413,7 +5420,6 @@ impl FourslashTest {
 
     // fourslash.go:4203
     fn verify_hover_content(
-        &self,
         t: &T,
         actual: &lsproto::MarkupContentOrStringOrMarkedStringWithLanguageOrMarkedStrings,
         expected_text: &str,
@@ -5421,13 +5427,13 @@ impl FourslashTest {
         prefix: &str,
     ) {
         match &actual.markup_content {
-            Some(markup_content) => self.verify_hover_markdown(t, &markup_content.value, expected_text, expected_documentation, prefix),
+            Some(markup_content) => Self::verify_hover_markdown(t, &markup_content.value, expected_text, expected_documentation, prefix),
             None => t.fatal(&format!("{prefix}Expected markup content, got: {actual:?}")),
         }
     }
 
     // fourslash.go:4218
-    fn verify_hover_markdown(&self, t: &T, actual: &str, expected_text: &str, expected_documentation: &str, prefix: &str) {
+    fn verify_hover_markdown(t: &T, actual: &str, expected_text: &str, expected_documentation: &str, prefix: &str) {
         let expected = format!("```typescript\n{expected_text}\n```\n{expected_documentation}");
         assert_deep_equal(t, &actual.to_string(), &expected, &format!("{prefix}Hover markdown content mismatch"));
     }
@@ -5585,7 +5591,7 @@ fn auto_import_ignore(item: &lsproto::CompletionItem) -> lsproto::CompletionItem
 }
 
 // The text of a signature or parameter documentation (markup value or plain string; "" when absent).
-fn documentation_text(documentation: &Option<lsproto::StringOrMarkupContent>) -> String {
+fn documentation_text(documentation: Option<&lsproto::StringOrMarkupContent>) -> String {
     let Some(documentation) = documentation else {
         return String::new();
     };
@@ -5771,9 +5777,7 @@ impl FourslashTest {
         let mut related_diagnostics = Vec::new();
         if let Some(related_information) = &lsp_diagnostic.related_information {
             related_diagnostics.extend(related_information.iter().filter_map(|info| {
-                let Some(related_script_info) = self.try_get_script_info(&info.location.uri.file_name()) else {
-                    return None;
-                };
+                let related_script_info = self.try_get_script_info(&info.location.uri.file_name())?;
                 let related_diagnostic = FourslashDiagnostic {
                     file: new_fourslash_diagnostic_file(&related_script_info.file_name, &related_script_info.content),
                     loc: self.from_lsp_range(&related_script_info, info.location.range),
@@ -6016,9 +6020,7 @@ fn format_call_hierarchy_item(
                 result.push_str("│ ├ fromSpans:\n");
 
                 let mut from_spans_trailing_prefix = format!("{trailing_prefix}╰ ╰ ");
-                if i < count - 1 {
-                    from_spans_trailing_prefix = format!("{prefix}│ ╰ ");
-                } else if !outgoing_calls.skip && (!outgoing_calls.seen || !outgoing_calls.values.is_empty()) {
+                if i < count - 1 || !outgoing_calls.skip && (!outgoing_calls.seen || !outgoing_calls.values.is_empty()) {
                     from_spans_trailing_prefix = format!("{prefix}│ ╰ ");
                 }
                 format_call_hierarchy_item_spans(f, from_file.as_ref(), result, &incoming_call.from_ranges, &format!("{prefix}│ │ "), &from_spans_trailing_prefix);

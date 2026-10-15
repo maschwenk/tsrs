@@ -32,7 +32,7 @@ pub fn dedent(text: &str) -> String {
     mapped_lines.extend(lines.iter().map(|line| if line.trim().is_empty() { "" } else { line }));
     let indentation = stringutil::guess_indentation(&mapped_lines);
     if indentation > 0 {
-        for line in lines.iter_mut() {
+        for line in &mut lines {
             if line.len() > indentation {
                 *line = line[indentation..].to_string();
             } else {
