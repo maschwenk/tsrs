@@ -132,11 +132,10 @@ impl CommonJSModuleTransformer {
         let mut statements: Vec<P<Node>> = Vec::new();
         let mut variables: Vec<P<Node>> = Vec::new();
         let namespace_declaration = ast::get_namespace_declaration_node(node);
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if namespace_declaration.is_some() && !ast::is_default_import(node) {
+        if let Some(namespace_declaration) = namespace_declaration && !ast::is_default_import(node) {
             // import * as n from "mod";
             variables.push(f.new_variable_declaration(
-                namespace_declaration.unwrap().name().unwrap().clone_node(f),
+                namespace_declaration.name().unwrap().clone_node(f),
                 None, /*exclamationToken*/
                 None, /*type*/
                 Some(self.get_helper_expression_for_import(node, self.create_require_call(node))),

@@ -312,7 +312,7 @@ impl Checker {
                     break 'keep false;
                 }
                 let initializer = p.initializer();
-                (initializer.is_none() || self.is_possibly_discriminant_value(initializer.unwrap()))
+                (initializer.is_none() || Self::is_possibly_discriminant_value(initializer.unwrap()))
                     && self.is_discriminant_property(Some(contextual_type), symbol.name())
             };
             if keep { Some(p) } else { None }

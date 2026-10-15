@@ -849,7 +849,7 @@ impl Checker {
             parent_type = self.get_type_with_facts(parent_type, TypeFacts::NEUndefined);
         }
         let access_flags = AccessFlags::ExpressionPosition
-            | if no_tuple_bounds_check || self.has_default_value(declaration) { AccessFlags::AllowMissing } else { AccessFlags::None };
+            | if no_tuple_bounds_check || Self::has_default_value(declaration) { AccessFlags::AllowMissing } else { AccessFlags::None };
         let t: P<Type>;
         match pattern.kind() {
             Kind::ObjectBindingPattern => {
@@ -1139,7 +1139,7 @@ impl Checker {
         let mut min_length: usize = 0;
         for (i, element) in elements.iter().enumerate().rev() {
             let e = *element;
-            if !(Some(e) == rest_element || e.name().is_none() || self.has_default_value(e)) {
+            if !(Some(e) == rest_element || e.name().is_none() || Self::has_default_value(e)) {
                 min_length = i + 1;
                 break;
             }

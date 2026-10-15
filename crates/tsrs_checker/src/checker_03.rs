@@ -936,7 +936,7 @@ impl Checker {
         if !self.check_grammar_modifiers(node) {
             self.check_grammar_interface_declaration(node);
         }
-        if !self.container_allows_block_scoped_variable(node.parent().unwrap()) {
+        if !Self::container_allows_block_scoped_variable(node.parent().unwrap()) {
             self.grammar_error_on_node(node, &diagnostics::X_0_declarations_can_only_be_declared_inside_a_block, &[&"interface"]);
         }
         self.check_type_parameters(node.type_parameters());

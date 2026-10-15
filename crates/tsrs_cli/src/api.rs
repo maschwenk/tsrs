@@ -560,7 +560,7 @@ mod memory_tests {
     #[test]
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn repeated_builds_memory() {
-        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("tsrs-api-buildmem-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -577,7 +577,7 @@ mod memory_tests {
                 };
                 json::marshal(&id).unwrap()
             }
-            _ => unreachable!(),
+            Response::Binary(_) => unreachable!(),
         };
         let n: usize = std::env::var("N").ok().and_then(|v| v.parse().ok()).unwrap_or(40);
         let mut before = 0;
@@ -602,7 +602,7 @@ mod memory_tests {
     #[test]
     #[cfg(all(target_os = "linux", target_env = "gnu"))]
     fn failed_builds_free_their_orchestrator() {
-        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(|e| e.into_inner());
+        let _serial = super::BUILD_TESTS.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
         let dir = std::env::temp_dir().join(format!("tsrs-api-failedbuild-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
@@ -616,7 +616,7 @@ mod memory_tests {
                 Value::Object(o) => json::marshal(o.get("buildOrchestratorID").unwrap()).unwrap(),
                 _ => unreachable!(),
             },
-            _ => unreachable!(),
+            Response::Binary(_) => unreachable!(),
         };
         let id = create();
         let fail = |i: usize| {

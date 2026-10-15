@@ -1129,9 +1129,7 @@ impl Server {
             if let Err(err) = result {
                 if err.is(MESSAGE_MARSHAL_ERROR) && msg.kind == MessageKind::Response {
                     let resp = msg.as_response();
-                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                    if resp.id.is_some() && resp.error.is_none() {
-                        let id = resp.id.as_ref().unwrap();
+                    if let Some(id) = resp.id.as_ref() && resp.error.is_none() {
                         self.logger.errorf(format_args!("failed to marshal response for request {id}: {err}"));
                         self.send_error(Some(id), err)?;
                         continue;
@@ -2072,9 +2070,8 @@ impl Server {
                 Ok(())
             });
         };
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if params.text_document.is_some() && self.session().config().workspace_symbols_scope == lsutil::WorkspaceSymbolsScope::CurrentProject {
-            let uri = params.text_document.as_ref().unwrap().uri.clone();
+        if let Some(text_document) = params.text_document.as_ref() && self.session().config().workspace_symbols_scope == lsutil::WorkspaceSymbolsScope::CurrentProject {
+            let uri = text_document.uri.clone();
             self.session().with_snapshot_for_document(ctx, &uri, |snapshot| {
                 // Go maps `ls.Project.GetProgram` (a nil program is dereferenced by ProvideWorkspaceSymbols).
                 let programs = snapshot.get_language_service_projects_containing_file(&uri).iter().map(|p| p.get_program().unwrap()).collect();

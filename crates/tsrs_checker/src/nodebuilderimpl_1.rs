@@ -1401,9 +1401,8 @@ impl NodeBuilderImpl {
 
         let context_file = self.ctx().enclosing_file.get().unwrap();
         let mut resolution_mode = override_import_mode;
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if resolution_mode == RESOLUTION_MODE_NONE && original_module_specifier.is_some() {
-            resolution_mode = c.program.get_mode_for_usage_location(context_file, original_module_specifier.unwrap());
+        if resolution_mode == RESOLUTION_MODE_NONE && let Some(original_module_specifier) = original_module_specifier {
+            resolution_mode = c.program.get_mode_for_usage_location(context_file, original_module_specifier);
         } else if resolution_mode == RESOLUTION_MODE_NONE {
             resolution_mode = c.program.get_default_resolution_mode_for_file(context_file);
         }
@@ -1830,9 +1829,8 @@ impl NodeBuilderImpl {
         let Some(t) = t else {
             return Some(self.f.new_keyword_type_node(Kind::AnyKeyword));
         };
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if !self.is_actively_expanding(c) && type_node.is_some() && self.get_type_from_type_node(c, type_node.unwrap(), false) == Some(t) {
-            let reused = self.try_reuse_existing_node_helper(c, type_node.unwrap());
+        if !self.is_actively_expanding(c) && let Some(type_node) = type_node && self.get_type_from_type_node(c, type_node, false) == Some(t) {
+            let reused = self.try_reuse_existing_node_helper(c, type_node);
             if reused.is_some() {
                 self.check_type_expandability(c, Some(t));
                 return reused;
@@ -1898,9 +1896,8 @@ impl NodeBuilderImpl {
         let parameter_type = c.get_type_of_symbol(parameter_symbol);
         let parameter_type_node = self.serialize_type_for_declaration(c, parameter_declaration, Some(parameter_type), Some(parameter_symbol), true);
         let mut modifiers: Option<P<ModifierList>> = None;
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if !self.ctx().flags.get().intersects(Flags::OmitParameterModifiers) && preserve_modifier_flags && parameter_declaration.is_some() && can_have_modifiers(parameter_declaration.unwrap()) {
-            let originals: Vec<P<Node>> = parameter_declaration.unwrap().modifier_nodes().iter().copied().filter(|&n| is_modifier(n)).collect();
+        if !self.ctx().flags.get().intersects(Flags::OmitParameterModifiers) && preserve_modifier_flags && let Some(parameter_declaration) = parameter_declaration && can_have_modifiers(parameter_declaration) {
+            let originals: Vec<P<Node>> = parameter_declaration.modifier_nodes().iter().copied().filter(|&n| is_modifier(n)).collect();
             let clones: Vec<P<Node>> = originals.iter().map(|node| node.clone_node(&self.f)).collect();
             if !clones.is_empty() {
                 modifiers = Some(self.f.new_modifier_list(clones));

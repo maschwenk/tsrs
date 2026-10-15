@@ -800,7 +800,7 @@ impl Checker {
             let target = self.get_array_or_tuple_target_type(node);
             if target == self.empty_generic_type {
                 links.resolved_type.set(Some(self.empty_object_type));
-            } else if !(node.kind() == Kind::TupleType && node.elements().iter().any(|&e| self.is_variadic_tuple_element(e))) && self.is_deferred_type_reference_node(node, false) {
+            } else if !(node.kind() == Kind::TupleType && node.elements().iter().any(|&e| Self::is_variadic_tuple_element(e))) && self.is_deferred_type_reference_node(node, false) {
                 if node.kind() == Kind::TupleType && node.elements().is_empty() {
                     links.resolved_type.set(Some(target));
                 } else {
@@ -823,21 +823,21 @@ impl Checker {
     }
 
     // checker.go:24614
-    pub(crate) fn is_variadic_tuple_element(&mut self, node: P<Node>) -> bool {
-        self.get_tuple_element_flags(node).intersects(ElementFlags::Variadic)
+    pub(crate) fn is_variadic_tuple_element(node: P<Node>) -> bool {
+        Self::get_tuple_element_flags(node).intersects(ElementFlags::Variadic)
     }
 
     // checker.go:24618
     pub(crate) fn get_array_or_tuple_target_type(&mut self, node: P<Node>) -> P<Type> {
         let readonly = Self::is_readonly_type_operator(node.parent().unwrap());
-        let element_type = self.get_array_element_type_node(node);
+        let element_type = Self::get_array_element_type_node(node);
         if element_type.is_some() {
             if readonly {
                 return self.global_readonly_array_type;
             }
             return self.global_array_type;
         }
-        let element_infos: Vec<TupleElementInfo> = node.elements().iter().map(|&e| self.get_tuple_element_info(e)).collect();
+        let element_infos: Vec<TupleElementInfo> = node.elements().iter().map(|&e| Self::get_tuple_element_info(e)).collect();
         self.get_tuple_target_type(&element_infos, readonly)
     }
 
@@ -863,7 +863,7 @@ impl Checker {
     // checker.go:24646
     pub(crate) fn get_type_from_rest_type_node(&mut self, node: P<Node>) -> P<Type> {
         let mut type_node = node.type_node().unwrap();
-        let element_type_node = self.get_array_element_type_node(type_node);
+        let element_type_node = Self::get_array_element_type_node(type_node);
         if let Some(element_type_node) = element_type_node {
             type_node = element_type_node;
         }
@@ -871,20 +871,19 @@ impl Checker {
     }
 
     // checker.go:24655
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_array_element_type_node(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_array_element_type_node(node: P<Node>) -> Option<P<Node>> {
         match node.kind() {
             Kind::ParenthesizedType => {
-                return self.get_array_element_type_node(node.type_node().unwrap());
+                return Self::get_array_element_type_node(node.type_node().unwrap());
             }
             Kind::TupleType => {
                 if node.elements().len() == 1 {
                     let node = node.elements()[0];
                     if node.kind() == Kind::RestType {
-                        return self.get_array_element_type_node(node.type_node().unwrap());
+                        return Self::get_array_element_type_node(node.type_node().unwrap());
                     }
                     if node.kind() == Kind::NamedTupleMember && node.as_named_tuple_member().dot_dot_dot_token.is_some() {
-                        return self.get_array_element_type_node(node.type_node().unwrap());
+                        return Self::get_array_element_type_node(node.type_node().unwrap());
                     }
                 }
             }
@@ -1411,7 +1410,7 @@ impl Checker {
             };
             let module_symbol = self.resolve_external_module_symbol(inner_module_symbol, false /*dontResolveAlias*/);
             if !ast::node_is_missing(n.qualifier) {
-                let name_chain = self.get_identifier_chain(n.qualifier.unwrap());
+                let name_chain = Self::get_identifier_chain(n.qualifier.unwrap());
                 let mut current_namespace = module_symbol;
                 for (i, &current) in name_chain.iter().enumerate() {
                     let mut meaning = SymbolFlags::Namespace;
@@ -1476,12 +1475,11 @@ impl Checker {
     }
 
     // checker.go:25120
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_identifier_chain(&mut self, node: P<Node>) -> Vec<P<Node>> {
+    pub(crate) fn get_identifier_chain(node: P<Node>) -> Vec<P<Node>> {
         if ast::is_identifier(node) {
             return vec![node];
         }
-        let mut chain = self.get_identifier_chain(node.as_qualified_name().left);
+        let mut chain = Self::get_identifier_chain(node.as_qualified_name().left);
         chain.push(node.as_qualified_name().right);
         chain
     }
@@ -1549,20 +1547,20 @@ impl Checker {
     }
 
     // checker.go:25179
-    pub(crate) fn get_tuple_element_flags(&mut self, node: P<Node>) -> ElementFlags {
+    pub(crate) fn get_tuple_element_flags(node: P<Node>) -> ElementFlags {
         match node.kind() {
             Kind::OptionalType => {
                 return ElementFlags::Optional;
             }
             Kind::RestType => {
-                return if self.get_array_element_type_node(node.type_node().unwrap()).is_some() { ElementFlags::Rest } else { ElementFlags::Variadic };
+                return if Self::get_array_element_type_node(node.type_node().unwrap()).is_some() { ElementFlags::Rest } else { ElementFlags::Variadic };
             }
             Kind::NamedTupleMember => {
                 let named = node.as_named_tuple_member();
                 if named.question_token.is_some() {
                     return ElementFlags::Optional;
                 } else if named.dot_dot_dot_token.is_some() {
-                    return if self.get_array_element_type_node(named.type_).is_some() { ElementFlags::Rest } else { ElementFlags::Variadic };
+                    return if Self::get_array_element_type_node(named.type_).is_some() { ElementFlags::Rest } else { ElementFlags::Variadic };
                 }
                 return ElementFlags::Required;
             }
@@ -1572,9 +1570,9 @@ impl Checker {
     }
 
     // checker.go:25198
-    pub(crate) fn get_tuple_element_info(&mut self, node: P<Node>) -> TupleElementInfo {
+    pub(crate) fn get_tuple_element_info(node: P<Node>) -> TupleElementInfo {
         TupleElementInfo {
-            flags: self.get_tuple_element_flags(node),
+            flags: Self::get_tuple_element_flags(node),
             labeled_declaration: if ast::is_named_tuple_member(node) || ast::is_parameter_declaration(node) { Some(node) } else { None },
         }
     }

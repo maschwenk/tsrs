@@ -625,9 +625,7 @@ impl RequestFileSystem {
         let resolved = self.resolve_path(path)?;
         let mut result = Lookup { path: resolved.path.clone(), info: None, entry: None, use_base: false, followed_symlink: resolved.followed_symlink };
         let (rentry, rfb) = self.local(&resolved.path);
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if !resolved.host && rentry.is_some() {
-            let e = rentry.unwrap();
+        if !resolved.host && let Some(e) = rentry {
             result.info = e.info();
             result.entry = Some(e);
         } else if resolved.host || self.kind == Kind::Layer {

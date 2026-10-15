@@ -13,7 +13,7 @@ and ty, Biome, Turborepo, and swc. Where a rule copies one of them, it says whic
 ## Clippy
 
 ```sh
-cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
+cargo clippy --workspace --locked --exclude tsrs_fourslash --all-targets --config 'build.warnings="deny"' -- -D dead-code
 ```
 
 `[workspace.lints.clippy]` in `Cargo.toml` and `clippy.toml` turn on the oxc baseline and the project-specific strict
@@ -31,11 +31,10 @@ When it fails:
 Details:
 
 - Findings depend on the Clippy version, so `rust-toolchain.toml` pins it everywhere.
-- The command covers the library and binary targets of every workspace crate except `tsrs_fourslash`. That crate is
-  mostly 750k lines of generated Go test translations and has its own generator and build gates.
-- Also check `--all-targets` and `--all-targets --all-features` when changing lint policy. The latter enables
-  `plain-ptrs`, so check optional features with compressed pointers separately. These scopes include tests,
-  examples, profiling tools and both pointer representations.
+- The command covers all targets, including tests and examples, of every workspace crate except `tsrs_fourslash`.
+  That crate is mostly 750k lines of generated Go test translations and has its own generator and build gates.
+- Also check `--all-features` when changing lint policy. It enables `plain-ptrs`, so check optional features with
+  compressed pointers separately. These scopes include profiling tools and both pointer representations.
 - Workspace crates declare `publish = false`; missing crates.io metadata does not need a global exception.
 - Generated Rust is linted; fix its generator when Clippy finds something. When generated code intentionally needs
   an exception, emit the smallest reasoned `#[expect]` from the generator.
@@ -88,7 +87,7 @@ Test files, the generated fourslash crate and generated files are not scanned.
 | Clones | `redundant_clone`, `clone_on_copy`, `implicit_clone`, `clone_on_ref_ptr`, `assigning_clones`, `cloned_instead_of_copied` | Go copies pointers; a port turns many of those into `.clone()`. With these on, a `.clone()` that remains is a real copy, and a reference-count bump reads `Arc::clone(&x)`, which matters on the paths the checker threads share. Bun, oxc, Rolldown, Ruff, Biome. |
 | Allocations | `format_push_string`, `inefficient_to_string`, `needless_collect`, `unnecessary_box_returns`, `rc_buffer`, `vec_box`, `stable_sort_primitive` | A temporary `String`, `Vec` or `Box` that the code did not need. Bun, oxc, Biome. |
 | Arguments and stack | `needless_pass_by_value`, `trivially_copy_pass_by_ref`, `large_types_passed_by_value`, `large_stack_arrays`, `large_stack_frames`, `inline_always` | The signature table in PORTING.md, checked: `&str` and `&[T]` in, small `Copy` values by value. `#[inline(always)]` needs a measurement, as in oxc, where each one carries `#[expect(clippy::inline_always)]` and a comment. Bun, Biome. |
-| Helper signatures | `unused_self`, `needless_pass_by_ref_mut`, `unnecessary_wraps` | Helpers only request the receiver, mutability and optional or fallible result they need. Required callback and interface signatures use a local, reasoned `#[expect]`. |
+| Helper signatures | `unused_self`, `self_only_used_in_recursion`, `needless_pass_by_ref_mut`, `unnecessary_wraps` | Helpers only request the receiver, mutability and optional or fallible result they need; recursive helpers that never access instance state are associated functions. Required callback and interface signatures use a local, reasoned `#[expect]`. |
 | Branches | `single_match`, `single_match_else`, `redundant_else`, `collapsible_match`, `if_same_then_else` | Simplify branches while preserving the Go source's evaluation order and side effects. |
 | Hashing | `disallowed_types` (`std::collections::HashMap` / `HashSet`), `set_contains_or_insert`, `zero_sized_map_values`, `iter_over_hash_type` | PORTING.md already requires `FxHashMap`; std's maps use SipHash. `iter_over_hash_type` flags iterating a hash map or set: the order must never reach a diagnostic or emitted text (sort, or use `OrderedMap`). oxc, Rolldown, rust-analyzer, Bun ban the std maps; Ruff uses `iter_over_hash_type`. |
 | Locks and threads | `mutex_atomic`, `mutex_integer`, `rc_mutex`, `significant_drop_in_scrutinee`, `non_send_fields_in_send_ty` | A mutex around a flag or counter, a lock guard held across a whole `match`, and every new `unsafe impl Send` over non-`Send` fields (the "by decree" impls in PORTING.md "Threading") becomes a reviewed line. |

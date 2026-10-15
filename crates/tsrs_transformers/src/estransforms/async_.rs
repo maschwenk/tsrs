@@ -233,7 +233,7 @@ impl asyncTransformer {
     fn visit_catch_clause_in_async_body(&self, node: P<Node>) -> Option<P<Node>> {
         let mut catch_clause_names: FxHashSet<String> = FxHashSet::default();
         if let Some(variable_declaration) = node.as_catch_clause().variable_declaration {
-            self.record_declaration_name(variable_declaration, &mut catch_clause_names);
+            Self::record_declaration_name(variable_declaration, &mut catch_clause_names);
         }
 
         // names declared in a catch variable are block scoped
@@ -312,9 +312,8 @@ impl asyncTransformer {
     fn visit_for_statement_in_async_body(&self, node: P<Node>) -> P<Node> {
         let n = node.as_for_statement();
         let initializer = n.initializer;
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        let visited_initializer = if initializer.is_some() && self.is_variable_declaration_list_with_colliding_name(initializer) {
-            self.visit_variable_declaration_list_with_colliding_names(initializer.unwrap(), false)
+        let visited_initializer = if let Some(initializer) = initializer && self.is_variable_declaration_list_with_colliding_name(Some(initializer)) {
+            self.visit_variable_declaration_list_with_colliding_names(initializer, false)
         } else {
             self.visitor().visit_node(n.initializer)
         };
@@ -565,8 +564,7 @@ impl asyncTransformer {
     }
 
     // async.go:508
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    fn record_declaration_name(&self, node: P<Node>, names: &mut FxHashSet<String>) {
+    fn record_declaration_name(node: P<Node>, names: &mut FxHashSet<String>) {
         let Some(name) = node.name() else {
             return;
         };
@@ -575,7 +573,7 @@ impl asyncTransformer {
         } else if ast::is_binding_pattern(name) {
             for &element in name.as_binding_pattern().elements.nodes() {
                 if !ast::is_omitted_expression(element) {
-                    self.record_declaration_name(element, names);
+                    Self::record_declaration_name(element, names);
                 }
             }
         }
@@ -833,7 +831,7 @@ impl asyncTransformer {
 
         let mut enclosing_function_parameter_names: FxHashSet<String> = FxHashSet::default();
         for &parameter in node.parameters() {
-            self.record_declaration_name(parameter, &mut enclosing_function_parameter_names);
+            Self::record_declaration_name(parameter, &mut enclosing_function_parameter_names);
         }
         let saved_enclosing_function_parameter_names = self.enclosing_function_parameter_names.replace(Some(enclosing_function_parameter_names));
 

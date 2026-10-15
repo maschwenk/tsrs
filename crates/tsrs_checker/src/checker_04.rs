@@ -682,7 +682,7 @@ impl Checker {
         // Grammar checking
         self.check_grammar_modifiers(node);
         self.check_type_name_is_reserved(node.name().unwrap(), &diagnostics::Type_alias_name_cannot_be_0);
-        if !self.container_allows_block_scoped_variable(node.parent().unwrap()) {
+        if !Self::container_allows_block_scoped_variable(node.parent().unwrap()) {
             self.grammar_error_on_node(node, &diagnostics::X_0_declarations_can_only_be_declared_inside_a_block, &[&"type"]);
         }
         self.check_exports_on_merged_declarations(node);
@@ -2011,7 +2011,7 @@ impl Checker {
             let t = self.get_string_literal_type(s);
             return self.get_fresh_type_of_literal_type(t);
         }
-        if self.is_const_context(node) || self.is_template_literal_context(node) || {
+        if self.is_const_context(node) || Self::is_template_literal_context(node) || {
             let contextual_type = self.get_contextual_type(node, ContextFlags::None).unwrap_or(self.unknown_type);
             some_type(self, contextual_type, super::checker::Checker::is_template_literal_contextual_type)
         } {
@@ -2021,10 +2021,9 @@ impl Checker {
     }
 
     // checker.go:8175
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn is_template_literal_context(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_template_literal_context(node: P<Node>) -> bool {
         let parent = node.parent().unwrap();
-        is_parenthesized_expression(parent) && self.is_template_literal_context(parent)
+        is_parenthesized_expression(parent) && Self::is_template_literal_context(parent)
             || is_element_access_expression(parent) && parent.as_element_access_expression().argument_expression == node
     }
 
@@ -2476,7 +2475,7 @@ impl Checker {
         }
         if let Some(declaration) = sig.declaration() {
             if self.is_deprecated_declaration(declaration) {
-                let suggestion_node = self.get_deprecated_suggestion_node(node);
+                let suggestion_node = Self::get_deprecated_suggestion_node(node);
                 let name = try_get_property_access_or_identifier_to_string(get_invoked_expression(node));
                 let signature_string = self.signature_to_string(sig);
                 self.add_deprecated_suggestion_with_signature(suggestion_node.unwrap(), declaration, &name, &signature_string);

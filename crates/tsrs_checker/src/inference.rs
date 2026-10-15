@@ -1844,7 +1844,7 @@ impl Checker {
         if same {
             return supertype;
         }
-        let nullable_flags = self.get_combined_type_flags(types) & TypeFlags::Nullable;
+        let nullable_flags = Self::get_combined_type_flags(types) & TypeFlags::Nullable;
         Some(self.get_nullable_type(supertype.unwrap(), nullable_flags))
     }
 
@@ -1888,12 +1888,11 @@ impl Checker {
     }
 
     // inference.go:1590
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_combined_type_flags(&mut self, types: &[P<Type>]) -> TypeFlags {
+    pub(crate) fn get_combined_type_flags(types: &[P<Type>]) -> TypeFlags {
         let mut flags = TypeFlags::None;
         for &t in types {
             if t.flags().intersects(TypeFlags::Union) {
-                flags |= self.get_combined_type_flags(t.types());
+                flags |= Self::get_combined_type_flags(t.types());
             } else {
                 flags |= t.flags();
             }

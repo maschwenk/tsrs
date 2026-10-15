@@ -1371,13 +1371,12 @@ impl Relater {
                     let name_type = c.get_name_type_from_mapped_type(target_type);
                     let constraint_type = c.get_constraint_type_from_mapped_type(target_type);
                     let target_keys;
-                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                    if name_type.is_some() && checker::Checker::is_mapped_type_with_keyof_constraint_declaration(target_type) {
+                    if let Some(name_type) = name_type && checker::Checker::is_mapped_type_with_keyof_constraint_declaration(target_type) {
                         // we need to get the apparent mappings and union them with the generic mappings, since some properties may be
                         // missing from the `constraintType` which will otherwise be mapped in the object
-                        let mapped_keys = c.get_apparent_mapped_type_keys(name_type.unwrap(), target_type);
+                        let mapped_keys = c.get_apparent_mapped_type_keys(name_type, target_type);
                         // We still need to include the non-apparent (and thus still generic) keys in the target side of the comparison (in case they're in the source side)
-                        target_keys = c.get_union_type(&[mapped_keys, name_type.unwrap()]);
+                        target_keys = c.get_union_type(&[mapped_keys, name_type]);
                     } else if let Some(name_type) = name_type {
                         target_keys = name_type;
                     } else {
@@ -1584,9 +1583,8 @@ impl Relater {
                 // allow assignments of index types of identical (or similar enough) mapped types.
                 // eg, `keyof {[X in keyof A]: Obj[X]}` should be assignable to `keyof {[Y in keyof A]: Tup[Y]}` because both map over the same set of keys (`keyof A`).
                 // Without this source-side breakdown, a `keyof {[X in keyof A]: Obj[X]}` style type won't be assignable to anything except itself, which is much too strict.
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                let source_mapped_keys = if name_type.is_some() && checker::Checker::is_mapped_type_with_keyof_constraint_declaration(mapped_type) {
-                    c.get_apparent_mapped_type_keys(name_type.unwrap(), mapped_type)
+                let source_mapped_keys = if let Some(name_type) = name_type && checker::Checker::is_mapped_type_with_keyof_constraint_declaration(mapped_type) {
+                    c.get_apparent_mapped_type_keys(name_type, mapped_type)
                 } else if let Some(name_type) = name_type {
                     name_type
                 } else {
@@ -2185,7 +2183,6 @@ impl Relater {
         result
     }
 
-    #[expect(clippy::too_many_arguments, reason = "the tail of properties_related_to, split off to return its buffer to the pool")]
     #[expect(clippy::option_option, reason = "The outer option records whether a result is available; the inner option records an absent value.")]
     fn properties_related_to_rest(&self, c: &mut Checker, source: P<Type>, target: P<Type>, report_errors: bool, excluded_properties: &Set<String>, optionals_only: bool, intersection_state: IntersectionState, require_optional_properties: bool, unmatched_property: Option<P<Symbol>>, found: &[Option<Option<P<Symbol>>>]) -> Ternary {
         let mut result = Ternary::True;
@@ -2857,14 +2854,13 @@ impl Relater {
         };
         if target_flags.intersects(TypeFlags::TypeParameter) && target != c.marker_super_type_for_check && target != c.marker_sub_type_for_check {
             let constraint = c.get_base_constraint_of_type(target);
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if is_distributed_type_parameter(target) && c.is_type_assignable_to(generalized_source, target.as_type_parameter().constraint.get().unwrap()) {
                 self.report_error(c, &diagnostics::X_0_is_only_assignable_to_the_non_distributed_1_but_1_has_been_distributed_here, &[&generalized_source_type, &target_type]);
-            } else if constraint.is_some() && c.is_type_assignable_to(generalized_source, constraint.unwrap()) {
-                let constraint_string = c.type_to_string_exported(constraint.unwrap());
+            } else if let Some(constraint) = constraint && c.is_type_assignable_to(generalized_source, constraint) {
+                let constraint_string = c.type_to_string_exported(constraint);
                 self.report_error(c, &diagnostics::X_0_is_assignable_to_the_constraint_of_type_1_but_1_could_be_instantiated_with_a_different_subtype_of_constraint_2, &[&generalized_source_type, &target_type, &constraint_string]);
-            } else if constraint.is_some() && c.is_type_assignable_to(source, constraint.unwrap()) {
-                let constraint_string = c.type_to_string_exported(constraint.unwrap());
+            } else if let Some(constraint) = constraint && c.is_type_assignable_to(source, constraint) {
+                let constraint_string = c.type_to_string_exported(constraint);
                 self.report_error(c, &diagnostics::X_0_is_assignable_to_the_constraint_of_type_1_but_1_could_be_instantiated_with_a_different_subtype_of_constraint_2, &[&source_type, &target_type, &constraint_string]);
             } else {
                 self.error_chain.set(None); // Only report this error once

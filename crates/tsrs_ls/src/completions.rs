@@ -1291,7 +1291,6 @@ impl getCompletionDataState {
 
     // Aggregates relevant symbols for completion in object literals in type argument positions.
     // completions.go:1026
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     #[expect(clippy::unnecessary_wraps, reason = "Completion branches share a fallible result with branches that resolve symbols or validate requests.")]
     fn try_get_object_type_literal_in_type_argument_completion_symbols(&mut self, type_checker: &mut Checker) -> Result<globalsSearch, lsproto::Error> {
         let Some(type_literal_node) = try_get_type_literal_node(self.context_token) else {
@@ -1299,7 +1298,7 @@ impl getCompletionDataState {
         };
 
         let intersection_type_node = if ast::is_intersection_type_node(type_literal_node.parent().unwrap()) { type_literal_node.parent() } else { None };
-        let container_type_node = if intersection_type_node.is_some() { intersection_type_node.unwrap() } else { type_literal_node };
+        let container_type_node = intersection_type_node.unwrap_or(type_literal_node);
 
         let Some(container_expected_type) = get_constraint_of_type_argument_property(Some(container_type_node), type_checker) else {
             return Ok(globalsSearch::Continue);
@@ -1324,7 +1323,6 @@ impl getCompletionDataState {
     // Aggregates relevant symbols for completion in object literals and object binding patterns.
     // Relevant symbols are stored in the captured 'symbols' variable.
     // completions.go:1071
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     #[expect(clippy::unnecessary_wraps, reason = "Completion branches share a fallible result with branches that resolve symbols or validate requests.")]
     fn try_get_object_like_completion_symbols(&mut self, l: &LanguageService, ctx: &Context, type_checker: &mut Checker) -> Result<globalsSearch, lsproto::Error> {
         if let Some(context_token) = self.context_token {
@@ -1355,7 +1353,7 @@ impl getCompletionDataState {
                 return Ok(globalsSearch::Continue);
             };
             let completions_type = type_checker.get_contextual_type_exported(object_like_container, ContextFlags::IgnoreNodeInferences);
-            let t = if completions_type.is_some() { completions_type.unwrap() } else { instantiated_type };
+            let t = completions_type.unwrap_or(instantiated_type);
             let string_index_type = type_checker.get_string_index_type(t);
             let number_index_type = type_checker.get_number_index_type(t);
             self.is_new_identifier_location = string_index_type.is_some() || number_index_type.is_some();

@@ -455,9 +455,7 @@ impl LanguageService {
             }
         }
 
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if origin_is_promise(origin) && data.property_access_to_convert.is_some() {
-            let property_access_to_convert = data.property_access_to_convert.unwrap();
+        if origin_is_promise(origin) && let Some(property_access_to_convert) = data.property_access_to_convert {
             if insert_text.is_empty() {
                 insert_text.clone_from(&name);
             }

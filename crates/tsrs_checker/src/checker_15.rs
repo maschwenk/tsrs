@@ -970,7 +970,7 @@ impl Checker {
                         break 'keep false;
                     };
                     if ast::is_property_assignment(p) {
-                        break 'keep self.is_possibly_discriminant_value(p.initializer().unwrap())
+                        break 'keep Self::is_possibly_discriminant_value(p.initializer().unwrap())
                             && self.is_discriminant_property(Some(contextual_type), symbol.name());
                     }
                     if ast::is_shorthand_property_assignment(p) {
@@ -1002,7 +1002,7 @@ impl Checker {
                 if p.symbol().is_some()
                     && ast::is_property_assignment(p)
                     && p.symbol().unwrap().name() == key_property_name
-                    && self.is_possibly_discriminant_value(p.initializer().unwrap())
+                    && Self::is_possibly_discriminant_value(p.initializer().unwrap())
                 {
                     Some(p)
                 } else {
@@ -1023,18 +1023,17 @@ impl Checker {
     // expressions we check to those that don't depend on their contextual type in order not to cause
     // recursive (and possibly infinite) invocations of getContextualType.
     // checker.go:31291
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn is_possibly_discriminant_value(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_possibly_discriminant_value(node: P<Node>) -> bool {
         match node.kind() {
             Kind::StringLiteral | Kind::NumericLiteral | Kind::BigIntLiteral | Kind::NoSubstitutionTemplateLiteral | Kind::TemplateExpression
             | Kind::TrueKeyword | Kind::FalseKeyword | Kind::NullKeyword | Kind::Identifier | Kind::UndefinedKeyword => {
                 return true;
             }
             Kind::PropertyAccessExpression | Kind::ParenthesizedExpression => {
-                return self.is_possibly_discriminant_value(node.expression().unwrap());
+                return Self::is_possibly_discriminant_value(node.expression().unwrap());
             }
             Kind::JsxExpression => {
-                return node.expression().is_none() || self.is_possibly_discriminant_value(node.expression().unwrap());
+                return node.expression().is_none() || Self::is_possibly_discriminant_value(node.expression().unwrap());
             }
             _ => {}
         }

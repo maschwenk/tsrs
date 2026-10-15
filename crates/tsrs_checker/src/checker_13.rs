@@ -96,7 +96,7 @@ impl Checker {
             }
         }
         if origin.is_none() && includes.intersects(TypeFlags::Union) {
-            let named_unions = self.add_named_unions(&[], types);
+            let named_unions = Self::add_named_unions(&[], types);
             let mut reduced_types: Vec<P<Type>> = Vec::new();
             if (named_unions.len() > 1 || type_set.len() > 8) && self.program.source_files_complete() {
                 // tsrs-only: under a total order `contains_type` finds exactly the identical type, so one set of the
@@ -277,8 +277,7 @@ impl Checker {
     }
 
     // checker.go:26294
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn add_named_unions(&mut self, named_unions: &[P<Type>], types: &[P<Type>]) -> Vec<P<Type>> {
+    pub(crate) fn add_named_unions(named_unions: &[P<Type>], types: &[P<Type>]) -> Vec<P<Type>> {
         let mut named_unions = named_unions.to_vec();
         for &t in types {
             if t.flags().intersects(TypeFlags::Union) {
@@ -287,7 +286,7 @@ impl Checker {
                 if t.alias().is_some() || origin.is_some_and(|o| !o.flags().intersects(TypeFlags::Union)) {
                     append_if_unique(&mut named_unions, t);
                 } else if let Some(origin) = origin.filter(|o| o.flags().intersects(TypeFlags::Union)) {
-                    named_unions = self.add_named_unions(&named_unions, origin.types());
+                    named_unions = Self::add_named_unions(&named_unions, origin.types());
                 }
             }
         }
@@ -1596,7 +1595,7 @@ impl Checker {
         let mut types: Vec<P<Type>> = Vec::with_capacity(props.len() + index_infos.len());
         types.extend(props.iter().map(|&prop| self.get_literal_type_from_property(prop, include, false)));
         types.extend(index_infos.iter().filter_map(|&info| {
-            if info != self.enum_number_index_info && self.is_key_type_included(info.key_type(), include) {
+            if info != self.enum_number_index_info && Self::is_key_type_included(info.key_type(), include) {
                 if info.key_type() == self.string_type && include.intersects(TypeFlags::Number) {
                     Some(self.string_or_number_type)
                 } else {
@@ -1663,10 +1662,9 @@ impl Checker {
     }
 
     // checker.go:27259
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn is_key_type_included(&mut self, key_type: P<Type>, include: TypeFlags) -> bool {
+    pub(crate) fn is_key_type_included(key_type: P<Type>, include: TypeFlags) -> bool {
         key_type.flags().intersects(include)
-            || key_type.flags().intersects(TypeFlags::Intersection) && key_type.types().iter().any(|&t| self.is_key_type_included(t, include))
+            || key_type.flags().intersects(TypeFlags::Intersection) && key_type.types().iter().any(|&t| Self::is_key_type_included(t, include))
     }
 }
 
@@ -1989,14 +1987,12 @@ impl Checker {
             }
             let prop = self.get_property_of_type(object_type, &prop_name);
             if let Some(prop) = prop {
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if access_flags.intersects(AccessFlags::ReportDeprecated)
-                    && access_node.is_some()
+                    && let Some(access_node) = access_node
                     && !prop.declarations().is_empty()
                     && self.is_deprecated_symbol(prop)
-                    && self.is_uncalled_function_reference(access_node.unwrap(), prop)
+                    && self.is_uncalled_function_reference(access_node, prop)
                 {
-                    let access_node = access_node.unwrap();
                     let deprecated_node;
                     if let Some(access_expression) = access_expression {
                         deprecated_node = access_expression.as_element_access_expression().argument_expression;
@@ -2038,9 +2034,8 @@ impl Checker {
             }
             if every_type(self, object_type, |_, t| is_tuple_type(t)) && is_numeric_literal_name(&prop_name) {
                 let index = jsnum::from_string(&prop_name);
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                if access_node.is_some() && every_type(self, object_type, |_, t| !t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
-                    let index_node = get_index_node_for_access_expression(access_node.unwrap());
+                if let Some(access_node) = access_node && every_type(self, object_type, |_, t| !t.target_tuple_type().combined_flags.get().intersects(ElementFlags::Variable)) && !access_flags.intersects(AccessFlags::AllowMissing) {
+                    let index_node = get_index_node_for_access_expression(access_node);
                     if is_tuple_type(object_type) {
                         if index < jsnum::Number(0.0) {
                             self.error(index_node, &diagnostics::A_tuple_type_cannot_be_indexed_with_a_negative_value, &[]);
@@ -2088,9 +2083,8 @@ impl Checker {
                     }
                     return None;
                 }
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                if access_node.is_some() && index_info.key_type() == self.string_type && !self.is_type_assignable_to_kind(index_type, TypeFlags::String | TypeFlags::Number) {
-                    let index_node = get_index_node_for_access_expression(access_node.unwrap());
+                if let Some(access_node) = access_node && index_info.key_type() == self.string_type && !self.is_type_assignable_to_kind(index_type, TypeFlags::String | TypeFlags::Number) {
+                    let index_node = get_index_node_for_access_expression(access_node);
                     let index_string = self.type_to_string_exported(index_type);
                     self.error(index_node, &diagnostics::Type_0_cannot_be_used_as_an_index_type, &[&index_string]);
                     if access_flags.intersects(AccessFlags::IncludeUndefined) {

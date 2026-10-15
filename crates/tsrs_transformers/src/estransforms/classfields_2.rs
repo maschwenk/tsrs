@@ -48,9 +48,8 @@ impl classFieldsTransformer {
         // Register class alias BEFORE visiting members (Strada registers after, since its
         // onSubstituteNode runs at emit time; we substitute eagerly during transformation).
         let alias = self.get_class_lexical_environment().class_constructor.get();
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if is_class_with_constructor_reference && alias.is_some() {
-            self.class_aliases.borrow_mut().insert(self.emit_context().most_original(Some(node)).unwrap(), alias.unwrap());
+        if is_class_with_constructor_reference && let Some(alias) = alias {
+            self.class_aliases.borrow_mut().insert(self.emit_context().most_original(Some(node)).unwrap(), alias);
         }
 
         let mut modifiers = self.modifier_visitor().visit_modifiers(node.modifiers());

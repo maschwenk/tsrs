@@ -5924,7 +5924,6 @@ fn symbol_kind_to_lowercase(kind: lsproto::SymbolKind) -> String {
 
 // Go passes a possibly nil `*scriptInfo` and dereferences it when formatting a span.
 // fourslash.go:3468
-#[expect(clippy::too_many_arguments, reason = "generated fourslash harness API mirrors TypeScript's test runner signature")]
 fn format_call_hierarchy_item(
     t: &T,
     f: &mut FourslashTest,

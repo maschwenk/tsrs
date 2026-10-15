@@ -601,7 +601,7 @@ impl Checker {
         let Some(node) = node else {
             return false;
         };
-        if self.is_or_has_generic_conditional(target) {
+        if Self::is_or_has_generic_conditional(target) {
             return false;
         }
         if self.compiler_options.no_check.is_true() {
@@ -664,10 +664,9 @@ impl Checker {
     }
 
     // relater.go:474
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn is_or_has_generic_conditional(&mut self, t: P<Type>) -> bool {
+    pub(crate) fn is_or_has_generic_conditional(t: P<Type>) -> bool {
         t.flags().intersects(TypeFlags::Conditional)
-            || (t.flags().intersects(TypeFlags::Intersection) && t.types().iter().any(|&t| self.is_or_has_generic_conditional(t)))
+            || (t.flags().intersects(TypeFlags::Intersection) && t.types().iter().any(|&t| Self::is_or_has_generic_conditional(t)))
     }
 
     // relater.go:478
@@ -2089,7 +2088,6 @@ impl Checker {
     // generic type are structurally compared. We infer the variance information by comparing
     // instantiations of the generic type for type arguments with known relations. The function
     // returns an empty slice when invoked recursively for the given generic type.
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn get_variances_worker(&mut self, symbol: P<Symbol>, type_parameters: &'static [P<Type>]) -> Vec<VarianceFlags> {
         let links = self.variance_links.get(symbol);
         let variances_len = |links: P<VarianceLinks>| links.variances.get().map_or(0, <[types::VarianceFlags]>::len);
@@ -2167,12 +2165,11 @@ impl Checker {
                 if self.variance_stack.is_empty() {
                     self.resolution_start = save_resolution_start;
                 }
-            } else {
+            } else if let Some(stack_index) = stack_index {
                 // We've detected a circularity. Since we may compute different variances depending on where
                 // we enter a circularity, we find the generic type with the "smallest" symbol in the circular
                 // region of the variance stack and restart the computation from there if necessary. This
                 // ensures stable results for circular generic types.
-                let stack_index = stack_index.unwrap();
                 let mut min_index = stack_index;
                 for i in stack_index + 1..self.variance_stack.len() {
                     let a = self.variance_stack[i].symbol;
@@ -2722,17 +2719,16 @@ impl Checker {
         let mut infos: Vec<TupleElementInfo> = Vec::with_capacity(length);
         for i in 0..length {
 
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            let flags = if rest_type.is_none() || i < length - 1 {
+            let flags = if let Some(rest_type) = rest_type && i == length - 1 {
+                types.push(rest_type);
+                ElementFlags::Variadic
+            } else {
                 types.push(self.get_type_at_position(source, i + pos));
                 if i + pos < min_argument_count {
                     ElementFlags::Required
                 } else {
                     ElementFlags::Optional
                 }
-            } else {
-                types.push(rest_type.unwrap());
-                ElementFlags::Variadic
             };
             let labeled_declaration = self.get_nameable_declaration_at_position(source, i + pos);
             infos.push(TupleElementInfo {
@@ -2897,14 +2893,13 @@ impl Checker {
         if is_tuple_type(rest_type) {
             let index = pos - param_count;
             let element_info = rest_type.target_tuple_type().element_infos()[index];
-            return self.get_tuple_element_label(element_info, Some(rest_parameter), index);
+            return Self::get_tuple_element_label(element_info, Some(rest_parameter), index);
         }
         rest_parameter.name().to_string()
     }
 
     // relater.go:1976
     pub(crate) fn get_tuple_element_label(
-        &mut self,
         element_info: TupleElementInfo,
         rest_symbol: Option<P<Symbol>>,
         index: usize,
@@ -2915,7 +2910,7 @@ impl Checker {
         if let Some(rest_symbol) = rest_symbol {
             if let Some(value_declaration) = rest_symbol.value_declaration() {
                 if is_parameter_declaration(value_declaration) {
-                    return self.get_tuple_element_label_from_binding_element(value_declaration, index, element_info.flags);
+                    return Self::get_tuple_element_label_from_binding_element(value_declaration, index, element_info.flags);
                 }
             }
         }
@@ -2924,9 +2919,7 @@ impl Checker {
     }
 
     // relater.go:1992
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
     pub(crate) fn get_tuple_element_label_from_binding_element(
-        &mut self,
         node: P<Node>,
         index: usize,
         element_flags: ElementFlags,
@@ -2979,10 +2972,10 @@ impl Checker {
                         if index < element_count {
                             let element = elements[index];
                             if is_binding_element(element) {
-                                return self.get_tuple_element_label_from_binding_element(element, index, element_flags);
+                                return Self::get_tuple_element_label_from_binding_element(element, index, element_flags);
                             }
                         } else if last_element_is_binding_element_rest {
-                            return self.get_tuple_element_label_from_binding_element(
+                            return Self::get_tuple_element_label_from_binding_element(
                                 last_element.unwrap(),
                                 index - element_count,
                                 element_flags,

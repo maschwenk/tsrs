@@ -341,8 +341,7 @@ impl Printer {
     // literal expressions or binary plus expressions that all share the same literal kind.
     // It is used to determine whether the right-hand operand of a binary plus expression can be
     // emitted without parentheses.
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_literal_kind_of_binary_plus_operand(&self, node: P<Node>) -> Kind {
+    pub(crate) fn get_literal_kind_of_binary_plus_operand(node: P<Node>) -> Kind {
         let node = skip_partially_emitted_expressions(node);
 
         if is_literal_kind(node.kind()) {
@@ -357,9 +356,9 @@ impl Printer {
                 ////	return n.cachedLiteralKind;
                 ////}
 
-                let left_kind = self.get_literal_kind_of_binary_plus_operand(n.left());
+                let left_kind = Self::get_literal_kind_of_binary_plus_operand(n.left());
                 let mut literal_kind = Kind::Unknown;
-                if is_literal_kind(left_kind) && left_kind == self.get_literal_kind_of_binary_plus_operand(n.right()) {
+                if is_literal_kind(left_kind) && left_kind == Self::get_literal_kind_of_binary_plus_operand(n.right()) {
                     literal_kind = left_kind;
                 }
 
@@ -371,7 +370,7 @@ impl Printer {
         Kind::Unknown
     }
 
-    pub(crate) fn get_binary_expression_precedence(&self, node: P<Node>) -> (OperatorPrecedence, OperatorPrecedence) {
+    pub(crate) fn get_binary_expression_precedence(node: P<Node>) -> (OperatorPrecedence, OperatorPrecedence) {
         let n = node.as_binary_expression();
         let precedence = get_expression_precedence(node);
         let mut left_prec = precedence;
@@ -419,8 +418,8 @@ impl Printer {
             }
             OperatorPrecedence::Additive => 'case: {
                 if n.operator_token().kind() == Kind::PlusToken && is_binary_operation(n.right(), Kind::PlusToken) {
-                    let left_kind = self.get_literal_kind_of_binary_plus_operand(n.left());
-                    if is_literal_kind(left_kind) && left_kind == self.get_literal_kind_of_binary_plus_operand(n.right()) {
+                    let left_kind = Self::get_literal_kind_of_binary_plus_operand(n.left());
+                    if is_literal_kind(left_kind) && left_kind == Self::get_literal_kind_of_binary_plus_operand(n.right()) {
                         // No need to parenthesize the right operand when the binary operator
                         // is plus (+) if both the left and right operands consist solely of either
                         // literals of the same kind or binary plus (+) expressions for literals of
@@ -452,7 +451,7 @@ impl Printer {
 
     pub(crate) fn emit_binary_expression(&mut self, node: P<Node>) {
         let n = node.as_binary_expression();
-        let (mut left_prec, mut right_prec) = self.get_binary_expression_precedence(node);
+        let (mut left_prec, mut right_prec) = Self::get_binary_expression_precedence(node);
         let emitted_left = skip_partially_emitted_expressions(n.left());
         if node_is_synthesized(emitted_left)
             && emitted_left.kind() == Kind::BinaryExpression

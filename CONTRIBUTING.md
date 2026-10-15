@@ -29,7 +29,7 @@ cargo build --profile fast -p tsrs_cli -p tsrs_testrunner
 ./target/fast/tsrs -p path/to/project             # like `tsc` (emits; add --noEmit to only type check)
 cargo check --workspace                           # must be 0 errors, 0 warnings (CI sets build.warnings=deny)
 cargo check -p tsrs_wasm --target wasm32-wasip1   # the WebAssembly build still compiles (notes/wasm-build.md)
-cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
+cargo clippy --workspace --locked --exclude tsrs_fourslash --all-targets --config 'build.warnings="deny"' -- -D dead-code
 tools/lint/source.py                              # unsafe Send/Sync inventory, comments on weakened atomic orderings
 tools/gen-check.sh                                # generated code matches its generator (change the generator, then --write)
 ```

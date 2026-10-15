@@ -149,12 +149,12 @@ impl NodeBuilderImpl {
 }
 
 // Go's `getUniqAssociatedNamesFromTupleType` closure in getExpandedParameters.
-fn get_uniq_associated_names_from_tuple_type(c: &mut Checker, t: P<Type>, rest_symbol: P<Symbol>) -> Vec<String> {
+fn get_uniq_associated_names_from_tuple_type(t: P<Type>, rest_symbol: P<Symbol>) -> Vec<String> {
     let element_infos = t.target().unwrap().as_tuple_type().element_infos.get();
     let mut names: Vec<String> = element_infos
         .iter()
         .enumerate()
-        .map(|(i, &info)| c.get_tuple_element_label(info, Some(rest_symbol), i))
+        .map(|(i, &info)| Checker::get_tuple_element_label(info, Some(rest_symbol), i))
         .collect();
     if !names.is_empty() {
         let mut duplicates: Vec<usize> = vec![];
@@ -195,7 +195,7 @@ fn get_uniq_associated_names_from_tuple_type(c: &mut Checker, t: P<Type>, rest_s
 // Go's `expandSignatureParametersWithTupleMembers` closure in getExpandedParameters.
 fn expand_signature_parameters_with_tuple_members(c: &mut Checker, sig: P<Signature>, rest_type: P<Type>, rest_index: usize, rest_symbol: P<Symbol>) -> Vec<P<Symbol>> {
     let element_types = c.get_type_arguments(rest_type);
-    let associated_names = get_uniq_associated_names_from_tuple_type(c, rest_type, rest_symbol);
+    let associated_names = get_uniq_associated_names_from_tuple_type(rest_type, rest_symbol);
     let rest_params: Vec<P<Symbol>> = element_types
         .iter()
         .enumerate()
@@ -286,9 +286,8 @@ impl NodeBuilderImpl {
 
 
         let declaration = signature.declaration();
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        let return_type: P<Type> = if declaration.is_some() && !ast::node_is_synthesized(declaration.unwrap()) {
-            let symbol = c.get_symbol_of_declaration(declaration.unwrap());
+        let return_type: P<Type> = if let Some(declaration) = declaration && !ast::node_is_synthesized(declaration) {
+            let symbol = c.get_symbol_of_declaration(declaration);
             let enclosing_symbol_type = self.ctx().enclosing_symbol_types.borrow().get(&ast::get_symbol_id(symbol.unwrap())).copied();
             if let Some(t) = enclosing_symbol_type { t } else {
                 let t = c.get_return_type_of_signature(signature);
@@ -298,9 +297,7 @@ impl NodeBuilderImpl {
             c.get_return_type_of_signature(signature)
         };
         if !(suppress_any && is_type_any(Some(return_type))) {
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if !self.is_actively_expanding(c) && try_reuse && self.ctx().enclosing_declaration.get().is_some() && declaration.is_some() && !ast::node_is_synthesized(declaration.unwrap()) {
-                let declaration = declaration.unwrap();
+            if !self.is_actively_expanding(c) && try_reuse && self.ctx().enclosing_declaration.get().is_some() && let Some(declaration) = declaration && !ast::node_is_synthesized(declaration) {
                 let declaration_symbol = c.get_symbol_of_declaration(declaration).unwrap();
                 let mut restore = self.add_symbol_type_to_context(c, declaration_symbol, return_type);
                 let mut pt = self.pc.get_return_type_of_signature(declaration);
@@ -523,22 +520,19 @@ impl NodeBuilderImpl {
         let mut result: Option<P<Node>> = None;
         let mut reported_inference_fallback = false;
         // !!! expandable hover support
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if !self.is_actively_expanding(c)
             && try_reuse
             && self.ctx().enclosing_declaration.get().is_some()
-            && declaration.is_some()
-            && (ast::is_accessor(declaration.unwrap()) || (ast::has_inferred_type(declaration.unwrap()) && !ast::node_is_synthesized(declaration.unwrap()) && !t.object_flags().intersects(ObjectFlags::RequiresWidening)))
+            && let Some(declaration) = declaration
+            && (ast::is_accessor(declaration) || (ast::has_inferred_type(declaration) && !ast::node_is_synthesized(declaration) && !t.object_flags().intersects(ObjectFlags::RequiresWidening)))
         {
-            let declaration = declaration.unwrap();
             let mut remove: Option<Box<dyn FnMut(&mut Checker)>> = None;
             if let Some(symbol) = symbol {
                 remove = Some(self.add_symbol_type_to_context(c, symbol, t));
             }
             let mut pt = if ast::is_accessor(declaration) { self.pc.get_type_of_accessor(declaration) } else { self.pc.get_type_of_declaration(declaration) };
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if (pt.is_none() || pt.unwrap().kind == pseudochecker::PseudoTypeKind::NoResult) && ast::is_binary_expression(declaration) && symbol.is_some() {
-                let decl = symbol.unwrap().declarations().iter().copied().find(|&d| has_type_annotation(Some(d)));
+            if pt.is_none_or(|pt| pt.kind == pseudochecker::PseudoTypeKind::NoResult) && ast::is_binary_expression(declaration) && let Some(symbol) = symbol {
+                let decl = symbol.declarations().iter().copied().find(|&d| has_type_annotation(Some(d)));
                 if let Some(decl) = decl {
                     // Binary expressions have a first-in-wins type annotation system. The first one with an annotation supplies the type for the rest.
                     pt = self.pc.get_type_of_declaration(decl);
@@ -549,8 +543,8 @@ impl NodeBuilderImpl {
             if self.pseudo_type_equivalent_to_type(c, pt, Some(t), is_optional_annotated, report_errors) {
                 // !!! TODO: If annotated type node is a reference with insufficient type arguments, we should still fall back to type serialization
                 // see: canReuseTypeNodeAnnotation in strada for context
-                let ptt = self.pseudo_type_to_type(c, pt);
-                if ptt.is_some() && requires_adding_undefined && contains_non_missing_undefined_type(c, t) && !contains_non_missing_undefined_type(c, ptt.unwrap()) {
+                let ptt = Self::pseudo_type_to_type(c, pt);
+                if let Some(ptt) = ptt && requires_adding_undefined && contains_non_missing_undefined_type(c, t) && !contains_non_missing_undefined_type(c, ptt) {
                     pt = Some(pseudochecker::new_pseudo_type_union(&[pt.unwrap(), *pseudochecker::PseudoTypeUndefined]));
                 }
                 result = self.pseudo_type_to_node_with_checker_fallback(c, pt.unwrap(), t);
@@ -562,7 +556,7 @@ impl NodeBuilderImpl {
                 reported_inference_fallback = report_errors && pt.unwrap().kind == pseudochecker::PseudoTypeKind::Inferred && matches!(&pt.unwrap().data, pseudochecker::PseudoTypeData::Inferred(inferred) if !inferred.error_nodes.is_empty());
                 let mut should_add_undefined = false;
                 if requires_adding_undefined {
-                    if let Some(ptt) = self.pseudo_type_to_type(c, pt) {
+                    if let Some(ptt) = Self::pseudo_type_to_type(c, pt) {
                         should_add_undefined = !contains_non_missing_undefined_type(c, ptt);
                     } else {
                         should_add_undefined = !pseudochecker::could_already_refer_to_undefined_type(pt.unwrap());
@@ -822,9 +816,8 @@ impl NodeBuilderImpl {
                 if c.has_late_bindable_name(decl) {
                     if ast::is_binary_expression(decl) {
                         let name = ast::get_name_of_declaration(decl);
-                        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                        if name.is_some() && ast::is_element_access_expression(name.unwrap()) && ast::is_property_access_entity_name_expression(name.unwrap().as_element_access_expression().argument_expression, false /*allowJs*/) {
-                            self.track_computed_name(c, name.unwrap().as_element_access_expression().argument_expression, save_enclosing_declaration);
+                        if let Some(name) = name && ast::is_element_access_expression(name) && ast::is_property_access_entity_name_expression(name.as_element_access_expression().argument_expression, false /*allowJs*/) {
+                            self.track_computed_name(c, name.as_element_access_expression().argument_expression, save_enclosing_declaration);
                         }
                     } else {
                         self.track_computed_name(c, decl.name().unwrap().expression().unwrap(), save_enclosing_declaration);
@@ -1142,10 +1135,9 @@ impl NodeBuilderImpl {
         if is_static_method_symbol || is_non_local_function_symbol {
             let mut symbol = Some(symbol);
             let vd = symbol.unwrap().value_declaration();
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if is_function_expression_symbol && vd.is_some() && vd.unwrap().parent().is_some() && vd.unwrap().parent() != self.ctx().enclosing_declaration.get() {
+            if is_function_expression_symbol && let Some(vd) = vd && vd.parent().is_some() && vd.parent() != self.ctx().enclosing_declaration.get() {
                 // Go: `getMergedSymbol` of a nil parent symbol is nil
-                symbol = vd.unwrap().parent().unwrap().symbol().map(|s| c.get_merged_symbol(s));
+                symbol = vd.parent().unwrap().symbol().map(|s| c.get_merged_symbol(s));
             }
             // typeof is allowed only for static/non local functions
             let result = (self.ctx().flags.get().intersects(Flags::UseTypeOfFunction) || self.ctx().visited_types.borrow().has(&type_id)) // it is type of the symbol uses itself recursively
@@ -1353,7 +1345,6 @@ impl NodeBuilderImpl {
     }
 
     // nodebuilderimpl.go:3070
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn type_reference_to_type_node(&self, c: &mut Checker, t: P<Type>) -> Option<P<Node>> {
         let mut type_arguments: Vec<P<Type>> = c.get_type_arguments(t).to_vec();
         let target = t.target().unwrap();
@@ -1399,7 +1390,7 @@ impl NodeBuilderImpl {
                             } else {
                                 None
                             };
-                            let label = c.get_tuple_element_label(element_infos[i], None, i);
+                            let label = Checker::get_tuple_element_label(element_infos[i], None, i);
                             let name = self.new_identifier(c, &label, None /*symbol*/);
                             let question_token = if flags.intersects(ElementFlags::Optional) { Some(self.f.new_token(Kind::QuestionToken)) } else { None };
                             let type_node = if flags.intersects(ElementFlags::Rest) { self.f.new_array_type_node(*element) } else { *element };
@@ -1521,10 +1512,10 @@ impl NodeBuilderImpl {
             self.ctx().flags.set(self.ctx().flags.get() | Flags::ForbidIndexedAccessSymbolReferences);
             let final_ref = self.symbol_to_type_node(c, t.symbol().unwrap(), SymbolFlags::Type, type_argument_nodes);
             restore_flags(c);
-            if result_type.is_none() {
-                final_ref
+            if let Some(result_type) = result_type {
+                Some(self.append_reference_to_type(c, result_type, final_ref.unwrap()))
             } else {
-                Some(self.append_reference_to_type(c, result_type.unwrap(), final_ref.unwrap()))
+                final_ref
             }
         }
     }
@@ -1808,9 +1799,8 @@ impl NodeBuilderImpl {
                 if is_reserved_member_name(sym.name()) && !sym.flags().intersects(SymbolFlags::Class) {
                     return Some(self.f.new_type_reference_node(self.f.new_identifier(""), type_argument_nodes));
                 }
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                if type_argument_nodes.is_some() && type_argument_nodes.unwrap().nodes().len() == 1 && Some(sym) == c.global_array_type.symbol() {
-                    return Some(self.f.new_array_type_node(type_argument_nodes.unwrap().nodes()[0]));
+                if let Some(type_argument_nodes) = type_argument_nodes && type_argument_nodes.nodes().len() == 1 && Some(sym) == c.global_array_type.symbol() {
+                    return Some(self.f.new_array_type_node(type_argument_nodes.nodes()[0]));
                 }
                 return self.symbol_to_type_node(c, sym, SymbolFlags::Type, type_argument_nodes);
             }
@@ -1879,9 +1869,11 @@ impl NodeBuilderImpl {
             if let Some(symbol) = t.symbol() {
                 return self.symbol_to_type_node(c, symbol, SymbolFlags::Type, None);
             }
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            let name: String = if (t == c.marker_super_type_for_check || t == c.marker_sub_type_for_check) && c.variance_type_parameter.is_some() && c.variance_type_parameter.unwrap().symbol().is_some() {
-                format!("{}{}", if t == c.marker_sub_type_for_check { "sub-" } else { "super-" }, ast::symbol_name(c.variance_type_parameter.unwrap().symbol().unwrap()))
+            let name: String = if (t == c.marker_super_type_for_check || t == c.marker_sub_type_for_check)
+                && let Some(variance_type_parameter) = c.variance_type_parameter
+                && let Some(symbol) = variance_type_parameter.symbol()
+            {
+                format!("{}{}", if t == c.marker_sub_type_for_check { "sub-" } else { "super-" }, ast::symbol_name(symbol))
             } else {
                 "?".to_string()
             };
@@ -1900,12 +1892,11 @@ impl NodeBuilderImpl {
                 return self.type_to_type_node(c, Some(types[0]));
             }
             let type_nodes = self.map_to_type_nodes(c, &types, true /*isBareList*/);
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if type_nodes.is_some() && !type_nodes.unwrap().nodes().is_empty() {
+            if let Some(type_nodes) = type_nodes && !type_nodes.nodes().is_empty() {
                 if t.flags().intersects(TypeFlags::Union) {
-                    return Some(self.f.new_union_type_node(type_nodes.unwrap()));
+                    return Some(self.f.new_union_type_node(type_nodes));
                 }
-                return Some(self.f.new_intersection_type_node(type_nodes.unwrap()));
+                return Some(self.f.new_intersection_type_node(type_nodes));
             }
             if !self.ctx().encountered_error.get() && !self.ctx().flags.get().intersects(Flags::AllowEmptyUnionOrIntersection) {
                 self.ctx().encountered_error.set(true);

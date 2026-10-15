@@ -331,7 +331,7 @@ jobs:
 
       - parallel:
           - name: Clippy
-            run: cargo clippy --workspace --locked --exclude tsrs_fourslash --config 'build.warnings="deny"' -- -D dead-code
+            run: cargo clippy --workspace --locked --exclude tsrs_fourslash --all-targets --config 'build.warnings="deny"' -- -D dead-code
 
           # Unsafe Send/Sync inventory and comments on weakened atomic orderings (docs/RUST.md, "Source checks").
           - name: Source checks

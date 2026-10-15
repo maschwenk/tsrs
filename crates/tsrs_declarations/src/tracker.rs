@@ -121,9 +121,7 @@ impl SymbolTrackerImpl {
     pub fn report_nonlocal_augmentation(&self, containing_file: P<SourceFile>, parent_symbol: P<Symbol>, augmenting_symbol: P<Symbol>) {
         let primary_declaration = parent_symbol.declarations().iter().copied().find(|&d| ast::get_source_file_of_node(d) == Some(containing_file));
         let augmenting_declarations: Vec<P<Node>> = augmenting_symbol.declarations().iter().copied().filter(|&d| ast::get_source_file_of_node(d) != Some(containing_file)).collect();
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-        if primary_declaration.is_some() && !augmenting_declarations.is_empty() {
-            let primary_declaration = primary_declaration.unwrap();
+        if let Some(primary_declaration) = primary_declaration && !augmenting_declarations.is_empty() {
             for augmentations in augmenting_declarations {
                 let diag = create_diagnostic_for_node(augmentations, &diagnostics::Declaration_augments_declaration_in_another_file_This_cannot_be_serialized, &[]);
                 let related = create_diagnostic_for_node(primary_declaration, &diagnostics::This_is_the_declaration_being_augmented_Consider_moving_the_augmenting_declaration_into_the_same_file, &[]);

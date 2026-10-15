@@ -442,7 +442,6 @@ impl Session {
                     continue;
                 }
                 let i = path_str.rfind('.');
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
                 if i.is_none() || path_str.rfind('/') > i {
                     // Extensionless paths might be directories.
                     // For creations/changes, we can check the file system.
@@ -455,9 +454,9 @@ impl Session {
                             has_relevant_change = true;
                         }
                     }
-                } else {
+                } else if let Some(i) = i {
                     let extensions: Vec<&str> = content_mapper_extensions.iter().map(std::string::String::as_str).collect();
-                    if is_relevant_extension(&path_str[i.unwrap()..]) || tspath::file_extension_is_one_of(path_str, &extensions) {
+                    if is_relevant_extension(&path_str[i..]) || tspath::file_extension_is_one_of(path_str, &extensions) {
                         has_relevant_change = true;
                     }
                 }

@@ -108,7 +108,7 @@ impl NodeBuilderImpl {
                     // during initial checking (e.g. when the contextual type depends on inference), causing incorrect
                     // literal type preservation.
                     let contextual_type = c.get_contextual_type(d.node, ContextFlags::None);
-                    let t = self.pseudo_type_to_type(c, Some(d.const_type));
+                    let t = Self::pseudo_type_to_type(c, Some(d.const_type));
                     if let Some(t) = t {
                         let instantiated = c.instantiate_contextual_type(contextual_type, d.node, ContextFlags::None);
                         if c.is_literal_of_contextual_type(t, instantiated) {
@@ -363,7 +363,7 @@ impl NodeBuilderImpl {
             }
         }
         // If we can easily operate on just types, we should
-        let type_from_pseudo = self.pseudo_type_to_type(c, t); // note: cannot convert complex types like objects, which must be validated separately
+        let type_from_pseudo = Self::pseudo_type_to_type(c, t); // note: cannot convert complex types like objects, which must be validated separately
         if type_from_pseudo == type_ {
             return true;
         }
@@ -716,8 +716,7 @@ impl NodeBuilderImpl {
     }
 
     // pseudotypenodebuilder.go:689
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn pseudo_type_to_type(&self, c: &mut Checker, t: Option<P<PseudoType>>) -> Option<P<Type>> {
+    pub(crate) fn pseudo_type_to_type(c: &mut Checker, t: Option<P<PseudoType>>) -> Option<P<Type>> {
         // !!! TODO: only literal types currently mapped because this is only used to determine if literal contextual typing need apply to the pseudotype
         // If this is used more broadly, the implementation needs to be filled out more to handle the structural pseudotypes - signatures, objects, tuples, etc
         assert!(t.is_some(), "Attempted to realize nil pseudotype");
@@ -738,9 +737,9 @@ impl NodeBuilderImpl {
             PseudoTypeKind::MaybeConstLocation => {
                 let d = t.as_pseudo_type_maybe_const_location();
                 if c.is_const_context(d.node) {
-                    return self.pseudo_type_to_type(c, Some(d.const_type));
+                    return Self::pseudo_type_to_type(c, Some(d.const_type));
                 }
-                self.pseudo_type_to_type(c, Some(d.regular_type))
+                Self::pseudo_type_to_type(c, Some(d.regular_type))
             }
             PseudoTypeKind::Union => {
                 let mut res: Vec<P<Type>> = Vec::new();
@@ -751,7 +750,7 @@ impl NodeBuilderImpl {
                         has_elided_type = true;
                         return Some(res);
                     }
-                    let t = self.pseudo_type_to_type(c, Some(m));
+                    let t = Self::pseudo_type_to_type(c, Some(m));
                     let Some(t) = t else {
                         return None; // propagate failure
                     };

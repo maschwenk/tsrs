@@ -422,7 +422,6 @@ impl Checker {
 
     // Pattern ambient modules are merged together if they have the same pattern and identical import attributes type.
     // checker.go:1409
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn merge_pattern_ambient_modules(&mut self) {
         let mut groups_by_pattern: FxHashMap<String, Vec<usize>> = FxHashMap::default();
         // Go builds fresh `&ast.PatternAmbientModule{...}` values and mutates their Symbol; they are only published at the end.
@@ -448,8 +447,7 @@ impl Checker {
                     .or_default()
                     .push(grouped.len());
                 grouped.push((module.pattern.clone(), module.symbol));
-            } else {
-                let group_index = group_index.unwrap();
+            } else if let Some(group_index) = group_index {
                 grouped[group_index].1 = self.merge_symbol(
                     grouped[group_index].1,
                     module.symbol,

@@ -964,16 +964,13 @@ pub fn node_will_indent_child(
         | Kind::DefaultClause => return true,
         Kind::CaseBlock => return settings.indent_switch_case.is_true_or_unknown(),
         Kind::VariableDeclaration | Kind::PropertyAssignment | Kind::BinaryExpression => {
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
             if settings.indent_multi_line_object_literal_beginning_on_blank_line.is_false_or_unknown()
-                && source_file.is_some()
+                && let Some(source_file) = source_file
                 && child_kind == Kind::ObjectLiteralExpression
             {
-                return range_is_on_one_line(child.unwrap().loc(), source_file.unwrap());
+                return range_is_on_one_line(child.unwrap().loc(), source_file);
             }
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if parent.kind() == Kind::BinaryExpression && source_file.is_some() && child_kind == Kind::JsxElement {
-                let source_file = source_file.unwrap();
+            if parent.kind() == Kind::BinaryExpression && let Some(source_file) = source_file && child_kind == Kind::JsxElement {
                 let parent_start_line = scanner::get_ecma_line_of_position(
                     source_file.get(),
                     scanner::skip_trivia(
@@ -1013,9 +1010,8 @@ pub fn node_will_indent_child(
         | Kind::GetAccessor
         | Kind::SetAccessor => return child_kind != Kind::Block,
         Kind::ArrowFunction => {
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if source_file.is_some() && child_kind == Kind::ParenthesizedExpression {
-                return range_is_on_one_line(child.unwrap().loc(), source_file.unwrap());
+            if let Some(source_file) = source_file && child_kind == Kind::ParenthesizedExpression {
+                return range_is_on_one_line(child.unwrap().loc(), source_file);
             }
             return child_kind != Kind::Block;
         }

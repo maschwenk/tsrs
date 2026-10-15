@@ -335,7 +335,7 @@ fn bad_client_input_does_not_end_the_session() {
     client.send_notification(
         lsproto::TEXT_DOCUMENT_DID_CHANGE_INFO,
         lsproto::DidChangeTextDocumentParams {
-            text_document: lsproto::VersionedTextDocumentIdentifier { uri: other.clone(), version: 2 },
+            text_document: lsproto::VersionedTextDocumentIdentifier { uri: other, version: 2 },
             content_changes: vec![lsproto::TextDocumentContentChangePartialOrWholeDocument {
                 whole_document: Some(lsproto::TextDocumentContentChangeWholeDocument { text: "x".to_string() }),
                 ..Default::default()
@@ -423,7 +423,7 @@ fn will_rename_files(files: &[(&str, &str)], renames: &[(&str, &str)]) -> (Vec<(
     assert!(init_msg.error.is_none(), "Initialize failed");
     client.send_notification(lsproto::INITIALIZED_INFO, lsproto::InitializedParams::default());
     client.server.init_complete().wait();
-    let (file_name, text) = files.iter().find(|(name, _)| name.ends_with(".ts")).unwrap();
+    let (file_name, text) = files.iter().find(|(name, _)| std::path::Path::new(name).extension().is_some_and(|ext| ext.eq_ignore_ascii_case("ts"))).unwrap();
     client.send_notification(
         lsproto::TEXT_DOCUMENT_DID_OPEN_INFO,
         lsproto::DidOpenTextDocumentParams {

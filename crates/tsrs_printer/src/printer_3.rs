@@ -289,9 +289,7 @@ impl Printer {
         let skip_trailing_comments = self.comments_disabled || previous_sibling.is_some_and(|p| !self.should_emit_trailing_comments(p));
         let emit_trailing_comma = has_trailing_comma && format.intersects(ListFormat::AllowTrailingComma) && format.intersects(ListFormat::CommaDelimited);
         if emit_trailing_comma {
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if previous_sibling.is_some() && !skip_trailing_comments {
-                let previous = previous_sibling.unwrap();
+            if let Some(previous) = previous_sibling && !skip_trailing_comments {
                 self.emit_token(Kind::CommaToken, previous.end(), WriteKind::Punctuation, previous);
             } else {
                 self.write_punctuation(",");

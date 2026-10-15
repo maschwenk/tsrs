@@ -58,7 +58,6 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:52
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn create_member_from_symbol(
         &mut self,
         symbol: P<Symbol>,
@@ -113,11 +112,9 @@ impl<'a> missingMemberFixer<'a> {
                 let (node_builder, id_to_symbol) = self.create_node_builder();
                 let accessors = ast::get_all_accessor_declarations(symbol.declarations(), declaration.unwrap());
                 let mut ordered_accessors: Vec<P<Node>> = Vec::new();
-                if accessors.second_accessor.is_none() {
-                    ordered_accessors.push(accessors.first_accessor);
-                } else {
-                    ordered_accessors.push(accessors.first_accessor);
-                    ordered_accessors.push(accessors.second_accessor.unwrap());
+                ordered_accessors.push(accessors.first_accessor);
+                if let Some(second_accessor) = accessors.second_accessor {
+                    ordered_accessors.push(second_accessor);
                 }
 
                 nodes = ordered_accessors.into_iter().fold(nodes, |mut nodes, accessor| {
@@ -290,7 +287,6 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:208
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn create_signature_declaration_from_signature(
         &mut self,
         signature: P<Signature>,
@@ -419,7 +415,7 @@ impl<'a> missingMemberFixer<'a> {
 
             Kind::MethodDeclaration => {
                 let method = signature_declaration.as_method_declaration();
-                let method_name = if name.is_none() { factory.new_identifier("") } else { create_property_name(factory, name.unwrap(), quote_preference) };
+                let method_name = if let Some(name) = name { create_property_name(factory, name, quote_preference) } else { factory.new_identifier("") };
                 Some(factory.update_method_declaration(
                     signature_declaration,
                     modifiers,
@@ -453,7 +449,6 @@ impl<'a> missingMemberFixer<'a> {
     }
 
     // codeactions_missingmemberfixer.go:305
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn create_signature_declaration_from_signatures(
         &mut self,
         signatures: &[P<Signature>],
@@ -526,7 +521,7 @@ impl<'a> missingMemberFixer<'a> {
             list
         };
 
-        let method_name = if name.is_none() { factory.new_identifier("") } else { create_property_name(factory, name.unwrap(), quote_preference) };
+        let method_name = if let Some(name) = name { create_property_name(factory, name, quote_preference) } else { factory.new_identifier("") };
 
         let question_token = if optional { Some(factory.new_token(Kind::QuestionToken)) } else { None };
         let return_type = self.get_return_type_from_signatures(signatures, enclosing_declaration, node_builder, id_to_symbol);

@@ -74,7 +74,6 @@ impl Checker {
 
     // checker.go:21793
     #[cfg_attr(feature = "site-counts", track_caller)]
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn create_union_or_intersection_property(&mut self, containing_type: P<Type>, name: &str, skip_object_function_property_augment: bool) -> Option<P<Symbol>> {
         let mut prop_flags = SymbolFlags::None;
         let mut single_prop: Option<P<Symbol>> = None;
@@ -116,8 +115,7 @@ impl Checker {
                     if single_prop.is_none() {
                         single_prop = Some(prop);
                         prop_flags = tsrs_core::or_else(prop.flags() & SymbolFlags::Accessor, SymbolFlags::Property);
-                    } else if Some(prop) != single_prop {
-                        let sp = single_prop.unwrap();
+                    } else if let Some(sp) = single_prop && prop != sp {
                         let is_instantiation = self.get_target_symbol(prop) == self.get_target_symbol(sp);
                         // If the symbols are instances of one another with identical types - consider the symbols
                         // equivalent and just use the first one, which thus allows us to avoid eliding private
@@ -1048,7 +1046,6 @@ impl Checker {
     }
 
     #[inline(never)]
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     fn instantiate_type_with_alias_worker(&mut self, t: P<Type>, m: P<TypeMapper>, alias: Option<P<TypeAlias>>) -> P<Type> {
         if self.instantiation_stack.len() == 100 || self.instantiation_count >= 5_000_000 {
             // We have reached 100 recursive type instantiations, or 5M type instantiations caused by the same statement
@@ -1073,17 +1070,17 @@ impl Checker {
         let index = self.find_active_mapper(m);
         // A mapper that was not active gets a cleared cache, and nothing is stored in it for this call (the result is
         // stored only when the mapper was already active), so its lookup can only miss: no key is built for it.
-        let key = if index.is_none() {
-            self.push_active_mapper(m);
-            debug_assert!(self.active_type_mappers_caches.last().is_some_and(super::packedmap::PackedMap::is_empty));
-            None
-        } else {
+        let key = if let Some(index) = index {
             let key = active_mapper_cache_key(t, alias);
-            if let Some(cached_type) = self.active_type_mappers_caches[index.unwrap()].get(&key) {
+            if let Some(cached_type) = self.active_type_mappers_caches[index].get(&key) {
                 tsrs_core::sitecount::hit("active mapper cache (instantiateTypeWithAlias)", "hit");
                 return cached_type;
             }
             Some(key)
+        } else {
+            self.push_active_mapper(m);
+            debug_assert!(self.active_type_mappers_caches.last().is_some_and(super::packedmap::PackedMap::is_empty));
+            None
         };
         tsrs_core::sitecount::hit(
             "active mapper cache (instantiateTypeWithAlias)",
@@ -1432,9 +1429,8 @@ impl Checker {
             let too_complex_before = self.too_complex_reports;
             let new_alias = new_alias.alias();
             let mut new_mapper = new_type_mapper(type_parameters, alloc_slice(&type_arguments));
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && m.is_some() {
-                new_mapper = Self::combine_type_mappers(Some(new_mapper), m.unwrap());
+            if target.object_flags().intersects(ObjectFlags::SingleSignatureType) && let Some(m) = m {
+                new_mapper = Self::combine_type_mappers(Some(new_mapper), m);
             }
             let r = if target.object_flags().intersects(ObjectFlags::Reference) {
                 self.create_deferred_type_reference(t.target().unwrap(), t.as_type_reference().node.get().unwrap(), Some(new_mapper), new_alias)
@@ -2585,7 +2581,7 @@ impl Checker {
         if self.get_alias_symbol_for_type_node(node).is_some() {
             return true;
         }
-        if self.is_resolved_by_type_alias(node) {
+        if Self::is_resolved_by_type_alias(node) {
             match node.kind() {
                 Kind::ArrayType => return self.may_resolve_type_alias(node.as_array_type_node().element_type),
                 Kind::TupleType => return node.elements().iter().any(|&e| self.may_resolve_type_alias(e)),
@@ -2601,8 +2597,7 @@ impl Checker {
     // resolve their constituent types. We include SyntaxKind.TypeReference because type arguments
     // of type aliases are eagerly resolved.
     // checker.go:23718
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn is_resolved_by_type_alias(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_resolved_by_type_alias(node: P<Node>) -> bool {
         let parent = node.parent().unwrap();
         match parent.kind() {
             Kind::ParenthesizedType
@@ -2614,7 +2609,7 @@ impl Checker {
             | Kind::ConditionalType
             | Kind::TypeOperator
             | Kind::ArrayType
-            | Kind::TupleType => self.is_resolved_by_type_alias(parent),
+            | Kind::TupleType => Self::is_resolved_by_type_alias(parent),
             Kind::TypeAliasDeclaration | Kind::JSTypeAliasDeclaration => true,
             _ => false,
         }

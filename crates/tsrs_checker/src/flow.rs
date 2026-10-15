@@ -107,7 +107,6 @@ impl Checker {
     }
 
     // flow.go:81
-    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
     pub(crate) fn get_flow_type_of_reference_ex(&mut self, reference: P<Node>, declared_type: P<Type>, initial_type: P<Type>, flow_container: Option<P<Node>>, flow_node: Option<P<FlowNode>>) -> P<Type> {
         if self.flow_analysis_disabled {
             return self.error_type;
@@ -129,7 +128,7 @@ impl Checker {
         self.flow_invocation_count += 1;
         let mut census_container = None;
         let census_t0 = self.census_mut().map(|c| c.now_ns());
-        if census_t0.is_some() {
+        if let Some(census_t0) = census_t0 {
             census_container = ast::get_containing_function(reference);
             let sampled = (census_container.map_or(0, tsrs_core::P::to_bits) as u64).wrapping_mul(0x9E37_79B9_7F4A_7C15) >> 60 == 0;
             let key = sampled.then(|| {
@@ -152,7 +151,7 @@ impl Checker {
             }
             let steps = census.flow_steps;
             census.flow_stack.push((steps, 0, key));
-            census.charge_since(census_t0.unwrap());
+            census.charge_since(census_t0);
         }
         let census_span = self.census_begin(crate::workcensus::Cat::Flow, || crate::workcensus::CKey::OptNode(census_container));
         self.flow_memo.stats.walks += 1;
@@ -463,10 +462,6 @@ impl Checker {
 
     /// Stores the frame's answer under its first node, the node that ended its iteration and the checkpoints it
     /// iterated past (the type is the same at all of them; so is the height, iteration adds no depth).
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "the frame's facts, passed once at its end"
-    )]
     fn flow_memo_fill(
         &mut self,
         f: P<FlowState>,
@@ -912,7 +907,7 @@ impl Checker {
         let reference = f.ref_node();
         if self.contains_missing_type(t) && ast::is_access_expression(reference) && ast::is_property_access_expression(call_expression.expression().unwrap()) {
             let call_access = call_expression.expression().unwrap();
-            let candidate = self.get_reference_candidate(call_access.expression().unwrap());
+            let candidate = Self::get_reference_candidate(call_access.expression().unwrap());
             if self.is_matching_reference(reference.expression().unwrap(), candidate)
                 && ast::is_identifier(call_access.name().unwrap())
                 && call_access.name().unwrap().text() == "hasOwnProperty"
@@ -939,8 +934,8 @@ impl Checker {
             }
             Kind::EqualsEqualsToken | Kind::ExclamationEqualsToken | Kind::EqualsEqualsEqualsToken | Kind::ExclamationEqualsEqualsToken => {
                 let operator = binary.operator_token.kind();
-                let left = self.get_reference_candidate(binary.left);
-                let right = self.get_reference_candidate(binary.right());
+                let left = Self::get_reference_candidate(binary.left);
+                let right = Self::get_reference_candidate(binary.right());
                 if left.kind() == Kind::TypeOfExpression && ast::is_string_literal_like(right) {
                     return self.narrow_type_by_typeof(f, t, left, operator, right, assume_true);
                 }
@@ -988,7 +983,7 @@ impl Checker {
                 if ast::is_private_identifier(binary.left) {
                     return self.narrow_type_by_private_identifier_in_in_expression(f, t, expr, assume_true);
                 }
-                let target = self.get_reference_candidate(binary.right());
+                let target = Self::get_reference_candidate(binary.right());
                 let reference = f.ref_node();
                 if self.contains_missing_type(t) && ast::is_access_expression(reference) && self.is_matching_reference(reference.expression().unwrap(), target) {
                     let left_type = self.get_type_of_expression(binary.left);
@@ -1100,7 +1095,7 @@ impl Checker {
         if operator == Kind::ExclamationEqualsToken || operator == Kind::ExclamationEqualsEqualsToken {
             assume_true = !assume_true;
         }
-        let target = self.get_reference_candidate(type_of_expr.as_type_of_expression().expression);
+        let target = Self::get_reference_candidate(type_of_expr.as_type_of_expression().expression);
         if !self.is_matching_reference(f.ref_node(), target) {
             if self.strict_null_checks && self.optional_chain_contains_reference(target, f.ref_node()) && assume_true == (literal.text() != "undefined") {
                 t = self.get_adjusted_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
@@ -1294,7 +1289,7 @@ impl Checker {
     // flow.go:811
     pub(crate) fn narrow_type_by_instanceof(&mut self, f: P<FlowState>, t: P<Type>, expr: P<Node>, assume_true: bool) -> P<Type> {
         let binary = expr.as_binary_expression();
-        let left = self.get_reference_candidate(binary.left);
+        let left = Self::get_reference_candidate(binary.left);
         if !self.is_matching_reference(f.ref_node(), left) {
             if assume_true && self.strict_null_checks && self.optional_chain_contains_reference(left, f.ref_node()) {
                 return self.get_adjusted_type_with_facts(t, TypeFacts::NEUndefinedOrNull);
@@ -1484,7 +1479,7 @@ impl Checker {
     // flow.go:982
     pub(crate) fn narrow_type_by_private_identifier_in_in_expression(&mut self, f: P<FlowState>, t: P<Type>, expr: P<Node>, assume_true: bool) -> P<Type> {
         let binary = expr.as_binary_expression();
-        let target = self.get_reference_candidate(binary.right());
+        let target = Self::get_reference_candidate(binary.right());
         if !self.is_matching_reference(f.ref_node(), target) {
             return t;
         }
@@ -1983,7 +1978,7 @@ impl Checker {
             } else {
                 node.as_binary_expression().left.expression().unwrap()
             };
-            let candidate = self.get_reference_candidate(expr);
+            let candidate = Self::get_reference_candidate(expr);
             if self.is_matching_reference(f.ref_node(), candidate) {
                 let flow_type = self.get_type_at_flow_node(f, flow.antecedent().unwrap());
                 if f.memo_aborted.get() {
@@ -2143,7 +2138,7 @@ impl Checker {
     // 'x[n] = value' operation, where 'n' is an expression of type any, undefined, or a number-like type.
     // flow.go:1542
     pub(crate) fn is_evolving_array_operation_target(&mut self, node: P<Node>) -> bool {
-        let root = self.get_reference_root(node);
+        let root = Self::get_reference_root(node);
         let parent = root.parent().unwrap();
         let is_length_push_or_unshift = ast::is_property_access_expression(parent)
             && (parent.name().unwrap().text() == "length"
@@ -2553,18 +2548,17 @@ impl Checker {
     }
 
     // flow.go:1861
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_reference_candidate(&mut self, node: P<Node>) -> P<Node> {
+    pub(crate) fn get_reference_candidate(node: P<Node>) -> P<Node> {
         match node.kind() {
             Kind::ParenthesizedExpression => {
-                return self.get_reference_candidate(node.expression().unwrap());
+                return Self::get_reference_candidate(node.expression().unwrap());
             }
             Kind::BinaryExpression => match node.as_binary_expression().operator_token.kind() {
                 Kind::EqualsToken | Kind::BarBarEqualsToken | Kind::AmpersandAmpersandEqualsToken | Kind::QuestionQuestionEqualsToken => {
-                    return self.get_reference_candidate(node.as_binary_expression().left);
+                    return Self::get_reference_candidate(node.as_binary_expression().left);
                 }
                 Kind::CommaToken => {
-                    return self.get_reference_candidate(node.as_binary_expression().right());
+                    return Self::get_reference_candidate(node.as_binary_expression().right());
                 }
                 _ => {}
             },
@@ -2574,14 +2568,13 @@ impl Checker {
     }
 
     // flow.go:1876
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_reference_root(&mut self, node: P<Node>) -> P<Node> {
+    pub(crate) fn get_reference_root(node: P<Node>) -> P<Node> {
         let parent = node.parent().unwrap();
         if ast::is_parenthesized_expression(parent)
             || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind() == Kind::EqualsToken && parent.as_binary_expression().left == node
             || ast::is_binary_expression(parent) && parent.as_binary_expression().operator_token.kind() == Kind::CommaToken && parent.as_binary_expression().right() == node
         {
-            return self.get_reference_root(parent);
+            return Self::get_reference_root(parent);
         }
         node
     }
@@ -3346,7 +3339,7 @@ impl Checker {
                             let parameter_index = predicate.parameter_index.get();
                             if let Some(parameter_index) = parameter_index
                                 .filter(|&parameter_index| parameter_index < arguments.len())
-                                && self.is_false_expression(arguments[parameter_index])
+                                && Self::is_false_expression(arguments[parameter_index])
                             {
                                 return false;
                             }
@@ -3395,16 +3388,15 @@ impl Checker {
     }
 
     // flow.go:2589
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn is_false_expression(&mut self, expr: P<Node>) -> bool {
+    pub(crate) fn is_false_expression(expr: P<Node>) -> bool {
         let node = ast::skip_parentheses(expr);
         if node.kind() == Kind::FalseKeyword {
             return true;
         }
         if ast::is_binary_expression(node) {
             let binary = node.as_binary_expression();
-            return binary.operator_token.kind() == Kind::AmpersandAmpersandToken && (self.is_false_expression(binary.left) || self.is_false_expression(binary.right()))
-                || binary.operator_token.kind() == Kind::BarBarToken && self.is_false_expression(binary.left) && self.is_false_expression(binary.right());
+            return binary.operator_token.kind() == Kind::AmpersandAmpersandToken && (Self::is_false_expression(binary.left) || Self::is_false_expression(binary.right()))
+                || binary.operator_token.kind() == Kind::BarBarToken && Self::is_false_expression(binary.left) && Self::is_false_expression(binary.right());
         }
         false
     }

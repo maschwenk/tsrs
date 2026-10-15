@@ -1047,7 +1047,7 @@ impl Checker {
             if let Some(symbol) = symbol {
                 let declarations = symbol.declarations();
                 if declarations.iter().any(|&d| ast::is_type_declaration(d) && self.is_deprecated_declaration(d)) {
-                    let suggestion_node = self.get_deprecated_suggestion_node(node).unwrap();
+                    let suggestion_node = Self::get_deprecated_suggestion_node(node).unwrap();
                     self.add_deprecated_suggestion(suggestion_node, declarations, symbol.name());
                 }
             }
@@ -1121,13 +1121,12 @@ impl Checker {
     }
 
     // checker.go:3081
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_deprecated_suggestion_node(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_deprecated_suggestion_node(node: P<Node>) -> Option<P<Node>> {
         let node = ast::skip_parentheses(node);
         match node.kind() {
-            Kind::CallExpression | Kind::Decorator | Kind::NewExpression => return self.get_deprecated_suggestion_node(node.expression().unwrap()),
-            Kind::TaggedTemplateExpression => return self.get_deprecated_suggestion_node(node.as_tagged_template_expression().tag),
-            Kind::JsxOpeningElement | Kind::JsxSelfClosingElement => return self.get_deprecated_suggestion_node(node.tag_name()),
+            Kind::CallExpression | Kind::Decorator | Kind::NewExpression => return Self::get_deprecated_suggestion_node(node.expression().unwrap()),
+            Kind::TaggedTemplateExpression => return Self::get_deprecated_suggestion_node(node.as_tagged_template_expression().tag),
+            Kind::JsxOpeningElement | Kind::JsxSelfClosingElement => return Self::get_deprecated_suggestion_node(node.tag_name()),
             Kind::ElementAccessExpression => return Some(node.as_element_access_expression().argument_expression),
             Kind::PropertyAccessExpression => return node.name(),
             Kind::TypeReference => {
@@ -1386,7 +1385,7 @@ impl Checker {
         let mut seen_rest_element = false;
         let elements = node.elements();
         for &e in elements {
-            let mut flags = self.get_tuple_element_flags(e);
+            let mut flags = Self::get_tuple_element_flags(e);
             if flags.intersects(ElementFlags::Variadic) {
                 let t = self.get_type_from_type_node(e.type_node().unwrap());
                 if !self.is_array_like_type(t) {
@@ -2604,13 +2603,12 @@ impl Checker {
     // checker.go:4306
     pub(crate) fn check_class_declaration(&mut self, node: P<Node>) {
         let first_decorator = node.modifier_nodes().iter().copied().find(|&m| ast::is_decorator(m));
-        #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
         if self.legacy_decorators
-            && first_decorator.is_some()
+            && let Some(first_decorator) = first_decorator
             && node.members().iter().any(|&p| ast::has_static_modifier(p) && ast::is_private_identifier_class_element_declaration(p))
         {
             self.grammar_error_on_node(
-                first_decorator.unwrap(),
+                first_decorator,
                 &diagnostics::Class_decorators_can_t_be_used_with_static_private_identifier_Consider_removing_the_experimental_decorator,
                 &[],
             );

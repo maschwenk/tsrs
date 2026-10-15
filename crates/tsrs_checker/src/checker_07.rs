@@ -267,8 +267,7 @@ impl Checker {
      * its value is discarded (e.g. the left side of the comma operator).
      */
     // checker.go:13219
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn is_side_effect_free(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn is_side_effect_free(node: P<Node>) -> bool {
         let node = ast::skip_parentheses(node);
         match node.kind() {
             Kind::Identifier
@@ -296,14 +295,14 @@ impl Checker {
             }
             Kind::ConditionalExpression => {
                 let cond = node.as_conditional_expression();
-                return self.is_side_effect_free(cond.when_true) && self.is_side_effect_free(cond.when_false);
+                return Self::is_side_effect_free(cond.when_true) && Self::is_side_effect_free(cond.when_false);
             }
             Kind::BinaryExpression => {
                 let bin = node.as_binary_expression();
                 if ast::is_assignment_operator(bin.operator_token.kind()) {
                     return false;
                 }
-                return self.is_side_effect_free(bin.left) && self.is_side_effect_free(bin.right());
+                return Self::is_side_effect_free(bin.left) && Self::is_side_effect_free(bin.right());
             }
             Kind::PrefixUnaryExpression => {
                 // Unary operators ~, !, +, and - have no side effects.
@@ -547,7 +546,7 @@ impl Checker {
                 if name_type.is_some() {
                     links.set_name_type(name_type);
                 }
-                if in_destructuring_pattern && self.has_default_value(member_decl) {
+                if in_destructuring_pattern && Self::has_default_value(member_decl) {
                     // If object literal is an assignment pattern and if the assignment pattern specifies a default value
                     // for the property, make the property optional.
                     prop.flags.set(prop.flags() | SymbolFlags::Optional);
@@ -627,9 +626,7 @@ impl Checker {
                 self.check_node_deferred(member_decl);
             }
             let member = member.unwrap();
-            #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-            if computed_name_type.is_some() && !computed_name_type.unwrap().flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique) {
-                let computed_name_type = computed_name_type.unwrap();
+            if let Some(computed_name_type) = computed_name_type && !computed_name_type.flags().intersects(TypeFlags::StringOrNumberLiteralOrUnique) {
                 let string_number_symbol_type = self.string_number_symbol_type;
                 if self.is_type_assignable_to(computed_name_type, string_number_symbol_type) {
                     let number_type = self.number_type;
@@ -988,10 +985,9 @@ impl Checker {
     }
 
     // checker.go:13826
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn has_default_value(&mut self, node: P<Node>) -> bool {
+    pub(crate) fn has_default_value(node: P<Node>) -> bool {
         ast::is_binding_element(node) && node.initializer().is_some()
-            || ast::is_property_assignment(node) && self.has_default_value(node.initializer().unwrap())
+            || ast::is_property_assignment(node) && Self::has_default_value(node.initializer().unwrap())
             || ast::is_shorthand_property_assignment(node) && node.as_shorthand_property_assignment().object_assignment_initializer.get().is_some()
             || ast::is_binary_expression(node) && node.as_binary_expression().operator_token.kind() == Kind::EqualsToken
     }

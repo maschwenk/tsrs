@@ -65,7 +65,6 @@ fn iterate_baseline(all_files: &[TestFile], full_walker: &mut TypeWriterWalker, 
 
 // The body of iterateBaseline's per-file loop; `None` is Go's early `return baselines` (a symbol result without
 // a symbol, which the walker never produces).
-#[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
 fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], is_symbol_baseline: bool) -> Option<String> {
     let mut type_lines = String::new();
     type_lines.push_str("=== ");
@@ -84,8 +83,8 @@ fn file_baseline(unit_name: &str, content: &str, results: &[TypeWriterResult], i
         if last_index_written.is_none() {
             type_lines.push_str(&code_lines[..=result.line].join("\r\n"));
             type_lines.push_str("\r\n");
-        } else if last_index_written != Some(result.line) {
-            let next_index = last_index_written.unwrap() + 1;
+        } else if let Some(last_index_written) = last_index_written && last_index_written != result.line {
+            let next_index = last_index_written + 1;
             if !is_blank_or_bracket(next_index) {
                 type_lines.push_str("\r\n");
             }

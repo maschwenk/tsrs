@@ -161,7 +161,6 @@ impl tsc::Watcher for Watcher {
 }
 
 /// Go `createWatcher` + `start`. Without the test harness this blocks, running cycles until the process ends.
-#[expect(clippy::too_many_arguments, reason = "Go's createWatcher parameters")]
 pub(crate) fn run_watcher(
     sys: &'static dyn System,
     config: P<ParsedCommandLine>,

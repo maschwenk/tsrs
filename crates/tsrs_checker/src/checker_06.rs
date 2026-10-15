@@ -1243,7 +1243,7 @@ pub(crate) fn has_common_dom_type_name(t: P<Type>) -> bool {
 impl Checker {
     // checker.go:11867
     pub(crate) fn check_and_report_error_for_extending_interface(&mut self, error_location: P<Node>) -> bool {
-        let expression = self.get_entity_name_for_extending_interface(error_location);
+        let expression = Self::get_entity_name_for_extending_interface(error_location);
         if let Some(expression) = expression {
             if self.resolve_entity_name(expression, SymbolFlags::Interface, true /*ignoreErrors*/, false, None).is_some() {
                 self.error(Some(error_location), &diagnostics::Cannot_extend_an_interface_0_Did_you_mean_implements, &[&tsrs_scanner::get_text_of_node(expression)]);
@@ -1257,12 +1257,11 @@ impl Checker {
      * Climbs up parents to a heritage clause element and returns its entity name.
      */
     // checker.go:11879
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn get_entity_name_for_extending_interface(&mut self, node: P<Node>) -> Option<P<Node>> {
+    pub(crate) fn get_entity_name_for_extending_interface(node: P<Node>) -> Option<P<Node>> {
         match node.kind() {
             Kind::Identifier | Kind::QualifiedName | Kind::PropertyAccessExpression => {
                 if let Some(parent) = node.parent() {
-                    return self.get_entity_name_for_extending_interface(parent);
+                    return Self::get_entity_name_for_extending_interface(parent);
                 }
             }
             Kind::TypeReference => {
@@ -2319,7 +2318,7 @@ impl Checker {
                 right_type
             }
             Kind::CommaToken => {
-                if !self.compiler_options.allow_unreachable_code.is_true() && self.is_side_effect_free(left) && !Self::is_indirect_call(left.parent().unwrap()) {
+                if !self.compiler_options.allow_unreachable_code.is_true() && Self::is_side_effect_free(left) && !Self::is_indirect_call(left.parent().unwrap()) {
                     let sf = ast::get_source_file_of_node(left).unwrap();
                     let start = tsrs_scanner::skip_trivia(
                         sf.text(),
@@ -2429,7 +2428,7 @@ impl Checker {
                     self.check_property_accessibility(property, false /*isSuper*/, true /*writing*/, object_literal_type, prop);
                 }
             }
-            let access_flags = AccessFlags::ExpressionPosition | if self.has_default_value(property) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
+            let access_flags = AccessFlags::ExpressionPosition | if Self::has_default_value(property) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
             let element_type = self.get_indexed_access_type_ex(object_literal_type, expr_type, access_flags, name, AliasArg::None);
             let t = self.get_flow_type_of_destructuring(property, element_type);
             let mut expr = property;
@@ -2508,11 +2507,11 @@ impl Checker {
                 if self.is_array_like_type(source_type) {
                     // We create a synthetic expression so that getIndexedAccessType doesn't get confused
                     // when the element is a SyntaxKind.ElementAccessExpression.
-                    let access_flags = AccessFlags::ExpressionPosition | if self.has_default_value(element) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
+                    let access_flags = AccessFlags::ExpressionPosition | if Self::has_default_value(element) { AccessFlags::AllowMissing } else { AccessFlags::empty() };
                     let synthetic = self.create_synthetic_expression(element, index_type, false, None);
                     let element_type = self.get_indexed_access_type_or_undefined(source_type, index_type, access_flags, Some(synthetic), AliasArg::None).unwrap_or(self.error_type);
                     let mut assigned_type = element_type;
-                    if self.has_default_value(element) {
+                    if Self::has_default_value(element) {
                         assigned_type = self.get_type_with_facts(element_type, TypeFacts::NEUndefined);
                     }
                     let t = self.get_flow_type_of_destructuring(element, assigned_type);

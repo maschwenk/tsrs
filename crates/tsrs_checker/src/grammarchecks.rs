@@ -2039,7 +2039,7 @@ impl Checker {
 
     // grammarchecks.go:1772
     pub(crate) fn check_grammar_for_disallowed_block_scoped_variable_statement(&mut self, node: P<Node>) -> bool {
-        if !self.container_allows_block_scoped_variable(node.parent().unwrap()) {
+        if !Self::container_allows_block_scoped_variable(node.parent().unwrap()) {
             let block_scope_kind = self.get_combined_node_flags_cached(node.as_variable_statement().declaration_list) & NodeFlags::BlockScoped;
             if !block_scope_kind.is_empty() {
                 let keyword = if block_scope_kind == NodeFlags::Let {
@@ -2061,11 +2061,10 @@ impl Checker {
     }
 
     // grammarchecks.go:1796
-    #[expect(clippy::self_only_used_in_recursion, reason = "The receiver and recursive method shape preserve the upstream Go API.")]
-    pub(crate) fn container_allows_block_scoped_variable(&mut self, parent: P<Node>) -> bool {
+    pub(crate) fn container_allows_block_scoped_variable(parent: P<Node>) -> bool {
         match parent.kind() {
             Kind::IfStatement | Kind::DoStatement | Kind::WhileStatement | Kind::WithStatement | Kind::ForStatement | Kind::ForInStatement | Kind::ForOfStatement => return false,
-            Kind::LabeledStatement => return self.container_allows_block_scoped_variable(parent.parent().unwrap()),
+            Kind::LabeledStatement => return Self::container_allows_block_scoped_variable(parent.parent().unwrap()),
             _ => {}
         }
 

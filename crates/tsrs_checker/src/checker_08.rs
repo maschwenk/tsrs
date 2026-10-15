@@ -471,9 +471,8 @@ impl Checker {
 
                 if candidates.len() == 1 {
                     let merged_candidate = self.get_merged_symbol(candidates[0].symbol);
-                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                    if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
-                        return Some(self.get_merged_symbol(augmentation.unwrap()));
+                    if let Some(augmentation) = augmentation && augmentation_target == Some(merged_candidate) {
+                        return Some(self.get_merged_symbol(augmentation));
                     }
                     return Some(merged_candidate);
                 }
@@ -489,17 +488,15 @@ impl Checker {
                 }));
                 if best_type_candidates.len() == 1 {
                     let merged_candidate = self.get_merged_symbol(best_type_candidates[0].symbol);
-                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                    if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
-                        return Some(self.get_merged_symbol(augmentation.unwrap()));
+                    if let Some(augmentation) = augmentation && augmentation_target == Some(merged_candidate) {
+                        return Some(self.get_merged_symbol(augmentation));
                     }
                     return Some(merged_candidate);
                 }
                 let pattern = find_best_pattern_match(&best_type_candidates, |v| &v.pattern, module_reference).unwrap();
                 let merged_candidate = self.get_merged_symbol(pattern.symbol);
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                if augmentation.is_some() && augmentation_target == Some(merged_candidate) {
-                    return Some(self.get_merged_symbol(augmentation.unwrap()));
+                if let Some(augmentation) = augmentation && augmentation_target == Some(merged_candidate) {
+                    return Some(self.get_merged_symbol(augmentation));
                 }
                 return Some(merged_candidate);
             }
@@ -701,15 +698,14 @@ impl Checker {
                 let target_file = module_symbol.declarations().iter().copied().find(|d| ast::is_source_file(*d));
                 let usage_mode = self.get_emit_syntax_for_module_specifier_expression(reference);
                 let mut export_module_dot_exports_symbol: Option<P<Symbol>> = None;
-                #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                if namespace_import.is_some()
-                    && target_file.is_some()
+                if let Some(namespace_import) = namespace_import
+                    && let Some(target_file) = target_file
                     && ModuleKind::Node20 <= self.module_kind
                     && self.module_kind <= ModuleKind::NodeNext
                     && usage_mode == ModuleKind::CommonJS
-                    && self.program.get_implied_node_format_for_emit(target_file.unwrap().as_source_file_p()) == ModuleKind::ESNext
+                    && self.program.get_implied_node_format_for_emit(target_file.as_source_file_p()) == ModuleKind::ESNext
                 {
-                    export_module_dot_exports_symbol = self.get_export_of_module(symbol, InternalSymbolNameModuleExports, namespace_import.unwrap(), true /*dontResolveAlias*/);
+                    export_module_dot_exports_symbol = self.get_export_of_module(symbol, InternalSymbolNameModuleExports, namespace_import, true /*dontResolveAlias*/);
                 }
                 if let Some(export_module_dot_exports_symbol) = export_module_dot_exports_symbol {
                     if self.has_signatures(typ) {
@@ -1416,10 +1412,9 @@ impl Checker {
                     }
                 }
                 Some(target_symbol) => {
-                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                    if lookup_table.is_some() && export_node.is_some() && self.resolve_symbol(target_symbol) != self.resolve_symbol(source_symbol) {
-                        let s = lookup_table.as_deref_mut().unwrap().get_mut(id).unwrap();
-                        s.exports_with_duplicate.push(export_node.unwrap());
+                    if let Some(lookup_table) = lookup_table.as_deref_mut() && let Some(export_node) = export_node && self.resolve_symbol(target_symbol) != self.resolve_symbol(source_symbol) {
+                        let s = lookup_table.get_mut(id).unwrap();
+                        s.exports_with_duplicate.push(export_node);
                     }
                 }
             }
@@ -1991,10 +1986,9 @@ impl Checker {
                 if let Some(getter) = getter {
                     let getter_signature = self.get_signature_from_declaration(getter);
                     let this_parameter = Self::get_accessor_this_parameter(fn_);
-                    #[expect(clippy::unnecessary_unwrap, reason = "The guarded nil check and branch ordering preserve the upstream Go control flow.")]
-                    if this_parameter.is_some() && Some(declaration) == this_parameter {
+                    if let Some(this_parameter) = this_parameter && declaration == this_parameter {
                         // Use the type from the *getter*
-                        assert!(this_parameter.unwrap().type_node().is_none());
+                        assert!(this_parameter.type_node().is_none());
                         return Some(self.get_type_of_symbol(getter_signature.this_parameter().unwrap()));
                     }
                     return Some(self.get_return_type_of_signature(getter_signature));
@@ -2149,12 +2143,12 @@ impl Checker {
             let e = pattern_elements[i];
             if i < pattern_elements.len() - 1 || !(ast::is_binding_element(e) && has_dot_dot_dot_token(e)) {
                 let mut element_type = self.any_type;
-                if !ast::is_omitted_expression(e) && self.has_default_value(e) {
+                if !ast::is_omitted_expression(e) && Self::has_default_value(e) {
                     element_type = self.get_type_from_binding_element(e, false /*includePatternInType*/, false /*reportErrors*/);
                 }
                 element_types.push(element_type);
                 element_infos.push(TupleElementInfo { flags: ElementFlags::Optional, labeled_declaration: None });
-                if !ast::is_omitted_expression(e) && !self.has_default_value(e) {
+                if !ast::is_omitted_expression(e) && !Self::has_default_value(e) {
                     let any_type = self.any_type;
                     self.report_implicit_any(e, any_type, WideningKind::Normal);
                 }
