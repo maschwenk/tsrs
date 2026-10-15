@@ -159,6 +159,17 @@ struct checkerDataLease {
 // The context value (`Context::value` hands out references; the thread's lease needs its own handle).
 struct checkerDataLeaseKey(Arc<checkerDataLease>);
 
+/// Retains the data of temporary checkers acquired through its context. The caller must also retain
+/// their programs: the data lease deliberately holds weak pool references to avoid ownership cycles.
+#[derive(Clone, Default)]
+pub struct CheckerDataLease(Arc<checkerDataLease>);
+
+impl CheckerDataLease {
+    pub fn context(&self, ctx: &Context) -> Context {
+        ctx.with_value(checkerDataLeaseKey(Arc::clone(&self.0)))
+    }
+}
+
 thread_local! {
     static THREAD_LEASE: std::cell::RefCell<Option<Arc<checkerDataLease>>> = const { std::cell::RefCell::new(None) };
 }
@@ -195,7 +206,7 @@ impl Drop for checkerDataLease {
 
 // A context whose holders get a lease (see `checkerDataLease`).
 pub fn with_checker_data_lease(ctx: &Context) -> Context {
-    ctx.with_value(checkerDataLeaseKey(Arc::new(checkerDataLease::default())))
+    CheckerDataLease::default().context(ctx)
 }
 
 // mergeGlobalDiagnosticsFromCheckerLocked's merge. Region hook: the pool keeps the regions of the diagnostics it

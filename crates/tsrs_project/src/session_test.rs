@@ -368,6 +368,36 @@ fn snapshot_refs_release_parse_cache() {
     let _ = projecttestutil::TestTypingsLocation;
 }
 
+#[test]
+fn snapshot_leases_retain_store_resources_until_last_drop() {
+    for unwind in [false, true] {
+        let options = crate::session::SessionOptions { push_diagnostics_enabled: false, ..projecttestutil::default_session_options() };
+        let (session, _) = projecttestutil::setup_with_options(default_files, Some(options));
+        open(&session, default_files, "/home/projects/TS/p1/src/index.ts");
+        session.wait_for_background_tasks();
+        let snapshot = session.snapshot();
+        let entries = session.snapshot_host().parse_cache.len();
+        let first = snapshot.lease();
+        let last = snapshot.lease();
+        session.did_change_file(&ctx(), uri("file:///home/projects/TS/p1/src/index.ts"), 2, vec![partial(0, 0, 0, ";")]);
+        let _ = session.get_language_service(&ctx(), &uri("file:///home/projects/TS/p1/src/index.ts")).unwrap();
+        session.wait_for_background_tasks();
+        assert_eq!(snapshot.ref_count(), 2, "leases outlive replacement of the session snapshot");
+        assert!(session.snapshot_host().parse_cache.len() > entries, "the old file version stays cached");
+        drop(first);
+        assert_eq!(snapshot.ref_count(), 1);
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let last = last;
+            assert!(!unwind, "release the last snapshot lease during unwinding");
+            drop(last);
+        }));
+        assert_eq!(outcome.is_err(), unwind);
+        assert_eq!(snapshot.ref_count(), 0);
+        assert_eq!(session.snapshot_host().parse_cache.len(), entries, "the final lease releases the old file version, even with an Arc remaining");
+        session.close();
+    }
+}
+
 fn open(session: &crate::session::Session, files: &[(&str, &str)], name: &str) {
     session.did_open_file(&ctx(), uri(&format!("file://{name}")), 1, file(files, name), lsproto::LanguageKind::TypeScript);
 }

@@ -71,7 +71,9 @@ pub(crate) fn get_referenced_symbols_for_node(host: &dyn CheckerHost, p: &Params
     let node = host.resolve_node_handle(&program, p.string("node")?)?;
     let position = p.u32("position")?;
     let ls = language_service(&sd.scope.snapshot, &program, &sd.project, "")?;
-    let entries = ls.get_referenced_symbols_for_node_exported(&host.context(), position, node, program.get_source_files());
+    let ctx = sd.symbols.checker_data.context(&host.context());
+    let _data_scope = tsrs_project::enter_checker_data_lease(&ctx);
+    let entries = ls.get_referenced_symbols_for_node_exported(&ctx, position, node, program.get_source_files());
     if entries.is_empty() {
         return Ok(Value::Array(Vec::new())); // Go nil slice: json/v2 encodes []
     }
@@ -128,39 +130,35 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
     };
 
     let program = sd.program()?;
-    let mut prepared: Option<Arc<Snapshot>> = None;
+    // Own the clone's explicit reference on every exit, including response errors and unwinding.
+    struct PreparedSnapshot(Arc<Snapshot>);
+    impl Drop for PreparedSnapshot {
+        fn drop(&mut self) { self.0.deref(); }
+    }
+    let mut prepared: Option<PreparedSnapshot> = None;
     let mut result = run(&sd.scope.snapshot, &program, &ctx)?;
     if matches!(&result, Err(e) if tsrs_ls::is_err_needs_auto_imports(e)) {
-        let snapshot = host.clone_snapshot_with_auto_imports(&sd.scope.snapshot, &file_name)?;
-        let outcome = program_of(&snapshot, &sd.project).and_then(|program| run(&snapshot, &program, &ctx));
-        prepared = Some(snapshot);
-        result = match outcome {
-            Ok(r) => r,
-            Err(e) => {
-                prepared.take().unwrap().deref();
-                return Err(e);
-            }
-        };
+        prepared = Some(PreparedSnapshot(host.clone_snapshot_with_auto_imports(&sd.scope.snapshot, &file_name)?));
+        let snapshot = &prepared.as_ref().unwrap().0;
+        result = program_of(snapshot, &sd.project).and_then(|program| run(snapshot, &program, &ctx))?;
     }
-    let release_prepared = |prepared: Option<Arc<Snapshot>>| {
-        if let Some(s) = prepared {
-            s.deref();
-        }
-    };
     let list = match result {
         Ok(Some(list)) => list,
         Ok(None) => {
-            release_prepared(prepared);
             return Ok(Value::Null);
         }
         Err(e) => {
-            release_prepared(prepared);
             // Go returns the language service's error as is (ErrNeedsAutoImports, a cancelled context).
             return Err(CheckerError { kind: CheckerErrorKind::Internal, message: e.message });
         }
     };
     let mut entries = Vec::with_capacity(list.items.len());
-    let mut uses_prepared_symbols = false;
+    if list.items.iter().any(|item| item.symbol.is_some()) {
+        if let Some(snapshot) = &prepared {
+            // Install the origin before publishing the first symbol, including partial/error responses.
+            sd.scope.registry.symbol_owner(&snapshot.0)?;
+        }
+    }
     for item in &list.items {
         let ci = &item.completion_item;
         let mut o = obj();
@@ -187,15 +185,9 @@ pub(crate) fn get_completions_at_position(host: &dyn CheckerHost, p: &Params) ->
             }
         }
         if let Some(symbol) = item.symbol {
-            uses_prepared_symbols |= prepared.is_some();
             o.set("symbol", sd.symbol_response(symbol, &sd.project)?);
         }
         entries.push(o.build());
-    }
-    match prepared {
-        // Symbols from the auto-import snapshot were handed out: keep it alive with the registry.
-        Some(s) if uses_prepared_symbols => sd.scope.registry.retain_snapshot(s)?,
-        other => release_prepared(other),
     }
     let mut o = obj();
     o.set("isIncomplete", Value::Bool(list.is_incomplete));

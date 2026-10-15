@@ -1,6 +1,8 @@
 // Go `checkerSetup` / `setupChecker` and the response constructors that need snapshot registries
 // (`newSymbolResponse`, `newTypeResponse`, `newSignatureResponse`, `newIndexInfoResponse`).
 
+use std::sync::Arc;
+
 use tsrs_ast::{Node, SourceFile, Symbol, SymbolFlags};
 use tsrs_checker::{Checker, IndexInfo, ObjectFlags, Signature, Type, TypeFlags};
 use tsrs_compiler::{CheckerHandle, ProgramLease};
@@ -13,7 +15,7 @@ use tsrs_project::ID;
 use super::host::{CheckerError, CheckerHost, CheckerResult, SnapshotScope};
 use super::json::Obj;
 use super::params::{DocumentIdentifier, SymbolReference, SYMBOL_OWNER_KIND_FILE, SYMBOL_OWNER_KIND_SNAPSHOT};
-use super::registry::{ResultOwner, SignatureHandle, TypeHandle};
+use super::registry::{ResultOwner, SignatureHandle, SymbolOwner, TypeHandle};
 use super::symbol_index::source_file_symbol;
 
 /// A snapshot + project without a checker (Go `getSnapshotData` + `params.Project`), used by the property
@@ -22,12 +24,14 @@ pub(crate) struct SnapshotCtx<'h> {
     pub(crate) host: &'h dyn CheckerHost,
     pub(crate) scope: SnapshotScope,
     pub(crate) project: String,
+    pub(crate) symbols: Arc<SymbolOwner>,
 }
 
 impl<'h> SnapshotCtx<'h> {
     pub(crate) fn new(host: &'h dyn CheckerHost, snapshot: u64, project: &str) -> CheckerResult<SnapshotCtx<'h>> {
         let scope = host.snapshot(snapshot)?;
-        Ok(SnapshotCtx { host, scope, project: project.to_string() })
+        let symbols = scope.registry.symbol_owner(&scope.snapshot)?;
+        Ok(SnapshotCtx { host, scope, project: project.to_string(), symbols })
     }
 
     /// Go `snapshotData.newSymbolResponse(symbol, canonicalProject)`.
@@ -35,13 +39,19 @@ impl<'h> SnapshotCtx<'h> {
         if symbol_owner_file(symbol).is_some() {
             return file_symbol_response(self.host, symbol);
         }
-        let (id, project) = self.scope.registry.register_symbol(symbol, canonical_project)?;
+        let (id, project) = self.register_symbol(symbol, canonical_project)?;
         let mut reference = Obj::new();
         reference.num("kind", SYMBOL_OWNER_KIND_SNAPSHOT as f64);
         reference.num("snapshot", self.scope.handle as f64);
         reference.str_nonempty("project", &project);
         reference.num("id", id as f64);
         build_symbol_response(self.host, symbol, reference.build())
+    }
+
+    pub(crate) fn register_symbol(&self, symbol: P<Symbol>, canonical_project: &str) -> CheckerResult<(u64, String)> {
+        // SAFETY: API handlers use pinned checkers; language-service symbol queries use symbols.checker_data.
+        // Base and auto-import snapshots are retained in symbols before any of their results are registered.
+        unsafe { self.scope.registry.register_symbol(symbol, canonical_project, &self.symbols) }
     }
 
     /// A signature target keeps the identity of the checker that originally produced it.
@@ -444,7 +454,10 @@ pub(crate) fn resolve_symbol_for_program(sd: &SnapshotCtx, program: &ProgramLeas
             if r.snapshot != sd.scope.handle || r.file.is_some() {
                 return Err(CheckerError::client("snapshot symbol reference does not match the requested checker"));
             }
-            sd.scope.registry.resolve_symbol(r.id)
+            let handle = sd.scope.registry.resolve_symbol(r.id)?;
+            assert!(handle.belongs_to(&sd.symbols), "symbol belongs to another snapshot owner");
+            // SAFETY: sd keeps the same snapshot family and checker data alive for the entire request.
+            Ok(unsafe { handle.as_raw() })
         }
         SYMBOL_OWNER_KIND_FILE => {
             if r.file.is_none() || r.snapshot != 0 || !r.project.is_empty() {

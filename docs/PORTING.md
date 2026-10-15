@@ -89,7 +89,13 @@ programs and file versions ([LSP.md](LSP.md#memory-management)). The rules are:
   to these handles: the legacy graph's accessors return unowned pointers and static references. Raw conversion
   inside the checker lane is unsafe and requires the handle or a matching owner to cover every use. This
   relies on API checker regions being pinned until program destruction, including after cancellation; it does
-  not apply to temporary language-service checker results or to the symbol registry.
+  not apply to arbitrary temporary language-service checker results.
+- Registered API symbols use a separate snapshot-wide owner: `SymbolHandle` retains the base and auto-import
+  snapshots through `SnapshotLease`, and queries that return symbols attach its `CheckerDataLease` to their
+  context. Snapshot owners keep programs alive; the data lease protects temporary checker regions after
+  cancellation or idle disposal. Retention uses snapshot object identity, since IDs are local to a host.
+  The owner contains no registry reference, and drops checker-data leases before snapshots. File-symbol
+  references still use the cached-file request scope; the rest of the raw checker graph remains unchanged.
 - Arena objects remain live until their arena is released, unless an explicit recycling site proves them dead
   (rolled-back parses, dropped flow labels, scratch mappers and inference contexts whose escape
   bit is clear; `tsrs_core::arena`, notes/mem-recycle.md). A struct field that keeps a mapper must be a `MapperCell`.

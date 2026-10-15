@@ -162,6 +162,7 @@ for server data; see [the memory design](../notes/lsp-mem.md) and
 | package.json cache entries of a program's resolution data (copied to its clones) | GC | the original cache's region when added while that region is the allocation target (the full build); otherwise the thread arena (`arena::enter_table_owner`) |
 | symlinked directories and files the project-reference dts-faking host learns (the host is shared by every version cloned from a full build) | GC | the thread arena (`arena::enter_table_owner`; the host's table is on the heap): a module specifier lookup can add one while a checker or a later version's region is the target |
 | request-scoped results (lsproto values, strings) | GC | ordinary Rust ownership |
+| resolved API registry symbols | GC | opaque `SymbolHandle` retains the registry's base and auto-import snapshots through `SnapshotLease`, plus a `CheckerDataLease` for temporary query results; the last handle can outlive registry release and keeps the whole snapshot family alive; no reference back to the registry |
 
 Mechanism (`tsrs_core::arena`): `Region::enter` makes a region the thread's allocation target until the returned
 scope is dropped (scopes nest; `with_arena` reads one thread-local pointer, as before). A region is an `Arena` of its

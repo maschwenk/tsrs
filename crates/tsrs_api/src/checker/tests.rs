@@ -718,6 +718,115 @@ fn unowned_methods_fall_through() {
     }
 }
 
+#[test]
+fn registered_symbols_retain_owner_after_checker_replacement_and_release() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    for unwind in [false, true] {
+        let h = fixture();
+        let ty = h.type_at(MAIN_FILE, MAIN, "box:");
+        let response = h.ok("getPropertyOfType", &h.sp(&format!(r#""type":{},"name":"value""#, num(&ty, "id"))));
+        let reference = field(&response, "reference");
+        assert_eq!(num(reference, "kind"), 1, "an instantiated property is snapshot-owned");
+        let id = num(reference, "id");
+        let symbol = h.registry.resolve_symbol(id).unwrap();
+        let freed = Arc::new(AtomicBool::new(false));
+        let notify = Arc::clone(&freed);
+        // SAFETY: symbol retains its checker and source snapshot throughout these reads.
+        let raw = unsafe { symbol.as_raw() };
+        tsrs_core::arena::Region::containing(raw.addr()).unwrap().on_free(Box::new(move || {
+            notify.store(true, Ordering::SeqCst);
+        }));
+        {
+            let owner = super::setup::SetupOwner::new(&h, h.handle, &h.project).unwrap();
+            let mut s = owner.acquire().unwrap();
+            let (_, canonical) = s.sd.register_symbol(raw, "/other/tsconfig.json").unwrap();
+            assert_eq!(canonical, h.project, "canonical project remains first-writer-wins");
+            s.checker.was_canceled = true;
+        }
+        h.ok("getNumberType", &h.sp(""));
+        assert_eq!(h.registry.resolve_symbol(id).unwrap().id(), id, "symbol IDs survive checker replacement");
+        let clone = symbol.clone();
+        drop(symbol);
+        h.registry.release();
+        assert!(h.registry.resolve_symbol(id).unwrap_err().message.contains("released"));
+        drop(h);
+        assert!(!freed.load(Ordering::SeqCst));
+        assert_eq!(clone.id(), id);
+        // SAFETY: clone retains the symbol and its declarations even after the host was destroyed.
+        assert_eq!(unsafe { clone.as_raw() }.name(), "value");
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let last = clone;
+            assert!(!unwind, "release the last symbol during unwinding");
+            drop(last);
+        }));
+        assert_eq!(outcome.is_err(), unwind);
+        assert!(freed.load(Ordering::SeqCst), "the last symbol releases the canceled checker and snapshot");
+    }
+}
+
+#[test]
+fn registered_symbol_retains_temporary_checker_data() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use tsrs_core::context::{with_checker_lifetime, CheckerLifetime};
+
+    let h = fixture();
+    let sd = super::setup::SnapshotCtx::new(&h, h.handle, &h.project).unwrap();
+    let program = sd.program().unwrap();
+    let ctx = sd.symbols.checker_data.context(&with_checker_lifetime(&Context::background(), CheckerLifetime::Temporary));
+    let mut checker = program.get_type_checker(&ctx);
+    let symbol = checker.get_unknown_symbol();
+    let freed = Arc::new(AtomicBool::new(false));
+    let notify = Arc::clone(&freed);
+    tsrs_core::arena::Region::containing(symbol.addr()).unwrap().on_free(Box::new(move || {
+        notify.store(true, Ordering::SeqCst);
+    }));
+    let (id, _) = sd.register_symbol(symbol, &h.project).unwrap();
+    let handle = h.registry.resolve_symbol(id).unwrap();
+    checker.was_canceled = true;
+    drop(checker);
+    drop(ctx);
+    drop(program);
+    drop(sd);
+    h.registry.release();
+    assert!(!freed.load(Ordering::SeqCst), "the symbol lease retains a disposed temporary checker");
+    assert_eq!(handle.id(), id);
+    drop(handle);
+    assert!(freed.load(Ordering::SeqCst), "checker data is released even while the program remains alive");
+}
+
+#[test]
+fn registered_symbol_retains_derived_snapshot() {
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    let h = fixture();
+    // A separate program owner stands in for an auto-import snapshot's additional project.
+    let derived = fixture();
+    let sd = super::setup::SnapshotCtx::new(&h, h.handle, &h.project).unwrap();
+    h.registry.symbol_owner(&derived.snapshot).unwrap();
+    h.registry.symbol_owner(&derived.snapshot).unwrap(); // retaining the same snapshot is idempotent
+    let program = derived.program();
+    let ctx = tsrs_core::context::with_checker_lifetime(&Context::background(), tsrs_core::context::CheckerLifetime::API);
+    let checker = program.get_type_checker(&ctx);
+    let symbol = checker.get_unknown_symbol();
+    let (id, _) = sd.register_symbol(symbol, &h.project).unwrap();
+    let handle = h.registry.resolve_symbol(id).unwrap();
+    let freed = Arc::new(AtomicBool::new(false));
+    let notify = Arc::clone(&freed);
+    tsrs_core::arena::Region::containing(symbol.addr()).unwrap().on_free(Box::new(move || {
+        notify.store(true, Ordering::SeqCst);
+    }));
+    drop(checker);
+    drop(program);
+    drop(derived);
+    drop(sd);
+    drop(h);
+    assert!(!freed.load(Ordering::SeqCst));
+    assert_eq!(handle.id(), id);
+    drop(handle);
+    assert!(freed.load(Ordering::SeqCst), "the additional snapshot is released by its last symbol handle");
+}
+
 impl TestHost {
     /// Handle of the `levels`-th ancestor of the token touching `needle`.
     fn ancestor_handle_at(&self, needle: &str, levels: usize) -> String {

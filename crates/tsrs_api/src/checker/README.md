@@ -35,7 +35,10 @@ if let Some(result) = checker::handle(session, method, &params) { /* map result 
   error. Type/signature maps retain a program lease per checker generation; resolving one returns an
   opaque `TypeHandle` / `SignatureHandle` that retains the owner independently. Already resolved results
   survive release, and dropping the last result allows the program and checker regions to be freed.
-  Symbols still depend on the existing snapshot/request leases.
+  `SymbolHandle` retains the registry's base and auto-import snapshots through `SnapshotLease`, plus
+  a `CheckerDataLease` for temporary language-service checker results. These owners are separate from
+  the registry maps, so they cannot keep the registry alive in a cycle. One retained symbol keeps this
+  whole snapshot family alive; file-owned references continue to use the cached-file scope.
 * Errors: `CheckerError { kind: InvalidRequest | Client | Unsupported | Internal, message }` = Go
   `ErrInvalidRequest` / `ErrClientError` / an explicit unsupported error / other errors (mapped to core's
   `ErrorKind` in checker.rs). Handlers do not panic on bad input (wrong JSON types, out-of-range numbers, wrong
@@ -48,6 +51,9 @@ if let Some(result) = checker::handle(session, method, &params) { /* map result 
   non-content-mapped files are *file-owned* (`reference.kind = 0`, carries the source-file descriptor) and
   are resolved through the file, never through a registry; all others are *snapshot-owned*
   (`kind = 1`, snapshot + canonical project) and registered snapshot-wide.
+  Resolving a registered symbol returns an opaque owning handle. Canonical projects remain first-writer
+  wins, and symbol IDs remain usable after checker replacement. Auto-import snapshot owners are installed
+  before their first symbol is published, and the clone's temporary reference is released on error or unwind.
 * Type / signature ids: per-checker ids, registered per (snapshot, project), and pinned to the id of the
   API checker that produced them. A replaced API checker (e.g. after cancellation) makes older handles a
   stale-handle error instead of resolving against another checker. Cross-project and cross-snapshot

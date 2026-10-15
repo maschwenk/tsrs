@@ -9,10 +9,11 @@
 //
 // Each project's type/signature maps retain their program owner. Resolved handles retain it separately,
 // so releasing the snapshot or replacing the checker cannot invalidate an already resolved result.
-// Symbols still use snapshot/request ownership. After release every new lookup fails.
+// Symbols retain the snapshot family and temporary checker data together. After release every new
+// lookup fails, while already resolved handles keep their owners independently.
 
 use std::collections::hash_map::Entry;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use rustc_hash::FxHashMap;
 use tsrs_ast::Symbol;
@@ -22,8 +23,8 @@ use tsrs_core::P;
 use super::host::{CheckerError, CheckerResult};
 
 mod results;
-pub use results::{SignatureHandle, TypeHandle};
-pub(super) use results::ResultOwner;
+pub use results::{SignatureHandle, SymbolHandle, TypeHandle};
+pub(super) use results::{ResultOwner, SymbolOwner};
 
 struct ProjectRegistry {
     owner: ResultOwner,
@@ -38,9 +39,7 @@ struct RegistryState {
     // Go `symbolCanonicalProjects`: first writer wins.
     symbol_projects: FxHashMap<u64, String>,
     projects: FxHashMap<String, ProjectRegistry>,
-    // Snapshots derived during a request (auto-import preparation) whose symbols were handed out;
-    // dereferenced on release so those pointers stay valid exactly as long as the registry.
-    retained: Vec<std::sync::Arc<tsrs_project::Snapshot>>,
+    symbol_owner: Option<Arc<SymbolOwner>>,
 }
 
 #[derive(Default)]
@@ -61,25 +60,20 @@ impl CheckerRegistry {
         st.symbols = FxHashMap::default();
         st.symbol_projects = FxHashMap::default();
         let projects = std::mem::take(&mut st.projects);
-        let retained = std::mem::take(&mut st.retained);
+        let symbols = st.symbol_owner.take();
         drop(st);
         // Last leases may destroy checker pools and regions; do that outside the registry lock.
         drop(projects);
-        for snapshot in retained {
-            snapshot.deref();
-        }
+        drop(symbols);
     }
 
-    /// Takes over one reference of `snapshot` until `release` (see `retained`).
-    pub fn retain_snapshot(&self, snapshot: std::sync::Arc<tsrs_project::Snapshot>) -> CheckerResult<()> {
+    /// Retain the base snapshot or an auto-import snapshot before registering any of its symbols.
+    pub(super) fn symbol_owner(&self, snapshot: &Arc<tsrs_project::Snapshot>) -> CheckerResult<Arc<SymbolOwner>> {
         let mut st = self.lock();
-        if st.released {
-            drop(st);
-            snapshot.deref();
-            return Err(CheckerError::client("snapshot has been released"));
-        }
-        st.retained.push(snapshot);
-        Ok(())
+        Self::check_live(&st)?;
+        let owner = st.symbol_owner.get_or_insert_with(|| Arc::new(SymbolOwner::default()));
+        owner.retain_snapshot(snapshot);
+        Ok(Arc::clone(owner))
     }
 
     #[cfg(test)]
@@ -101,11 +95,16 @@ impl CheckerRegistry {
     }
 
     /// Go `registerSymbol`. Returns the symbol id and its canonical project.
-    pub fn register_symbol(&self, symbol: P<Symbol>, canonical_project: &str) -> CheckerResult<(u64, String)> {
+    ///
+    /// # Safety
+    /// The symbol's source snapshot must have been retained by `owner`. Checker-created symbols must
+    /// come from a persistent API checker or a query using `owner.checker_data`.
+    pub(super) unsafe fn register_symbol(&self, symbol: P<Symbol>, canonical_project: &str, owner: &Arc<SymbolOwner>) -> CheckerResult<(u64, String)> {
         assert!(!canonical_project.is_empty(), "registerSymbol requires a non-empty canonical project");
         let id = tsrs_ast::get_symbol_id(symbol).0;
         let mut st = self.lock();
         Self::check_live(&st)?;
+        assert!(st.symbol_owner.as_ref().is_some_and(|current| Arc::ptr_eq(current, owner)), "symbol belongs to another registry");
         match st.symbols.entry(id) {
             Entry::Occupied(entry) => assert!(*entry.get() == symbol, "duplicate symbol"),
             Entry::Vacant(entry) => {
@@ -117,13 +116,14 @@ impl CheckerRegistry {
     }
 
     /// Go `resolveSymbolHandle`.
-    pub fn resolve_symbol(&self, id: u64) -> CheckerResult<P<Symbol>> {
+    pub fn resolve_symbol(&self, id: u64) -> CheckerResult<SymbolHandle> {
         if id == 0 {
             return Err(CheckerError::client("empty symbol handle"));
         }
         let st = self.lock();
         Self::check_live(&st)?;
-        st.symbols.get(&id).copied().ok_or_else(|| CheckerError::client(format!("symbol handle {id} not found in snapshot registry")))
+        st.symbols.get(&id).map(|&value| SymbolHandle { value, owner: Arc::clone(st.symbol_owner.as_ref().unwrap()) })
+            .ok_or_else(|| CheckerError::client(format!("symbol handle {id} not found in snapshot registry")))
     }
 
     fn project_for_checker<'a>(st: &'a mut RegistryState, project: &str, owner: &ResultOwner) -> &'a mut ProjectRegistry {

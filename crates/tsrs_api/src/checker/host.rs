@@ -76,7 +76,7 @@ pub struct SnapshotScope {
     pub handle: u64,
     pub snapshot: Arc<Snapshot>,
     /// The snapshot's checker registries (Go `symbolRegistry` + `projectRegistries`). Core stores one
-    /// per API snapshot handle and calls `CheckerRegistry::release` before dropping its last reference.
+    /// per API snapshot handle and calls `CheckerRegistry::release` when its snapshot entry drops.
     pub registry: Arc<CheckerRegistry>,
     pub release: Option<Box<dyn FnOnce()>>,
 }

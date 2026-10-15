@@ -621,10 +621,9 @@ pub(crate) fn get_well_known_symbols(host: &dyn CheckerHost, p: &Params) -> Chec
     let unknown = s.c().get_unknown_symbol();
     let undefined = s.c().get_undefined_symbol();
     let arguments = s.c().get_arguments_symbol();
-    let registry = &s.sd.scope.registry;
     let mut o = obj();
     for (name, symbol) in [("unknown", unknown), ("undefined", undefined), ("arguments", arguments)] {
-        let (id, _) = registry.register_symbol(symbol, &s.sd.project)?;
+        let (id, _) = s.sd.register_symbol(symbol, &s.sd.project)?;
         o.num(name, id as f64);
     }
     Ok(o.build())

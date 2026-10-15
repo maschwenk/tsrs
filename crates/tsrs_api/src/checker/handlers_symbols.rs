@@ -298,8 +298,10 @@ fn resolve_symbol_reference<'h>(host: &'h dyn CheckerHost, r: &SymbolReference) 
                 return Err(CheckerError::client("invalid snapshot symbol reference"));
             }
             let sd = SnapshotCtx::new(host, r.snapshot, &r.project)?;
-            let symbol = sd.scope.registry.resolve_symbol(r.id)?;
-            Ok((symbol, Owner::Snapshot(sd)))
+            let handle = sd.scope.registry.resolve_symbol(r.id)?;
+            assert!(handle.belongs_to(&sd.symbols), "symbol belongs to another snapshot owner");
+            // SAFETY: sd retains the same owner for the lifetime of the returned request scope.
+            Ok((unsafe { handle.as_raw() }, Owner::Snapshot(sd)))
         }
         kind => Err(CheckerError::client(format!("invalid symbol reference kind {kind}"))),
     }
@@ -353,7 +355,8 @@ pub(crate) fn symbol_table_property(host: &dyn CheckerHost, p: &Params, property
             Ok(Value::Array(symbols.into_iter().map(|s| file_owned_response(host, s)).collect::<CheckerResult<_>>()?))
         }
         Owner::Snapshot(sd) => {
-            drop(sd);
+            // Keep the original owner while acquiring the checker used to order the table.
+            let _snapshot = sd;
             // Tables of snapshot-owned symbols may contain symbols from several files: checker ordering.
             let owner = SetupOwner::new(host, r.snapshot, &r.project)?;
             let mut s = owner.acquire()?;

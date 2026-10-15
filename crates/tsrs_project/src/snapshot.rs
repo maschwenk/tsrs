@@ -67,7 +67,25 @@ pub struct Snapshot {
     pub(crate) created_programs: Vec<Option<Shared<Project>>>,
 }
 
+/// Retains both the snapshot's Rust owners and its store resources until this lease is dropped.
+/// Unlike an `Arc<Snapshot>` alone, this also owns one of the snapshot's explicit references.
+pub struct SnapshotLease {
+    snapshot: Arc<Snapshot>,
+}
+
+impl Drop for SnapshotLease {
+    fn drop(&mut self) {
+        self.snapshot.deref();
+    }
+}
+
 impl Snapshot {
+    /// Retain a live snapshot without handing the caller a manual `deref` obligation.
+    pub fn lease(self: &Arc<Self>) -> SnapshotLease {
+        self.ref_();
+        SnapshotLease { snapshot: Arc::clone(self) }
+    }
+
     // snapshot.go:62
     pub(crate) fn content_mapper_watch_state(&self) -> (Vec<String>, Arc<Set<Path>>) {
         self.content_mapper_watch_state
