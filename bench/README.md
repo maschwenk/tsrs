@@ -156,7 +156,9 @@ tsrs's errors (the table's errors paragraph names such projects).
 - Per project: one untimed warm-up run (tsgo), then N reps (default 3); within a rep the two modes and the two
   compilers alternate, and the compiler order flips every rep. Tables report medians.
 - Wall: process wall clock measured by the harness. Peak: max RSS from `wait4` rusage (the number `/usr/bin/time -v`
-  prints). The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
+  prints). Both come from `bench/measure.py`, a small process that starts the compiler: on Linux a child's peak
+  starts at its parent's size, so peaks below the runner's own size (up to about 566 MiB) used to read as that size.
+  Results before 2026-10-15 have that floor; it shows as bun check and tsrs reading the same peak on small projects. The JSON also has the `--extendedDiagnostics` check/total time, "Memory used", files, symbols, types and
   instantiations of every run. tsrs's default-mode counters are lower than tsgo's by design (lazy members); compare
   counters in `--singleThreaded` runs or with `--noLazyMembers`.
 - Each mode gets two tables, wall time and peak memory, with the same rows in the same order: sorted by the speedup

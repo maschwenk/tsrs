@@ -21,6 +21,7 @@ import os
 import platform
 import re
 import shutil
+import signal
 import statistics
 import subprocess
 import sys
@@ -215,18 +216,27 @@ def run_once(exe: Path, cwd: Path, proj: Path, mode: str, log_path: Path, timeou
         argv = [str(exe), "-p", str(proj), "--noEmit", "--incremental", "false", "--extendedDiagnostics", "--pretty", "false"]
         argv += MODE_FLAGS[mode]
     log_path.parent.mkdir(parents=True, exist_ok=True)
+    # Through bench/measure.py, a small fresh process: a child of this one could not report a peak RSS below this
+    # process's own size (bench/measure.py has why). Its own session, so the timeout kills the compiler with it.
+    report = log_path.with_suffix(".rusage.json")
+    report.unlink(missing_ok=True)
     with open(log_path, "wb") as out:
         t0 = time.perf_counter()
-        p = subprocess.Popen(argv, cwd=cwd, stdout=out, stderr=subprocess.STDOUT)
-        timer = threading.Timer(timeout, p.kill)
+        p = subprocess.Popen([sys.executable, "-I", "-S", str(BENCH / "measure.py"), str(report), "--", *argv], cwd=cwd,
+                             stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
+        timer = threading.Timer(timeout, lambda: os.killpg(p.pid, signal.SIGKILL))
         timer.start()
-        _, status, ru = os.wait4(p.pid, 0)
+        p.wait()
         wall = time.perf_counter() - t0
         timer.cancel()
-    p.returncode = os.waitstatus_to_exitcode(status)  # keep Popen from waiting on a reaped pid
+    try:
+        measured = json.loads(report.read_text())
+    except (OSError, ValueError):  # killed by the timeout before it wrote the report
+        measured = {"wall_s": wall, "maxrss": 0, "status": None}
+    exit_code = os.waitstatus_to_exitcode(measured["status"]) if measured["status"] is not None else p.returncode
     # ru_maxrss: KiB on Linux, bytes on macOS (the number `/usr/bin/time -v` / `-l` print).
-    peak = ru.ru_maxrss * (1 if sys.platform == "darwin" else 1024)
-    r: dict = {"exit": p.returncode, "wall_s": round(wall, 3), "peak_rss_bytes": peak, "errors": 0}
+    peak = measured["maxrss"] * (1 if sys.platform == "darwin" else 1024)
+    r: dict = {"exit": exit_code, "wall_s": round(measured["wall_s"], 3), "peak_rss_bytes": peak, "errors": 0}
     keys = []
     for line in log_path.read_text(errors="replace").splitlines():
         if m := ERROR_RE.match(line):
@@ -243,7 +253,7 @@ def run_once(exe: Path, cwd: Path, proj: Path, mode: str, log_path: Path, timeou
     r["error_keys"] = sorted(keys)
     # tsgo/tsrs print --extendedDiagnostics after a completed check; bun prints its "checked N files" summary.
     finished = "files" in r if compiler == "bun" else "check_s" in r
-    r["ok"] = p.returncode in (0, 1, 2) and finished
+    r["ok"] = exit_code in (0, 1, 2) and finished
     return r
 
 
