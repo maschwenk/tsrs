@@ -311,6 +311,11 @@ once the four application projects were in; `measure-watch` since 2026-10-13):
    (`depot ci run --workflow .depot/workflows/bench.yml`) ends with the `bench-result` artifact: nothing is committed
    or commented.
 
+**Pull requests**: adding the `bench` label to a pull request runs the whole bench on its head commit and commits the
+merged result to its branch as `bench/pr-results/<date>-<commit>.{json,md}`. Nothing goes into `bench/results/`,
+`bench/RESULTS.md` or the chart, and no regression comment is made. Only adding the label starts it, so to bench a
+later commit, remove the label and add it again. Delete `bench/pr-results/` before the pull request merges.
+
 **Fixed machine spec**: `depot-ubuntu-24.04-8`, 8 vCPU, 32 GB RAM, Linux x86_64, for every run, so numbers are
 comparable over time (the 16-vCPU sections: `depot-ubuntu-24.04-16`, 16 vCPU, checked by their own jobs). Sizing: the largest peak measured is tsgo's default mode on vscode and mui-docs (7.5 GiB on an
 18-core Mac, 6.9 GiB on Linux); 32 GB leaves 4x headroom, and 8 vCPUs cover tsrs's default 8 checker threads (tsgo's 4)

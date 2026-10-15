@@ -29,6 +29,11 @@ on:
       - "Cargo.lock"
       - "Cargo.toml"
       - "rust-toolchain.toml"
+  # A pull request labeled `bench` gets a full bench of its head commit, committed back to its branch under
+  # bench/pr-results/ (the "Commit results to the pull request" step). Only the labeling runs it: the results commit
+  # and later pushes do not, so remove and re-add the label to bench again.
+  pull_request:
+    types: [labeled]
   workflow_dispatch:
     inputs:
       commit:
@@ -44,7 +49,7 @@ on:
 # regression flag could only name "one of N merges". The results commit and the summary table handle overlapping
 # runs: see the "Commit results" step.
 concurrency:
-  group: bench-${{ inputs.commit || github.sha }} # the measured commit, so backfills of different commits run side by side
+  group: bench-${{ inputs.commit || github.event.pull_request.head.sha || github.sha }} # the measured commit, so backfills of different commits run side by side
   cancel-in-progress: false
 
 permissions:
@@ -64,8 +69,11 @@ jobs:
   # up here (bench/.work). The measuring jobs get the binary as the `tsrs-pgo-dist` artifact, with the `rustc -V` that
   # built it (results record the compiler; bench/regressions.py reads it).
   build:
-    # Second loop guard: the results commit says [skip ci] (null on workflow_dispatch, which then runs).
-    if: github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]')
+    # Second loop guard: the results commit says [skip ci] (null on workflow_dispatch, which then runs). A pull request
+    # runs only when the `bench` label is added, checked here too in case a runner ignores `types`.
+    if: >-
+      github.repository == 'maschwenk/tsrs' && !contains(github.event.head_commit.message, '[skip ci]') &&
+      (github.event_name != 'pull_request' || (github.event.action == 'labeled' && github.event.label.name == 'bench'))
     runs-on: depot-ubuntu-24.04-8
     timeout-minutes: 60
     outputs:
@@ -73,7 +81,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
+          ref: ${{ inputs.commit || github.event.pull_request.head.sha || github.sha }} # the measured commit (workflow_dispatch may name one; a pull request's head, not its merge commit)
           persist-credentials: false
 
       - name: Runner hardware (must match the fixed spec)
@@ -277,7 +285,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
+          ref: ${{ inputs.commit || github.event.pull_request.head.sha || github.sha }} # the measured commit (workflow_dispatch may name one; a pull request's head, not its merge commit)
           persist-credentials: false
 
       - name: Runner hardware (must match the fixed spec)
@@ -383,7 +391,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
+          ref: ${{ inputs.commit || github.event.pull_request.head.sha || github.sha }} # the measured commit (workflow_dispatch may name one; a pull request's head, not its merge commit)
           persist-credentials: false
 
       - name: Runner hardware (16 vCPU x86_64)
@@ -586,7 +594,7 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: ${{ inputs.commit || github.sha }} # the measured commit (workflow_dispatch may name one)
+          ref: ${{ inputs.commit || github.event.pull_request.head.sha || github.sha }} # the measured commit (workflow_dispatch may name one; a pull request's head, not its merge commit)
           persist-credentials: false
 
       - name: Runner hardware (must match the fixed spec)
@@ -725,6 +733,28 @@ jobs:
         # different commits overlap and finish in any order. regressions.py compares it with the nearest earlier
         # benchmarked ancestor of its commit.
         run: python3 bench/regressions.py "bench/results/$(basename /tmp/bench-merged/*.json)" ${{ steps.publish.outputs.publish == 'true' && '--comment' || '' }}
+
+      # A labeled pull request (the `pull_request` trigger): the merged result goes on its branch, beside the code it
+      # measured, and never into bench/results/, bench/RESULTS.md or the chart, which hold only main's commits.
+      - name: Commit results to the pull request
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          measured=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["tsrs"]["commit"])' /tmp/bench-merged/*.json)
+          for attempt in 1 2 3; do
+            git fetch -q origin "$HEAD_REF"
+            git checkout -q -f -B "$HEAD_REF" "origin/$HEAD_REF"
+            mkdir -p bench/pr-results
+            cp /tmp/bench-merged/* bench/pr-results/
+            git add bench/pr-results
+            git commit -q -m "bench: pull request results for ${measured::12} [skip ci]"
+            git push -q origin "HEAD:$HEAD_REF" && exit 0
+            sleep $((attempt * 5))
+          done
+          exit 1
 
       - name: Commit results
         if: steps.publish.outputs.publish == 'true'
